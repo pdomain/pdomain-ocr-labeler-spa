@@ -941,6 +941,15 @@ from the list. Severity legend: blocker > high > medium > low > nit.
 - **Suggested fix:** Add `with: cache: 'npm'` to setup-node and `with: enable-cache: true` to setup-uv after B-28 lands a lockfile (npm cache is a no-op without one).
 
 ## B-32 — `install.ps1` `Test-Command` returns multiple values; works by accident
+- **Status:** ✅ **Fixed in iter 28 (2026-05-06)** — `Test-Command` is
+  now `function Test-Command { param([string]$Name); return $null -ne
+  (Get-Command -Name $Name -ErrorAction SilentlyContinue) }`. The
+  `$null -ne (...)` form returns exactly one Boolean (vs the previous
+  array-on-success-path). Two new tests in
+  `tests/unit/test_install_ps1.py::test_test_command_returns_explicit_boolean`
+  pin both the `$null -ne (...)` / `[bool](...)` shape AND forbid the
+  `ForEach-Object { return $true }` anti-pattern. Call sites updated
+  to pass `-Name` explicitly.
 - **Severity:** low (correctness-by-accident)
 - **Where:** `install.ps1:19-22`.
 - **Issue:** The function is:
@@ -957,6 +966,18 @@ from the list. Severity legend: blocker > high > medium > low > nit.
 - **Suggested fix:** Replace with `[bool](Get-Command $name -ErrorAction SilentlyContinue)` — a single-expression function that returns exactly `$true` or `$false`. Three lines → one line, and removes the accidental-correctness footgun.
 
 ## B-33 — `install.ps1` Python preflight does not detect Microsoft Store stub Python
+- **Status:** ✅ **Fixed in iter 28 (2026-05-06)** — preflight now
+  invokes `& python --version 2>&1` and matches against the regex
+  `^Python \d+\.\d+\.\d+$` via `-notmatch`. When the output doesn't
+  match (the Microsoft Store stub case, or any non-functional
+  `python.exe` on PATH), the script prints a clear message naming the
+  stub redirector and pointing at python.org / `winget install
+  Python.Python.3.13`, then falls through to `uv tool install`'s
+  built-in Python provisioning. New test
+  `test_install_ps1_detects_ms_store_stub_python` pins both the
+  `python --version` probe AND the `\d+\.\d+\.\d+` regex AND the
+  `-notmatch` branching keyword. Size budget bumped 120 → 140 to
+  accommodate the new branch.
 - **Severity:** nit
 - **Where:** `install.ps1:34-44`.
 - **Issue:** On Windows 10/11 with no real Python installed, `python.exe` resolves to `%LocalAppData%\Microsoft\WindowsApps\python.exe` — a Store reparse-point stub that, when invoked with arguments (e.g. `python -c "..."`), exits with code 9009 ("not recognized as an internal or external command") rather than running. `Test-Command "python"` returns `$true` (the stub exists on disk) and the `try { python -c ... }` swallows the failure non-fatally — so the user sees no preflight note despite having no Python at all. Then `uv tool install` proceeds to download Python 3.13 (which is fine) but the user-visible message about "system python is X.Y" never fires for the case it most needs to (no real Python).
@@ -964,6 +985,20 @@ from the list. Severity legend: blocker > high > medium > low > nit.
 - **Suggested fix:** After resolving `$sysPy`, also check `& python -c "import sys; sys.exit(0)" 2>$null; $LASTEXITCODE` and if non-zero, print "system python is the Microsoft Store redirector; uv will install a real Python 3.13." (Optional: wrap into the existing try/catch so the message surfaces from the catch path.)
 
 ## B-34 — `release.yml` `astral-sh/setup-uv@v4` `python-version: 3.13` is redundant with uv's auto-download
+- **Status:** ✅ **Fixed in iter 28 (2026-05-06)** — `python-version`
+  dropped from the `astral-sh/setup-uv@v4` `with:` block. The
+  workflow only invokes `uv build`, which spawns a build-isolated
+  PEP 517 env that provisions its own Python; setup-uv's pre-
+  provision was redundant (~5s wasted CI per run). The previous
+  `test_python_version_matches_mise` pin was renamed to
+  `test_python_pin_in_release_workflow` and loosened to accept the
+  pin appearing either as a `python-version:` key (for a future
+  setup-python step) OR as a comment that names the version — so a
+  `mise.toml` Python bump still fails the test loudly. New test
+  `test_setup_uv_does_not_set_python_version` walks the parsed YAML
+  and asserts setup-uv's `with:` block has no `python-version` key
+  (regex-over-text would have false-positive on the explanatory
+  comment).
 - **Severity:** nit (no behaviour impact, just code clarity)
 - **Where:** `.github/workflows/release.yml:47-51`.
 - **Issue:** `astral-sh/setup-uv@v4` only installs the `uv` binary. The `python-version` parameter on setup-uv is for setting up a uv-managed Python in advance — handy if you want `uv run` to skip the auto-download cost. But `uv build` doesn't need a system Python (it shells out to a build-isolated env), and the workflow doesn't otherwise call `uv run`. The pin is functionally a no-op that costs ~5s of Python download per CI run. The `test_python_version_matches_mise` test pins this value, so future bumps still drift-check, but the workflow could equally drop the line entirely.

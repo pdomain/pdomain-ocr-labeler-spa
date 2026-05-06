@@ -208,19 +208,104 @@ def test_install_ps1_references_correct_repo_slug():
 
 
 # ---------------------------------------------------------------------------
+# B-32 — Test-Command must use an explicit Boolean return
+# ---------------------------------------------------------------------------
+
+
+def test_test_command_returns_explicit_boolean() -> None:
+    """B-32: ``Test-Command`` must return an explicit ``$true``/``$false``.
+
+    The previous form piped ``Get-Command`` through ``ForEach-Object {
+    return $true }`` and relied on PowerShell's pipeline coercion. The
+    callers happened to work because ``-not @($true, $false)`` and
+    ``-not $false`` both yield the right Boolean, but the function
+    actually returned an array on the success path. Anyone refactoring
+    the helper would inherit the footgun.
+
+    The fix is the unambiguous ``return $null -ne (Get-Command ...)``
+    one-liner. Pin both:
+      * the helper uses ``$null -ne (...)`` (or equivalent ``[bool](...)``);
+      * the helper does NOT use the ``ForEach-Object { return $true }``
+        anti-pattern.
+    """
+    text = INSTALL_PS1.read_text()
+    # Locate the function body — be generous about whitespace.
+    body_match = re.search(
+        r"function\s+Test-Command\b[^{]*\{(?P<body>.*?)\n\}",
+        text,
+        re.DOTALL,
+    )
+    assert body_match, "install.ps1 must define a `Test-Command` function"
+    body = body_match.group("body")
+    # Must use an explicit-Boolean primitive. Either `$null -ne (...)`
+    # or `[bool](...)` is acceptable; both yield exactly one Boolean.
+    assert re.search(r"\$null\s+-ne\s+\(", body) or re.search(r"\[bool\]\s*\(", body), (
+        "Test-Command must return an explicit Boolean via `$null -ne (...)` or `[bool](...)` (B-32). "
+        f"Body was:\n{body}"
+    )
+    # Must NOT use the array-returning ForEach-Object anti-pattern.
+    assert not re.search(r"ForEach-Object\s*\{\s*return\s+\$true\s*\}", body), (
+        "Test-Command must not use `ForEach-Object { return $true }` — "
+        "that emits an array on the success path (B-32). "
+        f"Body was:\n{body}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# B-33 — MS Store stub Python redirector detection
+# ---------------------------------------------------------------------------
+
+
+def test_install_ps1_detects_ms_store_stub_python() -> None:
+    """B-33: install.ps1 must detect the Microsoft Store stub redirector.
+
+    On Windows 10/11 with no real Python installed, ``python.exe``
+    resolves to ``%LocalAppData%\\Microsoft\\WindowsApps\\python.exe`` —
+    a Store reparse-point stub that exits without running when given
+    arguments. ``Test-Command "python"`` happily returns ``$true`` for
+    it. The fix is to invoke ``python --version``, capture stdout/stderr,
+    and check that it matches the real-Python output shape
+    (``Python <maj>.<min>.<patch>``).
+
+    Pin the regex so a regression to the previous shape ("just trust
+    Test-Command") is caught.
+    """
+    text = INSTALL_PS1.read_text()
+    # The script must invoke `python --version` (the stub-detection probe).
+    assert re.search(r"\bpython\s+--version\b", text), (
+        "install.ps1 must call `python --version` to probe for the MS Store stub (B-33)"
+    )
+    # The script must check for the real-Python output shape. We
+    # accept any regex-shaped check that pins the
+    # ``Python <digits>.<digits>.<digits>`` form. A naive "starts with
+    # Python" check would match the stub's error output too in some
+    # locales. The literal regex string ``\d+\.\d+\.\d+`` should appear
+    # in the script.
+    assert r"\d+\.\d+\.\d+" in text, (
+        r"install.ps1 must include the real-Python output regex `\d+\.\d+\.\d+` "
+        "so the MS Store stub is detected (B-33)"
+    )
+    # Must also use `-notmatch` (the regex anti-pattern) against the
+    # version-output variable — otherwise a regression that prints the
+    # regex but never branches on it would slip through.
+    assert "-notmatch" in text, "install.ps1 must use `-notmatch` to detect non-version output (B-33)"
+
+
+# ---------------------------------------------------------------------------
 # Length sanity — keep the chunk reviewable
 # ---------------------------------------------------------------------------
 
 
 def test_install_ps1_under_size_budget():
-    # Keep the installer scannable in one screen. Soft-cap at 120 lines
+    # Keep the installer scannable in one screen. Soft-cap at 140 lines
     # to leave headroom for PowerShell's chattier idiom (Test-Command
-    # helper, try/catch blocks, here-string error message) but still
-    # flag accidental sprawl. install.sh sits at 95 with an 80-line
-    # target / 100 hard cap; PowerShell needs a few more lines for the
-    # same logic.
+    # helper, try/catch blocks, here-string error message, B-33 MS
+    # Store stub detection branch) but still flag accidental sprawl.
+    # install.sh sits at 95 with an 80-line target / 100 hard cap;
+    # PowerShell needs a few more lines for the same logic, plus the
+    # Windows-only stub-detection branch that has no install.sh peer.
     line_count = len(INSTALL_PS1.read_text().splitlines())
-    assert line_count <= 120, (
+    assert line_count <= 140, (
         f"install.ps1 has grown to {line_count} lines; consider extracting "
         "logic to a helper script before the installer becomes hard to audit"
     )

@@ -74,9 +74,15 @@ jobs:
 
       - uses: astral-sh/setup-uv@v4
         with:
-          # Pinned to match mise.toml. uv handles its own Python
-          # download; pinning here keeps CI deterministic.
-          python-version: "3.13"
+          # B-34: `python-version` is intentionally NOT set here.
+          # `astral-sh/setup-uv` only installs the `uv` binary; the
+          # `python-version` parameter pre-provisions a uv-managed
+          # Python (which is useful for `uv run` paths). This workflow
+          # only invokes `uv build`, which spawns a build-isolated env
+          # via PEP 517 and provisions its own Python — so a setup-uv
+          # `python-version` pin would download Python 3.13 only to
+          # have `uv build` ignore it. The mise-driven Python pin
+          # stays the single source of truth (see test_python_pin_in_release_workflow).
           # B-31: cache `~/.cache/uv` between runs. `uv build`
           # populates this with build-isolated env wheels (hatchling,
           # hatch-vcs, etc.); priming saves 10–20s of resolver work

@@ -227,12 +227,62 @@ def test_node_version_matches_mise() -> None:
     )
 
 
-def test_python_version_matches_mise() -> None:
-    """Same drift guard for Python."""
+def test_setup_uv_does_not_set_python_version() -> None:
+    """B-34: `astral-sh/setup-uv` must NOT declare ``python-version``.
+
+    setup-uv's ``python-version`` parameter pre-provisions a uv-managed
+    Python — useful for ``uv run`` workflows. This workflow only calls
+    ``uv build``, which spawns a build-isolated env via PEP 517 and
+    provisions its own Python; setup-uv's pre-provision would download
+    a Python 3.13 that ``uv build`` then ignores (~5s of wasted CI
+    time per run, plus implies a coupling that doesn't exist).
+
+    A future maintainer who adds a ``uv run …`` step to this workflow
+    will want to revisit this — by which point they'll be in this file
+    and see the comment.
+    """
+    # Walk the parsed YAML to find every step that uses
+    # `astral-sh/setup-uv@<anything>` and inspect its `with:` keys.
+    # YAML-walk (rather than regex over text) so that `python-version`
+    # appearing in a comment (explaining why it's NOT set) doesn't
+    # trip the test.
+    data = _load_workflow()
+    found_setup_uv = False
+    for job_name, job in (data.get("jobs") or {}).items():
+        for step in job.get("steps") or []:
+            uses = (step.get("uses") or "").strip()
+            if uses.startswith("astral-sh/setup-uv@"):
+                found_setup_uv = True
+                with_block = step.get("with") or {}
+                assert "python-version" not in with_block, (
+                    "B-34: `astral-sh/setup-uv` must not declare `python-version` "
+                    "(it's redundant with `uv build`'s PEP 517 isolation; see comment "
+                    f"in release.yml). Found in job {job_name!r} with-block: {with_block!r}"
+                )
+    assert found_setup_uv, "no `astral-sh/setup-uv` step found in release.yml"
+
+
+def test_python_pin_in_release_workflow() -> None:
+    """Drift guard: the Python pin must still appear in release.yml.
+
+    B-34 dropped the redundant ``setup-uv``+``python-version`` pin, but
+    we still want the workflow to mention the pinned major.minor so a
+    future ``mise.toml`` bump fails this test loudly. We accept either
+    a real ``python-version:`` key (e.g. on ``setup-python``, if added
+    later) OR a comment in the workflow that names the version — since
+    today the canonical pin lives only in ``mise.toml`` and the Docker
+    stage, the workflow only references it in prose.
+    """
     py_pin = _mise_pin("python")
     text = _workflow_text()
-    assert re.search(rf'python-version:\s*"?{re.escape(py_pin)}"?', text), (
-        f"release.yml must pin python-version to {py_pin!r} (from mise.toml)"
+    # Either: an explicit `python-version: 3.13` key (any step) — or
+    # a string `3.13` somewhere in the file (in a comment, today).
+    has_key = re.search(rf'python-version:\s*"?{re.escape(py_pin)}"?', text) is not None
+    has_mention = py_pin in text
+    assert has_key or has_mention, (
+        f"release.yml must reference the Python pin {py_pin!r} from mise.toml "
+        "(either as a `python-version:` key or in a comment) so a mise.toml "
+        "bump fails this test loudly"
     )
 
 

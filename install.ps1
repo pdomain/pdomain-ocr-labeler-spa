@@ -16,13 +16,19 @@ $ErrorActionPreference = "Stop"
 
 $repo = "ConcaveTrillion/pd-ocr-labeler-spa"
 
-function Test-Command($name) {
-    Get-Command $name -ErrorAction SilentlyContinue | ForEach-Object { return $true }
-    return $false
+# B-32: explicit boolean return. The earlier form piped Get-Command
+# through ForEach-Object and relied on PowerShell's pipeline-return
+# coercion — which is array-shaped, and the callers (`if (-not …)`)
+# only worked because `-not` against a non-empty array yields the
+# right answer by accident. `$null -ne (...)` is unambiguous: a
+# single Boolean leaves the function in both branches.
+function Test-Command {
+    param([string]$Name)
+    return $null -ne (Get-Command -Name $Name -ErrorAction SilentlyContinue)
 }
 
 # 1. Install uv if not already present (provides Python 3.13 too).
-if (-not (Test-Command "uv")) {
+if (-not (Test-Command -Name "uv")) {
     Write-Host "uv not found — installing uv from https://astral.sh/uv/install.ps1 ..."
     Invoke-RestMethod -Uri "https://astral.sh/uv/install.ps1" -UseBasicParsing | Invoke-Expression
     $env:Path = "$HOME\.local\bin;" + $env:Path
@@ -31,12 +37,31 @@ if (-not (Test-Command "uv")) {
 # 2. Preflight Python check. `uv tool install` will auto-download Python
 #    3.13 if missing, so this is informational, not gating — but it lets
 #    the user know up-front whether their system Python is new enough.
-if (Test-Command "python") {
+#
+# B-33: also detect the Microsoft Store stub redirector at
+# %LocalAppData%\Microsoft\WindowsApps\python.exe. The stub satisfies
+# `Test-Command "python"` (the file exists on PATH) but invoking it
+# with arguments emits a "Python was not found" message and exits
+# without running. We match the real-Python-version output shape
+# (`Python <maj>.<min>.<patch>`) and bail with a clear message when
+# the stub is detected — uv still handles actual Python provisioning,
+# but the user-facing note about a missing real Python is what the
+# preflight is for.
+if (Test-Command -Name "python") {
     try {
-        $sysPy = & python -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" 2>$null
-        if ($sysPy -and $sysPy -ne "3.13") {
-            Write-Host "Note: system python is ${sysPy}; pd-ocr-labeler-spa requires 3.13."
-            Write-Host "      uv will download Python 3.13 automatically — no action needed."
+        $pyVersionOutput = (& python --version 2>&1) | Out-String
+        $pyVersionOutput = $pyVersionOutput.Trim()
+        if ($pyVersionOutput -notmatch '^Python \d+\.\d+\.\d+$') {
+            Write-Host "Note: `python` on PATH is the Microsoft Store stub redirector (or otherwise non-functional)."
+            Write-Host "      Output was: ${pyVersionOutput}"
+            Write-Host "      uv will install Python 3.13 automatically; if you'd rather install Python yourself,"
+            Write-Host "      grab it from https://www.python.org/downloads/ or run: winget install Python.Python.3.13"
+        } else {
+            $sysPy = & python -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" 2>$null
+            if ($sysPy -and $sysPy -ne "3.13") {
+                Write-Host "Note: system python is ${sysPy}; pd-ocr-labeler-spa requires 3.13."
+                Write-Host "      uv will download Python 3.13 automatically — no action needed."
+            }
         }
     } catch {
         # Non-fatal: uv handles the actual Python provisioning.
