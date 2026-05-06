@@ -189,6 +189,34 @@ then eslint must be installed" to "lint must exist".
 
 **Blocks.** M0 acceptance gate clause "ESLint passes clean".
 
+### Q-A10. PyPI publishing for `pd-ocr-labeler-spa`?
+
+**Context.** Iter 24 landed `.github/workflows/release.yml`, which on
+`v*` tag push builds the wheel + sdist and attaches both to the
+GitHub Release. `install.sh`/`install.ps1` already download from
+that Release, so publish-to-Release is sufficient for the install
+flow. PyPI publishing is intentionally **not** wired — it would
+either require a `PYPI_TOKEN` repo secret (footgun: long-lived
+credential, easy to leak) or an OIDC trusted-publisher setup on
+PyPI (one-time configuration on the user's PyPI account).
+
+**Options.**
+
+- **(A)** Skip PyPI entirely. Ship from GitHub Releases only.
+  Mirrors current peer pd-prep-for-pgdp behaviour. Zero secrets.
+- **(B)** Add OIDC trusted publishing via
+  `pypa/gh-action-pypi-publish` (requires the user to register the
+  workflow on PyPI as a trusted publisher; no token in repo). Adds
+  `permissions: id-token: write` to the workflow.
+- **(C)** Token-based PyPI publish. **Rejected** — the release-
+  workflow tests in `test_release_workflow.py` actively forbid
+  `PYPI_TOKEN` / `secrets.PYPI*` references.
+
+**Recommendation.** **(A)** for now. Defer **(B)** until the
+project has a tagged 0.1.0 release worth publishing.
+
+**Blocks.** Nothing in M0–M9. Pure distribution-channel question.
+
 ---
 
 ## Resolution log

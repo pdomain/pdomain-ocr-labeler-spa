@@ -1,0 +1,107 @@
+# Release workflow: builds the wheel + sdist on `v*` tag pushes and
+# attaches them as assets to the GitHub Release for that tag.
+#
+# install.sh / install.ps1 download the published wheel from the
+# Release attached here (no `git+` install path, so end users don't
+# need Node/npm to build the SPA). There is no PyPI publish — see
+# Q-A10 in OPEN_QUESTIONS.md for the deferred PyPI decision.
+#
+# Mirrors pd-prep-for-pgdp/.github/workflows/release.yml in shape but
+# scoped to the publish-on-tag path only; M0 doesn't yet have a
+# branch CI lane.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: build + publish wheel
+    runs-on: ubuntu-latest
+    # Tag pushes attach the wheel + sdist to the GitHub Release; the
+    # action below needs `contents: write` to create/update the
+    # Release. Scoped to this job (not the workflow) per least-
+    # privilege.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # hatch-vcs needs full history (and the tag) to derive the
+          # version. Without fetch-depth: 0 the build produces a
+          # `0.0.0` placeholder and the wheel filename loses the
+          # version that `install.sh` is looking for.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          # Pinned to match mise.toml. Bump both together so the
+          # devcontainer and CI stay aligned.
+          node-version: "24"
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          # Pinned to match mise.toml. uv handles its own Python
+          # download; pinning here keeps CI deterministic.
+          python-version: "3.13"
+
+      - name: Build SPA bundle
+        # `npm ci` (not `npm install`) so the lockfile is honored.
+        # `npm run build` writes to `frontend/dist/`; the hatchling
+        # build hook in pyproject.toml force-includes that directory
+        # into `src/pd_ocr_labeler_spa/static/` inside the wheel, and
+        # `build_hooks/spa_check.py` refuses to build a wheel without
+        # an `index.html` present.
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Build wheel + sdist
+        # `uv build` produces both `dist/*.whl` and `dist/*.tar.gz`.
+        # No PYPI_TOKEN, no twine — see Q-A10.
+        run: uv build
+
+      - name: Verify wheel contains SPA bundle
+        # Belt-and-braces: build_hooks/spa_check.py already gates
+        # this, but a regression there would silently ship a blank-
+        # page wheel. Catches it before the Release is published.
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          wheels=(dist/*.whl)
+          if [ ${#wheels[@]} -eq 0 ]; then
+            echo "::error::no wheel produced under dist/"
+            exit 1
+          fi
+          for whl in "${wheels[@]}"; do
+            echo "checking $whl"
+            if ! python -m zipfile -l "$whl" | grep -q 'pd_ocr_labeler_spa/static/index\.html'; then
+              echo "::error::$whl is missing pd_ocr_labeler_spa/static/index.html — frontend-build did not run"
+              python -m zipfile -l "$whl"
+              exit 1
+            fi
+          done
+
+      - name: Publish wheel + sdist to GitHub Release
+        # Creates the Release for the tag if missing, otherwise
+        # uploads the assets to the existing Release. install.sh
+        # resolves the wheel via the `releases/latest` endpoint and
+        # downloads the `*.whl` asset attached here.
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+          fail_on_unmatched_files: true
+
+# PyPI publishing is intentionally NOT wired here. If/when it lands it
+# must use OIDC trusted publishing (pypa/gh-action-pypi-publish with
+# `permissions: id-token: write`), never a PYPI_TOKEN secret. See
+# Q-A10 in OPEN_QUESTIONS.md.

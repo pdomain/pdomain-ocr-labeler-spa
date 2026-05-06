@@ -191,8 +191,26 @@ every iteration.
   shipped with Windows 10/11). No CUDA/GPU branch (matches
   `install.sh`; pd-ocr-labeler-spa has no GPU extras). 9 shape pins
   in `tests/unit/test_install_ps1.py`.
-- [ ] `.github/workflows/release.yml` (CI gate including SPA-bundle
-  presence check).
+- [x] `.github/workflows/release.yml` (publish wheel + sdist on
+  `v*` tag push). Iter 24: single `release` job on `ubuntu-latest`;
+  `actions/checkout@v4` with `fetch-depth: 0` (hatch-vcs needs the
+  full history + tag); Node 24 + Python 3.13 pinned to match
+  `mise.toml`; `cd frontend && npm ci && npm run build` produces
+  the SPA bundle; `uv build` produces wheel + sdist; in-workflow
+  `python -m zipfile -l` check verifies the wheel contains
+  `pd_ocr_labeler_spa/static/index.html` before publish (defence
+  in depth alongside `build_hooks/spa_check.py`); both assets
+  attached to the GitHub Release via `softprops/action-gh-release@v2`
+  with `fail_on_unmatched_files: true`. PyPI publishing
+  intentionally NOT wired (Q-A10) — no `PYPI_TOKEN` /
+  `secrets.PYPI*` references; the in-workflow comment names OIDC
+  trusted-publishing as the only acceptable future path. 12 shape
+  pins in `tests/unit/test_release_workflow.py` (existence, valid
+  YAML, `v*` tag trigger, `fetch-depth: 0`, `@v<N>` major-pin for
+  every `uses:` ref, Node + Python pins sourced from `mise.toml`,
+  `npm ci` not `npm install`, `uv build`, publish-or-upload step
+  exists, wheel attached to Release, no `PYPI_TOKEN`/`TWINE_*`/
+  `secrets.PYPI*` regressions).
 - [ ] M0 acceptance gate: `make ci` green, `make build` produces a
   wheel that contains `pd_ocr_labeler_spa/static/index.html`,
   `pd-ocr-labeler-ui --no-browser --port 8080` answers `/healthz`,
