@@ -228,6 +228,53 @@ def test_filesystem_storage_async_methods_dispatch_blocking_io_to_threadpool() -
     )
 
 
+def test_filesystem_storage_list_keys_file_prefix_returns_canonical_form(tmp_path: Path) -> None:
+    """B-53 pin: ``list_keys`` returns root-relative posix keys for BOTH branches.
+
+    The previous impl had two branches in ``_walk()``:
+
+    - ``base.is_file()``: returned ``[prefix.lstrip("/")]`` — i.e. the
+      caller's argument as-passed (modulo a leading-slash strip that's
+      now dead code post-B-45).
+    - ``rglob`` walk: returned ``path.relative_to(root).as_posix()`` —
+      the canonical root-relative form.
+
+    Calling ``list_keys`` with prefixes pointing at a file but written
+    in non-canonical forms (trailing slash, ``./foo``, doubled slashes)
+    leaked the un-normalised input into the returned key. Round-trip
+    against ``get_bytes`` still worked (because ``_path`` re-normalises
+    on the way in), but key-equality across calls broke silently.
+
+    This test exercises three non-canonical file-prefix shapes and
+    asserts the returned key is the same canonical form the rglob branch
+    would produce.
+    """
+    import asyncio
+
+    from pd_ocr_labeler_spa.adapters.storage.filesystem import FilesystemStorage
+
+    fs = FilesystemStorage(root=tmp_path)
+
+    async def _go() -> None:
+        await fs.put_bytes("page-images/foo.png", b"data")
+
+        # Canonical form: the rglob branch would yield exactly this key.
+        canonical = "page-images/foo.png"
+
+        # Three non-canonical forms that hit the ``is_file()`` branch:
+        for non_canonical in (
+            "page-images/foo.png",  # canonical itself — must round-trip
+            "page-images/foo.png/",  # trailing slash
+            "./page-images/foo.png",  # leading "./"
+        ):
+            keys = await fs.list_keys(non_canonical)
+            assert keys == [canonical], (
+                f"list_keys({non_canonical!r}) returned {keys!r}, expected [{canonical!r}] (B-53)"
+            )
+
+    asyncio.run(_go())
+
+
 def test_filesystem_storage_presign_put_returns_relative_url(tmp_path: Path) -> None:
     """Spec §7: ``presign_put`` returns ``f"/cdn/{key}"``.
 

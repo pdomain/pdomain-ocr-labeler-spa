@@ -103,7 +103,13 @@ class FilesystemStorage:
             if not base.exists():
                 return []
             if base.is_file():
-                return [prefix.lstrip("/")]
+                # B-53: mirror the rglob-branch shape — return the
+                # canonical root-relative posix form, not the caller's
+                # un-normalised prefix. Otherwise ``list_keys("foo/")``
+                # against a file ``foo`` returns ``["foo/"]`` while
+                # ``list_keys("foo")`` returns ``["foo"]``, and
+                # key-equality across calls breaks silently.
+                return [base.relative_to(root).as_posix()]
             keys: list[str] = []
             for path in base.rglob("*"):
                 if path.is_file():
