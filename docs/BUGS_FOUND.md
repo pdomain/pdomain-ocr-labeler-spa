@@ -1115,3 +1115,347 @@ opportunistically.
 Two open Qs (Q-A8, Q-A9) and one new high (B-28) keep M0 from being
 declarable complete. Iter 26 should pick B-28; an M0-close iteration
 needs Node availability resolved first.
+
+---
+
+# Code-review checkpoint — iter 30 (2026-05-06)
+
+Review scope: commits since iter-25 checkpoint `b4899f7`:
+
+- `eba093e` — iter 26: B-28 + B-19 paired (two-pass `npm install
+  --package-lock-only && npm ci` in release.yml + Dockerfile +
+  cross-file anti-drift guard).
+- `c6eabad` — iter 27: B-29 (PEP-440 tag regex) + B-30 (concurrency
+  block) + B-31 (uv/npm cache) + B-35 (tightened installer tests) +
+  B-36 (header comment).
+- `5778103` — iter 28: B-32 (Test-Command explicit bool) + B-33 (MS
+  Store stub Python detection) + B-34 (drop redundant setup-uv
+  python-version).
+- `400aead` — iter 29: B-18 (Tailwind glob contains-not-equals) +
+  `docs/M0-acceptance.md` + 6 shape pins.
+
+Going into this review BUGS_FOUND.md had **0 open items**. After
+iter-25's checkpoint flagged B-28 as the M0-load-bearing high, iters
+26–29 worked the entire backlog to closure.
+
+Smoke-test:
+- `uv run pytest tests/ --ignore=tests/e2e` → **136 passed in 0.24s**.
+- `uv run ruff check` → clean.
+- `uv run pre-commit validate-config` → clean.
+- `uv run python -c "from pd_ocr_labeler_spa.bootstrap import build_app; build_app()"` → OK.
+- `bash -n install.sh` → OK.
+- `make -n docker-build` → renders cleanly with `_docker` macro.
+
+Despite the "all backlog closed" framing, the iters introduced one
+real **high-severity regression** during the iter-27 caching change
+that almost certainly breaks the very M0-acceptance path iter 26 just
+fixed. Filed as B-37 below. Plus four lower-severity findings.
+
+## B-37 — `actions/setup-node@v4` with `cache: "npm"` + `cache-dependency-path: frontend/package-lock.json` fails when the lockfile is absent — **undoes the iter-26 B-28 fix on first tag push**
+- **Severity:** **high** (re-breaks the M0 release pipeline that iter 26 just unbroke)
+- **Where:** `.github/workflows/release.yml:61-73` (the `actions/setup-node@v4` `with:` block).
+- **Issue:** `actions/setup-node@v4` errors out when `cache:` is set
+  but the `cache-dependency-path` doesn't resolve to an existing file.
+  The error is `Error: Dependencies lock file is not found in
+  /home/runner/work/.../frontend/package-lock.json. Supported file
+  patterns: package-lock.json,npm-shrinkwrap.json,yarn.lock` — and
+  the workflow halts at the setup-node step. This happens **before**
+  the "Build SPA bundle" step that's supposed to bootstrap the
+  lockfile via `npm install --package-lock-only`. The iter-27 commit
+  message and BUGS_FOUND annotation both claim "the lookup fails
+  gracefully (no key → cache miss → no-op)" — that's incorrect.
+  setup-node treats missing-lockfile as a hard error, not a graceful
+  miss.
+  
+  Reproducer: tag-push `v0.1.0` to a clean repo without
+  `frontend/package-lock.json`. The `release` job fails at "Setup
+  Node.js" before reaching "Build SPA bundle". Same outcome iter 25
+  filed B-28 for: `release.yml` cannot run end-to-end on first
+  execution. The whole point of iter 26's two-pass install was to
+  bootstrap the lockfile inside the workflow; iter 27's caching pull
+  that bootstrap out from under itself.
+  
+  This is documented behaviour, not theoretical — see
+  `actions/setup-node` issue tracker (e.g. #569, #1318) and the
+  action's source: when `cache-dependency-path` is set, it calls
+  `glob` on the path and fails-not-warns when the result is empty.
+- **Why it matters:** M0 acceptance gate clause "wheel installable
+  from a tagged release" depends on `release.yml` actually completing
+  end-to-end. As shipped today, the first tag push will fail at the
+  setup-node step with no Release published, no wheel attached, and
+  install.sh/install.ps1 broken (they look for the wheel asset which
+  was never created). The iter 26 review claimed B-28 closed; the
+  iter 27 caching addition silently re-opens it through a different
+  code path. Pre-1.0 the impact is bounded (no users), but the
+  acceptance gate is the criterion that flips M0 from in-progress to
+  done.
+- **Suggested fix:** Three options, in order of preference:
+  (a) Drop `cache: "npm"` + `cache-dependency-path` from
+  `actions/setup-node@v4` until Q-A8 lands a real lockfile. The
+  caching benefit is moot today (no warm cache exists yet) and the
+  cost is a hard CI failure. Add a TODO comment: "re-enable
+  `cache: 'npm'` once `frontend/package-lock.json` is committed
+  (Q-A8 unblock)".
+  (b) Move the cache enablement to a SECOND setup-node step that
+  runs AFTER the bootstrap install — but setup-node only runs once
+  per job and a second invocation overwrites the first.
+  (c) Pre-create an empty `package-lock.json` via a step before
+  setup-node (e.g. `cd frontend && touch package-lock.json` — but
+  this would be parsed as an invalid lockfile by the cache action).
+  
+  (a) is the right fix. Update
+  `test_setup_node_enables_npm_cache` to a conditional ("if
+  `frontend/package-lock.json` exists, then cache must be enabled")
+  or remove the cache assertion entirely until Q-A8 lands.
+
+## B-38 — `--include=dev` asymmetry between Dockerfile and `release.yml`; cross-file alignment test passes anyway
+- **Severity:** low
+- **Where:** `Dockerfile:29,31` (`npm install --package-lock-only --include=dev` + `npm ci --include=dev`); `.github/workflows/release.yml:115-118` (no `--include=dev` flag); cross-file guard at `tests/unit/test_dockerfile.py::test_dockerfile_and_release_workflow_agree_on_npm_install_logic`.
+- **Issue:** The Dockerfile's spa stage explicitly uses
+  `--include=dev` on both passes. release.yml does not. Functionally
+  both work today because `npm ci` defaults to including
+  devDependencies unless `NODE_ENV=production` is set in the
+  environment — but the alignment is implicit, not pinned. The
+  cross-file test asserts "both files contain `npm ci` AND
+  `--package-lock-only`" but says nothing about `--include=dev`,
+  `--omit=dev`, `--prefer-offline`, or any other flag. So a future
+  CI runner that sets `NODE_ENV=production` (or a future GHA runner
+  default change) would silently break `npm run build` (which needs
+  vite + tsc dev-deps) in release.yml without breaking the
+  Dockerfile.
+- **Why it matters:** The iter-26 commit message frames this as
+  "byte-aligned shell logic" — that overstates the alignment. The
+  test enforces token-presence parity, not flag-set parity. A
+  reviewer reading the test name "agree_on_npm_install_logic" will
+  assume both files install the same set of packages with the same
+  flags; today they don't (the explicit `--include=dev` in
+  Dockerfile is asymmetric).
+- **Suggested fix:** Either (a) drop `--include=dev` from the
+  Dockerfile (rely on the `npm ci` default like release.yml does),
+  or (b) add `--include=dev` to release.yml's `npm install
+  --package-lock-only` and `npm ci`, AND tighten the cross-file test
+  to assert the flag-set is symmetric. (b) is the more defensive
+  posture (immune to a future runner setting `NODE_ENV=production`)
+  and is the right answer for a "byte-aligned" claim. The test
+  tightening is one extra `assert "--include=dev" in text` line per
+  file.
+
+## B-39 — `test_python_pin_in_release_workflow` accepts any `3.13` substring; the loosened pin is now near-meaningless
+- **Severity:** nit
+- **Where:** `tests/unit/test_release_workflow.py::test_python_pin_in_release_workflow` (after iter-28 loosening).
+- **Issue:** The test was loosened from "must have `python-version:
+  3.13`" to "must have `python-version: 3.13` OR have `3.13`
+  somewhere in the file." With the iter-28 setup-uv pin removal,
+  the only remaining mention of `3.13` is in a single comment line
+  (`# `python-version` pin would download Python 3.13 only to ...`).
+  If a future iter cleans up the comment as part of an unrelated
+  refactor, the test starts failing for a non-substantive reason —
+  but more concerning, today the test passes because `3.13` appears
+  in prose, NOT because the workflow actually pins Python anywhere.
+  The drift-check claim ("a mise.toml bump fails this test loudly")
+  is now load-bearing on a comment that isn't shape-pinned itself.
+- **Why it matters:** The test name suggests the workflow has a
+  Python pin; today it has none (B-34 dropped it). The "loosen to
+  accept comment-mention" framing trades a real assertion for a
+  prose-coupling assertion. If `mise.toml` bumps to 3.14, the test
+  *would* fail (the comment still says 3.13, but `_mise_pin("python")`
+  returns 3.14). So the drift gate technically still works — but
+  the gate's failure mode tells the contributor "update the
+  comment", not "update the workflow." Misleading.
+- **Suggested fix:** Either (a) delete the test entirely (the
+  workflow doesn't pin Python anymore; `uv build`'s PEP 517
+  isolation is the source of truth and lives outside the
+  workflow), or (b) reshape the test to assert a more meaningful
+  invariant — e.g. "if a `python-version:` key exists anywhere in
+  the workflow, it must match `mise.toml`'s pin" (no failure
+  if the workflow has no pin at all). (a) is honest; (b)
+  preserves the drift gate for future workflows that re-introduce
+  a setup-python step. Either beats the current fragile
+  prose-coupling.
+
+## B-40 — `install.ps1` MS Store stub regex `^Python \d+\.\d+\.\d+$` rejects pre-release Python (3.14.0a1) and mislabels it as a stub
+- **Severity:** nit
+- **Where:** `install.ps1:54` (`if ($pyVersionOutput -notmatch '^Python \d+\.\d+\.\d+$')`).
+- **Issue:** The regex requires exactly three dot-separated digit
+  groups with nothing trailing. `python --version` outputs:
+  - `Python 3.13.0` → matches (release version)
+  - `Python 3.14.0a1` → does NOT match (alpha pre-release)
+  - `Python 3.14.0rc2` → does NOT match (release candidate)
+  - `Python 3.13.0+` → does NOT match (the `+` indicates a Python
+    built from a non-release tag — common with pyenv-built Pythons)
+  
+  Any user running a pre-release Python (e.g. testing 3.14 alpha
+  on Windows) gets the misleading message "`python` on PATH is the
+  Microsoft Store stub redirector (or otherwise non-functional)"
+  followed by remediation pointing at python.org / winget — when
+  in fact they have a real Python that just happens to be a
+  pre-release.
+- **Why it matters:** The user impact is small (uv still installs
+  3.13 for the tool, the install proceeds), but the diagnostic
+  message is actively wrong for early-adopters running pre-release
+  Pythons. A better regex would tolerate the standard
+  `\d+\.\d+\.\d+(\D.*)?$` shape (any non-digit suffix is fine).
+- **Suggested fix:** Loosen the regex to `^Python \d+\.\d+(\.\d+)?`
+  (anchor only the leading "Python <maj>.<min>" form; allow any
+  trailing characters). Also adjust the diagnostic message to
+  say "`python --version` did not return the expected
+  `Python <X>.<Y>.<Z>` shape" — which is more honest about what
+  was checked and leaves the user-facing reasoning to them.
+
+## B-41 — Cross-file `--package-lock-only` pin is planned-obsolete; future Q-A8-unblock iter must remove it from BOTH files AND the test
+- **Severity:** low
+- **Where:** `tests/unit/test_dockerfile.py::test_dockerfile_and_release_workflow_agree_on_npm_install_logic` and `tests/unit/test_release_workflow.py::test_uses_two_pass_install_with_lockfile_fallback`.
+- **Issue:** Both tests pin `--package-lock-only` as a required
+  token in their respective files. Once Q-A8 unblocks and a real
+  `frontend/package-lock.json` is committed, the bootstrap branch
+  becomes a permanent no-op. A future iter's natural cleanup —
+  remove the now-dead `if [ ! -f package-lock.json ]; then npm
+  install --package-lock-only; fi` block from BOTH files — would
+  fail both tests, and a hasty fix that updates only one
+  (e.g. cleans up release.yml but not Dockerfile) would
+  re-introduce the iter-25 inconsistency the cross-file test
+  was supposed to prevent. Worse: if the future iter removes
+  `--package-lock-only` from one file but the test forces them
+  to keep it in the other, they may revert the cleanup half-way
+  and leave dead code in.
+- **Why it matters:** Self-balancing test for current state, but
+  the "do this together" coupling depends on a future
+  contributor reading the BUGS_FOUND comment that names the
+  cleanup pattern. There's no in-test breadcrumb that says "when
+  Q-A8 lands, remove this assertion." A future-self reading just
+  the test code would reasonably interpret it as "this token
+  must always be present" rather than "this token is a
+  Q-A8-blocker workaround that can be ripped out together."
+- **Suggested fix:** Add a comment in both tests pointing at the
+  Q-A8-driven cleanup: `# When Q-A8 unblocks and a real
+  package-lock.json is committed, drop this assertion AND the
+  --package-lock-only branch in both release.yml and Dockerfile
+  in the same commit. See B-19/B-28.` Cosmetic but the test will
+  be re-read in the iter that closes Q-A8; that's the high-value
+  moment for the comment.
+
+## Non-findings (checked, no bug)
+
+- **B-29 PEP-440 tag glob.** `v[0-9]+.[0-9]+.[0-9]+` is correct
+  GitHub Actions filter-pattern syntax (`+` is "1+ of preceding
+  character", `.` is literal). Tags `v1.2.3`, `v12.34.56` match;
+  `vbeta`, `vfeature-test`, `v0.0` do not. The forbid-list test
+  correctly catches a re-widening to `v*` / `v[0-9]*` / `v?*`. The
+  pre-release form `v[0-9]+.[0-9]+.[0-9]+-*` accepts the
+  dash-separated convention (`v1.2.3-rc1`); rejects the no-dash
+  PEP-440-canonical `v1.2.3rc1` form. That asymmetry is acceptable
+  — git tags aren't required to follow PEP-440 verbatim, and the
+  dash-form is the de-facto convention across the pd-* peer repos.
+  Not worth filing.
+
+- **B-30 concurrency block.** `cancel-in-progress: false` is
+  correct for release jobs (mid-upload cancel can leave half-
+  uploaded assets). Group keyed on `${{ github.ref }}` means
+  different tags don't block each other but the same tag re-pushed
+  (or "Re-run all jobs") queues. Right shape.
+
+- **B-32 Test-Command explicit boolean.** `$null -ne (Get-Command
+  -Name $Name -ErrorAction SilentlyContinue)` returns exactly
+  `$true` or `$false` (single Boolean). Correct refactor;
+  PowerShell's `-not` no longer accidentally-correct.
+
+- **B-34 setup-uv `python-version` removal.** Correct. `uv build`
+  does spawn a build-isolated PEP 517 env that provisions its own
+  Python; the setup-uv pin was wasted. (B-39 above is about the
+  *test* that the pin removal exposed, not the removal itself.)
+
+- **B-35 installer test tightening.** `re.search(r"uv tool
+  install\s+--reinstall\s+\S+", text)` correctly pins all three
+  load-bearing parts (verb + flag + arg). Verified against
+  `install.sh:64` and `install.ps1:90` (both use exactly that
+  shape).
+
+- **B-18 Tailwind contains-not-equals.** The new
+  `_parse_tailwind_content_globs` parses string literals out of
+  the `content: [...]` array and asserts canonical-glob membership.
+  Empty array would fail the existence-of-`./src/**` check (no glob
+  scans `./src/**/*.{ts,tsx}` if the array is empty), so the test
+  is regression-safe in the "future iter empties the array"
+  hypothesis.
+
+- **`docs/M0-acceptance.md`.** All eight spec acceptance criteria
+  are reflected in the criteria table. The status section is
+  honest about Q-A8/A9 blocking. The sign-off ritual is
+  actionable (six shell commands, no external tooling needed
+  beyond `make ci` + a workstation with Node). ROADMAP M0 sub-
+  task list (`docs/ROADMAP.md:172-217`) is in sync — every
+  unchecked item there is also flagged as "gated on Q-A8" in
+  M0-acceptance.md. No drift between the two.
+
+- **Test count growth 121 → 136 (+15).** Genuine shape pins, no
+  trivially-passing tests:
+  - iter 26: +3 (cross-file alignment, dockerfile two-pass,
+    release.yml two-pass).
+  - iter 27: +3 (concurrency, setup-node cache, setup-uv cache).
+  - iter 28: +3 (Test-Command explicit bool, MS Store stub
+    detection, setup-uv-no-python-version).
+  - iter 29: +6 (M0-acceptance shape pins).
+  All assert against actual file contents. None are "if X then
+  Y" no-op tests. B-39 above is the only test in the batch with
+  a meaningfully-loosened invariant.
+
+- **BUGS_FOUND.md staleness audit.** Spot-checked B-19, B-28,
+  B-29..B-36 fix annotations. All cite the iter that landed the
+  fix and the right commit-sha. B-19's annotation (covers the
+  paired iter-26 fix with B-28) is honest about the remaining
+  Q-A8 dependency. No findings need to be flipped to open. (B-37
+  above is a NEW issue introduced by iter 27, not a re-opening
+  of a previously-closed entry.)
+
+- **OPEN_QUESTIONS.md staleness.** Q-A8 (Node availability) and
+  Q-A9 (ESLint config) both genuinely still blocked — no
+  `frontend/package-lock.json`, no `frontend/eslint.config.*`,
+  `node` and `npm` not on PATH. Q-A10 (PyPI publish)
+  intentionally deferred. No question should close yet.
+
+## Summary — iter 30
+
+**5 findings: 0 blocker, 1 high (B-37), 0 medium, 2 low (B-38, B-41), 2 nit (B-39, B-40).**
+
+Top concerns:
+
+1. **B-37 (high)** — `actions/setup-node@v4`'s `cache: "npm"` +
+   missing `frontend/package-lock.json` will hard-fail the workflow
+   at the Setup Node.js step **before** the iter-26 two-pass install
+   gets a chance to bootstrap the lockfile. This silently re-opens
+   B-28 (the M0-load-bearing high that iter 26 just fixed). Pre-1.0
+   the impact is invisible (no tag pushed yet), but the next tag
+   push will produce no Release. **Fix this before any tag push.**
+
+2. **B-38 (low)** — Dockerfile's `--include=dev` is asymmetric with
+   release.yml's no-flag `npm ci`. Works today by default, but the
+   "byte-aligned" framing in the iter-26 commit message overstates
+   the actual symmetry, and the cross-file test only checks two
+   tokens.
+
+3. **B-39 / B-40 / B-41** — quality-of-life: a fragile prose-pinning
+   test (B-39), a regex that misclassifies pre-release Pythons
+   (B-40), and a planned-obsolete test pin without a breadcrumb
+   (B-41). None block M0.
+
+**Test suite:** 136/136 green in 0.24s. No flakiness. ruff +
+pre-commit clean.
+
+**M0 status (re-assessed):** **Not yet declarable complete.** Three
+remaining blockers:
+
+- Q-A8 (frontend toolchain) — gates 4/8 acceptance criteria.
+- Q-A9 (ESLint config) — gates 1/8 acceptance criteria.
+- **B-37** (the new high) — release pipeline cannot run end-to-end
+  due to setup-node hard-failing on missing lockfile.
+
+The good news: B-37 is one-line fix (drop the cache enablement
+until Q-A8 lands). The acceptance gate decision is unchanged from
+iter 25's checkpoint — Q-A8 + Q-A9 are user-action items
+(devcontainer feature, ESLint config decision) and M0 cannot be
+self-closed by the /loop. Iter 31 should pick **B-37** first; B-38
+can ride along (one-line `--include=dev` add). B-39/B-40/B-41 are
+opportunistic.
+
+**Iter 31 picks: B-37 (drop or guard the npm cache), bundled with
+B-38 (`--include=dev` symmetry).**
