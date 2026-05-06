@@ -36,6 +36,7 @@ from .api.env_js import install_env_js
 from .api.healthz import install_healthz
 from .api.middleware.error_handler import install_error_handlers
 from .api.middleware.request_id import RequestIdMiddleware
+from .api.static_mounts import install_image_cache, install_spa_fallback
 from .core.app_state import build_app_state
 from .core.logging_config import configure_logging
 from .settings import Settings
@@ -110,13 +111,22 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # /healthz BEFORE SPA mount so the catch-all fallback can't shadow it.
     install_healthz(app)
 
-    # Per specs/02-backend.md §2 step 12: /env.js (and the future
-    # /image-cache mount + SPA fallback) only land in non-api_only modes.
-    # api_only is the OpenAPI-export / pure-API integration shape — the
-    # SPA bootstrap shim has no business existing there.
+    # Per specs/02-backend.md §2 step 12: /env.js, /image-cache, and the
+    # SPA fallback only land in non-api_only modes. api_only is the
+    # OpenAPI-export / pure-API integration shape — the SPA bootstrap
+    # shim has no business existing there.
     if settings.mode != "api_only":
+        # Order matters:
+        # 1. /env.js — concrete route, registered first so the SPA
+        #    catch-all can't shadow it.
+        # 2. /image-cache/{key:path} — concrete route through IStorage
+        #    (D-019); also concrete so the catch-all can't shadow.
+        # 3. SPA fallback `/{full_path:path}` — registered LAST so every
+        #    real route wins ahead of the catch-all. Spec §10.
         install_env_js(app)
+        install_image_cache(app)
+        install_spa_fallback(app)
     else:
-        log.debug("api_only mode: skipping /env.js + SPA static mount")
+        log.debug("api_only mode: skipping /env.js + /image-cache + SPA fallback")
 
     return app
