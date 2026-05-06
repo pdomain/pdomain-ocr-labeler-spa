@@ -7,10 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
-    "openapi:gen": "openapi-typescript ../openapi.json -o src/api/types.ts"
+    "openapi:gen": "openapi-typescript openapi.json -o src/api/types.ts"
   },
   "dependencies": {
     "react": "^19.0.0",

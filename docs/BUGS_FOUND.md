@@ -118,6 +118,14 @@ from the list. Severity legend: blocker > high > medium > low > nit.
   and pass into `Settings(**overrides)` once.
 
 ## B-05 — `frontend/package.json` declares `npm run lint` but eslint is not installed
+- **Status:** ✅ **Fixed in iter 8 (2026-05-06)** — dropped the
+  dangling `lint` script from `frontend/package.json`. Re-introducing
+  it requires landing eslint + a real `eslint.config.{js,ts}` in
+  the same change (deferred under Q-A9 in `OPEN_QUESTIONS.md`).
+  Regression test in
+  `tests/unit/test_frontend_config.py::test_package_json_does_not_declare_unrunnable_eslint_script`
+  pins the invariant: if `lint` exists, eslint must be in
+  `devDependencies` simultaneously.
 - **Severity:** low
 - **Where:** `frontend/package.json:10` (`"lint": "eslint . --ext
   .ts,.tsx"`).
@@ -136,6 +144,13 @@ from the list. Severity legend: blocker > high > medium > low > nit.
   config" sub-task.
 
 ## B-06 — `frontend/package.json` `openapi:gen` script reads `../openapi.json`; Makefile writes `frontend/openapi.json`
+- **Status:** ✅ **Fixed in iter 8 (2026-05-06)** — package.json
+  `openapi:gen` now reads `openapi.json` (frontend-local), matching
+  the Makefile's `cd frontend && … openapi-typescript openapi.json
+  -o src/api/types.ts` invocation and `specs/01-data-models.md:712-713`
+  + `specs/15-deployment-dev.md:127`. Regression test in
+  `tests/unit/test_frontend_config.py::test_openapi_gen_path_is_consistent_across_makefile_and_package_json`
+  cross-checks all three sources (Makefile, package.json, spec).
 - **Severity:** low
 - **Where:** `frontend/package.json:13` vs `Makefile:135-144`.
 - **Issue:** `package.json` has
@@ -172,6 +187,18 @@ from the list. Severity legend: blocker > high > medium > low > nit.
   when first consumer arrives.
 
 ## B-08 — `tsconfig.app.json` includes `src/**` so test files are type-checked by `tsc -b` during `npm run build`
+- **Status:** ✅ **Fixed in iter 8 (2026-05-06)** — added explicit
+  `exclude` patterns for `*.test.{ts,tsx}`, `*.spec.{ts,tsx}`,
+  `src/**/__tests__/**` and `src/test/**` to `tsconfig.app.json`,
+  and split test type-checking into a new `tsconfig.test.json` that
+  extends the app config and re-`include`s the same patterns
+  (plus `vitest/globals` + `@testing-library/jest-dom` types).
+  `vitest.config.ts` now wires `typecheck.tsconfig` →
+  `./tsconfig.test.json`. Production build (`tsc -b` via root
+  `tsconfig.json` references) sees app sources only — no vitest
+  globals leak into the prod surface. Regression tests in
+  `tests/unit/test_frontend_config.py` (3 tests covering app
+  excludes, test tsconfig include shape, and vitest wiring).
 - **Severity:** low
 - **Where:** `frontend/tsconfig.app.json:22` (`"include": ["src"]`)
   combined with `frontend/package.json:8` (`"build": "tsc -b && vite

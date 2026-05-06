@@ -76,11 +76,27 @@ every iteration.
   regression to `test_app_factory.py`). Wheel filename now
   `pd_ocr_labeler_spa-0.0.1.dev6+g6b6835b13.d20260506`. Local-only
   retag, no push.
-- [ ] **Iter 8 (next).** Resume scaffolding — Tailwind v3.4 + shadcn,
-  or pick from remaining bugs (B-04 settings mutation, B-05 eslint
-  script without eslint, B-06 openapi:gen path drift, B-07 unused
-  `_build_env(settings)` arg, B-08 tsconfig-includes-tests). B-05 +
-  B-08 are closest to "block M1 frontend work."
+- [x] **Iter 8 (2026-05-06).** Bundled fix for the three frontend
+  config low bugs: B-05 (dropped dangling `lint` script — restoring
+  it requires landing eslint + a real config in the same change,
+  filed Q-A9), B-06 (package.json `openapi:gen` now reads
+  frontend-local `openapi.json` matching Makefile + spec), B-08
+  (split test type-checking into `tsconfig.test.json`; production
+  `tsc -b` now excludes `*.{test,spec}.{ts,tsx}`, `__tests__/**`,
+  `src/test/**`; vitest config wires `typecheck.tsconfig` →
+  `./tsconfig.test.json`). Added `tests/unit/test_frontend_config.py`
+  (5 tests: B-05 conditional invariant, B-06 cross-file path check,
+  B-08 app-excludes / test-includes / vitest-wiring). Test count:
+  30 → 35. ruff lint+format clean. Remaining BUGS_FOUND.md items:
+  B-04 (low) + B-07 (nit).
+- [ ] **Iter 9 (next).** Closest unfixed bugs: B-04 (`__main__.py`
+  mutates `settings.frontend_dev_url` — spec §3 forbids; small
+  refactor to build overrides dict and pass into `Settings(**…)`),
+  B-07 (`_build_env(settings)` ignores its arg — underscore or
+  drop). After bugs cleared, resume M0 scaffolding (Tailwind v3.4
+  + shadcn/ui, Dockerfile, install scripts, DEVELOPMENT.md, release
+  workflow). Q-A9 (eslint shape) and Q-A8 (Node toolchain in
+  devcontainer) remain blockers for M0 acceptance gate.
 - [ ] Tailwind v3.4 + shadcn/ui wiring (`tailwind.config.ts`,
   `postcss.config.js`, `src/index.css`, `components.json`).
   Deferred from iter 2 to keep the smoke scaffold minimal.

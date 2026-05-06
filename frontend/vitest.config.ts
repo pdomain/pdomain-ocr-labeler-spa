@@ -16,6 +16,12 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     css: false,
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // Type-check tests against the test-only tsconfig (B-08): production
+    // build (`tsc -b` via tsconfig.app.json) excludes test files so test
+    // typings + vitest globals stay out of the prod surface.
+    typecheck: {
+      tsconfig: "./tsconfig.test.json",
+    },
   },
   esbuild: {
     // React 19's automatic JSX runtime — no `import React` needed in tests.
