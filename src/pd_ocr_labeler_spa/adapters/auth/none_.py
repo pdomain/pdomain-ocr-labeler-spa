@@ -7,6 +7,8 @@ Spec: ``specs/02-backend.md §7`` ("``none_.py`` returns
 
 from __future__ import annotations
 
+from fastapi.security import HTTPAuthorizationCredentials
+
 from .base import UserContext
 
 
@@ -18,6 +20,6 @@ class NoneAuth:
     no authentication to perform.
     """
 
-    async def verify(self, credentials: str | None) -> UserContext:
-        del credentials  # unused — the labeler accepts any caller as "local"
+    async def verify(self, creds: HTTPAuthorizationCredentials | None) -> UserContext:
+        del creds  # unused — the labeler accepts any caller as "local"
         return UserContext(user_id="local", display_name="Local User")

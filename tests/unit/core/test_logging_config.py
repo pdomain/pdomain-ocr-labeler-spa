@@ -17,8 +17,6 @@ import io
 import json
 import logging
 
-import pytest
-
 from pd_ocr_labeler_spa.core.logging_config import (
     JsonFormatter,
     RequestIdFilter,
@@ -221,11 +219,6 @@ def test_plain_formatter_includes_rid_token() -> None:
     assert "ping" in output
 
 
-@pytest.fixture(autouse=True)
-def _reset_managed_handlers():
-    """Ensure each test starts and ends without a stale managed handler."""
-    yield
-    root = logging.getLogger()
-    for h in list(root.handlers):
-        if getattr(h, "_pdlabeler_managed", False):
-            root.removeHandler(h)
+# B-47: the autouse ``_reset_managed_handlers`` cleanup fixture is now
+# in ``tests/unit/core/conftest.py`` so both this file and
+# ``test_request_id.py`` / ``test_request_audit_log.py`` share it.
