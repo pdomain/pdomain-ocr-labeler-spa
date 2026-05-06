@@ -537,6 +537,22 @@ auto-mounted `/openapi.json` + `/docs` + `/redoc`).
 - **Suggested fix:** One of: (a) add `post-rewrite` and `post-checkout` to `default_install_hook_types` and the `refresh-version` hook's `stages` (covers rebase, amend, cherry-pick, branch switch); (b) demote the hook to a no-op safety net and drive the actual freshness invariant via the existing CI test (`test_version_matches_installed_metadata`) — that test does the right job already; (c) document the gap in `docs/DEVELOPMENT.md` so contributors know to run `make refresh-version` after a rebase. (a) is most thorough; (b) acknowledges the test is the real guard. Either way, update the iter-12 entry in `LOOP_STATE.md` so future readers don't see B-11 as a fully solved problem.
 
 ## B-18 — Tailwind shape-pin test asserts content globs as a literal substring (forward-incompatible with shadcn/ui in M1)
+- **Status:** ✅ **Fixed in iter 29 (2026-05-06)** — replaced
+  `test_tailwind_config_exists_and_targets_src_globs` (substring/OR
+  check) with `test_tailwind_config_content_array_includes_canonical_src_glob`,
+  which parses the `content: [...]` array out of `tailwind.config.js`
+  via regex, extracts the string-literal entries, and asserts the
+  parsed list CONTAINS at least one entry that scans `./src/**` for
+  both `.ts` and `.tsx` (tolerating brace-expansion forms with extra
+  extensions like `{js,ts,jsx,tsx,mdx}`). Future shadcn/ui init that
+  *adds* entries (e.g. `./components/**/*.{ts,tsx}`,
+  `./app/**/*.{ts,tsx}`) is now accepted; only a regression that
+  *removes* the project's own `./src/**` scan will fail. Inline
+  comment in `tailwind.config.js` updated to document the
+  contains-not-equals contract for future readers. `tailwind.config.js`
+  itself unchanged (the existing single-glob form remains the
+  minimal correct form; we don't proactively add `./components/**`
+  because shadcn/ui init writes that entry itself when it lands).
 - **Severity:** low
 - **Where:** `frontend/tailwind.config.js:10-13` (`content: ["./index.html", "./src/**/*.{ts,tsx}"]`); pinning test in `tests/unit/test_tailwind_config.py`.
 - **Issue:** The glob `./src/**/*.{ts,tsx}` *does* recurse, so any future `src/components/ui/**.tsx` file is technically scanned. **However**, shadcn/ui's `init` writes a `tailwind.config.js` whose content array explicitly lists `./components/**/*.{ts,tsx}`, `./app/**/*.{ts,tsx}`, `./pages/**/*.{ts,tsx}`, and `./src/**/*.{ts,tsx}` — and the `components.json` `cli.tailwind.config` field points at a config the CLI parses. When iter N runs `npx shadcn@latest init` (currently blocked on Q-A8), the CLI may either (a) detect the existing config and merge cleanly, or (b) overwrite the file with its own template. If the test pins a literal substring of the content array, a shadcn overwrite that *expands* the globs would fail the test and force the iter author to manually patch the test rather than accept the more inclusive globs.

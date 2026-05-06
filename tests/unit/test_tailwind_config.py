@@ -32,20 +32,76 @@ PACKAGE_JSON = FRONTEND / "package.json"
 # ---------------------------------------------------------------------------
 
 
-def test_tailwind_config_exists_and_targets_src_globs() -> None:
-    """``content`` must include the index.html and the ``src/**/*.{ts,tsx}``
-    glob; otherwise JIT can't see class names referenced in TSX and the
-    output stylesheet is silently empty."""
-    assert TAILWIND_CONFIG.exists(), "frontend/tailwind.config.js missing"
+_CONTENT_ARRAY_RE = re.compile(r"content\s*:\s*\[(?P<body>[^\]]*)\]", re.DOTALL)
+_STRING_LITERAL_RE = re.compile(r"""['"]([^'"]+)['"]""")
+
+
+def _parse_tailwind_content_globs() -> list[str]:
+    """Extract the ``content`` array entries from ``tailwind.config.js``.
+
+    Tailwind's config is JS (not JSON), but the ``content`` field is a
+    plain array of string literals — no spreads, no template strings,
+    no computed values in any reasonable shadcn/ui or hand-written
+    config. We tolerate either single or double quotes and ignore
+    surrounding whitespace / inline comments inside the array. Asserts
+    on the *parsed* array rather than substrings so additive evolution
+    (e.g. shadcn/ui adding ``./components/**/*.{ts,tsx}``) doesn't break
+    the test as long as the canonical project glob remains a member.
+    """
     text = TAILWIND_CONFIG.read_text(encoding="utf-8")
-    assert "./index.html" in text, "tailwind.config.js content array must include ./index.html"
-    # Match either the brace-expansion form (preferred) or two separate
-    # globs — both produce the same JIT scan set.
-    has_brace_glob = "./src/**/*.{ts,tsx}" in text
-    has_split_globs = "./src/**/*.ts" in text and "./src/**/*.tsx" in text
-    assert has_brace_glob or has_split_globs, (
-        "tailwind.config.js content array must scan ./src/**/*.{ts,tsx} "
-        "(either as a brace-expansion glob or two separate globs)."
+    match = _CONTENT_ARRAY_RE.search(text)
+    assert match is not None, "tailwind.config.js: could not locate `content: [ ... ]` array"
+    body = match.group("body")
+    return [m.group(1) for m in _STRING_LITERAL_RE.finditer(body)]
+
+
+def _glob_scans_src_ts_tsx(glob: str) -> bool:
+    """Does this glob entry scan ``./src`` recursively for both ``.ts``
+    and ``.tsx`` files? Tolerates brace-expansion entries that include
+    *additional* extensions (e.g. ``{js,ts,jsx,tsx,mdx}``), so a future
+    shadcn/ui-style expansion remains acceptable as long as ts/tsx are
+    still covered."""
+    if not glob.startswith("./src/"):
+        return False
+    if "**" not in glob:
+        return False
+    if glob.endswith(".ts") or glob.endswith(".tsx"):
+        # Split-glob form: caller checks both extensions separately.
+        return True
+    # Brace-expansion form: extract the {…} part and check membership.
+    brace_match = re.search(r"\{([^}]+)\}", glob)
+    if not brace_match:
+        return False
+    extensions = {ext.strip() for ext in brace_match.group(1).split(",")}
+    return {"ts", "tsx"}.issubset(extensions)
+
+
+def test_tailwind_config_content_array_includes_canonical_src_glob() -> None:
+    """``content`` must contain at least one entry that scans
+    ``./src/**`` for ``.ts`` and ``.tsx`` — otherwise JIT can't see
+    class names referenced in TSX and the output stylesheet is silently
+    empty.
+
+    Asserts on the parsed array, not a literal substring, so shadcn/ui
+    init (or any future tool) that *adds* additional content entries
+    (e.g. ``./components/**/*.{ts,tsx}`` or ``./app/**/*.{ts,tsx}``) is
+    accepted. Only a regression that *removes* the project's own
+    ``./src/**`` scan should fail."""
+    assert TAILWIND_CONFIG.exists(), "frontend/tailwind.config.js missing"
+    globs = _parse_tailwind_content_globs()
+    assert "./index.html" in globs, (
+        f"tailwind.config.js content array must include './index.html'; got {globs!r}"
+    )
+    # Either a single brace-expansion entry covering both extensions,
+    # or two split entries (one .ts and one .tsx).
+    has_combined = any(_glob_scans_src_ts_tsx(g) and not g.endswith((".ts", ".tsx")) for g in globs)
+    has_split = any(g.startswith("./src/") and "**" in g and g.endswith(".ts") for g in globs) and any(
+        g.startswith("./src/") and "**" in g and g.endswith(".tsx") for g in globs
+    )
+    assert has_combined or has_split, (
+        f"tailwind.config.js content array must scan ./src/** recursively "
+        f"for both .ts and .tsx (either as a brace-expansion glob or two "
+        f"split globs); got {globs!r}"
     )
 
 
