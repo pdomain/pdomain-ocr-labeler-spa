@@ -1,6 +1,14 @@
 # Mirrors the peer pd-* convention (see pd-prep-for-pgdp/.pre-commit-config.yaml).
 # Hook list is intentionally kept in lockstep with sibling repos so a single
 # `pre-commit install` works the same way across the workspace.
+
+# `make setup` runs `pre-commit install` once; with this directive it also
+# installs the post-commit hook (see `local` repo below) without requiring
+# `--hook-type post-commit`. Fixes B-11: `__version__` was drifting because
+# hatch-vcs only re-derives the version on (re)install; refreshing
+# automatically after every commit eliminates the drift class.
+default_install_hook_types: [pre-commit, post-commit]
+
 repos:
 -   repo: https://gitlab.com/vojko.pribudic.foss/pre-commit-update
     rev: v0.9.0
@@ -25,3 +33,19 @@ repos:
         args: [--fix]
     # Run the formatter.
     -   id: ruff-format
+
+-   repo: local
+    hooks:
+    # B-11: refresh hatch-vcs derived version after each new commit so
+    # `pd_ocr_labeler_spa.__version__` and `pd-ocr-labeler-ui --version`
+    # stay aligned with the current HEAD/tag state. Runs `make
+    # refresh-version` (which reinstalls the package in-place); failure
+    # is non-fatal so a missing toolchain doesn't block the commit.
+    -   id: refresh-version
+        name: refresh hatch-vcs version after commit
+        entry: make refresh-version
+        language: system
+        stages: [post-commit]
+        always_run: true
+        pass_filenames: false
+        verbose: false

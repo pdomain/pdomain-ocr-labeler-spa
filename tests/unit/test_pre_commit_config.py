@@ -68,7 +68,59 @@ def test_pre_commit_update_repo_present(config: dict) -> None:
 
 
 def test_every_repo_pins_a_rev(config: dict) -> None:
-    """Unpinned hook revs lead to silent toolchain drift across machines."""
+    """Unpinned hook revs lead to silent toolchain drift across machines.
+
+    `local` repos are exempt — they reference scripts in the working tree,
+    so there's no upstream rev to pin.
+    """
     for entry in config["repos"]:
+        if entry["repo"] == "local":
+            continue
         rev = entry.get("rev")
         assert isinstance(rev, str) and rev, f"repo {entry['repo']!r} must pin a `rev`"
+
+
+def test_default_install_hook_types_includes_post_commit(config: dict) -> None:
+    """B-11: post-commit refresh-version hook only runs if it gets installed.
+
+    `pre-commit install` (called by `make setup`) defaults to installing
+    only the pre-commit hook type. `default_install_hook_types` extends
+    that so a single `pre-commit install` also wires up post-commit,
+    keeping the developer setup story to one command.
+    """
+    declared = config.get("default_install_hook_types")
+    assert isinstance(declared, list), (
+        "default_install_hook_types must be a list so `pre-commit install` "
+        "wires up the post-commit refresh-version hook for B-11"
+    )
+    assert "post-commit" in declared, (
+        "post-commit must be in default_install_hook_types or B-11's auto-refresh hook is dormant"
+    )
+    # Sanity: still installs the pre-commit hook by default.
+    assert "pre-commit" in declared
+
+
+def test_local_refresh_version_post_commit_hook_present(config: dict) -> None:
+    """B-11: `make refresh-version` runs after each commit so hatch-vcs
+    re-derives `__version__` from the new HEAD instead of staying frozen
+    at the last `uv sync`."""
+    local_entries = [e for e in config["repos"] if e["repo"] == "local"]
+    assert local_entries, "expected a `repo: local` entry hosting refresh-version"
+
+    refresh_hooks = [
+        hook for entry in local_entries for hook in entry["hooks"] if hook.get("id") == "refresh-version"
+    ]
+    assert refresh_hooks, "missing `refresh-version` hook in the local repo"
+    assert len(refresh_hooks) == 1, "expected exactly one `refresh-version` hook"
+
+    hook = refresh_hooks[0]
+    assert hook.get("stages") == ["post-commit"], (
+        "refresh-version must be staged post-commit only — running it "
+        "pre-commit would block on `uv pip install` and slow every commit"
+    )
+    assert hook.get("language") == "system", "refresh-version shells out to make"
+    assert "make refresh-version" in (hook.get("entry") or ""), (
+        "hook entry must invoke `make refresh-version` (the canonical refresh path)"
+    )
+    assert hook.get("always_run") is True, "refresh-version doesn't depend on staged files; must always_run"
+    assert hook.get("pass_filenames") is False, "make refresh-version takes no file arguments"

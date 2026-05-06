@@ -9,7 +9,7 @@ every iteration.
 
 | Milestone | Status | Notes |
 |---|---|---|
-| **M0** Repo scaffold | 🟡 in progress | Iter 1 backend skeleton + tests; iter 2 frontend scaffold (files only); iter 3 `mise.toml` + Makefile + Makefile parse smoke tests; iter 4 `.pre-commit-config.yaml` mirroring pd-prep-for-pgdp + YAML-shape smoke tests; iter 5 **code-review checkpoint** → 9 findings filed in `BUGS_FOUND.md`; iter 6 fixed B-02 + B-03; iter 7 fixed B-01 + B-09; iter 8 fixed B-05 + B-06 + B-08; iter 9 fixed B-04 (Settings now `frozen=True` + `Settings(**overrides)` in `__main__`) + B-07 (`_build_env()` no-arg) and added `docs/DEVELOPMENT.md` with shape-pin tests; iter 10 **code-review checkpoint** → 5 new findings (B-11..B-15: 2 low, 3 nit; no blockers); iter 11 fixed B-12 (DEVELOPMENT.md M0 honesty) + B-13 (AST scanner AugAssign/AnnAssign) + B-14 (`_build_env` test reframed) + B-15 (CORS unconditional). Frontend `npm install` still blocked on Q-A8. Dockerfile / install scripts / Tailwind+shadcn / release workflow still pending for M0 acceptance gate. |
+| **M0** Repo scaffold | 🟡 in progress | Iter 1 backend skeleton + tests; iter 2 frontend scaffold (files only); iter 3 `mise.toml` + Makefile + Makefile parse smoke tests; iter 4 `.pre-commit-config.yaml` mirroring pd-prep-for-pgdp + YAML-shape smoke tests; iter 5 **code-review checkpoint** → 9 findings filed in `BUGS_FOUND.md`; iter 6 fixed B-02 + B-03; iter 7 fixed B-01 + B-09; iter 8 fixed B-05 + B-06 + B-08; iter 9 fixed B-04 (Settings now `frozen=True` + `Settings(**overrides)` in `__main__`) + B-07 (`_build_env()` no-arg) and added `docs/DEVELOPMENT.md` with shape-pin tests; iter 10 **code-review checkpoint** → 5 new findings (B-11..B-15: 2 low, 3 nit; no blockers); iter 11 fixed B-12 + B-13 + B-14 + B-15; iter 12 fixed B-11 (post-commit pre-commit hook auto-runs `make refresh-version` so `__version__` stays current). **All review findings to date are closed.** Frontend `npm install` still blocked on Q-A8. Dockerfile / install scripts / Tailwind+shadcn / release workflow still pending for M0 acceptance gate. |
 | M1 Settings + adapters + AppState | ⬜ not started | Pre-conditions: M0. |
 | M2 Project discovery + load | ⬜ not started | Pre-conditions: M0, M1. |
 | M3 OCR config modal + first-page OCR | ⬜ not started | |
@@ -121,12 +121,23 @@ every iteration.
   credentials bit directly). Test count: 42 → 44. ruff clean. Sole
   remaining iter-10 finding: **B-11** (stale `__version__`) —
   deferred to iter 12.
-- [ ] **Iter 12 (next).** Pick B-11 (wire `make refresh-version`
-  into `make setup` or a post-commit hook so `__version__` doesn't
-  drift across iterations) — small fix. Or resume scaffolding
-  (Tailwind v3.4 + shadcn / Dockerfile / install scripts / release
-  workflow). Iter 12 is also the next code-review checkpoint per
-  /loop cadence.
+- [x] **Iter 12 (2026-05-06).** Fixed B-11 (last open iter-10
+  finding). Approach: post-commit pre-commit hook calling
+  `make refresh-version` plus `default_install_hook_types:
+  [pre-commit, post-commit]` so the existing `pre-commit install` in
+  `make setup` wires both. Three regression tests added: two in
+  `tests/unit/test_pre_commit_config.py` (default-install-hook-types
+  + local-repo refresh-version hook shape) and a new
+  `tests/unit/test_version.py` module (runtime check that
+  `__version__ == importlib.metadata.version("pd-ocr-labeler-spa")`
+  + AST guard that `__init__.py` only ever assigns `__version__`
+  from `version()` calls or a literal inside an
+  `except PackageNotFoundError:` block). Test count: 44 → 48. ruff
+  clean. **No iter-10 review findings remain.** Iter 13 should resume
+  scaffolding — Tailwind v3.4 wiring is the recommended next chunk
+  (small, well-bounded: tailwind.config.js, postcss.config.js,
+  src/index.css with `@tailwind` directives, file existence + grep
+  tests). Iter 15 is the next code-review checkpoint.
 - [ ] Tailwind v3.4 + shadcn/ui wiring (`tailwind.config.ts`,
   `postcss.config.js`, `src/index.css`, `components.json`).
   Deferred from iter 2 to keep the smoke scaffold minimal.

@@ -336,6 +336,23 @@ behavior-or-AST style rather than dumb file-presence (improvement on
 iter-5). Findings below are quibbles — no blockers, no high.
 
 ## B-11 — `__version__` is stale: reports `dev6+g6b6835b13` while HEAD is `7e593cc` (iter-9, 9 commits past `v0.0.0`)
+- **Status:** ✅ **Fixed in iter 12 (2026-05-06)** — added a post-commit
+  hook to `.pre-commit-config.yaml` (`local` repo, `id: refresh-version`,
+  `stages: [post-commit]`) that runs `make refresh-version` after every
+  commit, plus `default_install_hook_types: [pre-commit, post-commit]`
+  so the single `pre-commit install` call already in `make setup`
+  installs both hook types. `__init__.py` already used the dynamic
+  `importlib.metadata.version` resolution path; the new post-commit
+  hook is what keeps that metadata fresh between commits. Three new
+  regression tests:
+  `test_pre_commit_config.py::test_default_install_hook_types_includes_post_commit`,
+  `test_pre_commit_config.py::test_local_refresh_version_post_commit_hook_present`,
+  and `test_version.py` (full module: pins both the runtime invariant
+  `__version__ == importlib.metadata.version("pd-ocr-labeler-spa")` and
+  the static AST invariant that `__init__.py` only ever assigns
+  `__version__` from a `version()` call or a literal inside an
+  `except PackageNotFoundError:` block — preventing any future drift
+  back to a hard-coded string).
 - **Severity:** low
 - **Where:** runtime — `python -c "import pd_ocr_labeler_spa; print(pd_ocr_labeler_spa.__version__)"` returns `0.0.1.dev6+g6b6835b13.d20260506` even though `git rev-list --count v0.0.0..HEAD` is 9 and HEAD is `7e593cc`.
 - **Issue:** `hatch-vcs` writes `_version.py` at install time. Iter 7 ran `uv sync --reinstall-package` after retagging, which froze the version at iter 6's commit. Subsequent iters 8 + 9 didn't refresh, so the in-tree version is now off by 3 commits. This is exactly what `make refresh-version` exists to undo, but no iteration that lands new commits is wired to call it.
@@ -435,3 +452,24 @@ iter-5). Findings below are quibbles — no blockers, no high.
 
 Test count after iter 11: **44** (was 42 — +1 test for B-12 doc
 honesty, +1 for B-13 self-test). All ruff gates clean.
+
+---
+
+## Iter 12 disposition (2026-05-06)
+
+- ~~**B-11** (stale `__version__`)~~ — ✅ fixed. Wired
+  `make refresh-version` into the post-commit pre-commit hook (new
+  `local` repo entry in `.pre-commit-config.yaml`) and added
+  `default_install_hook_types: [pre-commit, post-commit]` so a single
+  `pre-commit install` (already part of `make setup`) installs both
+  hook types. `__init__.py` was already on the dynamic
+  `importlib.metadata.version` resolution path; the install-time
+  freeze is now refreshed automatically per commit. Three new
+  regression tests across `test_pre_commit_config.py` (post-commit
+  hook + default-install-hook-types pins) and a new `test_version.py`
+  (runtime + AST guards on dynamic resolution).
+
+**Iter-10 review backlog: zero remaining.** All B-11..B-15 closed.
+
+Test count after iter 12: **48** (was 44 — +2 in pre-commit-config,
++2 in new test_version module). All ruff gates clean.
