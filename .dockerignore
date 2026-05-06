@@ -1,0 +1,41 @@
+# What `docker build` should NOT copy into the image build context.
+#
+# Two principles:
+#   1. The frontend `spa` stage builds the SPA fresh from `frontend/` —
+#      no need to ship anyone's local `node_modules/` or `dist/`.
+#   2. The wheel `wheel` stage compiles a clean wheel — no need to ship
+#      build artefacts, caches, or local data.
+#
+# Mirrors `pd-prep-for-pgdp/.dockerignore` (specs/15-deployment-dev.md §6).
+
+.git/
+.gitignore
+.venv/
+.uv-cache/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Frontend build inputs/outputs we explicitly do NOT want — the `spa`
+# stage runs `npm install` + `npm run build` from a clean slate.
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Wheel build artefacts from local builds.
+dist/
+build/
+*.egg-info/
+src/pd_ocr_labeler_spa/static/
+
+# Tests + specs aren't needed in the runtime image.
+tests/
+specs/
+docs/
+
+# Editor / OS noise.
+.vscode/
+.idea/
+.DS_Store
