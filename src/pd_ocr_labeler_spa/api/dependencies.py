@@ -35,10 +35,12 @@ def _state_attr(request: Request, name: str) -> object:
     state = request.app.state
     try:
         return getattr(state, name)
-    except AttributeError as exc:  # pragma: no cover - defensive
+    except AttributeError as exc:
         # ``app.state`` raises ``AttributeError`` on a missing key. The
         # message names the missing attr + the wiring step so a test
-        # author can find the gap fast.
+        # author can find the gap fast. (B-52: dropped the
+        # ``pragma: no cover`` — this branch IS exercised by
+        # ``test_provider_raises_runtime_error_on_unwired_app``.)
         msg = (
             f"app.state.{name} not set — call bootstrap.build_app(settings) "
             f"to wire the dependency graph (specs/02-backend.md §2 step 9)."

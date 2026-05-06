@@ -58,58 +58,66 @@ def client(settings: Settings) -> Iterator[TestClient]:
         yield c
 
 
-# Track each provider's returned object across requests so we can assert
-# identity-stability of the singleton. ``id()`` is sufficient — no
-# attempt to JSON-serialise the adapter object goes over the wire.
-_LAST_IDS: dict[str, list[int]] = {
-    "settings": [],
-    "app_state": [],
-    "storage": [],
-    "auth": [],
-    "ocr_engine": [],
-}
+def _attach_probe_routes(app: FastAPI) -> dict[str, list[int]]:
+    """Attach probe routes that exercise each Depends provider.
 
-
-def _attach_probe_routes(app: FastAPI) -> None:
-    """Attach probe routes that exercise each Depends provider."""
-    _LAST_IDS["settings"].clear()
-    _LAST_IDS["app_state"].clear()
-    _LAST_IDS["storage"].clear()
-    _LAST_IDS["auth"].clear()
-    _LAST_IDS["ocr_engine"].clear()
+    Returns a fresh ``ids`` dict that the routes append into via
+    closure capture — one dict per fixture call (B-55: previously this
+    was a module-global, which would have raced under ``pytest-xdist``
+    and was a code smell besides — probe state belongs on the fixture,
+    not the module).
+    """
+    ids: dict[str, list[int]] = {
+        "settings": [],
+        "app_state": [],
+        "storage": [],
+        "auth": [],
+        "ocr_engine": [],
+    }
 
     @app.get("/_probe/settings")
     def _settings_probe(s: Settings = Depends(get_settings)) -> dict[str, object]:
-        _LAST_IDS["settings"].append(id(s))
+        ids["settings"].append(id(s))
         return {"type": type(s).__name__, "id": id(s)}
 
     @app.get("/_probe/app_state")
     def _app_state_probe(state: AppState = Depends(get_app_state)) -> dict[str, object]:
-        _LAST_IDS["app_state"].append(id(state))
+        ids["app_state"].append(id(state))
         return {"type": type(state).__name__, "id": id(state)}
 
     @app.get("/_probe/storage")
     def _storage_probe(storage: IStorage = Depends(get_storage)) -> dict[str, object]:
-        _LAST_IDS["storage"].append(id(storage))
+        ids["storage"].append(id(storage))
         return {"type": type(storage).__name__, "id": id(storage)}
 
     @app.get("/_probe/auth")
     def _auth_probe(auth: IAuth = Depends(get_auth)) -> dict[str, object]:
-        _LAST_IDS["auth"].append(id(auth))
+        ids["auth"].append(id(auth))
         return {"type": type(auth).__name__, "id": id(auth)}
 
     @app.get("/_probe/ocr")
     def _ocr_probe(ocr: IOCREngine = Depends(get_ocr_engine)) -> dict[str, object]:
-        _LAST_IDS["ocr_engine"].append(id(ocr))
+        ids["ocr_engine"].append(id(ocr))
         return {"type": type(ocr).__name__, "id": id(ocr)}
+
+    return ids
 
 
 @pytest.fixture
-def probed_client(settings: Settings) -> Iterator[TestClient]:
+def probe_state(settings: Settings) -> Iterator[tuple[TestClient, dict[str, list[int]]]]:
+    """Yield a TestClient + the fresh per-fixture ``ids`` capture dict."""
     app = build_app(settings)
-    _attach_probe_routes(app)
+    ids = _attach_probe_routes(app)
     with TestClient(app) as c:
-        yield c
+        yield c, ids
+
+
+@pytest.fixture
+def probed_client(
+    probe_state: tuple[TestClient, dict[str, list[int]]],
+) -> TestClient:
+    """Back-compat alias for tests that don't need the ``ids`` dict."""
+    return probe_state[0]
 
 
 # ── per-provider type checks ───────────────────────────────────────────────
@@ -159,7 +167,7 @@ def test_get_ocr_engine_returns_local_doctr(probed_client: TestClient) -> None:
     ],
 )
 def test_provider_returns_same_singleton_across_requests(
-    probed_client: TestClient,
+    probe_state: tuple[TestClient, dict[str, list[int]]],
     path: str,
     key: str,
 ) -> None:
@@ -168,11 +176,12 @@ def test_provider_returns_same_singleton_across_requests(
     If a provider accidentally re-built adapters per request the
     identity would drift; this pin closes that regression.
     """
-    r1 = probed_client.get(path)
-    r2 = probed_client.get(path)
+    client, ids = probe_state
+    r1 = client.get(path)
+    r2 = client.get(path)
     assert r1.status_code == 200
     assert r2.status_code == 200
-    assert _LAST_IDS[key] == [r1.json()["id"], r2.json()["id"]]
+    assert ids[key] == [r1.json()["id"], r2.json()["id"]]
     assert r1.json()["id"] == r2.json()["id"]
 
 
@@ -199,22 +208,48 @@ def test_get_storage_yields_same_object_as_app_state_storage(
 # ── failure mode: bare FastAPI() without bootstrap wiring ─────────────────
 
 
-def test_get_storage_raises_runtime_error_on_unwired_app() -> None:
-    """A test that builds ``FastAPI()`` directly (no ``build_app``) hits a clear error."""
+@pytest.mark.parametrize(
+    ("provider", "missing_attr"),
+    [
+        (get_settings, "settings"),
+        (get_app_state, "app_state"),
+        (get_storage, "storage"),
+        (get_auth, "auth"),
+        (get_ocr_engine, "ocr_engine"),
+    ],
+)
+def test_provider_raises_runtime_error_on_unwired_app(
+    provider: object,
+    missing_attr: str,
+) -> None:
+    """Every provider must raise a wiring-clear ``RuntimeError`` on a bare ``FastAPI()``.
+
+    The spec §6 contract says: each provider points the test author at
+    the missing ``app.state.<name>`` AND at ``bootstrap.build_app``.
+    We pin all 5 here (B-52) — previously only ``get_storage`` was
+    exercised, so a refactor that broke the wiring-error UX of any of
+    the other 4 providers would slip through unit tests.
+
+    The ``match=`` regex pins both halves of the message: the missing
+    attribute name AND the ``bootstrap.build_app`` pointer — the
+    *helpful* part, not just the exception class.
+    """
     app = FastAPI()
+
     # Manually mount a route reading the unwired provider — exercise the
     # provider's failure path without going through ``build_app``.
-
     @app.get("/probe")
     def _probe(  # pragma: no cover - body unreached
-        storage: IStorage = Depends(get_storage),
+        dep: object = Depends(provider),
     ) -> dict[str, str]:
         return {"ok": "yes"}
 
     with TestClient(app, raise_server_exceptions=True) as client:
-        with pytest.raises(RuntimeError) as exc:
+        with pytest.raises(
+            RuntimeError,
+            match=rf"app\.state\.{missing_attr}.*bootstrap\.build_app",
+        ):
             client.get("/probe")
-        assert "app.state.storage" in str(exc.value)
 
 
 # ── direct call shape (no FastAPI plumbing) ───────────────────────────────
