@@ -9,7 +9,7 @@ every iteration.
 
 | Milestone | Status | Notes |
 |---|---|---|
-| **M0** Repo scaffold | 🟡 in progress | Iter 1 backend skeleton + tests; iter 2 frontend scaffold (files only); iter 3 (2026-05-06) `mise.toml` (Node 24 / Py 3.13) + Makefile mirroring pd-prep-for-pgdp + Makefile parse smoke tests. Frontend `npm install` still blocked on Q-A8 (no node/npm/mise on PATH). Dockerfile / install scripts / pre-commit / DEVELOPMENT.md pending. |
+| **M0** Repo scaffold | 🟡 in progress | Iter 1 backend skeleton + tests; iter 2 frontend scaffold (files only); iter 3 (2026-05-06) `mise.toml` + Makefile + Makefile parse smoke tests; iter 4 (2026-05-06) `.pre-commit-config.yaml` mirroring pd-prep-for-pgdp + 5 YAML-shape smoke tests. Frontend `npm install` still blocked on Q-A8 (no node/npm/mise on PATH). Dockerfile / install scripts / DEVELOPMENT.md pending. |
 | M1 Settings + adapters + AppState | ⬜ not started | Pre-conditions: M0. |
 | M2 Project discovery + load | ⬜ not started | Pre-conditions: M0, M1. |
 | M3 OCR config modal + first-page OCR | ⬜ not started | |
@@ -45,15 +45,17 @@ every iteration.
   helpers). Added `tests/unit/test_makefile.py` (parse + dry-run
   smoke). Q-A8 still open: devcontainer has no node/npm/mise; see
   iter-3 update note in `OPEN_QUESTIONS.md`.
-- [ ] **Iter 4 (next).** Pick a tractable M0 sub-task that doesn't
-  need npm: `.pre-commit-config.yaml` (ruff hooks), or
-  `DEVELOPMENT.md`, or `Dockerfile` (two-stage Node→Python — the
-  Node stage runs in Docker, not the devcontainer, so it's
-  unblocked).
+- [x] **Iter 4.** `.pre-commit-config.yaml` mirroring
+  pd-prep-for-pgdp (pre-commit-update; trailing-whitespace,
+  end-of-file-fixer, check-yaml, check-json; ruff-check ×2 +
+  ruff-format). Added `tests/unit/test_pre_commit_config.py` (5
+  tests: YAML parse, repos shape, expected hook IDs per repo, every
+  repo pins a `rev`). Drive-by reformat of
+  `tests/unit/test_makefile.py` so the new check-format would pass.
+- [ ] **Iter 5 (next).** Code-review checkpoint per loop directive.
 - [ ] Tailwind v3.4 + shadcn/ui wiring (`tailwind.config.ts`,
   `postcss.config.js`, `src/index.css`, `components.json`).
   Deferred from iter 2 to keep the smoke scaffold minimal.
-- [ ] `.pre-commit-config.yaml` (ruff + ruff-format).
 - [ ] `Dockerfile` (two-stage Node → Python wheel).
 - [ ] `install.sh` / `install.ps1` (uv tool installer).
 - [ ] `.github/workflows/release.yml` (CI gate including SPA-bundle

@@ -42,8 +42,7 @@ def test_makefile_help_target_runs() -> None:
         timeout=20,
     )
     assert result.returncode == 0, (
-        f"`make help` failed (rc={result.returncode}):\n"
-        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        f"`make help` failed (rc={result.returncode}):\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
     # Sanity: a few key targets should appear in help output.
     for target in ("test", "frontend-install", "frontend-build", "build", "ci"):
@@ -65,8 +64,7 @@ def test_makefile_dry_run_test_target() -> None:
         timeout=20,
     )
     assert result.returncode == 0, (
-        f"`make -n test` failed (rc={result.returncode}):\n"
-        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        f"`make -n test` failed (rc={result.returncode}):\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
     # Recipe should mention pytest somewhere.
     assert "pytest" in result.stdout, f"`make -n test` did not render a pytest invocation:\n{result.stdout}"
@@ -88,7 +86,7 @@ def test_makefile_phony_targets_declared() -> None:
     for line in text.splitlines():
         if line.startswith(".PHONY:"):
             in_block = True
-            phony_block.append(line[len(".PHONY:"):])
+            phony_block.append(line[len(".PHONY:") :])
             continue
         if in_block:
             if line.endswith("\\") or line.startswith((" ", "\t")):
