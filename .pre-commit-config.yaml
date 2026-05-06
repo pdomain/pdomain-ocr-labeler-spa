@@ -76,3 +76,18 @@ repos:
         always_run: true
         pass_filenames: false
         verbose: false
+    # B-23: lockfile drift gate. Without this, `pyproject.toml` deps
+    # can drift from `uv.lock` and only surface inside `docker build`
+    # (where the wheel stage runs `uv export --frozen …`). Catching
+    # drift at commit time means M1+ contributors don't accidentally
+    # land a stale lockfile that the release pipeline only flags
+    # later. `uv lock --check` exits non-zero if `uv.lock` is not in
+    # sync with `pyproject.toml` and does NOT modify the lockfile —
+    # exactly the behaviour we want from a pre-commit gate.
+    -   id: uv-lock-check
+        name: uv.lock is in sync with pyproject.toml
+        entry: uv lock --check
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+        files: ^(pyproject\.toml|uv\.lock)$

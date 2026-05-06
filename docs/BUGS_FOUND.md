@@ -669,6 +669,27 @@ local CI), B-26 (ROADMAP.md's M0 sub-task checkboxes are stale —
 iters 18+19 landed but their boxes still read `[ ]`).
 
 ## B-23 — No CI/pre-commit gate for `uv.lock` ↔ `pyproject.toml` drift; B-20 hides drift until `docker build`
+- **Status:** ✅ **Fixed in iter 21 (2026-05-06)** — added a
+  `uv-lock-check` pre-commit hook (entry: `uv lock --check`,
+  `language: system`, `files: ^(pyproject\.toml|uv\.lock)$`,
+  `pass_filenames: false`) to the `repo: local` block of
+  `.pre-commit-config.yaml`. `uv lock --check` exits non-zero when
+  the lockfile is out of sync with `pyproject.toml` and does NOT
+  modify the lockfile, which is exactly the behaviour we want from a
+  pre-commit gate (in contrast `--frozen` errors when other
+  resolution flags are also passed; `--check-exists` only verifies
+  presence). New `tests/unit/test_uv_lock_check.py` pins two
+  invariants: (1) the hook exists with the right entry, language,
+  pass_filenames=False, and a `files:` regex that matches both
+  `pyproject.toml` and `uv.lock`; (2) the *current* lockfile passes
+  `uv lock --check` as a subprocess, so `make test` catches drift
+  even if a contributor bypasses hooks (`git commit --no-verify`).
+  Subprocess test is `pytest.skip`-guarded on `shutil.which("uv")`
+  so a stripped CI image without uv doesn't fail with a tooling
+  error. Verified end-to-end: `uv run pre-commit validate-config`
+  passes; both new tests pass; total 92→94. Chose pre-commit over
+  `make ci` per B-23's recommendation: catches drift at commit time
+  rather than CI time.
 - **Severity:** medium
 - **Where:** absence — `.pre-commit-config.yaml` (no `uv lock --check` hook), `Makefile` `ci` target line 186 (no `uv lock --check`), `tests/` (no test that asserts lock freshness).
 - **Issue:** Iter-17 (`e7fe5ef`) wired the Dockerfile to `uv export --frozen ...` which fails loudly if `uv.lock` is out of date relative to `pyproject.toml`. That's the right fail-mode — **but it only fires inside `docker build`**, which neither `make ci` nor `make test` runs. A contributor who adds a new direct dep to `pyproject.toml` without running `uv lock` would: (a) pass all 92 unit tests; (b) pass ruff; (c) commit; (d) pass the post-commit refresh-version hook because that calls `uv pip install -e .` (which ignores `uv.lock`); (e) only learn about the drift when a CI/release pipeline that actually runs `docker build` fires. There's no `make ci` step nor pre-commit hook that runs `uv lock --check` (or `uv sync --locked`, which is the modern equivalent).
@@ -690,6 +711,13 @@ iters 18+19 landed but their boxes still read `[ ]`).
 - **Suggested fix:** One of: (a) rename the test to `test_install_sh_documents_python_pin_in_comment` and adjust docstring to match what's verified; (b) add an actual Python-version preflight to the script (`if ! command -v python3.13 >/dev/null && ! uv python find 3.13 …; then echo "Python 3.13 required" …`) — but this fights uv's automatic download model and is probably overkill; (c) leave as is and add a note in the docstring acknowledging the test is "comment-presence, not behaviour-check." (a) is the cleanest path.
 
 ## B-26 — `docs/ROADMAP.md` M0 sub-task checkboxes are stale: iters 18 + 19 landed but boxes still read `[ ]`
+- **Status:** ✅ **Fixed in iter 21 (2026-05-06)** — flipped both M0
+  sub-task checkboxes in `docs/ROADMAP.md` from `[ ]` to `[x]` and
+  added one-line notes citing the iter / commit sha that landed each
+  (`b1ac8d5` for `make docker-*`, `f540c62` for `install.sh`). Also
+  split out a new `[ ] install.ps1 (Windows uv tool installer)`
+  bullet so the Windows pending-work is visible without dragging
+  down the Linux/macOS checkbox.
 - **Severity:** nit
 - **Where:** `docs/ROADMAP.md:174-176` — the lines `- [ ] Makefile docker-build / docker-run targets …` and `- [ ] install.sh / install.ps1 (uv tool installer).` are unchecked even though `b1ac8d5` (iter 18) added the `make docker-*` targets and `f540c62` (iter 19) added `install.sh`. The narrative cell in the M0 status row at line 12 *does* mention iter 18 + iter 19, so the contradictions are within a single doc.
 - **Why it matters:** Cosmetic but the ROADMAP is meant to be a single-glance status board. A reader scanning checkboxes (the natural human pattern) sees "docker targets and installer not done" while the narrative says they are. Future iter 21+ pickers may waste cycles "starting" a task that's already shipped.
