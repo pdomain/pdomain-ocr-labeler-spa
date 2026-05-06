@@ -1,0 +1,21 @@
+# Tool versions for contributors who use mise.
+#
+# Optional — `make setup` and the per-language tools (uv, npm) work without
+# mise as long as those tools are on PATH. If you prefer pinned versions,
+# install mise (https://mise.jdx.dev/) and run `make mise-setup`.
+#
+# End users installing pd-ocr-labeler-spa via the published wheel don't need
+# mise — the wheel ships with a prebuilt frontend bundle.
+#
+# Versions chosen to match peer pd-prep-for-pgdp/mise.toml so a single
+# devcontainer can host both repos against the same toolchain.
+
+[tools]
+node = "24"     # Active LTS — matches pd-prep-for-pgdp
+python = "3.13"
+
+# uv is intentionally NOT managed by mise. The shared devcontainer image
+# installs uv system-wide at /usr/local/bin/uv, and mise's aqua-backed
+# installer recently broke verifying Astral's release attestations. If
+# you're outside the devcontainer and need uv, install it via Astral's
+# script: `curl -LsSf https://astral.sh/uv/install.sh | sh`.

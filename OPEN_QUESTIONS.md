@@ -130,6 +130,23 @@ and verify `vitest run`. Until then the scaffold compiles by
 inspection (mirrors pgdp-prep's working setup) but is not
 runtime-verified.
 
+**Iter 3 update (2026-05-06).** `mise.toml` (Node 24, Python 3.13)
+and `Makefile` (mirrors pd-prep-for-pgdp targets) are now in place.
+The Makefile's `_npm` macro tries `mise exec` then PATH `npm`, and
+fails with a clear error otherwise — so `make frontend-install`
+gives an actionable message in the current devcontainer rather than
+an opaque shell error. **Still unverified end-to-end:** the
+devcontainer has neither `node`/`npm` nor a pre-installed `mise`
+binary (`/home/vscode/.local/bin/mise` does not exist), and
+`make mise-setup` (which downloads mise) requires outbound network
+that may not be available from /loop iterations. Resolution path:
+either (1) run `make mise-setup && make frontend-install` from an
+interactive shell where network is allowed, or (2) add the
+`ghcr.io/devcontainers/features/node:1` feature to
+`/workspaces/ocr-container/.devcontainer/devcontainer.json` (which
+is **outside this repo's edit boundary** — must be done by the
+workspace owner, not this agent).
+
 **Blocks.** M0 acceptance gate clause for frontend tests. (Numbered
 Q-A8 to avoid colliding with reserved Q-A5/A6/A7 in the M11 glyph
 annotations milestone.)

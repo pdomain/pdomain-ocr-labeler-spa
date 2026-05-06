@@ -1,0 +1,185 @@
+.PHONY: help setup refresh-version install uninstall reset remove-venv lint format \
+        pre-commit-check test e2e build clean ci dev \
+        frontend-install frontend-build frontend-dev frontend-test \
+        openapi-export upgrade-pd-book-tools \
+        mise-download mise-setup mise-doctor
+
+# ---------------------------------------------------------------------------
+# Help / discovery
+# ---------------------------------------------------------------------------
+
+help: ## Show this help message
+	@echo "Available commands:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
+
+# ---------------------------------------------------------------------------
+# Backend setup
+# ---------------------------------------------------------------------------
+
+setup: ## Sync deps + install pre-commit hooks + refresh version
+	@echo "Installing dependencies..."
+	uv sync --group dev
+	@echo "Setting up pre-commit hooks..."
+	uv run pre-commit install || true
+	@$(MAKE) --no-print-directory refresh-version
+	@echo "Setup complete!"
+
+refresh-version: ## Force hatch-vcs to re-derive version from current git state
+	@echo "Reinstalling pd-ocr-labeler-spa so hatch-vcs picks up HEAD/tags..."
+	@# Hatchling's `force-include` of src/pd_ocr_labeler_spa/static refuses to
+	@# resolve when the directory is missing (FileNotFoundError during the
+	@# editable build), so make sure it exists before the editable install.
+	@# The wheel-side SPA check (build_hooks/spa_check.py) still gates real
+	@# wheel builds on the bundled index.html being present.
+	@mkdir -p src/pd_ocr_labeler_spa/static
+	@UV_LINK_MODE=copy uv pip install -e . --reinstall-package pd-ocr-labeler-spa
+	@uv run pd-ocr-labeler-ui --version 2>/dev/null || true
+
+install: ## Install pd-ocr-labeler-ui as a uv tool from local source
+	uv tool install --reinstall .
+	@echo "pd-ocr-labeler-ui installed. Run: pd-ocr-labeler-ui --version"
+
+uninstall: ## Remove the installed pd-ocr-labeler-spa uv tool
+	@uv tool uninstall pd-ocr-labeler-spa || true
+
+remove-venv: ## Remove the virtual environment
+	rm -rf .venv
+
+reset: clean remove-venv setup ## Rebuild the virtual environment
+	@echo "Environment Reset!"
+
+# ---------------------------------------------------------------------------
+# Optional: mise-managed tool versions (mirrors pd-prep-for-pgdp pattern)
+# ---------------------------------------------------------------------------
+# `mise.toml` pins node/python. `make mise-setup` downloads the mise binary
+# (locally, no .bashrc edit) and pulls the toolchain. Other targets dispatch
+# through `$(MISE) exec --` so make is the only place that sees the pinned
+# versions; your interactive shell is unchanged.
+
+MISE := $(shell command -v mise 2>/dev/null || echo $$HOME/.local/bin/mise)
+HAVE_MISE = [ -x "$(MISE)" ]
+
+mise-download: ## [optional] Download the mise binary only (no shell init, no tools yet)
+	@if $(HAVE_MISE); then \
+		echo "mise already installed at $(MISE)"; \
+	else \
+		echo "Downloading mise to $$HOME/.local/bin/mise..."; \
+		curl -fsSL https://mise.run | sh; \
+		echo "mise downloaded. Run 'make mise-setup' next to install pinned tools."; \
+	fi
+
+mise-setup: mise-download ## [optional] Download mise + install pinned tools from mise.toml
+	@echo "Installing tools from mise.toml..."
+	@$(MISE) install
+	@echo "mise tools installed."
+	@echo "Make targets dispatch through mise automatically — no shell hook needed."
+
+mise-doctor: ## [optional] Show resolved tool versions (mise binary + PATH fallback)
+	@echo "-- mise binary --"
+	@if $(HAVE_MISE); then \
+		echo "  found: $(MISE)"; \
+		$(MISE) current 2>/dev/null | sed 's/^/  /' || echo "  (no mise.toml resolved)"; \
+	else \
+		echo "  not installed (run 'make mise-setup')"; \
+	fi
+	@echo "-- PATH (your interactive shell) --"
+	@command -v node   >/dev/null 2>&1 && echo "  node:   $$(node --version)"   || echo "  node:   not on PATH"
+	@command -v npm    >/dev/null 2>&1 && echo "  npm:    $$(npm --version)"    || echo "  npm:    not on PATH"
+	@command -v uv     >/dev/null 2>&1 && echo "  uv:     $$(uv --version)"     || echo "  uv:     not on PATH"
+	@command -v python >/dev/null 2>&1 && echo "  python: $$(python --version)" || echo "  python: not on PATH"
+
+# ---------------------------------------------------------------------------
+# Frontend
+# ---------------------------------------------------------------------------
+# Each target prefers `mise exec` (so node version matches mise.toml). Falls
+# back to PATH `npm` for contributors who manage Node themselves.
+
+define _npm
+	if $(HAVE_MISE); then \
+		echo "  (via $(MISE) exec)"; \
+		cd frontend && $(MISE) exec -- npm $(1); \
+	elif command -v npm >/dev/null 2>&1; then \
+		cd frontend && npm $(1); \
+	else \
+		echo "no npm available."; \
+		echo "   Options:"; \
+		echo "     - run 'make mise-setup' (downloads mise locally, no shell edit)"; \
+		echo "     - install Node 24 yourself"; \
+		echo "     - add the devcontainer node feature in .devcontainer/devcontainer.json"; \
+		exit 1; \
+	fi
+endef
+
+frontend-install: ## Install frontend dependencies
+	@echo "Installing frontend deps..."
+	@$(call _npm,install)
+
+frontend-build: ## Build the SPA into src/pd_ocr_labeler_spa/static/ (so the wheel includes it)
+	@echo "Building frontend..."
+	@$(call _npm,install)
+	@$(call _npm,run build)
+	@mkdir -p src/pd_ocr_labeler_spa/static
+	@rm -rf src/pd_ocr_labeler_spa/static/*
+	cp -r frontend/dist/. src/pd_ocr_labeler_spa/static/
+	@echo "Frontend bundled into src/pd_ocr_labeler_spa/static/"
+
+frontend-dev: ## Run Vite dev server (frontend only)
+	@$(call _npm,install)
+	@$(call _npm,run dev)
+
+frontend-test: ## Run the SPA's vitest suite (jsdom)
+	@echo "Running frontend (vitest) tests..."
+	@$(call _npm,install)
+	@$(call _npm,test)
+
+openapi-export: ## Regenerate frontend/src/api/types.ts from /openapi.json
+	@echo "Exporting OpenAPI schema and regenerating TS types..."
+	uv run python -c "import json, sys; from pd_ocr_labeler_spa.bootstrap import build_app; \
+print(json.dumps(build_app().openapi(), indent=2))" > frontend/openapi.json
+	@if $(HAVE_MISE); then \
+		cd frontend && $(MISE) exec -- npx --yes openapi-typescript openapi.json -o src/api/types.ts; \
+	else \
+		cd frontend && npx --yes openapi-typescript openapi.json -o src/api/types.ts; \
+	fi
+	@echo "frontend/src/api/types.ts regenerated."
+
+# ---------------------------------------------------------------------------
+# Lint / format / test / build
+# ---------------------------------------------------------------------------
+
+lint: ## Run ruff checks
+	uv run ruff check --select I --fix
+	uv run ruff check --fix
+
+format: ## Format code with ruff
+	uv run ruff format
+	@$(MAKE) --no-print-directory lint
+
+pre-commit-check: ## Run pre-commit on all files
+	uv run pre-commit run --all-files
+
+test: ## Run pytest (excludes e2e/)
+	uv run pytest tests/ -v --ignore=tests/e2e
+
+e2e: frontend-build ## Run Playwright E2E tests (requires `playwright install chromium`)
+	uv run --group e2e pytest tests/e2e -v
+
+dev: ## Run uvicorn with --reload against a Vite dev server on :5173
+	uv run pd-ocr-labeler-ui --reload --frontend-dev http://localhost:5173
+
+build: frontend-build ## Build the wheel (with frontend bundled)
+	# `--wheel` skips the sdist step. The build hook in
+	# build_hooks/spa_check.py refuses to build a wheel without
+	# src/pd_ocr_labeler_spa/static/index.html, and that directory is
+	# .gitignore'd — so the default `uv build` (sdist -> wheel-from-sdist)
+	# fails because the unpacked sdist has no SPA. Wheel-only is supported.
+	uv build --wheel
+
+clean: ## Clean cache + build artifacts
+	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
+	rm -rf dist/ src/pd_ocr_labeler_spa/static/ frontend/dist/ 2>/dev/null || true
+
+ci: setup test frontend-test build ## Full CI pipeline

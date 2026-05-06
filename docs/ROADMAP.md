@@ -9,7 +9,7 @@ every iteration.
 
 | Milestone | Status | Notes |
 |---|---|---|
-| **M0** Repo scaffold | 🟡 in progress | Iter 1 backend skeleton + tests; iter 2 (2026-05-06) frontend scaffold (files only — npm install deferred, see Q-A8). Makefile / mise.toml / Dockerfile / install scripts pending. |
+| **M0** Repo scaffold | 🟡 in progress | Iter 1 backend skeleton + tests; iter 2 frontend scaffold (files only); iter 3 (2026-05-06) `mise.toml` (Node 24 / Py 3.13) + Makefile mirroring pd-prep-for-pgdp + Makefile parse smoke tests. Frontend `npm install` still blocked on Q-A8 (no node/npm/mise on PATH). Dockerfile / install scripts / pre-commit / DEVELOPMENT.md pending. |
 | M1 Settings + adapters + AppState | ⬜ not started | Pre-conditions: M0. |
 | M2 Project discovery + load | ⬜ not started | Pre-conditions: M0, M1. |
 | M3 OCR config modal + first-page OCR | ⬜ not started | |
@@ -38,12 +38,18 @@ every iteration.
   mirrors pgdp-prep layout. **Not yet `npm install`-ed** — the
   devcontainer lacks Node; tracked as Q-A8 in OPEN_QUESTIONS.md, to
   be verified when `mise.toml` lands.
-- [ ] **Iter 3 (next).** `mise.toml` (Node 24 / Python 3.13) +
-  Makefile mirroring pd-prep-for-pgdp targets (`setup`, `test`,
+- [x] **Iter 3.** `mise.toml` (Node 24 / Python 3.13) + Makefile
+  mirroring pd-prep-for-pgdp targets (`setup`, `test`,
   `frontend-install`, `frontend-build`, `frontend-test`,
-  `frontend-dev`, `openapi-export`, `build`, `ci`). Then run
-  `make frontend-install` + `make frontend-test` end-to-end and
-  resolve Q-A8.
+  `frontend-dev`, `openapi-export`, `build`, `ci`, plus mise
+  helpers). Added `tests/unit/test_makefile.py` (parse + dry-run
+  smoke). Q-A8 still open: devcontainer has no node/npm/mise; see
+  iter-3 update note in `OPEN_QUESTIONS.md`.
+- [ ] **Iter 4 (next).** Pick a tractable M0 sub-task that doesn't
+  need npm: `.pre-commit-config.yaml` (ruff hooks), or
+  `DEVELOPMENT.md`, or `Dockerfile` (two-stage Node→Python — the
+  Node stage runs in Docker, not the devcontainer, so it's
+  unblocked).
 - [ ] Tailwind v3.4 + shadcn/ui wiring (`tailwind.config.ts`,
   `postcss.config.js`, `src/index.css`, `components.json`).
   Deferred from iter 2 to keep the smoke scaffold minimal.
