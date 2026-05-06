@@ -7,14 +7,34 @@
 # Q-A10 in OPEN_QUESTIONS.md for the deferred PyPI decision.
 #
 # Mirrors pd-prep-for-pgdp/.github/workflows/release.yml in shape but
-# scoped to the publish-on-tag path only; M0 doesn't yet have a
-# branch CI lane.
+# scoped to the publish-on-tag path only. GitHub Actions branch-CI is
+# not yet configured for this repo (no `ci.yml` workflow exists);
+# `make ci` is the local equivalent and runs in pre-commit / on
+# contributor laptops today. (B-36)
 
 name: release
 
 on:
   push:
-    tags: ["v*"]
+    # B-29: PEP-440-shaped release tags only — `vMAJOR.MINOR.PATCH`
+    # plus the optional `-rc1` / `-beta1` / `-pre` suffix form. This
+    # rejects strays like `vfeature-test`, `vbeta` (no version), or
+    # `v0.0` (the deprecated retag-target removed in B-09) so they
+    # don't trigger a junk Release that `install.sh`'s
+    # `/releases/latest` would otherwise surface to end users.
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+
+# B-30: serialize per-tag release runs so two near-simultaneous
+# `git push --tags` operations (or a "Re-run all jobs" mid-publish)
+# don't double-publish the same Release assets and surface as
+# `409 Conflict` from softprops/action-gh-release. `cancel-in-progress:
+# false` because release jobs are not safely cancellable mid-upload —
+# we'd rather queue the second run than abort the first.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -43,12 +63,25 @@ jobs:
           # Pinned to match mise.toml. Bump both together so the
           # devcontainer and CI stay aligned.
           node-version: "24"
+          # B-31: prime the npm cache so `npm ci` is fast on warm
+          # runs. `cache: 'npm'` looks up `package-lock.json` to key
+          # the cache; before B-28's lockfile lands the lookup fails
+          # gracefully (no key → cache miss → no-op), so this is
+          # safe to enable now and pays off automatically once the
+          # lockfile is committed.
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
 
       - uses: astral-sh/setup-uv@v4
         with:
           # Pinned to match mise.toml. uv handles its own Python
           # download; pinning here keeps CI deterministic.
           python-version: "3.13"
+          # B-31: cache `~/.cache/uv` between runs. `uv build`
+          # populates this with build-isolated env wheels (hatchling,
+          # hatch-vcs, etc.); priming saves 10–20s of resolver work
+          # on warm runs.
+          enable-cache: true
 
       - name: Build SPA bundle
         # B-28 / B-19: keep this block IDENTICAL in shell to the

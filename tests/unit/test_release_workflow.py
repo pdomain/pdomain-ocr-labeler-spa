@@ -82,7 +82,22 @@ def test_release_workflow_is_valid_yaml() -> None:
     assert ("on" in data) or (True in data), "workflow has no `on:` trigger block"
 
 
-def test_release_workflow_triggers_on_v_tags() -> None:
+def test_release_workflow_triggers_on_pep440_release_tags() -> None:
+    """B-29: tag triggers must be PEP-440-shaped, not the loose ``v*``.
+
+    The previous ``v*`` glob would fire on `vfeature-test`, `vbeta`,
+    `v0.0` (the deprecated retag-target removed in B-09), etc., any
+    of which would publish a junk Release that `install.sh`'s
+    `/releases/latest` endpoint would then surface to end users.
+
+    We require:
+      * `v[0-9]+.[0-9]+.[0-9]+`         — `v1.2.3` release shape, AND
+      * `v[0-9]+.[0-9]+.[0-9]+-*`       — `v1.2.3-rc1` / `-beta` etc.
+
+    Both glob forms must be present; nothing wider (e.g. `v*`,
+    `v[0-9]*`) is allowed because each widening re-introduces the
+    original footgun.
+    """
     data = _load_workflow()
     trigger = data.get("on") or data.get(True)
     assert isinstance(trigger, dict), "workflow `on:` must be a mapping"
@@ -90,7 +105,91 @@ def test_release_workflow_triggers_on_v_tags() -> None:
     assert isinstance(push, dict), "workflow must have `on.push`"
     tags = push.get("tags")
     assert tags, "workflow must declare `on.push.tags`"
-    assert any("v*" in t for t in tags), f"workflow must trigger on tags matching `v*`, got {tags!r}"
+    assert isinstance(tags, list), f"`on.push.tags` must be a list, got {type(tags).__name__}"
+
+    # The strict release-shape glob must be present.
+    release_glob = "v[0-9]+.[0-9]+.[0-9]+"
+    prerelease_glob = "v[0-9]+.[0-9]+.[0-9]+-*"
+    assert release_glob in tags, (
+        f"workflow must trigger on PEP-440 release tags ({release_glob!r}); got {tags!r}"
+    )
+    assert prerelease_glob in tags, (
+        f"workflow must also accept pre-release tags ({prerelease_glob!r}) "
+        f"so `v1.2.3-rc1` triggers; got {tags!r}"
+    )
+
+    # Forbid the loose `v*` (and the equally-loose `v[0-9]*` cousin)
+    # so a future widening can't silently re-introduce the B-29
+    # footgun.
+    forbidden = {"v*", "v[0-9]*", "v?*"}
+    assert not (set(tags) & forbidden), (
+        f"workflow tag glob must not include any of {forbidden} "
+        f"(would re-introduce B-29 — `vfeature-test` etc. would publish); got {tags!r}"
+    )
+
+
+def test_release_workflow_has_concurrency_block() -> None:
+    """B-30: concurrent tag-pushes (or a "Re-run all jobs" mid-publish)
+    must serialize so two parallel publish runs don't race the same
+    Release-asset upload (which surfaces as `409 Conflict` from
+    softprops/action-gh-release).
+
+    Pin both:
+      * the `concurrency:` block exists at workflow scope; and
+      * `cancel-in-progress: false` — release jobs are not safely
+        cancellable mid-upload, so we queue the second run rather
+        than abort the first.
+    """
+    data = _load_workflow()
+    concurrency = data.get("concurrency")
+    assert isinstance(concurrency, dict), (
+        "release.yml must declare a workflow-level `concurrency:` block (B-30) "
+        "to serialize per-tag publish runs"
+    )
+    group = concurrency.get("group")
+    assert group and "${{ github.ref }}" in str(group), (
+        f"`concurrency.group` must be keyed on `${{{{ github.ref }}}}` so "
+        f"different tags don't block each other; got {group!r}"
+    )
+    # `cancel-in-progress` must be explicitly false. Default behaviour
+    # for missing field is `false` too, but pinning the explicit value
+    # makes the intent reviewable.
+    cancel = concurrency.get("cancel-in-progress")
+    assert cancel is False, (
+        f"`concurrency.cancel-in-progress` must be `false` (release jobs "
+        f"can't safely be cancelled mid-upload); got {cancel!r}"
+    )
+
+
+def test_setup_node_enables_npm_cache() -> None:
+    """B-31: `actions/setup-node` must opt into `cache: 'npm'` so warm
+    runs reuse `~/.npm` rather than re-downloading every dep.
+
+    `cache-dependency-path: frontend/package-lock.json` is also
+    required because the lockfile lives under `frontend/` (not the
+    repo root) — without it, setup-node looks at the repo-root
+    `package-lock.json` (which doesn't exist), gets a cache miss
+    every run, and the `cache: 'npm'` setting is a no-op.
+    """
+    text = _workflow_text()
+    assert re.search(r"cache:\s*[\"']?npm[\"']?", text), (
+        "setup-node must declare `cache: 'npm'` for B-31 caching"
+    )
+    assert "cache-dependency-path: frontend/package-lock.json" in text, (
+        "setup-node must point `cache-dependency-path` at "
+        "`frontend/package-lock.json` (the lockfile is under frontend/, not repo root)"
+    )
+
+
+def test_setup_uv_enables_cache() -> None:
+    """B-31: `astral-sh/setup-uv` must opt into `enable-cache: true`
+    so `~/.cache/uv` is restored between CI runs (saves the
+    build-isolated-env resolution cost on every `uv build`).
+    """
+    text = _workflow_text()
+    assert re.search(r"enable-cache:\s*true", text), (
+        "setup-uv must declare `enable-cache: true` for B-31 caching"
+    )
 
 
 def test_checkout_uses_fetch_depth_zero() -> None:

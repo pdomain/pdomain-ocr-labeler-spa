@@ -149,9 +149,19 @@ def test_install_sh_uses_uv_tool_install():
     # Peer-mirror with pd-prep-for-pgdp/install.sh. Switching to pip /
     # pipx / poetry would break the documented "no toolchain needed"
     # promise (uv handles Python download too).
+    #
+    # B-35: tighten beyond a bare substring to require the full
+    # `uv tool install --reinstall <wheel-arg>` form. The bare
+    # substring would have passed against a comment or a regression
+    # that drops `--reinstall` (and so silently fails on the second
+    # `install.sh` run because the tool already exists). The wheel-
+    # file argument is also load-bearing — without it `uv tool
+    # install` doesn't know what to install.
     text = INSTALL_SH.read_text()
-    assert "uv tool install" in text, (
-        "install.sh must use `uv tool install` (peer-mirror with pd-prep-for-pgdp/install.sh)"
+    assert re.search(r"uv tool install\s+--reinstall\s+\S+", text), (
+        "install.sh must call `uv tool install --reinstall <wheel>` "
+        "(peer-mirror with pd-prep-for-pgdp/install.sh; --reinstall "
+        "makes re-runs idempotent, the wheel arg names what to install)"
     )
 
 

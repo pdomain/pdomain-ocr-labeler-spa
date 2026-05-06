@@ -894,6 +894,14 @@ from the list. Severity legend: blocker > high > medium > low > nit.
 - **Suggested fix:** Either (a) generate `frontend/package-lock.json` once (run `npm install` interactively, commit the result) which unblocks both `npm ci` here and tightens the Dockerfile concurrent with B-19; or (b) have release.yml use `npm install` with a comment explaining the lockfile gap; or (c) loosen the test to `npm ci || npm install` until Q-A8 unblocks. (a) is the right answer. Coupled fix with B-19.
 
 ## B-29 — `release.yml` `tags: ["v*"]` trigger is too permissive
+- **Status:** ✅ **Fixed in iter 27 (2026-05-06)** — `release.yml`
+  `on.push.tags` tightened to `["v[0-9]+.[0-9]+.[0-9]+",
+  "v[0-9]+.[0-9]+.[0-9]+-*"]`. The renamed test
+  `test_release_workflow_triggers_on_pep440_release_tags` pins both
+  globs are present AND forbids the loose `v*` / `v[0-9]*` / `v?*`
+  forms so a future widening can't silently re-introduce the
+  footgun. `vfeature-test`, `vbeta`, `v0.0` no longer fire the
+  workflow.
 - **Severity:** medium
 - **Where:** `.github/workflows/release.yml:17`.
 - **Issue:** The pattern `v*` matches any tag starting with `v`, including `v0.0` (the deprecated retag-target B-09 explicitly removed), `vNEXT`, `vfeature-test`, `vbeta`, `v0.1-rc1`, etc. Any of these would trigger a wheel build + Release publish under the matching tag name, producing junk Releases that install.sh's `/releases/latest` would then surface to end users. The `test_release_workflow_triggers_on_v_tags` pin uses `assert any("v*" in t for t in tags)` (loose substring) — would still pass if the trigger were `["v*", "vfeature-*"]` or similar.
@@ -901,6 +909,14 @@ from the list. Severity legend: blocker > high > medium > low > nit.
 - **Suggested fix:** Tighten the glob to PEP-440-compatible release shapes: `tags: ["v[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+-*"]` (covers `v1.2.3` and `v1.2.3-rc1`). Tighten the test to assert the regex form, not just `v*` substring.
 
 ## B-30 — `release.yml` has no `concurrency:` block; tag-race could double-publish
+- **Status:** ✅ **Fixed in iter 27 (2026-05-06)** — added a
+  workflow-scope `concurrency: { group: release-${{ github.ref }},
+  cancel-in-progress: false }` block. `cancel-in-progress: false`
+  because release jobs aren't safely cancellable mid-upload — better
+  to queue the second run than abort the first mid-Release-asset
+  upload. New test `test_release_workflow_has_concurrency_block`
+  pins the block exists, the group references `${{ github.ref }}`,
+  and `cancel-in-progress` is explicitly `false`.
 - **Severity:** low
 - **Where:** `.github/workflows/release.yml:13-22`.
 - **Issue:** Without `concurrency: { group: release-${{ github.ref }}, cancel-in-progress: false }`, two near-simultaneous `git push --tags` operations (or a re-trigger via "Re-run all jobs") could run two publish jobs in parallel. `softprops/action-gh-release@v2` is upsert-by-tag, so the second run might race with the first when uploading the same asset name, surfacing as `409 Conflict` from the GitHub API mid-publish.
@@ -908,6 +924,16 @@ from the list. Severity legend: blocker > high > medium > low > nit.
 - **Suggested fix:** Add a workflow-level `concurrency` block keyed on `${{ github.ref }}`. One-line change.
 
 ## B-31 — `release.yml` does not cache `~/.cache/uv` or `~/.npm`; cold runs are needlessly slow
+- **Status:** ✅ **Fixed in iter 27 (2026-05-06)** — `actions/setup-
+  node@v4` now declares `cache: "npm"` +
+  `cache-dependency-path: frontend/package-lock.json` (the lockfile
+  lives under `frontend/`, not the repo root, so without the
+  explicit dependency-path the cache key would never resolve).
+  `astral-sh/setup-uv@v4` now declares `enable-cache: true`. Two new
+  tests pin both: `test_setup_node_enables_npm_cache` (cache + path)
+  and `test_setup_uv_enables_cache`. Pre-B-28-lockfile-landing the
+  npm cache is a graceful no-op (no key → cache miss); once the
+  real lockfile is committed, warm runs save ~30–60s on `npm ci`.
 - **Severity:** nit (performance, not correctness)
 - **Where:** `.github/workflows/release.yml:41-51`.
 - **Issue:** `actions/setup-node@v4` accepts `with: cache: 'npm'` (and `cache-dependency-path: frontend/package-lock.json` once B-28 lands), and `astral-sh/setup-uv@v4` accepts `with: enable-cache: true`. Neither is wired. Each tag push re-resolves and re-downloads everything from scratch.
@@ -945,6 +971,15 @@ from the list. Severity legend: blocker > high > medium > low > nit.
 - **Suggested fix:** Either (a) drop `python-version` from setup-uv and adjust `test_python_version_matches_mise` to look elsewhere (e.g. assert the comment in the workflow names mise.toml's pin); or (b) leave as-is with a comment noting it's a deliberate cache-priming step. (b) is fine.
 
 ## B-35 — `test_install_ps1_uses_uv_tool_install` is too loose: matches the substring without `--reinstall` or `<wheel>`
+- **Status:** ✅ **Fixed in iter 27 (2026-05-06)** — both
+  `test_install_ps1_uses_uv_tool_install` and
+  `test_install_sh_uses_uv_tool_install` now assert
+  `re.search(r"uv tool install\s+--reinstall\s+\S+", text)`. A
+  regression that drops `--reinstall` (so the second installer run
+  silently fails because the tool already exists) or that drops the
+  wheel-file argument now fails the test. Verb + flag + arg are all
+  load-bearing; pinning all three makes the assertion match how a
+  reviewer reads the line.
 - **Severity:** nit
 - **Where:** `tests/unit/test_install_ps1.py::test_install_ps1_uses_uv_tool_install`; same loose-match in `test_install_sh.py::test_install_sh_uses_uv_tool_install`.
 - **Issue:** The assertion is `assert "uv tool install" in text`. Would pass if the script said `# we considered uv tool install but use pip instead` or `Write-Host "Try uv tool install yourself"`. The peer test in install.sh has the same shape. The actual call in install.ps1 is `& uv tool install --reinstall $wheelFile` (and in install.sh, `uv tool install --reinstall "$WHEEL_FILE"`), which has three load-bearing parts: the verb, the `--reinstall` flag (idempotent re-run of the installer), and a wheel-file path argument. Only the verb is pinned.
@@ -952,6 +987,14 @@ from the list. Severity legend: blocker > high > medium > low > nit.
 - **Suggested fix:** Tighten to `assert re.search(r"uv tool install\s+--reinstall\s+\S+", text)` in both tests. One-line change per file.
 
 ## B-36 — `release.yml` workflow comment claims "M0 doesn't yet have a branch CI lane" but iter 25's review confirms M0 *does* run `make ci` locally; comment risks future confusion
+- **Status:** ✅ **Fixed in iter 27 (2026-05-06)** — drive-by while
+  in the file for B-29/B-30/B-31. The header comment now reads
+  "GitHub Actions branch-CI is not yet configured for this repo
+  (no `ci.yml` workflow exists); `make ci` is the local equivalent
+  and runs in pre-commit / on contributor laptops today." Future-
+  contributor-confusion risk addressed without adding a separate
+  test (the comment's wording is reviewable by reading the file;
+  pinning prose tends to ratchet without value).
 - **Severity:** nit
 - **Where:** `.github/workflows/release.yml:9-11`.
 - **Issue:** The header comment says "M0 doesn't yet have a branch CI lane." Strictly true for *GitHub Actions* (no `ci.yml` workflow exists), but a future contributor reading just this comment might assume M0 has no CI at all and re-add a duplicate lint/test pipeline here. The Makefile's `make ci` target IS the canonical CI lane; the GitHub Actions side is a separate question.
