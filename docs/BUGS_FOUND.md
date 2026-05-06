@@ -473,3 +473,90 @@ honesty, +1 for B-13 self-test). All ruff gates clean.
 
 Test count after iter 12: **48** (was 44 — +2 in pre-commit-config,
 +2 in new test_version module). All ruff gates clean.
+
+---
+
+# Code-review checkpoint, iter 15 (2026-05-06)
+
+Review scope: commits `d7e133d` (iter 11 — B-12/13/14/15 fixes),
+`e83bda1` (iter 12 — B-11 post-commit hook), `97f5c89` (iter 13 —
+Tailwind v3.4 wiring), `ebf792f` (iter 14 — Dockerfile +
+.dockerignore). Reviewer ran `uv run pytest tests/unit -q` (66/66
+green), `uv run ruff check` (clean), `uv run python -c "from
+pd_ocr_labeler_spa.bootstrap import build_app; build_app()"` (clean
+factory boot, routes are `/healthz`, `/env.js`, plus FastAPI's
+auto-mounted `/openapi.json` + `/docs` + `/redoc`).
+
+7 findings. Severity legend: blocker > high > medium > low > nit.
+
+## B-16 — Dockerfile sets `ENV PD_LABELER_HOST/PORT` but `Settings` reads `PDLABELER_*` (no underscore)
+- **Severity:** high
+- **Where:** `Dockerfile:91` (`ENV PD_LABELER_HOST=0.0.0.0 PD_LABELER_PORT=8080`); cross-check `src/pd_ocr_labeler_spa/settings.py:29` (`env_prefix="PDLABELER_"`).
+- **Issue:** The runtime stage exports `PD_LABELER_HOST` and `PD_LABELER_PORT`, but `Settings` declares `env_prefix="PDLABELER_"` (no underscore between `PD` and `LABELER`). Pydantic-settings ignores the `PD_LABELER_*` envs; the bind-host fallback is the in-image `--host 0.0.0.0` argv (which works for `host` but `port` is silently uncovered by env). `tests/unit/test_settings.py:30` and `specs/02-backend.md §3` both use `PDLABELER_*`. The Dockerfile shape pin in `tests/unit/test_dockerfile.py:212-217` actually requires `PD_LABELER_HOST` (with the wrong underscore), so the test cements the wrong contract — both layers drifted together.
+- **Why it matters:** A user running `docker run -e PDLABELER_PORT=9000 …` (the documented spelling) would have no effect; `docker run -e PD_LABELER_PORT=9000 …` (current Dockerfile spelling) also has no effect because Settings ignores it. The image happens to boot correctly because `--host 0.0.0.0` is also passed positionally in `ENTRYPOINT`, but the `ENV` lines are dead code, and the test asserts the dead spelling. Anyone copying this for M1 storage/auth env vars (`PDLABELER_DATA_ROOT`, etc.) will hit the same trap and be confused by the mismatch.
+- **Suggested fix:** Either (a) replace `PD_LABELER_*` with `PDLABELER_*` in the Dockerfile and update the regex in `tests/unit/test_dockerfile.py::test_runtime_binds_host_to_all_interfaces`, OR (b) drop the `ENV` lines entirely and rely solely on the `--host 0.0.0.0 --no-browser` argv in `ENTRYPOINT` (cleanest — env is then unambiguously a user-override surface). Going with (b) avoids encoding an env-name in two more places. Also tighten the test to assert the `PDLABELER_` (no underscore) prefix is the only one referenced anywhere in the Dockerfile, mirroring the prefix that `Settings` actually reads.
+
+## B-17 — Post-commit `make refresh-version` hook silently no-ops on `git rebase` / `git cherry-pick` / `git commit --amend`
+- **Severity:** medium
+- **Where:** `.pre-commit-config.yaml:38-49` (`stages: [post-commit]`).
+- **Issue:** pre-commit's `post-commit` stage fires on `git commit` only. `git rebase`, `git cherry-pick`, `git commit --amend`, and many merge flows skip post-commit hooks (this is git's behaviour, not pre-commit's bug). After any of those, the editable install retains the **pre-rebase** version; `__version__` then drifts back to the symptom B-11 was supposed to eliminate, with no signal that the auto-refresh stopped working.
+- **Why it matters:** Iter-12's commit message frames B-11 as *closed*. It isn't — the hook closes the most common drift path (vanilla `git commit`) but the author switching branches with `git rebase` or amending the most recent commit will still drift. Severity is medium not high because (a) `__version__` is only an informational string, not a behaviour gate; (b) `make setup` / `make refresh-version` always make it correct again, so the failure is recoverable; (c) the new `tests/unit/test_version.py::test_version_matches_installed_metadata` would *fail* CI if `make ci` ran post-rebase without a fresh install — so CI catches it, just not the local dev shell. Still: the iter-12 commit message claims "iter-10 review backlog now zero" which is technically true (B-11 is partially closed) but masks that the underlying drift class still exists.
+- **Suggested fix:** One of: (a) add `post-rewrite` and `post-checkout` to `default_install_hook_types` and the `refresh-version` hook's `stages` (covers rebase, amend, cherry-pick, branch switch); (b) demote the hook to a no-op safety net and drive the actual freshness invariant via the existing CI test (`test_version_matches_installed_metadata`) — that test does the right job already; (c) document the gap in `docs/DEVELOPMENT.md` so contributors know to run `make refresh-version` after a rebase. (a) is most thorough; (b) acknowledges the test is the real guard. Either way, update the iter-12 entry in `LOOP_STATE.md` so future readers don't see B-11 as a fully solved problem.
+
+## B-18 — Tailwind shape-pin test asserts content globs as a literal substring (forward-incompatible with shadcn/ui in M1)
+- **Severity:** low
+- **Where:** `frontend/tailwind.config.js:10-13` (`content: ["./index.html", "./src/**/*.{ts,tsx}"]`); pinning test in `tests/unit/test_tailwind_config.py`.
+- **Issue:** The glob `./src/**/*.{ts,tsx}` *does* recurse, so any future `src/components/ui/**.tsx` file is technically scanned. **However**, shadcn/ui's `init` writes a `tailwind.config.js` whose content array explicitly lists `./components/**/*.{ts,tsx}`, `./app/**/*.{ts,tsx}`, `./pages/**/*.{ts,tsx}`, and `./src/**/*.{ts,tsx}` — and the `components.json` `cli.tailwind.config` field points at a config the CLI parses. When iter N runs `npx shadcn@latest init` (currently blocked on Q-A8), the CLI may either (a) detect the existing config and merge cleanly, or (b) overwrite the file with its own template. If the test pins a literal substring of the content array, a shadcn overwrite that *expands* the globs would fail the test and force the iter author to manually patch the test rather than accept the more inclusive globs.
+- **Why it matters:** Mild future-tax. The wider concern is the test pattern: pinning a literal substring of a glob list is fragile in the face of additive evolution. Today's globs are sufficient (single-source-tree React app), but the test is set up to fight shadcn rather than accept it.
+- **Suggested fix:** Loosen the content-globs assertion to require `"./src/**/*.{ts,tsx}"` is present *as one entry* (superset check), rather than as the full content of the array. The `^3.4.0` major pin is correct (v4 is a breaking-change rewrite); no action there.
+
+## B-19 — `Dockerfile` `wheel` stage uses `npm install` (not `npm ci`) and tolerates missing `package-lock.json`
+- **Severity:** medium
+- **Where:** `Dockerfile:17-18` (`COPY frontend/package.json frontend/package-lock.json* ./` + `RUN npm install --include=dev`).
+- **Issue:** Two reproducibility holes stacked:
+  1. `frontend/package-lock.json` doesn't exist in the repo (`ls frontend/package-lock.json` → ENOENT). The `*` glob in the COPY makes the file optional — the build still succeeds — but every container build resolves dependency versions live from npm, so two `docker build`s a week apart can ship different React/Vite/Tailwind patch versions.
+  2. Even when a lockfile *does* land (Q-A8 / iter-2 frontend scaffold milestone), the Dockerfile uses `npm install` (which mutates the lockfile) rather than `npm ci` (which fails fast on lockfile drift). For an immutable-image build the `ci` form is the right one.
+- **Why it matters:** The iter-14 commit message says "Versions track mise.toml so dev and image share a toolchain" but only the *Node* version is shared — the *npm dependency tree* is not. Reproducible image builds are part of the M0 acceptance gate per `specs/15-deployment-dev.md` (mirrors pgdp-prep).
+- **Suggested fix:** Land the lockfile when `make frontend-install` first runs (Q-A8 unblock), then change `Dockerfile:18` to `RUN npm ci --include=dev` and drop the `*` glob from the COPY (so a missing lockfile becomes a hard error rather than silent fallthrough). Add a `tests/unit/test_dockerfile.py` shape pin for `npm ci` once that lands.
+
+## B-20 — `Dockerfile` doesn't use `uv.lock` for reproducible Python deps; `pip install <wheel>` re-resolves
+- **Severity:** low
+- **Where:** `Dockerfile:48-67` (wheel stage) + `Dockerfile:88` (runtime `pip install /tmp/*.whl`). Note `pyproject.toml` declares `pd-book-tools = { git = ..., tag = "v0.9.0" }` and the repo carries a `uv.lock` (545 KB).
+- **Issue:** The wheel stage runs `uv build --wheel` which produces a wheel with the runtime dependency *requirements* baked in (matching `pyproject.toml`), but the *resolution* is deferred to `pip install /tmp/*.whl` in the runtime stage. `pip install` doesn't read `uv.lock` — it resolves freshly against PyPI + the git source. The `uv.lock` in the repo is therefore decorative for the docker path; reproducibility depends solely on the git tag pin (`v0.9.0` for pd-book-tools) and PyPI's behaviour for the rest.
+- **Why it matters:** Lower severity than B-19 because the wheel does have a tagged git source for the only non-PyPI dep, and `>=` floors on FastAPI/uvicorn/etc. are wide enough that minor PyPI bumps shouldn't break the wheel. But the `uv.lock` file in the build context is a Chekhov's gun: future readers will assume the docker build is fully locked. It isn't.
+- **Suggested fix:** Either (a) accept the looser-but-tagged shape (current state) and add a comment in the Dockerfile explicitly disclaiming "runtime resolves PyPI freshly; pin upper bounds in pyproject.toml if a regression bites", OR (b) use `uv pip install --frozen` against `uv.lock` in the runtime stage instead of `pip install` against the wheel — but that changes the install model from "install a self-contained wheel" to "install dependencies from lock then the wheel", which is an architecture decision worth discussing with the user before flipping. (a) is the lower-effort honest path.
+
+## B-21 — `Dockerfile` installs `git` + `ca-certificates` in both `wheel` and `runtime` stages
+- **Severity:** nit
+- **Where:** `Dockerfile:33-35` (wheel stage apt-get) + `Dockerfile:78-80` (runtime stage apt-get).
+- **Issue:** The wheel stage installs `git ca-certificates` to let `uv` fetch the `pd-book-tools` git source during `uv build`. The runtime stage installs the same packages because `pip install /tmp/*.whl` re-resolves and re-fetches the same git source. Each apt-get layer is ~10MB+ pre-cleanup; the runtime image keeps `git` installed (the cleanup only drops the apt cache), so the final image carries git for no runtime reason. Not a correctness bug; build-time/image-size waste.
+- **Why it matters:** Cosmetic. The runtime image is larger than necessary because git stays installed after the install step.
+- **Suggested fix:** In the runtime stage, wrap the install step in a single RUN that installs git + ca-certificates, runs `pip install /tmp/*.whl && rm /tmp/*.whl`, then `apt-get purge --autoremove -y git ca-certificates && rm -rf /var/lib/apt/lists/*`. That keeps the install-time deps available without bloating the final layer. Cross-check with pgdp-prep's Dockerfile to keep the pattern consistent.
+
+## B-22 — Iter-12 commit message claims "iter-10 review backlog now zero" but B-11's underlying class remains (see B-17)
+- **Severity:** nit
+- **Where:** `e83bda1` commit message body (`**iter-10 review backlog now zero**`).
+- **Issue:** B-11 was titled "stale `__version__` after intermediate commits". The post-commit hook closes the *symptom* path observed at iter-10 (vanilla `git commit` not refreshing the install). It doesn't close the *class* (any non-`git commit` ref-changing operation, see B-17). The commit message overstates the fix. Iter-15 (this checkpoint) is the appropriate place to record the gap rather than letting it propagate as "B-11 is fully solved" into M1.
+- **Why it matters:** Future code-review checkpoints take the BUGS_FOUND.md "Status: ✅ Fixed" lines at face value. If a future iter searches for "stale version" and finds B-11 marked closed, they may not re-discover the rebase/amend gap. Filing B-17 explicitly closes that loop.
+- **Suggested fix:** Pair-fix with B-17. When iter-N picks B-17, update B-11's "Status: ✅ Fixed" line to "✅ Fixed (post-commit only — see B-17 for rewrite/checkout coverage)". No code change needed for B-22 specifically.
+
+## Non-findings (checked, no bug)
+
+- **`spa` → `wheel` static handoff path correctness.** `Dockerfile:54` (`COPY --from=spa /work/dist/ ./src/pd_ocr_labeler_spa/static/`) lands the SPA exactly where `build_hooks/spa_check.py:42` checks (`SPA_INDEX_REL = src/pd_ocr_labeler_spa/static/index.html`). The hook's check is for `index.html`'s **existence and non-zero size**, which Vite's default build always produces. Confirmed correct.
+- **`hatch-vcs` bypass via `ARG VERSION`/sed.** `Dockerfile:51-65` substitutes `dynamic = ["version"]` for `version = "${VERSION}"` so hatch-vcs is never invoked in the Docker context (where `.git/` is excluded by `.dockerignore:11`). The `grep -E '^(version|dynamic)' pyproject.toml` check after the sed is a sanity gate; if the substitution failed, the next `uv build --wheel` would fail on the unresolved `dynamic = ["version"]`. Safe enough; mirrors pgdp-prep.
+- **`EXPOSE 8080` matches `Settings.port` (default 8080).** Confirmed `src/pd_ocr_labeler_spa/settings.py:42` (`port: int = 8080`) and `__main__.py` `--port` default (8080).
+- **`pd-ocr-labeler-ui` entrypoint matches `pyproject.toml [project.scripts]`.** Confirmed `pyproject.toml:36` (`pd-ocr-labeler-ui = "pd_ocr_labeler_spa.__main__:main"`); the dockerfile test reads this live.
+- **Iter 11 nit fixes are reverse-stable.** Walked through each: B-13 walker now visits Assign/AugAssign/AnnAssign; reversing to Assign-only would cause `test_ast_scanner_catches_all_three_assignment_forms` to fail. B-14 reframed test passes for "no settings param" (M0) and "settings param + body reads it" (M2); the misleading "param + ignores body" shape fails. B-15 unconditional credentials assertion would fail if `allow_credentials=True` is added regardless of origin shape. All three regression-stable.
+- **`tailwind.config.js` major pin.** `^3.4.0` allows `<4.0.0` and that's correct (Tailwind v4 is a CSS-first rewrite incompatible with `@tailwind` directive syntax). The test pins `tailwindcss` major to `3` which would catch a stray `^4` upgrade.
+- **`.dockerignore` exclusion of `src/pd_ocr_labeler_spa/static/`.** Iter 14 excludes the static dir from the build context — correct, because the wheel stage gets its `static/` from `COPY --from=spa /work/dist/`, not from the local repo. If both were copied, a stale local `static/` could shadow the freshly built one. Confirmed safe.
+- **DEVELOPMENT.md M0/M1+ split.** Walked the doc against actual M0 reality: `/healthz` exists, `/env.js` exists, `GET /` 404s (only `/openapi.json`, `/docs`, `/redoc`, `/healthz`, `/env.js` are mounted), `--frontend-dev` stores a URL with no consumer. Doc says exactly this. The `test_development_doc_is_honest_about_m0_limits` shape pin would fail if a future doc edit re-introduced the "make dev opens the SPA" promise.
+- **`PD_LABELER_SKIP_SPA_CHECK` escape-hatch env name.** Inconsistent with the `PDLABELER_` Settings prefix (note the underscore), but this env is consumed by the build hook (not Settings) and is intentionally undocumented. Not worth fixing — different layer, never user-facing. Flag here for posterity only.
+
+## Summary
+
+7 findings: 0 blocker, **1 high** (B-16 Dockerfile env prefix mismatch with Settings), **2 medium** (B-17 post-commit hook misses rebase/amend, B-19 npm install vs ci + missing lockfile), **2 low** (B-18 Tailwind glob test rigidity, B-20 uv.lock not used in docker), **2 nit** (B-21 duplicate apt-get, B-22 iter-12 commit message overstatement). Top concerns:
+
+1. **B-16** — the Dockerfile encodes `PD_LABELER_*` (with underscore) while `Settings` reads `PDLABELER_*` (no underscore). The image still boots correctly because `--host 0.0.0.0` is in argv, but the `ENV` lines are dead code, and the test in `test_dockerfile.py` cements the wrong contract. This is the kind of mistake that propagates — anyone copying the Dockerfile pattern for M1 storage env vars will hit it. **Fix first.**
+2. **B-19** — the Dockerfile uses `npm install` against an absent lockfile (and would still use `install` not `ci` once the lockfile lands). Reproducibility hole that's part of the M0 acceptance gate per spec. Fix once Q-A8 unblocks frontend-install.
+
+Iter 16 should pick **B-16** first (one-line `PDLABELER_` rename + tightened test, low-risk). Then either B-17 (post-rewrite/post-checkout hook stages) or resume scaffolding (`make docker-*` targets, install scripts, release.yml). All four iter 11–14 commits otherwise actually fixed/landed what they claimed; the doc-honesty pin (B-12) is a particularly nice piece of regression engineering.
