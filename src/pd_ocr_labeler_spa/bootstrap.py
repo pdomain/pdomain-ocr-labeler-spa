@@ -73,11 +73,14 @@ def build_app(settings: Settings | None = None) -> FastAPI:
 
     # /healthz BEFORE SPA mount so the catch-all fallback can't shadow it.
     install_healthz(app)
-    install_env_js(app)
 
-    # M0: no SPA static mount yet — frontend bundle lands in M0 part 2.
-    # In api_only mode we'd skip the mount anyway; record the intent.
-    if settings.mode == "api_only":
-        log.debug("api_only mode: skipping SPA static mount")
+    # Per specs/02-backend.md §2 step 12: /env.js (and the future
+    # /image-cache mount + SPA fallback) only land in non-api_only modes.
+    # api_only is the OpenAPI-export / pure-API integration shape — the
+    # SPA bootstrap shim has no business existing there.
+    if settings.mode != "api_only":
+        install_env_js(app)
+    else:
+        log.debug("api_only mode: skipping /env.js + SPA static mount")
 
     return app

@@ -9,7 +9,7 @@ every iteration.
 
 | Milestone | Status | Notes |
 |---|---|---|
-| **M0** Repo scaffold | 🟡 in progress | Iter 1 backend skeleton + tests; iter 2 frontend scaffold (files only); iter 3 (2026-05-06) `mise.toml` + Makefile + Makefile parse smoke tests; iter 4 (2026-05-06) `.pre-commit-config.yaml` mirroring pd-prep-for-pgdp + 5 YAML-shape smoke tests; iter 5 (2026-05-06) **code-review checkpoint** → 9 findings filed in `BUGS_FOUND.md` (1 high, 3 medium, 4 low, 1 nit; B-10 was a non-finding sanity check); iter 6 (2026-05-06) fixed B-02 (vite proxy → :8080) + B-03 (drop CORS `allow_credentials`) with regression tests. Iter 7 should pick B-01 (env.js api_only gate + test) and B-09 (re-tag `v0.0.0`) before resuming scaffolding. Frontend `npm install` still blocked on Q-A8. Dockerfile / install scripts / DEVELOPMENT.md pending. |
+| **M0** Repo scaffold | 🟡 in progress | Iter 1 backend skeleton + tests; iter 2 frontend scaffold (files only); iter 3 (2026-05-06) `mise.toml` + Makefile + Makefile parse smoke tests; iter 4 (2026-05-06) `.pre-commit-config.yaml` mirroring pd-prep-for-pgdp + 5 YAML-shape smoke tests; iter 5 (2026-05-06) **code-review checkpoint** → 9 findings filed in `BUGS_FOUND.md` (1 high, 3 medium, 4 low, 1 nit; B-10 was a non-finding sanity check); iter 6 (2026-05-06) fixed B-02 (vite proxy → :8080) + B-03 (drop CORS `allow_credentials`) with regression tests; iter 7 (2026-05-06) fixed B-01 (gate `/env.js` install on `mode != "api_only"` + parametrised test across modes) and B-09 (retagged `v0.0` → `v0.0.0` at same commit `2f01b17`). Iter 8 should resume scaffolding (Tailwind + shadcn / Dockerfile / install scripts) or pick from remaining bugs (B-04..B-08). Frontend `npm install` still blocked on Q-A8. Dockerfile / install scripts / DEVELOPMENT.md pending. |
 | M1 Settings + adapters + AppState | ⬜ not started | Pre-conditions: M0. |
 | M2 Project discovery + load | ⬜ not started | Pre-conditions: M0, M1. |
 | M3 OCR config modal + first-page OCR | ⬜ not started | |
@@ -66,9 +66,21 @@ every iteration.
   exists, all 3 proxy keys hit :8080, no stale 8765 literal) and
   `tests/unit/test_cors_middleware.py` (2 tests: wildcard+credentials
   combo refused, kwargs match pgdp-prep shape). Test count: 21 → 26.
-- [ ] **Iter 7 (next).** Apply B-01 (env.js api_only gate + flip
-  fixture; spec §2.12) and B-09 (re-tag `v0.0.0`), then resume
-  scaffolding (Tailwind + shadcn / Dockerfile / install scripts).
+- [x] **Iter 7 (2026-05-06).** Fixed B-01 (gate `/env.js` install on
+  `settings.mode != "api_only"` per spec §2 step 12) + B-09 (retag
+  `v0.0` → `v0.0.0` at same commit `2f01b17` so hatch-vcs version
+  derivation is canonical PEP-440). Test count: 26 → 30 (added
+  `tests/unit/test_env_js.py` with 4 parametrised tests across
+  modes; relocated and tightened the prior `/env.js` shape assertion
+  out of `test_healthz.py`; added `api_only`-omits-/env.js
+  regression to `test_app_factory.py`). Wheel filename now
+  `pd_ocr_labeler_spa-0.0.1.dev6+g6b6835b13.d20260506`. Local-only
+  retag, no push.
+- [ ] **Iter 8 (next).** Resume scaffolding — Tailwind v3.4 + shadcn,
+  or pick from remaining bugs (B-04 settings mutation, B-05 eslint
+  script without eslint, B-06 openapi:gen path drift, B-07 unused
+  `_build_env(settings)` arg, B-08 tsconfig-includes-tests). B-05 +
+  B-08 are closest to "block M1 frontend work."
 - [ ] Tailwind v3.4 + shadcn/ui wiring (`tailwind.config.ts`,
   `postcss.config.js`, `src/index.css`, `components.json`).
   Deferred from iter 2 to keep the smoke scaffold minimal.

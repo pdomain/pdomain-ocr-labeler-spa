@@ -14,6 +14,16 @@ from the list. Severity legend: blocker > high > medium > low > nit.
 ---
 
 ## B-01 — `/env.js` is mounted unconditionally; spec §2 step 12 gates it on `mode != "api_only"`
+- **Status:** ✅ **Fixed in iter 7 (2026-05-06)** — `install_env_js`
+  call is now wrapped in `if settings.mode != "api_only":` in
+  `src/pd_ocr_labeler_spa/bootstrap.py`. Test fixture for the prior
+  cement-the-wrong-shape assertion was relocated:
+  `tests/unit/test_env_js.py` parametrises across modes (route present
+  + spec-shape check in `normal`; route absent in `api_only`, both
+  via 404 and via app.router.routes inspection). The
+  `test_app_factory.py` purity test now uses `mode="normal"` and adds
+  a separate `api_only`-omits-/env.js assertion. LOOP_STATE iter-7
+  row records the sha.
 - **Severity:** medium
 - **Where:** `src/pd_ocr_labeler_spa/bootstrap.py:69-70`; spec
   `specs/02-backend.md:99-100`; reinforced by the divergent test
@@ -182,6 +192,13 @@ from the list. Severity legend: blocker > high > medium > low > nit.
   whatever pgdp-prep does in this regard.
 
 ## B-09 — `v0.0` tag yields a non-canonical PEP-440 version
+- **Status:** ✅ **Fixed in iter 7 (2026-05-06)** — `git tag -d v0.0`
+  + `git tag v0.0.0 2f01b17`. Same target commit, so hatch-vcs
+  derivation is stable for that point in history. After
+  `uv sync --reinstall-package pd-ocr-labeler-spa` the wheel filename
+  resolves to `pd_ocr_labeler_spa-0.0.1.dev6+g6b6835b13.d20260506`
+  (verified via `uv build --wheel`). No push performed; pure local
+  retag. LOOP_STATE iter-7 row records the sha.
 - **Severity:** nit
 - **Where:** repo `git tag v0.0` (commit `2f01b17`); confirmed by
   `uv run pd-ocr-labeler-ui --version` → `0.0`.
@@ -244,11 +261,12 @@ from the list. Severity legend: blocker > high > medium > low > nit.
 
 1. ~~**B-02** (vite proxy port)~~ — ✅ fixed in iter 6.
 2. ~~**B-03** (CORS allow_credentials)~~ — ✅ fixed in iter 6.
-3. **B-01** (env.js api_only gate + test) — small fix, prevents
-   spec drift compounding in M1's image-cache and SPA-fallback
-   mounts. **Iter 7 top of queue.**
-4. **B-09** (re-tag `v0.0.0`) — pure git operation; bundle with B-01
-   as a cleanup commit. **Iter 7.**
-5. Defer B-04, B-05, B-06, B-07, B-08 until M1 starts touching the
-   surrounding code (most are pre-existing comments / known
-   incomplete scaffolding).
+3. ~~**B-01** (env.js api_only gate + test)~~ — ✅ fixed in iter 7.
+4. ~~**B-09** (re-tag `v0.0.0`)~~ — ✅ fixed in iter 7.
+5. Remaining: **B-04** (settings mutation), **B-05** (eslint script
+   without eslint installed), **B-06** (openapi:gen path drift),
+   **B-07** (`_build_env(settings)` ignores arg), **B-08**
+   (tsconfig includes test files in prod build). All deferrable
+   until M1 starts touching the surrounding code; B-05 + B-08 are
+   the closest to "block M1 frontend work" so iter 8 should pick
+   from those if no higher-priority task surfaces.

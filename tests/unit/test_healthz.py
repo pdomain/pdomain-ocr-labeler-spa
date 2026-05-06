@@ -31,15 +31,3 @@ def test_healthz_excluded_from_openapi_schema(client: TestClient) -> None:
     # generated TS types — the SPA never calls it.
     schema = client.get("/openapi.json").json()
     assert "/healthz" not in schema.get("paths", {})
-
-
-def test_env_js_returns_window_env_assignment(client: TestClient) -> None:
-    resp = client.get("/env.js")
-    assert resp.status_code == 200
-    assert resp.headers["content-type"].startswith("application/javascript")
-    # M0 contract from specs/02-backend.md §5.1:
-    #     window.__ENV__ = {"API_BASE": "", "API_TOKEN": null};
-    body = resp.text
-    assert body.startswith("window.__ENV__ = ")
-    assert '"API_BASE": ""' in body
-    assert '"API_TOKEN": null' in body
