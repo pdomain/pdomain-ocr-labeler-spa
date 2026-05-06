@@ -15,14 +15,17 @@ import json
 
 from fastapi import APIRouter, Request, Response
 
-from ..settings import Settings
-
 router = APIRouter()
 
 
-def _build_env(settings: Settings) -> dict[str, object]:
+def _build_env() -> dict[str, object]:
     # M0: auth is fixed at "none". The shape matches the spec's literal
     # example so the SPA bootstrap (M1) can rely on the contract.
+    #
+    # M2 (auth seam) will re-introduce a ``settings: Settings`` parameter
+    # that wires ``settings.api_key`` into ``API_TOKEN`` — see
+    # pd-prep-for-pgdp's analogue. Dropping the param now (rather than
+    # underscoring it) keeps the M0 surface honest about its inputs.
     return {
         "API_BASE": "",
         "API_TOKEN": None,
@@ -31,8 +34,10 @@ def _build_env(settings: Settings) -> dict[str, object]:
 
 @router.get("/env.js", include_in_schema=False)
 async def env_js(request: Request) -> Response:
-    settings: Settings = request.app.state.settings
-    body = f"window.__ENV__ = {json.dumps(_build_env(settings))};\n"
+    # ``request`` retained for future per-request signal (e.g. echoing
+    # ``X-Forwarded-Prefix`` into ``API_BASE``) but unused in M0.
+    del request
+    body = f"window.__ENV__ = {json.dumps(_build_env())};\n"
     return Response(
         content=body,
         media_type="application/javascript; charset=utf-8",

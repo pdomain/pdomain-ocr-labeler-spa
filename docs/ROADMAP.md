@@ -9,7 +9,7 @@ every iteration.
 
 | Milestone | Status | Notes |
 |---|---|---|
-| **M0** Repo scaffold | 🟡 in progress | Iter 1 backend skeleton + tests; iter 2 frontend scaffold (files only); iter 3 (2026-05-06) `mise.toml` + Makefile + Makefile parse smoke tests; iter 4 (2026-05-06) `.pre-commit-config.yaml` mirroring pd-prep-for-pgdp + 5 YAML-shape smoke tests; iter 5 (2026-05-06) **code-review checkpoint** → 9 findings filed in `BUGS_FOUND.md` (1 high, 3 medium, 4 low, 1 nit; B-10 was a non-finding sanity check); iter 6 (2026-05-06) fixed B-02 (vite proxy → :8080) + B-03 (drop CORS `allow_credentials`) with regression tests; iter 7 (2026-05-06) fixed B-01 (gate `/env.js` install on `mode != "api_only"` + parametrised test across modes) and B-09 (retagged `v0.0` → `v0.0.0` at same commit `2f01b17`). Iter 8 should resume scaffolding (Tailwind + shadcn / Dockerfile / install scripts) or pick from remaining bugs (B-04..B-08). Frontend `npm install` still blocked on Q-A8. Dockerfile / install scripts / DEVELOPMENT.md pending. |
+| **M0** Repo scaffold | 🟡 in progress | Iter 1 backend skeleton + tests; iter 2 frontend scaffold (files only); iter 3 `mise.toml` + Makefile + Makefile parse smoke tests; iter 4 `.pre-commit-config.yaml` mirroring pd-prep-for-pgdp + YAML-shape smoke tests; iter 5 **code-review checkpoint** → 9 findings filed in `BUGS_FOUND.md`; iter 6 fixed B-02 + B-03; iter 7 fixed B-01 + B-09; iter 8 fixed B-05 + B-06 + B-08; iter 9 (2026-05-06) fixed B-04 (Settings now `frozen=True` + `Settings(**overrides)` in `__main__`) + B-07 (`_build_env()` no-arg) and added `docs/DEVELOPMENT.md` with shape-pin tests. **All iter-5 findings now closed.** Iter 10 is the next code-review checkpoint (reviews iters 6-9). Frontend `npm install` still blocked on Q-A8. Dockerfile / install scripts / Tailwind+shadcn / release workflow still pending for M0 acceptance gate. |
 | M1 Settings + adapters + AppState | ⬜ not started | Pre-conditions: M0. |
 | M2 Project discovery + load | ⬜ not started | Pre-conditions: M0, M1. |
 | M3 OCR config modal + first-page OCR | ⬜ not started | |
@@ -89,14 +89,19 @@ every iteration.
   B-08 app-excludes / test-includes / vitest-wiring). Test count:
   30 → 35. ruff lint+format clean. Remaining BUGS_FOUND.md items:
   B-04 (low) + B-07 (nit).
-- [ ] **Iter 9 (next).** Closest unfixed bugs: B-04 (`__main__.py`
-  mutates `settings.frontend_dev_url` — spec §3 forbids; small
-  refactor to build overrides dict and pass into `Settings(**…)`),
-  B-07 (`_build_env(settings)` ignores its arg — underscore or
-  drop). After bugs cleared, resume M0 scaffolding (Tailwind v3.4
-  + shadcn/ui, Dockerfile, install scripts, DEVELOPMENT.md, release
-  workflow). Q-A9 (eslint shape) and Q-A8 (Node toolchain in
-  devcontainer) remain blockers for M0 acceptance gate.
+- [x] **Iter 9 (2026-05-06).** Fixed B-04 (built `overrides` dict
+  from CLI flags + `Settings(**overrides)` once; enabled
+  `frozen=True` in `SettingsConfigDict`; added runtime + AST-level
+  regression tests) and B-07 (dropped unused `settings` param from
+  `_build_env`; pinned the no-arg signature). Added
+  `docs/DEVELOPMENT.md` (prereqs, first-time setup, dev loop, build,
+  CI mirror) with `tests/unit/test_development_doc.py` (4 tests:
+  exists, every `make <foo>` reference resolves, Node/Python pins
+  match `mise.toml`, Astral uv installer mentioned). Test count:
+  35 → 42. ruff lint+format clean. **No remaining iter-5 findings.**
+- [ ] **Iter 10 (next).** Code-review checkpoint per /loop cadence
+  (reviews iters 6-9). File new findings into `BUGS_FOUND.md`. Do
+  not fix in the same iter.
 - [ ] Tailwind v3.4 + shadcn/ui wiring (`tailwind.config.ts`,
   `postcss.config.js`, `src/index.css`, `components.json`).
   Deferred from iter 2 to keep the smoke scaffold minimal.
@@ -104,7 +109,6 @@ every iteration.
 - [ ] `install.sh` / `install.ps1` (uv tool installer).
 - [ ] `.github/workflows/release.yml` (CI gate including SPA-bundle
   presence check).
-- [ ] `DEVELOPMENT.md`.
 - [ ] M0 acceptance gate: `make ci` green, `make build` produces a
   wheel that contains `pd_ocr_labeler_spa/static/index.html`,
   `pd-ocr-labeler-ui --no-browser --port 8080` answers `/healthz`,

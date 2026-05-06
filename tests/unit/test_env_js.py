@@ -99,3 +99,26 @@ def test_env_js_route_present_in_router_table_in_normal(tmp_path: Path) -> None:
     app = build_app(s)
     paths = {getattr(r, "path", None) for r in app.router.routes}
     assert "/env.js" in paths
+
+
+def test_build_env_helper_signature_has_no_unused_settings_param() -> None:
+    """Regression for B-07.
+
+    The prior shape was ``_build_env(settings: Settings) -> dict`` but
+    the body never read ``settings``. Until M2 (auth seam) wires an
+    actual consumer (e.g. ``settings.api_key``), the parameter is a
+    misleading promise: static-analysis (ruff ``ARG``) and human readers
+    are told the function depends on settings when it does not.
+
+    Pin the cleaned-up signature so a future contributor doesn't quietly
+    re-introduce the dead parameter ahead of an actual consumer.
+    """
+    import inspect
+
+    from pd_ocr_labeler_spa.api.env_js import _build_env
+
+    sig = inspect.signature(_build_env)
+    assert list(sig.parameters) == [], (
+        "_build_env should take no parameters until M2 reintroduces a "
+        f"settings consumer; got {list(sig.parameters)}"
+    )

@@ -103,6 +103,16 @@ from the list. Severity legend: blocker > high > medium > low > nit.
   pgdp-prep.
 
 ## B-04 — `__main__.py` mutates `settings.frontend_dev_url` after construction; spec §3 forbids it
+- **Status:** ✅ **Fixed in iter 9 (2026-05-06)** — `__main__.py` now
+  builds an `overrides` dict from CLI args (`frontend_dev_url`, `host`,
+  `port`) and passes it to `Settings(**overrides)` once. Enabled
+  `frozen=True` in `SettingsConfigDict` so any future regression to
+  `settings.<field> = …` raises `ValidationError("frozen")` at the
+  call-site. Two regression tests in `tests/unit/test_settings.py`:
+  (1) runtime check that `frontend_dev_url`/`host`/`port` are frozen;
+  (2) AST-level scan of `__main__.py` rejecting any `settings.<attr>
+  = …` assignment, so the static guard survives if a future M2 change
+  has to disable `frozen` to thread an api-key reload signal.
 - **Severity:** low
 - **Where:** `src/pd_ocr_labeler_spa/__main__.py:55-60`.
 - **Issue:** Spec §3 (`specs/02-backend.md:148-149`) states "override
@@ -170,6 +180,17 @@ from the list. Severity legend: blocker > high > medium > low > nit.
   openapi-export`.
 
 ## B-07 — `_build_env(settings)` ignores its `settings` argument
+- **Status:** ✅ **Fixed in iter 9 (2026-05-06)** — dropped the unused
+  `settings: Settings` parameter from `_build_env()` (and the now-
+  unused `Settings` import) per the principle that an M0 surface
+  should be honest about what it actually depends on. M2 (auth seam)
+  will reintroduce a `settings` parameter alongside the first real
+  consumer (e.g. wiring `settings.api_key` into `API_TOKEN`).
+  Regression test in
+  `tests/unit/test_env_js.py::test_build_env_helper_signature_has_no_unused_settings_param`
+  pins the new shape: zero parameters until M2 lands a consumer.
+  Also `del request` inside the route handler so the unused argument
+  signal stays consistent.
 - **Severity:** nit
 - **Where:** `src/pd_ocr_labeler_spa/api/env_js.py:23-29`.
 - **Issue:** Helper takes `settings: Settings` but never reads from
@@ -290,10 +311,11 @@ from the list. Severity legend: blocker > high > medium > low > nit.
 2. ~~**B-03** (CORS allow_credentials)~~ — ✅ fixed in iter 6.
 3. ~~**B-01** (env.js api_only gate + test)~~ — ✅ fixed in iter 7.
 4. ~~**B-09** (re-tag `v0.0.0`)~~ — ✅ fixed in iter 7.
-5. Remaining: **B-04** (settings mutation), **B-05** (eslint script
-   without eslint installed), **B-06** (openapi:gen path drift),
-   **B-07** (`_build_env(settings)` ignores arg), **B-08**
-   (tsconfig includes test files in prod build). All deferrable
-   until M1 starts touching the surrounding code; B-05 + B-08 are
-   the closest to "block M1 frontend work" so iter 8 should pick
-   from those if no higher-priority task surfaces.
+5. ~~**B-05** + **B-06** + **B-08** (frontend config trio)~~ — ✅
+   fixed in iter 8.
+6. ~~**B-04** (settings mutation, `frozen=True`) + **B-07**
+   (`_build_env` unused arg)~~ — ✅ fixed in iter 9.
+
+**All findings from the iter-5 review are now addressed.** Iter 10 is
+the next code-review checkpoint per /loop cadence (review iters 6-9);
+new findings filed there.

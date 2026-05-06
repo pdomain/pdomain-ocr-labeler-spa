@@ -30,6 +30,11 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # Spec §3 (specs/02-backend.md:148-149): "override after construction
+        # is forbidden." Enforce via pydantic frozen so any future regression
+        # to mutate ``settings.<field> = …`` post-construction fails loudly
+        # at the call-site instead of silently desyncing process state.
+        frozen=True,
     )
 
     # ── Server ───────────────────────────────────────────────────────────────

@@ -74,3 +74,54 @@ def test_settings_accepts_explicit_overrides(tmp_path: Path) -> None:
     assert s.port == 8123
     assert s.data_root == tmp_path / "d"
     assert s.mode == "api_only"
+
+
+def test_settings_is_frozen_post_construction() -> None:
+    """Spec §3 (specs/02-backend.md:148-149): "override after construction
+    is forbidden."
+
+    Regression for B-04: M0 ``__main__.py`` previously mutated
+    ``settings.frontend_dev_url`` after constructing ``Settings()``. With
+    ``frozen=True`` enabled in ``model_config``, any such regression now
+    fails loudly at the call-site instead of silently desyncing process
+    state. Verifies for at least ``frontend_dev_url`` (the field that
+    motivated the bug) plus ``host`` and ``port`` (the other fields the
+    CLI threads through).
+    """
+    from pydantic import ValidationError
+
+    s = Settings()
+    for field in ("frontend_dev_url", "host", "port"):
+        with pytest.raises(ValidationError, match="frozen"):
+            setattr(s, field, "x" if field != "port" else 9999)
+
+
+def test_main_does_not_mutate_settings_post_construction() -> None:
+    """B-04 belt-and-suspenders: assert via AST that ``__main__.py`` does
+    not reintroduce the ``settings.<field> = …`` pattern.
+
+    Even with ``frozen=True`` catching a runtime regression, a static
+    check guards against someone disabling frozen later (M2 might need
+    to, when wiring an ``api_key`` reload signal) without auditing this
+    call-site.
+    """
+    import ast
+    import inspect
+
+    from pd_ocr_labeler_spa import __main__ as main_mod
+
+    src = inspect.getsource(main_mod)
+    tree = ast.parse(src)
+    bad_assignments: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if (
+                    isinstance(target, ast.Attribute)
+                    and isinstance(target.value, ast.Name)
+                    and target.value.id == "settings"
+                ):
+                    bad_assignments.append(f"settings.{target.attr} = ... at line {node.lineno}")
+    assert not bad_assignments, (
+        f"post-construction settings mutation reintroduced (spec §3 forbids): {bad_assignments}"
+    )

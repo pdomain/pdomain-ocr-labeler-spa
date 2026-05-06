@@ -48,16 +48,21 @@ def main(argv: list[str] | None = None) -> int:
         print(__version__)
         return 0
 
-    settings = Settings()
-    host = args.host or settings.host
-    port = args.port or settings.port
-
+    # spec/02-backend.md §3: build Settings *once* from CLI overrides + env.
+    # Post-construction mutation is forbidden (Settings is frozen) — collect
+    # CLI overrides into a dict and let pydantic-settings layer them on top
+    # of env defaults in a single ``Settings(**overrides)`` call.
+    overrides: dict[str, object] = {}
     if args.frontend_dev:
-        # spec/02-backend.md §3 says "override after construction is forbidden";
-        # M0 still mutates here because the only consumer is the very next
-        # uvicorn.run call. M1's CLI lands a proper "build settings up front
-        # then pass into build_app" pattern via Settings(**overrides).
-        settings.frontend_dev_url = args.frontend_dev
+        overrides["frontend_dev_url"] = args.frontend_dev
+    if args.host is not None:
+        overrides["host"] = args.host
+    if args.port is not None:
+        overrides["port"] = args.port
+
+    settings = Settings(**overrides)
+    host = settings.host
+    port = settings.port
 
     url = f"http://{host}:{port}"
     print(f"Listening on {url}")
