@@ -1,0 +1,99 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pd-ocr-labeler-spa"
+dynamic = ["version"]
+description = "FastAPI + React SPA replacement for pd-ocr-labeler — single wheel that serves API + bundled SPA"
+authors = [
+    { name = "CT", email = "concavetrillion@gmail.com" }
+]
+readme = "README.md"
+license = { text = "Unlicense" }
+requires-python = ">=3.13,<4.0"
+dependencies = [
+    # Server
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.5",
+    "python-multipart>=0.0.20",
+    "httpx>=0.28",
+    "sse-starlette>=2.1",
+    "anyio>=4.4",
+    # OCR / image domain (wired in later milestones; harmless to declare now)
+    "pd-book-tools",
+    "huggingface_hub>=0.23",
+]
+
+[project.optional-dependencies]
+modal = [
+    "modal>=0.66",
+]
+
+[project.scripts]
+# Console script name preserved verbatim from the legacy `pd-ocr-labeler`
+# so end users can swap binaries without re-learning the command.
+# See specs/15-deployment-dev.md §2.
+pd-ocr-labeler-ui = "pd_ocr_labeler_spa.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/ConcaveTrillion/pd-ocr-labeler-spa"
+Repository = "https://github.com/ConcaveTrillion/pd-ocr-labeler-spa"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.0",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.7",
+    "httpx>=0.28",
+]
+e2e = [
+    "pytest-playwright>=0.5",
+]
+
+[tool.uv.sources]
+# Pinned tag chosen to match the version pgdp-prep currently consumes,
+# so a single devcontainer can host both repos against the same
+# pd-book-tools build. Bump via `make upgrade-pd-book-tools` when ready.
+pd-book-tools = { git = "https://github.com/ConcaveTrillion/pd-book-tools.git", tag = "v0.9.0" }
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pd_ocr_labeler_spa"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/pd_ocr_labeler_spa/static" = "pd_ocr_labeler_spa/static"
+
+# Local guard mirroring the CI check in `.github/workflows/release.yml`:
+# fail `uv build` / `hatch build` if the SPA bundle is missing, so the
+# wheel can never be published with a blank `static/`. See
+# `build_hooks/spa_check.py` for the rationale.
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "build_hooks/spa_check.py"
+
+[tool.ruff]
+line-length = 110
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    # FastAPI's canonical pattern for dependency injection puts Depends()
+    # in default arguments. Ignoring this rule across the whole repo.
+    "B008",
+    # `Foo(str, Enum)` — Pydantic patterns use this idiom widely.
+    "UP042",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Spec-aligned coordinate names (L/R/T/B) trigger E741 in tests.
+"tests/*" = ["E741"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
