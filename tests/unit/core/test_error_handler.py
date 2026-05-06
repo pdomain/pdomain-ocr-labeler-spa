@@ -217,7 +217,8 @@ def test_unhandled_exception_emits_full_traceback_log(caplog) -> None:
 
 
 def test_handled_error_responses_preserve_request_id_header() -> None:
-    """The X-Request-ID header echoes on handler 1/2/3 error responses.
+    """The X-Request-ID header echoes on every error response, including
+    the unhandled-Exception 500 path (B-50 fix).
 
     RequestIdMiddleware wraps the handler chain — when one of the
     *registered* handlers fires (HTTP, validation, geometry), the
@@ -226,20 +227,21 @@ def test_handled_error_responses_preserve_request_id_header() -> None:
     on the header (not in the JSON envelope) per the error_handler
     module docstring.
 
-    NOTE: handler 4 (catch-all ``Exception``) is **not** covered here.
-    Starlette's ``ServerErrorMiddleware`` sits ABOVE user middleware in
-    the framework's ASGI stack: an unhandled exception bubbles past
-    ``RequestIdMiddleware``'s ``call_next`` before our 500 response
-    is built, so the header-write line never runs. That gap is
-    architectural to FastAPI/Starlette, shared with pgdp-prep, and
-    out of scope for M1.c (filed as a BUGS_FOUND candidate for the
-    next review checkpoint — possible fixes include moving the
-    request-id stamp into a pure-ASGI middleware that wraps the
-    response-send rather than waiting on call_next).
+    Handler 4 (catch-all ``Exception``) is now also covered.
+    Pre-B-50, ``RequestIdMiddleware`` extended ``BaseHTTPMiddleware``,
+    which discarded the response-header mutation when ``call_next``
+    raised — so 500s went out without the rid header. The B-50 fix
+    rewrites the middleware as a raw ASGI app that wraps the ``send``
+    callable and injects ``X-Request-ID`` on every
+    ``http.response.start`` message, regardless of whether the inner
+    app returned cleanly or raised. ``/_probe/boom`` raises
+    ``RuntimeError`` and exercises the catch-all handler; the rid
+    must still echo.
     """
     cases = [
         ("/_probe/http_404", 404),
         ("/_probe/geometry", 422),
+        ("/_probe/boom", 500),
     ]
     with _client() as client:
         for path, expected_status in cases:

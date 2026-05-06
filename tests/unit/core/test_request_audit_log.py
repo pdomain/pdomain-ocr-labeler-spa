@@ -48,6 +48,13 @@ def _make_audit_app() -> FastAPI:
         # raise to verify duration_ms > 0.
         return {"ok": True}
 
+    @app.get("/boom")
+    def boom() -> dict[str, bool]:
+        # Used by ``test_request_end_emitted_when_call_next_raises``
+        # — verifies the ``finally`` block in the middleware still
+        # emits ``request_end`` when the inner app raises.
+        raise RuntimeError("kaboom from middleware audit test")
+
     return app
 
 
@@ -118,3 +125,71 @@ def test_audit_log_carries_request_id(caplog) -> None:
     finally:
         # Identity-based removal (avoids the B-48 positional pitfall).
         caplog.handler.removeFilter(rid_filter)
+
+
+def test_request_end_emitted_when_call_next_raises(caplog) -> None:
+    """B-50/B-56: ``request_end`` fires even when the inner app raises.
+
+    Pre-fix shape (``BaseHTTPMiddleware`` + ``collapse_excgroups``)
+    swallowed the ``finally`` block when ``call_next`` raised — so
+    ``request_end`` never fired on unhandled-exception requests, the
+    operationally most-important case for an audit timeline. The fix
+    rewrites the middleware as raw ASGI; this test pins the new
+    contract: ``request_end`` is emitted with ``status=500`` and a
+    non-negative ``duration_ms`` regardless of whether the inner app
+    returned cleanly or raised.
+
+    Status defaults to 500 (the conventional "server error before any
+    response was started") when the inner app raises before sending a
+    response start message.
+    """
+    app = _make_audit_app()
+    with caplog.at_level(logging.INFO, logger=AUDIT_LOGGER):
+        # ``raise_server_exceptions=False`` so the test client surfaces
+        # the resulting 500 response (built by Starlette's
+        # ``ServerErrorMiddleware``) rather than re-raising into the test.
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.get("/boom")
+    assert response.status_code == 500
+
+    audit = [r for r in caplog.records if r.name == AUDIT_LOGGER]
+    starts = [r for r in audit if r.message == "request_start"]
+    ends = [r for r in audit if r.message == "request_end"]
+    assert starts, "request_start must fire on entry even when inner app raises"
+    assert ends, (
+        "request_end MUST fire on exit even when call_next raises — "
+        "the middleware's finally-block guarantees the audit timeline"
+    )
+    rec = ends[-1]
+    assert getattr(rec, "path", None) == "/boom"
+    assert getattr(rec, "method", None) == "GET"
+    assert getattr(rec, "status", None) == 500, (
+        "status defaults to 500 when the inner app raises before "
+        "sending a response.start (server error pre-response)"
+    )
+    duration_ms = getattr(rec, "duration_ms", None)
+    assert isinstance(duration_ms, int)
+    assert duration_ms >= 0
+
+
+def test_request_id_var_resets_after_exception_request() -> None:
+    """B-50: the ContextVar token is reset even when the inner app raises.
+
+    The middleware brackets ``request_id_var.set(rid)`` /
+    ``request_id_var.reset(token)`` around the entire request lifecycle
+    via ``try/finally`` — so a raising inner app must NOT leak the rid
+    into the outer ContextVar scope.
+    """
+    from pd_ocr_labeler_spa.core.logging_config import request_id_var
+
+    sentinel_token = request_id_var.set("")
+    try:
+        app = _make_audit_app()
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.get("/boom", headers={"X-Request-ID": "should-not-leak"})
+        assert response.status_code == 500
+        # After the failing request, this thread's ContextVar is back
+        # to the empty default.
+        assert request_id_var.get() == ""
+    finally:
+        request_id_var.reset(sentinel_token)
