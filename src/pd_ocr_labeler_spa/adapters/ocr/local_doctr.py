@@ -16,14 +16,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .base import IOCREngine, OCRProvenance
+from .base import OCRProvenance
 
 if TYPE_CHECKING:
     from pd_book_tools.ocr.document import Page
 
 
-class LocalDoctrOCR(IOCREngine):
-    """Wrapper around DocTR; predictor-cached. Body lands in M3."""
+class LocalDoctrOCR:
+    """Wrapper around DocTR; predictor-cached. Body lands in M3.
+
+    Conformance to ``IOCREngine`` is purely structural (PEP 544); no
+    explicit subclass — see ``adapters/__init__.py`` for the policy.
+    (B-46.)
+    """
 
     async def ocr_page(
         self,

@@ -27,14 +27,19 @@ from pd_ocr_labeler_spa.core.logging_config import (
 
 def test_request_id_var_default_is_empty_string() -> None:
     """Spec §9 invariant: empty-string default keeps the JSON field
-    type-stable and makes absent-vs-present unambiguous in log greps."""
-    # Reset to the documented default for this assertion (other tests
-    # may have left the var in an unrelated state).
-    token = request_id_var.set("")
-    try:
-        assert request_id_var.get() == ""
-    finally:
-        request_id_var.reset(token)
+    type-stable and makes absent-vs-present unambiguous in log greps.
+
+    Reads the *declared* default by running ``.get()`` inside a fresh
+    ``contextvars.Context()`` — that context has never seen a ``set()``
+    on this var, so ``.get()`` returns whatever ``ContextVar(default=)``
+    was passed at construction. A circular ``set("") -> get() == ""``
+    test would silently pass on a future ``default=None`` regression;
+    this one would not. (B-49.)
+    """
+    import contextvars
+
+    ctx = contextvars.Context()
+    assert ctx.run(lambda: request_id_var.get()) == ""
 
 
 def test_request_id_filter_injects_attribute() -> None:

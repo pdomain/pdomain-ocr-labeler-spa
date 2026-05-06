@@ -9,6 +9,14 @@ read arbitrary host files via crafted ``GET /image-cache/...`` paths.
 ``presign_put`` returns ``f"/cdn/{key}"`` — kept for adapter parity
 with pgdp-prep, even though the labeler SPA never PUTs through it
 (the SPA is read-only against ``IStorage`` per D-019).
+
+Async-correctness note: every method declared ``async`` dispatches
+its blocking syscalls through ``anyio.to_thread.run_sync(...)`` (or
+through ``anyio.Path``, which already does the same thing under the
+hood). Doing sync FS calls inside ``async def`` would block the event
+loop — fine in single-user mode, bad as soon as SSE / job-runner
+concurrency lands in M3+. The Protocol declares these methods async
+(spec §7), so the impls keep that promise honestly. (B-44.)
 """
 
 from __future__ import annotations
@@ -30,15 +38,21 @@ class FilesystemStorage:
     def _path(self, key: str) -> Path:
         """Resolve ``key`` against ``self._root`` and refuse escape attempts.
 
-        Two attack shapes guarded:
-        - ``../../etc/passwd`` (relative escape via parent dir refs)
-        - ``/etc/passwd`` (absolute key reinterpreted under root)
+        Two attack shapes are rejected up-front, before any FS access:
 
-        Both are caught by ``Path.resolve()``-then-``relative_to`` —
-        raising ``ValueError`` if the resolved path is outside the root.
+        - ``../../etc/passwd`` (relative escape via parent dir refs)
+          — caught by the ``resolve()``-then-``relative_to`` check below.
+        - ``/etc/passwd`` (absolute key) — rejected here with
+          ``ValueError`` rather than silently re-rooted under
+          ``self._root``. Storage callers are expected to use relative,
+          forward-slash keys; absolute keys are an API misuse, not a
+          legitimate way to address the data root. (B-45.)
+
+        Either form raises ``ValueError`` and never touches the FS.
         """
-        clean = key.lstrip("/")
-        candidate = (self._root / clean).resolve()
+        if key.startswith("/"):
+            raise ValueError(f"key escapes data root: {key!r} (absolute paths are not valid storage keys)")
+        candidate = (self._root / key).resolve()
         root = self._root.resolve()
         # candidate must be the root itself or strictly under it
         if candidate != root and root not in candidate.parents:
@@ -51,9 +65,10 @@ class FilesystemStorage:
 
     async def put_bytes(self, key: str, data: bytes) -> None:
         path = self._path(key)
-        # Parent dir creation is sync — anyio's Path proxy doesn't
-        # offer ``mkdir(parents=True)`` cleanly without an extra hop.
-        path.parent.mkdir(parents=True, exist_ok=True)
+        # ``anyio.Path`` doesn't expose ``mkdir(parents=True)`` cleanly,
+        # so dispatch the parent-mkdir to the threadpool to keep the
+        # event loop unblocked. (B-44.)
+        await anyio.to_thread.run_sync(lambda: path.parent.mkdir(parents=True, exist_ok=True))
         await anyio.Path(path).write_bytes(data)
 
     async def exists(self, key: str) -> bool:
@@ -61,8 +76,15 @@ class FilesystemStorage:
 
     async def delete(self, key: str) -> None:
         path = self._path(key)
-        if path.exists():
-            path.unlink()
+
+        # ``exists()`` + ``unlink()`` are cheap-but-blocking: bundle them
+        # into a single threadpool dispatch so the event loop sees one
+        # await point, not two sync syscalls. (B-44.)
+        def _delete() -> None:
+            if path.exists():
+                path.unlink()
+
+        await anyio.to_thread.run_sync(_delete)
 
     async def list_keys(self, prefix: str) -> list[str]:
         """Return keys under ``prefix`` (forward-slash form), recursive.
@@ -72,16 +94,23 @@ class FilesystemStorage:
         than 404 on a non-existent prefix.
         """
         base = self._path(prefix)
-        if not base.exists():
-            return []
-        if base.is_file():
-            return [prefix.lstrip("/")]
-        keys: list[str] = []
         root = self._root.resolve()
-        for path in base.rglob("*"):
-            if path.is_file():
-                keys.append(path.relative_to(root).as_posix())
-        return sorted(keys)
+
+        # ``rglob`` against a populated image-cache walks every entry;
+        # one threadpool dispatch covers the whole walk so the event
+        # loop isn't blocked per-entry. (B-44.)
+        def _walk() -> list[str]:
+            if not base.exists():
+                return []
+            if base.is_file():
+                return [prefix.lstrip("/")]
+            keys: list[str] = []
+            for path in base.rglob("*"):
+                if path.is_file():
+                    keys.append(path.relative_to(root).as_posix())
+            return sorted(keys)
+
+        return await anyio.to_thread.run_sync(_walk)
 
     def presign_put(self, key: str, *, expires_in: int = 600) -> str:
         """Return the URL the labeler would PUT to for ``key``.

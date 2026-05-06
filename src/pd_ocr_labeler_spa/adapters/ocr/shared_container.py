@@ -11,13 +11,20 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ...core.exceptions import NotImplementedYet
-from .base import IOCREngine, OCRProvenance
+from .base import OCRProvenance
 
 if TYPE_CHECKING:
     from pd_book_tools.ocr.document import Page
 
 
-class SharedContainerOCR(IOCREngine):
+class SharedContainerOCR:
+    """Shared-container OCR backend — Protocol seam; body raises ``NotImplementedYet``.
+
+    Conformance to ``IOCREngine`` is purely structural (PEP 544); no
+    explicit subclass — see ``adapters/__init__.py`` for the policy.
+    (B-46.)
+    """
+
     async def ocr_page(
         self,
         image: Any,

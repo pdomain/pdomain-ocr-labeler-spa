@@ -10,4 +10,14 @@ Three axes selected by ``Settings``:
 The Protocol surface is what every backend conforms to — flipping
 ``Settings.{storage_backend,auth_mode,ocr_engine}`` becomes a wiring
 change in ``bootstrap.py`` rather than per-call-site refactoring.
+
+Conformance policy
+------------------
+
+Adapter impls match their Protocol *structurally* (PEP 544): they do
+**not** inherit from the Protocol class. This avoids accidentally
+shadowing default args via Protocol class attributes, keeps each impl
+trivially mockable in tests, and matches the pattern in
+``pd-prep-for-pgdp``. ``isinstance(impl, IFoo)`` still works at
+runtime via ``@runtime_checkable``. (B-46.)
 """

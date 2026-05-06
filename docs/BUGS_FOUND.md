@@ -1592,6 +1592,7 @@ Findings B-42 through B-49 (8 items: 0 blocker, 0 high, 3 medium, 3 low, 2 nit).
   - `put_bytes`: `path.parent.mkdir(parents=True, exist_ok=True)` — sync (the comment acknowledges this with "anyio's Path proxy doesn't offer mkdir(parents=True) cleanly without an extra hop").
 - **Why it matters:** Under any concurrency at all (Vite-dev hot-reload, test parallelism, the eventual SSE notifications endpoint), these sync calls block the event loop while the kernel reads the directory. `list_keys` against a populated `<cache_root>/page-images/` (one file per page-image, hundreds of files for a long book) is the worst — sync `rglob` walks every entry. The labeler's single-user shape masks the cost in v1, but importing this pattern into M3+ where job-runner concurrency is real means the labeler is silently slow in places the spec says are async. The comment in `put_bytes` confirms the author knew but accepted the shortcut.
 - **Suggested fix:** Wrap each sync block in `await anyio.to_thread.run_sync(lambda: ...)`. For `list_keys` specifically, doing the whole rglob inside one `to_thread.run_sync` is fine (one threadpool dispatch). For `delete` and `put_bytes` parent-mkdir, same. Cost ~6 lines, removes the only correctness/performance lie in the impl. Add a regression test that the sync FS calls don't appear inside `async def` bodies via AST scan, or assert via a basic concurrency probe (two `delete` calls scheduled together don't serialize).
+- **Status:** Fixed in iter 37. `put_bytes` now dispatches its `parent.mkdir(parents=True, exist_ok=True)` through `anyio.to_thread.run_sync(lambda: ...)`. `delete` bundles its `exists()` + `unlink()` into a single nested `def _delete()` and dispatches once. `list_keys` does the full `rglob` walk inside one `def _walk()` dispatched once (cheaper than one dispatch per entry). Module docstring updated to spell out the async-correctness rule. Regression-pinned by a new AST-scan test (`test_filesystem_storage_async_methods_dispatch_blocking_io_to_threadpool`) that walks `filesystem.py` and flags any bare sync `Path.{exists,unlink,mkdir,rglob,is_file,relative_to}(...)` call lexically inside an `async def` body — nested `def`/`lambda` (the threadpool callable) and `await ...` expressions (anyio.Path coroutines) are correctly excluded.
 
 ---
 
@@ -1613,6 +1614,7 @@ Findings B-42 through B-49 (8 items: 0 blocker, 0 high, 3 medium, 3 low, 2 nit).
   The `lstrip("/")` on line 40 silently converts an absolute key into a relative one. The path-traversal test (line 78) only exercises `../../etc/passwd` (the first attack shape), never `/etc/passwd` — so the test passes but the docstring's second claim is unverified.
 - **Why it matters:** Security invariant (no escape from `self._root`) IS preserved, so the bug is mostly cosmetic — a caller passing `/etc/passwd` won't read `/etc/passwd` from the host. But the docstring misleads a future reader into thinking the absolute-path case throws. If the routing layer (M3+) uses absolute-key form anywhere, files end up at unexpected on-disk locations without an error, and ops debugging "why is `<root>/etc/foo` showing up?" wastes time.
 - **Suggested fix:** Either (1) tighten the impl: raise `ValueError` if `key.startswith("/")` BEFORE `lstrip` — making the docstring true; or (2) reword the docstring: "absolute-path keys are silently treated as relative under root (no escape, but the leading `/` is stripped)." Add a test asserting the chosen behavior — `put_bytes("/etc/passwd")` either raises OR creates `<root>/etc/passwd` and not anywhere else. Today neither variant is pinned.
+- **Status:** Fixed in iter 37 (option 1 — strict raise). `_path` now raises `ValueError(... "absolute paths are not valid storage keys")` when `key.startswith("/")`, BEFORE any FS access. Docstring rewritten to describe the actual two-stage check: explicit absolute-path rejection up-front, then the `resolve()`-then-`relative_to` invariant for the `..` escape case. Pinned by new test `test_filesystem_storage_absolute_key_rejected` that asserts every `IStorage` async method raises on `/etc/passwd` and that no re-rooted `<root>/etc/` directory appears as a side-effect. The previous round-trip and `..`-rejection tests are unchanged and still green (174/174). No callers in the codebase pass absolute keys (verified).
 
 ---
 
@@ -1626,6 +1628,7 @@ Findings B-42 through B-49 (8 items: 0 blocker, 0 high, 3 medium, 3 low, 2 nit).
 - **Issue:** Two different conformance styles within the same M1.a iter. Subclassing a `@runtime_checkable` Protocol turns the impl into a nominal subtype (still type-checks structurally, but `isinstance(LocalDoctrOCR(), IOCREngine)` returns `True` via MRO not runtime structural-check); not subclassing leaves it pure-structural. The functional difference is small, but the *style* difference is jarring.
 - **Why it matters:** A future agent reading these three packages in order will pattern-match "OCR inherits, the others don't, why?" and either (a) add inheritance to the others "for consistency" (potentially shadowing default arguments via Protocol class attributes) or (b) drop inheritance from OCR (breaking any `isinstance` check that doesn't yet exist but might land in M3 dispatcher wiring). Neither break is dramatic, but the inconsistency itself is the bug.
 - **Suggested fix:** Pick one style for the codebase and apply it. PEP 544 best-practice and pgdp-prep both lean toward *no* inheritance (pure structural typing) — drop `(IOCREngine)` from the three OCR impls. Add a one-line comment in `adapters/__init__.py` documenting the policy ("impls match Protocols structurally; do not subclass").
+- **Status:** Fixed in iter 37 (no-inheritance policy chosen, matching pgdp-prep). Dropped `(IOCREngine)` base from `LocalDoctrOCR`, `ModalOCR`, and `SharedContainerOCR`; updated each class docstring to point at the policy in `adapters/__init__.py`. `adapters/__init__.py` grew a "Conformance policy" section spelling out the structural-only rule and citing B-46. Removed the now-dead `IOCREngine` import from each impl module (kept `OCRProvenance`). Pinned by new test `test_ocr_impls_conform_structurally_not_by_inheritance` that asserts `IOCREngine not in impl.__mro__` for all three impls AND that `isinstance(impl(), IOCREngine)` still passes via `@runtime_checkable` structural check. Storage and auth impls were already structural, so no edits there — they're now consistent with OCR.
 
 ---
 
@@ -1673,6 +1676,7 @@ Findings B-42 through B-49 (8 items: 0 blocker, 0 high, 3 medium, 3 low, 2 nit).
       caplog.handler.removeFilter(rid_filter)
   ```
   One-line refactor; identity-based removal is robust.
+- **Status:** Fixed in iter 37. `test_request_id_tagged_on_log_lines` now captures the filter instance (`rid_filter = RequestIdFilter()`) before `addFilter`, and the `finally` block calls `caplog.handler.removeFilter(rid_filter)` — identity-based, immune to anything else appending or removing filters mid-test. Inline comment cites B-48.
 
 ---
 
@@ -1703,6 +1707,7 @@ Findings B-42 through B-49 (8 items: 0 blocker, 0 high, 3 medium, 3 low, 2 nit).
   assert ctx.run(lambda: request_id_var.get()) == ""
   ```
   The `contextvars.Context()` form is the canonical "fresh context" idiom and tests the real default without setting the var first.
+- **Status:** Fixed in iter 37. `test_request_id_var_default_is_empty_string` now constructs a fresh `contextvars.Context()` and asserts `ctx.run(lambda: request_id_var.get()) == ""` — exercises the *declared* `default=""` on `ContextVar` construction. Future drift to `default=None` or anything else would now fail this test. Docstring rewritten to explain why the indirection matters and cite B-49.
 
 ---
 

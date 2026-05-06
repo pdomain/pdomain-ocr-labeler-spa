@@ -37,6 +37,30 @@ def test_iocrengine_protocol_method_set() -> None:
     assert "ocr_page" in methods
 
 
+def test_ocr_impls_conform_structurally_not_by_inheritance() -> None:
+    """B-46 policy pin: OCR impls don't inherit from the Protocol.
+
+    ``adapters/__init__.py`` documents that conformance is structural
+    (PEP 544): impls must NOT subclass the Protocol class. This pin
+    catches a future "consistency" change that re-adds inheritance
+    (which would shadow Protocol class attributes and silently change
+    default-argument resolution). ``isinstance(impl, IOCREngine)`` still
+    works at runtime via ``@runtime_checkable``.
+    """
+    from pd_ocr_labeler_spa.adapters.ocr.base import IOCREngine
+    from pd_ocr_labeler_spa.adapters.ocr.local_doctr import LocalDoctrOCR
+    from pd_ocr_labeler_spa.adapters.ocr.modal import ModalOCR
+    from pd_ocr_labeler_spa.adapters.ocr.shared_container import SharedContainerOCR
+
+    for impl in (LocalDoctrOCR, ModalOCR, SharedContainerOCR):
+        assert IOCREngine not in impl.__mro__, (
+            f"{impl.__name__} should NOT subclass IOCREngine — adapters/__init__.py "
+            f"documents structural-only conformance (B-46). MRO: {impl.__mro__}"
+        )
+        # And structural conformance still holds:
+        assert isinstance(impl(), IOCREngine), f"{impl.__name__} fails the runtime_checkable structural check"
+
+
 def test_modal_ocr_raises_not_implemented_yet() -> None:
     """Spec §7: ``modal.py`` raises ``NotImplementedYet``."""
     import asyncio

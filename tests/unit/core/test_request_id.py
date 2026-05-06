@@ -88,7 +88,12 @@ def test_request_id_tagged_on_log_lines(caplog) -> None:
     # caplog handler is attached to the root logger but doesn't pick
     # up filters we install via ``configure_logging`` (which targets
     # its own _pdlabeler_managed handler).
-    caplog.handler.addFilter(RequestIdFilter())
+    #
+    # Capture the filter instance so cleanup can remove THIS exact
+    # filter — never the positional last-in-list, which would pick the
+    # wrong one if anything else appended a filter mid-test. (B-48.)
+    rid_filter = RequestIdFilter()
+    caplog.handler.addFilter(rid_filter)
 
     app = FastAPI()
     app.add_middleware(RequestIdMiddleware)
@@ -110,7 +115,7 @@ def test_request_id_tagged_on_log_lines(caplog) -> None:
             f"records did not carry request_id=trace-xyz: {rids}"
         )
     finally:
-        caplog.handler.removeFilter(caplog.handler.filters[-1])
+        caplog.handler.removeFilter(rid_filter)
 
 
 def test_contextvar_resets_after_request() -> None:
