@@ -70,3 +70,25 @@ def test_development_doc_mentions_uv_install_path() -> None:
     assert "astral.sh/uv/install.sh" in body, (
         "DEVELOPMENT.md should reference the Astral uv installer for out-of-devcontainer setup"
     )
+
+
+def test_development_doc_is_honest_about_m0_limits() -> None:
+    """B-12 regression: the dev-server section used to claim
+    ``make dev`` proxies ``/`` to Vite and a contributor could open
+    ``http://localhost:5173`` to see "the SPA" — both halves are false
+    in M0 (``GET /`` is 404 on the backend; the Vite scaffold has no
+    real SPA). Pin the doc to *call out* the M0 status so a first-
+    time contributor doesn't think they're holding it wrong.
+
+    We assert the doc names the M0 endpoints that DO work
+    (``/healthz``, ``/env.js``) and explicitly mentions the gap
+    (``404`` or ``M1``). The exact wording can drift; we only
+    require these tokens to coexist.
+    """
+    body = DOC.read_text()
+    assert "/healthz" in body, "M0 dev-server doc should name the working /healthz endpoint"
+    assert "/env.js" in body, "M0 dev-server doc should name the working /env.js endpoint"
+    # Either the literal "404" or "M1" appears as the gap-callout.
+    assert "404" in body or "M1" in body, (
+        "DEVELOPMENT.md should be honest that GET / is not wired in M0 (mention 404 or 'M1')"
+    )

@@ -43,23 +43,48 @@ state. `make frontend-install` runs `npm install` inside `frontend/`.
 
 ## Running the dev server
 
-Two-process setup so frontend hot-reload works:
+### What you'll see in M0
+
+M0 ships only the FastAPI skeleton. There is no SPA route on the
+backend yet — `GET /` returns 404. The only working endpoints are
+`GET /healthz` and (in `mode != "api_only"`) `GET /env.js`. The
+`--frontend-dev` CLI flag stores a URL on `settings.frontend_dev_url`
+but no consumer reads it yet — backend-side proxying of unknown asset
+paths to Vite is M1 work.
+
+The Vite dev server (`make frontend-dev`) is itself blocked on
+[Q-A8](../OPEN_QUESTIONS.md) until Node lands in the devcontainer,
+so for now the practical M0 dev loop is pytest plus curl:
 
 ```sh
-# terminal 1 — FastAPI on :8080 with --reload, proxying unknown asset
-# paths to a Vite dev server at http://localhost:5173
+make test            # pytest — the main M0 feedback loop
+make lint            # ruff check
+uv run pd-ocr-labeler-ui --no-browser --port 8080
+curl http://127.0.0.1:8080/healthz
+curl http://127.0.0.1:8080/env.js
+```
+
+### What's coming in M1+
+
+The intended two-process loop, once M1 wires the SPA mount + the
+backend-side passthrough that `--frontend-dev` configures:
+
+```sh
+# terminal 1 — FastAPI on :8080 with --reload; in M1+ this will proxy
+# unknown asset paths to the Vite dev server at $frontend_dev_url
 make dev
 
-# terminal 2 — Vite dev server on :5173 (proxies /api, /image-cache,
-# /env.js back to :8080 — see frontend/vite.config.ts)
+# terminal 2 — Vite dev server on :5173. The Vite-side proxy already
+# forwards /api, /image-cache, /env.js back to :8080 (see
+# `frontend/vite.config.ts`) so this half is already correct.
 make frontend-dev
 ```
 
-Open `http://localhost:5173` in a browser. Vite serves the SPA, the
-proxy forwards API calls to FastAPI, and FastAPI's `--reload` picks up
-backend edits.
+In M1 you'll open `http://localhost:5173` in a browser. Until then,
+the FastAPI side has no `/` route and the Vite side has no real SPA
+to serve, so neither URL is interesting on its own.
 
-For backend-only or headless work (no Vite dev server):
+For backend-only or headless work today (M0):
 
 ```sh
 uv run pd-ocr-labeler-ui --no-browser --port 8080

@@ -35,16 +35,23 @@ def _cors_kwargs(app):
     raise AssertionError("CORSMiddleware not registered on app")
 
 
-def test_cors_middleware_does_not_combine_wildcard_with_credentials() -> None:
-    # The whole point of B-03: rejecting the invalid combo.
+def test_cors_middleware_does_not_enable_credentials() -> None:
+    # B-03 framing was "wildcard + credentials" — but per B-15, the
+    # invariant we actually want is "credentials stays off until
+    # auth lands (M2)." Asserting unconditionally avoids a silent
+    # partial-regression where a future change narrows allow_origins
+    # to a single host and re-enables allow_credentials: the
+    # wildcard-gated assertion would no longer fire, and only the
+    # kwargs-shape pin (test below) would fail — with a misleading
+    # "we changed origins" diagnostic rather than the real "we re-
+    # introduced credentials" one.
     app = build_app(Settings(mode="api_only"))
     kwargs = _cors_kwargs(app)
-    if kwargs.get("allow_origins") == ["*"] or "*" in (kwargs.get("allow_origins") or []):
-        assert not kwargs.get("allow_credentials", False), (
-            "CORSMiddleware sets allow_origins=['*'] together with "
-            "allow_credentials=True — browsers reject this combo. See "
-            "docs/BUGS_FOUND.md B-03."
-        )
+    assert kwargs.get("allow_credentials", False) is False, (
+        "CORSMiddleware enables allow_credentials. Auth is M2; until "
+        "then the value must be False (or absent). See "
+        "docs/BUGS_FOUND.md B-03 / B-15."
+    )
 
 
 def test_cors_middleware_matches_pgdp_prep_shape() -> None:

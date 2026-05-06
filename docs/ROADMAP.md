@@ -9,7 +9,7 @@ every iteration.
 
 | Milestone | Status | Notes |
 |---|---|---|
-| **M0** Repo scaffold | 🟡 in progress | Iter 1 backend skeleton + tests; iter 2 frontend scaffold (files only); iter 3 `mise.toml` + Makefile + Makefile parse smoke tests; iter 4 `.pre-commit-config.yaml` mirroring pd-prep-for-pgdp + YAML-shape smoke tests; iter 5 **code-review checkpoint** → 9 findings filed in `BUGS_FOUND.md`; iter 6 fixed B-02 + B-03; iter 7 fixed B-01 + B-09; iter 8 fixed B-05 + B-06 + B-08; iter 9 fixed B-04 (Settings now `frozen=True` + `Settings(**overrides)` in `__main__`) + B-07 (`_build_env()` no-arg) and added `docs/DEVELOPMENT.md` with shape-pin tests; iter 10 (2026-05-06) **code-review checkpoint** → 5 new findings (B-11..B-15: 2 low, 3 nit; no blockers). Frontend `npm install` still blocked on Q-A8. Dockerfile / install scripts / Tailwind+shadcn / release workflow still pending for M0 acceptance gate. |
+| **M0** Repo scaffold | 🟡 in progress | Iter 1 backend skeleton + tests; iter 2 frontend scaffold (files only); iter 3 `mise.toml` + Makefile + Makefile parse smoke tests; iter 4 `.pre-commit-config.yaml` mirroring pd-prep-for-pgdp + YAML-shape smoke tests; iter 5 **code-review checkpoint** → 9 findings filed in `BUGS_FOUND.md`; iter 6 fixed B-02 + B-03; iter 7 fixed B-01 + B-09; iter 8 fixed B-05 + B-06 + B-08; iter 9 fixed B-04 (Settings now `frozen=True` + `Settings(**overrides)` in `__main__`) + B-07 (`_build_env()` no-arg) and added `docs/DEVELOPMENT.md` with shape-pin tests; iter 10 **code-review checkpoint** → 5 new findings (B-11..B-15: 2 low, 3 nit; no blockers); iter 11 fixed B-12 (DEVELOPMENT.md M0 honesty) + B-13 (AST scanner AugAssign/AnnAssign) + B-14 (`_build_env` test reframed) + B-15 (CORS unconditional). Frontend `npm install` still blocked on Q-A8. Dockerfile / install scripts / Tailwind+shadcn / release workflow still pending for M0 acceptance gate. |
 | M1 Settings + adapters + AppState | ⬜ not started | Pre-conditions: M0. |
 | M2 Project discovery + load | ⬜ not started | Pre-conditions: M0, M1. |
 | M3 OCR config modal + first-page OCR | ⬜ not started | |
@@ -108,11 +108,25 @@ every iteration.
   correct fix; B-15 CORS conditional test). All four iter-6-9 fixes
   correctly fixed their bugs without shifting failure modes. No
   blocker for moving forward.
-- [ ] **Iter 11 (next).** Pick B-12 first (doc accuracy is cheap and
-  load-bearing — strip or annotate the dev-server section). Then
-  either B-11 (wire `make refresh-version` into a hook so
-  `__version__` doesn't drift) or resume scaffolding (Tailwind v3.4
-  + shadcn / Dockerfile / install scripts / release workflow).
+- [x] **Iter 11 (2026-05-06).** Fixed B-12 (DEVELOPMENT.md split into
+  "What you'll see in M0" + "What's coming in M1+"; new regression
+  test pins the M0 callout naming `/healthz`, `/env.js`, and either
+  `404` or `M1`), B-13 (AST walker now visits `AugAssign` /
+  `AnnAssign` targets; self-test added covering all three forms),
+  B-14 (test reframed: if `_build_env` has a `settings` param the
+  body must reference it; M0 no-arg and M2 with-real-consumer both
+  pass; only the misleading "takes-and-ignores" shape fails), and
+  B-15 (CORS test asserts `allow_credentials is False`
+  unconditionally — partial-regression diagnostics now point at the
+  credentials bit directly). Test count: 42 → 44. ruff clean. Sole
+  remaining iter-10 finding: **B-11** (stale `__version__`) —
+  deferred to iter 12.
+- [ ] **Iter 12 (next).** Pick B-11 (wire `make refresh-version`
+  into `make setup` or a post-commit hook so `__version__` doesn't
+  drift across iterations) — small fix. Or resume scaffolding
+  (Tailwind v3.4 + shadcn / Dockerfile / install scripts / release
+  workflow). Iter 12 is also the next code-review checkpoint per
+  /loop cadence.
 - [ ] Tailwind v3.4 + shadcn/ui wiring (`tailwind.config.ts`,
   `postcss.config.js`, `src/index.css`, `components.json`).
   Deferred from iter 2 to keep the smoke scaffold minimal.

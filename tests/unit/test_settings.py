@@ -113,15 +113,74 @@ def test_main_does_not_mutate_settings_post_construction() -> None:
     src = inspect.getsource(main_mod)
     tree = ast.parse(src)
     bad_assignments: list[str] = []
+
+    def _is_settings_attr(node: ast.expr) -> bool:
+        return (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "settings"
+        )
+
     for node in ast.walk(tree):
+        # ``settings.foo = ...``
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                if (
-                    isinstance(target, ast.Attribute)
-                    and isinstance(target.value, ast.Name)
-                    and target.value.id == "settings"
-                ):
-                    bad_assignments.append(f"settings.{target.attr} = ... at line {node.lineno}")
+                if _is_settings_attr(target):
+                    bad_assignments.append(
+                        f"settings.{target.attr} = ... at line {node.lineno}"  # type: ignore[attr-defined]
+                    )
+        # ``settings.foo += ...`` and friends (B-13)
+        elif isinstance(node, ast.AugAssign):
+            if _is_settings_attr(node.target):
+                bad_assignments.append(
+                    f"settings.{node.target.attr} <op>= ... at line {node.lineno}"  # type: ignore[attr-defined]
+                )
+        # ``settings.foo: int = ...`` (B-13)
+        elif isinstance(node, ast.AnnAssign):
+            if _is_settings_attr(node.target):
+                bad_assignments.append(
+                    f"settings.{node.target.attr}: ... = ... at line {node.lineno}"  # type: ignore[attr-defined]
+                )
     assert not bad_assignments, (
         f"post-construction settings mutation reintroduced (spec §3 forbids): {bad_assignments}"
     )
+
+
+def test_ast_scanner_catches_all_three_assignment_forms() -> None:
+    """B-13 self-test for the AST scanner above.
+
+    The static check in
+    ``test_main_does_not_mutate_settings_post_construction`` must
+    catch all three mutation forms — ``Assign``, ``AugAssign``,
+    ``AnnAssign`` — targeting ``settings.<attr>``. The runtime
+    ``frozen=True`` catches all three, but the static net is the
+    backup; the iter-10 review found the original walker only matched
+    ``Assign``. This test feeds each shape through the same walker
+    logic to guarantee the holes are closed.
+    """
+    import ast
+
+    snippets = {
+        "Assign": "settings.host = '0.0.0.0'\n",
+        "AugAssign": "settings.port += 1\n",
+        "AnnAssign": "settings.port: int = 9090\n",
+    }
+
+    def _is_settings_attr(node: ast.expr) -> bool:
+        return (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "settings"
+        )
+
+    for label, src in snippets.items():
+        tree = ast.parse(src)
+        flagged = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                flagged = flagged or any(_is_settings_attr(t) for t in node.targets)
+            elif isinstance(node, ast.AugAssign):
+                flagged = flagged or _is_settings_attr(node.target)
+            elif isinstance(node, ast.AnnAssign):
+                flagged = flagged or _is_settings_attr(node.target)
+        assert flagged, f"AST scanner missed {label} form: {src!r}"

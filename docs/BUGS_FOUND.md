@@ -343,6 +343,16 @@ iter-5). Findings below are quibbles — no blockers, no high.
 - **Suggested fix:** Make `make refresh-version` part of the post-commit pre-commit hook, or have `make setup` always re-run it. Alternatively, document that `pd_ocr_labeler_spa.__version__` is install-time-frozen and steer callers to `subprocess.run(["git", "describe"])` or `importlib.metadata.version` after a fresh sync. (Either way: not a correctness bug, just a developer-ergonomics gotcha.)
 
 ## B-12 — DEVELOPMENT.md describes a dev loop that doesn't exist in M0
+- **Status:** ✅ **Fixed in iter 11 (2026-05-06)** — split the
+  dev-server section into "What you'll see in M0" (names `/healthz` +
+  `/env.js`, flags `GET /` as 404, points at Q-A8 for the Vite-side
+  block, recommends pytest+curl as the practical M0 loop) and "What's
+  coming in M1+" (preserves the two-process loop for when it lands).
+  Added regression test
+  `tests/unit/test_development_doc.py::test_development_doc_is_honest_about_m0_limits`
+  that pins the M0 callout: requires the doc to name `/healthz`,
+  `/env.js`, and either `404` or `M1` so future drift is caught by
+  CI rather than by a confused contributor.
 - **Severity:** low
 - **Where:** `docs/DEVELOPMENT.md:44-60` ("Running the dev server" section).
 - **Issue:** The doc says `make dev` "proxies unknown asset paths to a Vite dev server at http://localhost:5173" and instructs the reader to "Open http://localhost:5173 in a browser. Vite serves the SPA, the proxy forwards API calls to FastAPI". Both halves are false in M0:
@@ -352,6 +362,13 @@ iter-5). Findings below are quibbles — no blockers, no high.
 - **Suggested fix:** Add a "M0 status" note next to the dev-server section spelling out that `/` is 404 in M0, or strip the dev-server section down to just "the working flows in M0 are `make test`, `make frontend-test`, and `uv run pd-ocr-labeler-ui --no-browser`" until M1 lands the SPA mount + frontend-dev proxy.
 
 ## B-13 — `test_settings_is_frozen_post_construction` only catches `ast.Assign`, not `AugAssign` / `AnnAssign`
+- **Status:** ✅ **Fixed in iter 11 (2026-05-06)** — extended the AST
+  walker in `tests/unit/test_settings.py::test_main_does_not_mutate_settings_post_construction`
+  to handle `ast.AugAssign.target` and `ast.AnnAssign.target` with
+  the same `Attribute(value=Name("settings"))` shape. Added
+  `test_ast_scanner_catches_all_three_assignment_forms` as a self-test
+  feeding all three mutation shapes through the same walker logic so
+  future regressions in coverage are caught.
 - **Severity:** nit
 - **Where:** `tests/unit/test_settings.py:99-127` (`test_main_does_not_mutate_settings_post_construction`).
 - **Issue:** The AST walker matches `ast.Assign` only. A regression like `settings.port += 1` (`ast.AugAssign`) or `settings.port: int = 9090` (`ast.AnnAssign`) would silently pass the static check. The runtime `frozen=True` *would* still catch both, so this is belt-and-suspenders only — the suspenders are slightly loose.
@@ -359,6 +376,14 @@ iter-5). Findings below are quibbles — no blockers, no high.
 - **Suggested fix:** Extend the walker to also visit `ast.AugAssign.target` and `ast.AnnAssign.target` with the same `Attribute(value=Name("settings"))` shape. One-line addition.
 
 ## B-14 — `_build_env_helper_signature_has_no_unused_settings_param` is a hostile gate against the M2 fix
+- **Status:** ✅ **Fixed in iter 11 (2026-05-06)** — renamed test to
+  `test_build_env_does_not_take_an_unused_settings_param` and
+  reframed the invariant. New shape: if the signature has no
+  `settings` parameter, the test trivially passes; if it has one,
+  the function body must reference `settings` somewhere (parsed via
+  AST). M0 (no param) passes, M2 (param + real consumer) passes,
+  only the misleading "takes settings, ignores settings" shape
+  fails. M2 author no longer has a tripwire to step over.
 - **Severity:** nit
 - **Where:** `tests/unit/test_env_js.py:104-124`.
 - **Issue:** The test asserts `_build_env` takes zero parameters. Comment says "until M2 reintroduces a settings consumer" — but when M2 lands the **correct** fix (`_build_env(settings)` with a real consumer reading `settings.api_key`), this test fails and the M2 author has to remember it exists and update it. There's no production-code mechanism that flags it; it's just a tripwire in `tests/`.
@@ -366,6 +391,13 @@ iter-5). Findings below are quibbles — no blockers, no high.
 - **Suggested fix:** Either drop the test (frozen-via-spec is enough) or rewrite it to assert the **correct** invariant: "`_build_env`'s body never references `settings` while its signature includes it" (parses the function source via `ast` and flags the misleading-signature smell, which generalises to other functions). The latter test would naturally retire when M2 adds a real consumer.
 
 ## B-15 — `test_cors_middleware_does_not_combine_wildcard_with_credentials` is conditional and would silently pass on a partial regression
+- **Status:** ✅ **Fixed in iter 11 (2026-05-06)** — renamed to
+  `test_cors_middleware_does_not_enable_credentials` and dropped the
+  `if allow_origins == ["*"]` gate. The assertion now fires
+  unconditionally: `kwargs.get("allow_credentials", False) is False`.
+  A future change that narrows origins AND re-enables credentials
+  now fails this test specifically (clear diagnostic) rather than
+  the kwargs-shape pin (misleading "we changed origins" diagnostic).
 - **Severity:** nit
 - **Where:** `tests/unit/test_cors_middleware.py:35-46`.
 - **Issue:** The first CORS test uses `if kwargs.get("allow_origins") == ["*"] or "*" in (...): assert not allow_credentials`. If a future change set `allow_origins=["http://localhost:5173"]` and *also* re-added `allow_credentials=True`, this test silently passes (the conditional gate misses) — and the reader of the kwargs-shape pin (test 2) would also pass because test 2 *expects* `["*"]` and would fail loudly... but that failure mode looks like "we changed origins" rather than "we re-introduced credentials". Diagnostics for the credentials regression specifically are weakened.
@@ -384,3 +416,22 @@ iter-5). Findings below are quibbles — no blockers, no high.
 ## Summary
 
 5 findings: 0 blocker, 0 high, 0 medium, **2 low** (B-11 stale `__version__`, B-12 DEVELOPMENT.md drifts from M0 reality), **3 nit** (B-13 AST coverage, B-14 hostile M2 gate, B-15 conditional CORS test). All four fixes (B-01 through B-09) actually fixed their bugs without shifting failure modes. Top concern: **B-12** (doc drift visible to first-time contributors). Iter 11 should pick **B-12 first** (docs accuracy is cheap and load-bearing), and either B-11 or resume scaffolding (Tailwind / Dockerfile / install scripts) — both are reasonable.
+
+---
+
+## Iter 11 disposition (2026-05-06)
+
+- ~~**B-12** (DEVELOPMENT.md M0 honesty)~~ — ✅ fixed (doc split into
+  M0 / M1+ sections; new regression test pins the M0 callout).
+- ~~**B-13** (AST scanner AugAssign/AnnAssign coverage)~~ — ✅ fixed
+  (walker extended; self-test added).
+- ~~**B-14** (`_build_env` hostile M2 gate)~~ — ✅ fixed (test
+  reframed to "if param exists, body must read it").
+- ~~**B-15** (CORS conditional)~~ — ✅ fixed (gate dropped; assertion
+  unconditional).
+- **B-11** (stale `__version__`) — deferred to iter 12. Lowest-risk
+  fix is a Makefile tweak adding `make refresh-version` to a
+  post-commit hook or to `make setup` itself. Defer to iter 12.
+
+Test count after iter 11: **44** (was 42 — +1 test for B-12 doc
+honesty, +1 for B-13 self-test). All ruff gates clean.

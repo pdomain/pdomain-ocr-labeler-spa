@@ -101,24 +101,55 @@ def test_env_js_route_present_in_router_table_in_normal(tmp_path: Path) -> None:
     assert "/env.js" in paths
 
 
-def test_build_env_helper_signature_has_no_unused_settings_param() -> None:
-    """Regression for B-07.
+def test_build_env_does_not_take_an_unused_settings_param() -> None:
+    """Regression for B-07, reframed per B-14.
 
     The prior shape was ``_build_env(settings: Settings) -> dict`` but
     the body never read ``settings``. Until M2 (auth seam) wires an
     actual consumer (e.g. ``settings.api_key``), the parameter is a
-    misleading promise: static-analysis (ruff ``ARG``) and human readers
-    are told the function depends on settings when it does not.
+    misleading promise: static-analysis (ruff ``ARG``) and human
+    readers are told the function depends on settings when it does
+    not.
 
-    Pin the cleaned-up signature so a future contributor doesn't quietly
-    re-introduce the dead parameter ahead of an actual consumer.
+    The original B-07 fix pinned ``parameters == []`` exactly. That
+    inverted the polarity for M2: the *correct* M2 fix
+    (``_build_env(settings)`` reading ``settings.api_key``) would
+    fail this test, training the M2 author to delete the test rather
+    than read it. Reframe to the actual invariant — **if the
+    signature declares a ``settings`` parameter, the body must read
+    from it.** A no-arg signature passes; a signature with a real
+    consumer passes; only the misleading "takes settings, ignores
+    settings" shape fails.
     """
+    import ast
     import inspect
 
+    from pd_ocr_labeler_spa.api import env_js as env_js_mod
     from pd_ocr_labeler_spa.api.env_js import _build_env
 
     sig = inspect.signature(_build_env)
-    assert list(sig.parameters) == [], (
-        "_build_env should take no parameters until M2 reintroduces a "
-        f"settings consumer; got {list(sig.parameters)}"
+    if "settings" not in sig.parameters:
+        # No settings param at all → invariant trivially holds.
+        return
+
+    # Parse the function and check that ``settings`` is referenced
+    # somewhere in its body (anywhere — attr access, passed through,
+    # etc.).
+    src = inspect.getsource(env_js_mod)
+    tree = ast.parse(src)
+    fn = next(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == "_build_env"
+        ),
+        None,
+    )
+    assert fn is not None, "could not locate _build_env in source"
+    used = any(isinstance(n, ast.Name) and n.id == "settings" for stmt in fn.body for n in ast.walk(stmt))
+    assert used, (
+        "_build_env declares a `settings` parameter but never references "
+        "it. Either drop the parameter (M0/M1 shape) or wire it through "
+        "to a real consumer (e.g. settings.api_key in M2). Misleading-"
+        "signature smell — see docs/BUGS_FOUND.md B-07/B-14."
     )
