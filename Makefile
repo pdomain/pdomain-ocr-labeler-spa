@@ -2,7 +2,8 @@
         pre-commit-check test e2e build clean ci dev \
         frontend-install frontend-build frontend-dev frontend-test \
         openapi-export upgrade-pd-book-tools \
-        mise-download mise-setup mise-doctor
+        mise-download mise-setup mise-doctor \
+        docker-build docker-run docker-shell
 
 # ---------------------------------------------------------------------------
 # Help / discovery
@@ -183,3 +184,33 @@ clean: ## Clean cache + build artifacts
 	rm -rf dist/ src/pd_ocr_labeler_spa/static/ frontend/dist/ 2>/dev/null || true
 
 ci: setup test frontend-test build ## Full CI pipeline
+
+# ---------------------------------------------------------------------------
+# Docker
+# ---------------------------------------------------------------------------
+# Mirrors `pd-prep-for-pgdp/Makefile` docker-* shape so cross-repo muscle
+# memory works: `docker-build` depends on `frontend-build` (the
+# Dockerfile's wheel stage requires a populated `static/` regardless,
+# but the wheel-from-source `make build` path needs it locally too, and
+# folks frequently run `make docker-build` after editing TS), and
+# `docker-run` maps the EXPOSEd port out 1:1.
+#
+# The image tag and host port are exposed as overridable vars so
+# operators can `make docker-run DOCKER_PORT=9000` without editing the
+# Makefile, while the in-container port stays pinned to whatever the
+# Dockerfile EXPOSEs (and `Settings.port` defaults to). The unit test
+# in `tests/unit/test_makefile_docker.py` asserts those three values
+# stay in lockstep.
+
+DOCKER_IMAGE ?= pd-ocr-labeler-spa
+DOCKER_TAG   ?= dev
+DOCKER_PORT  ?= 8080
+
+docker-build: frontend-build ## Build the production Docker image
+	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
+
+docker-run: ## Run the built image (host:container port $(DOCKER_PORT):8080)
+	docker run --rm -it -p $(DOCKER_PORT):8080 $(DOCKER_IMAGE):$(DOCKER_TAG)
+
+docker-shell: ## Open a debugging shell in the built image
+	docker run --rm -it --entrypoint /bin/bash $(DOCKER_IMAGE):$(DOCKER_TAG)
