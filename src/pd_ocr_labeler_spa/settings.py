@@ -20,6 +20,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogFormat = Literal["plain", "json"]
 Mode = Literal["normal", "api_only"]
+StorageBackend = Literal["filesystem", "s3"]
+AuthMode = Literal["none"]
+OCREngine = Literal["local_doctr", "modal", "shared_container"]
 
 
 class Settings(BaseSettings):
@@ -55,3 +58,16 @@ class Settings(BaseSettings):
     # ── Mode flag ────────────────────────────────────────────────────────────
     mode: Mode = "normal"
     """``api_only`` skips the SPA static mount — useful for tests and headless ops."""
+
+    # ── Adapter axes (specs/02-backend.md §3) ────────────────────────────────
+    # Wired by ``core.app_state.build_app_state`` (M1.d). Flipping these
+    # fields is the only entry point for swapping backends; route code
+    # never branches on adapter choice.
+    storage_backend: StorageBackend = "filesystem"
+    """``s3`` is ``NotImplementedYet`` (D-019); only ``filesystem`` is wired in v1."""
+
+    auth_mode: AuthMode = "none"
+    """``none`` returns a single anonymous ``UserContext`` for every request (D-005)."""
+
+    ocr_engine: OCREngine = "local_doctr"
+    """``modal`` / ``shared_container`` are ``NotImplementedYet`` (D-018); only ``local_doctr`` is wired."""

@@ -36,6 +36,7 @@ from .api.env_js import install_env_js
 from .api.healthz import install_healthz
 from .api.middleware.error_handler import install_error_handlers
 from .api.middleware.request_id import RequestIdMiddleware
+from .core.app_state import build_app_state
 from .core.logging_config import configure_logging
 from .settings import Settings
 
@@ -86,6 +87,18 @@ def build_app(settings: Settings | None = None) -> FastAPI:
 
     # Stash settings on app.state so dependencies / routes can read it.
     app.state.settings = settings
+
+    # Spec §2 step 4 + step 9: build the AppState (adapter wiring graph)
+    # and stash both the singleton and each adapter on ``app.state`` so
+    # ``api/dependencies.py`` providers can read them by name. Wiring
+    # errors (e.g. ``storage_backend = "s3"``) raise here, at app-build
+    # time — not on first request — per the loud-at-wire-time policy in
+    # spec §2.
+    app_state = build_app_state(settings)
+    app.state.app_state = app_state
+    app.state.storage = app_state.storage
+    app.state.auth = app_state.auth
+    app.state.ocr_engine = app_state.ocr_engine
 
     # Spec §2 step 10: install error handlers AFTER middleware (CORS +
     # RequestId) so a 500 still passes back through both on the way
