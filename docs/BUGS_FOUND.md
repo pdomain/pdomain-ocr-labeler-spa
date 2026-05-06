@@ -1267,6 +1267,19 @@ fixed. Filed as B-37 below. Plus four lower-severity findings.
   file.
 
 ## B-39 — `test_python_pin_in_release_workflow` accepts any `3.13` substring; the loosened pin is now near-meaningless
+- **Status:** ✅ **Fixed in iter 32 (2026-05-06)** — chose suggestion
+  (b). Test renamed
+  `test_python_pin_in_release_workflow` →
+  `test_python_pin_in_release_workflow_matches_mise_if_set`. New
+  assertion walks parsed YAML, collects every step's `with` block
+  containing a `python-version` key, and requires each value (str-
+  coerced — YAML can parse `3.13` as a float) to equal
+  `_mise_pin("python")`. Today (no `python-version:` key anywhere)
+  the assertion is a no-op; if a future iter re-adds setup-python or
+  re-pins setup-uv, the new key is drift-checked against `mise.toml`.
+  Updated the explanatory comment in `release.yml` to reference the
+  renamed test. The prose-coupling assertion is gone — comment-only
+  tests were exactly the fragility B-25/B-39 flagged.
 - **Severity:** nit
 - **Where:** `tests/unit/test_release_workflow.py::test_python_pin_in_release_workflow` (after iter-28 loosening).
 - **Issue:** The test was loosened from "must have `python-version:
@@ -1300,6 +1313,20 @@ fixed. Filed as B-37 below. Plus four lower-severity findings.
   prose-coupling.
 
 ## B-40 — `install.ps1` MS Store stub regex `^Python \d+\.\d+\.\d+$` rejects pre-release Python (3.14.0a1) and mislabels it as a stub
+- **Status:** ✅ **Fixed in iter 32 (2026-05-06)** — loosened the
+  regex to `^Python \d+\.\d+(\.\d+)?` (anchor on `Python <maj>.<min>`,
+  optional patch group, allow ANY trailing characters). `Python
+  3.13.0`, `Python 3.14.0a1`, `Python 3.14.0rc2`, `Python 3.13.0+`
+  (pyenv-built) all match. The Microsoft Store stub's "Python was
+  not found" reparse-point output does not start with that shape and
+  is still detected. Also reworded the diagnostic message to lead
+  with what was actually checked (`python --version` did not return
+  the expected `Python <X>.<Y>.<Z>` shape) before naming the most
+  common cause (Store stub) — more honest about the inference.
+  Updated `test_install_ps1_detects_ms_store_stub_python` to assert
+  presence of the more permissive `\d+\.\d+` literal (with any
+  stricter form acceptable); the bare-`Python `-substring anti-pattern
+  is still forbidden via the unchanged `-notmatch` keyword pin.
 - **Severity:** nit
 - **Where:** `install.ps1:54` (`if ($pyVersionOutput -notmatch '^Python \d+\.\d+\.\d+$')`).
 - **Issue:** The regex requires exactly three dot-separated digit
@@ -1329,6 +1356,18 @@ fixed. Filed as B-37 below. Plus four lower-severity findings.
   was checked and leaves the user-facing reasoning to them.
 
 ## B-41 — Cross-file `--package-lock-only` pin is planned-obsolete; future Q-A8-unblock iter must remove it from BOTH files AND the test
+- **Status:** ✅ **Fixed in iter 32 (2026-05-06)** — added explicit
+  PLANNED-OBSOLESCENCE breadcrumb docstring sections to BOTH affected
+  tests (`test_uses_two_pass_install_with_lockfile_fallback` in
+  `test_release_workflow.py` and
+  `test_dockerfile_and_release_workflow_agree_on_npm_install_logic`
+  in `test_dockerfile.py`) naming Q-A8 as the unblock trigger and
+  enumerating the four-place cleanup that must land in a single
+  commit (drop bootstrap from `release.yml` + `Dockerfile` spa stage,
+  delete the workflow-side assertion, drop the `--package-lock-only`
+  clauses from the cross-file test). The `npm ci` + `--include=dev`
+  symmetry pins explicitly remain post-cleanup. Cosmetic-only —
+  no test-shape change, no source-file change.
 - **Severity:** low
 - **Where:** `tests/unit/test_dockerfile.py::test_dockerfile_and_release_workflow_agree_on_npm_install_logic` and `tests/unit/test_release_workflow.py::test_uses_two_pass_install_with_lockfile_fallback`.
 - **Issue:** Both tests pin `--package-lock-only` as a required

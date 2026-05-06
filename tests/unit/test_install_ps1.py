@@ -276,14 +276,21 @@ def test_install_ps1_detects_ms_store_stub_python() -> None:
         "install.ps1 must call `python --version` to probe for the MS Store stub (B-33)"
     )
     # The script must check for the real-Python output shape. We
-    # accept any regex-shaped check that pins the
-    # ``Python <digits>.<digits>.<digits>`` form. A naive "starts with
-    # Python" check would match the stub's error output too in some
-    # locales. The literal regex string ``\d+\.\d+\.\d+`` should appear
-    # in the script.
-    assert r"\d+\.\d+\.\d+" in text, (
-        r"install.ps1 must include the real-Python output regex `\d+\.\d+\.\d+` "
-        "so the MS Store stub is detected (B-33)"
+    # accept any regex-shaped check that pins at least the
+    # ``Python <digits>.<digits>`` prefix — the major.minor anchor is
+    # what discriminates real Python (always prints the version) from
+    # the Store stub (prints a "Python was not found" reparse message
+    # that does not start with that shape). B-40 loosened from a
+    # strict ``\d+\.\d+\.\d+`` end-anchored match (which rejected
+    # pre-release Pythons like ``3.14.0a1``) to a leading-anchored
+    # major.minor match; the regex literal in the script must contain
+    # at least ``\d+\.\d+`` (with the optional ``(\.\d+)?`` patch
+    # group acceptable). A bare ``Python `` substring with no digit
+    # check would let the stub through.
+    assert r"\d+\.\d+" in text, (
+        r"install.ps1 must include a `\d+\.\d+` (or stricter) regex literal "
+        "so the MS Store stub is detected (B-33/B-40). A version-shape check "
+        "without digit groups would match the stub's error output too."
     )
     # Must also use `-notmatch` (the regex anti-pattern) against the
     # version-output variable — otherwise a regression that prints the

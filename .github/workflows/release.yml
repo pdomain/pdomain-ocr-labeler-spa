@@ -86,8 +86,11 @@ jobs:
           # only invokes `uv build`, which spawns a build-isolated env
           # via PEP 517 and provisions its own Python — so a setup-uv
           # `python-version` pin would download Python 3.13 only to
-          # have `uv build` ignore it. The mise-driven Python pin
-          # stays the single source of truth (see test_python_pin_in_release_workflow).
+          # have `uv build` ignore it. mise.toml stays the single
+          # source of truth for Python version. If a future step re-
+          # adds `python-version:` (e.g. setup-python@v5), the
+          # `test_python_pin_in_release_workflow_matches_mise_if_set`
+          # drift-check pins it to mise.toml.
           # B-31: cache `~/.cache/uv` between runs. `uv build`
           # populates this with build-isolated env wheels (hatchling,
           # hatch-vcs, etc.); priming saves 10–20s of resolver work

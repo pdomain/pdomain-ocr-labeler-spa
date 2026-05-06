@@ -288,28 +288,42 @@ def test_setup_uv_does_not_set_python_version() -> None:
     assert found_setup_uv, "no `astral-sh/setup-uv` step found in release.yml"
 
 
-def test_python_pin_in_release_workflow() -> None:
-    """Drift guard: the Python pin must still appear in release.yml.
+def test_python_pin_in_release_workflow_matches_mise_if_set() -> None:
+    """Drift guard: any explicit ``python-version:`` key must match ``mise.toml``.
 
-    B-34 dropped the redundant ``setup-uv``+``python-version`` pin, but
-    we still want the workflow to mention the pinned major.minor so a
-    future ``mise.toml`` bump fails this test loudly. We accept either
-    a real ``python-version:`` key (e.g. on ``setup-python``, if added
-    later) OR a comment in the workflow that names the version — since
-    today the canonical pin lives only in ``mise.toml`` and the Docker
-    stage, the workflow only references it in prose.
+    B-34 dropped the redundant ``setup-uv``+``python-version`` pin —
+    today the workflow has no Python pin at all (``uv build``'s PEP 517
+    isolation provisions Python on its own, and ``mise.toml`` is the
+    single source of truth). B-39 reframed this test from
+    "must-mention-in-prose" (which accidentally pinned a comment) to
+    "if any step ever re-introduces a ``python-version:`` key, that
+    key must match ``mise.toml``." So:
+
+    * Today (no ``python-version:`` key anywhere) the test is a no-op.
+    * If a future iter adds ``actions/setup-python@v5`` (or sets
+      ``python-version`` on ``setup-uv`` again), the new key must
+      agree with ``mise.toml`` or this test fails.
+
+    The previous prose-coupling assertion was deleted entirely (per
+    B-25/B-39 — comment-only tests are fragile and misleading).
     """
     py_pin = _mise_pin("python")
-    text = _workflow_text()
-    # Either: an explicit `python-version: 3.13` key (any step) — or
-    # a string `3.13` somewhere in the file (in a comment, today).
-    has_key = re.search(rf'python-version:\s*"?{re.escape(py_pin)}"?', text) is not None
-    has_mention = py_pin in text
-    assert has_key or has_mention, (
-        f"release.yml must reference the Python pin {py_pin!r} from mise.toml "
-        "(either as a `python-version:` key or in a comment) so a mise.toml "
-        "bump fails this test loudly"
-    )
+    data = _load_workflow()
+    pinned_versions: list[tuple[str, str, object]] = []
+    for job_name, job in data.get("jobs", {}).items():
+        for step in job.get("steps", []) or []:
+            with_block = step.get("with") or {}
+            if "python-version" in with_block:
+                pinned_versions.append(
+                    (job_name, step.get("uses", "<no-uses>"), with_block["python-version"])
+                )
+    for job_name, uses, value in pinned_versions:
+        # Coerce to str — YAML can parse "3.13" as a float without quotes.
+        assert str(value) == py_pin, (
+            f"release.yml job {job_name!r} step {uses!r} pins "
+            f"`python-version: {value!r}`, which disagrees with mise.toml "
+            f"({py_pin!r}). Bump mise.toml or this key together."
+        )
 
 
 def test_uses_npm_ci_not_npm_install() -> None:
@@ -354,6 +368,18 @@ def test_uses_two_pass_install_with_lockfile_fallback() -> None:
 
     Pin the bootstrap form explicitly so a regression that drops it
     (and re-introduces the iter-24 first-tag-push failure) fails fast.
+
+    B-41 BREADCRUMB — PLANNED OBSOLESCENCE
+    --------------------------------------
+    When Q-A8 unblocks (Node toolchain in devcontainer) and a real
+    `frontend/package-lock.json` is committed, the bootstrap branch
+    becomes permanent dead code. At that point: drop the
+    `if [ ! -f package-lock.json ]; then npm install --package-lock-only ...; fi`
+    block from BOTH `release.yml` AND `Dockerfile` (spa stage) in the
+    SAME commit AND delete this assertion plus the cross-file pin in
+    `tests/unit/test_dockerfile.py::test_dockerfile_and_release_workflow_agree_on_npm_install_logic`.
+    All three changes must land together — splitting risks the
+    iter-25 inconsistency this test was designed to prevent.
     """
     text = _workflow_text()
     assert "--package-lock-only" in text, (

@@ -43,16 +43,29 @@ if (-not (Test-Command -Name "uv")) {
 # `Test-Command "python"` (the file exists on PATH) but invoking it
 # with arguments emits a "Python was not found" message and exits
 # without running. We match the real-Python-version output shape
-# (`Python <maj>.<min>.<patch>`) and bail with a clear message when
-# the stub is detected — uv still handles actual Python provisioning,
-# but the user-facing note about a missing real Python is what the
-# preflight is for.
+# (`Python <maj>.<min>[.<patch>][<suffix>]`) and bail with a clear
+# message when the stub is detected — uv still handles actual Python
+# provisioning, but the user-facing note about a missing real Python
+# is what the preflight is for.
+#
+# B-40: regex anchors only on `Python <maj>.<min>` and tolerates any
+# trailing characters. `Python --version` outputs vary:
+#   release       -> `Python 3.13.0`
+#   pre-release   -> `Python 3.14.0a1`, `Python 3.14.0rc2`
+#   pyenv-built   -> `Python 3.13.0+`
+# All are real Pythons; the stub on the other hand prints a multi-
+# line "Python was not found" reparse-point message that does not
+# start with `Python <digit>.<digit>` at all. Loosening the trailing
+# match avoids mislabelling pre-release Python users as having a
+# Store stub.
 if (Test-Command -Name "python") {
     try {
         $pyVersionOutput = (& python --version 2>&1) | Out-String
         $pyVersionOutput = $pyVersionOutput.Trim()
-        if ($pyVersionOutput -notmatch '^Python \d+\.\d+\.\d+$') {
-            Write-Host "Note: `python` on PATH is the Microsoft Store stub redirector (or otherwise non-functional)."
+        if ($pyVersionOutput -notmatch '^Python \d+\.\d+(\.\d+)?') {
+            Write-Host "Note: `python --version` on PATH did not return the expected `Python <X>.<Y>.<Z>` shape."
+            Write-Host "      This usually means the Microsoft Store stub redirector at"
+            Write-Host "      %LocalAppData%\Microsoft\WindowsApps\python.exe (Windows 10/11 default when no real Python is installed)."
             Write-Host "      Output was: ${pyVersionOutput}"
             Write-Host "      uv will install Python 3.13 automatically; if you'd rather install Python yourself,"
             Write-Host "      grab it from https://www.python.org/downloads/ or run: winget install Python.Python.3.13"

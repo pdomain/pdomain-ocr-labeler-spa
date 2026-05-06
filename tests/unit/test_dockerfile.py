@@ -468,6 +468,21 @@ def test_dockerfile_and_release_workflow_agree_on_npm_install_logic() -> None:
     require the load-bearing tokens to appear in both files AND we
     pin `--include=dev` symmetry so the two stages can't drift on
     flag-set even when both still pass the token-presence checks.
+
+    B-41 BREADCRUMB — PLANNED OBSOLESCENCE OF `--package-lock-only`
+    --------------------------------------------------------------
+    When Q-A8 unblocks (Node toolchain in devcontainer) and a real
+    `frontend/package-lock.json` is committed, the
+    `--package-lock-only` bootstrap becomes permanent dead code.
+    At that point: drop the bootstrap block from BOTH `release.yml`
+    AND `Dockerfile` (spa stage) in the SAME commit, drop the
+    `--package-lock-only` clauses from this assertion, AND drop the
+    sibling assertion in
+    `test_release_workflow.py::test_uses_two_pass_install_with_lockfile_fallback`.
+    The `npm ci` + `--include=dev` symmetry pins should remain;
+    only the bootstrap pins go away. All four changes must land in
+    one commit — splitting risks half-finished cleanup leaving dead
+    code in one file but not the other.
     """
     workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     dockerfile = _dockerfile_text()
