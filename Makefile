@@ -206,11 +206,30 @@ DOCKER_IMAGE ?= pd-ocr-labeler-spa
 DOCKER_TAG   ?= dev
 DOCKER_PORT  ?= 8080
 
+# `_docker` parallels `_npm`: emit a friendly diagnostic if `docker` isn't
+# on PATH, instead of letting the recipe fail with bash's terse
+# `make: docker: No such file or directory`. M0 contributors who try the
+# docker targets without docker installed get a pointer rather than a
+# stack trace. Argument is the docker subcommand + flags as a single
+# string (e.g. `build -t img:tag .`).
+define _docker
+	if command -v docker >/dev/null 2>&1; then \
+		docker $(1); \
+	else \
+		echo "docker not on PATH."; \
+		echo "   Options:"; \
+		echo "     - install Docker Desktop (https://www.docker.com/products/docker-desktop/)"; \
+		echo "     - install Colima or another OCI runtime that provides 'docker'"; \
+		echo "     - add the docker-in-docker feature in .devcontainer/devcontainer.json"; \
+		exit 1; \
+	fi
+endef
+
 docker-build: frontend-build ## Build the production Docker image
-	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
+	@$(call _docker,build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .)
 
 docker-run: ## Run the built image (host:container port $(DOCKER_PORT):8080)
-	docker run --rm -it -p $(DOCKER_PORT):8080 $(DOCKER_IMAGE):$(DOCKER_TAG)
+	@$(call _docker,run --rm -it -p $(DOCKER_PORT):8080 $(DOCKER_IMAGE):$(DOCKER_TAG))
 
 docker-shell: ## Open a debugging shell in the built image
-	docker run --rm -it --entrypoint /bin/bash $(DOCKER_IMAGE):$(DOCKER_TAG)
+	@$(call _docker,run --rm -it --entrypoint /bin/bash $(DOCKER_IMAGE):$(DOCKER_TAG))

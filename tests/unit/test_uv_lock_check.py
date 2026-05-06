@@ -42,9 +42,7 @@ def _local_repo(config: dict) -> dict:
     repos = config.get("repos")
     assert isinstance(repos, list) and repos, "config has no repos list"
     locals_ = [r for r in repos if r.get("repo") == "local"]
-    assert len(locals_) == 1, (
-        "expected exactly one `repo: local` block in .pre-commit-config.yaml"
-    )
+    assert len(locals_) == 1, "expected exactly one `repo: local` block in .pre-commit-config.yaml"
     return locals_[0]
 
 

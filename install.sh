@@ -24,23 +24,41 @@ if ! command -v uv >/dev/null 2>&1; then
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
-# 2. Resolve the latest tag from the public GitHub API.
-LATEST_TAG=$(curl -sSf "https://api.github.com/repos/${REPO}/tags" 2>/dev/null \
-    | grep '"name"' | head -1 | sed 's/.*"name": "\([^"]*\)".*/\1/') || true
+# 2. Preflight Python check. `uv tool install` will auto-download Python
+#    3.13 if missing, so this is informational, not gating — but it lets
+#    the user know up-front whether their system Python is new enough.
+if command -v python3 >/dev/null 2>&1; then
+    SYS_PY=$(python3 -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" 2>/dev/null || echo "?")
+    if [ "$SYS_PY" != "3.13" ] && [ "$SYS_PY" != "?" ]; then
+        echo "Note: system python3 is ${SYS_PY}; pd-ocr-labeler-spa requires 3.13."
+        echo "      uv will download Python 3.13 automatically — no action needed."
+    fi
+fi
 
-if [ -z "$LATEST_TAG" ]; then
-    echo "Error: could not resolve the latest release tag from GitHub." >&2
-    echo "       https://api.github.com/repos/${REPO}/tags returned nothing usable." >&2
+# 3. Resolve the latest published release from the GitHub API.
+#    `/releases/latest` returns the most recent *published* release
+#    (ignoring drafts/prereleases) and embeds asset URLs directly, so
+#    we save a round-trip vs `/tags` + `/releases/tags/<tag>`. It is
+#    also robust to pre-1.0 tag retag flows (this repo retagged
+#    v0.0 → v0.0.0 in iter 7) where `/tags` ordering by commit-date
+#    can return the wrong "latest".
+RELEASE_JSON=$(curl -sSf \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null) || true
+
+if [ -z "$RELEASE_JSON" ]; then
+    echo "Error: could not resolve the latest release from GitHub." >&2
+    echo "       https://api.github.com/repos/${REPO}/releases/latest returned nothing usable." >&2
+    echo "       (Has a release been published yet?)" >&2
     exit 1
 fi
 
+LATEST_TAG=$(printf '%s\n' "$RELEASE_JSON" \
+    | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+
 echo "Installing pd-ocr-labeler-spa ${LATEST_TAG}..."
 
-# 3. Find the wheel asset attached to the GitHub Release for this tag.
-RELEASE_JSON=$(curl -sSf \
-    -H "Accept: application/vnd.github+json" \
-    "https://api.github.com/repos/${REPO}/releases/tags/${LATEST_TAG}" 2>/dev/null) || true
-
+# 4. Find the wheel asset attached to the latest release.
 WHEEL_URL=$(printf '%s\n' "$RELEASE_JSON" \
     | grep '"browser_download_url"' \
     | grep -E '\.whl"' \
@@ -58,7 +76,7 @@ if [ -z "$WHEEL_URL" ]; then
     exit 1
 fi
 
-# 4. Download the wheel to a temp dir and install it as a uv tool.
+# 5. Download the wheel to a temp dir and install it as a uv tool.
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT INT TERM
 

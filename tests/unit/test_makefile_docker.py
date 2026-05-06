@@ -155,6 +155,64 @@ def test_docker_run_maps_settings_port_into_container() -> None:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# `_docker` macro guard — B-24: terse-fail without docker on PATH.
+# ---------------------------------------------------------------------------
+
+
+def test_makefile_defines_docker_macro() -> None:
+    """B-24: the Makefile must define a `_docker` macro analogous to `_npm`.
+
+    Without it, `make docker-build` on a host that lacks docker fails
+    with bash's terse `make: docker: No such file or directory`. The
+    macro adds a `command -v docker` preflight + a friendly options
+    block (install Docker Desktop, Colima, devcontainer feature) so
+    the contributor experience matches `make frontend-build` without
+    npm.
+    """
+    text = MAKEFILE.read_text()
+    assert "define _docker" in text, "Makefile must define a `_docker` macro (B-24)"
+    # The macro must include the command-presence check.
+    assert "command -v docker" in text, (
+        "`_docker` macro must check for docker on PATH via `command -v docker`"
+    )
+
+
+@pytest.mark.parametrize("target", ["docker-build", "docker-run", "docker-shell"])
+def test_docker_targets_invoke_docker_macro(target: str) -> None:
+    """All three docker-* recipes must dispatch through `$(call _docker,...)`.
+
+    A target that calls `docker …` directly bypasses the preflight
+    and re-introduces B-24. The text-grep is loose enough to allow
+    formatting variation but tight enough to catch a regression
+    where someone copies a recipe and forgets the macro.
+    """
+    text = MAKEFILE.read_text()
+    # Locate the recipe block for `target`. Each docker target is a
+    # single-recipe line in the current Makefile, so we just slice
+    # between the target line and the next blank line.
+    lines = text.splitlines()
+    target_line = next(
+        (i for i, ln in enumerate(lines) if ln.startswith(f"{target}:")),
+        None,
+    )
+    assert target_line is not None, f"target `{target}` not found in Makefile"
+    # Recipe lines are tab-indented; collect them until we hit a
+    # non-tab non-blank line.
+    recipe: list[str] = []
+    for ln in lines[target_line + 1 :]:
+        if ln.startswith("\t"):
+            recipe.append(ln)
+        elif ln.strip() == "":
+            continue
+        else:
+            break
+    recipe_text = "\n".join(recipe)
+    assert "_docker" in recipe_text, (
+        f"target `{target}` must dispatch through the `_docker` macro (B-24); got recipe:\n{recipe_text}"
+    )
+
+
 def test_docker_targets_are_phony() -> None:
     text = MAKEFILE.read_text()
     # Reuse the loose "first .PHONY block" parse from test_makefile.py.

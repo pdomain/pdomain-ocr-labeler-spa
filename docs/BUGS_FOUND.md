@@ -697,6 +697,21 @@ iters 18+19 landed but their boxes still read `[ ]`).
 - **Suggested fix:** Add a `uv lock --check` (or `uv sync --locked --no-install-project`) step to either (a) a new pre-commit hook in `.pre-commit-config.yaml` `local` repo (mirrors how `pd-prep-for-pgdp` does this — worth checking peer parity), or (b) `make ci` after `make setup`. Option (a) is friendlier because it catches the drift at commit time rather than CI time. Either way, add a unit test that asserts the gate exists (text-grep for `uv lock --check` or `uv sync --locked` in either the Makefile `ci` recipe or the pre-commit-config hook list).
 
 ## B-24 — `make docker-build/run/shell` fail with bare `command not found` when Docker isn't on PATH
+- **Status:** ✅ **Fixed in iter 22 (2026-05-06)** — added a `_docker`
+  macro to the Makefile (parallels `_npm`) that runs `command -v
+  docker` and emits a friendly options block (Docker Desktop /
+  Colima / devcontainer feature) before exiting 1 if docker is
+  missing. All three docker-* recipes now dispatch via `$(call
+  _docker,…)` instead of calling `docker …` directly. New tests in
+  `tests/unit/test_makefile_docker.py`: `test_makefile_defines_docker_macro`
+  pins both the `define _docker` line and the `command -v docker`
+  preflight; `test_docker_targets_invoke_docker_macro` (parametrised
+  across all three targets) walks each recipe block and asserts
+  `_docker` appears, so a regression that copies a recipe and
+  forgets the macro fails cleanly. Verified via `make -n
+  docker-build` — rendered recipe still contains
+  `pd-ocr-labeler-spa:dev` and `-p 8080:8080` so the existing
+  three-way port-alignment + image-tag invariants still hold.
 - **Severity:** low
 - **Where:** `Makefile:209-216` (the three docker-* recipes) — neither has a guard like the `_npm` macro's "no npm available; here are your options" fallback.
 - **Issue:** The frontend targets (`frontend-install`, `frontend-build`, `frontend-dev`, `frontend-test`) go through the `_npm` macro at `Makefile:98-112` which checks for `mise` then `npm` and prints a friendly options block ("run `make mise-setup`", "install Node 24 yourself", "add the devcontainer node feature") before exiting 1. The new docker targets don't. On a devcontainer that lacks docker (the current state — `which docker` returns nothing in this environment), the recipes shell out to `docker build …` and the user gets bash's terse `make: docker: No such file or directory`. The `_npm` macro is exactly the cure — a `_docker` macro pattern would be ~6 lines and parallel.
@@ -704,6 +719,20 @@ iters 18+19 landed but their boxes still read `[ ]`).
 - **Suggested fix:** Add a `_docker` macro analogous to `_npm` that verifies `command -v docker` first and prints a one-line suggestion if not. Wrap each `docker build`/`docker run` call. Optional but a nicer cross-repo pattern. Alternatively, just one-line guard at the top of each recipe: `@command -v docker >/dev/null 2>&1 || { echo "docker not on PATH; install Docker Desktop or Colima first"; exit 1; }`.
 
 ## B-25 — `install.sh` mentions Python 3.13 only in a comment; the test asserting "references pinned Python" only proves the comment exists
+- **Status:** ✅ **Fixed in iter 22 (2026-05-06)** — chose option (b)
+  from the suggested-fix menu: added an actual Python preflight to
+  `install.sh` that calls `python3 -c "import sys; print(...)"` to
+  check the system Python's major.minor and prints an informational
+  note if it isn't 3.13 (the check is intentionally non-gating —
+  `uv tool install` auto-downloads 3.13 — but the check now exists
+  rather than being purely a comment). The legacy
+  `test_install_sh_mentions_pinned_python_major` test stays (still
+  enforces comment-presence drift-coupled to mise.toml), and a new
+  `test_install_sh_runs_python_version_preflight` test pins the
+  behavioural invariant: install.sh must invoke `python3 -c …` and
+  reference `sys.version_info`. Future contributors reading the test
+  names now see one for "comment drift" and one for "behaviour
+  exists" — no more false sense of safety.
 - **Severity:** low
 - **Where:** `install.sh:16` (`# Python 3.13+ is required (pyproject.toml requires-python).`); `tests/unit/test_install_sh.py::test_install_sh_mentions_pinned_python_major` (substring-match for `3.13`).
 - **Issue:** The test docstring says "If we bump Python in mise.toml, the installer's user-facing comment block needs to follow — otherwise users running the script see stale prerequisite info." That's true but very weak — the script itself does not check the user's Python at all (it relies on `uv tool install` auto-downloading 3.13 because `requires-python` says so). The test gives a false sense of safety: a future contributor reading "test_install_sh_mentions_pinned_python_major" will assume the script enforces 3.13, when in fact only the comment does. This is the same anti-pattern flagged in B-14 (a hostile gate that pins absence of a feature rather than the actual invariant).
@@ -724,6 +753,24 @@ iters 18+19 landed but their boxes still read `[ ]`).
 - **Suggested fix:** Tick the two boxes at `ROADMAP.md:174-176`. Add a sub-item under `install.sh` saying `install.ps1` (Windows) is still TBD. Maintain the convention going forward: every iter that completes a sub-task also flips its checkbox.
 
 ## B-27 — `install.sh` resolves the latest tag via `/repos/X/tags`, not `/repos/X/releases/latest`; pre-1.0 retags can return the wrong "latest"
+- **Status:** ✅ **Fixed in iter 22 (2026-05-06)** — switched
+  `install.sh` from the two-call shape (`/repos/X/tags` →
+  `/repos/X/releases/tags/<tag>`) to a single
+  `/repos/X/releases/latest` call. That endpoint returns the most
+  recently *published* release (ignoring drafts/prereleases) and
+  embeds the asset URLs directly, so we save a curl round-trip and
+  fix the dormant pre-1.0 retag footgun (B-09's history retagged
+  `v0.0` → `v0.0.0`; `/tags` orders by commit-date and would have
+  returned the wrong "latest" the moment we shipped a hot-fix
+  release branch). New `test_install_sh_uses_releases_latest_endpoint`
+  pins both halves: the new endpoint must appear, and the bare
+  `/repos/X/tags` shape must NOT (the regex tolerates
+  `/releases/tags/<tag>` if a future iter wants to fetch a specific
+  release by tag name). Cross-repo: peer `pd-prep-for-pgdp/install.sh`
+  *still* uses the `/tags` shape — that's a divergence we accept
+  here rather than block on a cross-repo flip. The peer install.sh
+  has its own scope/agent and the pattern can propagate when that
+  agent picks up parity work.
 - **Severity:** nit
 - **Where:** `install.sh:28-29` (`curl … "https://api.github.com/repos/${REPO}/tags" … | grep '"name"' | head -1`).
 - **Issue:** The GitHub `/tags` endpoint returns refs ordered by **commit date of the tagged sha**, not by semver. Two relevant pre-1.0 quirks: (a) re-tagging an existing tag (B-09's history has exactly this — `v0.0` was deleted and `v0.0.0` recreated at the iter-1 sha) means the "latest" by tag date may be older than the actual newest commit. (b) Hot-fix back-port flows that tag a release branch can leave `/tags` ordered counter-intuitively. The peer `pd-prep-for-pgdp/install.sh:44` uses the *same* shape, so this is parity — but parity to a slightly fragile pattern. The `releases/latest` endpoint returns the most recently *published* (not most recently *tagged*) release and is the GitHub-blessed shape for installers.

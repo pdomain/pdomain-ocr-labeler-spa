@@ -124,6 +124,27 @@ def test_install_sh_mentions_pinned_python_major():
     assert py in text, f"install.sh must reference the pinned Python {py} from mise.toml"
 
 
+def test_install_sh_runs_python_version_preflight():
+    """install.sh must do a runtime python version check, not just a comment.
+
+    iter 22 (B-25) tightened this from "comment-presence only" to a
+    behavioural pin: the script must actually invoke `python3 -c
+    'import sys ...'` so a system Python that's too old surfaces a
+    note up-front rather than the user finding out from a confusing
+    `uv tool install` failure mode. The check is intentionally
+    informational, not gating — `uv tool install` auto-downloads
+    Python 3.13 when missing — but the behavioural step must exist.
+    """
+    text = INSTALL_SH.read_text()
+    # Must invoke python3 with -c and reference sys.version_info.
+    assert re.search(r"python3\s+-c\b", text), (
+        "install.sh must call `python3 -c ...` to inspect the system Python version"
+    )
+    assert "sys.version_info" in text, (
+        "install.sh's python preflight must inspect `sys.version_info` (not just print version)"
+    )
+
+
 def test_install_sh_uses_uv_tool_install():
     # Peer-mirror with pd-prep-for-pgdp/install.sh. Switching to pip /
     # pipx / poetry would break the documented "no toolchain needed"
@@ -141,6 +162,33 @@ def test_install_sh_names_canonical_entrypoint():
     text = INSTALL_SH.read_text()
     assert entry in text, (
         f"install.sh must mention the canonical entrypoint {entry!r} from pyproject.toml [project.scripts]"
+    )
+
+
+def test_install_sh_uses_releases_latest_endpoint():
+    """install.sh must resolve "latest" via `/releases/latest`, not `/tags`.
+
+    iter 22 (B-27) flipped this. The `/tags` endpoint orders by
+    commit-date of the tagged sha, which is wrong for two pre-1.0
+    quirks: (a) re-tagged refs (this repo retagged v0.0 → v0.0.0 in
+    iter 7), and (b) hot-fix back-port flows tagged on a release
+    branch. `/releases/latest` returns the most recent *published*
+    release (ignoring drafts/prereleases) and embeds asset URLs
+    directly — both more correct and saves a round-trip vs
+    `/tags` + `/releases/tags/<tag>`.
+    """
+    text = INSTALL_SH.read_text()
+    assert "/releases/latest" in text, (
+        "install.sh must use the GitHub `/releases/latest` endpoint to resolve the version"
+    )
+    # Belt-and-braces: forbid the legacy bare `/tags` listing (the
+    # `/repos/X/tags` endpoint), which orders by commit-date and is
+    # the original B-27 footgun. `/releases/tags/<tag>` (a different
+    # endpoint that fetches a specific release by tag name) is fine
+    # if some future iter needs it — that's why we match the *bare*
+    # `/repos/<owner>/<name>/tags` shape only.
+    assert not re.search(r"/repos/[^/\s\"]+/[^/\s\"]+/tags\b(?!/)", text), (
+        "install.sh must not use the bare `/repos/X/tags` endpoint (use `/releases/latest` instead)"
     )
 
 
