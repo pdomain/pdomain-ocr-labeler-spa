@@ -819,3 +819,169 @@ Iter 21 should pick **B-23 first** (one pre-commit hook + one
 test, low risk, M1-load-bearing), then **B-26** (two-line ROADMAP
 checkbox flip), then resume scaffolding (`install.ps1`, or
 `release.yml`, or shadcn primitives once Q-A8 lands).
+
+---
+
+# Code-review checkpoint — iter 25 (2026-05-06)
+
+Review scope: commits since `52d8d89` (iter 20 checkpoint):
+
+- `c96e1ed` — iter 21: B-23 `uv-lock-check` pre-commit hook + B-26 ROADMAP checkboxes.
+- `5b21e1d` (+ws `b3509ab`) — iter 22: B-24 `_docker` macro; B-25
+  install.sh python preflight; B-27 `/releases/latest` flip.
+- `d2bab21` — iter 23: install.ps1 Windows installer + 9 shape pins.
+- `8a848c8` — iter 24: `.github/workflows/release.yml` + 12 shape pins.
+
+Smoke-test:
+- `uv run pytest tests/ --ignore=tests/e2e` → **121 passed in 0.23s**.
+- `uv run ruff check` → clean.
+- `uv run pre-commit validate-config` → clean.
+- `python -c "from pd_ocr_labeler_spa.bootstrap import build_app; build_app()"` → OK.
+- `bash -n install.sh` → OK.
+- `make -n docker-build` → recipe expands cleanly with `_docker` macro.
+- `uv lock --check` (uv 0.11.9) → **does** detect drift and exit
+  non-zero; manually broke `pyproject.toml` and observed the expected
+  "lockfile needs to be updated" failure. B-23 hook is real.
+- `curl /repos/.../releases/latest` against this repo (no release yet)
+  → 404, install.sh's `set -euo pipefail` + `|| true` + empty-string
+  guard prints a clear "Has a release been published yet?" message and
+  exits 1 (not a confusing JSON dump).
+
+Findings filed below. **Do not fix this iteration** — iter 26+ picks
+from the list. Severity legend: blocker > high > medium > low > nit.
+
+## B-28 — `release.yml` runs `npm ci`, but `frontend/package-lock.json` does not exist
+- **Severity:** **high** (release pipeline is dead on first execution)
+- **Where:** `.github/workflows/release.yml:62` (`cd frontend && npm ci && npm run build`); `frontend/` has no `package-lock.json` (ls confirmed).
+- **Issue:** `npm ci` requires an existing `package-lock.json` and fails fast with `Missing: ... from lock file` if it isn't present. The repo currently has `frontend/package.json` but no lockfile (Q-A8: Node never ran here). The first `git push` of a `v*` tag will run release.yml, immediately fail at the `npm ci` step, and produce neither wheel nor sdist nor Release. The 12 shape-pin tests in `test_release_workflow.py` actively assert `npm ci` (and forbid `npm install`), so they cement the broken-on-first-run shape.
+- **Why it matters:** Iter 24's whole purpose was to establish a publish path so install.sh / install.ps1 can fetch a real wheel. As shipped, the publish path can't run end-to-end even once. Pre-1.0 it's invisible (no tag has been pushed since iter 24 landed); the moment someone tags `v0.1.0` it surfaces as a red CI run with no Release attached. B-19 already noted the same `npm install` vs `npm ci` story for the Dockerfile but in the *opposite* direction — the Dockerfile uses `npm install` (which works without a lockfile but doesn't pin), so the two are now inconsistent: docker build works, GitHub Actions release won't. Pick one.
+- **Suggested fix:** Either (a) generate `frontend/package-lock.json` once (run `npm install` interactively, commit the result) which unblocks both `npm ci` here and tightens the Dockerfile concurrent with B-19; or (b) have release.yml use `npm install` with a comment explaining the lockfile gap; or (c) loosen the test to `npm ci || npm install` until Q-A8 unblocks. (a) is the right answer. Coupled fix with B-19.
+
+## B-29 — `release.yml` `tags: ["v*"]` trigger is too permissive
+- **Severity:** medium
+- **Where:** `.github/workflows/release.yml:17`.
+- **Issue:** The pattern `v*` matches any tag starting with `v`, including `v0.0` (the deprecated retag-target B-09 explicitly removed), `vNEXT`, `vfeature-test`, `vbeta`, `v0.1-rc1`, etc. Any of these would trigger a wheel build + Release publish under the matching tag name, producing junk Releases that install.sh's `/releases/latest` would then surface to end users. The `test_release_workflow_triggers_on_v_tags` pin uses `assert any("v*" in t for t in tags)` (loose substring) — would still pass if the trigger were `["v*", "vfeature-*"]` or similar.
+- **Why it matters:** `/releases/latest` is "most recent published release"; a stray `vfeature` tag pushed by accident → workflow fires → Release published → install.sh installs that. Pre-1.0 the impact is small (no users yet), but post-1.0 it's a footgun on every contributor's first stray tag.
+- **Suggested fix:** Tighten the glob to PEP-440-compatible release shapes: `tags: ["v[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+-*"]` (covers `v1.2.3` and `v1.2.3-rc1`). Tighten the test to assert the regex form, not just `v*` substring.
+
+## B-30 — `release.yml` has no `concurrency:` block; tag-race could double-publish
+- **Severity:** low
+- **Where:** `.github/workflows/release.yml:13-22`.
+- **Issue:** Without `concurrency: { group: release-${{ github.ref }}, cancel-in-progress: false }`, two near-simultaneous `git push --tags` operations (or a re-trigger via "Re-run all jobs") could run two publish jobs in parallel. `softprops/action-gh-release@v2` is upsert-by-tag, so the second run might race with the first when uploading the same asset name, surfacing as `409 Conflict` from the GitHub API mid-publish.
+- **Why it matters:** Mostly theoretical for a one-author repo; real once contributors have tag-push permission, or if a flaky CI re-run is triggered. Cheap belt-and-braces.
+- **Suggested fix:** Add a workflow-level `concurrency` block keyed on `${{ github.ref }}`. One-line change.
+
+## B-31 — `release.yml` does not cache `~/.cache/uv` or `~/.npm`; cold runs are needlessly slow
+- **Severity:** nit (performance, not correctness)
+- **Where:** `.github/workflows/release.yml:41-51`.
+- **Issue:** `actions/setup-node@v4` accepts `with: cache: 'npm'` (and `cache-dependency-path: frontend/package-lock.json` once B-28 lands), and `astral-sh/setup-uv@v4` accepts `with: enable-cache: true`. Neither is wired. Each tag push re-resolves and re-downloads everything from scratch.
+- **Why it matters:** A release.yml run currently spends ~30-60s in `npm ci` and ~20s in `uv build` deps that could be primed from cache on the second-and-later runs. Pre-1.0 with one tag a month it doesn't matter; once releases are routine it's free latency win.
+- **Suggested fix:** Add `with: cache: 'npm'` to setup-node and `with: enable-cache: true` to setup-uv after B-28 lands a lockfile (npm cache is a no-op without one).
+
+## B-32 — `install.ps1` `Test-Command` returns multiple values; works by accident
+- **Severity:** low (correctness-by-accident)
+- **Where:** `install.ps1:19-22`.
+- **Issue:** The function is:
+  ```
+  function Test-Command($name) {
+      Get-Command $name -ErrorAction SilentlyContinue | ForEach-Object { return $true }
+      return $false
+  }
+  ```
+  PowerShell's `return $true` inside `ForEach-Object {...}` only exits *the script block*, not the enclosing function. When `Get-Command` succeeds, the function emits `$true` from the foreach AND `$false` from the trailing `return` — the function returns `@($true, $false)`, an array. Callers `if (-not (Test-Command "uv"))` still produce the right boolean only because PowerShell's `-not` against a non-empty array yields `$false` (the array's truthy), and `-not $false` (the `Get-Command` miss path returning a single `$false`) yields `$true`. Both arms happen to do the right thing, but the semantics are:
+    - tool found → returns `@($true, $false)` (intended `$true`)
+    - tool missing → returns `$false` (correct)
+- **Why it matters:** Anyone refactoring this helper (e.g. switching the foreach to `Where-Object` or replacing with `[bool](Get-Command ...)`) will see the array-return shape and assume "must be intentional", or worse, copy the pattern to a new helper where the boolean coercion doesn't accidentally save them.
+- **Suggested fix:** Replace with `[bool](Get-Command $name -ErrorAction SilentlyContinue)` — a single-expression function that returns exactly `$true` or `$false`. Three lines → one line, and removes the accidental-correctness footgun.
+
+## B-33 — `install.ps1` Python preflight does not detect Microsoft Store stub Python
+- **Severity:** nit
+- **Where:** `install.ps1:34-44`.
+- **Issue:** On Windows 10/11 with no real Python installed, `python.exe` resolves to `%LocalAppData%\Microsoft\WindowsApps\python.exe` — a Store reparse-point stub that, when invoked with arguments (e.g. `python -c "..."`), exits with code 9009 ("not recognized as an internal or external command") rather than running. `Test-Command "python"` returns `$true` (the stub exists on disk) and the `try { python -c ... }` swallows the failure non-fatally — so the user sees no preflight note despite having no Python at all. Then `uv tool install` proceeds to download Python 3.13 (which is fine) but the user-visible message about "system python is X.Y" never fires for the case it most needs to (no real Python).
+- **Why it matters:** Behavioural mirror with `install.sh` is the goal; install.sh's `python3` is rarely a stub. Real consequence is small (uv handles it) but the asymmetry means the test `test_install_ps1_runs_python_version_preflight` enforces a behaviour that does nothing on the most common Windows configuration.
+- **Suggested fix:** After resolving `$sysPy`, also check `& python -c "import sys; sys.exit(0)" 2>$null; $LASTEXITCODE` and if non-zero, print "system python is the Microsoft Store redirector; uv will install a real Python 3.13." (Optional: wrap into the existing try/catch so the message surfaces from the catch path.)
+
+## B-34 — `release.yml` `astral-sh/setup-uv@v4` `python-version: 3.13` is redundant with uv's auto-download
+- **Severity:** nit (no behaviour impact, just code clarity)
+- **Where:** `.github/workflows/release.yml:47-51`.
+- **Issue:** `astral-sh/setup-uv@v4` only installs the `uv` binary. The `python-version` parameter on setup-uv is for setting up a uv-managed Python in advance — handy if you want `uv run` to skip the auto-download cost. But `uv build` doesn't need a system Python (it shells out to a build-isolated env), and the workflow doesn't otherwise call `uv run`. The pin is functionally a no-op that costs ~5s of Python download per CI run. The `test_python_version_matches_mise` test pins this value, so future bumps still drift-check, but the workflow could equally drop the line entirely.
+- **Why it matters:** It works; the cost is one wasted step per release. Worth flagging for cleanup once B-31 (caching) lands and someone is in the workflow file anyway.
+- **Suggested fix:** Either (a) drop `python-version` from setup-uv and adjust `test_python_version_matches_mise` to look elsewhere (e.g. assert the comment in the workflow names mise.toml's pin); or (b) leave as-is with a comment noting it's a deliberate cache-priming step. (b) is fine.
+
+## B-35 — `test_install_ps1_uses_uv_tool_install` is too loose: matches the substring without `--reinstall` or `<wheel>`
+- **Severity:** nit
+- **Where:** `tests/unit/test_install_ps1.py::test_install_ps1_uses_uv_tool_install`; same loose-match in `test_install_sh.py::test_install_sh_uses_uv_tool_install`.
+- **Issue:** The assertion is `assert "uv tool install" in text`. Would pass if the script said `# we considered uv tool install but use pip instead` or `Write-Host "Try uv tool install yourself"`. The peer test in install.sh has the same shape. The actual call in install.ps1 is `& uv tool install --reinstall $wheelFile` (and in install.sh, `uv tool install --reinstall "$WHEEL_FILE"`), which has three load-bearing parts: the verb, the `--reinstall` flag (idempotent re-run of the installer), and a wheel-file path argument. Only the verb is pinned.
+- **Why it matters:** A regression that drops `--reinstall` (so the second run of the installer silently fails because the tool already exists) would pass the test. Same for dropping the wheel-file arg. Low impact pre-1.0 but the behavioural pin should match how a reviewer reads the line.
+- **Suggested fix:** Tighten to `assert re.search(r"uv tool install\s+--reinstall\s+\S+", text)` in both tests. One-line change per file.
+
+## B-36 — `release.yml` workflow comment claims "M0 doesn't yet have a branch CI lane" but iter 25's review confirms M0 *does* run `make ci` locally; comment risks future confusion
+- **Severity:** nit
+- **Where:** `.github/workflows/release.yml:9-11`.
+- **Issue:** The header comment says "M0 doesn't yet have a branch CI lane." Strictly true for *GitHub Actions* (no `ci.yml` workflow exists), but a future contributor reading just this comment might assume M0 has no CI at all and re-add a duplicate lint/test pipeline here. The Makefile's `make ci` target IS the canonical CI lane; the GitHub Actions side is a separate question.
+- **Why it matters:** Doc-honesty paper-cut. Catches a future contributor mid-thought.
+- **Suggested fix:** Re-word to: "GitHub Actions branch-CI is not yet configured (see future ci.yml); `make ci` is the local equivalent and runs in pre-commit / contributor laptops today."
+
+---
+
+## Summary — iter 25
+
+**9 findings: 0 blocker, 1 high (B-28), 1 medium (B-29), 2 low (B-30, B-32),
+5 nit (B-31, B-33, B-34, B-35, B-36).**
+
+Top concerns:
+
+1. **B-28 (high)** — `release.yml` calls `npm ci` against an absent
+   `frontend/package-lock.json`. The release pipeline cannot succeed
+   on first execution. This is M0-blocking for the acceptance gate
+   "wheel installable from a tagged release". Fix in coordination with
+   B-19 (the Dockerfile's `npm install` ↔ this workflow's `npm ci`
+   inconsistency): generate the lockfile once, then both stages can
+   use `npm ci`.
+2. **B-29 (medium)** — `tags: ["v*"]` is too permissive. `vfeature-test`
+   would publish a Release. Tighten to `v[0-9]+.[0-9]+.[0-9]+(-*)?`.
+
+The other 7 are quality-of-life: better caching (B-31), tighter test
+pins (B-35), cleaner PowerShell helpers (B-32), and doc honesty
+(B-36). None block M1.
+
+**BUGS_FOUND.md staleness audit:** spot-checked iter-21..24 fix
+annotations, all reference the right commit shas. B-19 is genuinely
+still open and is now coupled with B-28. No findings need to be flipped
+to `Fixed`.
+
+**OPEN_QUESTIONS.md staleness audit:** Q-A8 (frontend toolchain) is
+still relevant — Node still not on PATH in the devcontainer; coupled
+to B-28's lockfile gap (you can't generate a `package-lock.json`
+without a working `npm`). Q-A10 (PyPI publish) is correctly deferred
+and the workflow + test pin both honour the deferral. No question
+should be closed yet.
+
+**Test-suite size:** 94 → 121 across iters 21–24 (+27); still <0.25s.
+The new tests are mostly genuine shape pins (B-23 + 2, B-25 + 1,
+B-27 + 1, B-24 + 4, install.ps1 + 9, release.yml + 12). B-35 flags
+the only outright-too-loose pin in the new batch.
+
+**Iter 26 should pick B-28 first** — it's M0-load-bearing (the
+acceptance gate clause "make build produces a wheel" is moot if the
+*release* pipeline can't produce a wheel), and the fix is small if
+Q-A8 is unblocked first. Then **B-29** (one regex tighten) bundled
+with **B-35** (two assertion tightens). B-30..B-36 can be picked up
+opportunistically.
+
+**M0 done?** Not yet. Acceptance gate clauses (`docs/ROADMAP.md`):
+- `make ci` green: ✅
+- `make build` produces a wheel containing
+  `pd_ocr_labeler_spa/static/index.html`: ✅ in principle (build
+  hook + tests pin it), but in practice **blocked on Q-A8** (no Node
+  to run `make frontend-build` locally) and **B-28** (release.yml
+  can't run `npm ci`).
+- `pd-ocr-labeler-ui --no-browser --port 8080` answers /healthz: ✅.
+- `make openapi-export` regenerates `frontend/src/api/types.ts`: not
+  yet runtime-verified end-to-end (Q-A8 blocker).
+- ESLint passes clean: still pending Q-A9 + the eslint.config.ts
+  file that closes it.
+
+Two open Qs (Q-A8, Q-A9) and one new high (B-28) keep M0 from being
+declarable complete. Iter 26 should pick B-28; an M0-close iteration
+needs Node availability resolved first.
