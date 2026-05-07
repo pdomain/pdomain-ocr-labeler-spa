@@ -28,6 +28,7 @@ from ..adapters.ocr import IOCREngine
 from ..adapters.storage import IStorage
 from ..core.active_project import ActiveProject, ActiveProjectCarrier
 from ..core.app_state import AppState
+from ..core.ocr_config_state import OCRConfigCarrier
 from ..core.project_state import ProjectState
 from ..settings import Settings
 
@@ -132,6 +133,22 @@ def get_project_state(request: Request) -> ProjectState:
     return state
 
 
+def get_ocr_config_carrier(request: Request) -> OCRConfigCarrier:
+    """The mutable ``OCRConfigCarrier`` — selected OCR detection + recognition
+    model keys (M3 slice 8c-iv-a).
+
+    Spec authority: ``specs/02-backend.md §5.8`` lines 317-322 — ``GET
+    /api/ocr-config`` returns the *currently selected* models; ``POST
+    /api/ocr-config/models`` updates the selection. The carrier is the
+    in-process state that lets a POST persist into a subsequent GET
+    within one process lifetime. Disk-side persistence is slice
+    8c-iv-b (``ocr_config.json`` sidecar).
+    """
+    carrier = _state_attr(request, "ocr_config_carrier")
+    assert isinstance(carrier, OCRConfigCarrier)
+    return carrier
+
+
 __all__ = [
     "get_settings",
     "get_app_state",
@@ -141,4 +158,5 @@ __all__ = [
     "get_active_project_carrier",
     "get_active_project",
     "get_project_state",
+    "get_ocr_config_carrier",
 ]

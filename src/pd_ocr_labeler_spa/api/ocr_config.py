@@ -56,12 +56,14 @@ import os
 import platform
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..core.hf_probe import fetch_hf_last_modified
 from ..core.model_discovery import discover_local_pairs, pairs_to_model_option_records
 from ..core.model_selection import HF_LATEST_KEY, ModelOptionRecord, pick_default_keys
+from ..core.ocr_config_state import OCRConfigCarrier
 from ..core.ocr_models import GetOCRConfigResponse, OCRModelOption, SetOCRModelsRequest
+from .dependencies import get_ocr_config_carrier
 
 router = APIRouter(prefix="/api/ocr-config", tags=["ocr-config"])
 
@@ -171,31 +173,44 @@ def _build_snapshot(
 
 
 @router.get("", response_model=GetOCRConfigResponse)
-def get_ocr_config() -> GetOCRConfigResponse:
+def get_ocr_config(
+    carrier: OCRConfigCarrier = Depends(get_ocr_config_carrier),
+) -> GetOCRConfigResponse:
     """Return an OCR-config snapshot.
 
     Spec §02-backend.md §5.8 line 319. The response body composes the
     iter-7 DTOs; ``selection_reason`` is computed from the slice-8c-iii
     discovery pipeline (HF probe + local-models walk +
     ``pick_default_keys``). Option lists remain stock-only — surfacing
-    HF / local options is slice 8c-iv+ work.
+    HF / local options is slice 8c-iv-b+ work.
+
+    Slice 8c-iv-a wires the ``OCRConfigCarrier``: the GET reads the
+    *currently selected* triple from the carrier (defaults to
+    ``("stock", "stock", None)`` until a POST mutates it), and a
+    subsequent GET reflects the POST's selection within the same
+    process. Disk-side persistence is slice 8c-iv-b.
     """
+    detection, recognition, revision = carrier.snapshot()
     return _build_snapshot(
-        selected_detection=_STOCK_DETECTION.key,
-        selected_recognition=_STOCK_RECOGNITION.key,
-        hf_pinned_revision=None,
+        selected_detection=detection,
+        selected_recognition=recognition,
+        hf_pinned_revision=revision,
     )
 
 
 @router.post("/models", response_model=GetOCRConfigResponse)
-def post_ocr_config_models(req: SetOCRModelsRequest) -> GetOCRConfigResponse:
-    """Validate + echo OCR model selection (slice 8c-i, stateless).
+def post_ocr_config_models(
+    req: SetOCRModelsRequest,
+    carrier: OCRConfigCarrier = Depends(get_ocr_config_carrier),
+) -> GetOCRConfigResponse:
+    """Validate + persist OCR model selection (slice 8c-iv-a, in-process).
 
     Spec §02-backend.md §5.8 line 320. The route shape is canonical;
-    selection is NOT persisted (deferred to slice 8c-iv+ when the
-    ``OCRConfigCarrier`` lands). Unknown keys → 400. The wire body's
-    ``selection_reason`` is the slice-8c-iii-c picker output, not the
-    hardcoded ``"stock-fallback"`` from slice 8c-i.
+    selection now persists into ``OCRConfigCarrier`` so a subsequent
+    ``GET /api/ocr-config`` reflects the change. Disk-side persistence
+    (``ocr_config.json`` sidecar) lands in slice 8c-iv-b. Unknown keys
+    → 400. The wire body's ``selection_reason`` is the slice-8c-iii-c
+    picker output.
     """
     detection_keys = {_STOCK_DETECTION.key}
     recognition_keys = {_STOCK_RECOGNITION.key}
@@ -209,6 +224,11 @@ def post_ocr_config_models(req: SetOCRModelsRequest) -> GetOCRConfigResponse:
             status_code=400,
             detail=f"unknown recognition_key: {req.recognition_key!r}",
         )
+    carrier.set_models(
+        detection_key=req.detection_key,
+        recognition_key=req.recognition_key,
+        hf_pinned_revision=req.hf_pinned_revision,
+    )
     return _build_snapshot(
         selected_detection=req.detection_key,
         selected_recognition=req.recognition_key,

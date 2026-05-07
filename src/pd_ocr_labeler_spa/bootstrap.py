@@ -50,6 +50,7 @@ from .core.active_project import (
 )
 from .core.app_state import build_app_state
 from .core.logging_config import configure_logging
+from .core.ocr_config_state import OCRConfigCarrier
 from .core.persistence.session_state import load_session_state
 from .core.project_state import ProjectState
 from .core.startup_discovery import resolve_initial_project
@@ -215,6 +216,16 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # global, so multiple ``build_app(...)`` calls in the same test
     # process get isolated state.
     app.state.project_state = ProjectState()
+
+    # M3 slice 8c-iv-a: ``OCRConfigCarrier`` holds the user-selected OCR
+    # detection + recognition model keys + ``hf_pinned_revision``. Today
+    # the carrier is in-process only — a subsequent ``GET /api/ocr-config``
+    # reflects the most recent ``POST /api/ocr-config/models`` within
+    # the same server process. Slice 8c-iv-b will add an
+    # ``ocr_config.json`` sidecar so the selection survives a restart.
+    # Per-``build_app`` instance for the same reason as ``ProjectState``:
+    # test isolation requires no module-global state.
+    app.state.ocr_config_carrier = OCRConfigCarrier()
 
     # Spec §2 step 10: install error handlers AFTER middleware (CORS +
     # RequestId) so a 500 still passes back through both on the way

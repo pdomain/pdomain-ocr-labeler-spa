@@ -393,3 +393,137 @@ def test_get_ocr_config_returns_local_only_when_hub_offline_and_pair_present(
         resp = c.get("/api/ocr-config")
     body = resp.json()
     assert body["selection_reason"] == "local-only-hf-unreachable"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Slice 8c-iv-a: OCRConfigCarrier wired — POST persists into a subsequent GET
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_post_persists_selection_into_subsequent_get(client: TestClient) -> None:
+    """A successful ``POST /api/ocr-config/models`` must be visible in
+    the next ``GET /api/ocr-config`` from the same process.
+
+    Pre-slice-8c-iv-a this test would fail: the POST was a stateless
+    echo and the GET re-read defaults from ``_build_snapshot``. Slice
+    8c-iv-a wires the in-process ``OCRConfigCarrier`` so the POST
+    mutates ``app.state.ocr_config_carrier`` and the GET reads from it.
+
+    (Disk-side persistence — survival across server restart — is slice
+    8c-iv-b territory; this test only pins the in-process round-trip.)
+    """
+    # Default state pre-POST.
+    resp_initial = client.get("/api/ocr-config")
+    assert resp_initial.status_code == 200
+    assert resp_initial.json()["selected_detection"] == "stock"
+    assert resp_initial.json()["selected_recognition"] == "stock"
+    assert resp_initial.json()["hf_pinned_revision"] is None
+
+    # POST a (still-stock) selection with a non-None revision so we can
+    # observe the carrier mutation through a field that defaults to None.
+    resp_post = client.post(
+        "/api/ocr-config/models",
+        json={
+            "detection_key": "stock",
+            "recognition_key": "stock",
+            "hf_pinned_revision": "main",
+        },
+    )
+    assert resp_post.status_code == 200, resp_post.text
+    assert resp_post.json()["hf_pinned_revision"] == "main"
+
+    # Subsequent GET reflects the POST's selection.
+    resp_after = client.get("/api/ocr-config")
+    assert resp_after.status_code == 200
+    body = resp_after.json()
+    assert body["selected_detection"] == "stock"
+    assert body["selected_recognition"] == "stock"
+    assert body["hf_pinned_revision"] == "main"
+
+
+def test_carrier_isolated_across_build_app_instances(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each ``build_app(settings)`` call gets its own carrier instance.
+
+    Pins the "no module-global state" invariant: a POST against one app
+    must not leak into a second app built from the same process. This
+    is the test isolation contract for the carrier wire-up — the same
+    contract ``ProjectState`` and ``ActiveProjectCarrier`` already pin.
+    """
+    from pd_ocr_labeler_spa.api import ocr_config as _ocr_config_mod
+
+    monkeypatch.setattr(_ocr_config_mod, "fetch_hf_last_modified", lambda: None)
+    monkeypatch.setattr(_ocr_config_mod, "_resolve_local_models_root", lambda: tmp_path / "no-models")
+
+    settings_a = _make_settings(tmp_path / "a")
+    settings_b = _make_settings(tmp_path / "b")
+
+    app_a = build_app(settings_a)
+    app_b = build_app(settings_b)
+
+    with TestClient(app_a) as ca, TestClient(app_b) as cb:
+        # Mutate A's carrier only.
+        resp = ca.post(
+            "/api/ocr-config/models",
+            json={
+                "detection_key": "stock",
+                "recognition_key": "stock",
+                "hf_pinned_revision": "rev-on-a-only",
+            },
+        )
+        assert resp.status_code == 200
+        # A reflects.
+        body_a = ca.get("/api/ocr-config").json()
+        assert body_a["hf_pinned_revision"] == "rev-on-a-only"
+        # B unchanged — still default.
+        body_b = cb.get("/api/ocr-config").json()
+        assert body_b["hf_pinned_revision"] is None
+
+
+def test_carrier_exposed_on_app_state(client: TestClient) -> None:
+    """``app.state.ocr_config_carrier`` is the wired instance.
+
+    Pins the ``bootstrap.build_app`` step that registers the carrier
+    so the dependency provider can resolve it. Direct access for
+    inspection / test seam — the production read path goes through
+    ``Depends(get_ocr_config_carrier)``.
+    """
+    from pd_ocr_labeler_spa.core.ocr_config_state import OCRConfigCarrier
+
+    carrier = client.app.state.ocr_config_carrier  # type: ignore[attr-defined]
+    assert isinstance(carrier, OCRConfigCarrier)
+    # Default state — no POST yet.
+    assert carrier.snapshot() == ("stock", "stock", None)
+
+
+def test_post_rejects_unknown_keys_without_mutating_carrier(
+    client: TestClient,
+) -> None:
+    """A 400 response from key validation must NOT mutate the carrier.
+
+    Pins the validation-before-mutation order: the carrier's
+    ``set_models`` is called only after both keys pass the option-list
+    gate. If the order were reversed (set first, validate later) a
+    bad-key POST would leak into a subsequent GET.
+    """
+    # Pre-state.
+    body_before = client.get("/api/ocr-config").json()
+    assert body_before["selected_detection"] == "stock"
+
+    resp = client.post(
+        "/api/ocr-config/models",
+        json={
+            "detection_key": "not-a-real-key",
+            "recognition_key": "stock",
+            "hf_pinned_revision": "should-not-leak",
+        },
+    )
+    assert resp.status_code == 400
+
+    # Post-state unchanged.
+    body_after = client.get("/api/ocr-config").json()
+    assert body_after["selected_detection"] == "stock"
+    assert body_after["selected_recognition"] == "stock"
+    assert body_after["hf_pinned_revision"] is None
