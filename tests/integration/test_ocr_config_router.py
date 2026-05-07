@@ -527,3 +527,161 @@ def test_post_rejects_unknown_keys_without_mutating_carrier(
     assert body_after["selected_detection"] == "stock"
     assert body_after["selected_recognition"] == "stock"
     assert body_after["hf_pinned_revision"] is None
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Slice 8c-iv-b: ocr_config.json sidecar — selection survives a restart
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _make_settings_for_data_root(tmp_path: Path) -> Settings:
+    """Variant of ``_make_settings`` that takes a tmp_path-like dir and
+    derives the four roots underneath it. Used by the across-restart
+    tests that need TWO separate ``build_app`` calls sharing a single
+    ``data_root`` so the second app can read the first's sidecar."""
+    return Settings(  # type: ignore[arg-type]
+        host="127.0.0.1",
+        port=8080,
+        config_root=tmp_path / "config",
+        data_root=tmp_path / "data",
+        cache_root=tmp_path / "cache",
+        mode="api_only",
+    )
+
+
+def test_post_selection_persists_across_build_app_restart(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Slice 8c-iv-b acceptance pin: a POST against one ``build_app``
+    instance is reflected in a fresh ``build_app`` against the same
+    ``data_root``.
+
+    This is the load-bearing test for the entire sidecar slice — the
+    in-process carrier (slice 8c-iv-a) was already covered by
+    ``test_post_persists_selection_into_subsequent_get``; what's new
+    is that selection now survives a server-process restart via
+    ``<data_root>/ocr_config.json`` (spec §7a).
+
+    Two ``build_app(settings)`` calls share a single ``tmp_path``-rooted
+    settings (so they get the same ``data_root``). The first POSTs a
+    non-default ``hf_pinned_revision``; the second reads its initial
+    GET and must see that revision because the lifespan startup hook
+    seeded the carrier from the sidecar on disk.
+    """
+    from pd_ocr_labeler_spa.api import ocr_config as _ocr_config_mod
+
+    monkeypatch.setattr(_ocr_config_mod, "fetch_hf_last_modified", lambda: None)
+    monkeypatch.setattr(_ocr_config_mod, "_resolve_local_models_root", lambda: tmp_path / "no-models")
+
+    settings = _make_settings_for_data_root(tmp_path)
+
+    # First "process": POST a selection.
+    app1 = build_app(settings)
+    with TestClient(app1) as c1:
+        resp = c1.post(
+            "/api/ocr-config/models",
+            json={
+                "detection_key": "stock",
+                "recognition_key": "stock",
+                "hf_pinned_revision": "pinned-via-restart-test",
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        # Sidecar file landed where the spec puts it.
+        sidecar = settings.data_root / "ocr_config.json"
+        assert sidecar.exists(), "POST should have written ocr_config.json under data_root"
+
+    # Second "process": fresh build_app, same data_root. Lifespan
+    # startup hook reads the sidecar and seeds the new carrier.
+    app2 = build_app(settings)
+    with TestClient(app2) as c2:
+        body = c2.get("/api/ocr-config").json()
+        assert body["selected_detection"] == "stock"
+        assert body["selected_recognition"] == "stock"
+        assert body["hf_pinned_revision"] == "pinned-via-restart-test", (
+            "Lifespan startup hook must seed OCRConfigCarrier from <data_root>/ocr_config.json (spec §7a)."
+        )
+
+
+def test_idempotent_post_does_not_rewrite_sidecar(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An idempotent re-POST of the same triple must not touch the sidecar.
+
+    Pins the ``carrier.set_models`` returns-True-iff-changed contract
+    the slice depends on: re-POSTing the same selection is a no-op
+    (no new mtime, no rewrite). Otherwise a busy SPA could thrash the
+    disk on every UI re-mount.
+    """
+    from pd_ocr_labeler_spa.api import ocr_config as _ocr_config_mod
+
+    monkeypatch.setattr(_ocr_config_mod, "fetch_hf_last_modified", lambda: None)
+    monkeypatch.setattr(_ocr_config_mod, "_resolve_local_models_root", lambda: tmp_path / "no-models")
+
+    settings = _make_settings_for_data_root(tmp_path)
+    sidecar = settings.data_root / "ocr_config.json"
+
+    app = build_app(settings)
+    with TestClient(app) as c:
+        # First POST — a real change (revision goes None → "v1").
+        resp1 = c.post(
+            "/api/ocr-config/models",
+            json={
+                "detection_key": "stock",
+                "recognition_key": "stock",
+                "hf_pinned_revision": "v1",
+            },
+        )
+        assert resp1.status_code == 200
+        assert sidecar.exists()
+        first_mtime_ns = sidecar.stat().st_mtime_ns
+
+        # Second POST — same triple. carrier.set_models returns False;
+        # save_ocr_config is NOT called; sidecar mtime unchanged.
+        resp2 = c.post(
+            "/api/ocr-config/models",
+            json={
+                "detection_key": "stock",
+                "recognition_key": "stock",
+                "hf_pinned_revision": "v1",
+            },
+        )
+        assert resp2.status_code == 200
+        second_mtime_ns = sidecar.stat().st_mtime_ns
+        assert second_mtime_ns == first_mtime_ns, (
+            "Idempotent re-POST should skip the sidecar write — carrier.set_models "
+            "returns False on no-op and the route gates save() on that flag."
+        )
+
+
+def test_corrupt_sidecar_does_not_crash_startup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A corrupt ``ocr_config.json`` must not crash startup.
+
+    Spec §7a load-failure contract: every failure path returns ``None``
+    and the carrier keeps its construction-time defaults. Pin this at
+    the integration boundary (not just the unit one) because startup
+    happens inside ``TestClient(app) as ...`` — a regression that
+    raises here would crash the test client.
+    """
+    from pd_ocr_labeler_spa.api import ocr_config as _ocr_config_mod
+
+    monkeypatch.setattr(_ocr_config_mod, "fetch_hf_last_modified", lambda: None)
+    monkeypatch.setattr(_ocr_config_mod, "_resolve_local_models_root", lambda: tmp_path / "no-models")
+
+    settings = _make_settings_for_data_root(tmp_path)
+    settings.data_root.mkdir(parents=True, exist_ok=True)
+    (settings.data_root / "ocr_config.json").write_text("this is { not valid json", encoding="utf-8")
+
+    app = build_app(settings)
+    with TestClient(app) as c:
+        # Startup completed; GET returns defaults (carrier was NOT seeded
+        # because the sidecar read failed).
+        body = c.get("/api/ocr-config").json()
+        assert body["selected_detection"] == "stock"
+        assert body["selected_recognition"] == "stock"
+        assert body["hf_pinned_revision"] is None

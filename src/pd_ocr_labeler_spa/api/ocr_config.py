@@ -63,7 +63,9 @@ from ..core.model_discovery import discover_local_pairs, pairs_to_model_option_r
 from ..core.model_selection import HF_LATEST_KEY, ModelOptionRecord, pick_default_keys
 from ..core.ocr_config_state import OCRConfigCarrier
 from ..core.ocr_models import GetOCRConfigResponse, OCRModelOption, SetOCRModelsRequest
-from .dependencies import get_ocr_config_carrier
+from ..core.persistence.ocr_config import OCRConfigSidecar, save_ocr_config
+from ..settings import Settings
+from .dependencies import get_ocr_config_carrier, get_settings
 
 router = APIRouter(prefix="/api/ocr-config", tags=["ocr-config"])
 
@@ -202,15 +204,30 @@ def get_ocr_config(
 def post_ocr_config_models(
     req: SetOCRModelsRequest,
     carrier: OCRConfigCarrier = Depends(get_ocr_config_carrier),
+    settings: Settings = Depends(get_settings),
 ) -> GetOCRConfigResponse:
-    """Validate + persist OCR model selection (slice 8c-iv-a, in-process).
+    """Validate + persist OCR model selection.
 
     Spec §02-backend.md §5.8 line 320. The route shape is canonical;
-    selection now persists into ``OCRConfigCarrier`` so a subsequent
-    ``GET /api/ocr-config`` reflects the change. Disk-side persistence
-    (``ocr_config.json`` sidecar) lands in slice 8c-iv-b. Unknown keys
-    → 400. The wire body's ``selection_reason`` is the slice-8c-iii-c
-    picker output.
+    selection persists in two layers:
+
+    - **In-process** (slice 8c-iv-a): ``OCRConfigCarrier`` so a
+      subsequent ``GET /api/ocr-config`` in the same process reflects
+      the change.
+    - **On-disk** (slice 8c-iv-b, this slice): ``ocr_config.json``
+      sidecar at ``<data_root>/ocr_config.json`` so the selection
+      survives a restart. The save runs **after** ``set_models``
+      reports an actual state change — idempotent re-POSTs of the
+      same triple skip the disk I/O.
+
+    Save errors are logged-and-swallowed inside ``save_ocr_config``
+    (spec §7a) so a sidecar-write failure cannot turn a 200 OCR-config
+    POST into a 500. The user's selection still takes effect for the
+    live session; the operator sees the failure via the stable
+    WARNING substring ``ocr_config_save_failed``.
+
+    Unknown keys → 400. The wire body's ``selection_reason`` is the
+    slice-8c-iii-c picker output.
     """
     detection_keys = {_STOCK_DETECTION.key}
     recognition_keys = {_STOCK_RECOGNITION.key}
@@ -224,11 +241,24 @@ def post_ocr_config_models(
             status_code=400,
             detail=f"unknown recognition_key: {req.recognition_key!r}",
         )
-    carrier.set_models(
+    changed = carrier.set_models(
         detection_key=req.detection_key,
         recognition_key=req.recognition_key,
         hf_pinned_revision=req.hf_pinned_revision,
     )
+    # Slice 8c-iv-b: persist to disk on real state change. Idempotent
+    # re-POSTs are no-ops (carrier reports unchanged → skip the I/O).
+    # The sidecar shape mirrors the wire DTO field names exactly so a
+    # future contributor can map persisted → response without aliasing.
+    if changed:
+        save_ocr_config(
+            settings.data_root,
+            OCRConfigSidecar(
+                selected_detection_key=req.detection_key,
+                selected_recognition_key=req.recognition_key,
+                hf_pinned_revision=req.hf_pinned_revision,
+            ),
+        )
     return _build_snapshot(
         selected_detection=req.detection_key,
         selected_recognition=req.recognition_key,

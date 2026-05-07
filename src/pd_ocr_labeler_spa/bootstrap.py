@@ -51,6 +51,7 @@ from .core.active_project import (
 from .core.app_state import build_app_state
 from .core.logging_config import configure_logging
 from .core.ocr_config_state import OCRConfigCarrier
+from .core.persistence.ocr_config import load_ocr_config
 from .core.persistence.session_state import load_session_state
 from .core.project_state import ProjectState
 from .core.startup_discovery import resolve_initial_project
@@ -62,6 +63,7 @@ log = logging.getLogger(__name__)
 def _make_lifespan(
     settings: Settings,
     carrier: ActiveProjectCarrier,
+    ocr_carrier: OCRConfigCarrier,
 ):
     """Build the FastAPI ``lifespan`` async context manager.
 
@@ -97,6 +99,21 @@ def _make_lifespan(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001
+        # M3 slice 8c-iv-b: seed the OCRConfigCarrier from the
+        # ``ocr_config.json`` sidecar (if present + valid). A missing
+        # / corrupt sidecar returns ``None`` and the carrier keeps its
+        # construction-time defaults (``stock``, ``stock``, None) —
+        # matching the carrier's natural cold-start state. Done BEFORE
+        # session_state to keep the order stable for log readers
+        # (carrier-state logged first, project-resolution second).
+        persisted = load_ocr_config(settings.data_root)
+        if persisted is not None:
+            ocr_carrier.set_models(
+                detection_key=persisted.selected_detection_key,
+                recognition_key=persisted.selected_recognition_key,
+                hf_pinned_revision=persisted.hf_pinned_revision,
+            )
+
         # Step 1: read session_state (best-effort, never raises).
         session = load_session_state(settings.data_root)
 
@@ -151,7 +168,13 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # it; the same instance is referenced by both the startup hook
     # closure and the request-time provider.
     carrier = ActiveProjectCarrier()
-    lifespan = _make_lifespan(settings, carrier)
+    # M3 slice 8c-iv-b: build the OCRConfigCarrier here too so the
+    # lifespan can capture it via closure and seed it from the
+    # ``ocr_config.json`` sidecar before any request arrives. Per-
+    # ``build_app`` instance so test isolation holds (no module-global
+    # state).
+    ocr_carrier = OCRConfigCarrier()
+    lifespan = _make_lifespan(settings, carrier, ocr_carrier)
 
     app = FastAPI(title="pd-ocr-labeler-spa", lifespan=lifespan)
 
@@ -217,15 +240,17 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # process get isolated state.
     app.state.project_state = ProjectState()
 
-    # M3 slice 8c-iv-a: ``OCRConfigCarrier`` holds the user-selected OCR
-    # detection + recognition model keys + ``hf_pinned_revision``. Today
-    # the carrier is in-process only — a subsequent ``GET /api/ocr-config``
-    # reflects the most recent ``POST /api/ocr-config/models`` within
-    # the same server process. Slice 8c-iv-b will add an
-    # ``ocr_config.json`` sidecar so the selection survives a restart.
-    # Per-``build_app`` instance for the same reason as ``ProjectState``:
-    # test isolation requires no module-global state.
-    app.state.ocr_config_carrier = OCRConfigCarrier()
+    # M3 slice 8c-iv-a + 8c-iv-b: ``OCRConfigCarrier`` holds the
+    # user-selected OCR detection + recognition model keys +
+    # ``hf_pinned_revision``. Slice 8c-iv-a wired the in-process
+    # carrier so a POST persists into a subsequent GET within one
+    # server process. Slice 8c-iv-b adds the ``ocr_config.json``
+    # sidecar (spec §7a) so the selection survives a restart — the
+    # carrier instance is constructed above (so the lifespan closure
+    # can capture it) and seeded from disk by the lifespan startup
+    # hook before any request arrives. Per-``build_app`` for test
+    # isolation, same as ``ProjectState``.
+    app.state.ocr_config_carrier = ocr_carrier
 
     # Spec §2 step 10: install error handlers AFTER middleware (CORS +
     # RequestId) so a 500 still passes back through both on the way
