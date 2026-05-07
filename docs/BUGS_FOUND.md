@@ -2175,7 +2175,8 @@ Iter 50 = next code-review checkpoint.
 
 ## B-66 — Spec internal contradiction: `02-backend.md §10` describes both a manual catch-all AND `StaticFiles(directory=path, html=True)` mount
 
-- **Status:** Open. Filed iter 49 (spec-drift sweep).
+- **Status:** **Resolved iter 51.** Spec-only amend in `specs/02-backend.md §10`: dropped the `StaticFiles(directory=path, html=True)` sentence and replaced it with the manual-catch-all description (reserved-prefix carve-out, traversal guard, `Cache-Control: no-store` on `index.html`). Added a parenthetical explaining why `StaticFiles(...)` was rejected — so a future agent doesn't re-introduce the contradiction. No code change.
+- **Severity:** low (spec-only; impl is correct).
 - **Severity:** low (spec-only; impl is correct).
 - **Where:** `specs/02-backend.md` §10 lines 506-513.
 - **Issue:** §10 describes the SPA static surface in two contradictory ways within four lines:

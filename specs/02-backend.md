@@ -508,9 +508,21 @@ Per-route audit log (closes pgdp-prep gap):
 `bootstrap._mount_static_frontend(app, settings)`:
 - Skipped when `settings.frontend_dev_url` is set.
 - Resolves `pd_ocr_labeler_spa/static/` via `importlib.resources.files()`.
-- Defines catch-all `/{full_path:path}`: serve file if exists, else
-  `index.html` (SPA fallback for deep links).
-- Mounts `StaticFiles(directory=path, html=True)` at `/`.
+- Defines a manual catch-all `/{full_path:path}` that:
+  - 404s for reserved prefixes (`/api/`, `/healthz`, `/env.js`,
+    `/docs`, `/redoc`, `/openapi.json`, `/image-cache/`) so backend
+    bugs aren't masked by the SPA shell;
+  - Serves a real file under `static/<path>` if it exists (with a
+    traversal guard via `resolve()`-then-`relative_to`);
+  - Falls back to `static/index.html` with `Cache-Control: no-store`
+    so the dev-loop reload doesn't pick up a stale shell (B-62).
+- The catch-all is registered LAST so it doesn't shadow real routes.
+
+(We deliberately do NOT use `StaticFiles(directory=path, html=True)`:
+it has no reserved-prefix carve-out, no `Cache-Control: no-store` on
+`index.html`, and its missing-dir behaviour is a `RuntimeError` at
+mount time rather than a graceful 404 with a "run `make
+frontend-build`" hint.)
 
 Image cache: served via `IStorage` adapter (D-019) at
 `/image-cache/{key:path}`. The filesystem adapter reads from
