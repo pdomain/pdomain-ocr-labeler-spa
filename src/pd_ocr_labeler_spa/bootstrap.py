@@ -37,6 +37,7 @@ from .api.healthz import install_healthz
 from .api.middleware.error_handler import install_error_handlers
 from .api.middleware.request_id import RequestIdMiddleware
 from .api.static_mounts import install_image_cache, install_spa_fallback
+from .core.active_project import ActiveProjectCarrier
 from .core.app_state import build_app_state
 from .core.logging_config import configure_logging
 from .settings import Settings
@@ -100,6 +101,15 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     app.state.storage = app_state.storage
     app.state.auth = app_state.auth
     app.state.ocr_engine = app_state.ocr_engine
+
+    # Spec §13 + §00 "State model" lines 179-201: the active-project
+    # pointer is mutable and lives separately from the frozen
+    # ``AppState``. Slice 2 lands the empty carrier here so DI is
+    # ready; slice 3 (lifespan) will call ``set_active_project`` from
+    # the startup hook with whatever ``resolve_initial_project()``
+    # returned. Slice 4 (POST /api/projects/load) will mutate it
+    # from the request path.
+    app.state.active_project_carrier = ActiveProjectCarrier()
 
     # Spec §2 step 10: install error handlers AFTER middleware (CORS +
     # RequestId) so a 500 still passes back through both on the way

@@ -26,6 +26,7 @@ from fastapi import Request
 from ..adapters.auth import IAuth
 from ..adapters.ocr import IOCREngine
 from ..adapters.storage import IStorage
+from ..core.active_project import ActiveProject, ActiveProjectCarrier
 from ..core.app_state import AppState
 from ..settings import Settings
 
@@ -80,10 +81,38 @@ def get_ocr_engine(request: Request) -> IOCREngine:
     return ocr  # type: ignore[return-value]
 
 
+def get_active_project_carrier(request: Request) -> ActiveProjectCarrier:
+    """The mutable ``ActiveProjectCarrier`` — the swap-handle.
+
+    Most read-side handlers want ``get_active_project`` (the snapshot)
+    instead. Reach for this provider only from endpoints that mutate
+    the active project — i.e. ``POST /api/projects/load`` and
+    ``DELETE /api/projects/{id}`` (spec §5.2). Wiring lands in M2
+    slice 4; the provider exists now so the dependency type is
+    importable from route modules under construction.
+    """
+    carrier = _state_attr(request, "active_project_carrier")
+    assert isinstance(carrier, ActiveProjectCarrier)
+    return carrier
+
+
+def get_active_project(request: Request) -> ActiveProject | None:
+    """The current ``ActiveProject`` snapshot, or ``None`` if no project loaded.
+
+    Read-only convenience over ``get_active_project_carrier`` — most
+    handlers only need to know "what's active right now" and shouldn't
+    be reaching for the swap method.
+    """
+    carrier = get_active_project_carrier(request)
+    return carrier.snapshot()
+
+
 __all__ = [
     "get_settings",
     "get_app_state",
     "get_storage",
     "get_auth",
     "get_ocr_engine",
+    "get_active_project_carrier",
+    "get_active_project",
 ]
