@@ -68,6 +68,11 @@ from ..core.active_project import ActiveProjectCarrier, InvalidProjectDirError
 from ..core.models import Project
 from ..core.persistence.ground_truth import load_ground_truth_from_directory
 from ..core.persistence.project_envelope import build_project_from_directory
+from ..core.persistence.session_state import (
+    SESSION_STATE_SCHEMA_VERSION,
+    SessionState,
+    save_session_state,
+)
 from ..core.project_enumeration import enumerate_projects
 from ..core.project_state import ProjectState
 from ..settings import Settings
@@ -422,6 +427,28 @@ def load_project(
     # counter — separate from the carrier's, but moves in lockstep on
     # successful loads.
     project_state.set_loaded_project(project)
+
+    # Step 8 (M2-tail): persist session state so the next startup can
+    # resume at this project + page. Best-effort: a write failure must
+    # not turn a successful load into an HTTP 500 (we already mutated
+    # the carrier + ProjectState; rolling those back to honour a
+    # session-state I/O error would be worse UX than logging and
+    # continuing). Spec §02-backend.md §5.2 line 217 — "Saves session
+    # state."; spec §09-persistence.md §6 — file shape.
+    try:
+        save_session_state(
+            settings.data_root,
+            SessionState(
+                schema_version=SESSION_STATE_SCHEMA_VERSION,
+                last_project_path=str(resolved),
+                last_page_index=project_state.current_page_index,
+            ),
+        )
+    except OSError as exc:
+        log.warning(
+            "Failed to write session_state.json after load (continuing): %s",
+            exc,
+        )
 
     response = LoadProjectResponse(
         project=project,

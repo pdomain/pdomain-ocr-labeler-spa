@@ -533,6 +533,82 @@ def test_get_project_by_id_404_when_nothing_loaded(
     assert body["error"] == "project_not_found"
 
 
+def test_post_load_writes_session_state(
+    tmp_path: Path,
+) -> None:
+    """``POST /api/projects/load`` persists ``session_state.json``.
+
+    Spec §09-persistence.md §6 + §02-backend.md §5.2 line 217 ("Saves
+    session state.") — on a successful load, the route writes
+    ``<data_root>/session_state.json`` with the resolved project_root +
+    current_page_index so a subsequent restart can resume.
+
+    Pinned at the integration layer: route → save_session_state →
+    on-disk JSON. The ``session_state.py`` unit tests pin the byte
+    shape; this test only pins the wiring (file present, fields named
+    per the spec, point at the project we just loaded).
+    """
+    import json as _json
+
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    project_dir = projects_root / "alpha"
+    project_dir.mkdir()
+    (project_dir / "001.png").write_bytes(b"\x00")
+
+    data_root = tmp_path / "data"
+    settings = _make_settings(
+        tmp_path,
+        source_projects_root=projects_root,
+        data_root=data_root,
+    )
+    app = build_app(settings)
+    with TestClient(app) as c:
+        resp = c.post("/api/projects/load", json={"project_root": str(project_dir)})
+        assert resp.status_code == 200, resp.text
+
+    session_file = data_root / "session_state.json"
+    assert session_file.exists(), f"session_state.json was not written under {data_root}"
+    payload = _json.loads(session_file.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "1.0"
+    assert payload["last_project_path"] == str(project_dir.resolve())
+    assert payload["last_page_index"] == 0
+
+
+def test_post_load_session_state_save_error_does_not_fail_request(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If session-state write raises, the load request still succeeds.
+
+    Session-state writeback is best-effort persistence: a failed write
+    is operationally bad but must not turn a successful project load
+    into an HTTP 500. The route logs the error and returns 200 with
+    the loaded project; the SPA still gets a usable response.
+    """
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    project_dir = projects_root / "alpha"
+    project_dir.mkdir()
+    (project_dir / "001.png").write_bytes(b"\x00")
+
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+
+    # Patch the imported reference inside the route module.
+    from pd_ocr_labeler_spa.api import projects as projects_mod
+
+    def _boom(*_a: object, **_kw: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(projects_mod, "save_session_state", _boom)
+
+    with TestClient(app) as c:
+        resp = c.post("/api/projects/load", json={"project_root": str(project_dir)})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["project"]["project_id"] == "alpha"
+
+
 def test_get_project_by_id_404_when_id_mismatches_loaded(
     tmp_path: Path,
 ) -> None:
