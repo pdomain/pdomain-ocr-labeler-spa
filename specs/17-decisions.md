@@ -711,6 +711,19 @@ without having to find the badge.
 
 ---
 
+## D-035 — Legacy URL redirects use 301 Moved Permanently
+
+**Date.** 2026-05-07. Resolves Q-A4.
+
+**Decision.** Use `301` (not `308`) for `/project/{id}` →
+`/projects/{id}` and peer redirects from D-030. SPA routes are
+GET-only, so 308's method-preservation guarantee buys nothing here;
+301 has the broadest support across older clients and crawlers.
+
+**Refs.** [`OPEN_QUESTIONS.md Q-A4`](../OPEN_QUESTIONS.md), [`13-driver-contract.md`](13-driver-contract.md) §1.
+
+---
+
 ## Pending decisions
 
 See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for any sub-questions

@@ -44,8 +44,9 @@ canonical URL the SPA emits to the browser bar is the `pageno` form
 | `/project/{id}` | `301` | `/projects/{id}` |
 | `/project/{id}/page/{n}` | `301` | `/projects/{id}/pages/pageno/{n}` |
 
-The 301 vs 308 question is open ([Q-A4](../OPEN_QUESTIONS.md)) —
-default `301` until resolved.
+All legacy redirects emit `301 Moved Permanently` per
+[D-035](17-decisions.md) (resolves Q-A4). 308 was on the table but
+offers no benefit for the GET-only SPA routes here.
 
 ### 1.3 Edge cases
 

@@ -14,27 +14,6 @@ the user has answered, a **Resolution** line linking the resulting ADR.
 
 ## Open — needs user input
 
-### Q-A4. Q19 redirect status code?
-
-**Context.** D-030 introduces 301 redirects from `/project/{id}` to
-`/projects/{id}`. Should it be `301 Moved Permanently` or
-`308 Permanent Redirect`?
-
-**Options.**
-
-- **(A)** `301`. Browsers fully understand. Older clients may
-  downgrade method to GET on POST redirects (irrelevant — these
-  routes are GET-only SPA paths).
-- **(B)** `308`. Preserves method strictly. Modern; some older
-  clients don't honour.
-
-**Recommendation.** **(A)**. SPA routes are always GET; method
-preservation isn't a concern; `301` has the broadest support.
-
-**Blocks.** [`13-driver-contract.md`](specs/13-driver-contract.md) §1.
-
----
-
 ### Q-A8. Frontend toolchain availability in dev shell
 
 **Context.** Iteration 2 of the dev /loop scaffolded
@@ -336,6 +315,7 @@ in [`specs/17-decisions.md`](specs/17-decisions.md).
 | Q-A1 | Auto-rotation envelope bump | (A) v2.2 additive (`source.rotation_degrees`/`rotation_source`); fall back to (B) sidecar if legacy `Source` rejects extras (resolved 2026-05-07) | [D-032](specs/17-decisions.md) |
 | Q-A2 | Q14 normalization toggle scope | (A) project-level checkbox in OCR config modal, persisted in `OCRConfig` (resolved 2026-05-07) | [D-033](specs/17-decisions.md) |
 | Q-A3 | Rotation indicator UI placement | (B) separate badge next to source pill + tooltip showing source; manual-rotate button also gets a state tooltip (resolved 2026-05-07) | [D-034](specs/17-decisions.md) |
+| Q-A4 | Legacy URL redirect status | (A) `301 Moved Permanently` — SPA routes are GET, broadest client support (resolved 2026-05-07) | [D-035](specs/17-decisions.md) |
 
 ### Delegations to peer-repo agents (2026-05-06)
 
