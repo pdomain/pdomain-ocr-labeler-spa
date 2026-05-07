@@ -29,13 +29,20 @@ hooks installed and pass"). Each has a status flag.
 ## Status
 
 **M0 is in progress.** Backend, repo scaffold, Dockerfile, installers,
-and release workflow are complete; the frontend half is gated on
-Q-A8 (no Node/npm in the devcontainer). 130/130 pytest are green and
-ruff is clean as of iter 28. After iter 29:
+and release workflow are complete; the frontend half is gated on the
+Q-A8 bootstrap iteration (mise + Node 24 are now available — see
+"Remaining blockers" — but the first `npm install` /
+`package-lock.json` commit / `npm run build` has not yet run).
+358/358 pytest green as of iter 54; ruff lint+format clean.
 
-- Open BUGS_FOUND items: **0**. (B-18 closed in iter 29.)
-- Remaining open questions blocking M0: **Q-A8** (frontend toolchain),
-  **Q-A9** (ESLint config + restored `lint` script).
+- Open BUGS_FOUND items: see [`BUGS_FOUND.md`](BUGS_FOUND.md). The
+  M0-relevant residue is B-72 (a `make test` regression that fires
+  once `static/assets/` is populated — relevant the moment the Q-A8
+  bootstrap iter runs).
+- Remaining open questions blocking M0: **Q-A8** (frontend
+  toolchain — mechanical bootstrap pending) and **Q-A9** (ESLint
+  config + restored `lint` script — depends on Q-A8 to install
+  devDeps).
 - Remaining open questions NOT blocking M0: Q-A10 (PyPI publishing —
   out of M0 scope per `specs/16-milestones.md`).
 
@@ -43,22 +50,27 @@ ruff is clean as of iter 28. After iter 29:
 
 ### Q-A8 — Frontend toolchain availability
 
-See [`../OPEN_QUESTIONS.md` Q-A8](../OPEN_QUESTIONS.md). The
-devcontainer ships without `node`/`npm`/`mise`, so criteria 2-6
-above cannot be runtime-verified from inside the /loop. The agent's
-edit boundary stops at this repo, so the resolution path is one of:
+See [`../OPEN_QUESTIONS.md` Q-A8](../OPEN_QUESTIONS.md). **As of
+2026-05-07 mise is installed in the dev container** (`mise --version`
+2026.5.1; `mise exec -- node --version` v24.15.0; `mise exec -- npm
+--version` 11.12.1). The remaining unblock is a single mechanical
+iteration:
 
-- **(preferred)** Workspace owner adds
-  `ghcr.io/devcontainers/features/node:1` to
-  `/workspaces/ocr-container/.devcontainer/devcontainer.json` and
-  rebuilds the container. Then `make frontend-install` /
-  `frontend-build` / `frontend-test` run end-to-end.
-- **(fallback)** Run `make mise-setup && make frontend-install &&
-  make frontend-build && make frontend-test` from an interactive shell
-  with outbound network. The Makefile's `_npm` macro is already wired
-  for the mise-exec path. This commits `frontend/package-lock.json`,
-  which closes the bootstrap branch in `Dockerfile` and
-  `release.yml` (see B-19/B-28 fixes).
+```sh
+mise install                                  # honors mise.toml pins
+cd frontend && mise exec -- npm install       # generates package-lock.json
+git add frontend/package-lock.json
+mise exec -- npm run build                    # writes dist/, copied to ../src/.../static/
+make frontend-test                            # vitest under jsdom
+make frontend-build                           # repeats the build via Makefile
+make build                                    # wheel + spa_check.py invariant
+```
+
+After that iteration commits `frontend/package-lock.json` and the
+first SPA bundle, criteria 2-6 above flip to green and the iter-26
+two-pass install bootstrap branches in `Dockerfile`/`release.yml`
+become no-ops (see the planned-obsolescence breadcrumbs left by
+iter 32 — B-41).
 
 ### Q-A9 — ESLint config + restored `lint` script
 

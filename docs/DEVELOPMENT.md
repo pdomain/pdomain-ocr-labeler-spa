@@ -6,89 +6,91 @@ pre-built frontend bundle. See the project [`README.md`](../README.md)
 for the user-facing pitch and [`specs/`](../specs/) for the
 authoritative design notes.
 
-> **Status note.** As of M0 this repo has a backend skeleton (FastAPI
-> `/healthz` + `/env.js`) and a frontend scaffold (Vite + React + TS),
-> but the SPA bundle isn't wired into the wheel yet. `make build` will
-> refuse to produce a wheel until `make frontend-build` populates
-> `src/pd_ocr_labeler_spa/static/`. See [`ROADMAP.md`](ROADMAP.md) for
-> what's in flight.
+> **Status note (2026-05-07).** Backend is feature-rich (M0 scaffold +
+> M1 settings/adapters/AppState/middleware/error-handler/lifespan-clean;
+> M2 slice 2 wired). The frontend scaffold exists but has never been
+> `npm install`-ed or `npm run build`-ed — the SPA bundle is not yet
+> committed. `make build` will refuse to produce a wheel until
+> `make frontend-build` populates `src/pd_ocr_labeler_spa/static/`.
+> The SPA fallback route + `/image-cache` route are wired and
+> degrade gracefully (helpful 404) until that bundle lands. See
+> [`ROADMAP.md`](ROADMAP.md) and [`PARITY_STATUS.md`](PARITY_STATUS.md).
 
 ## Prerequisites
 
-- **Python 3.13** — pinned in [`mise.toml`](../mise.toml).
-- **Node 24** — also pinned in `mise.toml`.
+This repo uses **[mise](https://mise.jdx.dev/)** to pin the runtime
+toolchain. `mise.toml` declares Node 24 and Python 3.13; running
+`mise install` (or just letting mise auto-activate when you `cd` into
+the repo) gives you both.
+
+- **mise** — `curl https://mise.run | sh` if you don't have it.
+- **Python 3.13** — managed by mise via `mise.toml`.
+- **Node 24** — managed by mise via `mise.toml`.
 - **`uv`** — Astral's Python package manager. The shared devcontainer
   has it pre-installed at `/usr/local/bin/uv`. Outside the
   devcontainer: `curl -LsSf https://astral.sh/uv/install.sh | sh`.
-  Note that `mise` is intentionally **not** used to manage `uv` (see
-  the `mise.toml` comment for why).
-- **`mise`** *(optional)* — if you want pinned-version isolation
-  matching CI exactly. Run `make mise-setup` to download mise and
-  install Node 24 + Python 3.13. Skip this if Node 24 and Python 3.13
-  are already on your `PATH`.
+  `mise` is intentionally **not** used to manage `uv` (see the
+  `mise.toml` comment for why — the aqua-backed installer recently
+  broke verifying Astral's release attestations).
 
-`make help` lists every target with a one-line description.
+`make help` lists every target with a one-line description. Where
+this doc says "run `npm ...`" it means under mise — either with mise
+auto-activation in your shell, or explicitly via `mise exec -- npm
+...` from a non-activated session.
 
 ## First-time setup
 
 ```sh
-make mise-setup     # optional: download mise + install pinned Node/Python
-make setup          # uv sync + install pre-commit hooks + refresh version
-make frontend-install
+mise install         # installs Node 24 + Python 3.13 per mise.toml
+make setup           # uv sync + install pre-commit hooks + refresh version
+make frontend-install  # npm install inside frontend/
 ```
 
 `make setup` runs `uv sync`, installs the pre-commit hooks, and forces
 `hatch-vcs` to re-derive the package version from the current git
 state. `make frontend-install` runs `npm install` inside `frontend/`.
 
+(For users who can't or won't install mise, `make mise-setup` is a
+fallback that downloads a vendored mise binary and runs `mise
+install` for you. End users running the published wheel never need
+mise — the wheel ships with the SPA bundle prebuilt.)
+
 ## Running the dev server
 
-### What you'll see in M0
+### Backend-only (today's default)
 
-M0 ships only the FastAPI skeleton. There is no SPA route on the
-backend yet — `GET /` returns 404. The only working endpoints are
-`GET /healthz` and (in `mode != "api_only"`) `GET /env.js`. The
-`--frontend-dev` CLI flag stores a URL on `settings.frontend_dev_url`
-but no consumer reads it yet — backend-side proxying of unknown asset
-paths to Vite is M1 work.
-
-The Vite dev server (`make frontend-dev`) is itself blocked on
-[Q-A8](../OPEN_QUESTIONS.md) until Node lands in the devcontainer,
-so for now the practical M0 dev loop is pytest plus curl:
+The FastAPI side is fully wired: SPA fallback, `/healthz`, `/env.js`,
+`/image-cache/{key:path}`, request-id middleware, structured logging.
+Until the frontend bundle is built (next iteration), `GET /` will
+return a helpful 404 explaining how to populate `static/`.
 
 ```sh
-make test            # pytest — the main M0 feedback loop
+make test            # pytest — main backend feedback loop
 make lint            # ruff check
 uv run pd-ocr-labeler-ui --no-browser --port 8080
 curl http://127.0.0.1:8080/healthz
 curl http://127.0.0.1:8080/env.js
 ```
 
-### What's coming in M1+
+### Two-process dev loop (Vite + FastAPI)
 
-The intended two-process loop, once M1 wires the SPA mount + the
-backend-side passthrough that `--frontend-dev` configures:
+Once you've run `make frontend-install`, the standard pgdp-prep-style
+dev loop works:
 
 ```sh
-# terminal 1 — FastAPI on :8080 with --reload; in M1+ this will proxy
-# unknown asset paths to the Vite dev server at $frontend_dev_url
+# terminal 1 — FastAPI on :8080 with --reload
 make dev
 
-# terminal 2 — Vite dev server on :5173. The Vite-side proxy already
+# terminal 2 — Vite dev server on :5173. The Vite-side proxy
 # forwards /api, /image-cache, /env.js back to :8080 (see
-# `frontend/vite.config.ts`) so this half is already correct.
+# `frontend/vite.config.ts`).
 make frontend-dev
 ```
 
-In M1 you'll open `http://localhost:5173` in a browser. Until then,
-the FastAPI side has no `/` route and the Vite side has no real SPA
-to serve, so neither URL is interesting on its own.
-
-For backend-only or headless work today (M0):
-
-```sh
-uv run pd-ocr-labeler-ui --no-browser --port 8080
-```
+Open `http://localhost:5173` in a browser. The FastAPI side will
+still 404 on `/` until you `make frontend-build` to populate
+`static/`, but Vite at :5173 serves the SPA shell directly during
+development.
 
 ## Tests
 

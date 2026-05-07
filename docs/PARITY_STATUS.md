@@ -1,6 +1,6 @@
 # Parity status — pd-ocr-labeler-spa vs pd-ocr-labeler
 
-**Snapshot:** 2026-05-07, after iter 54 of the spec-driven /loop.
+**Snapshot:** 2026-05-07 (post-iter-54 + mise-availability update).
 **Audience:** user, deciding next priorities.
 **Scope:** what the SPA replacement covers today vs what the legacy
 NiceGUI labeler ships.
@@ -19,13 +19,18 @@ yet** to actually call `set_active_project` from
 route**, so end-to-end "open a project" still doesn't work).
 **Zero user-facing domain endpoints exist yet** (no project discovery
 list, no OCR, no GT editing, no save/load, no export) — every legacy
-capability past "boots and serves `/healthz`" is **not started**. The dominant blocker is **Q-A8**: the
-devcontainer has no Node/npm/mise, so the entire frontend (currently a
-single smoke test) cannot be built or runtime-verified, which gates M2
-acceptance and everything past it. Backend parity is constrained to
-M2's prerequisite seams — adapters, request-id, audit log, error
-envelope, image-cache route shape — none of which yet read or write a
-real project.
+capability past "boots and serves `/healthz`" is **not started**.
+**Q-A8 has now eased**: `mise` is installed in this dev environment
+(verified `mise --version` 2026.5.1, `mise exec -- node --version`
+v24.15.0, `mise exec -- npm --version` 11.12.1), so the previously
+"can't iterate at all" frontend story is now "needs a single iter to
+run `mise install` + `npm install` + commit `package-lock.json`".
+That iteration hasn't run yet — the frontend (currently a single
+smoke test) is still not built or runtime-verified, so the M0/M1
+frontend acceptance bars remain ungated. Backend parity is
+constrained to M2's prerequisite seams — adapters, request-id, audit
+log, error envelope, image-cache route shape — none of which yet
+read or write a real project.
 
 ---
 
@@ -62,8 +67,10 @@ real project.
 
 ## 3. Frontend parity table
 
-Almost every row reads ⛔ **Q-A8** (no Node/npm/mise in the devcontainer
-and `make mise-setup` requires outbound network not available in /loop).
+Almost every row reads ⛔ **Q-A8** (mise is now installed but the
+frontend has not yet been bootstrapped — `mise install` + `npm
+install` + `package-lock.json` commit + first `npm run build` haven't
+run; the rows below stay ⛔ until that iteration lands).
 
 | Capability | Status | Notes |
 |---|---|---|
@@ -91,7 +98,7 @@ and `make mise-setup` requires outbound network not available in /loop).
 
 | Q | Why it gates work |
 |---|---|
-| **Q-A8** Frontend toolchain | Without Node/npm in the dev environment, **no frontend iteration is verifiable**. Either add `ghcr.io/devcontainers/features/node:1` to `.devcontainer/devcontainer.json` (workspace-owner action, outside this repo), or run `make mise-setup && make frontend-install` from an interactive shell with network. Until resolved, M2 cannot close acceptance and M3–M9 cannot start their frontend halves. |
+| **Q-A8** Frontend toolchain | **Eased 2026-05-07.** mise is now installed in the dev container; `mise exec -- node` and `mise exec -- npm` resolve cleanly. The remaining work is mechanical: a single iteration that runs `mise install` + `mise exec -- npm install` inside `frontend/`, commits `frontend/package-lock.json`, runs `mise exec -- npm run build` once to populate `src/pd_ocr_labeler_spa/static/`, then verifies `make frontend-test`/`make frontend-build`/`make build` end-to-end. After that lands, M0 acceptance criteria 2-6 can flip green and the M1 `data-testid="project-load-button"` driver-contract test becomes runnable. |
 | **Q-A12** `session_state.json` extras-tolerance | **Resolved** 2026-05-07 → option (A) with WARNING-level drift signal (D-041). **Implementation pending.** B-58 still open: one-line code change (`extra="ignore"` + `logger.warning("session_state_extras_dropped …")`) + spec §6 amend. Iter 54 candidate. |
 
 (Q-A11 — 500 redact-vs-verbatim — **resolved + implemented** iter 53 per
@@ -130,13 +137,18 @@ in `docs/BUGS_FOUND.md`. **B-51 closed iter 53** (D-040 impl).
    .set_active_project()`. Brings slice 1 + slice 2 + iter-44
    `session_state.load` together for the first time. Pin via a new
    `tests/integration/test_lifespan.py` row.
-4. **Resolve Q-A8** (workspace-owner action). The single biggest
-   unblock available. Until Node is on PATH, every iteration past M1
-   is **backend-only**, and M1 itself can't fully close (the
+4. **Bootstrap the frontend toolchain (Q-A8 mechanical
+   close)** (~30 min, requires outbound network for the npm
+   registry). Run `mise install` (Node 24 + Python 3.13 per
+   `mise.toml`), then `mise exec -- npm install` inside `frontend/`,
+   commit `frontend/package-lock.json`, run `mise exec -- npm run
+   build` once to populate `src/pd_ocr_labeler_spa/static/`, then
+   verify `make frontend-test` + `make frontend-build` + `make build`.
+   This flips M0 acceptance criteria 2-6 green and the M1
    `data-testid="project-load-button"` driver-contract sanity test
-   from `specs/16-milestones.md:144` is unverifiable). Adding the
-   devcontainer Node feature is a one-line edit to a file outside
-   this repo's edit boundary.
+   from `specs/16-milestones.md:144` becomes runnable. (mise
+   itself is already on PATH as of 2026-05-07; the gap is just the
+   single bootstrap iteration.)
 5. **M2 slice 4 — `core/project_state.py` + `api/projects.py`** (the
    spec-proper M2 work). Author `core/project_state.py`,
    `core/persistence/{project_envelope, ground_truth}.py`,
@@ -151,10 +163,13 @@ in `docs/BUGS_FOUND.md`. **B-51 closed iter 53** (D-040 impl).
 
 ## 7. Risk register
 
-1. **Frontend backlog compounds while Q-A8 is unresolved.** Every
-   iter that lands a backend endpoint without its frontend half
-   widens the gap that someone has to close in one bursty session
-   when Node finally arrives. **Mitigation:** keep frontend work
+1. **Frontend backlog compounds until the Q-A8 bootstrap iter
+   runs.** mise is installed (2026-05-07) but `npm install` /
+   `package-lock.json` / first `npm run build` haven't happened yet.
+   Every iter that lands a backend endpoint without its frontend
+   half widens the gap that one bursty session has to close.
+   **Mitigation:** schedule the bootstrap iter soon so frontend +
+   backend can co-evolve; in the meantime, keep frontend work
    tightly tied to its spec (write the component .tsx by inspection
    the day the endpoint lands) so the eventual catch-up is
    mechanical, not design-from-scratch.
