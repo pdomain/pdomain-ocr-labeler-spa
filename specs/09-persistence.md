@@ -221,6 +221,74 @@ if needed.
 
 ---
 
+## 7a. ocr_config.json
+
+`<data_root>/ocr_config.json` — **SPA-only** sidecar that persists
+the user's OCR model selection across server restarts. Legacy
+`pd-ocr-labeler` does NOT read or write this file (model selection
+in legacy is in-process only, recomputed each launch). Schema:
+
+```jsonc
+{
+  "schema_version": "1.0",
+  "selected_detection_key": "stock",
+  "selected_recognition_key": "stock",
+  "hf_pinned_revision": null
+}
+```
+
+Field semantics — same as the wire DTOs in
+[`01-data-models.md`](01-data-models.md) lines 374–400:
+
+- `schema_version` is the **string** `"1.0"` (parity with §6
+  `session_state.json` — not an int).
+- `selected_detection_key` / `selected_recognition_key` carry whatever
+  string the route handler validated against the currently-exposed
+  option lists. Persisted as-is; round-trip identity required so
+  `OCRConfigCarrier` semantics are preserved across restart.
+- `hf_pinned_revision` is `null` (default) or a string commit/tag
+  pinning the HF Hub revision. Optional per the carrier's API.
+
+**Lifecycle.** Loaded once at app startup (`build_app` lifespan
+hook); the deserialized triple seeds `OCRConfigCarrier`. Saved
+immediately after every successful `POST /api/ocr-config/models` (or
+future `POST /api/ocr-config/rescan`) — i.e. on every state-changing
+mutation, not on a debounce. Atomicity uses the same `tmp + replace`
+pattern as `session_state.py`.
+
+**Extras-tolerance.** The reader uses `extra="ignore"` (forward-compat
+with future SPA versions adding additive fields). Unknown keys are
+logged at **WARNING** with the stable grep-able substring
+`ocr_config_extras_dropped` so a release-time CI step can detect
+uncoordinated drift. Note the file is **NOT** under D-003: legacy
+never touches it, so the asymmetry vs `UserPageEnvelope`'s
+`extra="forbid"` is purely about future-SPA forward-compat, not
+cross-binary interop.
+
+**Failure modes (load).** Same shape as session_state — every
+failure path returns `None` (file missing / unparsable / wrong shape
+/ pydantic-rejected) and the caller seeds the carrier with defaults.
+Startup never crashes on a corrupt sidecar; the next successful POST
+overwrites it.
+
+**Failure modes (save).** Errors are **logged at WARNING and
+swallowed** — distinct from `session_state.save_session_state`, which
+re-raises. Rationale: a failed model-selection-save should not turn
+a 200 OCR-config POST into a 500. The in-process carrier still
+holds the new selection; the user sees the change applied. The
+WARNING log uses the stable substring `ocr_config_save_failed` so an
+operator can spot persistent disk-side failure (e.g. read-only
+data root, full disk).
+
+**Test isolation.** Integration tests using the `client` fixture
+must use a `tmp_path`-scoped `data_root` so the sidecar lives in a
+fresh dir per test. The same fixture already monkeypatches
+`fetch_hf_last_modified` and `_resolve_local_models_root` (slice
+8c-iii-c precedent); the sidecar layer adds the analogous data-root
+isolation.
+
+---
+
 ## 8. Atomic writes
 
 Every JSON write goes through this helper to avoid partial files on
@@ -274,6 +342,7 @@ message: "This page was saved by a newer pd-ocr-labeler. Upgrade to
 read it."
 
 When we eventually bump v2.1 → v2.2 (additive only), the rule is:
+
 - New optional fields are fine.
 - Reading v2.1 with v2.2 code: works.
 - Reading v2.2 with v2.1 code: works (extra fields ignored via

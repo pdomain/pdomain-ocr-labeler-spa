@@ -6,6 +6,7 @@ labeler reads or writes from the user's data root, because the same
 data root is shared during transition ([D-003](17-decisions.md)).
 
 Conventions:
+
 - Domain models live in `src/pd_ocr_labeler_spa/core/models.py`. They
   are reused by both the `IStorage`/`IOCREngine` Protocols and the
   wire — no separate DTO layer (mirrors pgdp-prep's
@@ -484,6 +485,7 @@ class ApiError(BaseModel):
 ```
 
 Status code conventions:
+
 - `400` `validation_error` for Pydantic / domain validation failures.
 - `404` for missing project / page / word.
 - `409` `conflict` for autosave races (last-writer-wins; SPA refetches).
@@ -563,6 +565,7 @@ per Q-A1 option (B) with auto-cleanup on next legacy save.
 ```
 
 Reader (`src/pd_ocr_labeler_spa/core/persistence/user_page_envelope.py`):
+
 - `is_user_page_envelope(data)` type guard.
 - `parse_envelope(data) -> UserPageEnvelope` Pydantic-validating loader.
 - `build_envelope(page, page_record, project, *, source_lane, saved_by, update_page_source) -> dict` writer.
@@ -621,6 +624,7 @@ Top of `<labeled-projects>/<project_id>/project.json`:
 ```
 
 Normalisation (`_normalize_ground_truth_entries:275`):
+
 - Apply `pd_book_tools.pgdp.pgdp_results.PGDPResults(key, text).processed_page_text`
   to every value (PGDP-markup → OCR-comparable Unicode).
 - Add lowercase variant of every key.
@@ -647,6 +651,27 @@ Saved on every successful project load (`AppState.load_project:402`).
 Read on root-page load. **Field name compatibility** required —
 legacy uses `last_project_path` (singular). The SPA must read and
 write the same names so flipping between binaries works.
+
+### `ocr_config.json`
+
+`<data_root>/ocr_config.json` — **SPA-only** sidecar persisting OCR
+model selection across restarts. Legacy `pd-ocr-labeler` does not
+read/write this file. Full lifecycle + failure-mode contract in
+[`09-persistence.md`](09-persistence.md) §7a:
+
+```jsonc
+{
+  "schema_version": "1.0",
+  "selected_detection_key": "stock",
+  "selected_recognition_key": "stock",
+  "hf_pinned_revision": null
+}
+```
+
+Field-by-field parity with the wire DTOs in §3 above
+(`GetOCRConfigResponse.selected_*`, `SetOCRModelsRequest`); the
+sidecar exists so `OCRConfigCarrier` (M3 slice 8c-iv-a) keeps
+state across restart.
 
 ### Image cache filenames
 
@@ -739,6 +764,7 @@ sync.
 ## 7. Conformance fixtures
 
 Carry over from legacy:
+
 - `tests/integration/test_user_page_persistence.py` — round-trip
   envelope fixtures (legacy + new).
 - A real labeled project from `pd-ocr-labeler/tests/browser/fixtures/`
