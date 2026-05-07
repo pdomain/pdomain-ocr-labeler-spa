@@ -261,6 +261,116 @@ pgdp-prep diverges, labeler-spa picks independently.
 
 ---
 
+### Q-A12 — `session_state.json` extras-tolerance policy under D-003
+
+**Filed.** 2026-05-07 (iter-45 review checkpoint, B-58).
+
+**Background.** `core/persistence/session_state.py` (iter 44) sets
+`SessionState.model_config = ConfigDict(extra="forbid")`, citing
+`specs/09-persistence.md §11`. But §11 specifically discusses
+`UserPageEnvelope` (a versioned envelope where `extra="forbid"` plus
+the schema-version gate is the deliberate forward-compat circuit-
+breaker). Spec §6 (`session_state.json`) does NOT specify forbid; it
+just lists the three keys. The legacy
+`pd-ocr-labeler/operations/persistence/session_state_operations.py:30-37`
+uses `from_dict` with `data.get(...)` for each known key — i.e.
+**silently ignores** any extra fields. Under D-003 (shared data root),
+both binaries read+write the same file. If the legacy ever adds an
+additive field (`last_window_geometry`, etc.), the SPA's strict
+`extra="forbid"` envelope would reject it, `load_session_state` would
+return `None`, and the user's last session would silently disappear.
+
+**Choice.**
+
+- **(A) Switch to `extra="ignore"`.** Match legacy `from_dict`'s
+  silent-drop behaviour. Log dropped keys at `info` so a legacy
+  schema bump is at least visible to the operator. Amend spec §6 to
+  state explicitly: "Readers MUST tolerate unknown keys per the
+  D-003 forward-compat contract." This is the recommended default
+  for shared-file scenarios; `UserPageEnvelope`'s strict policy is
+  the exception, justified by its versioned schema.
+- **(B) Keep `extra="forbid"`.** Strictness matches the spec §11
+  envelope policy. Trade-off: schema drift is loud (good for
+  catching legacy bugs early), but the user-visible cost is "lost
+  session on first run after legacy adds a field." Would need spec
+  §6 to add an explicit "MUST forbid extras" clause and a D-003
+  caveat that legacy upgrades require a coordinated SPA upgrade.
+- **(C) Per-binary version negotiation via `schema_version`.**
+  Heavyweight. Treat extras as forbid but accept any
+  `schema_version` ≤ the SPA's known maximum, dropping fields
+  introduced after that version. Doesn't fit a single-string-version
+  schema and would require coordinating with legacy to bump the
+  version on every additive field.
+
+**Recommendation.** **(A)**. The legacy already does silent-drop;
+matching it under D-003 is the path of least surprise. The "drift
+catcher" argument behind (B) is better served by the optional `info`
+log when extras are dropped — that's still visible without breaking
+the user.
+
+**Blocks.** B-58 closeout. Iter 46 should pick this and pair the spec
+amendment with the one-line code change.
+
+---
+
+### Q-A13 — `--log-level` CLI flag: which Settings field does it touch?
+
+**Filed.** 2026-05-07 (iter-47, M1.g `__main__` CLI wiring).
+
+**Background.** Iter 47's M1.g task (per the user's directive) called for
+`--log-level` alongside `--host`, `--port`, `--reload`, `--data-root`.
+Spec `02-backend.md §3` only declares `log_format: Literal["plain",
+"json"]` and `request_id_header: str` — there is no `log_level` field.
+Legacy `pd-ocr-labeler/cli.py:50-56` uses `-v/--verbose` (count) and
+maps that to root/dependency log levels in `get_logging_configuration`
+— it doesn't have a `--log-level` either. pgdp-prep's `__main__.py`
+also doesn't have `--log-level`.
+
+The spec-aligned legacy-parity flag is **`-v/--verbose`** (count, 0–3),
+which iter 47 wired. But the user named `--log-level` directly, which
+suggests one of three possible intents:
+
+**Choice.**
+
+- **(A) Add a new `Settings.log_level: Literal["debug", "info",
+  "warning", "error", "critical"]` field**, mappable from `--log-level`
+  in `__main__`. Pro: explicit, matches `uvicorn --log-level`'s shape.
+  Con: redundant with `-v/--verbose`'s legacy mapping; would need spec
+  §3 to grow a new field; opens "is this the python `logging` module
+  level or the uvicorn access-log level?" ambiguity.
+- **(B) Treat `--log-level` as an alias for `-v` count.** `--log-level
+  debug` → `verbose=1`, `info` → `0`, etc. Pro: no new Settings field;
+  preserves the legacy verbosity-count mapping. Con: surprising —
+  `--log-level critical` mapping to `verbose=-1` doesn't make sense.
+- **(C) Treat `--log-level` as a uvicorn-only knob.** Threaded into
+  `uvicorn.run(log_level=...)` directly, never touching Settings. Pro:
+  matches uvicorn's CLI surface 1:1; doesn't pollute Settings. Con:
+  doesn't drive the application logger (only uvicorn's), so a user
+  passing `--log-level debug` wouldn't see app-level DEBUG logs.
+- **(D) Drop `--log-level` from the M1.g surface.** Iter 47 wired `-v`
+  per spec §15 §3 and that's the spec-canonical knob. The user's ask
+  for `--log-level` was a generic flag-set sketch, not a binding spec
+  requirement. Document the alias rationale in `__main__.py`'s
+  docstring and call it done.
+
+**Recommendation.** **(D)**. The spec already names `-v/--verbose`
+(count) as the verbosity knob; adding `--log-level` would either
+duplicate that surface or grow Settings without a clear consumer.
+Deferral keeps the flag set spec-aligned. If a real consumer surfaces
+later (e.g. a deployment doc that specifies `--log-level` literally),
+revisit then with a concrete shape.
+
+**Status as of iter 47.** Q-A13 filed; `--log-level` NOT wired in
+M1.g. The `-v/--verbose` flag IS wired in the parser (consumer not
+yet routed; lands in a future iter that wires the verbosity →
+logging-level mapping per legacy `cli.py:65-170`).
+
+**Blocks.** Nothing today (M1.g shipped without `--log-level`).
+Resolving Q-A13 in any direction other than (D) would re-open a one-
+line patch to the M1.g `__main__.py` flag set.
+
+---
+
 ## Resolution log
 
 All initial questions resolved by user on 2026-05-06. Decisions live

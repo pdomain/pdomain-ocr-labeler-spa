@@ -55,6 +55,27 @@ class Settings(BaseSettings):
     data_root: Path = Field(default_factory=lambda: Path.home() / "pd-ocr-labeler")
     cache_root: Path = Field(default_factory=lambda: Path.home() / ".cache" / "pd-ocr-labeler")
 
+    # ── Project discovery (specs/02-backend.md §3 lines 130-132) ─────────────
+    # Both fields are CLI-overridable seams; their consumers land in M2
+    # (project discovery + load). Declared here so the M1.g ``__main__``
+    # CLI can thread CLI args through ``Settings(**overrides)`` today.
+    source_projects_root: Path | None = None
+    """Root directory whose subdirectories are selectable projects.
+
+    Set by ``--projects-root``; falls back to ``config.yaml``'s
+    ``source_projects_root``. ``None`` until M2 wires the discovery
+    layer.
+    """
+
+    cli_project_dir: Path | None = None
+    """Optional positional ``project_dir`` from the CLI.
+
+    When set, project discovery + restore overrides session_state's
+    ``last_project_path`` and eagerly loads this dir. Same contract as
+    legacy ``pd-ocr-labeler-ui [project_dir]`` (legacy
+    ``cli.py:18-23``).
+    """
+
     # ── Mode flag ────────────────────────────────────────────────────────────
     mode: Mode = "normal"
     """``api_only`` skips the SPA static mount — useful for tests and headless ops."""
