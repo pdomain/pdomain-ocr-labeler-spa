@@ -159,9 +159,46 @@ def _resolve_static_dir() -> Path | None:
 
     Returns ``None`` (rather than raising) when the dir is missing or
     empty, so the SPA fallback degrades gracefully in M0/dev mode.
+
+    Materialisation results (for non-Path Traversables) are cached at
+    *this* level keyed by ``(package_name, resource_name)`` — see
+    :func:`_materialise_traversable` for the reasoning behind moving
+    the cache up here (B-67).
     """
+    return _resolve_resource_dir("pd_ocr_labeler_spa", "static")
+
+
+# Module-level cache keyed by ``(package_name, resource_name)`` tuple. The
+# cached *value* is a ``(materialised_path, ExitStack)`` pair: each cached
+# entry owns exactly one ExitStack, so re-resolves are O(1) AND we don't
+# leak orphaned tmpdirs on repeated calls (one stack per logical resource,
+# not one stack per Traversable instance — B-67 lessons applied to B-71).
+_RESOLVED_RESOURCE_DIR_CACHE: dict[tuple[str, str], tuple[Path, object]] = {}
+
+
+def _resolve_resource_dir(package_name: str, resource_name: str) -> Path | None:
+    """Resolve ``<package>/<resource>`` to an on-disk ``Path`` or ``None``.
+
+    Factored out of :func:`_resolve_static_dir` so the caching contract
+    (one entry per ``(package, resource)`` tuple) is testable against
+    multiple sub-trees — the bug B-67 was about the inner helper using
+    ``id(traversable)`` as a cache key, which is unsound under id-recycle
+    once the Traversable goes out of scope.
+    """
+    cache_key = (package_name, resource_name)
+    cached = _RESOLVED_RESOURCE_DIR_CACHE.get(cache_key)
+    if cached is not None:
+        cached_path, _stack = cached
+        # Re-validate: a previously-materialised tmpdir could have been
+        # cleaned up under our feet (test isolation, OS-level reaper);
+        # in that case fall through and re-materialise. Cheap stat call.
+        if cached_path.is_dir():
+            return cached_path
+        # Stale cache entry — drop it and recompute.
+        _RESOLVED_RESOURCE_DIR_CACHE.pop(cache_key, None)
+
     try:
-        traversable = resources.files("pd_ocr_labeler_spa").joinpath("static")
+        traversable = resources.files(package_name).joinpath(resource_name)
     except (FileNotFoundError, ModuleNotFoundError):
         return None
 
@@ -180,30 +217,40 @@ def _resolve_static_dir() -> Path | None:
 
     if isinstance(traversable, Path):
         # Fast path: pip/uv-extracted wheel or source tree — already a
-        # real on-disk ``Path``, no materialisation needed.
+        # real on-disk ``Path``, no materialisation needed. We do NOT
+        # cache Path-shaped results: ``resources.files(...)`` is already
+        # cheap and the lookup gives us the same Path on every call.
         return traversable
 
     # Zip-imported / frozen package: materialise to a tmpdir whose
-    # lifetime spans the process. We hold the ExitStack reference on
-    # the function attribute so subsequent calls return the same
-    # extracted dir rather than re-extracting on every request.
-    return _materialise_traversable(traversable)
+    # lifetime spans the process. We hold the ExitStack reference in
+    # the module-level cache value so the tmpdir survives.
+    materialised = _materialise_traversable(traversable)
+    if materialised is None:
+        return None
+    real_path, stack = materialised
+    _RESOLVED_RESOURCE_DIR_CACHE[cache_key] = (real_path, stack)
+    return real_path
 
 
-def _materialise_traversable(traversable: object) -> Path | None:
-    """Extract a non-Path Traversable to disk for the process lifetime.
+def _materialise_traversable(traversable: object) -> tuple[Path, object] | None:
+    """Extract a non-Path Traversable to disk and return ``(path, stack)``.
 
-    Cached on the module so repeated calls (e.g. tests, lifespan
-    re-init) reuse the same materialised path. The underlying
-    ``ExitStack`` is intentionally never closed — the SPA bundle has to
-    outlive every request that may consume it, and the tmpdir is
-    cleaned up by the OS on process exit.
+    Returns ``None`` if extraction fails or the result isn't a directory.
+    The caller is responsible for retaining the returned ``ExitStack``
+    so the underlying tmpdir survives — typically by stashing it in the
+    process-wide :data:`_RESOLVED_RESOURCE_DIR_CACHE` keyed by
+    ``(package, resource_name)``.
+
+    B-67 (iter 51): the previous shape cached results inside this helper
+    keyed by ``id(traversable)``. That key is unsound: once the
+    Traversable goes out of scope, CPython is free to recycle its int
+    id for an unrelated object, and the cache returns the wrong
+    materialised Path. The correct cache key is the *logical* identity
+    of the resource — its ``(package_name, resource_name)`` tuple —
+    which is owned by the caller, not by us. So this helper no longer
+    caches; the higher-level :func:`_resolve_resource_dir` does.
     """
-    cache = getattr(_materialise_traversable, "_cache", {})
-    key = id(traversable)
-    if key in cache:
-        return cache[key]
-
     import contextlib
 
     stack = contextlib.ExitStack()
@@ -218,13 +265,7 @@ def _materialise_traversable(traversable: object) -> Path | None:
         stack.close()
         return None
 
-    cache[key] = real
-    _materialise_traversable._cache = cache  # type: ignore[attr-defined]
-    # Keep the ExitStack alive on the module so the tmpdir survives.
-    keepalive = getattr(_materialise_traversable, "_keepalive", [])
-    keepalive.append(stack)
-    _materialise_traversable._keepalive = keepalive  # type: ignore[attr-defined]
-    return real
+    return real, stack
 
 
 def _is_reserved(full_path: str) -> bool:

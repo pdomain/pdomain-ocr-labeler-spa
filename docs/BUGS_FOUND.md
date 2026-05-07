@@ -2107,3 +2107,237 @@ Top concerns:
 5. **B-59 / B-60 / B-61** can batch into a single iter — all small.
 
 Iter 50 = next code-review checkpoint.
+
+---
+
+## B-63 — `Settings` is missing the spec-§3 fields `poll_interval_seconds`, `hf_repo`, `no_prefetch`
+
+- **Status:** Open. Filed iter 49 (spec-drift sweep).
+- **Severity:** low (no consumer wired yet, but spec promises the fields exist now).
+- **Where:** `src/pd_ocr_labeler_spa/settings.py` vs `specs/02-backend.md §3` (lines 137-143).
+- **Issue:** Spec §3 declares the canonical Settings shape. Three fields listed in the spec are absent from the impl:
+
+    ```
+    poll_interval_seconds: float = 0.5     # Job runner — spec §3 line 138
+    hf_repo: str = "CT2534/pd-ocr-models"  # OCR — spec §3 line 141
+    no_prefetch: bool = False              # OCR — spec §3 line 142
+    ```
+
+  The other deferred-consumer fields from spec §3 (`source_projects_root`, `cli_project_dir`) **were** added pre-emptively in iter-47 (M1.g) so `__main__.py` had a target for the `--projects-root` flag and the positional `project_dir`. The same precedent argues these three should land at the same time.
+- **Why it matters:** The settings.py module docstring explicitly says the file is the M0 stub and "fields … aren't yet exercised … are added in M1 and later. Keep this file lean until the consuming code lands — premature fields invite drift between spec and impl." That's a defensible policy, but the iter-47 M1.g work broke it for `source_projects_root` / `cli_project_dir` (M2 consumers). The current state is **inconsistent**: some no-consumer-yet fields are present, some aren't, with no policy distinguishing them. Either:
+  - **(a)** add all three now (matches spec §3 verbatim; matches the iter-47 precedent for source_projects_root); or
+  - **(b)** revert source_projects_root / cli_project_dir from Settings and instead pass them as overrides into the discovery layer in M2 (matches the original "lean stub" docstring policy); or
+  - **(c)** amend the settings.py docstring to clarify the actual policy ("fields land when EITHER a consumer wires them OR a CLI flag in M1.g threads them") and continue case-by-case.
+
+  The risk surface is small for the three missing fields — `poll_interval_seconds` is consumed by the M3 JobRunner, `hf_repo` / `no_prefetch` by the M3 OCR predictor cache. None are CLI-flag candidates today (no spec-§15 §3 entry for them either), so option (b) feels noisier than (a).
+- **Suggested fix:** Pick (a). Add the three fields with the spec-§3 defaults verbatim; add a short module-docstring note that the consumers are M3-deferred. Pin via `tests/unit/test_settings.py::test_settings_has_spec_§3_fields` parametrised over the full spec field list (catches future drift cheaply). Cross-reference: when M3 lands, the `os_aware_roots` helpers in `paths.py` and the JobRunner will both read `settings.poll_interval_seconds` directly via `Depends(get_settings)` — no override threading needed.
+
+---
+
+## B-64 — Spec internal contradiction: `<config_root>/pd-ocr-labeler/config.yaml` (specs/01 §3, specs/09 §7) double-suffixes the app name vs the §5 path table
+
+- **Status:** Open. Filed iter 49 (spec-drift sweep).
+- **Severity:** low (spec-only; impl is correct).
+- **Where:**
+  - `specs/01-data-models.md` line 658 (config.yaml location) — says `<config_root>/pd-ocr-labeler/config.yaml`.
+  - `specs/01-data-models.md` line 690 (path table) — says `config_root = ~/.config/pd-ocr-labeler/` (already includes the app-name suffix).
+  - `specs/09-persistence.md` line 211 — says `<config>/pd-ocr-labeler/config.yaml` (same spelling as §3).
+  - Impl: `src/pd_ocr_labeler_spa/core/persistence/paths.py:96-103` returns `config_root / "config.yaml"` (no double-suffix).
+  - Impl: `src/pd_ocr_labeler_spa/settings.py:54` defaults `config_root = ~/.config/pd-ocr-labeler` (matches §5 table).
+- **Issue:** §5's table establishes that `config_root` already ends in `/pd-ocr-labeler/`. §3's "config.yaml location" sentence and §7 of `09-persistence.md` then say the file lives at `<config_root>/pd-ocr-labeler/config.yaml` — which would put it at `~/.config/pd-ocr-labeler/pd-ocr-labeler/config.yaml`, a doubled app-name. The literal reading of those two sentences contradicts §5.
+- **Why it matters:** Future agents reading §3 or §7 in isolation might "fix" the impl to match the doubled-suffix spec sentence, breaking D-003 cross-binary config interop with the legacy labeler (legacy's `persistence_paths_operations.py` writes to the un-doubled path). The impl is right; the spec wording is the bug.
+- **Suggested fix:** Amend both lines:
+  - `specs/01-data-models.md` line 658: change `<config_root>/pd-ocr-labeler/config.yaml` → `<config_root>/config.yaml`.
+  - `specs/09-persistence.md` line 211: change `<config>/pd-ocr-labeler/config.yaml` → `<config_root>/config.yaml` (and consider clarifying that `<config_root>` is the §5 OS-aware root that already includes `pd-ocr-labeler/`).
+  No code change. Spec-amend-only.
+
+---
+
+## B-65 — Spec drift: `--data-root` CLI flag implemented in iter 47 but not listed in `specs/15-deployment-dev.md §3`
+
+- **Status:** Open. Filed iter 49 (spec-drift sweep).
+- **Severity:** low (spec lags impl; either the spec adds the flag or the impl drops it).
+- **Where:**
+  - Impl: `src/pd_ocr_labeler_spa/__main__.py:85-91` (the flag) + `_build_overrides` line 144-145 (the threading).
+  - Spec: `specs/15-deployment-dev.md §3` lines 67-77 — flag list does NOT include `--data-root`.
+- **Issue:** Iter 47's M1.g work added `--data-root PATH` as a Settings override (overrides `Settings.data_root`, complementing the `PDLABELER_DATA_ROOT` env var). The spec §3 flag list is the canonical authority for the CLI surface and was not amended at the time. Spec authority discipline (per the per-repo CLAUDE.md: "if reality forces a change, change the spec first, then the code") was inverted here.
+- **Why it matters:** Drift between spec and CLI surface is the kind of thing that misleads future agents: a future iter reading spec §3 might "fix" the impl by removing `--data-root`, breaking any user (or driver script) that relies on it. The flag is genuinely useful (matches pgdp-prep parity + complements the env-var override + makes hermetic test setup easier from the shell), so the right fix is to **add it to spec §3**, not remove it from the impl.
+- **Suggested fix:** Amend `specs/15-deployment-dev.md §3`:
+  ```
+    --data-root PATH            Override Settings.data_root (env: PDLABELER_DATA_ROOT)
+  ```
+  Insert just above `--projects-root PATH` so the path-flag pair sits together. No code change.
+
+---
+
+## B-66 — Spec internal contradiction: `02-backend.md §10` describes both a manual catch-all AND `StaticFiles(directory=path, html=True)` mount
+
+- **Status:** Open. Filed iter 49 (spec-drift sweep).
+- **Severity:** low (spec-only; impl is correct).
+- **Where:** `specs/02-backend.md` §10 lines 506-513.
+- **Issue:** §10 describes the SPA static surface in two contradictory ways within four lines:
+  ```
+  - Defines catch-all `/{full_path:path}`: serve file if exists, else
+    `index.html` (SPA fallback for deep links).
+  - Mounts `StaticFiles(directory=path, html=True)` at `/`.
+  ```
+  These are two different approaches: the catch-all is a manual `FileResponse`-driven route with reserved-prefix carve-outs (what the impl actually does in `static_mounts.py:install_spa_fallback`); `StaticFiles(directory=…, html=True)` is FastAPI's built-in directory mount that auto-falls-back to `index.html` for unknown paths but has no reserved-prefix carve-out and no traversal guard beyond Starlette's defaults.
+- **Why it matters:** The iter-43 implementation chose the manual catch-all approach and documented its reasons (reserved-prefix carve-out so `/api/foo` 404s instead of returning HTML, explicit `Cache-Control: no-store` on `index.html` per B-62, missing-`static/` 404 with helpful `make frontend-build` message). A future agent reading §10 might "fix" the impl by switching to `StaticFiles(directory=…, html=True)`, losing all three. The spec needs to pick one description and stick with it.
+- **Suggested fix:** Amend §10 to describe the manual catch-all only:
+  ```
+  - Defines catch-all `/{full_path:path}` that:
+    - 404s for reserved prefixes (`/api/`, `/healthz`, `/env.js`, `/docs`,
+      `/redoc`, `/openapi.json`, `/image-cache/`) so backend bugs aren't
+      masked by the SPA shell;
+    - Serves a real file under `static/<path>` if it exists (with a
+      traversal guard via `resolve()`-then-`relative_to`);
+    - Falls back to `static/index.html` with `Cache-Control: no-store`
+      so the dev-loop reload doesn't pick up a stale shell.
+  ```
+  Drop the `StaticFiles(directory=…)` sentence entirely. No code change.
+
+---
+
+## Summary — iter 49 (spec-drift sweep, option C)
+
+**4 findings: 0 blocker, 0 high, 0 medium, 4 low (B-63, B-64, B-65, B-66).** All are spec-vs-impl drift, three of which are spec-only fixes (the impl is right; the spec needs amending). One (B-63) is impl-vs-spec lag where the impl has lean fields that the spec promises will exist.
+
+Top concern: **B-63** — the `Settings` class is missing three spec-§3 fields with no current consumer. Decision needed: pre-populate (matches iter-47 precedent for `source_projects_root`/`cli_project_dir`) or stay lean (matches the original docstring policy). Recommendation (a): pre-populate with spec defaults; add a parametrised drift-pin test so future spec §3 edits surface failures cheaply.
+
+**Spec-amend list (no code changes required):**
+1. `specs/01-data-models.md` line 658 — drop the `pd-ocr-labeler/` segment from the config.yaml path.
+2. `specs/09-persistence.md` line 211 — drop the `pd-ocr-labeler/` segment from the config.yaml path.
+3. `specs/15-deployment-dev.md §3` — add `--data-root PATH` to the flag list.
+4. `specs/02-backend.md §10` — pick the catch-all description; drop the `StaticFiles(...)` sentence.
+
+**Surface scoped:** the spec areas in scope for M0/M1 implementation today: `02-backend.md` (settings, deps, adapters, errors, logging, static), `09-persistence.md` (paths + session_state), `15-deployment-dev.md §3` (CLI flags), `01-data-models.md §5/§6` (paths + OpenAPI). M2+ specs (project discovery, page lifecycle, OCR, words/lines/paragraphs/refine, jobs, notifications, export, hotkeys, glyph annotations) intentionally NOT swept — no impl yet to drift against.
+
+**Surface deliberately NOT in scope:**
+- Lifespan + JobEventBroker + JobRunner wiring (spec §2 step 4-5; M3-deferred per the iter-43 decision).
+- `app_state.startup()` discovery + restoration (spec §13; M2-deferred).
+- `get_user`, `get_job_runner`, `get_job_events` providers (spec §6; M3-deferred per `dependencies.py` docstring).
+- All routers (spec §4 table; M2+).
+
+The above are documented gaps where the impl-vs-spec mismatch is **intentional** (deferred work, not drift). Re-confirming this list keeps the iter-50 reviewer from re-filing them.
+
+---
+
+## B-67 — `_materialise_traversable._cache` keyed on `id(traversable)` — id-recycling can return the wrong cached `Path`
+
+- **Status:** **Resolved iter 51.** Cache moved up one level in `static_mounts.py` to `_resolve_resource_dir(package_name, resource_name)`, keyed on the logical `(package, resource_name)` tuple. Cache value is now `(real_path, ExitStack)` so each entry owns exactly one keepalive (also addresses B-71's orphan-stack growth). Re-validation step (`cached_path.is_dir()`) drops stale entries if the tmpdir gets cleaned up. Pinned by `tests/unit/api/test_static_mounts.py::test_resolve_resource_dir_cache_keyed_on_logical_identity_not_id` (two distinct sub-trees → two distinct paths; same logical key with a fresh Traversable instance → same cached path) plus `::test_resolve_resource_dir_cache_evicts_stale_entry_after_tmpdir_vanishes` (re-validation contract).
+- **Severity:** medium (correctness hole on zip-import path; rare but real).
+- **Severity:** medium (correctness hole on zip-import path; rare but real).
+- **Where:** `src/pd_ocr_labeler_spa/api/static_mounts.py:202-227` (`_materialise_traversable`) — `key = id(traversable); if key in cache: return cache[key]`.
+- **Issue:** `id(obj)` is only unique among **currently live** objects. Once the `Traversable` returned by `resources.files(...).joinpath("static")` is garbage-collected, CPython is free to reuse that integer for an unrelated object. The cache holds onto the *materialised `Path`* (and via `_keepalive` an `ExitStack` whose tmpdir is alive for the process lifetime), but **the original Traversable is not retained anywhere**, so its id is reclaimable. A subsequent `_resolve_static_dir()` call constructs a new Traversable; if CPython hands it the same int as a previously-cached Traversable, `cache[key]` returns the **wrong materialised path** (e.g., a stale tmpdir from a different package or a different sub-tree if the API ever broadens to support multiple roots).
+- **Why it matters:** Today the function is only ever called against the same string (`"static"`) under the same package, so even on a cache-collision-by-id-recycle the wrong cached path is the right path by coincidence. But the cache's *contract* — "same Traversable id ⇒ same materialised Path" — is unsound, and any future caller that reuses the helper for a second sub-tree (e.g., a `themes/` dir, or per-tenant SPA bundles in M2+) would silently get the wrong dir. A wheel + zip-import combo is the only path that exercises `_materialise_traversable` at all, so this is latent today, but it's exactly the kind of "works on the dev tree, breaks on the wheel" hazard B-59 was supposed to close.
+- **Reproduction (latent — does not bite today's single-sub-tree caller):**
+  ```python
+  # Hypothetical second caller that breaks the contract:
+  def _resolve_themes_dir() -> Path | None:
+      t = resources.files("pd_ocr_labeler_spa").joinpath("themes")
+      return _materialise_traversable(t)  # if id collides w/ static cache → wrong Path
+  ```
+- **Suggested fix:** Drop the `id`-keyed cache; either (a) cache by `(package_name, resource_name)` tuple captured at call-site (requires the caller to pass them through), or (b) cache by the materialised path itself with no id key — `_resolve_static_dir` is called rarely enough that even per-call materialisation is fine if `as_file()` is paired with a process-lifetime `ExitStack`. Option (b) is one fewer indirection. The accompanying test should be parametrised over two different sub-trees (real or fake Traversables) to pin the contract.
+
+---
+
+## B-68 — `__main__.main` opens the browser BEFORE `uvicorn.run` binds the port — race window where the tab loads the prior listener (or a connection refused)
+
+- **Status:** Open. Filed iter 50.
+- **Severity:** low (UX glitch, no data loss; legacy parity carries the bug forward).
+- **Where:** `src/pd_ocr_labeler_spa/__main__.py:172-184`. `webbrowser.open(url, new=1)` runs at line 174; `uvicorn.run(...)` at line 178. Between those two lines the server is not listening on `host:port`.
+- **Issue:** `webbrowser.open` returns immediately after handing the URL to the OS-level launcher. The browser then races to TCP-connect to `host:port` while uvicorn is still importing the app graph in this Python process. Three observable failure modes:
+  1. **Connection refused** → browser shows error page; user reloads, succeeds. Annoying.
+  2. **Stale listener** → if the user previously ran the labeler and the OS is slow to release the port (TIME_WAIT), the new tab might briefly hit the *old* server before uvicorn unbinds it. Confusing in dev — "why did my CLI flag not take effect?"
+  3. **Browser caches the connection error** → some browsers refuse to retry on reload for ~30s after a `ECONNREFUSED`, multiplying the bad-UX window.
+- **Why it matters:** Legacy `pd-ocr-labeler-ui` had this same shape (`pd-ocr-labeler/pd_ocr_labeler/cli.py:113-118` opens browser before NiceGUI binds), so iter-47 inherits the bug. But the SPA factory imports more (CORS + RequestId + AppState wiring + adapters) — the gap between `webbrowser.open` and a listening port is *larger* here, making the race more frequent. Operationally minor; mostly a polish item.
+- **Suggested fix:** Move browser-open behind the uvicorn boot. Two clean shapes:
+  1. **Spawn a delay-then-open thread** before `uvicorn.run` blocks the main thread:
+     ```python
+     def _open_when_ready(url: str) -> None:
+         # poll the port; open when SYN-ACK lands
+         deadline = time.monotonic() + 10
+         while time.monotonic() < deadline:
+             try:
+                 with socket.create_connection((host, port), timeout=0.5):
+                     break
+             except OSError:
+                 time.sleep(0.1)
+         webbrowser.open(url, new=1)
+     threading.Thread(target=_open_when_ready, args=(url,), daemon=True).start()
+     uvicorn.run(...)
+     ```
+  2. **Hook into FastAPI lifespan startup** — register an `on_startup` callback that fires `webbrowser.open` from inside the running event loop. Cleaner but couples the CLI shape to the factory.
+- Pin with a unit test that patches `time.sleep` + `socket.create_connection` and asserts `webbrowser.open` is NOT called until the polling succeeds.
+
+---
+
+## B-69 — `test_lifespan.py::test_startup_shutdown_clean` is fragile against `TestClient`'s OWN ResourceWarnings (httpx/anyio churn)
+
+- **Status:** Open. Filed iter 50.
+- **Severity:** low (test fragility; would manifest on a future httpx/starlette upgrade as a false-positive failure, not a missed leak).
+- **Where:** `tests/integration/test_lifespan.py:89-118`.
+- **Issue:** The capture block surrounds `with TestClient(app) as client: ... gc.collect()`. Any `ResourceWarning` emitted by **`TestClient`'s internal httpx/anyio plumbing** during the same window is indistinguishable from one emitted by the app under test. Today httpx's TestClient is clean, but:
+  1. httpx 0.27 → 0.28 has historically introduced transient ResourceWarnings around `AsyncClient.aclose()` timing.
+  2. anyio 4.x has a documented finalizer-warning quirk on Windows (`anyio.from_thread`).
+  3. Starlette's `LifespanHandler` opens an internal anyio task group; an upstream regression there shows up as a `ResourceWarning` under our `gc.collect()` even though `build_app()` is innocent.
+- **Why it matters:** Today the test passes (304/304). On a future `make ci` after `uv lock --upgrade-package httpx`, this test could turn red from third-party churn alone, sending a future agent on a wild goose chase looking for a leak in our code. The iter-48 author's "intent is no leaks across enter/exit, not exact resource list" is the right framing; the implementation should match.
+- **Suggested fix:** Filter the captured warnings by **source module** before the assertion — only fail if the warning's filename is under our package or our test code:
+  ```python
+  ours = [
+      w for w in captured
+      if issubclass(w.category, ResourceWarning)
+      and ("pd_ocr_labeler_spa" in (w.filename or "") or "/tests/" in (w.filename or ""))
+  ]
+  assert not ours, ...
+  ```
+  Plus a comment naming this defence so a future reader doesn't strip it. The meta-test (`test_resource_warning_capture_self_test`) should be extended with a parallel "deliberate leak from a third-party module" case asserting that warnings outside our tree are NOT counted.
+
+---
+
+## B-70 — `_build_overrides` accepts empty-string `--host ""` and `--port 0` as overrides (bypass-env), with surprising downstream effects
+
+- **Status:** Open. Filed iter 50.
+- **Severity:** nit (degenerate-input UX).
+- **Where:** `src/pd_ocr_labeler_spa/__main__.py:138-150` — `if args.host is not None: overrides["host"] = args.host` etc.
+- **Issue:** The override-dict guard checks `is not None` / `is not False` to honor env precedence, but doesn't filter out **degenerate-but-non-default** values:
+  - `--host ""` lands `host=""` in Settings; pydantic accepts an empty `str`; uvicorn binds to all interfaces (or fails in confusing ways depending on platform). The env value `PDLABELER_HOST=10.0.0.1` is silently ignored even though the user clearly didn't mean to override.
+  - `--port 0` lands `port=0`; uvicorn picks an ephemeral port; the printed `Listening on http://127.0.0.1:0` line is *false*. Browser-open hits `:0` → connection refused.
+  - `--data-root ""` becomes `Path("")` → resolves to CWD; subtle data-corruption hazard if the user has a CWD that happens to contain stale labeler files.
+- **Why it matters:** These are all "user shot themselves in the foot" cases, but the precedence-preservation philosophy from B-04 / iter-47 is "argparse defaults must not clobber env". Empty-string and zero are *also* defaults-from-the-shell perspective (e.g. `--host "$UNSET_VAR"` expands to empty). The current code treats them as explicit overrides.
+- **Suggested fix:** Two options:
+  1. **Tighten the guards** to reject pathological values: `if args.host: overrides["host"] = args.host` (truthy check rejects `""`); `if args.port and args.port > 0: ...`; `if args.data_root and str(args.data_root): ...`.
+  2. **Or argparse-validate at parse time**: `type=lambda s: s or argparse.ArgumentTypeError("--host cannot be empty")`. More upfront feedback to the user.
+  Either way, pin a test for each: `main(["--host", "", ...])` should either error cleanly or fall through to env, never silently bind to `""`.
+
+---
+
+## B-71 — `_materialise_traversable._keepalive` list grows unboundedly under repeated calls
+
+- **Status:** Open. Filed iter 50.
+- **Severity:** nit (memory micro-leak in a code path called once per process; no operational impact).
+- **Where:** `src/pd_ocr_labeler_spa/api/static_mounts.py:222-226`.
+- **Issue:** `_keepalive` is a module-level list that `.append(stack)` is called on every `_materialise_traversable` invocation that hits a non-Path traversable AND misses the cache. The `cache[key]` lookup gates re-materialisation on `id(traversable)` collision (see B-67); under id collision the second call hits the cache and skips the append. But: under sequential `build_app()` calls in a long-running test session (like `test_lifespan.py`'s repeated invocations or M3+ multi-tenant scenarios), each fresh Traversable lands a new ExitStack on `_keepalive` even though only the first one is referenced from `_cache`. The orphan ExitStacks hold their tmpdirs alive *forever*, multiplying disk usage by N invocations.
+- **Why it matters:** Today the function is called once per process (single SPA bundle, single resolution at startup). M3+ may add hot-reload of the static dir or per-tenant bundles; that's where this bites. Also, a future test that drives `build_app(api_only=False)` repeatedly across hundreds of cases would slowly fill `/tmp` on a CI runner.
+- **Suggested fix:** Couple `_keepalive` to `_cache` — only retain ExitStacks whose Path is still in the cache:
+  ```python
+  # Replace _keepalive list with a dict keyed identically to _cache:
+  keepalive = getattr(_materialise_traversable, "_keepalive", {})
+  keepalive[key] = stack
+  _materialise_traversable._keepalive = keepalive
+  ```
+  Then a future cache eviction (if added) frees the corresponding tmpdir cleanly. Or, given B-67 recommends dropping the id-keyed cache entirely, fold the keepalive into the cache value: `cache[key] = (real_path, stack)`. Either way, no orphan ExitStacks.
+
+---
+
+## Summary — iter 50 (code review of iters 46–49)
+
+**5 findings: 0 blocker, 0 high, 1 medium (B-67), 1 low (B-68), 1 low (B-69), 2 nit (B-70, B-71).**
+
+Top concern: **B-67 (medium)** — `_materialise_traversable`'s `id(traversable)`-keyed cache is unsound by contract; latent today because we only call it for one sub-tree, but exactly the "works on the dev tree, breaks on wheels" footgun B-59 was supposed to close. Fix is straightforward (drop the id key, key on (package, resource_name) or just don't cache); the value is in pinning the contract before a second caller lands.
+
+Out-of-scope by directive: B-58 (Q-A12-blocked), B-51 (Q-A11-blocked), B-63..B-66 (filed iter 49). No regression of B-50 found — `RequestIdMiddleware` is unchanged across iters 46-49 and the new `static_mounts.py` HTTPException(404) raises route through `ExceptionMiddleware` (inside us), preserving the X-Request-ID echo.
+
+**Code-health read across iters 46-49:** healthy. Iter 46 was a clean 5-bug closeout with one-commit-per-bug discipline + parametrised regression pins. Iter 47's M1.g landing has thorough test coverage (17 tests for what's effectively glue code) and disciplined "consumer lands later, seam lands today" framing. Iter 48 closed a real M1 acceptance gap with a non-trivial mechanism (capture-list path for finalizer warnings) plus a self-test that pins the mechanism — exactly the right shape. Iter 49 was docs-only but useful — caught real spec drift (B-63..B-66). Findings here are second-order polish, not architectural concerns.
+
+No new Q-A entries surfaced — none of B-67..B-71 are user-decision items.

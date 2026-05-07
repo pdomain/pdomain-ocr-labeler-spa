@@ -531,6 +531,244 @@ def test_resolve_static_dir_handles_non_path_traversable() -> None:
     assert index_path.is_file()
 
 
+# ── B-67: cache-key soundness ─────────────────────────────────────────────
+
+
+def test_resolve_resource_dir_cache_keyed_on_logical_identity_not_id() -> None:
+    """B-67 (iter 51): the materialisation cache MUST be keyed on the
+    logical ``(package, resource_name)`` identity of the resource, NOT
+    on ``id(traversable)``.
+
+    Why this matters: ``id(obj)`` is only unique among *currently live*
+    objects. CPython recycles int ids freely once a Traversable goes
+    out of scope. The previous shape stashed each materialised path
+    under ``id(traversable)``; if a fresh Traversable for a *different*
+    sub-tree happened to receive the same recycled id, the cache would
+    return the wrong path. Today's single-sub-tree caller hides the
+    bug; any second caller (themes/, per-tenant SPA, …) would silently
+    serve the wrong dir.
+
+    This test pins the **correct** contract by exercising two distinct
+    Traversable objects against two different ``(package, resource)``
+    keys and asserting:
+      1. They get distinct cached paths (no key collision on `id`).
+      2. Re-resolving the same logical key returns the same path
+         (cache hit), even after the original Traversable instance has
+         been GC'd and a new one with potentially the same id has
+         appeared.
+    """
+    import importlib
+    import tempfile
+
+    from pd_ocr_labeler_spa.api import static_mounts
+
+    # Two distinct on-disk sub-trees standing in for two logical
+    # resources (e.g. "static" + a hypothetical "themes").
+    tmp = Path(tempfile.mkdtemp())
+    static_root = tmp / "static"
+    static_root.mkdir()
+    (static_root / "index.html").write_bytes(b"<html>static</html>")
+    themes_root = tmp / "themes"
+    themes_root.mkdir()
+    (themes_root / "index.html").write_bytes(b"<html>themes</html>")
+
+    class _FakeTraversable:
+        """Non-Path Traversable backed by a real on-disk dir.
+
+        Same shape as the existing B-59 fixture above — duplicated
+        intentionally so this test is self-contained: a future
+        refactor of the B-59 fixture must not silently break the
+        B-67 contract test.
+        """
+
+        def __init__(self, real: Path, name: str | None = None) -> None:
+            self._real = real
+            self.name = name if name is not None else real.name
+
+        def is_dir(self) -> bool:
+            return self._real.is_dir()
+
+        def is_file(self) -> bool:
+            return self._real.is_file()
+
+        def joinpath(self, name: str) -> _FakeTraversable:
+            return _FakeTraversable(self._real / name, name=name)
+
+        def __truediv__(self, name: str) -> _FakeTraversable:
+            return self.joinpath(name)
+
+        def iterdir(self):
+            for child in self._real.iterdir():
+                yield _FakeTraversable(child, name=child.name)
+
+        def read_bytes(self) -> bytes:
+            return self._real.read_bytes()
+
+        def open(self, mode: str = "r", *args, **kwargs):  # noqa: ANN001
+            return self._real.open(mode, *args, **kwargs)
+
+        def __str__(self) -> str:
+            return f"<FakeTraversable bogus repr at 0x{id(self):x}>"
+
+    # Reset the module-level cache so prior tests don't pre-seed it.
+    static_mounts._RESOLVED_RESOURCE_DIR_CACHE.clear()
+
+    # Live containers so the shim closures resolve names at call time —
+    # we want to swap the static-side Traversable later in the test.
+    static_holder = [_FakeTraversable(static_root)]
+    themes_traversable = _FakeTraversable(themes_root)
+
+    real_files = importlib.resources.files
+
+    def _patched_files(pkg: str) -> object:
+        if pkg == "pkg.static":
+
+            class _Shim:
+                def joinpath(self, name: str) -> _FakeTraversable:
+                    assert name == "static"
+                    return static_holder[0]
+
+            return _Shim()
+        if pkg == "pkg.themes":
+
+            class _Shim2:
+                def joinpath(self, name: str) -> _FakeTraversable:
+                    assert name == "themes"
+                    return themes_traversable
+
+            return _Shim2()
+        return real_files(pkg)
+
+    importlib.resources.files = _patched_files  # type: ignore[assignment]
+    try:
+        # Two distinct logical resources resolve to two distinct dirs.
+        path_static = static_mounts._resolve_resource_dir("pkg.static", "static")
+        path_themes = static_mounts._resolve_resource_dir("pkg.themes", "themes")
+        assert path_static is not None
+        assert path_themes is not None
+        assert path_static != path_themes, (
+            "B-67: two distinct logical resources MUST materialise to "
+            "distinct paths — cache must key on (package, resource_name), "
+            f"not on id(traversable). Got static={path_static!r} "
+            f"themes={path_themes!r}."
+        )
+        # Sanity: each materialised dir contains the right index.html bytes.
+        assert (path_static / "index.html").read_bytes() == b"<html>static</html>"
+        assert (path_themes / "index.html").read_bytes() == b"<html>themes</html>"
+
+        # Re-resolve same logical key returns the SAME path (cache hit),
+        # even though we construct a *fresh* Traversable instance — this
+        # is the case the old `id`-keyed cache silently broke when the
+        # int id got recycled. The new key is logical, not pointer-level,
+        # so a fresh instance with a freshly-recycled id collides
+        # CORRECTLY (intentional cache hit, same logical resource).
+        # Swap the static-side Traversable to a fresh instance backing
+        # the same on-disk dir. The previous instance is no longer
+        # referenced from `static_holder`, so GC may reclaim its id —
+        # potentially handing the same int to the new one. The cache
+        # MUST still return the same materialised path, because the
+        # cache key is the LOGICAL `(package, resource)` identity, not
+        # the pointer-level `id(traversable)`.
+        static_holder[0] = _FakeTraversable(static_root)
+        path_static_again = static_mounts._resolve_resource_dir("pkg.static", "static")
+        assert path_static_again == path_static, (
+            "B-67: re-resolving the same (package, resource_name) MUST "
+            "return the cached path even though the underlying "
+            "Traversable is a fresh Python object."
+        )
+    finally:
+        importlib.resources.files = real_files  # type: ignore[assignment]
+        static_mounts._RESOLVED_RESOURCE_DIR_CACHE.clear()
+
+
+def test_resolve_resource_dir_cache_evicts_stale_entry_after_tmpdir_vanishes() -> None:
+    """B-67 follow-on: if a previously-materialised tmpdir is gone (test
+    isolation, reaper, manual cleanup), the cache must not return the
+    stale path — it should re-materialise.
+
+    This guards the ``cached_path.is_dir()`` re-validation in
+    ``_resolve_resource_dir``: without it, a stale cache entry would
+    survive across a tmpdir cleanup and produce a 404 on a Traversable
+    that *does* still resolve.
+    """
+    import importlib
+    import shutil
+    import tempfile
+
+    from pd_ocr_labeler_spa.api import static_mounts
+
+    static_mounts._RESOLVED_RESOURCE_DIR_CACHE.clear()
+
+    tmp = Path(tempfile.mkdtemp())
+    static_root = tmp / "static"
+    static_root.mkdir()
+    (static_root / "index.html").write_bytes(b"<html/>")
+
+    class _FakeTraversable:
+        def __init__(self, real: Path, name: str | None = None) -> None:
+            self._real = real
+            self.name = name if name is not None else real.name
+
+        def is_dir(self) -> bool:
+            return self._real.is_dir()
+
+        def is_file(self) -> bool:
+            return self._real.is_file()
+
+        def joinpath(self, name: str) -> _FakeTraversable:
+            return _FakeTraversable(self._real / name, name=name)
+
+        def __truediv__(self, name: str) -> _FakeTraversable:
+            return self.joinpath(name)
+
+        def iterdir(self):
+            for child in self._real.iterdir():
+                yield _FakeTraversable(child, name=child.name)
+
+        def read_bytes(self) -> bytes:
+            return self._real.read_bytes()
+
+        def open(self, mode: str = "r", *args, **kwargs):  # noqa: ANN001
+            return self._real.open(mode, *args, **kwargs)
+
+        def __str__(self) -> str:
+            return f"<FakeTraversable at 0x{id(self):x}>"
+
+    real_files = importlib.resources.files
+
+    def _patched_files(pkg: str) -> object:
+        if pkg == "pkg.fake":
+
+            class _Shim:
+                def joinpath(self, name: str) -> _FakeTraversable:
+                    return _FakeTraversable(static_root, name="static")
+
+            return _Shim()
+        return real_files(pkg)
+
+    importlib.resources.files = _patched_files  # type: ignore[assignment]
+    try:
+        first = static_mounts._resolve_resource_dir("pkg.fake", "static")
+        assert first is not None
+        # Wipe the materialised tmpdir from under the cache.
+        shutil.rmtree(first, ignore_errors=True)
+        # Even a Path-shaped Traversable would be cached as itself, so
+        # for this contract we need a non-Path Traversable above (which
+        # we have). The cache currently holds a (real_path, stack) pair
+        # whose `real_path.is_dir()` is now False; a re-resolve must
+        # detect that and re-materialise to a fresh tmpdir.
+        second = static_mounts._resolve_resource_dir("pkg.fake", "static")
+        assert second is not None
+        assert second != first, (
+            "stale cache entry survived after tmpdir vanished — "
+            "re-validation step (cached_path.is_dir()) is missing."
+        )
+        assert second.is_dir()
+    finally:
+        importlib.resources.files = real_files  # type: ignore[assignment]
+        static_mounts._RESOLVED_RESOURCE_DIR_CACHE.clear()
+
+
 # ── catch-all is registered LAST ──────────────────────────────────────────
 
 
