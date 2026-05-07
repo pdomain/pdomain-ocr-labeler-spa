@@ -158,3 +158,139 @@ def test_get_ocr_config_appears_in_openapi_schema(client: TestClient) -> None:
     spec = client.get("/openapi.json").json()
     assert "/api/ocr-config" in spec["paths"]
     assert "get" in spec["paths"]["/api/ocr-config"]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# POST /api/ocr-config/models — slice 8c-i (stateless echo)
+# ──────────────────────────────────────────────────────────────────────
+#
+# Slice 8c-i ships the route shape — same DTO contract as GET — but
+# without a persistent OCRConfigCarrier yet. The handler validates
+# requested keys against the slice-8a stock-fallback option lists and
+# echoes a GetOCRConfigResponse with ``selected_*`` set from the
+# request body. Unknown keys → 400. ``selection_reason`` stays
+# ``"stock-fallback"`` because no real probing exists yet (slice 8c-ii+
+# work). When carrier-backed selection state lands, this test file gets
+# extended to verify persistence; the route shape stays the same.
+
+
+def test_post_ocr_config_models_returns_200_for_known_keys(client: TestClient) -> None:
+    """The route exists at the spec-canonical URL and accepts the
+    iter-7 ``SetOCRModelsRequest`` body."""
+    resp = client.post(
+        "/api/ocr-config/models",
+        json={
+            "detection_key": "stock",
+            "recognition_key": "stock",
+            "hf_pinned_revision": None,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_post_ocr_config_models_response_validates_against_dto(
+    client: TestClient,
+) -> None:
+    """Response body parses cleanly into ``GetOCRConfigResponse``.
+
+    Spec §5.8 line 320 declares the POST returns the same DTO as GET so
+    the frontend can refresh from a single shape.
+    """
+    from pd_ocr_labeler_spa.core.ocr_models import GetOCRConfigResponse
+
+    resp = client.post(
+        "/api/ocr-config/models",
+        json={"detection_key": "stock", "recognition_key": "stock"},
+    )
+    parsed = GetOCRConfigResponse.model_validate(resp.json())
+    assert parsed.selected_detection == "stock"
+    assert parsed.selected_recognition == "stock"
+
+
+def test_post_ocr_config_models_echoes_selected_keys(client: TestClient) -> None:
+    """``selected_detection`` and ``selected_recognition`` reflect the
+    request body, not a hardcoded default. Future slices that add
+    non-stock options must keep this round-trip property."""
+    resp = client.post(
+        "/api/ocr-config/models",
+        json={"detection_key": "stock", "recognition_key": "stock"},
+    )
+    body = resp.json()
+    assert body["selected_detection"] == "stock"
+    assert body["selected_recognition"] == "stock"
+
+
+def test_post_ocr_config_models_unknown_detection_key_returns_400(
+    client: TestClient,
+) -> None:
+    """Unknown detection key → 400 — slice 8a's stock-only option list
+    means anything else is a contract violation. Future slices that
+    discover real models will widen the accept-set; this test gets
+    relaxed when that lands."""
+    resp = client.post(
+        "/api/ocr-config/models",
+        json={"detection_key": "hf:unknown", "recognition_key": "stock"},
+    )
+    assert resp.status_code == 400, resp.text
+
+
+def test_post_ocr_config_models_unknown_recognition_key_returns_400(
+    client: TestClient,
+) -> None:
+    """Unknown recognition key → 400 — same reasoning as detection."""
+    resp = client.post(
+        "/api/ocr-config/models",
+        json={"detection_key": "stock", "recognition_key": "local:/no/such"},
+    )
+    assert resp.status_code == 400, resp.text
+
+
+def test_post_ocr_config_models_extra_field_rejected_with_validation_error(
+    client: TestClient,
+) -> None:
+    """``SetOCRModelsRequest`` is ``extra="forbid"`` — a stray key
+    surfaces through the project's validation_error envelope (HTTP 400
+    with ``error="validation_error"``, ``details[*].type=="extra_forbidden"``).
+    The status code is 400 rather than the FastAPI default 422 because
+    the app installs a unified validation-error handler — see
+    ``api/middleware/validation_error.py`` (or equivalent). Pins the
+    iter-7 DTO contract end-to-end through the route."""
+    resp = client.post(
+        "/api/ocr-config/models",
+        json={
+            "detection_key": "stock",
+            "recognition_key": "stock",
+            "rogue_field": "nope",
+        },
+    )
+    assert resp.status_code == 400, resp.text
+    body = resp.json()
+    assert body["error"] == "validation_error"
+    types = {d["type"] for d in body["details"]}
+    assert "extra_forbidden" in types
+
+
+def test_post_ocr_config_models_slice8c_i_keeps_stock_fallback_reason(
+    client: TestClient,
+) -> None:
+    """Until real probing exists (slice 8c-ii+), ``selection_reason``
+    must stay ``"stock-fallback"``. A drift to e.g. ``"hf-latest"``
+    here would be dishonest — there's no HF probe behind it."""
+    resp = client.post(
+        "/api/ocr-config/models",
+        json={"detection_key": "stock", "recognition_key": "stock"},
+    )
+    body = resp.json()
+    assert body["selection_reason"] == "stock-fallback"
+
+
+def test_post_ocr_config_models_appears_in_openapi_schema(
+    client: TestClient,
+) -> None:
+    """``POST /api/ocr-config/models`` surfaces in OpenAPI so
+    ``make openapi-export`` regenerates ``types.ts``. Without this,
+    the frontend mutation hook can't be typed against the same DTO.
+    """
+    spec = client.get("/openapi.json").json()
+    assert "/api/ocr-config/models" in spec["paths"]
+    assert "post" in spec["paths"]["/api/ocr-config/models"]
