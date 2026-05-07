@@ -41,6 +41,7 @@ from .api.env_js import install_env_js
 from .api.healthz import install_healthz
 from .api.middleware.error_handler import install_error_handlers
 from .api.middleware.request_id import RequestIdMiddleware
+from .api.projects import install_projects_router
 from .api.static_mounts import install_image_cache, install_spa_fallback
 from .core.active_project import (
     ActiveProjectCarrier,
@@ -211,6 +212,12 @@ def build_app(settings: Settings | None = None) -> FastAPI:
 
     # /healthz BEFORE SPA mount so the catch-all fallback can't shadow it.
     install_healthz(app)
+
+    # /api/projects router — M2 slice 4. Concrete prefix (/api/...) so
+    # ordering vs. the SPA catch-all is unambiguous; included alongside
+    # /healthz for symmetry. M2-proper will add /api/pages, /api/words,
+    # etc.
+    install_projects_router(app)
 
     # Per specs/02-backend.md §2 step 12: /env.js, /image-cache, and the
     # SPA fallback only land in non-api_only modes. api_only is the

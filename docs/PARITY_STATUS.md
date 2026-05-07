@@ -12,16 +12,21 @@ NiceGUI labeler ships.
 
 The SPA is **scaffolding-complete and ~97% through M1** (settings +
 adapters + AppState + middleware + lifespan; B-51 closed iter 53 per
-D-040). **M2 startup-discovery is at slice 3/4** (slice 1: `resolve_initial_project`
-+ `validate_project_dir`; slice 2: `ActiveProjectCarrier` + DI
-providers + bootstrap wiring; **slice 3 (iter 55) just landed** — the
-FastAPI lifespan startup hook now calls
+D-040). **M2 startup-discovery is at slice 4 (in progress)** (slice 1:
+`resolve_initial_project` + `validate_project_dir`; slice 2:
+`ActiveProjectCarrier` + DI providers + bootstrap wiring; slice 3:
+FastAPI lifespan startup hook calls
 `resolve_initial_project(settings, session_state=load_session_state(...))`
 and feeds the result into
 `app.state.active_project_carrier.set_active_project()`, so a CLI-or-
-session-restored project is now actually opened on boot. **No
-`POST /api/projects/load` route yet** — slice 4 — so manual project
-swaps via HTTP still don't work).
+session-restored project is now actually opened on boot. **Slice 4
+landing in progress** — iter 2 shipped pure `core/project_enumeration.py`
+scanner; iter 3 shipped `api/projects.py` with `GET /api/projects` +
+`POST /api/projects/load` (interim slim `LoadProjectResponseStub`
+because the spec-canonical `Project` + `PagePayload` models are
+M2-proper). HTTP project swaps now work end-to-end against the
+carrier; the SPA can drive load + dropdown re-mark, but no page
+graph yet).
 **Zero user-facing domain endpoints exist yet** (no project discovery
 list, no OCR, no GT editing, no save/load, no export) — every legacy
 capability past "boots and serves `/healthz`" is **not started**.
@@ -55,7 +60,7 @@ read or write a real project.
 | Image-cache HTTP route | 🟡 partial | Route shape + 404-on-OSError logic landed (B-57); **no images served yet** because no project loads. |
 | Static SPA fallback | ✅ done | `index.html` carries `Cache-Control: no-store` (B-62); reserved-prefix carve-out per spec §10 (B-66 resolved iter 51). |
 | `/env.js` | ✅ done | Mode-gated; B-01 closed. |
-| Project discovery (scan project root) | 🟡 partial | M2 slice 1 (iter 52) shipped pure `resolve_initial_project` + `validate_project_dir`; slice 2 (iter 53) shipped `ActiveProjectCarrier` + DI providers + `app.state.active_project_carrier` wiring; **slice 3 (iter 55)** wired the FastAPI lifespan startup hook calling resolver → carrier so CLI/session boot now actually opens a project. **No enumeration of `source_projects_root`** (M2-proper `core/project_state.py`) and **no `POST /api/projects/load`** (slice 4). Legacy: `operations/persistence/project_discovery_operations.py`. |
+| Project discovery (scan project root) | 🟡 partial | M2 slice 1 (iter 52) shipped pure `resolve_initial_project` + `validate_project_dir`; slice 2 (iter 53) shipped `ActiveProjectCarrier` + DI providers + `app.state.active_project_carrier` wiring; slice 3 (iter 55) wired the FastAPI lifespan startup hook calling resolver → carrier so CLI/session boot now actually opens a project. **Slice 4 in progress**: iter-2 starter shipped pure `core/project_enumeration.py` (case-fold sort, `.hidden`/file/broken-symlink filters, dedup-on-label); iter-3 shipped `api/projects.py` with `GET /api/projects` (composes scanner + Settings + carrier → `ListProjectsResponse{projects, selected, projects_root, config_source}`) and `POST /api/projects/load` (validates path is under `source_projects_root`, swaps carrier, returns interim slim `LoadProjectResponseStub` — the spec-canonical `Project + PagePayload` shape lands in M2-proper). 18 new integration tests in `tests/integration/test_projects_router.py` (380→398): GET happy/empty/sort/dedup/skip-hidden/select-after-load/select-omitted-if-off-root, POST happy/idempotent-generation-bump/missing/regular-file/outside-root/no-root/dotdot-traversal/missing-body. **Still deferred**: `POST /api/projects/discover` and `POST /api/projects/source-root` (need YAML config plumbing — M2-proper); `GET /api/projects/{id}` (needs the loaded `Project` graph — M2-proper); session-state writeback on load (bundled with M2-proper page-payload extension). Legacy: `operations/persistence/project_discovery_operations.py`. |
 | Session restore (last project, last page) | 🟡 partial | `core/persistence/session_state.py` reader exists (iter 44); lifespan caller wired iter 55 (so reader is now exercised on every boot via `load_session_state(settings.data_root)`); writer not yet wired into a /load route; **B-58 open** (extras-tolerance; D-041 decided, impl pending). |
 | Page enumeration (`pages.json` / manifest) | ⬜ not started | M2. |
 | OCR overlay data (paragraphs/lines/words + bboxes) | ⬜ not started | M3–M4. |
