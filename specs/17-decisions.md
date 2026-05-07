@@ -761,6 +761,24 @@ then eslint must be installed" to "`lint` must exist".
 
 ---
 
+## D-038 — PyPI publishing deferred; ship via GitHub Releases + pd-index
+
+**Date.** 2026-05-07. Resolves Q-A10.
+
+**Decision.** Adopt option (A): publish wheels + sdists to GitHub
+Releases only. `install.sh` / `install.ps1` already pull from the
+Release; PyPI is not a hard requirement. Distribution will route
+through the workspace's self-hosted PEP 503 index at
+`ConcaveTrillion/pd-index` (consistent with other pd-* repos) once
+that index repo is built; the `release.yml` workflow stays
+PyPI-token-free, and the existing release-workflow tests continue to
+forbid `PYPI_TOKEN` references. OIDC trusted publishing (option B)
+remains a future option but isn't being wired now.
+
+**Refs.** [`OPEN_QUESTIONS.md Q-A10`](../OPEN_QUESTIONS.md), [`15-deployment-dev.md`](15-deployment-dev.md) §release-pipeline.
+
+---
+
 ## Pending decisions
 
 See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for any sub-questions
