@@ -695,6 +695,22 @@ themselves, so per-page toggling is unnecessary churn.
 
 ---
 
+## D-034 — Auto-rotation indicator UI: separate badge + tooltip
+
+**Date.** 2026-05-07. Resolves Q-A3.
+
+**Decision.** Adopt option (B): a separate rotation badge next to the
+source badge (`[LABELED] [↻90 auto]`). Distinct concept from source
+provenance gets a distinct pill. Tooltip on the badge surfaces
+`rotation_source` ("auto" vs "manual"). Per the user's amendment, the
+manual-rotation button itself also carries a tooltip explaining the
+current rotation state so users hovering the button see the same info
+without having to find the badge.
+
+**Refs.** [`OPEN_QUESTIONS.md Q-A3`](../OPEN_QUESTIONS.md), [`19-auto-rotation.md`](19-auto-rotation.md) §UI, [`13-driver-contract.md`](13-driver-contract.md).
+
+---
+
 ## Pending decisions
 
 See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for any sub-questions

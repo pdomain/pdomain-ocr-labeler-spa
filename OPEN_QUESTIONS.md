@@ -14,24 +14,6 @@ the user has answered, a **Resolution** line linking the resulting ADR.
 
 ## Open — needs user input
 
-### Q-A3. Q18 rotation indicator UI placement?
-
-**Context.** D-029 adds a rotation indicator. Where?
-
-**Options.**
-
-- **(A)** Append to the source badge: "LABELED ↻90". Compact, near
-  filename.
-- **(B)** Separate badge next to source badge: "[LABELED] [↻90 auto]".
-  Two pills.
-- **(C)** Tooltip on rotate-button: "Currently rotated 90° (auto)".
-  No always-on indicator.
-
-**Recommendation.** **(B)**. Distinct concept from source provenance;
-distinct pill. Tooltip provides the "auto" vs "manual" detail.
-
-**Blocks.** [`19-auto-rotation.md`](specs/19-auto-rotation.md) §UI, [`13-driver-contract.md`](specs/13-driver-contract.md).
-
 ### Q-A4. Q19 redirect status code?
 
 **Context.** D-030 introduces 301 redirects from `/project/{id}` to
@@ -353,6 +335,7 @@ in [`specs/17-decisions.md`](specs/17-decisions.md).
 | Q20 | Auto-open browser | (C) auto-open with `--no-browser` opt-out | [D-031](specs/17-decisions.md) |
 | Q-A1 | Auto-rotation envelope bump | (A) v2.2 additive (`source.rotation_degrees`/`rotation_source`); fall back to (B) sidecar if legacy `Source` rejects extras (resolved 2026-05-07) | [D-032](specs/17-decisions.md) |
 | Q-A2 | Q14 normalization toggle scope | (A) project-level checkbox in OCR config modal, persisted in `OCRConfig` (resolved 2026-05-07) | [D-033](specs/17-decisions.md) |
+| Q-A3 | Rotation indicator UI placement | (B) separate badge next to source pill + tooltip showing source; manual-rotate button also gets a state tooltip (resolved 2026-05-07) | [D-034](specs/17-decisions.md) |
 
 ### Delegations to peer-repo agents (2026-05-06)
 
