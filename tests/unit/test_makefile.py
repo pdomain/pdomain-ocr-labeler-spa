@@ -71,6 +71,57 @@ def test_makefile_dry_run_test_target() -> None:
 
 
 @pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+def test_makefile_run_target_dry_runs_and_invokes_ui() -> None:
+    """`make -n run` should reference frontend-build and the UI entry point.
+
+    `make run` is the user-facing "just run the labeler" target —
+    distinct from `make dev` (which expects Vite on :5173). It must:
+    - Ensure the SPA bundle exists (depend on / call `frontend-build`).
+    - Launch `pd-ocr-labeler-ui` without `--reload` and without
+      `--frontend-dev` (we are SERVING the bundle, not developing it).
+
+    Asserting on the dry-run output keeps the test fast and lets us
+    catch accidental regressions like dropping the dependency or
+    flipping `--reload` back on.
+    """
+    result = subprocess.run(
+        ["make", "-C", str(REPO_ROOT), "-n", "run"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, (
+        f"`make -n run` failed (rc={result.returncode}):\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    out = result.stdout
+    # Either the recipe shells out to frontend-build, or it depends on
+    # it (in which case `make -n` renders the dependency's recipe
+    # first). Either way the dry-run output must mention the SPA build.
+    assert "frontend-build" in out or "Building frontend" in out, (
+        f"`make -n run` should ensure the SPA is built before serving:\n{out}"
+    )
+    assert "pd-ocr-labeler-ui" in out, f"`make -n run` should launch pd-ocr-labeler-ui:\n{out}"
+    # Must NOT enable reload or frontend-dev — those are `make dev`'s job.
+    assert "--reload" not in out, f"`make run` must not enable --reload:\n{out}"
+    assert "--frontend-dev" not in out, f"`make run` must not enable --frontend-dev:\n{out}"
+
+
+@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+def test_makefile_help_lists_run_target() -> None:
+    """`make help` should advertise the `run` target alongside `dev`."""
+    result = subprocess.run(
+        ["make", "-C", str(REPO_ROOT), "help"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0
+    assert "run " in result.stdout or "run\t" in result.stdout or "\nrun" in result.stdout, (
+        f"`run` target missing from help output:\n{result.stdout}"
+    )
+
+
+@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
 def test_makefile_phony_targets_declared() -> None:
     """All recipe-only targets we care about should be declared .PHONY.
 
@@ -115,6 +166,7 @@ def test_makefile_phony_targets_declared() -> None:
         "openapi-export",
         "lint",
         "format",
+        "run",
     }
     missing = must_be_phony - declared
     assert not missing, f"targets missing from .PHONY: {sorted(missing)}"

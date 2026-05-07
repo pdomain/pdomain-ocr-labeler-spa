@@ -119,6 +119,26 @@ pd-ocr-labeler-spa/
 | [`16-milestones.md`](specs/16-milestones.md) | M0…M9 milestone breakdown |
 | [`17-decisions.md`](specs/17-decisions.md) | ADRs / open decisions log |
 
+## Quick start (just run the labeler)
+
+```bash
+make setup     # one-time: sync deps + install pre-commit hooks
+make run       # builds the SPA if missing, then serves via FastAPI
+```
+
+`make run` is the single-command "I just want to use it" target — it
+builds the SPA bundle into `src/pd_ocr_labeler_spa/static/` if it
+doesn't exist yet, then launches `pd-ocr-labeler-ui` (no `--reload`,
+no Vite). At startup the server prints a one-line `device: …` banner
+(e.g. `device: cuda:0 (NVIDIA …)` or `device: cpu`) so you can confirm
+whether torch picked up the local GPU before kicking off OCR. The
+default URL is <http://127.0.0.1:8080> and a browser tab opens
+automatically once the listener is up.
+
+To force a fresh frontend bundle, run `make frontend-build` before
+`make run`. For frontend hacking (Vite HMR on :5173) use `make dev`
+instead.
+
 ## Where to start
 
 1. Read [`OPEN_QUESTIONS.md`](OPEN_QUESTIONS.md) — these are decisions

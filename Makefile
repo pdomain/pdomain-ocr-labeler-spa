@@ -1,5 +1,5 @@
 .PHONY: help setup refresh-version install uninstall reset remove-venv lint format \
-        pre-commit-check test e2e build clean ci dev \
+        pre-commit-check test e2e build clean ci dev run \
         frontend-install frontend-build frontend-dev frontend-test \
         openapi-export upgrade-pd-book-tools \
         mise-download mise-setup mise-doctor \
@@ -167,6 +167,29 @@ e2e: frontend-build ## Run Playwright E2E tests (requires `playwright install ch
 
 dev: ## Run uvicorn with --reload against a Vite dev server on :5173
 	uv run pd-ocr-labeler-ui --reload --frontend-dev http://localhost:5173
+
+# ---------------------------------------------------------------------------
+# `make run` — single-command "just use the labeler" entry point
+# ---------------------------------------------------------------------------
+# Distinct from `make dev` (which assumes you're hacking on the frontend
+# and want HMR via Vite on :5173). `run` serves the bundled SPA from
+# src/pd_ocr_labeler_spa/static/ directly via FastAPI — no Vite, no
+# --reload, browser tab opens automatically. The startup banner
+# (printed by __main__.main via core.device_info.describe_device)
+# announces whether torch picked up the local GPU.
+#
+# We rebuild the SPA only if the bundle is missing — operators running
+# `make run` repeatedly shouldn't pay the npm-install + vite-build cost
+# every invocation. To force a rebuild, run `make frontend-build` first.
+
+run: ## Build SPA if missing, then serve via pd-ocr-labeler-ui (production-style; opens browser)
+	@if [ ! -f src/pd_ocr_labeler_spa/static/index.html ]; then \
+		echo "SPA bundle missing; running frontend-build first..."; \
+		$(MAKE) --no-print-directory frontend-build; \
+	else \
+		echo "SPA bundle present at src/pd_ocr_labeler_spa/static/index.html (run 'make frontend-build' to refresh)."; \
+	fi
+	uv run pd-ocr-labeler-ui
 
 build: frontend-build ## Build the wheel (with frontend bundled)
 	# `--wheel` skips the sdist step. The build hook in
