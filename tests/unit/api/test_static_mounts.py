@@ -133,6 +133,45 @@ def test_image_cache_sets_immutable_cache_control(client: TestClient, image_cach
     assert "immutable" in cc
 
 
+@pytest.mark.parametrize(
+    "exc",
+    [
+        FileNotFoundError("missing"),
+        IsADirectoryError("is dir"),
+        PermissionError("denied"),
+        OSError("broken symlink / ENOSPC"),
+    ],
+)
+def test_image_cache_treats_oserror_subclasses_as_404(
+    tmp_path: Path, exc: BaseException
+) -> None:
+    """B-57: every ``OSError`` subclass from the storage adapter must
+    surface as 404 (not propagate to the generic 500 handler).
+
+    Rationale: the cache root is shared with the legacy labeler under
+    D-003 — half-finished writes, broken symlinks, and permission
+    glitches are normal-mode-of-operation occurrences. They must NOT
+    leak as 500 with a stack trace; the route should return the same
+    "not found" status as a missing key.
+    """
+
+    class _RaisingStorage:
+        async def get_bytes(self, key: str) -> bytes:  # noqa: ARG002
+            raise exc
+
+    s = Settings(
+        config_root=tmp_path / "config",
+        data_root=tmp_path / "data",
+        cache_root=tmp_path / "cache",
+        mode="normal",
+    )
+    app = build_app(s)
+    app.state.storage = _RaisingStorage()
+    with TestClient(app) as client:
+        r = client.get("/image-cache/whatever.png")
+    assert r.status_code == 404, r.content
+
+
 def test_image_cache_disabled_in_api_only_mode(tmp_path: Path) -> None:
     """``api_only`` mode skips the SPA bundle, /env.js, AND /image-cache."""
     s = Settings(

@@ -94,7 +94,17 @@ def install_image_cache(app: FastAPI) -> None:
             # a missing key produces — so the rejection isn't an oracle
             # for "this key would have escaped if it existed".
             raise HTTPException(status_code=404, detail="not found") from None
-        except FileNotFoundError:
+        except OSError:
+            # B-57: covers FileNotFoundError, IsADirectoryError,
+            # PermissionError, broken-symlink OSError, etc. The cache
+            # root is shared with the legacy labeler under D-003, so
+            # mid-write / partial / permission-glitched files are a
+            # normal-mode-of-operation possibility — they must surface
+            # as a clean 404, not propagate to the generic 500 handler
+            # (which would also leak the cache key into the response
+            # body until B-51 lands). Logged at debug so operators with
+            # a real disk problem still get a server-side breadcrumb.
+            log.debug("Image cache read failed for key=%r", key, exc_info=True)
             raise HTTPException(status_code=404, detail="not found") from None
 
         # Cache-Control: served images are content-addressed (page hashes
