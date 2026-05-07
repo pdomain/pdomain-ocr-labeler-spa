@@ -72,8 +72,61 @@ _NUMERIC_STEM_RE = re.compile(r"^(\d+)(\.\w+)?$")
 
 __all__ = [
     "PAGES_MANIFEST_FILENAME",
+    "find_ground_truth_text",
     "load_ground_truth_from_directory",
 ]
+
+
+def find_ground_truth_text(name: str, ground_truth_map: dict[str, str]) -> str | None:
+    """Variant lookup of GT text for a page filename.
+
+    Legacy parity: ``pd-ocr-labeler/pd_ocr_labeler/state/project_state.py``
+    lines 1674-1722 (``ProjectState.find_ground_truth_text``). The
+    ``ground_truth_map`` is the post-normalization dict produced by
+    :func:`load_ground_truth_from_directory`, which already adds
+    lowercase + extension-tolerant aliases via ``setdefault``. This
+    helper still tries multiple variants in priority order so a caller
+    holding an arbitrary path-or-filename can find the entry without
+    pre-normalising.
+
+    Variants attempted (first hit wins):
+
+    1. ``name`` verbatim (after ``.strip()``)
+    2. ``name.lower()``
+    3. basename of ``name`` (Pathlib ``.name``)
+    4. basename lowercase
+    5. (if basename has a ``.``) bare stem
+    6. bare stem lowercase
+
+    Returns ``None`` if ``name`` is empty/whitespace, or no variant
+    matches. Never raises.
+    """
+    if not name:
+        return None
+    normalized_name = str(name).strip()
+    if not normalized_name:
+        return None
+
+    basename = Path(normalized_name).name
+    candidates: list[str] = [
+        normalized_name,
+        normalized_name.lower(),
+        basename,
+        basename.lower(),
+    ]
+    if "." in basename:
+        base = basename.rsplit(".", 1)[0]
+        candidates.append(base)
+        candidates.append(base.lower())
+
+    seen: set[str] = set()
+    for c in candidates:
+        if c in seen:
+            continue
+        seen.add(c)
+        if c in ground_truth_map:
+            return ground_truth_map[c]
+    return None
 
 
 def load_ground_truth_from_directory(directory: Path) -> dict[str, str]:

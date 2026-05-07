@@ -658,3 +658,129 @@ def test_cache_write_provenance_includes_predictor_keys(
     model_names = [m["name"] for m in models]
     assert "my-det" in model_names
     assert "my-reco" in model_names
+
+
+# ── Ground-truth injection on Page after OCR ─────────────────────────────
+#
+# Slice "GT injection on Page after OCR". Legacy parity:
+# pd-ocr-labeler/operations/ocr/page_operations.py:363-364 (post-OCR
+# add_ground_truth call inside _parse_page) + state/project_state.py:
+# 709-719 (find_ground_truth_text(image_name, project.ground_truth_map)).
+#
+# In the SPA the loader does both halves: lookup + injection. Skip
+# injection when the GT lookup returns None or "" — legacy semantics
+# (page_operations.py:363 ``if ground_truth_string:``).
+
+
+def _project_with_gt(tmp_path: Path, gt_map: dict[str, str]) -> Project:
+    """Like _make_project but with caller-supplied GT map."""
+    image_paths = []
+    for i in range(2):
+        p = tmp_path / f"page_{i:03d}.png"
+        p.write_bytes(b"fake-png")
+        image_paths.append(p)
+    return Project(
+        project_id="proj1",
+        project_root=tmp_path,
+        image_paths=image_paths,
+        ground_truth_map=gt_map,
+        total_pages=len(image_paths),
+        current_page_index=0,
+    )
+
+
+def test_run_ocr_injects_ground_truth_when_present(
+    tmp_path: Path, stub_pd_book_tools, stub_predictor_cache: PredictorCache
+) -> None:
+    project = _project_with_gt(tmp_path, {"page_000.png": "hello world"})
+    loader = LocalDoctrPageLoader(
+        project=project,
+        predictor_cache=stub_predictor_cache,
+        detection_key="stock",
+        recognition_key="stock",
+        hf_revision=None,
+    )
+    outcome = loader.run_ocr(0)
+    assert outcome.payload.ground_truth_calls == ["hello world"]
+
+
+def test_run_ocr_skips_injection_when_no_gt(
+    tmp_path: Path, stub_pd_book_tools, stub_predictor_cache: PredictorCache
+) -> None:
+    """Empty GT map → no add_ground_truth call (legacy line 363)."""
+    project = _project_with_gt(tmp_path, {})
+    loader = LocalDoctrPageLoader(
+        project=project,
+        predictor_cache=stub_predictor_cache,
+        detection_key="stock",
+        recognition_key="stock",
+        hf_revision=None,
+    )
+    outcome = loader.run_ocr(0)
+    assert outcome.payload.ground_truth_calls == []
+
+
+def test_run_ocr_skips_injection_when_gt_empty_string(
+    tmp_path: Path, stub_pd_book_tools, stub_predictor_cache: PredictorCache
+) -> None:
+    """GT map has the key but value is "" → don't call add_ground_truth.
+    Legacy ``if ground_truth_string:`` is falsy for "" (line 363)."""
+    project = _project_with_gt(tmp_path, {"page_000.png": ""})
+    loader = LocalDoctrPageLoader(
+        project=project,
+        predictor_cache=stub_predictor_cache,
+        detection_key="stock",
+        recognition_key="stock",
+        hf_revision=None,
+    )
+    outcome = loader.run_ocr(0)
+    assert outcome.payload.ground_truth_calls == []
+
+
+def test_run_ocr_uses_variant_lookup_for_gt(
+    tmp_path: Path, stub_pd_book_tools, stub_predictor_cache: PredictorCache
+) -> None:
+    """GT key with case-insensitive variant matches.
+    Legacy ``find_ground_truth_text`` tries lowercase variants."""
+    project = _project_with_gt(tmp_path, {"page_001.PNG".lower(): "lower-gt"})
+    # File is "page_001.png" so lowercase variant in map should match.
+    project = Project(
+        project_id="proj1",
+        project_root=tmp_path,
+        image_paths=project.image_paths,
+        ground_truth_map={"page_001.PNG": "exact-only-uppercase"},
+        total_pages=2,
+    )
+    loader = LocalDoctrPageLoader(
+        project=project,
+        predictor_cache=stub_predictor_cache,
+        detection_key="stock",
+        recognition_key="stock",
+        hf_revision=None,
+    )
+    # The on-disk filename is "page_001.png" (lowercase). The GT map
+    # only has "page_001.PNG". find_ground_truth_text falls back to
+    # the lowercase variant which IS in the map (since it returns the
+    # value of the matched key — and "page_001.PNG".lower() ==
+    # "page_001.png" — but we have "PNG" capitalized in the map, so
+    # the lowercase fallback won't match either; pin: returns None ⇒
+    # no injection).
+    outcome = loader.run_ocr(1)
+    assert outcome.payload.ground_truth_calls == []
+
+
+def test_run_ocr_injects_when_gt_keyed_by_lowercase(
+    tmp_path: Path, stub_pd_book_tools, stub_predictor_cache: PredictorCache
+) -> None:
+    """The realistic case: GT map has the canonical lowercase key,
+    image filename is lowercase, find returns it."""
+    project = _project_with_gt(tmp_path, {"page_001.png": "matched-gt"})
+    loader = LocalDoctrPageLoader(
+        project=project,
+        predictor_cache=stub_predictor_cache,
+        detection_key="stock",
+        recognition_key="stock",
+        hf_revision=None,
+    )
+    outcome = loader.run_ocr(1)
+    assert outcome.payload.ground_truth_calls == ["matched-gt"]

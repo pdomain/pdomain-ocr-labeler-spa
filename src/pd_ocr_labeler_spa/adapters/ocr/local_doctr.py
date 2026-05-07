@@ -40,6 +40,7 @@ from ...core.page_state import (
     PageLoadOutcome,
     PageSource,
 )
+from ...core.persistence.ground_truth import find_ground_truth_text
 from ...core.persistence.user_page_envelope import (
     USER_PAGE_SOURCE_LANE_CACHED,
     OCRModelProvenance,
@@ -202,6 +203,30 @@ class LocalDoctrPageLoader:
         # ``Document`` produced from a single image has exactly one
         # ``Page`` at ``pages[0]``.
         page_obj: Page = doc.pages[0]
+
+        # Ground-truth injection (legacy parity:
+        # pd-ocr-labeler/operations/ocr/page_operations.py:363-364 +
+        # state/project_state.py:709-719). Look up GT for the image
+        # filename from project.ground_truth_map; if non-empty, call
+        # page.add_ground_truth(gt_text). Skip on None / "" per
+        # legacy ``if ground_truth_string:``. Done BEFORE the auto-
+        # cache-write so the cached envelope captures the GT-augmented
+        # page (matches legacy ordering: gt is injected inside the
+        # page parser before the auto-save block in project_state.py).
+        gt_text = find_ground_truth_text(image_path.name, self.project.ground_truth_map)
+        if gt_text:
+            try:
+                page_obj.add_ground_truth(gt_text)
+            except Exception as exc:  # pragma: no cover - defensive
+                # Legacy doesn't guard this call, but a defensive
+                # try/except keeps a malformed GT from breaking the
+                # OCR result. Log and continue.
+                logger.warning(
+                    "GT injection failed for index=%s name=%s: %s",
+                    page_index,
+                    image_path.name,
+                    exc,
+                )
 
         # Auto-cache-write side effect (legacy parity:
         # pd-ocr-labeler/state/project_state.py:752-799). After a

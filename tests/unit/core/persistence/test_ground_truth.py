@@ -388,3 +388,60 @@ def test_pages_json_passes_values_through_pgdp_normalizer(tmp_path: Path) -> Non
     # confirms the per-entry loop completed (which means PGDPResults
     # was called).
     assert result["001.png"] == "plain ascii text"
+
+
+# ── find_ground_truth_text helper (slice "GT injection") ─────────────────
+#
+# Pure variant-lookup helper. Legacy parity:
+# pd-ocr-labeler/state/project_state.py:1674-1722
+# (find_ground_truth_text). Order of attempted keys:
+# normalized name → normalized lowercase → basename → basename lower →
+# (if has extension) bare stem → bare stem lower.
+
+from pd_ocr_labeler_spa.core.persistence.ground_truth import (  # noqa: E402
+    find_ground_truth_text,
+)
+
+
+def test_find_gt_returns_none_on_empty_name() -> None:
+    assert find_ground_truth_text("", {"x": "y"}) is None
+
+
+def test_find_gt_returns_none_on_whitespace_name() -> None:
+    assert find_ground_truth_text("   ", {"x": "y"}) is None
+
+
+def test_find_gt_returns_none_on_no_match() -> None:
+    assert find_ground_truth_text("missing.png", {"other.png": "x"}) is None
+
+
+def test_find_gt_direct_match() -> None:
+    assert find_ground_truth_text("001.png", {"001.png": "hello"}) == "hello"
+
+
+def test_find_gt_lowercase_match() -> None:
+    """Legacy: tries lowercase variant if exact match fails."""
+    assert find_ground_truth_text("001.PNG", {"001.png": "hi"}) == "hi"
+
+
+def test_find_gt_basename_match() -> None:
+    """Legacy: when given a path-shaped name, basename is tried."""
+    assert find_ground_truth_text("/abs/path/001.png", {"001.png": "yo"}) == "yo"
+
+
+def test_find_gt_extensionless_match() -> None:
+    """Legacy: when name has extension, the bare stem is also tried."""
+    assert find_ground_truth_text("001.png", {"001": "ok"}) == "ok"
+
+
+def test_find_gt_extensionless_lowercase_match() -> None:
+    assert find_ground_truth_text("001.PNG", {"001": "ok"}) == "ok"
+
+
+def test_find_gt_priority_direct_over_lowercase() -> None:
+    """Direct match wins even when lowercase variant also exists."""
+    result = find_ground_truth_text(
+        "001.PNG",
+        {"001.PNG": "exact", "001.png": "lower"},
+    )
+    assert result == "exact"
