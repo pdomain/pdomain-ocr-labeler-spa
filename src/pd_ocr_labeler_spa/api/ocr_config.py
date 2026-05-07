@@ -58,8 +58,12 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..core.hf_probe import fetch_hf_last_modified
-from ..core.model_discovery import discover_local_pairs, pairs_to_model_option_records
+from ..core.hf_probe import HF_DEFAULT_REPO, fetch_hf_last_modified
+from ..core.model_discovery import (
+    LocalModelPair,
+    discover_local_pairs,
+    pairs_to_model_option_records,
+)
 from ..core.model_selection import HF_LATEST_KEY, ModelOptionRecord, pick_default_keys
 from ..core.ocr_config_state import OCRConfigCarrier
 from ..core.ocr_models import GetOCRConfigResponse, OCRModelOption, SetOCRModelsRequest
@@ -122,6 +126,26 @@ def _resolve_local_models_root() -> Path:
     return base_dir / MODEL_STORE_DIRNAME
 
 
+def _gather_pairs_and_records() -> tuple[list[LocalModelPair], list[ModelOptionRecord]]:
+    """Discovery-pipeline output kept as a paired result so the router
+    can build option lists (which need the local pair's ``profile`` /
+    ``signature`` for the legacy-style label) AND the picker's record
+    list (which only needs the abstract triple) without walking twice.
+    """
+    hf_record = ModelOptionRecord(
+        key=HF_LATEST_KEY,
+        source="huggingface",
+        hf_last_modified=fetch_hf_last_modified(),
+        local_mtime=None,
+        has_detection=True,
+        has_recognition=True,
+        is_preferred_profile=False,
+    )
+    local_pairs = discover_local_pairs(_resolve_local_models_root())
+    local_records = pairs_to_model_option_records(local_pairs)
+    return local_pairs, [hf_record, *local_records]
+
+
 def _gather_records() -> list[ModelOptionRecord]:
     """Build the ``ModelOptionRecord`` list fed to ``pick_default_keys``.
 
@@ -148,25 +172,110 @@ def _gather_records() -> list[ModelOptionRecord]:
     return [hf_record, *local_records]
 
 
+def _build_option_lists(
+    local_pairs: list[LocalModelPair],
+    *,
+    selected_detection: str,
+    selected_recognition: str,
+) -> tuple[list[OCRModelOption], list[OCRModelOption]]:
+    """Build the wire-shaped detection / recognition option lists.
+
+    Slice 8c-v-a: surfaces stock + HF (always) + one entry per local
+    pair. Labels mirror legacy
+    ``pd_ocr_labeler/operations/ocr/model_selection_operations.py``:
+
+    - HF: ``f"Hugging Face: {HF_DEFAULT_REPO} (latest)"`` (legacy line 353).
+    - Local: ``f"{profile}: {signature}"`` (legacy line 288).
+
+    ``is_default=True`` is set on whichever option matches the currently
+    selected key — this lets the modal render the selection without
+    diffing keys client-side. (For now both detection and recognition
+    use the same option-list shape; if a divergent shape ever surfaces,
+    each list could be built independently — but legacy uses identical
+    catalogs, so we replicate that.)
+    """
+    hf_label = f"Hugging Face: {HF_DEFAULT_REPO} (latest)"
+    hf_option_det = OCRModelOption(
+        key=HF_LATEST_KEY,
+        label=hf_label,
+        source="huggingface",
+        is_default=(selected_detection == HF_LATEST_KEY),
+    )
+    hf_option_reco = OCRModelOption(
+        key=HF_LATEST_KEY,
+        label=hf_label,
+        source="huggingface",
+        is_default=(selected_recognition == HF_LATEST_KEY),
+    )
+
+    detection_options: list[OCRModelOption] = [
+        OCRModelOption(
+            key=_STOCK_DETECTION.key,
+            label=_STOCK_DETECTION.label,
+            source=_STOCK_DETECTION.source,
+            is_default=(selected_detection == _STOCK_DETECTION.key),
+        ),
+        hf_option_det,
+    ]
+    recognition_options: list[OCRModelOption] = [
+        OCRModelOption(
+            key=_STOCK_RECOGNITION.key,
+            label=_STOCK_RECOGNITION.label,
+            source=_STOCK_RECOGNITION.source,
+            is_default=(selected_recognition == _STOCK_RECOGNITION.key),
+        ),
+        hf_option_reco,
+    ]
+
+    for pair in local_pairs:
+        local_label = f"{pair.profile}: {pair.signature}"
+        detection_options.append(
+            OCRModelOption(
+                key=pair.key,
+                label=local_label,
+                source="local",
+                is_default=(selected_detection == pair.key),
+            )
+        )
+        recognition_options.append(
+            OCRModelOption(
+                key=pair.key,
+                label=local_label,
+                source="local",
+                is_default=(selected_recognition == pair.key),
+            )
+        )
+
+    return detection_options, recognition_options
+
+
 def _build_snapshot(
     selected_detection: str,
     selected_recognition: str,
     hf_pinned_revision: str | None,
 ) -> GetOCRConfigResponse:
-    """Compose a ``GetOCRConfigResponse`` from the stock option lists +
+    """Compose a ``GetOCRConfigResponse`` from the surfaced option lists +
     a real ``selection_reason`` derived from the discovery pipeline.
 
-    The caller picks ``selected_detection`` / ``selected_recognition``
-    from the exposed (still stock-only) option lists; this helper is
-    not responsible for reconciling those with the picker's output.
-    Slice 8c-iv+ will wire selection through the carrier; today the
-    picker's job is purely to compute ``selection_reason`` honestly.
+    Slice 8c-v-a: option lists now include stock + HF (always) + zero-or-
+    more local pairs. The caller's ``selected_*`` keys must be present
+    in the corresponding option list (the route-level POST validation
+    enforces this); selection is never silently rewritten here.
+
+    Slice 8c-iii-c's ``selection_reason`` contract still applies — the
+    picker's reason is honest about what *would* be the default; the
+    user's actual selection (``selected_*``) is sourced from the carrier.
     """
-    records = _gather_records()
+    local_pairs, records = _gather_pairs_and_records()
     _, _, reason = pick_default_keys(records)
+    detection_options, recognition_options = _build_option_lists(
+        local_pairs,
+        selected_detection=selected_detection,
+        selected_recognition=selected_recognition,
+    )
     return GetOCRConfigResponse(
-        detection_options=[_STOCK_DETECTION],
-        recognition_options=[_STOCK_RECOGNITION],
+        detection_options=detection_options,
+        recognition_options=recognition_options,
         selected_detection=selected_detection,
         selected_recognition=selected_recognition,
         hf_pinned_revision=hf_pinned_revision,
@@ -229,8 +338,20 @@ def post_ocr_config_models(
     Unknown keys → 400. The wire body's ``selection_reason`` is the
     slice-8c-iii-c picker output.
     """
-    detection_keys = {_STOCK_DETECTION.key}
-    recognition_keys = {_STOCK_RECOGNITION.key}
+    # Slice 8c-v-a: validate against the *currently surfaced* option
+    # lists, not just stock. The discovery pipeline is the single source
+    # of truth for legitimate keys; gating POST against the same set of
+    # records `_build_snapshot` would surface keeps the GET/POST contract
+    # in sync (e.g. a key that wouldn't appear in a subsequent GET can't
+    # be POSTed). HF key + every discovered local pair key are accepted.
+    local_pairs, _ = _gather_pairs_and_records()
+    detection_options, recognition_options = _build_option_lists(
+        local_pairs,
+        selected_detection=req.detection_key,
+        selected_recognition=req.recognition_key,
+    )
+    detection_keys = {opt.key for opt in detection_options}
+    recognition_keys = {opt.key for opt in recognition_options}
     if req.detection_key not in detection_keys:
         raise HTTPException(
             status_code=400,

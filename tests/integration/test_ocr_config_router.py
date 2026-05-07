@@ -149,17 +149,131 @@ def test_get_ocr_config_default_reason_is_hf_unreachable_no_local(
     assert body["selected_recognition"] in rec_keys
 
 
-def test_get_ocr_config_options_are_stock_sourced(client: TestClient) -> None:
-    """Every option in slice 8a has ``source="stock"``.
+def test_get_ocr_config_surfaces_stock_and_hf_options_by_default(
+    client: TestClient,
+) -> None:
+    """Slice 8c-v-a: option lists surface stock + HF (always),
+    plus zero-or-more local pairs from discovery.
 
-    Same scope reason as ``test_get_ocr_config_slice8a_stock_fallback``:
-    no HF probe / no local scan → no ``"huggingface"`` or ``"local"``
-    options can legitimately appear.
+    Legacy parity (legacy ``model_selection_operations.py`` line 351):
+    the HF option is *always* present even when the hub is unreachable —
+    the user can still pick it and get a "would use HF if online" UX
+    affordance. With the no-network fixture (HF probe → ``None``, empty
+    local-models root), the option lists therefore contain exactly stock
+    + huggingface, both for detection and recognition.
     """
     resp = client.get("/api/ocr-config")
     body = resp.json()
-    for opt in body["detection_options"] + body["recognition_options"]:
-        assert opt["source"] == "stock", opt
+    for label, options in (
+        ("detection_options", body["detection_options"]),
+        ("recognition_options", body["recognition_options"]),
+    ):
+        sources = [opt["source"] for opt in options]
+        assert "stock" in sources, (label, options)
+        assert "huggingface" in sources, (label, options)
+        # In the empty-local-tree fixture, no local options expected.
+        assert "local" not in sources, (label, options)
+
+
+def test_get_ocr_config_hf_option_uses_legacy_label(client: TestClient) -> None:
+    """HF option label mirrors legacy
+    ``f"Hugging Face: {HF_DEFAULT_REPO} (latest)"`` (legacy line 353)
+    so the modal renders the same string operators are used to.
+    """
+    from pd_ocr_labeler_spa.core.hf_probe import HF_DEFAULT_REPO
+
+    resp = client.get("/api/ocr-config")
+    body = resp.json()
+    expected_label = f"Hugging Face: {HF_DEFAULT_REPO} (latest)"
+    for options in (body["detection_options"], body["recognition_options"]):
+        hf = next((o for o in options if o["source"] == "huggingface"), None)
+        assert hf is not None
+        assert hf["key"] == "huggingface"
+        assert hf["label"] == expected_label
+
+
+def test_get_ocr_config_surfaces_local_pairs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Slice 8c-v-a: a discovered local pair surfaces as one option in
+    each list with ``source="local"`` and ``key="<profile>/<signature>"``.
+
+    Legacy label parity (legacy line 288): ``f"{profile}: {signature}"``.
+    """
+    from pd_ocr_labeler_spa.api import ocr_config as _ocr_config_mod
+
+    profile = tmp_path / "models" / "all"
+    (profile / "detection").mkdir(parents=True)
+    (profile / "recognition").mkdir(parents=True)
+    (profile / "detection" / "all-detection-base-1700000000.pt").write_bytes(b"x")
+    (profile / "recognition" / "all-recognition-base-1700000000.pt").write_bytes(b"x")
+
+    monkeypatch.setattr(_ocr_config_mod, "fetch_hf_last_modified", lambda: None)
+    monkeypatch.setattr(_ocr_config_mod, "_resolve_local_models_root", lambda: tmp_path / "models")
+
+    settings = _make_settings(tmp_path)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        body = c.get("/api/ocr-config").json()
+
+    for options in (body["detection_options"], body["recognition_options"]):
+        local = next((o for o in options if o["source"] == "local"), None)
+        assert local is not None, options
+        assert local["key"] == "all/all-base-1700000000"
+        assert local["label"] == "all: all-base-1700000000"
+
+
+def test_post_ocr_config_models_accepts_huggingface_key(client: TestClient) -> None:
+    """Slice 8c-v-a: POST accepts ``"huggingface"`` as detection/recognition
+    key now that the option list surfaces it. Pre-slice the only valid key
+    was ``"stock"`` (legacy POST 400 → still applies for unknown keys).
+    """
+    resp = client.post(
+        "/api/ocr-config/models",
+        json={
+            "detection_key": "huggingface",
+            "recognition_key": "huggingface",
+            "hf_pinned_revision": None,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["selected_detection"] == "huggingface"
+    assert body["selected_recognition"] == "huggingface"
+
+
+def test_post_ocr_config_models_accepts_discovered_local_key(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Slice 8c-v-a: a key surfaced as a local option may be POSTed."""
+    from pd_ocr_labeler_spa.api import ocr_config as _ocr_config_mod
+
+    profile = tmp_path / "models" / "all"
+    (profile / "detection").mkdir(parents=True)
+    (profile / "recognition").mkdir(parents=True)
+    (profile / "detection" / "all-detection-base-1700000000.pt").write_bytes(b"x")
+    (profile / "recognition" / "all-recognition-base-1700000000.pt").write_bytes(b"x")
+
+    monkeypatch.setattr(_ocr_config_mod, "fetch_hf_last_modified", lambda: None)
+    monkeypatch.setattr(_ocr_config_mod, "_resolve_local_models_root", lambda: tmp_path / "models")
+
+    settings = _make_settings(tmp_path)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        local_key = "all/all-base-1700000000"
+        resp = c.post(
+            "/api/ocr-config/models",
+            json={
+                "detection_key": local_key,
+                "recognition_key": local_key,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["selected_detection"] == local_key
+        assert body["selected_recognition"] == local_key
 
 
 def test_get_ocr_config_hf_pinned_revision_unset(client: TestClient) -> None:
