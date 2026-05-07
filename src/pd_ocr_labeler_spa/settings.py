@@ -114,3 +114,16 @@ class Settings(BaseSettings):
 
     no_prefetch: bool = False
     """When True, skip the startup model-prefetch step — M3-deferred consumer."""
+
+    # ── Error-handler debug surface (specs/02-backend.md §8 / D-040) ─────────
+    # Q-A11 (resolved 2026-05-07, option B): the unhandled-`Exception`
+    # 500 envelope's ``details`` field surfaces the last 3 traceback
+    # lines on a single-user laptop (default) but can be redacted on
+    # any deployment that doesn't trust its clients. The full traceback
+    # always reaches the server log via ``logger.exception`` — this
+    # flag governs only what crosses the wire to the browser.
+    debug_unhandled_traceback: bool = True
+    """When True (default), the catch-all 500 envelope includes the last 3
+    traceback lines as ``details``. When False, ``details`` is ``None`` —
+    operators must correlate via the ``X-Request-ID`` header against the
+    server-side ``logger.exception`` line. See D-040 + spec §8."""

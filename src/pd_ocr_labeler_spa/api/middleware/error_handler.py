@@ -18,9 +18,12 @@ Handler chain (per ``specs/02-backend.md §8``):
 4. ``Exception`` (catch-all) → ``500 internal_error``. The full
    traceback is logged via ``logger.exception(...)`` so operators see
    the full stack with the request-id prefixed by ``RequestIdFilter``.
-   Only the last three traceback lines are surfaced to the client —
-   enough to triage from a browser console without leaking the full
-   server-side call graph.
+   Whether the last three traceback lines reach the client in
+   ``details`` is gated on ``Settings.debug_unhandled_traceback``
+   (default ``True`` — single-user laptop UX inherited from pgdp-prep).
+   When the flag is ``False`` (D-040, Q-A11 option B), ``details`` is
+   ``None`` and operators must correlate the client-side ``error``
+   with the server-side log via the ``X-Request-ID`` header.
 
 Response envelope (uniform across all four handlers — the SPA's
 ``client.ts`` parses one shape):
@@ -122,17 +125,25 @@ def install_error_handlers(app: FastAPI) -> None:
         # ``logger.exception`` emits the full traceback at ERROR level
         # — combined with ``RequestIdFilter`` the operator gets one log
         # line per request with the correlation id and the full stack.
+        # This fires UNCONDITIONALLY: even when the client-side
+        # ``details`` is redacted (D-040), operators correlate via the
+        # X-Request-ID header against this log line.
         log.exception("unhandled exception in %s %s", request.method, request.url.path)
-        # Surface only the LAST 3 traceback lines to the client. Enough
-        # for a browser-console "where did this fail" without leaking
-        # the full call graph (security: don't help a probe map our
-        # internals; UX: enough to correlate with server logs by line
-        # number / function name).
+        # The ``details`` field is gated on
+        # ``Settings.debug_unhandled_traceback`` (D-040, Q-A11). Default
+        # True keeps single-user-laptop UX (browser-console triage).
+        # Read from ``request.app.state.settings`` — set by
+        # ``bootstrap.build_app`` step 1; falls back to ``True`` if the
+        # app was constructed without going through bootstrap (defensive
+        # — the test harness builds bare FastAPI apps in a few places).
+        settings = getattr(request.app.state, "settings", None)
+        debug_traceback = getattr(settings, "debug_unhandled_traceback", True)
+        details = traceback.format_exc().splitlines()[-3:] if debug_traceback else None
         return JSONResponse(
             status_code=500,
             content=ApiError(
                 error="internal_error",
                 message=str(exc) or exc.__class__.__name__,
-                details=traceback.format_exc().splitlines()[-3:],
+                details=details,
             ).model_dump(),
         )
