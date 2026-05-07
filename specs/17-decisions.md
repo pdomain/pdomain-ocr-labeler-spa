@@ -682,6 +682,19 @@ on next legacy save.
 
 ---
 
+## D-033 — Q14 normalization toggle: project-level OCR config
+
+**Date.** 2026-05-07. Resolves Q-A2.
+
+**Decision.** Adopt option (A): the "Normalize for GT matching"
+toggle lives in the OCR config modal and persists in `OCRConfig`.
+Whole-project scope; books are typographically homogeneous within
+themselves, so per-page toggling is unnecessary churn.
+
+**Refs.** [`OPEN_QUESTIONS.md Q-A2`](../OPEN_QUESTIONS.md), [`18-text-normalization.md`](18-text-normalization.md) §Implementation.
+
+---
+
 ## Pending decisions
 
 See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for any sub-questions

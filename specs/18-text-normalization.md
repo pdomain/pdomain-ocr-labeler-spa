@@ -8,8 +8,8 @@ ground-truth conventions used by PGDP and DocTR training corpora.
 > ADR — [`17-decisions.md`](17-decisions.md) D-025 (this is the
 > source of truth; this spec elaborates).
 > Implementation home — **pd-book-tools** (`pd_book_tools.text.normalize`)
-> Open sub-questions — [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md)
-> Q-A2 (toggle scope).
+> Toggle scope decided by [D-033](17-decisions.md) (project-level,
+> persisted in `OCRConfig`); resolves Q-A2.
 
 ---
 

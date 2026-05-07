@@ -14,28 +14,6 @@ the user has answered, a **Resolution** line linking the resulting ADR.
 
 ## Open — needs user input
 
-### Q-A2. Q14 normalization toggle scope?
-
-**Context.** D-025 (normalization in pd-book-tools, opt-in everywhere).
-The labeler can opt the **comparison** path into normalization-aware
-GT matching so `ſhall` matches `shall` as exact. Where does the
-toggle live?
-
-**Options.**
-
-- **(A)** Project-level: a checkbox in OCR config modal "Normalize for
-  GT matching". Persisted in `OCRConfig`. Applies to the whole project.
-- **(B)** Per-page: a toggle near the line filter. Each page can
-  differ.
-- **(C)** Global setting in `usePrefsStore`. Persisted per-browser.
-- **(D)** Off in v1; surface in M9 polish only after we have data.
-
-**Recommendation.** **(A)** project-level. Books are typographically
-homogeneous within themselves; per-page toggling is unnecessary
-churn.
-
-**Blocks.** [`18-text-normalization.md`](specs/18-text-normalization.md) §Implementation, M9 polish.
-
 ### Q-A3. Q18 rotation indicator UI placement?
 
 **Context.** D-029 adds a rotation indicator. Where?
@@ -374,6 +352,7 @@ in [`specs/17-decisions.md`](specs/17-decisions.md).
 | Q19 | URL grammar | pgdp-prep style with `index/{idx0}` and `pageno/{n}` sub-routes + 301 redirect from legacy | [D-030](specs/17-decisions.md) |
 | Q20 | Auto-open browser | (C) auto-open with `--no-browser` opt-out | [D-031](specs/17-decisions.md) |
 | Q-A1 | Auto-rotation envelope bump | (A) v2.2 additive (`source.rotation_degrees`/`rotation_source`); fall back to (B) sidecar if legacy `Source` rejects extras (resolved 2026-05-07) | [D-032](specs/17-decisions.md) |
+| Q-A2 | Q14 normalization toggle scope | (A) project-level checkbox in OCR config modal, persisted in `OCRConfig` (resolved 2026-05-07) | [D-033](specs/17-decisions.md) |
 
 ### Delegations to peer-repo agents (2026-05-06)
 
