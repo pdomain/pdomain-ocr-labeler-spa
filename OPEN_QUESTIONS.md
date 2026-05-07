@@ -14,42 +14,6 @@ the user has answered, a **Resolution** line linking the resulting ADR.
 
 ## Open — needs user input
 
-### Q-A9. ESLint flavor + config shape for the SPA frontend
-
-**Filed.** 2026-05-06 (iter 8, in conjunction with B-05 fix).
-
-**Context.** B-05 (iter 5 review) flagged the dangling
-`"lint": "eslint . --ext .ts,.tsx"` script in
-`frontend/package.json` — the script was declared but `eslint` was
-not in `devDependencies`. Iter 8 fixed B-05 by **dropping the
-script entirely** rather than picking an ESLint configuration
-unilaterally. `specs/16-milestones.md:51` lists `eslint.config.ts`
-as an M0 file (still pending) and `specs/16-milestones.md:85`
-includes "ESLint and ruff pass clean" in the M0 acceptance gate, so
-the script must come back before M0 closes. The peer
-`pd-prep-for-pgdp/frontend/package.json` has the **same dangling
-script** and no eslint installed — i.e. the peer doesn't resolve
-this question for us.
-
-**Question.** When ESLint lands, which config shape do we adopt?
-- (A) Flat config (`eslint.config.ts`) with the
-  `typescript-eslint` v8 + `@vitejs/plugin-react` recommended
-  presets and Vite/React 19 defaults. (Spec wording matches.)
-- (B) Legacy `.eslintrc.cjs` for parity with whatever the
-  workspace owner runs in other projects (pgdp-prep doesn't have
-  one, so this is a guess).
-- (C) Skip ESLint entirely; rely on `tsc -b` + Prettier-via-ruff
-  parity. Would require updating `specs/16-milestones.md:85` to
-  drop the ESLint clause.
-
-**Resolution path.** Pick (A) by default — spec already names
-`eslint.config.ts`. Land the config + devDeps + restore the `lint`
-script in a single iteration so the regression test in
-`tests/unit/test_frontend_config.py` can flip from "if lint exists
-then eslint must be installed" to "lint must exist".
-
-**Blocks.** M0 acceptance gate clause "ESLint passes clean".
-
 ### Q-A10. PyPI publishing for `pd-ocr-labeler-spa`?
 
 **Context.** Iter 24 landed `.github/workflows/release.yml`, which on
@@ -264,6 +228,7 @@ in [`specs/17-decisions.md`](specs/17-decisions.md).
 | Q-A3 | Rotation indicator UI placement | (B) separate badge next to source pill + tooltip showing source; manual-rotate button also gets a state tooltip (resolved 2026-05-07) | [D-034](specs/17-decisions.md) |
 | Q-A4 | Legacy URL redirect status | (A) `301 Moved Permanently` — SPA routes are GET, broadest client support (resolved 2026-05-07) | [D-035](specs/17-decisions.md) |
 | Q-A8 | Frontend toolchain | mise installed; Node 24 from `mise.toml`. `mise install` + `npm ci` is canonical. Supersedes ghcr.io devcontainer-feature suggestion (resolved 2026-05-07) | [D-036](specs/17-decisions.md) |
+| Q-A9 | ESLint config shape | (A) flat `eslint.config.ts` + typescript-eslint v8 + `@vitejs/plugin-react` recommended (resolved 2026-05-07) | [D-037](specs/17-decisions.md) |
 
 ### Delegations to peer-repo agents (2026-05-06)
 

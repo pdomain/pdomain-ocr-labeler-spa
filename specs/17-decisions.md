@@ -743,6 +743,24 @@ clauses are unblocked.
 
 ---
 
+## D-037 — ESLint flat config (`eslint.config.ts`) with typescript-eslint v8
+
+**Date.** 2026-05-07. Resolves Q-A9.
+
+**Decision.** Adopt option (A): a flat config at
+`frontend/eslint.config.ts` using `typescript-eslint` v8 +
+`@vitejs/plugin-react` recommended presets. `specs/16-milestones.md`
+already names `eslint.config.ts` as an M0 file; this commits the
+shape. The `lint` script in `frontend/package.json` is restored in the
+same change that lands the config + devDeps so the M0 acceptance
+clause "ESLint passes clean" becomes verifiable. The shape-pin test
+in `tests/unit/test_frontend_config.py` flips from "if `lint` exists
+then eslint must be installed" to "`lint` must exist".
+
+**Refs.** [`OPEN_QUESTIONS.md Q-A9`](../OPEN_QUESTIONS.md), [`16-milestones.md`](16-milestones.md) §M0.
+
+---
+
 ## Pending decisions
 
 See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for any sub-questions
