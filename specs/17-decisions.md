@@ -724,6 +724,25 @@ GET-only, so 308's method-preservation guarantee buys nothing here;
 
 ---
 
+## D-036 — Frontend toolchain via mise
+
+**Date.** 2026-05-07. Resolves Q-A8.
+
+**Decision.** Node 24 is provided via `mise` per `mise.toml`. Once
+`mise install` has run in the devcontainer (or a developer's shell),
+`npm ci` and the rest of the `make frontend-*` targets resolve cleanly
+without further bootstrapping. The `make _npm` macro's `mise exec` →
+PATH fallback stays in place so non-mise environments also work, but
+mise is the canonical path. The previously-floated
+`ghcr.io/devcontainers/features/node:1` devcontainer feature is
+**superseded** — mise is the workspace-wide pin and adding a second
+Node source would diverge from `mise.toml`. M1.h frontend acceptance
+clauses are unblocked.
+
+**Refs.** [`OPEN_QUESTIONS.md Q-A8`](../OPEN_QUESTIONS.md), [`15-deployment-dev.md`](15-deployment-dev.md) §10–11.
+
+---
+
 ## Pending decisions
 
 See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for any sub-questions

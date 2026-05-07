@@ -365,9 +365,12 @@ node = "24"
 python = "3.13"
 ```
 
-`mise install` is optional. `Makefile` dispatches through
-`mise exec` when available, else falls back to PATH (matches pgdp-prep
-`Makefile:104-135`).
+Node is provided via mise per `mise.toml` (D-036; resolves Q-A8). The
+canonical bootstrap is `mise install` then `npm ci`. The `Makefile`'s
+`_npm` macro dispatches through `mise exec` when available and falls
+back to PATH otherwise (matches pgdp-prep `Makefile:104-135`), so a
+developer with their own Node 24 on PATH also works — but the
+workspace-pinned default is mise.
 
 ---
 

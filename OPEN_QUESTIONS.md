@@ -14,59 +14,6 @@ the user has answered, a **Resolution** line linking the resulting ADR.
 
 ## Open — needs user input
 
-### Q-A8. Frontend toolchain availability in dev shell
-
-**Context.** Iteration 2 of the dev /loop scaffolded
-`frontend/` (package.json, tsconfig, vite/vitest configs, App.tsx,
-smoke test) but could not run `npm install` or `npx vitest` — neither
-`node` nor `npm` is on PATH in the current devcontainer. mise (which
-the spec/`mise.toml` plan would pin Node 24 via) is also not installed.
-
-This blocks the M0 acceptance gate clause "frontend `make
-frontend-install` and `make frontend-test` succeed" — the files are
-in place but unverified end-to-end.
-
-**Options.**
-
-- **(A)** Install Node 24 + mise into the devcontainer image (modify
-  `.devcontainer/Dockerfile` upstream of this repo) and re-run
-  `npm install` + `vitest run` from a follow-up iteration.
-- **(B)** Add a one-shot bootstrap script (e.g. `make
-  frontend-install` calls `corepack enable && corepack prepare
-  pnpm@latest --activate` after a manual node install) and document
-  the prerequisite in `DEVELOPMENT.md`.
-- **(C)** Defer to whichever iteration first lands `mise.toml` +
-  Makefile (planned M0 sub-task) and verify there.
-
-**Recommendation.** **(C)** — the next iteration that authors
-`mise.toml` + Makefile is the natural place to also `mise install`
-and verify `vitest run`. Until then the scaffold compiles by
-inspection (mirrors pgdp-prep's working setup) but is not
-runtime-verified.
-
-**Iter 3 update (2026-05-06).** `mise.toml` (Node 24, Python 3.13)
-and `Makefile` (mirrors pd-prep-for-pgdp targets) are now in place.
-The Makefile's `_npm` macro tries `mise exec` then PATH `npm`, and
-fails with a clear error otherwise — so `make frontend-install`
-gives an actionable message in the current devcontainer rather than
-an opaque shell error. **Still unverified end-to-end:** the
-devcontainer has neither `node`/`npm` nor a pre-installed `mise`
-binary (`/home/vscode/.local/bin/mise` does not exist), and
-`make mise-setup` (which downloads mise) requires outbound network
-that may not be available from /loop iterations. Resolution path:
-either (1) run `make mise-setup && make frontend-install` from an
-interactive shell where network is allowed, or (2) add the
-`ghcr.io/devcontainers/features/node:1` feature to
-`/workspaces/ocr-container/.devcontainer/devcontainer.json` (which
-is **outside this repo's edit boundary** — must be done by the
-workspace owner, not this agent).
-
-**Blocks.** M0 acceptance gate clause for frontend tests. (Numbered
-Q-A8 to avoid colliding with reserved Q-A5/A6/A7 in the M11 glyph
-annotations milestone.)
-
----
-
 ### Q-A9. ESLint flavor + config shape for the SPA frontend
 
 **Filed.** 2026-05-06 (iter 8, in conjunction with B-05 fix).
@@ -316,6 +263,7 @@ in [`specs/17-decisions.md`](specs/17-decisions.md).
 | Q-A2 | Q14 normalization toggle scope | (A) project-level checkbox in OCR config modal, persisted in `OCRConfig` (resolved 2026-05-07) | [D-033](specs/17-decisions.md) |
 | Q-A3 | Rotation indicator UI placement | (B) separate badge next to source pill + tooltip showing source; manual-rotate button also gets a state tooltip (resolved 2026-05-07) | [D-034](specs/17-decisions.md) |
 | Q-A4 | Legacy URL redirect status | (A) `301 Moved Permanently` — SPA routes are GET, broadest client support (resolved 2026-05-07) | [D-035](specs/17-decisions.md) |
+| Q-A8 | Frontend toolchain | mise installed; Node 24 from `mise.toml`. `mise install` + `npm ci` is canonical. Supersedes ghcr.io devcontainer-feature suggestion (resolved 2026-05-07) | [D-036](specs/17-decisions.md) |
 
 ### Delegations to peer-repo agents (2026-05-06)
 
