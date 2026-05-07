@@ -50,6 +50,7 @@ LOGS_DIRNAME = "logs"
 PAGE_IMAGES_DIRNAME = "page-images"
 CONFIG_YAML_FILENAME = "config.yaml"
 SESSION_STATE_FILENAME = "session_state.json"
+OCR_CONFIG_FILENAME = "ocr_config.json"
 
 
 def labeled_projects_root(data_root: Path) -> Path:
@@ -80,6 +81,19 @@ def session_state_path(data_root: Path) -> Path:
     See ``session_state.SessionState``.
     """
     return data_root / SESSION_STATE_FILENAME
+
+
+def ocr_config_path(data_root: Path) -> Path:
+    """``<data_root>/ocr_config.json`` — SPA-only OCR model selection sidecar (spec §7a).
+
+    Sibling of ``session_state.json``. Unlike that file, this one is
+    NOT shared with the legacy ``pd-ocr-labeler`` binary — legacy
+    recomputes model selection on every launch. The sidecar persists
+    the in-process ``OCRConfigCarrier`` triple across SPA restarts
+    (M3 slice 8c-iv-b). Field shape + lifecycle in
+    ``core/persistence/ocr_config.py``.
+    """
+    return data_root / OCR_CONFIG_FILENAME
 
 
 def image_cache_root(cache_root: Path) -> Path:
