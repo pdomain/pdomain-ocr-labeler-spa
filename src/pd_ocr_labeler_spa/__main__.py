@@ -272,6 +272,16 @@ def main(argv: list[str] | None = None) -> int:
     host = settings.host
     port = settings.port
 
+    # Surface the resolved torch device so operators running `make run`
+    # can see whether the local GPU was picked up before the OCR
+    # pipeline starts pulling models. ``describe_device()`` never raises
+    # and lazily imports torch, so the cost is bounded and a torch-less
+    # env still boots cleanly. Printed BEFORE the URL so a `tail -1` of
+    # the boot log still surfaces the listen address.
+    from .core.device_info import describe_device
+
+    print(describe_device())
+
     url = f"http://{host}:{port}"
     print(f"Listening on {url}")
 

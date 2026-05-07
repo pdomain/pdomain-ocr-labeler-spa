@@ -102,6 +102,41 @@ def test_short_verbose_flag_counts() -> None:
     assert _parse_args(["--verbose", "--verbose"]).verbose == 2
 
 
+def test_main_prints_device_line_before_listening(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    """``main()`` must print the resolved torch device on a separate line.
+
+    Operators running ``make run`` need to know whether torch picked up
+    the GPU before the OCR pipeline starts pulling models — printing a
+    one-liner from ``core.device_info.describe_device()`` at startup is
+    the cheapest signal. Order is: device line, then "Listening on …",
+    so a `tail -1` of the boot log still surfaces the URL.
+    """
+    for var in list(__import__("os").environ):
+        if var.startswith("PDLABELER_"):
+            monkeypatch.delenv(var, raising=False)
+
+    with (
+        patch.object(main_mod, "uvicorn") as mock_uvicorn,
+        patch.object(main_mod, "webbrowser"),
+    ):
+        mock_uvicorn.run.side_effect = lambda *a, **kw: None
+        rc = main(["--no-browser", "--data-root", str(tmp_path)])
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    lines = [line for line in out.splitlines() if line.strip()]
+    # Find the indices of the device + listening lines.
+    device_idx = next((i for i, line in enumerate(lines) if line.startswith("device:")), None)
+    listening_idx = next((i for i, line in enumerate(lines) if line.startswith("Listening on ")), None)
+    assert device_idx is not None, f"device line missing from startup output:\n{out}"
+    assert listening_idx is not None, f"Listening line missing from startup output:\n{out}"
+    assert device_idx < listening_idx, (
+        "device line must come before 'Listening on' so a tail -1 still surfaces the URL"
+    )
+
+
 def test_version_flag_short_circuits(capsys: pytest.CaptureFixture[str]) -> None:
     """``--version`` prints version and returns 0 without starting uvicorn."""
     with patch.object(main_mod, "uvicorn") as mock_uvicorn:
