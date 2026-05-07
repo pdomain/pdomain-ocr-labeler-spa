@@ -27,6 +27,8 @@ page_operations.py:339-360`` (``_parse_page`` inside
 from __future__ import annotations
 
 import importlib
+import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -39,11 +41,30 @@ from ...core.page_state import (
     PageSource,
 )
 from ...core.persistence.user_page_envelope import (
+    USER_PAGE_SOURCE_LANE_CACHED,
+    OCRModelProvenance,
+    build_envelope,
     cached_envelope_path,
+    envelope_to_dict,
     labeled_envelope_path,
     read_envelope_file,
 )
+from ...core.persistence.user_page_envelope import (
+    OCRProvenance as EnvelopeOCRProvenance,
+)
 from .base import OCRProvenance
+
+logger = logging.getLogger(__name__)
+
+
+def _write_cached_envelope_text(path: Path, text: str) -> None:
+    """Module-level write helper. Lifted so tests can monkeypatch the
+    write site without touching ``Path.write_text`` globally (legacy
+    parity tests rely on a granular failure-injection seam).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
 
 if TYPE_CHECKING:
     from pd_book_tools.ocr.document import Page
@@ -181,11 +202,79 @@ class LocalDoctrPageLoader:
         # ``Document`` produced from a single image has exactly one
         # ``Page`` at ``pages[0]``.
         page_obj: Page = doc.pages[0]
+
+        # Auto-cache-write side effect (legacy parity:
+        # pd-ocr-labeler/state/project_state.py:752-799). After a
+        # successful OCR run, persist the cached envelope so subsequent
+        # loads hit the cached lane instead of paying OCR cost again.
+        # No-op when ``cache_root is None`` (preserves slice-8b-ii ctor
+        # signature for OCR-only callers). Failures are
+        # log-and-swallowed (legacy lines 789-794): a write failure
+        # must not turn a successful OCR into a 5xx — the in-memory
+        # outcome is still returned to the caller.
+        if self.cache_root is not None:
+            self._write_cached_envelope(page_index, page_obj)
+
         return PageLoadOutcome(
             page_index=page_index,
             source=PageSource.OCR,
             payload=page_obj,
         )
+
+    # ── auto-cache-write helper ──────────────────────────────────────
+
+    def _build_ocr_provenance(self) -> EnvelopeOCRProvenance:
+        """Compose ``OCRProvenance`` from the loader's selected models.
+
+        Legacy parity: ``page_operations._resolve_ocr_provenance_for_save``
+        (line 1166). Records the detection + recognition keys + HF
+        revision so a re-read of the cached envelope can identify the
+        models that produced it.
+        """
+        models: list[OCRModelProvenance] = [
+            OCRModelProvenance(
+                name=self.detection_key,
+                version=self.hf_revision,
+            ),
+            OCRModelProvenance(
+                name=self.recognition_key,
+                version=self.hf_revision,
+            ),
+        ]
+        return EnvelopeOCRProvenance(engine="doctr", models=models)
+
+    def _write_cached_envelope(self, page_index: int, page_obj: Any) -> None:
+        """Side-effect: write the cached-lane envelope JSON.
+
+        Failures log-and-swallow per legacy
+        ``project_state.py:789-794``. Distinct from the labeled lane:
+        cached writes use ``source_lane="cached"`` (slice 8b-v
+        override) and land at ``cached_envelope_path(...)`` — the
+        ``_envelope.json`` suffix avoids collision with legacy's plain
+        ``.json`` writes to the shared cache dir.
+        """
+        assert self.cache_root is not None  # caller-checked
+        try:
+            envelope = build_envelope(
+                page=page_obj,
+                project=self.project,
+                page_index=page_index,
+                ocr_provenance=self._build_ocr_provenance(),
+                source_lane=USER_PAGE_SOURCE_LANE_CACHED,
+            )
+            target = cached_envelope_path(self.cache_root, self.project.project_id, page_index)
+            _write_cached_envelope_text(target, json.dumps(envelope_to_dict(envelope), ensure_ascii=False))
+            logger.debug(
+                "auto-cache-write: wrote cached envelope index=%s path=%s",
+                page_index,
+                target,
+            )
+        except Exception as exc:  # pragma: no cover - exercised via injection
+            logger.debug(
+                "auto-cache-write: failed for index=%s: %s",
+                page_index,
+                exc,
+            )
 
 
 __all__ = [

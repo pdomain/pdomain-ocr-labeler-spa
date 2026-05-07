@@ -54,6 +54,20 @@ def stub_pd_book_tools(monkeypatch: pytest.MonkeyPatch):
     class _FakePage:
         def __init__(self, source_identifier: str) -> None:
             self.source_identifier = source_identifier
+            # Track add_ground_truth calls for slice "GT injection".
+            self.ground_truth_calls: list[str] = []
+
+        def to_dict(self) -> dict[str, Any]:
+            """Stub for ``Page.to_dict`` used by the auto-cache-write
+            slice. The build_envelope writer just stashes this verbatim
+            into ``payload.page``; the value here is purely a marker.
+            """
+            return {"type": "Page", "source_identifier": self.source_identifier}
+
+        def add_ground_truth(self, text: str) -> None:
+            """Stub for ``Page.add_ground_truth``. Records calls so
+            tests can assert injection behaviour."""
+            self.ground_truth_calls.append(text)
 
     class _FakeDocument:
         def __init__(self, pages: list[_FakePage]) -> None:
@@ -474,3 +488,173 @@ def test_loader_integrates_with_ensure_page_model(
     outcome2 = ensure_page_model(state, 0, loader=loader)
     assert outcome2 is outcome1
     assert len(stub_pd_book_tools.calls) == 1
+
+
+# ── Auto-cache-write side effect after run_ocr ───────────────────────────
+#
+# Slice "auto-cache-write". Legacy ref:
+# pd-ocr-labeler/state/project_state.py:752-799 (auto-save block inside
+# ensure_page_model). After a successful OCR run, the loader writes the
+# cached envelope to disk so subsequent loads (this session or later)
+# hit the cached lane instead of paying OCR cost again.
+#
+# Failure-mode contract (legacy lines 789-794): exceptions during cache
+# write are log-and-swallowed — never derail the OCR call. The OCR
+# outcome is still returned to the caller.
+
+
+def test_run_ocr_writes_cached_envelope_when_cache_root_set(
+    tmp_path: Path, stub_pd_book_tools, stub_predictor_cache: PredictorCache
+) -> None:
+    """After run_ocr succeeds, a cached envelope file appears at
+    cached_envelope_path(cache_root, project_id, page_index)."""
+    from pd_ocr_labeler_spa.core.persistence.user_page_envelope import (
+        cached_envelope_path,
+    )
+
+    project = _make_project(tmp_path)
+    cache_root = tmp_path / "cache"
+    loader = LocalDoctrPageLoader(
+        project=project,
+        predictor_cache=stub_predictor_cache,
+        detection_key="stock",
+        recognition_key="stock",
+        hf_revision=None,
+        cache_root=cache_root,
+    )
+
+    loader.run_ocr(0)
+
+    expected = cached_envelope_path(cache_root, "proj1", 0)
+    assert expected.exists(), f"expected cached envelope at {expected}"
+
+
+def test_cached_envelope_has_cached_source_lane(
+    tmp_path: Path, stub_pd_book_tools, stub_predictor_cache: PredictorCache
+) -> None:
+    """Auto-cache-write must set ``provenance.source_lane='cached'``
+    so a future read can distinguish a cache write from a labeled save.
+    Pinned via build_envelope's source_lane override (slice 8b-v)."""
+    import json
+
+    from pd_ocr_labeler_spa.core.persistence.user_page_envelope import (
+        cached_envelope_path,
+    )
+
+    project = _make_project(tmp_path)
+    cache_root = tmp_path / "cache"
+    loader = LocalDoctrPageLoader(
+        project=project,
+        predictor_cache=stub_predictor_cache,
+        detection_key="stock",
+        recognition_key="stock",
+        hf_revision=None,
+        cache_root=cache_root,
+    )
+    loader.run_ocr(2)
+
+    raw = json.loads(cached_envelope_path(cache_root, "proj1", 2).read_text())
+    assert raw["provenance"]["source_lane"] == "cached"
+    assert raw["source"]["page_index"] == 2
+    assert raw["source"]["page_number"] == 3
+    assert raw["source"]["image_path"] == "page_002.png"
+    # Page dict was placed in payload.page verbatim from to_dict.
+    assert raw["payload"]["page"] == {
+        "type": "Page",
+        "source_identifier": "page_002.png",
+    }
+
+
+def test_run_ocr_skips_cache_write_when_cache_root_none(
+    tmp_path: Path, stub_pd_book_tools, stub_predictor_cache: PredictorCache
+) -> None:
+    """``cache_root=None`` lane is a no-op (preserves the slice-8b-ii
+    constructor signature). The OCR still runs and returns normally."""
+    project = _make_project(tmp_path)
+    loader = LocalDoctrPageLoader(
+        project=project,
+        predictor_cache=stub_predictor_cache,
+        detection_key="stock",
+        recognition_key="stock",
+        hf_revision=None,
+        cache_root=None,
+    )
+
+    outcome = loader.run_ocr(0)
+    assert outcome.source == PageSource.OCR
+    # No directory was created; nothing was written.
+    cache_root = tmp_path / "cache"
+    assert not cache_root.exists()
+
+
+def test_run_ocr_swallows_cache_write_failure(
+    tmp_path: Path,
+    stub_pd_book_tools,
+    stub_predictor_cache: PredictorCache,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy parity (project_state.py:789-794): a write-time exception
+    must be log-and-swallowed — the OCR outcome is returned regardless.
+    Patches ``Path.write_text`` only on the cached envelope path so we
+    don't break the rest of the suite."""
+    project = _make_project(tmp_path)
+    cache_root = tmp_path / "cache"
+    loader = LocalDoctrPageLoader(
+        project=project,
+        predictor_cache=stub_predictor_cache,
+        detection_key="stock",
+        recognition_key="stock",
+        hf_revision=None,
+        cache_root=cache_root,
+    )
+
+    # Force write failure during the cache write.
+    import pd_ocr_labeler_spa.adapters.ocr.local_doctr as loader_module
+
+    def fail_write(*args: Any, **kwargs: Any) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(loader_module, "_write_cached_envelope_text", fail_write)
+
+    outcome = loader.run_ocr(0)
+    assert outcome.source == PageSource.OCR  # still returned
+
+    # No file was successfully written. The cache page-images dir may
+    # still be created by the helper before the write fails (or not at
+    # all if the failure happens before mkdir); either way no envelope
+    # JSON should exist.
+    page_images_dir = cache_root / "page-images"
+    if page_images_dir.exists():
+        assert list(page_images_dir.glob("*_envelope.json")) == []
+
+
+def test_cache_write_provenance_includes_predictor_keys(
+    tmp_path: Path, stub_pd_book_tools, stub_predictor_cache: PredictorCache
+) -> None:
+    """OCRProvenance.models reflects the loader's detection + recognition
+    keys so a re-read of the cached envelope can tell which models
+    produced it. Legacy parity: ``_resolve_ocr_provenance_for_save`` at
+    page_operations.py:1166 carries the predictor identity."""
+    import json
+
+    from pd_ocr_labeler_spa.core.persistence.user_page_envelope import (
+        cached_envelope_path,
+    )
+
+    project = _make_project(tmp_path)
+    cache_root = tmp_path / "cache"
+    loader = LocalDoctrPageLoader(
+        project=project,
+        predictor_cache=stub_predictor_cache,
+        detection_key="my-det",
+        recognition_key="my-reco",
+        hf_revision="abc1234",
+        cache_root=cache_root,
+    )
+    loader.run_ocr(0)
+
+    raw = json.loads(cached_envelope_path(cache_root, "proj1", 0).read_text())
+    models = raw["provenance"]["ocr"]["models"]
+    model_names = [m["name"] for m in models]
+    assert "my-det" in model_names
+    assert "my-reco" in model_names
