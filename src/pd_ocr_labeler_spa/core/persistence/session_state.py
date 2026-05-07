@@ -5,6 +5,16 @@ Spec: ``specs/09-persistence.md §6`` + ``specs/01-data-models.md §3``
 user when they last closed the app? Re-applied on next startup
 (``app_state.startup()`` step 3 per ``specs/02-backend.md §13``).
 
+Extras-tolerance policy (D-041, 2026-05-07): the SPA and legacy
+share this file and either may add additive fields without a
+coordinated release, so the reader uses ``extra="ignore"`` (legacy
+parity — `from_dict` semantics). When unknown keys ARE seen, they
+are logged at **WARNING** with the stable grep-able substring
+``session_state_extras_dropped`` so a release-time CI step or
+operator can detect uncoordinated drift. The ``UserPageEnvelope``
+keeps ``extra="forbid"`` — that asymmetry is the deliberate
+forward-compat circuit-breaker for the versioned schema (spec §11).
+
 Schema (verbatim from spec §6, **byte-compatible with legacy
 pd_ocr_labeler under D-003** — both binaries share the file)::
 
@@ -65,11 +75,15 @@ class SessionState(BaseModel):
     writes).
     """
 
-    # Top-level envelope: forbid extra keys so a malformed save (e.g.
-    # someone shipping a v1.1 field we don't know about) is detected
-    # at parse time rather than silently dropped. The version-bump
-    # rule is documented in ``specs/09-persistence.md §11``.
-    model_config = ConfigDict(extra="forbid")
+    # Top-level envelope: ``extra="ignore"`` per D-041 — the SPA and
+    # legacy share this file and either may add additive fields
+    # without a coordinated release. ``load_session_state`` separately
+    # logs dropped keys at WARNING (stable substring
+    # ``session_state_extras_dropped``) so an operator / CI gate can
+    # spot uncoordinated drift. ``UserPageEnvelope`` keeps
+    # ``extra="forbid"`` (the versioned schema's forward-compat
+    # circuit-breaker; spec §11). Don't conflate the two.
+    model_config = ConfigDict(extra="ignore")
 
     schema_version: str = Field(
         default=SESSION_STATE_SCHEMA_VERSION,
@@ -126,13 +140,35 @@ def load_session_state(data_root: Path) -> SessionState | None:
         logger.debug("Session state at %s is not a JSON object; ignoring.", path)
         return None
     try:
-        return SessionState.model_validate(data)
+        parsed = SessionState.model_validate(data)
     except Exception:  # pragma: no cover - pydantic ValidationError covered below
         # Catch-all so a future Pydantic version change in error class
         # hierarchy doesn't crash startup. The branch is covered by
         # the malformed-input test in tests/.
         logger.debug("Session state at %s failed validation; ignoring.", path, exc_info=True)
         return None
+
+    # D-041: detect dropped (unknown) keys and emit a WARNING with the
+    # stable substring ``session_state_extras_dropped`` so an operator
+    # or CI grep can spot uncoordinated SPA/legacy drift. Compare the
+    # raw JSON keys to the model's declared field names — anything in
+    # the JSON but not in the model was silently dropped by
+    # ``extra="ignore"``.
+    declared = set(SessionState.model_fields.keys())
+    raw_keys = set(data.keys())
+    dropped = sorted(raw_keys - declared)
+    if dropped:
+        logger.warning(
+            "session_state_extras_dropped — unknown key(s) %s in %s ignored "
+            "(possible SPA/legacy drift; stable substring for grep / CI gates).",
+            dropped,
+            path,
+            extra={
+                "session_state_dropped_keys": dropped,
+                "session_state_path": str(path),
+            },
+        )
+    return parsed
 
 
 def last_project_path_exists(state: SessionState) -> bool:

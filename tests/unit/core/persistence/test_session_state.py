@@ -22,6 +22,7 @@ binary and the SPA must "just work" against a shared data root.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -75,12 +76,16 @@ def test_session_state_rejects_negative_page_index() -> None:
         SessionState(last_page_index=-1)
 
 
-def test_session_state_rejects_extra_fields() -> None:
-    """Top-level envelope is ``extra="forbid"``: a stray key surfaces
-    schema-drift loudly rather than being silently dropped (spec §11
-    versioning policy)."""
-    with pytest.raises(ValidationError):
-        SessionState.model_validate({"last_project_path": "/x", "last_page_index": 0, "future_field": True})
+def test_session_state_ignores_extra_fields_per_d041() -> None:
+    """D-041 (2026-05-07): top-level envelope is ``extra="ignore"`` —
+    the SPA and legacy share this file and either may add additive
+    fields. Unknown keys are silently dropped at the model layer; the
+    operator-facing WARNING is emitted by ``load_session_state``
+    (covered separately below)."""
+    s = SessionState.model_validate({"last_project_path": "/x", "last_page_index": 0, "future_field": True})
+    assert s.last_project_path == "/x"
+    assert s.last_page_index == 0
+    assert not hasattr(s, "future_field")
 
 
 # ── cold-start / failure-mode load behaviour ─────────────────────────────
@@ -118,19 +123,30 @@ def test_load_returns_none_when_json_is_not_an_object(tmp_path: Path) -> None:
     assert load_session_state(tmp_path) is None
 
 
-def test_load_returns_none_when_object_has_extra_field(tmp_path: Path) -> None:
-    """``extra="forbid"`` rejection at parse time → ``None`` (not raise).
-
-    Best-effort load: an unknown future field shouldn't crash startup;
-    we just ignore the file and let the user start fresh.
+def test_load_ignores_unknown_keys_per_d041(tmp_path: Path) -> None:
+    """D-041 (2026-05-07): unknown keys are silently dropped at the
+    Pydantic layer (``extra="ignore"``), the load returns the parsed
+    state with the known fields populated. The operator-facing
+    WARNING is asserted in
+    ``test_load_logs_warning_with_stable_substring_when_extras_dropped``.
     """
     path = session_state_path(tmp_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps({"schema_version": "1.0", "last_page_index": 0, "future": "x"}),
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "last_project_path": "/x",
+                "last_page_index": 3,
+                "future": "x",
+            }
+        ),
         encoding="utf-8",
     )
-    assert load_session_state(tmp_path) is None
+    state = load_session_state(tmp_path)
+    assert state is not None
+    assert state.last_project_path == "/x"
+    assert state.last_page_index == 3
 
 
 def test_load_returns_none_when_page_index_negative(tmp_path: Path) -> None:
@@ -351,3 +367,90 @@ def test_save_replaces_atomically_under_concurrent_load(tmp_path: Path) -> None:
     parsed2 = json.loads(raw2)
     assert parsed2["last_project_path"] == "/new"
     assert parsed2["last_page_index"] == 2
+
+
+# ── D-041 (2026-05-07): WARNING-level drift signal on dropped keys ────────
+
+
+def test_load_logs_warning_with_stable_substring_when_extras_dropped(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """D-041 spec amendment to §6: when ``load_session_state`` reads a
+    file with unknown keys, it MUST emit a WARNING containing the
+    stable grep-able substring ``session_state_extras_dropped``. The
+    substring is the contract — future iters that change the
+    human-readable wording must keep it intact so a release-time CI
+    grep can detect uncoordinated SPA/legacy drift.
+
+    The dropped key names also appear in ``extra=`` so structured-log
+    parsers can route on them.
+    """
+    path = session_state_path(tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "last_project_path": "/x",
+                "last_page_index": 0,
+                "future_one": "a",
+                "future_two": "b",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with caplog.at_level(logging.WARNING, logger="pd_ocr_labeler_spa.core.persistence.session_state"):
+        state = load_session_state(tmp_path)
+
+    assert state is not None
+    matching = [
+        r
+        for r in caplog.records
+        if r.levelno == logging.WARNING and "session_state_extras_dropped" in r.getMessage()
+    ]
+    assert len(matching) == 1, (
+        "Expected exactly one WARNING with the stable substring "
+        "'session_state_extras_dropped'. D-041 makes this substring the "
+        "release-CI / operator-grep contract."
+    )
+    dropped = getattr(matching[0], "session_state_dropped_keys", None)
+    assert dropped == ["future_one", "future_two"], (
+        f"WARNING extra= must list dropped key names; got {dropped!r}"
+    )
+
+
+def test_load_does_not_warn_when_no_extras_present(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Negative pin for D-041: a normal load with only declared keys
+    must NOT emit the WARNING. Otherwise every release would trip the
+    operator's drift alarm and the signal would be useless."""
+    path = session_state_path(tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "last_project_path": "/x",
+                "last_page_index": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with caplog.at_level(logging.WARNING, logger="pd_ocr_labeler_spa.core.persistence.session_state"):
+        state = load_session_state(tmp_path)
+
+    assert state is not None
+    drift_warnings = [
+        r
+        for r in caplog.records
+        if r.levelno == logging.WARNING and "session_state_extras_dropped" in r.getMessage()
+    ]
+    assert drift_warnings == [], (
+        "WARNING must be silent when only declared keys are present — "
+        "the substring is reserved for actual drift signals (D-041)."
+    )
