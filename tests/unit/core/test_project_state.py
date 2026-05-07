@@ -1,300 +1,359 @@
-"""Unit tests for ``core.project_state`` — the M2-slice-2 mutable carrier.
+"""Unit tests for ``core.project_state`` — the M2-proper container.
 
-Slice 2 ships a tiny ``ProjectState`` carrier that tracks *which project
-is currently active* — separate from the frozen ``AppState`` (whose
-adapter graph is wired once at build time). The carrier ships:
+This is the spec-canonical ``ProjectState`` named in
+``specs/16-milestones.md`` line 158 (M2 backend bullet 1) and described
+in ``specs/00-overview.md`` lines 185-187:
 
-- An empty default (no project open).
-- ``set_active_project(path)`` that validates via slice 1's
-  ``validate_project_dir`` and swaps the active snapshot under a lock.
-- A frozen ``ActiveProject`` snapshot returned by ``snapshot()`` so
-  callers can hand the value to consumers without risking mutation
-  through the returned reference.
-- A monotonically-increasing ``generation`` counter so future SSE /
-  cache-invalidation code (M3+) can detect "the active project
-  changed under me" without diffing paths.
+> ``ProjectState`` (per project) — knows the loaded ``Project``, the
+> current page index, the per-page-index ``PageState`` map, the GT map.
 
-Slice 2 deliberately STOPS at: project enumeration, lifespan wiring
-(slice 3), and HTTP routes that change the active project (slice 4).
+Slice 4-router (iter 3) shipped a ``LoadProjectResponseStub`` that just
+echoes the active-project pointer; that pointer lives on
+``core/active_project.py``. THIS module is a different shape: it's the
+per-project graph that ``LoadProjectResponse.project: Project`` needs
+to be derived from once persistence I/O lands (slice 5).
+
+What this iter-4 skeleton ships:
+
+- A frozen ``Project`` model with the minimal fields ``ProjectState``
+  needs to carry (full spec §1 lines 28-44 model — ``project_id``,
+  ``project_root``, ``image_paths``, ``ground_truth_map``,
+  ``total_pages``, ``current_page_index``, etc.). Validation contract
+  matches spec §1; persistence (``from_dict`` / ``to_dict``) is iter-5.
+- A frozen ``PageState`` placeholder (the rich version with the
+  ``pd_book_tools.ocr.page.Page`` object + dirty flags + selection sets
+  is M3 — see spec §0 lines 187-189).
+- A mutable ``ProjectState`` carrier holding:
+   - ``loaded_project: Project | None``
+   - ``page_states: dict[int, PageState]``
+   - ``current_page_index: int``
+   - ``generation: int`` — monotonically-increasing counter for SSE /
+     cache-invalidation, same discipline as ``ActiveProjectCarrier``.
+   - ``threading.Lock`` for safe sync+async access.
+   - ``set_loaded_project(project)`` / ``clear()`` /
+     ``get_page_state(idx)`` / ``set_page_state(idx, state)``.
+
+What this iter-4 skeleton deliberately does NOT do:
+
+- Persist anything. No ``from_disk`` / ``save`` methods on
+  ``ProjectState``. The slice-5 persistence I/O (``pages.json`` /
+  ``pages_manifest.json`` / ground-truth scan) lives in
+  ``core/persistence/`` per ``specs/16-milestones.md`` line 159.
+- Wire into ``POST /api/projects/load``. The route can't construct a
+  real ``Project`` until slice 5 ships persistence; until then it
+  keeps emitting ``LoadProjectResponseStub`` (see route docstring +
+  the explicit deviation in ``specs/16-milestones.md`` M2 bullet 3).
+- Expose ground-truth lookup. ``ProjectState.find_ground_truth_text``
+  (spec §1 line 630) lands when the GT map exists — slice 5.
 
 Spec authority:
-- ``specs/02-backend.md §13`` — background discovery + restoration
-  (``POST /api/projects/load`` ultimately sets ``current_project_id``).
-- ``specs/00-overview.md`` "State model" §lines-179-201 — backend keeps
-  a single ``AppState`` with a per-project ``ProjectState`` map; this
-  slice ships the *active-pointer* carrier; the per-project
-  ``ProjectState`` map (with loaded ``Project``, GT, page states) is
-  M2 proper.
-
-The carrier name ``ProjectState`` is reserved for the spec-proper
-object (``core/project_state.py``, see ``specs/16-milestones.md`` M2
-backend bullet 1); to avoid colliding with that future module, slice
-2 lands the carrier at ``core/active_project.py`` with classes
-``ActiveProject`` (frozen snapshot) + ``ActiveProjectCarrier``
-(mutable holder). When the spec-proper ``ProjectState`` lands, it'll
-own the same swap discipline but with richer fields; the *carrier*
-contract documented here is the seam.
+- ``specs/00-overview.md`` lines 179-201 — state model.
+- ``specs/01-data-models.md §1`` lines 21-44 — ``Project`` model.
+- ``specs/16-milestones.md`` M2 backend bullet 1 — file + scope.
 """
 
 from __future__ import annotations
 
-import logging
 import threading
 from pathlib import Path
 
 import pytest
 
-from pd_ocr_labeler_spa.core.active_project import (
-    ActiveProject,
-    ActiveProjectCarrier,
-    InvalidProjectDirError,
-)
+from pd_ocr_labeler_spa.core.models import Project
+from pd_ocr_labeler_spa.core.project_state import PageState, ProjectState
 
-# ── default empty state ────────────────────────────────────────────────────
+# ── Project model basics ──────────────────────────────────────────────────
 
 
-def test_empty_carrier_has_no_active_project() -> None:
-    """A freshly constructed carrier has no project active."""
-    carrier = ActiveProjectCarrier()
-    assert carrier.snapshot() is None
+def test_project_minimal_construction(tmp_path: Path) -> None:
+    """Per spec §1 lines 28-44: ``Project`` carries id + root + image_paths."""
+    proj = Project(
+        project_id="MyProj_001",
+        project_root=tmp_path,
+        image_paths=[],
+        ground_truth_map={},
+        total_pages=0,
+    )
+    assert proj.project_id == "MyProj_001"
+    assert proj.project_root == tmp_path
+    assert proj.image_paths == []
+    assert proj.ground_truth_map == {}
+    assert proj.total_pages == 0
+    assert proj.current_page_index == 0  # spec default
+    assert proj.version == "1.0"  # spec default
+    assert proj.source_lib == "doctr-pd-labeled"  # spec default
+    assert proj.saved_pages == 0  # spec default
+    assert proj.include_images is True  # spec default
+    assert proj.copied_images is False  # spec default
 
 
-def test_empty_carrier_generation_starts_at_zero() -> None:
-    """Generation counter starts at 0 — increments only on successful swaps."""
-    carrier = ActiveProjectCarrier()
-    assert carrier.generation == 0
+def test_project_page_count_property_matches_image_paths(tmp_path: Path) -> None:
+    """``page_count`` is ``len(image_paths)`` per spec §1 line 43."""
+    paths = [tmp_path / f"p_{i}.jpg" for i in range(5)]
+    proj = Project(
+        project_id="P",
+        project_root=tmp_path,
+        image_paths=paths,
+        ground_truth_map={},
+        total_pages=5,
+    )
+    assert proj.page_count == 5
 
 
-# ── set_active_project: happy path ─────────────────────────────────────────
+# ── ProjectState defaults ─────────────────────────────────────────────────
 
 
-def test_set_active_project_swaps_to_a_valid_dir(tmp_path: Path) -> None:
-    """Valid path → carrier holds an ``ActiveProject`` snapshot."""
-    carrier = ActiveProjectCarrier()
-    snap = carrier.set_active_project(tmp_path)
-    assert isinstance(snap, ActiveProject)
-    assert snap.path == tmp_path.resolve()
-    assert carrier.snapshot() == snap
+def test_empty_project_state_has_no_loaded_project() -> None:
+    """Fresh ``ProjectState`` has nothing loaded."""
+    state = ProjectState()
+    assert state.loaded_project is None
+    assert state.page_states == {}
+    assert state.current_page_index == 0
+    assert state.generation == 0
 
 
-def test_set_active_project_resolves_path(tmp_path: Path) -> None:
-    """Path is ``Path.resolve()``-d so symlink / relative trivia is canonical.
+# ── set_loaded_project ────────────────────────────────────────────────────
 
-    Mirrors slice 1's ``ResolvedInitialProject.path`` discipline so a
-    consumer that compares ``carrier.snapshot().path`` against
-    ``resolved.path`` doesn't get tripped up by ``./foo`` vs ``foo``.
+
+def test_set_loaded_project_stores_and_bumps_generation(tmp_path: Path) -> None:
+    """A successful load swaps ``loaded_project`` and bumps ``generation``."""
+    state = ProjectState()
+    proj = Project(
+        project_id="P",
+        project_root=tmp_path,
+        image_paths=[],
+        ground_truth_map={},
+        total_pages=0,
+    )
+    state.set_loaded_project(proj)
+    assert state.loaded_project is proj
+    assert state.generation == 1
+
+
+def test_set_loaded_project_resets_per_page_state(tmp_path: Path) -> None:
+    """Loading a new project clears the prior per-page state map.
+
+    Per-page state belongs to ONE project; loading a different project
+    must not carry stale ``PageState`` entries across.
     """
-    sub = tmp_path / "proj"
-    sub.mkdir()
-    snap = ActiveProjectCarrier().set_active_project(Path(str(sub) + "/."))
-    assert snap.path == sub.resolve()
+    state = ProjectState()
+    proj_a = Project(
+        project_id="A",
+        project_root=tmp_path / "a",
+        image_paths=[],
+        ground_truth_map={},
+        total_pages=1,
+    )
+    state.set_loaded_project(proj_a)
+    state.set_page_state(0, PageState(page_index=0))
+    assert 0 in state.page_states
+
+    proj_b = Project(
+        project_id="B",
+        project_root=tmp_path / "b",
+        image_paths=[],
+        ground_truth_map={},
+        total_pages=1,
+    )
+    state.set_loaded_project(proj_b)
+    assert state.page_states == {}
+    assert state.loaded_project is proj_b
 
 
-def test_set_active_project_default_label_is_dirname(tmp_path: Path) -> None:
-    """Default label = ``path.name`` (matches legacy "project ID = dir name")."""
-    sub = tmp_path / "MyProject_001"
-    sub.mkdir()
-    snap = ActiveProjectCarrier().set_active_project(sub)
-    assert snap.label == "MyProject_001"
+def test_set_loaded_project_seeds_current_page_index(tmp_path: Path) -> None:
+    """``current_page_index`` is taken from the loaded ``Project``.
 
-
-def test_set_active_project_explicit_label_overrides(tmp_path: Path) -> None:
-    """Caller can override the label (used by future load-by-pretty-name flows)."""
-    snap = ActiveProjectCarrier().set_active_project(tmp_path, label="Override")
-    assert snap.label == "Override"
-
-
-def test_set_active_project_records_opened_at(tmp_path: Path) -> None:
-    """``opened_at`` is set to a monotonic UTC datetime on each swap."""
-    carrier = ActiveProjectCarrier()
-    snap = carrier.set_active_project(tmp_path)
-    assert snap.opened_at is not None
-    # second swap must produce a non-decreasing opened_at
-    other = tmp_path / "other"
-    other.mkdir()
-    snap2 = carrier.set_active_project(other)
-    assert snap2.opened_at >= snap.opened_at
-
-
-def test_set_active_project_increments_generation(tmp_path: Path) -> None:
-    """Each successful swap bumps ``generation`` by 1.
-
-    Future SSE code can compare a stale generation to the current one
-    to detect "the active project changed under me" without diffing
-    the path string.
+    The spec's ``Project.current_page_index`` (§1 line 38) is the
+    persisted "where the user was last looking" — the carrier honors it
+    so resume-from-disk behavior matches the legacy labeler.
     """
-    carrier = ActiveProjectCarrier()
-    assert carrier.generation == 0
-    carrier.set_active_project(tmp_path)
-    assert carrier.generation == 1
-    other = tmp_path / "other"
-    other.mkdir()
-    carrier.set_active_project(other)
-    assert carrier.generation == 2
+    state = ProjectState()
+    proj = Project(
+        project_id="P",
+        project_root=tmp_path,
+        image_paths=[],
+        ground_truth_map={},
+        total_pages=10,
+        current_page_index=4,
+    )
+    state.set_loaded_project(proj)
+    assert state.current_page_index == 4
 
 
-def test_set_active_project_emits_structured_log(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-    """Successful swap emits an INFO log with stable structured keys.
+# ── clear ─────────────────────────────────────────────────────────────────
 
-    Mirrors slice 1's logging discipline so the active-project lifecycle
-    is testable without parsing message strings.
+
+def test_clear_resets_to_empty(tmp_path: Path) -> None:
+    """``clear()`` resets to no-project + bumps generation."""
+    state = ProjectState()
+    proj = Project(
+        project_id="P",
+        project_root=tmp_path,
+        image_paths=[],
+        ground_truth_map={},
+        total_pages=0,
+    )
+    state.set_loaded_project(proj)
+    state.set_page_state(0, PageState(page_index=0))
+    assert state.generation == 2  # 1 set_loaded_project + 1 set_page_state
+
+    state.clear()
+    assert state.loaded_project is None
+    assert state.page_states == {}
+    assert state.current_page_index == 0
+    assert state.generation == 3  # every state change bumps
+
+
+# ── get / set page state ──────────────────────────────────────────────────
+
+
+def test_get_page_state_returns_none_when_absent() -> None:
+    """Unknown page index → ``None`` (not KeyError)."""
+    state = ProjectState()
+    assert state.get_page_state(0) is None
+    assert state.get_page_state(99) is None
+
+
+def test_set_page_state_round_trips() -> None:
+    """``set_page_state(idx, state)`` then ``get_page_state(idx)`` returns it."""
+    state = ProjectState()
+    page = PageState(page_index=3)
+    state.set_page_state(3, page)
+    assert state.get_page_state(3) is page
+
+
+def test_set_page_state_bumps_generation() -> None:
+    """Per-page-state changes are observable via the generation counter."""
+    state = ProjectState()
+    assert state.generation == 0
+    state.set_page_state(0, PageState(page_index=0))
+    assert state.generation == 1
+    state.set_page_state(1, PageState(page_index=1))
+    assert state.generation == 2
+
+
+def test_set_page_state_rejects_negative_index() -> None:
+    """Page indices are 0-based per ``specs/00-overview.md``; negatives invalid."""
+    state = ProjectState()
+    with pytest.raises(ValueError, match="page_index must be non-negative"):
+        state.set_page_state(-1, PageState(page_index=-1))
+
+
+def test_set_page_state_rejects_index_state_mismatch() -> None:
+    """``state.page_index`` must match the dict key — sanity-check.
+
+    Prevents the trivial bug where a caller indexes by 5 but stores a
+    ``PageState`` whose ``page_index`` is 3; later code that pulls from
+    the dict and trusts ``state.page_index`` would silently misbehave.
     """
-    caplog.set_level(logging.INFO, logger="pd_ocr_labeler_spa.core.active_project")
-    ActiveProjectCarrier().set_active_project(tmp_path)
-    matching = [
-        r for r in caplog.records if getattr(r, "active_project_path", None) == str(tmp_path.resolve())
-    ]
-    assert len(matching) == 1
-    assert matching[0].levelno == logging.INFO
-    # generation extra is also present on the log line
-    assert getattr(matching[0], "active_project_generation", None) == 1
+    state = ProjectState()
+    with pytest.raises(ValueError, match="page_index mismatch"):
+        state.set_page_state(5, PageState(page_index=3))
 
 
-# ── set_active_project: invalid input ──────────────────────────────────────
+# ── current_page_index manipulation ───────────────────────────────────────
 
 
-def test_set_active_project_rejects_missing_path(tmp_path: Path) -> None:
-    """Missing path → ``InvalidProjectDirError``; carrier untouched."""
-    carrier = ActiveProjectCarrier()
-    missing = tmp_path / "nope"
-    with pytest.raises(InvalidProjectDirError):
-        carrier.set_active_project(missing)
-    assert carrier.snapshot() is None
-    assert carrier.generation == 0
+def test_set_current_page_index_within_bounds(tmp_path: Path) -> None:
+    """Updating the cursor within ``total_pages`` works + bumps generation."""
+    state = ProjectState()
+    proj = Project(
+        project_id="P",
+        project_root=tmp_path,
+        image_paths=[],
+        ground_truth_map={},
+        total_pages=5,
+    )
+    state.set_loaded_project(proj)
+    gen_before = state.generation
+    state.set_current_page_index(3)
+    assert state.current_page_index == 3
+    assert state.generation == gen_before + 1
 
 
-def test_set_active_project_rejects_regular_file(tmp_path: Path) -> None:
-    """Path-to-regular-file → ``InvalidProjectDirError``; carrier untouched."""
-    f = tmp_path / "file.txt"
-    f.write_text("hi")
-    carrier = ActiveProjectCarrier()
-    with pytest.raises(InvalidProjectDirError):
-        carrier.set_active_project(f)
-    assert carrier.snapshot() is None
+def test_set_current_page_index_rejects_negative() -> None:
+    """Negative page index is invalid even with no project loaded."""
+    state = ProjectState()
+    with pytest.raises(ValueError, match="must be non-negative"):
+        state.set_current_page_index(-1)
 
 
-def test_set_active_project_invalid_does_not_clobber_prior(tmp_path: Path) -> None:
-    """Failed swap leaves the prior active snapshot intact (no half-swap)."""
-    a = tmp_path / "a"
-    a.mkdir()
-    carrier = ActiveProjectCarrier()
-    first = carrier.set_active_project(a)
-    assert carrier.generation == 1
+def test_set_current_page_index_rejects_out_of_range_when_loaded(tmp_path: Path) -> None:
+    """``idx >= total_pages`` rejected when a project IS loaded.
 
-    with pytest.raises(InvalidProjectDirError):
-        carrier.set_active_project(tmp_path / "missing")
-
-    # Snapshot AND generation untouched — the swap was atomic.
-    assert carrier.snapshot() == first
-    assert carrier.generation == 1
-
-
-# ── snapshot is frozen / mutation-safe ─────────────────────────────────────
-
-
-def test_snapshot_is_frozen_dataclass(tmp_path: Path) -> None:
-    """``ActiveProject`` is frozen — mutating a returned snapshot raises.
-
-    Hard-frozen contract mirrors slice 1's ``ResolvedInitialProject``
-    and ``AppState``; consumers can't mutate carrier state by mutating
-    a returned reference.
-
-    ``dataclasses.FrozenInstanceError`` IS-A ``AttributeError`` (per
-    the stdlib), so we pin against ``AttributeError`` rather than the
-    blind ``Exception`` ruff B017 forbids.
+    With no project loaded we can't validate range, so only the
+    non-negative check fires; once loaded, the upper bound is the
+    ``total_pages`` from the loaded project.
     """
-    snap = ActiveProjectCarrier().set_active_project(tmp_path)
-    with pytest.raises(AttributeError):
-        snap.path = tmp_path / "evil"  # type: ignore[misc]
+    state = ProjectState()
+    proj = Project(
+        project_id="P",
+        project_root=tmp_path,
+        image_paths=[],
+        ground_truth_map={},
+        total_pages=3,
+    )
+    state.set_loaded_project(proj)
+    with pytest.raises(ValueError, match="out of range"):
+        state.set_current_page_index(3)
+    with pytest.raises(ValueError, match="out of range"):
+        state.set_current_page_index(99)
 
 
-def test_snapshot_does_not_share_reference_with_internal_state(tmp_path: Path) -> None:
-    """``snapshot()`` returns the same frozen instance that ``set_active_project``
-    returned — but because it's frozen, the carrier doesn't need to copy.
-
-    Pin: identity == identity. If a future maintainer adds a mutable
-    field, this test forces them to also add ``deepcopy`` semantics
-    (or to keep the snapshot frozen-all-the-way-down).
-    """
-    carrier = ActiveProjectCarrier()
-    a = carrier.set_active_project(tmp_path)
-    b = carrier.snapshot()
-    assert a is b
+# ── thread safety ────────────────────────────────────────────────────────
 
 
-# ── thread safety ──────────────────────────────────────────────────────────
+def test_concurrent_set_page_state_serializes_under_lock() -> None:
+    """Concurrent ``set_page_state`` calls all succeed; generation == N.
 
-
-def test_concurrent_set_active_project_serializes_under_lock(tmp_path: Path) -> None:
-    """Concurrent swaps must produce a generation == thread_count, not
-    interleave to a smaller number.
-
-    The carrier swaps under a ``threading.Lock`` so two threads racing
-    to ``set_active_project`` both succeed but the generation counter
-    is the source of truth for "how many swaps actually completed."
-    A non-locked impl would race the read-modify-write on
-    ``generation`` and end up with a smaller count.
+    Mirrors ``ActiveProjectCarrier``'s lock contract — every successful
+    mutation bumps the generation counter, so ``N`` concurrent writes
+    must produce ``generation == N`` (not less, which would mean a lost
+    update due to a racy read-modify-write).
     """
     n_threads = 16
-    dirs = []
-    for i in range(n_threads):
-        d = tmp_path / f"p_{i}"
-        d.mkdir()
-        dirs.append(d)
-
-    carrier = ActiveProjectCarrier()
+    state = ProjectState()
     barrier = threading.Barrier(n_threads)
     errors: list[Exception] = []
 
-    def worker(p: Path) -> None:
+    def worker(i: int) -> None:
         try:
             barrier.wait()
-            carrier.set_active_project(p)
+            state.set_page_state(i, PageState(page_index=i))
         except Exception as exc:
             errors.append(exc)
 
-    threads = [threading.Thread(target=worker, args=(d,)) for d in dirs]
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(n_threads)]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
 
     assert errors == []
-    assert carrier.generation == n_threads
-    snap = carrier.snapshot()
-    assert snap is not None
-    # Whichever thread won the last swap, the snapshot path is one of
-    # the input dirs (resolved). No interleaved garbage.
-    assert snap.path in {d.resolve() for d in dirs}
+    assert state.generation == n_threads
+    assert len(state.page_states) == n_threads
 
 
-# ── clear() ───────────────────────────────────────────────────────────────
+# ── separation of concerns ───────────────────────────────────────────────
 
 
-def test_clear_resets_to_no_active_project(tmp_path: Path) -> None:
-    """``clear()`` mirrors ``DELETE /api/projects/{id}`` (spec §5.2 line 222).
+def test_project_state_does_not_validate_filesystem(tmp_path: Path) -> None:
+    """``ProjectState`` is pure in-memory — never stats the disk.
 
-    Returns to "no project open" but DOES bump the generation — a
-    clear is a state change observers should see.
+    Filesystem validation belongs to ``ActiveProjectCarrier`` (project
+    *root*) and to slice-5 persistence (project *contents*). A
+    ``Project`` whose ``project_root`` is a non-existent path is still
+    a valid ``Project`` to *hold* — what matters is whether the upstream
+    loader was happy to construct it.
     """
-    carrier = ActiveProjectCarrier()
-    carrier.set_active_project(tmp_path)
-    assert carrier.snapshot() is not None
-    assert carrier.generation == 1
-
-    carrier.clear()
-    assert carrier.snapshot() is None
-    assert carrier.generation == 2
-
-
-def test_clear_on_empty_carrier_is_noop_but_increments_generation() -> None:
-    """Idempotency choice (documented): clear-on-empty still bumps generation.
-
-    This keeps the contract "every successful operation bumps the
-    counter" simple. If a future consumer wants "only-if-changed"
-    semantics, they can check ``snapshot()`` before clearing.
-    """
-    carrier = ActiveProjectCarrier()
-    carrier.clear()
-    assert carrier.snapshot() is None
-    assert carrier.generation == 1
+    state = ProjectState()
+    bogus = tmp_path / "definitely-does-not-exist"
+    proj = Project(
+        project_id="Ghost",
+        project_root=bogus,
+        image_paths=[],
+        ground_truth_map={},
+        total_pages=0,
+    )
+    state.set_loaded_project(proj)  # must not raise
+    assert state.loaded_project is proj

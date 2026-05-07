@@ -12,20 +12,23 @@ NiceGUI labeler ships.
 
 The SPA is **scaffolding-complete and ~97% through M1** (settings +
 adapters + AppState + middleware + lifespan; B-51 closed iter 53 per
-D-040). **M2 startup-discovery is at slice 4 (in progress)** (slice 1:
-`resolve_initial_project` + `validate_project_dir`; slice 2:
-`ActiveProjectCarrier` + DI providers + bootstrap wiring; slice 3:
-FastAPI lifespan startup hook calls
+D-040). **M2 startup-discovery: slice-4 router shipped, M2-proper state
+in progress** (slice 1: `resolve_initial_project` +
+`validate_project_dir`; slice 2: `ActiveProjectCarrier` + DI providers
++ bootstrap wiring; slice 3: FastAPI lifespan startup hook calls
 `resolve_initial_project(settings, session_state=load_session_state(...))`
 and feeds the result into
 `app.state.active_project_carrier.set_active_project()`, so a CLI-or-
-session-restored project is now actually opened on boot. **Slice 4
-landing in progress** — iter 2 shipped pure `core/project_enumeration.py`
-scanner; iter 3 shipped `api/projects.py` with `GET /api/projects` +
-`POST /api/projects/load` (interim slim `LoadProjectResponseStub`
-because the spec-canonical `Project` + `PagePayload` models are
-M2-proper). HTTP project swaps now work end-to-end against the
-carrier; the SPA can drive load + dropdown re-mark, but no page
+session-restored project is now actually opened on boot. Slice 4 (iter
+2): pure `core/project_enumeration.py` scanner. Slice 4 router (iter 3):
+`api/projects.py` with `GET /api/projects` + `POST /api/projects/load`
+(interim slim `LoadProjectResponseStub` because spec-canonical
+`Project` + `PagePayload` models are M2-proper). M2-proper container
+(iter 4): `core/project_state.py` skeleton + `core/models.py::Project`
+landed — `ProjectState` carrier ready to hold the loaded `Project` +
+per-page-state map, awaiting slice-5 persistence I/O to actually
+construct one from disk. HTTP project swaps work end-to-end against
+the carrier; the SPA can drive load + dropdown re-mark, but no page
 graph yet).
 **Zero user-facing domain endpoints exist yet** (no project discovery
 list, no OCR, no GT editing, no save/load, no export) — every legacy
@@ -159,15 +162,23 @@ in `docs/BUGS_FOUND.md`. **B-51 closed iter 53** (D-040 impl).
    from `specs/16-milestones.md:144` becomes runnable. (mise
    itself is already on PATH as of 2026-05-07; the gap is just the
    single bootstrap iteration.)
-5. **M2 slice 4 — `core/project_state.py` + `api/projects.py`** (the
-   spec-proper M2 work). Author `core/project_state.py`,
-   `core/persistence/{project_envelope, ground_truth}.py`,
-   `api/projects.py`, `api/pages.py` (record-only payload).
-   Acceptance test `tests/integration/test_project_load.py
-   ::test_load_real_fixture` needs only Python. The frontend half
-   waits on Q-A8 but the integration tests + GT-variant matching
-   tests carry over from legacy `test_ground_truth.py` and ship
-   pure-Python value today.
+5. **M2 slice 5 — persistence I/O + wire the loaded `Project`
+   through `POST /api/projects/load`**. The spec-proper M2 split
+   (delivered iter-by-iter): slice 4 starter (iter 2) shipped pure
+   `core/project_enumeration.py`; slice 4 router (iter 3) shipped
+   `api/projects.py`; iter 4 shipped `core/project_state.py` +
+   `core/models.py::Project` (the M2-proper carrier). **Remaining
+   iter-5 work**: `core/persistence/{project_envelope, ground_truth}.py`
+   to read `pages.json` / `pages_manifest.json` + scan GT files +
+   build a `Project`; then extend the `POST /api/projects/load`
+   handler to `state.set_loaded_project(project)` and replace
+   `LoadProjectResponseStub` with the spec-canonical
+   `LoadProjectResponse{project, current_page}`; then `api/pages.py`
+   (record-only payload). Acceptance test
+   `tests/integration/test_project_load.py::test_load_real_fixture`
+   needs only Python. The frontend half waits on Q-A8 but the
+   integration tests + GT-variant matching tests carry over from
+   legacy `test_ground_truth.py` and ship pure-Python value today.
 
 ---
 
