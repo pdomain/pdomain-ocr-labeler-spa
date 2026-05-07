@@ -240,6 +240,88 @@ def test_can_read_legacy_shaped_file(tmp_path: Path) -> None:
 # ── atomicity invariants ─────────────────────────────────────────────────
 
 
+# ── B-60: stale-path validation seam ─────────────────────────────────────
+
+
+def test_load_session_state_returns_state_for_stale_path(tmp_path: Path) -> None:
+    """B-60: ``load_session_state`` MUST be a pure read — it does NOT
+    validate that ``last_project_path`` still exists on disk.
+
+    Spec §6 says "Read on app start; if the path no longer exists or
+    doesn't contain images, ignore." That's a two-stage validation;
+    the module owner of stage 1 is ``load_session_state`` and the
+    owner of stage 2 is the caller (``app_state.startup()``). Pinning
+    the divide here means a future caller author can't accidentally
+    "fix" stage 2 inside ``load_session_state`` — which would couple
+    the persistence layer to the filesystem in ways the docstring
+    explicitly disclaims.
+    """
+    stale = tmp_path / "this-project-was-moved-away"
+    save_session_state(
+        tmp_path, SessionState(last_project_path=str(stale), last_page_index=3)
+    )
+    assert not stale.exists(), "test setup: project dir must not exist"
+    loaded = load_session_state(tmp_path)
+    # Stage-1 read returns a SessionState even though the path is stale.
+    assert loaded is not None
+    assert loaded.last_project_path == str(stale)
+
+
+def test_last_project_path_exists_returns_false_when_none(tmp_path: Path) -> None:
+    """B-60 stage-2 helper: ``last_project_path is None`` → False."""
+    from pd_ocr_labeler_spa.core.persistence.session_state import (
+        last_project_path_exists,
+    )
+
+    state = SessionState()  # last_project_path defaults to None
+    assert last_project_path_exists(state) is False
+    del tmp_path  # unused
+
+
+def test_last_project_path_exists_returns_false_when_missing(tmp_path: Path) -> None:
+    """B-60 stage-2 helper: a path string that doesn't resolve → False."""
+    from pd_ocr_labeler_spa.core.persistence.session_state import (
+        last_project_path_exists,
+    )
+
+    state = SessionState(last_project_path=str(tmp_path / "nope"), last_page_index=0)
+    assert last_project_path_exists(state) is False
+
+
+def test_last_project_path_exists_returns_true_when_dir_exists(tmp_path: Path) -> None:
+    """B-60 stage-2 helper: a path string pointing at a real dir → True.
+
+    The helper checks ``Path.is_dir()`` (not ``.exists()``) — a regular
+    file at the path doesn't count, since saved projects are always
+    directories under spec §1.
+    """
+    from pd_ocr_labeler_spa.core.persistence.session_state import (
+        last_project_path_exists,
+    )
+
+    proj = tmp_path / "real-project"
+    proj.mkdir()
+    state = SessionState(last_project_path=str(proj), last_page_index=2)
+    assert last_project_path_exists(state) is True
+
+
+def test_last_project_path_exists_returns_false_for_file_at_path(tmp_path: Path) -> None:
+    """B-60 stage-2 helper: a regular file (not a dir) at the path → False.
+
+    Saved projects are dirs containing per-page JSON files; a file at
+    the path means the layout is corrupt and the caller should treat
+    it as "no prior session" rather than try to load it.
+    """
+    from pd_ocr_labeler_spa.core.persistence.session_state import (
+        last_project_path_exists,
+    )
+
+    not_a_dir = tmp_path / "regular-file.txt"
+    not_a_dir.write_text("not a project")
+    state = SessionState(last_project_path=str(not_a_dir), last_page_index=0)
+    assert last_project_path_exists(state) is False
+
+
 def test_save_does_not_leave_tmp_file_on_success(tmp_path: Path) -> None:
     """``Path.replace`` consumes the tmp file; no stray ``.tmp`` afterwards."""
     save_session_state(tmp_path, SessionState(last_page_index=0))

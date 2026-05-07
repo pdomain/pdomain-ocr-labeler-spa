@@ -135,6 +135,35 @@ def load_session_state(data_root: Path) -> SessionState | None:
         return None
 
 
+def last_project_path_exists(state: SessionState) -> bool:
+    """Stage-2 validation seam for spec §6's "ignore stale path" rule.
+
+    Spec §6 reads "Read on app start; if the path no longer exists or
+    doesn't contain images, ignore." That's a **two-stage validation**:
+
+    1. ``load_session_state`` parses the JSON envelope (this module).
+    2. The caller (``app_state.startup()``) verifies ``last_project_path``
+       still resolves to a project directory (this helper).
+
+    Splitting the seams keeps ``load_session_state`` a pure read — no
+    filesystem checks beyond the file the function is named for — and
+    gives callers an explicit single-call validator they can either
+    use or bypass with intent. B-60 motivated this seam: without an
+    explicit helper a future caller author may reasonably read
+    "load_session_state returned a state ⇒ I can trust the path" and
+    skip the existence check, then blow up on the first file read.
+
+    Returns ``True`` iff ``state.last_project_path`` is non-None AND
+    resolves to an existing directory (NOT a regular file — saved
+    projects are always dirs containing per-page JSONs per spec §1).
+    Otherwise returns ``False`` — the caller should treat that as "no
+    prior session" and present the project picker.
+    """
+    if state.last_project_path is None:
+        return False
+    return Path(state.last_project_path).is_dir()
+
+
 def save_session_state(data_root: Path, state: SessionState) -> None:
     """Write ``state`` atomically to ``<data_root>/session_state.json``.
 
