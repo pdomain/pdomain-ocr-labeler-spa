@@ -32,9 +32,21 @@ then jump to the per-area spec for whatever you're implementing.
 
 ## Non-goals
 
+> **Scope freeze (2026-05-07).** Per user directive, the network /
+> multi-user / managed-adapter axes below are **deferred to the far
+> future**. Active milestones (M1–M9) are local-mode only. See
+> [D-042](17-decisions.md#d-042--postgresmanaged-adapter-axes-deferred-to-far-future-2026-05-07)
+> for the explicit list and rationale; [`docs/ROADMAP.md`](../docs/ROADMAP.md)
+> carries the same callout for the implementation tracker.
+
 - **No multi-user collaboration.** One user, possibly multiple browser
   tabs against the same backend, sharing in-memory state.
-  ([D-023](17-decisions.md))
+  ([D-023](17-decisions.md), [D-042](17-decisions.md))
+- **No database / Postgres / SQLAlchemy.** Persistence is filesystem-
+  only via atomic-rename JSON sidecars + `config.yaml`. No
+  `database/` adapter axis, no migrations, no ORM. The schema seam is
+  "ready if we ever add one" but adding one is far-future work.
+  ([D-042](17-decisions.md))
 - **No public API contract.** The REST surface is intentionally
   unstable across SPA versions. Internal use only — the SPA frontend
   and the driver agent are the only known consumers.
@@ -208,6 +220,7 @@ The shape `(user action) → (HTTP/SSE) → (server logic) → (client refetch)`
 applies uniformly. Examples:
 
 ### Click "Validate" on a single word
+
 - SPA optimistically toggles `is_validated` in the cached query result.
 - `POST /api/projects/{id}/pages/{idx0}/words/{line_idx}/{word_idx}/validate`
   with `{validated: true}`.
@@ -217,6 +230,7 @@ applies uniformly. Examples:
   response wins.
 
 ### Click "Refine all bboxes on this page"
+
 - SPA calls `POST /api/projects/{id}/pages/{idx0}/refine-bboxes`.
 - Long-running (>500ms typical). Server returns `202 Accepted` with a
   `job_id`.
@@ -227,6 +241,7 @@ applies uniformly. Examples:
   refetch hydrates the new bboxes.
 
 ### Reload OCR (Edited image)
+
 - Same shape as Refine, with `use_edited_image=true` payload.
 - Server: `PageState.reload_page_with_ocr(use_edited_image=True)`.
 - Different from "refine" only in handler; same job-runner shape.

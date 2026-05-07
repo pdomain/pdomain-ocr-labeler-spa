@@ -5,6 +5,32 @@ The authoritative milestone definitions live in
 tracks implementation status — what's shipped, what's next. Update on
 every iteration.
 
+> **Scope freeze (2026-05-07).** Per user directive — focus on local-mode
+> functionality across the main feature set first. The following adapter
+> axes are **deferred to the far future** and must not be picked up by
+> the active loop without an explicit user OK:
+>
+> - **Auth / JWT / managed-multi-tenant** (D-005): keep the `IAuth`
+>   Protocol with `none_` impl only.
+> - **`s3` storage adapter** (D-019): Protocol stays, impl stays
+>   `NotImplementedYet`.
+> - **Postgres / SQLAlchemy / database adapter axis** (00-overview Non-
+>   goals): explicitly out of scope. No `database/` adapter, no
+>   migrations, no ORM — filesystem + atomic-rename JSON sidecars only.
+> - **Per-user prefs backend** (D-021): localStorage stays the only
+>   path; no `GET/PUT /api/user/prefs` until multi-user lands.
+> - **Optimistic locking / `version` on `PageRecord`** (D-023): single-
+>   process `asyncio.Lock` only.
+> - **Cloud-mode wheel / off-machine GPU OCR** (D-018): `modal` and
+>   `shared_container` OCR engines stay `NotImplementedYet` stubs.
+>
+> Local JSON-sidecar persistence (e.g. `session_state.json`,
+> `config.yaml`, the `ocr_config.json` carrier-writeback work in M3
+> slice 8c-iv+) is **in scope** — that's local. The deferral is about
+> network/multi-user/managed adapters, not about persistence per se.
+>
+> Codified in [`../specs/17-decisions.md` D-042](../specs/17-decisions.md#d-042--postgresmanaged-adapter-axes-deferred-to-far-future-2026-05-07).
+
 ## Status by milestone
 
 | Milestone | Status | Notes |

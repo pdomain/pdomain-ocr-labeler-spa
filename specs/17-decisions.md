@@ -18,11 +18,13 @@ with explicit settings parameter. `__main__.main()` reads env into a
 settings.
 
 **Why.**
+
 - Same-as pgdp-prep pattern; one less thing to learn.
 - `TestClient(build_app(settings))` is the test seam.
 - Avoids global singletons, plays well with concurrent tests.
 
 **Alternatives considered.**
+
 - Reading settings inside FastAPI app at first request (lazy). Rejected:
   forces lazy init guards; no clean way to error on bad settings at
   boot.
@@ -41,6 +43,7 @@ settings.
 Vite + TypeScript SPA. Keep the FastAPI server.
 
 **Why.**
+
 - The legacy UI's performance ceiling is the websocket roundtrip per
   edit. Big-text editors and word-match rebuilds are server-rendered
   → measurably slow.
@@ -50,6 +53,7 @@ Vite + TypeScript SPA. Keep the FastAPI server.
   per-tab UI state to the browser cheaply.
 
 **Alternatives considered.**
+
 - Keep NiceGUI, optimize the slow paths. Rejected: we'd be racing
   WebSocket overhead.
 - HTMX. Rejected: still server-rendered, not a clean win for the
@@ -70,11 +74,13 @@ directory the legacy uses. Both binaries can be installed simultaneously;
 flipping between them preserves user data.
 
 **Why.**
+
 - Continuity across the transition. Users don't lose labels.
 - Schema-versioned envelopes prevent mis-parses.
 - Single user means simultaneous-binary races are unlikely.
 
 **Trade-offs.**
+
 - A second writer can race; we mitigate with `pidfile` lockfile + a
   startup warning.
 - After GA, we may swap the legacy out and the data root keeps the
@@ -93,6 +99,7 @@ flipping between them preserves user data.
 `<AlertDialog />` from there for every modal/dialog/toast/dropdown.
 
 **Why.**
+
 - pgdp-prep's spec mentions shadcn but the code uses raw Tailwind on
   raw HTML. Closes the divergence.
 - The word-edit dialog has 8 distinct modal behaviours (focus trap,
@@ -102,6 +109,7 @@ flipping between them preserves user data.
 - Accessibility (focus trap, Escape, ARIA) for free.
 
 **Alternatives considered.**
+
 - Pure Tailwind (pgdp-prep's path). Rejected: too much boilerplate
   for the dialog count.
 - Radix directly. Rejected: shadcn's copy-paste pattern lets us adapt
@@ -121,6 +129,7 @@ flipping between them preserves user data.
 defer JWT/PKCE adapters indefinitely.
 
 **Why.**
+
 - Single-user use case. JWT pre-mature.
 - Cheap to keep the seam; saves a refactor when (if) we go multi-tenant.
 
@@ -137,6 +146,7 @@ Refine + Save Project + Export use SSE. All other mutations are
 synchronous JSON over HTTP.
 
 **Why.**
+
 - Single-page edits should feel snappy with optimistic updates.
 - Long-running jobs need progress feedback.
 - Mirrors pgdp-prep's job-runner pattern; avoids per-mutation SSE
@@ -155,12 +165,14 @@ word-edit-dialog image. Use plain HTML/CSS + shadcn for everything
 else.
 
 **Why.**
+
 - Konva is mature, has solid drag handles + transformer.
 - pgdp-prep already uses it — no new dependency cost.
 - Plain HTML for the word-match view is faster to render and lets
   React reconciliation diff at the cell level.
 
 **Risks.**
+
 - Konva DOM-backed Layer with ~600 word rects per page may be slow.
   Mitigation: profile in M4; fall back to single-canvas paint if
   needed.
@@ -177,6 +189,7 @@ else.
 with monospace CSS. Drop CodeMirror.
 
 **Why.**
+
 - The legacy uses CodeMirror's basic editor without syntax
   highlighting / line numbers — feature we don't need.
 - Smaller bundle.
@@ -195,6 +208,7 @@ with monospace CSS. Drop CodeMirror.
 in v1. Use `react-hotkeys-hook`.
 
 **Why.**
+
 - Migrating the UI is a one-time chance to fix the keyboard story.
 - The legacy 5 keybindings are preserved; the new ones are additive.
 
@@ -210,6 +224,7 @@ in v1. Use `react-hotkeys-hook`.
 for SPA routes, byte-identical to legacy.
 
 **Why.**
+
 - The driver agent depends on this URL shape.
 - Diverging to `/projects/{id}/pages/{idx0}` (pgdp-prep convention)
   would force a coordinated driver-agent update.
@@ -226,12 +241,14 @@ for SPA routes, byte-identical to legacy.
 SQLite jobs table. Server restart drops in-flight jobs.
 
 **Why.**
+
 - Single-user, single-process. SQLite jobs in pgdp-prep exist for
   multi-tenant + restart-resilience; we have neither requirement.
 - The on-disk envelope is the durable record. Job runs are
   reconstructable by re-running.
 
 **Trade-offs.**
+
 - Crashing during a long Save Project loses the in-flight progress.
   The completed pages are still saved.
 
@@ -248,11 +265,13 @@ simultaneous PUT requests to the same project block on a lock; the
 second sees the first's result.
 
 **Why.**
+
 - Cleaner than reasoning about partial mutation state.
 - Two-tab editing on the same page works because the lock guarantees
   ordering.
 
 **Trade-offs.**
+
 - Latency for two simultaneous edits doubles. Acceptable for
   single-user.
 
@@ -270,12 +289,14 @@ storage-adapter abstraction for the image cache (even though we have
 `IStorage` for envelopes).
 
 **Why.**
+
 - The labeler is a desktop app. S3-backed image cache would be
   meaningless for the v1 deploy shape.
 - `IStorage` is still in place for envelopes — that abstraction earns
   its keep on labeled-projects writes.
 
 **Risks.**
+
 - If we ever multi-host the labeler, we need to introduce a real
   IStorage seam for the cache. Re-evaluate then.
 
@@ -292,6 +313,7 @@ storage-adapter abstraction for the image cache (even though we have
 testids; no testid is renamed.
 
 **Why.**
+
 - The driver agent (`pd-ocr-labeler-driver`) operates the UI through
   `data-testid` selectors. Preserving them keeps the driver agent
   working without code changes.
@@ -311,6 +333,7 @@ testids; no testid is renamed.
 `frontend/openapi.json`.
 
 **Why.**
+
 - Closes the pgdp-prep drift gap explicitly noted in the architecture
   extract (section 4 "When this regenerates").
 - Forces frontend/backend sync.
@@ -328,6 +351,7 @@ byte-for-byte. The legacy `payload.word_attributes` legacy 5-bool
 side-channel is preserved on read AND write.
 
 **Why.**
+
 - Round-trip compatibility with the legacy. A user can save in SPA
   and re-open in legacy.
 - The 5-bool side-channel was a backward-compat hack in legacy; we
@@ -346,11 +370,13 @@ backend. Two tabs viewing the same page see identical
 toolbar-disabled states.
 
 **Why.**
+
 - Disabled-state computation depends on selection cardinality. Two
   tabs differing on this would be confusing.
 - Client-side optimistic updates make it feel snappy.
 
 **Trade-offs.**
+
 - Each viewport drag posts to the backend. Network chatter increases.
   Mitigation: debounce drag-move events.
 
@@ -369,11 +395,13 @@ theoretical. Supersedes the relevant part of D-007 only insofar as
 the OCR adapter is concerned.
 
 **Why.**
+
 - User answer to Q4 was **(B)**: full adapter axis like pgdp-prep.
 - The labeler will eventually want off-machine GPU for large books;
   baking the seam now is cheaper than retrofitting.
 
 **Implications.**
+
 - M3 needs to wire all three Protocol stubs in `adapters/ocr/`. Only
   `local_doctr` works; the others raise `NotImplementedYet` if
   selected.
@@ -394,18 +422,22 @@ serves via the storage adapter. Ship filesystem impl only;
 Supersedes D-013.
 
 **Why.**
+
 - User answer to Q5 was **(B)**: storage adapter pattern, but S3 not
   implemented yet.
 - Same seam-vs-implementation philosophy as D-005 / D-018.
 
 **Implications.**
+
 - `<cache>/page-images/` is no longer mounted via `StaticFiles`; it's
   served through the storage adapter's `get_bytes`.
 - Per-image-type filename layout unchanged.
 - `s3` adapter raises `NotImplementedYet` — same shape as `modal`
   OCR engine.
 
-**Refs.** [`OPEN_QUESTIONS.md Q5`](../OPEN_QUESTIONS.md), [`02-backend.md`](02-backend.md) §10, [`09-persistence.md`](09-persistence.md) §4.
+**Refs.** [`OPEN_QUESTIONS.md Q5`](../OPEN_QUESTIONS.md),
+[`02-backend.md`](02-backend.md) §10,
+[`09-persistence.md`](09-persistence.md) §4.
 
 ---
 
@@ -421,16 +453,20 @@ acceptable if research shows Konva handles 600 word rects per page
 without measurable lag.
 
 **Why.**
+
 - User answered **(B)** raw canvas but acknowledged "delegate to
   subagent research tool to determine best method here."
 - Premature commitment risks two months of building on a wrong stack.
 
 **Implications.**
+
 - Spec 04 lists both options with implementation deltas.
 - M4 has a "research spike" sub-task before component implementation
   begins.
 
-**Refs.** [`OPEN_QUESTIONS.md Q6`](../OPEN_QUESTIONS.md), [`04-image-viewport.md`](04-image-viewport.md), [`16-milestones.md`](16-milestones.md) M4.
+**Refs.** [`OPEN_QUESTIONS.md Q6`](../OPEN_QUESTIONS.md),
+[`04-image-viewport.md`](04-image-viewport.md),
+[`16-milestones.md`](16-milestones.md) M4.
 
 ---
 
@@ -444,10 +480,12 @@ splitter, zoom level, selection mode) live in `localStorage` via
 these to a per-user backend store when multi-user lands.
 
 **Why.**
+
 - User answered **(B)** plus "UI prefs probably should get saved per
   user later".
 
 **Implications.**
+
 - v1: `usePrefsStore` persists to `localStorage`.
 - Future: when auth lands (D-005 follow-up), introduce
   `GET/PUT /api/user/prefs` and migrate the store.
@@ -465,10 +503,12 @@ hotkeys for full keyboard-driven editing as a roadmap milestone (M9.5
 or later).
 
 **Why.**
+
 - User answered "follow recommendation, identify additional hotkeys
   for full keyboard-driven editing in a roadmap/spec item".
 
 **Implications.**
+
 - Spec 12 ships the wishlist for v1.
 - Spec 16 gets a new entry: M9.5 — "Full keyboard-driven editing
   audit" (post-GA polish).
@@ -486,10 +526,12 @@ across tabs converge via last-writer-wins on autosave. Plan optimistic
 locking for multi-user phase.
 
 **Why.**
+
 - User answered "follow recommendation, multi-user will need some
   form of optimistic locking?".
 
 **Implications.**
+
 - v1: no version vector; the backend's `asyncio.Lock` per project
   serializes writes; concurrent reads always see the latest.
 - Multi-user follow-up (when D-005 expands): introduce a `version`
@@ -507,6 +549,7 @@ locking for multi-user phase.
 resolved.
 
 **Why.**
+
 - User: "No, labeler won't use it."
 
 **Refs.** [`OPEN_QUESTIONS.md Q13`](../OPEN_QUESTIONS.md).
@@ -525,6 +568,7 @@ optionally by pd-ocr-cli (export/output) and pd-prep-for-pgdp
 in OCR output. Normalization is opt-in.
 
 **Why.**
+
 - User answer to Q14: "These should be configurable. Unicode glyphs
   exist for long S and ligature. We should default to glyphs with
   optional additional GT matching logic and normalization in output,
@@ -535,6 +579,7 @@ in OCR output. Normalization is opt-in.
   labeled artefact.
 
 **Implications.**
+
 - New spec [`18-text-normalization.md`](18-text-normalization.md)
   documents the design.
 - Three peer-repo agents (pd-book-tools, pd-ocr-cli, pd-prep-for-pgdp)
@@ -568,7 +613,9 @@ SSE — same shape as Reload OCR (page) and Refine Bboxes (page).
 The user noted: "don't we have a 'jobs' possibly available in our
 new spec?" — yes, see [`02-backend.md`](02-backend.md) §11.
 
-**Refs.** [`OPEN_QUESTIONS.md Q16`](../OPEN_QUESTIONS.md), [`10-export.md`](10-export.md), [`02-backend.md`](02-backend.md) §11.
+**Refs.** [`OPEN_QUESTIONS.md Q16`](../OPEN_QUESTIONS.md),
+[`10-export.md`](10-export.md),
+[`02-backend.md`](02-backend.md) §11.
 
 ---
 
@@ -582,6 +629,7 @@ pre-commit + playwright install). Devcontainer users get a hint
 that the same Make targets work; they're not required.
 
 **Why.**
+
 - User: "not everyone may be using dev container, we should follow
   the other makefile setup/dev that allows for developer to manage
   their env or us to 'help'".
@@ -603,11 +651,13 @@ GT. Indicator UI shows rotation state (e.g. badge "↻ auto" near page
 name).
 
 **Why.**
+
 - User answer to Q18: "yes, we should enable both B and C and
   indicate auto-rotated. We should enhance auto-rotate with GT
   best-match rotation possibly too."
 
 **Implications.**
+
 - New spec [`19-auto-rotation.md`](19-auto-rotation.md).
 - M9.x or M10 milestone (post-GA enhancement).
 - `PageRecord` gains a `rotation_degrees: int = 0` field; persisted
@@ -638,6 +688,7 @@ Legacy paths get **301 redirects**:
 Default canonical URL emitted by the SPA: the `pageno/{n}` form (human-friendly).
 
 **Why.**
+
 - User answer to Q19: "driver hasn't been run yet. This is ok to
   change and match pgdp-prep convention, but it might confuse someone
   using URL, could we do something like pages/index/{idx0} and
@@ -646,11 +697,14 @@ Default canonical URL emitted by the SPA: the `pageno/{n}` form (human-friendly)
 - Plural matches pgdp-prep.
 
 **Implications.**
+
 - Driver-contract spec heavily revised.
 - M2 router supports all three forms + redirects.
 - `routes.ts` exposes both `buildPageIndexUrl` and `buildPageNumberUrl`.
 
-**Refs.** [`OPEN_QUESTIONS.md Q19`](../OPEN_QUESTIONS.md), [`13-driver-contract.md`](13-driver-contract.md) §1, [`03-frontend.md`](03-frontend.md) §3.
+**Refs.** [`OPEN_QUESTIONS.md Q19`](../OPEN_QUESTIONS.md),
+[`13-driver-contract.md`](13-driver-contract.md) §1,
+[`03-frontend.md`](03-frontend.md) §3.
 
 ---
 
@@ -678,7 +732,9 @@ first v2.2 file is written; if legacy rejects, fall back to sidecar
 `<project>_<page:03d>.rotation.json` (Q-A1 option B) with auto-cleanup
 on next legacy save.
 
-**Refs.** [`OPEN_QUESTIONS.md Q-A1`](../OPEN_QUESTIONS.md), [`01-data-models.md`](01-data-models.md) §3, [`19-auto-rotation.md`](19-auto-rotation.md) §Persistence.
+**Refs.** [`OPEN_QUESTIONS.md Q-A1`](../OPEN_QUESTIONS.md),
+[`01-data-models.md`](01-data-models.md) §3,
+[`19-auto-rotation.md`](19-auto-rotation.md) §Persistence.
 
 ---
 
@@ -791,7 +847,9 @@ field. If a real consumer (e.g. an external deployment doc literally
 specifying `--log-level`) surfaces later, revisit with a concrete
 shape — but the default rule is one verbosity flag, matching legacy.
 
-**Refs.** [`OPEN_QUESTIONS.md Q-A13`](../OPEN_QUESTIONS.md), [`15-deployment-dev.md`](15-deployment-dev.md) §3, [`02-backend.md`](02-backend.md) §3.
+**Refs.** [`OPEN_QUESTIONS.md Q-A13`](../OPEN_QUESTIONS.md),
+[`15-deployment-dev.md`](15-deployment-dev.md) §3,
+[`02-backend.md`](02-backend.md) §3.
 
 ---
 
@@ -824,8 +882,8 @@ opening a separate terminal to tail logs for a 500 would be hostile
 ergonomics. Parity with pgdp-prep stays intact for the default path.
 
 **Why a flag rather than a hardcoded choice.** The spec explicitly
-admits future adapter axes (managed multi-tenant via JWT + S3 storage
-+ off-machine GPU per D-005 / D-018 / D-019). The moment any of those
+admits future adapter axes (managed multi-tenant via JWT + S3 storage,
+plus off-machine GPU per D-005 / D-018 / D-019). The moment any of those
 land, the verbatim-traceback in the 500 body becomes a real disclosure
 vector — the last 3 traceback lines on Python 3.13 include the
 *source code of the raising line*, which means string literals in
@@ -857,7 +915,10 @@ read into `error_handler.py`; add the spec §8 sub-clause; flip
 both flag values rather than asserting the literal "internal secret"
 leak.
 
-**Refs.** [`OPEN_QUESTIONS.md Q-A11`](../OPEN_QUESTIONS.md), [`02-backend.md`](02-backend.md) §3 (Settings field list) and §8 (error handling), [`docs/BUGS_FOUND.md` B-51](../docs/BUGS_FOUND.md).
+**Refs.** [`OPEN_QUESTIONS.md Q-A11`](../OPEN_QUESTIONS.md),
+[`02-backend.md`](02-backend.md) §3 (Settings field list) and §8
+(error handling),
+[`docs/BUGS_FOUND.md` B-51](../docs/BUGS_FOUND.md).
 
 ---
 
@@ -918,7 +979,82 @@ key dropped) and `test_session_state_load_logs_warning_with_stable_substring`
 (captures `caplog`, asserts WARNING level + substring +
 dropped-key-name in `extra=`).
 
-**Refs.** [`OPEN_QUESTIONS.md Q-A12`](../OPEN_QUESTIONS.md), [`09-persistence.md`](09-persistence.md) §6 (session_state.json) — to be amended; §11 (UserPageEnvelope) — kept strict per documented asymmetry, [`docs/BUGS_FOUND.md` B-58](../docs/BUGS_FOUND.md).
+**Refs.** [`OPEN_QUESTIONS.md Q-A12`](../OPEN_QUESTIONS.md),
+[`09-persistence.md`](09-persistence.md) §6 (session_state.json) — to
+be amended; §11 (UserPageEnvelope) — kept strict per documented
+asymmetry,
+[`docs/BUGS_FOUND.md` B-58](../docs/BUGS_FOUND.md).
+
+---
+
+## D-042 — Postgres/managed-adapter axes deferred to far future (2026-05-07)
+
+**Date.** 2026-05-07. Direct user directive on the /loop driver agent.
+
+**Decision.** All adapter axes that imply a network-attached or multi-
+user shape are **deferred to the far future**. The /loop must not pick
+slices that build them out without explicit user re-authorisation. The
+deferred axes are:
+
+- **Auth.** Keep `IAuth` Protocol + `NoneAuth` impl only. No JWT, no
+  PKCE, no session-cookie auth, no `verify` calls against a network
+  identity provider. Reaffirms D-005.
+- **Storage `s3`.** Protocol stays so the seam is real, but the impl
+  stays `NotImplementedYet`. No boto3 dep, no S3 fixtures, no upload
+  path. Reaffirms D-019.
+- **Database / Postgres / SQLAlchemy.** No `database/` adapter axis,
+  no Alembic, no ORM models, no async Postgres driver in `pyproject`,
+  no `pg_*` env vars in `Settings`. Reaffirms 00-overview Non-goals
+  ("Filesystem only — Single-user; no DB needed for v1").
+- **Per-user prefs backend.** UI prefs stay in `localStorage` only;
+  no `GET/PUT /api/user/prefs`. Reaffirms D-021.
+- **Optimistic locking / version vector on `PageRecord`.** Single-
+  process `asyncio.Lock` only; no `If-Match`, no `version` field.
+  Reaffirms D-023.
+- **Cloud-mode OCR.** `ModalOCR` and `SharedContainerOCR` stay
+  `NotImplementedYet` stubs. Reaffirms D-018.
+
+**Why.** User directive: "focus on getting local-mode functionality
+working across main features first." The repo's milestone roadmap is
+already structured this way (M1–M9 are all local-mode work), but the
+spec body retains seams + future-facing prose that an autonomous /loop
+could mistake for "near-term" work — particularly D-021's "future per-
+user backend store", D-023's "Plan optimistic locking", D-019's
+`s3` Protocol, and D-040's references to "any future managed/multi-
+tenant shape". This ADR converts those from "soon" to "far future" so
+slice picking stays bounded.
+
+**What stays in scope (do NOT defer).** Local JSON-sidecar
+persistence is **the active path** and is the kind of work to
+prioritise:
+
+- `session_state.json` (spec §6) — already shipped iter 44.
+- `config.yaml` (spec §7) — pending; in scope.
+- `ocr_config.json` carrier writeback (M3 slice 8c-iv+) — in scope;
+  the `OCRConfigCarrier` is an in-process holder + filesystem sidecar,
+  NOT a database row.
+- `UserPageEnvelope` v2.1 read/write (M3) — in scope.
+- Image cache via filesystem `IStorage` — in scope.
+
+**Implications.**
+
+- `s3` / `modal` / `shared_container` adapters keep their
+  `NotImplementedYet` stubs but no further effort is spent on them.
+- `auth` axis stays at `none_` only; the spec sections that mention
+  "future per-user backend store" / "when multi-user lands" / "future
+  managed/multi-tenant shape" remain valid future plans (don't delete)
+  but are reclassified out of the active milestone path.
+- The "Postgres-deferred" framing is **stricter than D-005/D-018/D-019
+  alone implied** — those say "wire the Protocol now, defer the impl";
+  this ADR additionally says "do not even spend an iter polishing the
+  deferred Protocol's edges, do not file Q-questions about its shape,
+  do not let it appear in the next-up slice list."
+
+**Refs.** Ratifies user directive 2026-05-07 against
+[`docs/ROADMAP.md` Scope freeze callout](../docs/ROADMAP.md);
+this file's prior entries D-005 (auth), D-018 (OCR engine axis),
+D-019 (S3 storage), D-021 (UI prefs), D-023 (multi-tab), D-040 (500
+body redaction); [`00-overview.md` Non-goals](00-overview.md).
 
 ---
 
