@@ -271,16 +271,39 @@ def test_main_does_not_open_browser_when_no_browser(monkeypatch: pytest.MonkeyPa
 
 
 def test_main_opens_browser_in_default_mode(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Default behaviour: the CLI opens a browser to the bound URL."""
+    """Default behaviour: the CLI opens a browser to the bound URL.
+
+    Updated for B-68: ``main`` no longer calls ``webbrowser.open``
+    synchronously — the call now happens on a daemon thread that
+    polls ``host:port`` until the listener is up. To keep this
+    assertion meaningful we (a) stub ``socket.create_connection`` so
+    the poller sees a live listener immediately, then (b) join the
+    thread with a tight timeout before asserting.
+    """
+    import threading as _threading
+
     for var in list(__import__("os").environ):
         if var.startswith("PDLABELER_"):
             monkeypatch.delenv(var, raising=False)
+
+    class _FakeSock:
+        def __enter__(self) -> _FakeSock:  # noqa: PYI034
+            return self
+
+        def __exit__(self, *_a: Any) -> None:
+            return None
+
+    monkeypatch.setattr(main_mod.socket, "create_connection", lambda *_a, **_kw: _FakeSock())
 
     with (
         patch.object(main_mod, "uvicorn"),
         patch.object(main_mod, "webbrowser") as mock_wb,
     ):
         rc = main(["--data-root", str(tmp_path)])
+        # Wait for the daemon poller thread to finish before asserting.
+        for t in _threading.enumerate():
+            if t.name == "pd-ocr-labeler-browser-opener":
+                t.join(timeout=2.0)
 
     assert rc == 0
     mock_wb.open.assert_called_once()
@@ -576,3 +599,106 @@ def test_main_with_none_argv_reads_sys_argv(monkeypatch: pytest.MonkeyPatch, tmp
     with patch.object(main_mod, "uvicorn"), patch.object(main_mod, "webbrowser"):
         rc = main(None)
     assert rc == 0
+
+
+# ── B-68: browser-open polls the listener before opening ────────────────
+
+
+def test_open_when_ready_waits_for_listener_then_opens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_open_when_ready`` must NOT call ``webbrowser.open`` until a TCP
+    connection to ``host:port`` succeeds.
+
+    Pins B-68: the prior code called ``webbrowser.open`` *before*
+    ``uvicorn.run`` bound the port, racing the spawned tab against
+    the still-importing app factory.
+    """
+    from pd_ocr_labeler_spa.__main__ import _open_when_ready
+
+    attempts = {"n": 0}
+
+    class _FakeSock:
+        def __enter__(self) -> _FakeSock:  # noqa: PYI034
+            return self
+
+        def __exit__(self, *_a: Any) -> None:
+            return None
+
+    def fake_create_connection(*_a: Any, **_kw: Any) -> _FakeSock:
+        attempts["n"] += 1
+        if attempts["n"] < 3:
+            raise OSError("connection refused")
+        return _FakeSock()
+
+    monkeypatch.setattr(main_mod.socket, "create_connection", fake_create_connection)
+    open_calls: list[str] = []
+    monkeypatch.setattr(main_mod.webbrowser, "open", lambda url, new=0: open_calls.append(url))
+    _open_when_ready(
+        "http://127.0.0.1:9999",
+        "127.0.0.1",
+        9999,
+        deadline_s=2.0,
+        poll_s=0.0,
+    )
+
+    assert open_calls == ["http://127.0.0.1:9999"]
+    assert attempts["n"] == 3  # polled twice, succeeded on third
+
+
+def test_open_when_ready_gives_up_silently_after_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the deadline elapses with no successful connect, do NOT open
+    the browser (and do NOT raise) — startup may have wedged."""
+    from pd_ocr_labeler_spa.__main__ import _open_when_ready
+
+    monkeypatch.setattr(
+        main_mod.socket,
+        "create_connection",
+        lambda *_a, **_kw: (_ for _ in ()).throw(OSError("nope")),
+    )
+    open_calls: list[str] = []
+    monkeypatch.setattr(main_mod.webbrowser, "open", lambda url, new=0: open_calls.append(url))
+
+    _open_when_ready(
+        "http://127.0.0.1:9999",
+        "127.0.0.1",
+        9999,
+        deadline_s=0.05,
+        poll_s=0.01,
+    )
+
+    assert open_calls == []  # never opened the browser
+
+
+def test_open_when_ready_swallows_webbrowser_exceptions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Headless platforms sometimes have ``webbrowser.open`` raise.
+    The poller must catch + swallow so a server startup never crashes
+    on a missing browser launcher."""
+    from pd_ocr_labeler_spa.__main__ import _open_when_ready
+
+    class _FakeSock:
+        def __enter__(self) -> _FakeSock:  # noqa: PYI034
+            return self
+
+        def __exit__(self, *_a: Any) -> None:
+            return None
+
+    monkeypatch.setattr(main_mod.socket, "create_connection", lambda *_a, **_kw: _FakeSock())
+
+    def boom(*_a: Any, **_kw: Any) -> None:
+        raise RuntimeError("no display")
+
+    monkeypatch.setattr(main_mod.webbrowser, "open", boom)
+
+    # Must not raise.
+    _open_when_ready(
+        "http://127.0.0.1:9999",
+        "127.0.0.1",
+        9999,
+        deadline_s=1.0,
+        poll_s=0.0,
+    )

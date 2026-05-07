@@ -29,7 +29,10 @@ filed pending user decision before adding a new Settings field.
 from __future__ import annotations
 
 import argparse
+import socket
 import sys
+import threading
+import time
 import webbrowser
 from pathlib import Path
 
@@ -203,6 +206,56 @@ def _build_overrides(args: argparse.Namespace) -> dict[str, object]:
     return overrides
 
 
+# B-68: bound on how long the browser-open thread will poll for the
+# uvicorn listener before giving up. 10s comfortably covers the SPA
+# factory's import + adapter wiring (sub-second on warm caches) while
+# still bounding the daemon thread's lifetime if startup wedges.
+_BROWSER_OPEN_DEADLINE_S: float = 10.0
+_BROWSER_OPEN_POLL_S: float = 0.1
+
+
+def _open_when_ready(
+    url: str,
+    host: str,
+    port: int,
+    *,
+    deadline_s: float = _BROWSER_OPEN_DEADLINE_S,
+    poll_s: float = _BROWSER_OPEN_POLL_S,
+) -> None:
+    """Poll ``host:port`` until something accepts a TCP connection, then
+    call ``webbrowser.open(url)``.
+
+    Per B-68: ``webbrowser.open`` returns immediately after handing the
+    URL to the OS-level launcher. If we call it *before* uvicorn binds
+    the port, the spawned tab can race the still-importing app factory
+    and either (a) hit ``ECONNREFUSED`` (browsers cache that for ~30s
+    on some platforms), or (b) hit a stale prior listener still in
+    ``TIME_WAIT``. Polling the port first eliminates both.
+
+    Bounded by ``deadline_s`` so a startup wedge never leaks this
+    daemon thread indefinitely. Swallows all exceptions
+    (``webbrowser.open`` itself raises on some headless platforms) —
+    failing to open the browser must never crash the server, matching
+    the prior ``try / except Exception: pass`` semantics.
+    """
+    deadline = time.monotonic() + deadline_s
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=0.5):
+                break
+        except OSError:
+            time.sleep(poll_s)
+    else:
+        # Deadline hit without a successful connection — give up
+        # silently. The server itself may still come up later; the
+        # user can navigate manually.
+        return
+    try:
+        webbrowser.open(url, new=1)
+    except Exception:  # noqa: BLE001 — see docstring
+        pass
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(sys.argv[1:] if argv is None else argv)
 
@@ -223,10 +276,17 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Listening on {url}")
 
     if not args.no_browser and not args.reload:
-        try:
-            webbrowser.open(url, new=1)
-        except Exception:
-            pass
+        # B-68 fix: do not open the browser before uvicorn binds the port.
+        # Spawn a daemon thread that polls ``host:port`` and opens the URL
+        # once the listener is up. Bounded by ``_BROWSER_OPEN_DEADLINE_S``
+        # so a startup failure can't leak the thread; ``daemon=True`` so a
+        # parent ``SystemExit`` from uvicorn cleanly tears it down.
+        threading.Thread(
+            target=_open_when_ready,
+            args=(url, host, port),
+            name="pd-ocr-labeler-browser-opener",
+            daemon=True,
+        ).start()
 
     uvicorn.run(
         "pd_ocr_labeler_spa.bootstrap:build_app",
