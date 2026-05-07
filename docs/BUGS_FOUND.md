@@ -1808,7 +1808,15 @@ Iter 40 = next code-review checkpoint.
 
 ## B-51 — Unhandled-exception 500 envelope leaks **the source line literally** (including any string literals in `raise X(...)`) into client `details`
 
-- **Status:** **OPEN** (still). Decision landed 2026-05-07: option (B) — `Settings.debug_unhandled_traceback: bool = True` default-on, redact when `False`. See [D-040](../specs/17-decisions.md#d-040--unhandled-exception-traceback-disclosure-gated-by-debug_unhandled_traceback-flag). **Blocked-on: implementation per D-040** (NOT blocked on user decision — user has answered). Closeout requires: (1) add the `Settings` field, (2) plumb the read into `error_handler.py`, (3) amend spec §8 with the security clause, (4) parametrise `tests/unit/core/test_error_handler.py:175-189` across both flag values rather than asserting the literal leak.
+- **Status:** ✅ **Fixed in iter 53 (2026-05-07)** — commit `ef5908d`.
+  `Settings.debug_unhandled_traceback: bool = True` (env
+  `PDLABELER_DEBUG_UNHANDLED_TRACEBACK`) added; `error_handler.py`
+  Exception catch-all reads it and emits `details=None` when `False`
+  while keeping `logger.exception` server-side. Default-on preserves
+  single-user-on-laptop browser-console-triage UX. See
+  [D-040](../specs/17-decisions.md#d-040--unhandled-exception-traceback-disclosure-gated-by-debug_unhandled_traceback-flag).
+  Spec §8 security-clause amendment is the only remaining tail
+  (doc-only, tracked separately).
 - **Severity:** medium
 - **Where:** `src/pd_ocr_labeler_spa/api/middleware/error_handler.py:120-138`; pinned by `tests/unit/core/test_error_handler.py:175-189`.
 - **Issue:** `details=traceback.format_exc().splitlines()[-3:]` returns the last 3 traceback lines verbatim, which on Python 3.13 includes the *source code of the raising line*. My live probe response body:
@@ -2348,3 +2356,14 @@ Out-of-scope by directive: B-58 (Q-A12-blocked), B-51 (Q-A11-blocked), B-63..B-6
 **Code-health read across iters 46-49:** healthy. Iter 46 was a clean 5-bug closeout with one-commit-per-bug discipline + parametrised regression pins. Iter 47's M1.g landing has thorough test coverage (17 tests for what's effectively glue code) and disciplined "consumer lands later, seam lands today" framing. Iter 48 closed a real M1 acceptance gap with a non-trivial mechanism (capture-list path for finalizer warnings) plus a self-test that pins the mechanism — exactly the right shape. Iter 49 was docs-only but useful — caught real spec drift (B-63..B-66). Findings here are second-order polish, not architectural concerns.
 
 No new Q-A entries surfaced — none of B-67..B-71 are user-decision items.
+
+---
+
+## B-72 — `test_static_mounts.py` `rmdir(static/assets/)` regresses `make test` after `make frontend-build`
+
+- **Status:** Open. Filed iter 54 (2026-05-07).
+- **Severity:** medium (real `make test` regression — fails in any working tree where a real frontend bundle has landed in `src/pd_ocr_labeler_spa/static/assets/`, even though `static/assets/` is correctly `.gitignore`d).
+- **Where:** `tests/unit/api/test_static_mounts.py:269-286` (`test_spa_static_asset_does_not_set_no_store`) and `:289-303` (`test_spa_fallback_serves_static_asset_directly`). Both end their `finally:` block with `asset.parent.rmdir()`.
+- **Issue:** Both tests `mkdir(parents=True, exist_ok=True)` an `assets/` subdir under the in-source `static/` bundle, write a single fixture file, and on teardown `unlink()` the file then `rmdir()` `assets/`. The `rmdir()` assumes nobody else has put files in `assets/` — which is true on a clean tree, but **false** any time a real `make frontend-build` has populated `static/assets/index-*.{js,css,js.map}`. After Q-A8 unblocked the frontend toolchain (iter 50+) and someone runs `make frontend-build` once locally, every subsequent `pytest` run fails these two tests with `OSError: [Errno 39] Directory not empty: '.../static/assets'`.
+- **Why it matters:** This is the same B-54-class anti-pattern (test side-effects on the in-source tree) but in test teardown rather than test setup. It's silent on a fresh checkout, surfaces the moment Q-A8 is unblocked. Currently 355/357 tests pass — these are the only two failures. CI on a fresh runner will be green; a developer's laptop after their first `make frontend-build` will be red. Discovered iter 54 by running `uv run pytest -q` against the working tree post-iter-52.
+- **Suggested fix:** Replace the in-source-tree write with a `tmp_path`-based mock bundle + `monkeypatch` of `_resolve_static_dir`. Or, simpler: add an autouse fixture `_preserve_static_assets` that `os.listdir()`s `static/assets/` on entry and asserts the same set on exit (fail loudly if drifts) AND change the teardown to `shutil.rmtree(asset.parent, ignore_errors=True)` only when the dir was created by the test. The `tmp_path` route is preferred — it's the only fix that survives a future frontend-bundle-lives-elsewhere refactor.

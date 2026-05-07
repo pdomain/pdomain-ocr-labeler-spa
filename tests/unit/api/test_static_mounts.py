@@ -266,41 +266,101 @@ def test_spa_index_html_sets_no_store_cache_control(settings: Settings, spa_dir:
         assert "no-store" in cc, f"expected no-store on SPA shell; got {cc!r}"
 
 
+def _write_test_asset(spa_dir: Path, filename: str, content: bytes) -> Path:
+    """Write ``spa_dir/assets/<filename>`` with ``content``; return path.
+
+    B-72: ``assets/`` may *already* hold a real frontend bundle from a
+    prior ``make frontend-build``. We therefore (1) create the dir
+    idempotently, (2) refuse to overwrite a pre-existing entry under
+    the same name (would mask a real bundle file), and (3) leave the
+    dir intact on teardown — only the test's own file is removed.
+    """
+    assets_dir = spa_dir / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    target = assets_dir / filename
+    if target.exists():
+        msg = (
+            f"refusing to clobber existing {target}: pick a unique test "
+            f"filename so a real frontend bundle isn't overwritten"
+        )
+        raise AssertionError(msg)
+    target.write_bytes(content)
+    return target
+
+
+def _cleanup_test_asset(asset: Path) -> None:
+    """Remove a single test-written asset; leave siblings untouched.
+
+    B-72: previous shape called ``asset.parent.rmdir()``, which fails
+    with ``OSError: Directory not empty`` whenever a real frontend
+    bundle has populated ``static/assets/``. The dir is gitignored and
+    safe to leave between tests; the test's own file is what matters.
+    """
+    if asset.exists():
+        asset.unlink()
+
+
 def test_spa_static_asset_does_not_set_no_store(settings: Settings, spa_dir: Path) -> None:
     """B-62 sibling: hash-named static assets keep default caching
     (no explicit ``no-store``). They're content-addressed so they're
     safe to cache aggressively; only the SPA shell needs no-store.
     """
-    asset = spa_dir / "assets" / "hashed.js"
-    asset.parent.mkdir(parents=True, exist_ok=True)
-    asset.write_bytes(b"// content")
+    # B-72: pick a filename collision-resistant against any real bundle
+    # (vite emits ``index-<hash>.js``; this one's deliberately not that).
+    asset = _write_test_asset(spa_dir, "b72-test-fixture-hashed.js", b"// content")
     try:
         app = build_app(settings)
         with TestClient(app) as client:
-            r = client.get("/assets/hashed.js")
+            r = client.get("/assets/b72-test-fixture-hashed.js")
         assert r.status_code == 200
         cc = r.headers.get("cache-control", "")
         assert "no-store" not in cc, f"hashed asset should NOT carry no-store; got {cc!r}"
     finally:
-        asset.unlink()
-        asset.parent.rmdir()
+        _cleanup_test_asset(asset)
 
 
 def test_spa_fallback_serves_static_asset_directly(settings: Settings, spa_dir: Path) -> None:
     """Real files in the bundle (``/assets/<hash>.js``) serve verbatim, NOT as HTML."""
-    asset = spa_dir / "assets" / "main.js"
-    asset.parent.mkdir(parents=True, exist_ok=True)
-    asset.write_bytes(b"console.log('hi');")
-
-    app = build_app(settings)
+    asset = _write_test_asset(spa_dir, "b72-test-fixture-main.js", b"console.log('hi');")
     try:
+        app = build_app(settings)
         with TestClient(app) as client:
-            r = client.get("/assets/main.js")
+            r = client.get("/assets/b72-test-fixture-main.js")
         assert r.status_code == 200
         assert r.content == b"console.log('hi');"
     finally:
-        asset.unlink()
-        asset.parent.rmdir()
+        _cleanup_test_asset(asset)
+
+
+def test_b72_test_isolation_does_not_mutate_real_static_assets(spa_dir: Path) -> None:
+    """B-72 regression pin: tests in this module MUST NOT delete or
+    overwrite a real frontend bundle that pre-existed under
+    ``static/assets/``.
+
+    The check captures the assets-dir contents at the start of *this*
+    test (which runs after the two B-72 victims thanks to pytest's
+    in-file declaration order — see comment block above), then walks
+    the dir again and asserts the same set survives. If the B-72 fix
+    regresses (someone re-introduces an unconditional ``rmdir`` in
+    teardown), this fixture goes red on a tree where ``make
+    frontend-build`` has run.
+
+    On a clean tree (no bundle), this test is a no-op assertion that
+    the dir is either absent or empty — still a useful invariant.
+    """
+    assets_dir = spa_dir / "assets"
+    snapshot_before = sorted(p.name for p in assets_dir.iterdir()) if assets_dir.is_dir() else []
+    # Run a probe through the SPA fallback so any in-test mutation of
+    # the assets dir (write/unlink) would happen before we re-check.
+    app = build_app(Settings(mode="normal"))
+    with TestClient(app) as client:
+        client.get("/")  # SPA shell
+    snapshot_after = sorted(p.name for p in assets_dir.iterdir()) if assets_dir.is_dir() else []
+    assert snapshot_before == snapshot_after, (
+        f"B-72 regression: static/assets/ contents changed during a "
+        f"test run; before={snapshot_before!r} after={snapshot_after!r}. "
+        f"Tests in this module must use _write_test_asset/_cleanup_test_asset."
+    )
 
 
 @pytest.mark.parametrize(
