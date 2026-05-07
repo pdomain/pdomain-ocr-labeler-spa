@@ -28,6 +28,7 @@ from ..adapters.ocr import IOCREngine
 from ..adapters.storage import IStorage
 from ..core.active_project import ActiveProject, ActiveProjectCarrier
 from ..core.app_state import AppState
+from ..core.project_state import ProjectState
 from ..settings import Settings
 
 
@@ -107,6 +108,30 @@ def get_active_project(request: Request) -> ActiveProject | None:
     return carrier.snapshot()
 
 
+def get_project_state(request: Request) -> ProjectState:
+    """The mutable ``ProjectState`` carrier — loaded ``Project`` + per-page graph.
+
+    Spec authority: ``specs/00-overview.md`` lines 185-187 (the
+    per-project state container) + ``specs/16-milestones.md`` line 158
+    (M2 backend bullet 1). Distinct from ``ActiveProjectCarrier``:
+
+    - ``ActiveProjectCarrier`` (slice 2) holds the *pointer* — which
+      project root is active.
+    - ``ProjectState`` (this module) holds the *graph* — the
+      reconstituted ``Project`` model + per-page state.
+
+    Slice 5 wires this carrier so ``POST /api/projects/load`` can call
+    ``state.set_loaded_project(project)`` after the persistence layer
+    builds the model. The provider exists at slice 5 so the wiring is
+    exercised end-to-end; future routes that read the loaded project
+    (the M2-proper ``GET /api/projects/{id}``, every page-route in M3)
+    will reach for the same provider.
+    """
+    state = _state_attr(request, "project_state")
+    assert isinstance(state, ProjectState)
+    return state
+
+
 __all__ = [
     "get_settings",
     "get_app_state",
@@ -115,4 +140,5 @@ __all__ = [
     "get_ocr_engine",
     "get_active_project_carrier",
     "get_active_project",
+    "get_project_state",
 ]

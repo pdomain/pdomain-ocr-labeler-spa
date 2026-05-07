@@ -12,37 +12,40 @@ Spec authority:
   ``{error: <tag>, message: <str>, details: <any>}``); flat shape, not
   nested under ``error.code``.
 
-What this slice (M2 slice 4 — second half) ships:
+What this slice (M2 slice 5) ships ON TOP OF slice 4:
 
-1. ``GET /api/projects`` composes the pure ``enumerate_projects``
-   scanner (slice 4 starter, iter 2) with the request-time
-   ``Settings`` and the ``ActiveProjectCarrier`` (slice 2). The
-   response surfaces the scanner's output plus the active-project
-   pointer + provenance.
+1. ``GET /api/projects`` (unchanged from slice 4) — composes the pure
+   ``enumerate_projects`` scanner with the request-time ``Settings``
+   and the ``ActiveProjectCarrier``.
 
-2. ``POST /api/projects/load`` validates the requested ``project_root``
-   is (a) a real directory, (b) under ``Settings.source_projects_root``,
-   then swaps the carrier and returns the new active-project key + the
-   carrier's bumped ``generation``.
+2. ``POST /api/projects/load`` (UPGRADED): now reads ``pages.json`` /
+   ``pages_manifest.json``, scans the project dir for image files, and
+   reads optional ``project.json`` to construct a full ``Project``
+   model. The model is then stashed on ``ProjectState`` so subsequent
+   read endpoints (M2-proper's ``GET /api/projects/{id}``, M3+ page
+   routes) can return real data. The slice-4 ``LoadProjectResponseStub``
+   is replaced by ``LoadProjectResponse{project, current_page_index}``.
 
-What this slice deliberately does NOT do (deferred to M2-proper):
+What slice 5 deliberately does NOT do (deferred):
 
 - ``POST /api/projects/discover`` and ``POST /api/projects/source-root``
-  — both depend on YAML config plumbing that lands in M2-proper.
-- ``GET /api/projects/{project_id}`` — needs the loaded ``Project``
-  graph (M2-proper).
-- ``LoadProjectResponse`` carrying ``project: Project`` +
-  ``current_page: PagePayload`` per spec §1 lines 221-223 — those
-  models don't exist yet. Slice 4 ships an interim slim shape
-  (``LoadProjectResponseStub`` with ``project_key`` + ``generation``)
-  whose docstring spells out the deviation. The route name + URL stay
-  spec-canonical so the M2-proper expansion is purely additive — the
-  SPA will see additional fields, not renamed ones.
+  — both depend on YAML config plumbing (M2-proper).
+- ``GET /api/projects/{project_id}`` — additional read route (M2-proper).
+- The full spec-canonical ``LoadProjectResponse`` shape with
+  ``current_page: PagePayload`` per spec §1 lines 221-223. ``PagePayload``
+  bundles ``PageRecord`` + ``EncodedDims`` + ``LineMatch[]`` + image
+  URLs which require the M3 OCR/page-cache plumbing
+  (``ensure_page_model``, image cache, encode dims). Slice 5 ships
+  ``current_page_index: int`` instead — the same URL stays stable;
+  M3 will additively expand the response field name + type when the
+  ``PagePayload`` model exists. The interim ``int`` is enough for the
+  SPA to URL-redirect to ``/page/{idx0+1}`` per spec §URL.
+- Writing ``session_state.json`` on successful load — also tied to
+  the page-payload step (M3) since the writer needs the resolved
+  page index.
 - ``config_source`` provenance: slice 4 emits ``"default"``
-  unconditionally; the YAML/CLI source tracking lands with
+  unconditionally; YAML/CLI source tracking lands with
   ``POST /api/projects/source-root`` in M2-proper.
-- Writing ``session_state.json`` on a successful load — see route
-  docstring.
 """
 
 from __future__ import annotations
@@ -56,9 +59,17 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ..core.active_project import ActiveProjectCarrier, InvalidProjectDirError
+from ..core.models import Project
+from ..core.persistence.ground_truth import load_ground_truth_from_directory
+from ..core.persistence.project_envelope import build_project_from_directory
 from ..core.project_enumeration import enumerate_projects
+from ..core.project_state import ProjectState
 from ..settings import Settings
-from .dependencies import get_active_project_carrier, get_settings
+from .dependencies import (
+    get_active_project_carrier,
+    get_project_state,
+    get_settings,
+)
 from .middleware.error_handler import ApiError
 
 log = logging.getLogger(__name__)
@@ -118,32 +129,54 @@ class LoadProjectRequest(BaseModel):
     initial_page_index: int = 0
 
 
-class LoadProjectResponseStub(BaseModel):
-    """Slice-4 interim shape — see module docstring.
+class LoadProjectResponse(BaseModel):
+    """M2 slice-5 response — interim shape on the path to spec-canonical.
 
-    The spec-canonical ``LoadProjectResponse`` is::
+    Spec-canonical (``§01-data-models.md`` lines 221-223) is::
 
         class LoadProjectResponse(BaseModel):
             project: Project
             current_page: PagePayload
 
-    Both ``Project`` and ``PagePayload`` arrive in M2-proper. Until
-    they exist, this slim shape lets the SPA drive the load handshake
-    end-to-end (carrier swap + URL update + dropdown re-mark) with no
-    fake data. The class is named with the ``Stub`` suffix so that
-    M2-proper's expansion (which keeps the URL constant and just
-    extends the response schema) doesn't accidentally re-export this
-    type from generated TS.
+    ``PagePayload`` (``§01-data-models.md`` lines 236-244) bundles
+    ``PageRecord`` + ``EncodedDims`` + ``LineMatch[]`` + image-cache
+    URLs — none of which exist yet (those models land in M3 with the
+    OCR / page-cache / encode-dims plumbing).
+
+    Slice 5 ships ``current_page_index: int`` in place of
+    ``current_page: PagePayload``. Why this is acceptable scope:
+
+    - The route name + URL stay spec-canonical (purely additive
+      expansion in M3).
+    - The carrier swap, project-state mutation, and ``Project``
+      construction are all real — no stub data.
+    - The SPA only needs the index right now to redirect to
+      ``/page/{idx0+1}``; the rich ``PagePayload`` is a follow-up
+      fetch via ``GET /api/projects/{id}/pages/{idx}`` in M3.
+
+    M3 will rename ``current_page_index`` → ``current_page`` and
+    swap ``int`` → ``PagePayload`` simultaneously when the page-payload
+    plumbing is in place. The TS generator pins on field name + type,
+    so a renamed field IS a breaking client change — the SPA will be
+    updated in the same M3 milestone.
+
+    ``generation`` mirrors slice 4's stub semantics: the
+    ``ProjectState.generation`` counter AFTER the swap, so the SPA can
+    distinguish "I just loaded X" from "someone else loaded X 2
+    generations ago" once SSE lands.
 
     Fields:
 
-    - ``project_key``: the ``ProjectKey`` of the now-active project.
-    - ``generation``: the carrier's monotonically-increasing counter
-      AFTER the swap. Lets the SPA distinguish "I just loaded X"
-      from "someone else loaded X 2 generations ago" once SSE lands.
+    - ``project``: the loaded ``Project`` model — full image_paths +
+      ground_truth_map + persisted-metadata.
+    - ``current_page_index``: the 0-based cursor (clamped + seeded
+      from ``project.json`` if previously saved).
+    - ``generation``: the ``ProjectState.generation`` counter AFTER
+      this load. Increments by ≥1 on every successful load.
     """
 
-    project_key: ProjectKey
+    project: Project
+    current_page_index: int
     generation: int
 
 
@@ -254,6 +287,7 @@ def load_project(
     request: Request,  # noqa: ARG001  reserved for future SSE / session-state plumbing
     settings: Settings = Depends(get_settings),
     carrier: ActiveProjectCarrier = Depends(get_active_project_carrier),
+    project_state: ProjectState = Depends(get_project_state),
 ) -> JSONResponse:
     """``POST /api/projects/load`` — validate path, swap carrier.
 
@@ -279,16 +313,24 @@ def load_project(
        project_not_found`` (operator-actionable label, same shape the
        lifespan hook uses for the same race in slice 3).
 
-    Per the module docstring, slice 4 returns ``LoadProjectResponseStub``;
-    M2-proper will additively expand the response to the spec-canonical
-    ``LoadProjectResponse``.
+    Slice 5 (this iter) extends slice 4 to also:
 
-    Session-state writeback is intentionally omitted at slice 4. The
-    spec says the load endpoint "Saves session state" (§5.2 line 217),
-    but the writer (``save_session_state``) needs the page-payload
-    plumbing to know what page index to record — and the page payload
-    isn't in the slim slice-4 response. M2-proper bundles writeback
-    with the page-payload extension.
+    - Build the full ``Project`` model from disk (``pages.json`` /
+      ``pages_manifest.json`` ground truth + image-file scan +
+      optional ``project.json`` saved metadata) via
+      ``build_project_from_directory``.
+    - Stash the model on ``ProjectState`` via ``set_loaded_project``.
+    - Return a ``LoadProjectResponse{project, current_page_index, generation}``
+      response (replacing the slice-4 ``LoadProjectResponseStub``).
+
+    Session-state writeback is still omitted in slice 5: the
+    ``save_session_state`` call wants to record both the project path
+    AND the page index that the SPA actually displayed. Slice 5 stops
+    short of the page-payload step (M3 territory: real OCR / image
+    cache / encode dims), so the index we'd record is just whatever
+    ``build_project_from_directory`` clamped — accurate, but the spec
+    intentionally bundles session-state with the page-payload step.
+    M3 will land both.
     """
     target = body.project_root
 
@@ -358,13 +400,27 @@ def load_project(
 
     snap = carrier.snapshot()
     assert snap is not None  # we just set it
-    response = LoadProjectResponseStub(
-        project_key=ProjectKey(
-            project_id=resolved.name,
-            project_root=resolved,
-            label=resolved.name,
-        ),
-        generation=carrier.generation,
+
+    # Step 6 (slice 5): build the full ``Project`` from disk — image
+    # scan + ground-truth load + optional ``project.json`` metadata.
+    # We fetch GT first (cheap, even on a no-GT project) and feed it
+    # into the builder; the builder owns the on-disk-overrides + clamp
+    # logic.
+    ground_truth_map = load_ground_truth_from_directory(resolved)
+    project = build_project_from_directory(resolved, ground_truth_map=ground_truth_map)
+
+    # Step 7 (slice 5): stash the loaded project on ``ProjectState``.
+    # ``set_loaded_project`` resets the per-page state map (page indices
+    # are scoped to ONE project) and seeds ``current_page_index`` from
+    # ``Project.current_page_index``. Bumps the state's generation
+    # counter — separate from the carrier's, but moves in lockstep on
+    # successful loads.
+    project_state.set_loaded_project(project)
+
+    response = LoadProjectResponse(
+        project=project,
+        current_page_index=project.current_page_index,
+        generation=project_state.generation,
     )
     return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
 
@@ -376,7 +432,7 @@ def install_projects_router(app) -> None:  # type: ignore[no-untyped-def]
 
 __all__ = [
     "LoadProjectRequest",
-    "LoadProjectResponseStub",
+    "LoadProjectResponse",
     "ListProjectsResponse",
     "ProjectKey",
     "install_projects_router",

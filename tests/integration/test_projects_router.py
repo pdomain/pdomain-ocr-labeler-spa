@@ -249,8 +249,25 @@ def test_get_projects_selected_omitted_if_loaded_outside_root(tmp_path: Path, pr
 # ──────────────────────────────────────────────────────────────────────
 
 
-def test_post_load_swaps_carrier_and_returns_key(client_with_root: TestClient, projects_root: Path) -> None:
-    """Happy path: valid project_root → 200 + ProjectKey + generation."""
+def test_post_load_swaps_carrier_and_returns_project(
+    client_with_root: TestClient, projects_root: Path
+) -> None:
+    """Happy path (slice-5 shape): 200 + full ``Project`` + cursor + generation.
+
+    Slice 5 replaced the slice-4 ``LoadProjectResponseStub`` with the
+    real ``LoadProjectResponse{project, current_page_index, generation}``.
+    The route also wires ``ProjectState.set_loaded_project`` so subsequent
+    handlers can read the loaded model — that side of the contract is
+    pinned by ``test_post_load_populates_project_state`` below; this
+    test just pins the wire shape.
+
+    A fresh source-lane project (no ``project.json``, no ``pages.json``,
+    no images) yields an empty ``Project`` with ``total_pages=0`` and
+    ``current_page_index=0``. Loading is still a successful operation
+    — the route emits an empty-but-valid project, not an error. (The
+    SPA's ``/page/0`` redirect target gracefully handles the empty case
+    via a "no images" placeholder.)
+    """
     target = projects_root / "alpha"
     resp = client_with_root.post(
         "/api/projects/load",
@@ -258,11 +275,89 @@ def test_post_load_swaps_carrier_and_returns_key(client_with_root: TestClient, p
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["project_key"]["project_id"] == "alpha"
-    assert body["project_key"]["project_root"] == str(target.resolve())
-    assert body["project_key"]["label"] == "alpha"
+    # Top-level shape (LoadProjectResponse).
+    assert "project" in body
+    assert "current_page_index" in body
+    assert "generation" in body
+    # The Project model carries the spec §1 fields.
+    project = body["project"]
+    assert project["project_id"] == "alpha"
+    assert project["project_root"] == str(target.resolve())
+    assert project["total_pages"] == 0  # empty fixture project
+    assert project["image_paths"] == []
+    assert project["ground_truth_map"] == {}
+    assert project["current_page_index"] == 0
+    assert body["current_page_index"] == 0
     assert isinstance(body["generation"], int)
     assert body["generation"] >= 1
+
+
+def test_post_load_returns_project_with_images_and_ground_truth(
+    tmp_path: Path,
+) -> None:
+    """A populated source-lane project surfaces its image_paths + GT.
+
+    Slice 5 contract: when the project dir has images + ``pages.json``,
+    the loaded ``Project`` carries them through verbatim. This is the
+    integration pin of the ``ground_truth.py`` + ``project_envelope.py``
+    composition.
+    """
+    import json as _json
+
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    project_dir = projects_root / "real_book"
+    project_dir.mkdir()
+    (project_dir / "001.png").write_bytes(b"\x00")
+    (project_dir / "002.png").write_bytes(b"\x00")
+    (project_dir / "pages.json").write_text(
+        _json.dumps({"001.png": "first page text", "002.png": "second page text"}),
+        encoding="utf-8",
+    )
+
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        resp = c.post("/api/projects/load", json={"project_root": str(project_dir)})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    project = body["project"]
+    assert project["total_pages"] == 2
+    assert [Path(p).name for p in project["image_paths"]] == ["001.png", "002.png"]
+    # GT map: the original keys both survive (lowercase aliases also
+    # populated, which the ground_truth tests pin separately).
+    assert project["ground_truth_map"]["001.png"] == "first page text"
+    assert project["ground_truth_map"]["002.png"] == "second page text"
+
+
+def test_post_load_populates_project_state(
+    tmp_path: Path,
+) -> None:
+    """Slice-5 wiring pin: ``ProjectState`` carries the loaded project.
+
+    Loading must mutate ``app.state.project_state`` so subsequent
+    handlers (M2-proper's ``GET /api/projects/{id}``, M3+ page routes)
+    can read the loaded model. Pinned at the integration layer because
+    the wiring crosses three boundaries (route → DI → state).
+    """
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    project_dir = projects_root / "stateful_book"
+    project_dir.mkdir()
+    (project_dir / "001.png").write_bytes(b"\x00")
+
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        resp = c.post("/api/projects/load", json={"project_root": str(project_dir)})
+        assert resp.status_code == 200
+    # Read directly from app.state to confirm the wire path mutated it.
+    project_state = app.state.project_state
+    assert project_state.loaded_project is not None
+    assert project_state.loaded_project.project_id == "stateful_book"
+    assert project_state.loaded_project.total_pages == 1
+    assert project_state.current_page_index == 0
+    assert project_state.generation >= 1
 
 
 def test_post_load_increments_generation_on_repeat(client_with_root: TestClient, projects_root: Path) -> None:

@@ -50,6 +50,7 @@ from .core.active_project import (
 from .core.app_state import build_app_state
 from .core.logging_config import configure_logging
 from .core.persistence.session_state import load_session_state
+from .core.project_state import ProjectState
 from .core.startup_discovery import resolve_initial_project
 from .settings import Settings
 
@@ -202,6 +203,17 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # ``carrier.set_active_project``); slice 4 will add
     # ``POST /api/projects/load`` to mutate it from the request path.
     app.state.active_project_carrier = carrier
+
+    # Spec ``§00-overview.md`` lines 185-187: ``ProjectState`` is the
+    # per-project graph (loaded ``Project`` + per-page state), separate
+    # from the ``ActiveProjectCarrier`` pointer. M2 slice 5 wires it so
+    # ``POST /api/projects/load`` can call
+    # ``state.set_loaded_project(project)`` after the persistence layer
+    # builds the model. A fresh ``ProjectState`` per ``build_app`` —
+    # like ``ActiveProjectCarrier`` it's process-scoped, not module-
+    # global, so multiple ``build_app(...)`` calls in the same test
+    # process get isolated state.
+    app.state.project_state = ProjectState()
 
     # Spec §2 step 10: install error handlers AFTER middleware (CORS +
     # RequestId) so a 500 still passes back through both on the way
