@@ -242,6 +242,44 @@ every iteration.
   `pd-ocr-labeler-ui --no-browser --port 8080` answers `/healthz`,
   `make openapi-export` regenerates `frontend/src/api/types.ts`.
 
+## Open design items (post-M0)
+
+Cross-cutting design items that don't belong to a single milestone. Each
+item should be implementation-ready before pickup; surface anything
+ambiguous as an OPEN_QUESTIONS.md entry first.
+
+- [ ] **Local-mode port auto-select fallback.** When the configured
+  default port is already bound, fall back to an OS-assigned free port
+  (`port=0`) instead of crashing — but only when the user did *not*
+  pass `--port N` explicitly. Motivation: dev UX. Sibling repo
+  `pd-prep-for-pgdp` just hit a stale-port collision (a 21-hour-old
+  orphaned `python3 -m http.server` blocked startup); since
+  `pd-ocr-labeler-spa` is structurally modeled on
+  `pd-prep-for-pgdp`, the two should converge on the same behavior.
+  Prerequisite already shipped: commit `7c084ce fix(B-68): poll
+  listener before opening browser in __main__.main` moved listener-
+  binding ahead of browser-launch, so we can detect collisions before
+  spawning the browser.
+  - **Behavior (local mode only):**
+    1. Try the configured default port first — preserves the
+       bookmarkable URL.
+    2. On `EADDRINUSE`, retry with `port=0` (kernel picks a free port).
+       Print the actually-chosen URL clearly on stdout *before*
+       browser-launch so it's obvious which tab is which.
+    3. If the user passes `--port N` explicitly, fail loud on
+       collision (no fallback) — they asked for that exact port.
+    4. Self-hosted / managed adapters (when those exist): out of
+       scope — keep explicit-port behavior, no auto-fallback.
+  - **Acceptance:** tests cover (a) default-port-free → binds default
+    and prints expected URL, (b) default-port-taken → fallback
+    succeeds, prints the actually-chosen URL, and the printed URL is
+    what the browser-launcher receives, (c) explicit `--port N`
+    collision → fails loud with a clear error (no fallback path
+    taken).
+  - **Cross-link:** matching open item being added to
+    `pd-prep-for-pgdp`; keep the two implementations in sync when
+    either is picked up.
+
 ## Iteration index (this repo)
 
 See `/workspaces/ocr-container/docs/LOOP_STATE.md` for the full per-
