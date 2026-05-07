@@ -1999,3 +1999,111 @@ Top concerns:
 3. **Or pivot to M1.e** (image-cache mount + SPA fallback) if the agent prefers code-progress over backlog cleanup — at 65% M1 is near the M1.h frontend-blocked milestone.
 
 Iter 45 = next code-review checkpoint.
+
+---
+
+## B-57 — `_serve_image` only catches `ValueError` / `FileNotFoundError`; other adapter errors leak as 500 (compounds B-51)
+
+- **Status:** Fixed iter 46 (`6012f4c`). Broadened `except FileNotFoundError` to `except OSError` so all subclasses (incl. `IsADirectoryError`, `PermissionError`, broken-symlink `OSError`) surface as a clean 404; logged at `debug` so operators with a real disk problem still get a server-side breadcrumb. Pinned by parametrised `test_image_cache_treats_oserror_subclasses_as_404` against a mock storage.
+- **Severity:** medium
+- **Where:** `src/pd_ocr_labeler_spa/api/static_mounts.py:80-112`. Tests: `tests/unit/api/test_static_mounts.py` covers the two caught branches but no other `OSError` subclasses.
+- **Issue:** The route catches exactly two exceptions from `storage.get_bytes(key)`:
+  ```python
+  except ValueError:        # path-traversal rejection from FilesystemStorage._path
+      raise HTTPException(404, "not found")
+  except FileNotFoundError:
+      raise HTTPException(404, "not found")
+  ```
+  Every other exception that `IStorage.get_bytes` may raise — `IsADirectoryError` (key resolves to a sub-directory of the cache root), `PermissionError` (file present but mode 000), `OSError` (broken symlink, ENOSPC on a read-ahead path), `MemoryError` for a giant blob — propagates UP to the unhandled-`Exception` catch-all in `error_handler.py:120`. That handler returns the 500 envelope with the **last 3 traceback lines verbatim** (B-51 — Q-A11-gated). Until B-51 is fixed, *any* funny state in the cache root surfaces a stack trace including the file path under `<cache>/page-images/<project>_<page>_<type>_<sha>.png`. After B-51 is fixed, the user still gets a generic 500 for what should be a clean 404.
+- **Why it matters:** `<cache>/page-images/` is shared with the legacy labeler under D-003. The legacy may be mid-write (legacy doesn't use `tmp + replace` for images per `pd-ocr-labeler/operations/ocr/image_cache_operations.py`), or a half-finished symlink may exist, or a stale `.partial` from a previous run. Any of those produce `OSError` rather than `FileNotFoundError`, and the SPA returns 500 + (until B-51) leaks the cache key. The "404 to keep the rejection from being an oracle" design only holds if every read-failure is treated identically.
+- **Suggested fix:** Broaden the catch to `(ValueError, OSError)` — `FileNotFoundError` and `IsADirectoryError` and `PermissionError` are all `OSError` subclasses, so this single line replaces the two `except` blocks. Log the original exception at `debug` (not `error`) so operators with a real disk problem still get a server-side breadcrumb. Optionally: tag `MemoryError` separately (out-of-memory is genuinely a 500). Add parametrised tests over the four `OSError` subclasses using a mock storage that raises each.
+
+---
+
+## B-58 — `SessionState.model_config = ConfigDict(extra="forbid")` breaks **forward** D-003 compat with legacy session_state.json
+
+- **Severity:** medium
+- **Where:** `src/pd_ocr_labeler_spa/core/persistence/session_state.py:72`. Spec citation: the docstring cites `specs/09-persistence.md §11` as authority, but §11 talks about **`UserPageEnvelope`**, not `session_state.json`.
+- **Issue:** Spec §11 says "top-level `extra="forbid"` makes v2.1 readers refuse v2.2 because `schema.version` won't match" — that rule is documented *for `UserPageEnvelope`* (a versioned envelope where the schema-version gate is the deliberate forward-compat circuit-breaker). Spec §6 (session_state) does NOT specify `extra="forbid"`; it just lists three keys. The legacy `pd-ocr-labeler/operations/persistence/session_state_operations.py:30-37` uses `from_dict` with `data.get(...)` for each of the three keys — it **silently ignores** any extra fields. So a future legacy bump that adds `last_window_geometry` (additive only, per the §11 philosophy) would: (a) be loaded fine by legacy `from_dict`, (b) be **rejected** by SPA's `extra="forbid"` envelope, causing `load_session_state` to return `None`. The SPA user then loses their last-loaded project on first run after a legacy upgrade.
+- **Why it matters:** D-003 is the labeler's hard contract — both binaries share the data root. The session_state.json file is the most-touched cross-binary file (rewritten on every project load by either binary). The spec §11 "additive only" rule is meant to allow forward-compat *because the readers ignore unknowns*. Forbidding extras unilaterally on the SPA side breaks that contract: the SPA reader trips on a legacy writer's evolution, and the user-visible symptom is "my session is gone" with only a debug log entry. The session_state docstring even notes "Field-name compatibility is mandatory" — but field-set compatibility (the inverse: extras-tolerance) is just as mandatory under D-003.
+- **Suggested fix:** Switch `SessionState.model_config` to `ConfigDict(extra="ignore")` for D-003 forward-compat, AND log the dropped keys at `info` so a legacy schema bump becomes visible without crashing the user. Pin the new behaviour: `test_session_state_load_ignores_unknown_keys` — write a JSON file with `{"schema_version": "1.0", "last_project_path": null, "last_page_index": 0, "last_window_geometry": "100x100"}`, assert `load_session_state` returns a `SessionState` (not `None`) and the unknown key is dropped silently. Update the module docstring to cite spec §6 (which doesn't mandate forbid) instead of §11 (which is about envelope). If the user prefers strictness, file as Q-A12 — but the default for D-003 should be ignore.
+
+---
+
+## B-59 — `_resolve_static_dir` uses `Path(str(traversable))` — fails silently on zip-imported wheels (e.g. zipapp / pkg in egg)
+
+- **Status:** Fixed iter 46 (`9ced2b7`). Resolver now uses `Traversable.is_dir()` / `.joinpath("index.html").is_file()` directly; for non-`Path` traversables it materialises via `resources.as_file()` into a process-lifetime tmpdir cached on the module. Pinned by `test_resolve_static_dir_handles_non_path_traversable` with a fake Traversable backed by an on-disk dir but with deliberately-bogus `__str__` so the previous `Path(str(...))` form would fail loudly.
+- **Severity:** low
+- **Where:** `src/pd_ocr_labeler_spa/api/static_mounts.py:146-159`.
+- **Issue:** `importlib.resources.files("pd_ocr_labeler_spa")` returns a `Traversable` — for wheels installed via pip/uv it's a `PosixPath` (extracted dir). For zip-imported packages (`zipapp`, `python -m foo` against a zip, ancient `.egg`) it's a `MultiplexedPath` or `ZipPath` — and `Path(str(zippath))` produces a string like `<importlib.resources._adapters.MultiplexedPath object at 0x…>` which then `Path(…).is_dir()` returns `False`, so the SPA fallback silently degrades to "bundle not found" — same UX as M0 dev mode. The user gets the "run `make frontend-build`" 404 *for a wheel that does ship the SPA bundle*.
+- **Why it matters:** Hatchling-built wheels are pip-extracted today, so this never fires. But it's a stealth bug: anyone running `pd-ocr-labeler-ui` from a zipapp (a reasonable distribution mode for a single-binary install) would see "404 — run `make frontend-build`" with no diagnostic, and the misleading message would send them down the wrong debugging path. Iter-44's review questions explicitly named this as worth re-checking under (5).
+- **Suggested fix:** Use `traversable.is_dir()` and `(traversable / "index.html").is_file()` directly — `Traversable` defines both. Drop the `Path(str(...))` cast. For `FileResponse` later, fall back: `if isinstance(traversable, Path)` use it directly; else `with resources.as_file(traversable) as p:` to materialise the asset (zip-extracted to tmp). Add a regression test that monkeypatches `resources.files` to return a fake `Traversable` (not a `Path`) and asserts the resolver still finds `index.html`.
+
+---
+
+## B-60 — `load_session_state` returns a SessionState pointing at a deleted project dir; spec §6 "ignore stale path" half is undocumented as caller-responsibility
+
+- **Status:** Fixed iter 46 (`10db73d`). Added sibling `last_project_path_exists(state)` helper — returns `True` iff `last_project_path` is non-None and resolves to an existing directory (not a regular file — saved projects are dirs per spec §1). `load_session_state` stays a pure JSON read. Pinned by 4 helper-shape tests + `test_load_session_state_returns_state_for_stale_path` so the no-validation behaviour of stage 1 is intentional, not accidental.
+- **Severity:** low
+- **Where:** `src/pd_ocr_labeler_spa/core/persistence/session_state.py:93-135`. Spec: `specs/09-persistence.md §6` last sentence — "Read on app start; if the path no longer exists or doesn't contain images, ignore."
+- **Issue:** The spec sentence describes a **two-stage validation**: (1) JSON parses to a SessionState, and (2) the stored path still resolves to a project directory with images. Today's `load_session_state` does only (1). If the user moves their project after closing the app, `load_session_state` returns `SessionState(last_project_path="/old/path", last_page_index=5)` — and the caller (a future `app_state.startup()` per spec §13) is silently expected to perform the second-stage check. The module docstring says "the caller should treat None as 'no prior session'" but doesn't say "and treat a stale path as 'no prior session' too." Tests don't pin the divide.
+- **Why it matters:** The spec sentence reads as one operation ("read; if invalid, ignore") but the implementation splits it across two modules without a contract spelling out the seam. A future `app_state.startup()` author may reasonably read "load_session_state returns a SessionState ⇒ I can trust last_project_path" and skip the existence check, then blow up on the first read. Or the author duplicates the check in two places. Or the user gets a confusing UI state — "loading project /old/path…" followed by an error.
+- **Suggested fix:** Either (a) add a `last_project_path_exists()` helper *next to* `load_session_state` so the caller has a one-call validation seam, OR (b) add an explicit `validate_path: bool = False` parameter to `load_session_state` (default off keeps the pure read; opt-in returns `None` for stale paths and logs at debug). Either way, document the seam explicitly in the module docstring with a pointer at `app_state.startup()`. Pin with `test_load_session_state_returns_state_for_stale_path` so the no-path-validation behaviour is intentional, not accidental.
+
+---
+
+## B-61 — `paths.py` purity AST-scan only forbids static `import os` / `import platform`; dynamic imports slip through
+
+- **Status:** Fixed iter 46 (`8657ac8`, test-only). AST walker extended to flag (a) `__import__("os")` / `__import__("platform")` (call to `Name("__import__")` with a string-literal arg in `forbidden_imports`) and (b) any `importlib.import_module(...)` call regardless of arg (since runtime-computed strings can't be statically inspected). Two meta-tests pin the scan logic itself so the gap can't silently reopen. paths.py production code unchanged (already pure).
+- **Severity:** nit
+- **Where:** `tests/unit/core/persistence/test_paths.py` AST-scan test (per iter-44 commit message). Iter-44's review questions explicitly named this as worth re-checking under (5).
+- **Issue:** The AST-scan walks for `ast.Import` / `ast.ImportFrom` nodes with `os` / `platform` module names — but `__import__("os")` (an `ast.Call` to a `Name("__import__")`) and `importlib.import_module("os")` (an `ast.Call` to an `Attribute(Name("importlib"), "import_module")`) both bypass the check. So a future "convenience" refactor that does `getattr(__import__("os"), "name")` to peek at the platform would defeat the purity guard with no test failure.
+- **Why it matters:** The whole point of the AST-scan is to be a regression catcher — to prevent the `paths.py` module from ever growing OS-awareness in a way that double-suffixes the app name. A guard that catches the obvious form but not the dynamic forms gives a false sense of safety. The guard's docstring should either honestly admit the gap (and pair with a runtime "is `paths.py` calling `os` at all?" check via `inspect`) or extend coverage.
+- **Suggested fix:** Extend the AST walker to also flag (1) `ast.Call` whose `func` is `Name("__import__")` with a string arg matching `os` or `platform`, and (2) `ast.Attribute` access of the form `importlib.import_module` regardless of arg. Cheap extension; closes the dynamic-import escape hatch.
+
+---
+
+## B-62 — SPA fallback's `FileResponse` for `index.html` doesn't set `Cache-Control: no-store` — browsers may serve a stale shell after `make frontend-build`
+
+- **Status:** Fixed iter 46 (`e332b14`). SPA shell `FileResponse(index_file)` now carries `Cache-Control: no-store`; hashed assets at `/assets/<hash>.js` keep the default caching since they're content-addressed. Pinned by `test_spa_index_html_sets_no_store_cache_control` (root + unknown route) and `test_spa_static_asset_does_not_set_no_store` (hashed asset).
+- **Severity:** nit
+- **Where:** `src/pd_ocr_labeler_spa/api/static_mounts.py:230-248`.
+- **Issue:** `FileResponse(os.fspath(index_file))` returns the SPA shell with default headers — Starlette's `FileResponse` sets `etag` based on file mtime + size (good for revalidation) but no explicit `Cache-Control`. Browsers default to heuristic caching for HTML — typically a fraction of the time-since-Last-Modified — so a developer who rebuilds the SPA and refreshes the browser may see the OLD index.html served from disk cache. Static assets under `/assets/<hash>.js` are content-addressed so they're safe under aggressive cache; index.html is NOT (filename is stable across builds; only contents change).
+- **Why it matters:** The dev loop is `make frontend-build` → reload tab. If the browser serves stale `index.html` from disk cache, the new bundle hashes in the new index aren't even fetched, and the developer sees "my changes didn't land" with no log evidence. Worse for users post-release: a tab kept open through an `pd-ocr-labeler-ui` upgrade may reload an old shell that points at hash-named assets which no longer exist on disk → 404 storm. The `image-cache` mount sets `Cache-Control: public, max-age=3600, immutable` correctly (because content-addressed); the SPA shell needs the *opposite*.
+- **Suggested fix:** Wrap the `FileResponse` for `index.html` with explicit `headers={"Cache-Control": "no-store"}` — match `pd-prep-for-pgdp`'s SPA fallback if it has one (parity check), else add the header unconditionally. Asset passthrough (`/assets/<hash>.js`) keeps default caching. Pin with `test_spa_index_html_no_store` (response to `/` has `Cache-Control` containing `no-store`) and `test_spa_asset_passthrough_default_caching` (response to `/assets/main.js` does NOT have `no-store`).
+
+---
+
+## Summary — iter 45
+
+**6 findings: 0 blocker, 0 high, 2 medium (B-57, B-58), 2 low (B-59, B-60), 2 nit (B-61, B-62).**
+
+Top concerns:
+
+1. **B-58 (medium)** — Most important issue worth attention. `SessionState`'s `extra="forbid"` cites the wrong spec section (§11 is about `UserPageEnvelope`, not session_state). Under D-003, the SPA must tolerate forward-compat extras the legacy may add — `extra="forbid"` makes a future legacy schema bump silently wipe the user's last session on next SPA run. One-line fix to `extra="ignore"` plus a log at info. Spec §6 should be amended to make the policy explicit.
+
+2. **B-57 (medium)** — `_serve_image` only catches `ValueError` / `FileNotFoundError`. Any other `OSError` from the cache root (legacy mid-write, broken symlink, permission glitch under D-003 shared root) becomes a 500 + (until B-51 is fixed) leaks the cache key into the response body. One-line broaden to `(ValueError, OSError)`.
+
+3. **B-62 (nit, but high-impact UX)** — The SPA shell `index.html` is served with default browser caching, so a developer's `make frontend-build` + reload may pick up a stale shell that points at hash-named assets which no longer exist. Two-line fix: explicit `Cache-Control: no-store` on the `FileResponse` for index.html only.
+
+**B-50 fix verified** by reading both `request_id.py` (raw ASGI middleware with `send_wrapper` and `_lookup_exception_handler` dispatching the registered `Exception`-class handler) and `tests/unit/core/test_request_audit_log.py:130-172` (`test_request_end_emitted_when_call_next_raises` exercises the unhandled-exception path against `_make_audit_app()` with `raise_server_exceptions=False`, asserts both `request_start` and `request_end` fire and that `request_end` carries `status=500` + non-negative `duration_ms`). The architectural reasoning in the module docstring (lines 26-67) is sound — the `ServerErrorMiddleware`-bypass argument holds because Starlette's middleware stack is built bottom-up and `ServerErrorMiddleware` wraps the user middleware list.
+
+**Spec-drift audit on `session_state.py`:** Field names (`schema_version` / `last_project_path` / `last_page_index`), schema_version-as-string `"1.0"`, `last_page_index` 0-based all match spec §6 + legacy `SessionState` dataclass at `pd-ocr-labeler/operations/persistence/session_state_operations.py:18-24`. **One drift found**: `extra="forbid"` was applied unilaterally without a spec mandate (B-58 above).
+
+**Test count growth audit:** 211 → 270 (+59 across iters 41–44). Genuine shape pins; AST-scans (paths.py purity, B-44 sync-FS-in-async-def) are real. No tautologies detected. Per-iter breakdown: iter 41 +2 (B-50/B-56), iter 42 +6 (B-52/53/54/55 batch), iter 43 +21 (M1.e static_mounts), iter 44 +30 (M1.f persistence).
+
+**M1 progress estimate:** **roughly 85%**.
+- ✅ M1.a / M1.b / M1.c / M1.d / M1.e / M1.f all done.
+- ⬜ M1.g: `__main__.py` CLI flag wiring — small, unblocked.
+- ⬜ M1.h: Frontend `HeaderBar` + `EmptyProjectState` + `RootPage` — Q-A8-blocked.
+- ⬜ Lifespan + `FastAPI(lifespan=…)` wiring — deferred to M3 (per spec §2 step 4 broker/runner are AppState fields).
+
+**Iter 46 picks:**
+
+1. **B-58 first** (medium, one-line fix + spec amendment) — the D-003 forward-compat hole is real and trivial to close. Pair with `test_session_state_load_ignores_unknown_keys`.
+2. **Then B-57** (medium, one-line broaden of the except clause + parametrised tests) — closes the cache-error 500-leak surface that compounds B-51.
+3. **Then B-62** (nit but high-impact UX) — `Cache-Control: no-store` on the SPA index.html.
+4. **Then M1.g** (`__main__.py` CLI flags wiring) — code-progress; the only unblocked M1 sub-task remaining.
+5. **B-59 / B-60 / B-61** can batch into a single iter — all small.
+
+Iter 50 = next code-review checkpoint.
