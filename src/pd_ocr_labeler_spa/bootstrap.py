@@ -41,6 +41,7 @@ from .api.env_js import install_env_js
 from .api.healthz import install_healthz
 from .api.middleware.error_handler import install_error_handlers
 from .api.middleware.request_id import RequestIdMiddleware
+from .api.ocr_config import install_ocr_config_router
 from .api.projects import install_projects_router
 from .api.static_mounts import install_image_cache, install_spa_fallback
 from .core.active_project import (
@@ -230,6 +231,14 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # /healthz for symmetry. M2-proper will add /api/pages, /api/words,
     # etc.
     install_projects_router(app)
+
+    # /api/ocr-config router — M3 slice 8a. Read-only stock-fallback
+    # skeleton composed from the iter-7 OCR config DTOs; spec §5.8
+    # lines 317-322. Wired alongside /api/projects so the SPA's
+    # OCRConfigModal can fetch its initial state from the OpenAPI-
+    # generated client without conditional gating. Slice 8b+ will add
+    # the POST mutate / rescan routes against this same prefix.
+    install_ocr_config_router(app)
 
     # Per specs/02-backend.md §2 step 12: /env.js, /image-cache, and the
     # SPA fallback only land in non-api_only modes. api_only is the
