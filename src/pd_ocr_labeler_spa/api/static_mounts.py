@@ -255,7 +255,18 @@ def install_spa_fallback(app: FastAPI) -> None:
                 return FileResponse(os.fspath(candidate))
         # Otherwise serve the SPA shell so the React Router can
         # take over for client-side routes like ``/projects/<id>``.
-        return FileResponse(os.fspath(index_file))
+        # B-62: ``index.html`` has a stable filename across builds while
+        # its contents change every build, and it points at hash-named
+        # assets that disappear when a new build replaces them. Without
+        # an explicit ``no-store`` browsers may serve a stale shell from
+        # disk cache after ``make frontend-build`` (or a wheel upgrade)
+        # and trigger a 404 storm against the old asset hashes. Hashed
+        # assets above keep the default caching semantics — they're
+        # content-addressed and safe to cache aggressively.
+        return FileResponse(
+            os.fspath(index_file),
+            headers={"Cache-Control": "no-store"},
+        )
 
 
 __all__ = ["install_image_cache", "install_spa_fallback"]

@@ -245,6 +245,55 @@ def test_spa_fallback_serves_index_for_root(settings: Settings, spa_dir: Path) -
     assert r.content == expected
 
 
+def test_spa_index_html_sets_no_store_cache_control(
+    settings: Settings, spa_dir: Path
+) -> None:
+    """B-62: the SPA shell ``index.html`` MUST be served with
+    ``Cache-Control: no-store``.
+
+    The shell's filename is stable across builds; only its contents
+    change. Browsers default to heuristic caching for HTML, so without
+    an explicit no-store header a developer's ``make frontend-build``
+    + reload may serve the OLD shell from disk cache — which then
+    points at hash-named assets that no longer exist on disk (404
+    storm). Asset passthrough at ``/assets/<hash>.js`` is content-
+    addressed and keeps the default caching semantics.
+    """
+    del spa_dir  # bundle present
+    app = build_app(settings)
+    with TestClient(app) as client:
+        r_root = client.get("/")
+        r_route = client.get("/projects/foo")
+    for r in (r_root, r_route):
+        assert r.status_code == 200, r.content
+        cc = r.headers.get("cache-control", "")
+        assert "no-store" in cc, f"expected no-store on SPA shell; got {cc!r}"
+
+
+def test_spa_static_asset_does_not_set_no_store(
+    settings: Settings, spa_dir: Path
+) -> None:
+    """B-62 sibling: hash-named static assets keep default caching
+    (no explicit ``no-store``). They're content-addressed so they're
+    safe to cache aggressively; only the SPA shell needs no-store.
+    """
+    asset = spa_dir / "assets" / "hashed.js"
+    asset.parent.mkdir(parents=True, exist_ok=True)
+    asset.write_bytes(b"// content")
+    try:
+        app = build_app(settings)
+        with TestClient(app) as client:
+            r = client.get("/assets/hashed.js")
+        assert r.status_code == 200
+        cc = r.headers.get("cache-control", "")
+        assert "no-store" not in cc, (
+            f"hashed asset should NOT carry no-store; got {cc!r}"
+        )
+    finally:
+        asset.unlink()
+        asset.parent.rmdir()
+
+
 def test_spa_fallback_serves_static_asset_directly(settings: Settings, spa_dir: Path) -> None:
     """Real files in the bundle (``/assets/<hash>.js``) serve verbatim, NOT as HTML."""
     asset = spa_dir / "assets" / "main.js"
