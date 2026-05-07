@@ -663,14 +663,26 @@ recommendation.
 
 ---
 
-## Pending decisions (post-2026-05-06)
+## D-032 — Auto-rotation envelope: additive v2.2 with legacy verification
 
-These are **new** sub-questions that arose from the Q14, Q18, Q19
-resolutions. See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for
-detail.
+**Date.** 2026-05-07. Resolves Q-A1.
 
-- Q-A1: Auto-rotation envelope schema bump? (v2.1 → v2.2 to add
-  `rotation_degrees`?)
-- Q-A2: Q14 normalization toggle — project-level setting? Per-page?
-- Q-A3: Q18 indicator UI placement — source badge or separate?
-- Q-A4: Q19 redirect status code — 301 (permanent) or 308 (preserve method)?
+**Decision.** Bump `UserPageEnvelope` to v2.2 by adding
+`source.rotation_degrees: int = 0` and
+`source.rotation_source: Literal["none","auto","manual"] = "none"`.
+Writers continue to emit `version: "2.1"` when rotation state is
+default so the common-case file remains byte-identical to legacy.
+Writers emit `version: "2.2"` only when rotation state is non-default.
+Verify legacy's `Source` model tolerates additive fields before the
+first v2.2 file is written; if legacy rejects, fall back to sidecar
+`<project>_<page:03d>.rotation.json` (Q-A1 option B) with auto-cleanup
+on next legacy save.
+
+**Refs.** [`OPEN_QUESTIONS.md Q-A1`](../OPEN_QUESTIONS.md), [`01-data-models.md`](01-data-models.md) §3, [`19-auto-rotation.md`](19-auto-rotation.md) §Persistence.
+
+---
+
+## Pending decisions
+
+See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for any sub-questions
+still open.

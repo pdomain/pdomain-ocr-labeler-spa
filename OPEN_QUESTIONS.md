@@ -14,31 +14,6 @@ the user has answered, a **Resolution** line linking the resulting ADR.
 
 ## Open — needs user input
 
-### Q-A1. Auto-rotation envelope schema bump?
-
-**Context.** D-029 (auto-rotation) adds a per-page `rotation_degrees`
-field. To persist it across save/load, we need to extend the
-`UserPageEnvelope`. v2.1 is byte-shared with the legacy labeler.
-
-**Options.**
-
-- **(A)** Bump to v2.2 (additive: new optional `source.rotation_degrees: int = 0`
-  field). Legacy v2.1 readers ignore unknown fields by default but
-  `extra="forbid"` on the top-level `UserPageEnvelopeSchema` would
-  reject — verify legacy behaviour before bumping.
-- **(B)** Keep v2.1, store rotation in a sidecar file
-  `<labeled-projects>/<project_id>_<page:03d>.rotation.json`. Doesn't
-  break legacy. More files to manage.
-- **(C)** Keep v2.1, store rotation only in the cache-lane envelope
-  (which is SPA-only). Crash recovery preserves it; explicit Save Page
-  resets it to 0. **Bad** — unexpected reset.
-
-**Recommendation.** **(A)** with verification of legacy strictness
-first. If legacy rejects v2.2: ship **(B)** with auto-cleanup of the
-sidecar on next legacy save.
-
-**Blocks.** M9.x rotation milestone, [`19-auto-rotation.md`](specs/19-auto-rotation.md) §Persistence.
-
 ### Q-A2. Q14 normalization toggle scope?
 
 **Context.** D-025 (normalization in pd-book-tools, opt-in everywhere).
@@ -398,6 +373,7 @@ in [`specs/17-decisions.md`](specs/17-decisions.md).
 | Q18 | Auto-rotation | (B) AND (C) with GT-best-match heuristic | [D-029](specs/17-decisions.md) |
 | Q19 | URL grammar | pgdp-prep style with `index/{idx0}` and `pageno/{n}` sub-routes + 301 redirect from legacy | [D-030](specs/17-decisions.md) |
 | Q20 | Auto-open browser | (C) auto-open with `--no-browser` opt-out | [D-031](specs/17-decisions.md) |
+| Q-A1 | Auto-rotation envelope bump | (A) v2.2 additive (`source.rotation_degrees`/`rotation_source`); fall back to (B) sidecar if legacy `Source` rejects extras (resolved 2026-05-07) | [D-032](specs/17-decisions.md) |
 
 ### Delegations to peer-repo agents (2026-05-06)
 

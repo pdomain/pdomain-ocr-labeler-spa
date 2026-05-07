@@ -498,12 +498,25 @@ Status code conventions:
 
 ## 3. On-disk schemas
 
-### `UserPageEnvelope` v2.1
+### `UserPageEnvelope` v2.1 / v2.2
 
 **Read + write byte-equivalent to legacy** (legacy
 `pd_ocr_labeler/models/user_page_persistence.py:83-86`).
 
-Schema: `{"name": "pd_ocr_labeler.user_page", "version": "2.1"}`.
+Schema: `{"name": "pd_ocr_labeler.user_page", "version": "2.1"}` for
+files written without rotation state. **v2.2** is an additive bump
+(D-032, Q-A1) introducing `source.rotation_degrees: int = 0` and
+`source.rotation_source: Literal["none","auto","manual"] = "none"` to
+persist auto-rotation results across save/load. Readers MUST accept
+both versions; writers emit v2.2 only when rotation state is non-default
+to preserve byte-equivalence with legacy v2.1 readers in the common
+case. Before the first v2.2 file is written, verify that legacy's
+top-level envelope `extra="forbid"` (if any) tolerates the additive
+`source.rotation_degrees` / `source.rotation_source` fields — the
+fields are **inside `source`**, not at the envelope root, so legacy's
+root-level strictness does not apply. If legacy's `Source` model
+also forbids extras, fall back to sidecar `<project>_<page:03d>.rotation.json`
+per Q-A1 option (B) with auto-cleanup on next legacy save.
 
 ```jsonc
 {
