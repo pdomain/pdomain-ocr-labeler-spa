@@ -2157,7 +2157,8 @@ Iter 50 = next code-review checkpoint.
 
 ## B-65 — Spec drift: `--data-root` CLI flag implemented in iter 47 but not listed in `specs/15-deployment-dev.md §3`
 
-- **Status:** Open. Filed iter 49 (spec-drift sweep).
+- **Status:** **Resolved iter 51.** Added `--data-root PATH` to the spec §3 flag list, just above `--projects-root` so the path-flag pair sits together. No code change. Spec authority discipline restored: spec now describes the actual CLI surface.
+- **Severity:** low (spec lags impl; either the spec adds the flag or the impl drops it).
 - **Severity:** low (spec lags impl; either the spec adds the flag or the impl drops it).
 - **Where:**
   - Impl: `src/pd_ocr_labeler_spa/__main__.py:85-91` (the flag) + `_build_overrides` line 144-145 (the threading).

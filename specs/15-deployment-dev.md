@@ -65,6 +65,7 @@ auto-opens the user's browser to `http://localhost:8080`.
 
 ```
 pd-ocr-labeler-ui [project_dir]
+  --data-root PATH            Override Settings.data_root (env: PDLABELER_DATA_ROOT)
   --projects-root PATH        Override config.yaml source_projects_root
   --host TEXT                 Default 127.0.0.1
   --port INT                  Default 8080
