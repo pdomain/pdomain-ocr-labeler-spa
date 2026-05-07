@@ -13,8 +13,8 @@ the user has answered, a **Resolution** line linking the resulting ADR.
 > **2026-05-07:** Q-A11 and Q-A12 resolved by user. Decisions recorded
 > in [D-040](specs/17-decisions.md#d-040--unhandled-exception-traceback-disclosure-gated-by-debug_unhandled_traceback-flag)
 > and [D-041](specs/17-decisions.md#d-041--session_statejson-extras-tolerance-with-warning-level-drift-signal).
-> Implementation of both deferred to a future iter; B-51 / B-58 stay
-> open until that lands.
+> **D-040 implemented iter 53** (commit `ef5908d`); B-51 closed.
+> D-041 implementation still pending; B-58 stays open.
 
 ---
 
@@ -35,8 +35,8 @@ default, current behaviour preserved) the 500 envelope's `details`
 includes the last 3 traceback lines. When `False`, `details` is null /
 absent and `message` becomes the redacted form; `logger.exception`
 still fires server-side with the X-Request-ID correlation so triage
-remains possible from server logs. Implementation deferred to a future
-iter. See [D-040](specs/17-decisions.md#d-040--unhandled-exception-traceback-disclosure-gated-by-debug_unhandled_traceback-flag).
+remains possible from server logs. **Implemented iter 53** (commit
+`ef5908d`); B-51 closed. See [D-040](specs/17-decisions.md#d-040--unhandled-exception-traceback-disclosure-gated-by-debug_unhandled_traceback-flag).
 
 **Original question for context:**
 
@@ -74,11 +74,10 @@ probe map our internals" — contradictory with the implementation.
 single-user case, gives a knob deployments can flip, and aligns spec
 §8 with explicit guidance instead of leaving security implicit.
 
-**Blocks.** B-51 closeout — **still open**, blocked-on:
-implementation per D-040, not blocked on user decision. The pgdp-prep
-agent should be polled in parallel — if pgdp-prep adopts (B),
-labeler-spa stays parity. If pgdp-prep diverges, labeler-spa picks
-independently.
+**Blocks.** B-51 — **closed iter 53** (commit `ef5908d`). The
+pgdp-prep agent should be polled in parallel — if pgdp-prep adopts
+(B), labeler-spa stays parity. If pgdp-prep diverges, labeler-spa
+picks independently.
 
 ---
 

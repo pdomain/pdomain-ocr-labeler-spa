@@ -1,6 +1,6 @@
 # Parity status — pd-ocr-labeler-spa vs pd-ocr-labeler
 
-**Snapshot:** 2026-05-07, after iter 52 of the spec-driven /loop.
+**Snapshot:** 2026-05-07, after iter 54 of the spec-driven /loop.
 **Audience:** user, deciding next priorities.
 **Scope:** what the SPA replacement covers today vs what the legacy
 NiceGUI labeler ships.
@@ -9,11 +9,17 @@ NiceGUI labeler ships.
 
 ## 1. One-paragraph status
 
-The SPA is **scaffolding-complete and ~95% through M1** (settings +
-adapters + AppState + middleware + lifespan). **Zero domain endpoints
-exist yet** (no project discovery, no OCR, no GT editing, no save/load,
-no export) — every legacy capability past "boots and serves
-`/healthz`" is **not started**. The dominant blocker is **Q-A8**: the
+The SPA is **scaffolding-complete and ~97% through M1** (settings +
+adapters + AppState + middleware + lifespan; B-51 closed iter 53 per
+D-040). **M2 startup-discovery is at slice 2/4** (`resolve_initial_project`
++ `validate_project_dir` from slice 1, plus `ActiveProjectCarrier` +
+DI providers + bootstrap wiring from slice 2 — but **no lifespan hook
+yet** to actually call `set_active_project` from
+`resolve_initial_project`'s output, and **no `/api/projects/load`
+route**, so end-to-end "open a project" still doesn't work).
+**Zero user-facing domain endpoints exist yet** (no project discovery
+list, no OCR, no GT editing, no save/load, no export) — every legacy
+capability past "boots and serves `/healthz`" is **not started**. The dominant blocker is **Q-A8**: the
 devcontainer has no Node/npm/mise, so the entire frontend (currently a
 single smoke test) cannot be built or runtime-verified, which gates M2
 acceptance and everything past it. Backend parity is constrained to
@@ -35,12 +41,12 @@ real project.
 | Auth adapter (none) | ✅ done | B-42 still open re: `verify` signature drift from spec §7. |
 | OCR adapter Protocol | 🟡 partial | Protocol + `none_`/`local_doctr`/`modal`/`shared_container` files exist; **bodies are `NotImplementedYet`**. Real OCR lands M3. |
 | Request-ID middleware + audit log | ✅ done | Raw-ASGI rewrite iter 41 (B-50); `request_start`/`request_end` iter 36; B-43/B-50/B-56 closed. |
-| Error handler (500 envelope) | 🟡 partial | Catch-all wired; **B-51 open** (source-line leak in `details`); resolution gated on Q-A11. |
+| Error handler (500 envelope) | ✅ done | Catch-all wired; B-51 closed iter 53 (`Settings.debug_unhandled_traceback` flag — D-040). |
 | Image-cache HTTP route | 🟡 partial | Route shape + 404-on-OSError logic landed (B-57); **no images served yet** because no project loads. |
 | Static SPA fallback | ✅ done | `index.html` carries `Cache-Control: no-store` (B-62); reserved-prefix carve-out per spec §10 (B-66 resolved iter 51). |
 | `/env.js` | ✅ done | Mode-gated; B-01 closed. |
-| Project discovery (scan project root) | ⬜ not started | Legacy: `operations/persistence/project_discovery_operations.py`. M2 work. |
-| Session restore (last project, last page) | 🟡 partial | `core/persistence/session_state.py` reader exists (iter 44); writer + caller not wired; **B-58 open** (extras-tolerance, gated on Q-A12). |
+| Project discovery (scan project root) | 🟡 partial | M2 slice 1 (iter 52) shipped pure `resolve_initial_project` + `validate_project_dir`; M2 slice 2 (iter 53) shipped `ActiveProjectCarrier` + DI providers + `app.state.active_project_carrier` wiring. **No enumeration of `source_projects_root`** (M2-proper `core/project_state.py`) and **no lifespan hook** invoking the resolver yet. Legacy: `operations/persistence/project_discovery_operations.py`. |
+| Session restore (last project, last page) | 🟡 partial | `core/persistence/session_state.py` reader exists (iter 44); writer + lifespan caller not wired; **B-58 open** (extras-tolerance; D-041 decided, impl pending). |
 | Page enumeration (`pages.json` / manifest) | ⬜ not started | M2. |
 | OCR overlay data (paragraphs/lines/words + bboxes) | ⬜ not started | M3–M4. |
 | Ground-truth editing endpoint | ⬜ not started | M5 (`POST /api/.../words/{wid}/ground-truth`). |
@@ -86,11 +92,11 @@ and `make mise-setup` requires outbound network not available in /loop).
 | Q | Why it gates work |
 |---|---|
 | **Q-A8** Frontend toolchain | Without Node/npm in the dev environment, **no frontend iteration is verifiable**. Either add `ghcr.io/devcontainers/features/node:1` to `.devcontainer/devcontainer.json` (workspace-owner action, outside this repo), or run `make mise-setup && make frontend-install` from an interactive shell with network. Until resolved, M2 cannot close acceptance and M3–M9 cannot start their frontend halves. |
-| **Q-A12** `session_state.json` extras-tolerance | B-58 still open. Recommendation is **(A)** switch `SessionState.model_config` to `extra="ignore"` + log dropped keys, and amend spec §6 to mandate it. One-line code change + spec edit; today's strict policy will silently lose the user's last session if the legacy ever adds an additive field. Iter 46 left this for the user. |
-| **Q-A13** `--log-level` CLI flag | Recommendation is **(D)** drop it; spec already names `-v/--verbose`. Iter 47 shipped without `--log-level`. Resolution in any direction other than (D) re-opens a one-line patch in `__main__.py`. Non-blocking for M2+ but untracked items rot. |
+| **Q-A12** `session_state.json` extras-tolerance | **Resolved** 2026-05-07 → option (A) with WARNING-level drift signal (D-041). **Implementation pending.** B-58 still open: one-line code change (`extra="ignore"` + `logger.warning("session_state_extras_dropped …")`) + spec §6 amend. Iter 54 candidate. |
 
-(Also still hanging from earlier, **Q-A11** redact-vs-verbatim 500
-traceback — gates B-51 closeout; recommendation **(B)** debug flag.)
+(Q-A11 — 500 redact-vs-verbatim — **resolved + implemented** iter 53 per
+D-040; B-51 closed. Q-A13 `--log-level` resolved (D) drop; no action
+needed.)
 
 ---
 
@@ -98,38 +104,48 @@ traceback — gates B-51 closeout; recommendation **(B)** debug flag.)
 
 | ID | Severity | One-line |
 |---|---|---|
-| **B-58** | medium | `SessionState` `extra="forbid"` breaks D-003 forward-compat; gated on Q-A12. |
-| **B-51** | medium | 500 envelope leaks the source line of the raising statement in client `details`; gated on Q-A11. |
+| **B-72** | medium | `tests/unit/api/test_static_mounts.py` `test_spa_static_asset_does_not_set_no_store` + `test_spa_fallback_serves_static_asset_directly` call `asset.parent.rmdir()` on `static/assets/` — fails after `make frontend-build` populates the dir. Real `make test` regression. |
+| **B-58** | medium | `SessionState` `extra="forbid"` breaks D-003 forward-compat; D-041 decided (A), impl pending. |
 | **B-42** | low | `IAuth.verify` signature drifts from spec §7 (`creds: HTTPAuthorizationCredentials | None` → `credentials: str | None`). One-line spec/impl alignment. |
 
 Everything else open is **nit/low** (B-68 browser-open race, B-70
 empty-string `--host` bypass, B-71 `_keepalive` micro-leak). Full table
-in `docs/BUGS_FOUND.md`.
+in `docs/BUGS_FOUND.md`. **B-51 closed iter 53** (D-040 impl).
 
 ---
 
 ## 6. Recommendation: morning priorities
 
-1. **Resolve Q-A12 + close B-58** (~30 min, no Node needed). One-line
-   `extra="ignore"`, info-log on dropped keys, spec §6 amend, one
-   regression test. Highest leverage: **closes the only medium-sev
-   data-loss bug**, locks in the D-003 contract before M2 starts
+1. **Close B-72** (~5 min, this iter). Two test-isolation cases that
+   `rmdir()` `static/assets/` and now break `make test` whenever a
+   real frontend bundle is present. Stop-the-bleed on a green CI.
+2. **Close B-58 per D-041** (~15 min, no Node needed). One-line
+   `extra="ignore"`, WARNING-level dropped-keys log, spec §6 amend,
+   one regression test. Locks in the D-003 contract before M2 starts
    writing session_state.
-2. **Resolve Q-A8** (workspace-owner action). The single biggest
+3. **M2 slice 3 — lifespan wiring** (~30 min, no Node needed). Add
+   the FastAPI lifespan startup hook that calls
+   `resolve_initial_project(settings, session_state=load_session_state(...))`
+   and feeds the result into `app.state.active_project_carrier
+   .set_active_project()`. Brings slice 1 + slice 2 + iter-44
+   `session_state.load` together for the first time. Pin via a new
+   `tests/integration/test_lifespan.py` row.
+4. **Resolve Q-A8** (workspace-owner action). The single biggest
    unblock available. Until Node is on PATH, every iteration past M1
    is **backend-only**, and M1 itself can't fully close (the
    `data-testid="project-load-button"` driver-contract sanity test
    from `specs/16-milestones.md:144` is unverifiable). Adding the
    devcontainer Node feature is a one-line edit to a file outside
    this repo's edit boundary.
-3. **Start M2 backend half** (~1–2 iters; doesn't need Q-A8). Author
-   `core/project_state.py`, `core/persistence/{project_envelope,
-   ground_truth}.py`, `api/projects.py`, `api/pages.py` (record-only
-   payload). Acceptance test
-   `tests/integration/test_project_load.py::test_load_real_fixture`
-   needs only Python. The frontend half waits on Q-A8 but the
-   integration tests + GT-variant matching tests carry over from
-   legacy `test_ground_truth.py` and ship pure-Python value today.
+5. **M2 slice 4 — `core/project_state.py` + `api/projects.py`** (the
+   spec-proper M2 work). Author `core/project_state.py`,
+   `core/persistence/{project_envelope, ground_truth}.py`,
+   `api/projects.py`, `api/pages.py` (record-only payload).
+   Acceptance test `tests/integration/test_project_load.py
+   ::test_load_real_fixture` needs only Python. The frontend half
+   waits on Q-A8 but the integration tests + GT-variant matching
+   tests carry over from legacy `test_ground_truth.py` and ship
+   pure-Python value today.
 
 ---
 
