@@ -387,6 +387,77 @@ def post_ocr_config_models(
     )
 
 
+@router.post("/rescan", response_model=GetOCRConfigResponse)
+def post_ocr_config_rescan(
+    carrier: OCRConfigCarrier = Depends(get_ocr_config_carrier),
+    settings: Settings = Depends(get_settings),
+) -> GetOCRConfigResponse:
+    """Re-run model discovery and reconcile the carrier (slice 8c-v-b).
+
+    Spec ``specs/02-backend.md §5.8`` line 321. The handler walks the
+    discovery pipeline fresh (HF probe + local-models tree) so a model
+    pair that landed on disk after startup surfaces, and a pair that was
+    deleted between calls no longer does.
+
+    Carrier reconciliation: if the currently-selected detection /
+    recognition key still appears in the freshly-discovered option list,
+    it is preserved; otherwise it falls back to ``"stock"`` (always
+    present). The carrier is mutated only on real change — idempotent
+    rescans (no surface-set churn) skip the disk write the same way an
+    idempotent ``POST /models`` does.
+    """
+    local_pairs, records = _gather_pairs_and_records()
+    _, _, reason = pick_default_keys(records)
+
+    current_det, current_reco, current_rev = carrier.snapshot()
+    detection_options, recognition_options = _build_option_lists(
+        local_pairs,
+        selected_detection=current_det,
+        selected_recognition=current_reco,
+    )
+    detection_keys = {opt.key for opt in detection_options}
+    recognition_keys = {opt.key for opt in recognition_options}
+
+    # Reconcile: a stale selection (e.g. a local pair deleted from disk)
+    # falls back to ``"stock"`` so the user never sees a selection that
+    # has no matching option in the modal.
+    next_det = current_det if current_det in detection_keys else _STOCK_DETECTION.key
+    next_reco = current_reco if current_reco in recognition_keys else _STOCK_RECOGNITION.key
+
+    changed = carrier.set_models(
+        detection_key=next_det,
+        recognition_key=next_reco,
+        hf_pinned_revision=current_rev,
+    )
+    if changed:
+        save_ocr_config(
+            settings.data_root,
+            OCRConfigSidecar(
+                selected_detection_key=next_det,
+                selected_recognition_key=next_reco,
+                hf_pinned_revision=current_rev,
+            ),
+        )
+
+    # Rebuild option lists with the reconciled selection so ``is_default``
+    # flips onto the post-fallback key when reconciliation kicked in.
+    if changed:
+        detection_options, recognition_options = _build_option_lists(
+            local_pairs,
+            selected_detection=next_det,
+            selected_recognition=next_reco,
+        )
+
+    return GetOCRConfigResponse(
+        detection_options=detection_options,
+        recognition_options=recognition_options,
+        selected_detection=next_det,
+        selected_recognition=next_reco,
+        hf_pinned_revision=current_rev,
+        selection_reason=reason,
+    )
+
+
 def install_ocr_config_router(app) -> None:  # type: ignore[no-untyped-def]
     """Register the OCR config router. Called from ``bootstrap.build_app``."""
     app.include_router(router)

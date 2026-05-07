@@ -770,6 +770,154 @@ def test_idempotent_post_does_not_rewrite_sidecar(
         )
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Slice 8c-v-b: POST /api/ocr-config/rescan
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_post_rescan_returns_200(client: TestClient) -> None:
+    """The route exists at the spec-canonical URL
+    (``specs/02-backend.md §5.8`` line 321).
+    """
+    resp = client.post("/api/ocr-config/rescan")
+    assert resp.status_code == 200, resp.text
+
+
+def test_post_rescan_response_validates_against_dto(client: TestClient) -> None:
+    """Response body parses cleanly into ``GetOCRConfigResponse``.
+
+    Spec line 321 declares the rescan returns the same DTO as GET.
+    """
+    from pd_ocr_labeler_spa.core.ocr_models import GetOCRConfigResponse
+
+    resp = client.post("/api/ocr-config/rescan")
+    parsed = GetOCRConfigResponse.model_validate(resp.json())
+    assert isinstance(parsed.detection_options, list)
+    assert isinstance(parsed.recognition_options, list)
+
+
+def test_post_rescan_appears_in_openapi_schema(client: TestClient) -> None:
+    """``POST /api/ocr-config/rescan`` surfaces in OpenAPI for ``types.ts``
+    generation. ``make openapi-export`` walks the OpenAPI doc.
+    """
+    spec = client.get("/openapi.json").json()
+    assert "/api/ocr-config/rescan" in spec["paths"]
+    assert "post" in spec["paths"]["/api/ocr-config/rescan"]
+
+
+def test_post_rescan_picks_up_newly_landed_local_pair(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rescan must walk the local-models tree fresh — so a pair that
+    landed *after* startup surfaces in the response. Pins that the
+    handler does not cache the discovery output across requests.
+    """
+    from pd_ocr_labeler_spa.api import ocr_config as _ocr_config_mod
+
+    models_root = tmp_path / "models"
+    monkeypatch.setattr(_ocr_config_mod, "fetch_hf_last_modified", lambda: None)
+    monkeypatch.setattr(_ocr_config_mod, "_resolve_local_models_root", lambda: models_root)
+
+    settings = _make_settings(tmp_path)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        # Pre-rescan: empty tree → no local options.
+        body0 = c.get("/api/ocr-config").json()
+        sources0 = {opt["source"] for opt in body0["detection_options"]}
+        assert "local" not in sources0
+
+        # Land a new pair on disk between calls.
+        profile = models_root / "all"
+        (profile / "detection").mkdir(parents=True)
+        (profile / "recognition").mkdir(parents=True)
+        (profile / "detection" / "all-detection-base-1700000000.pt").write_bytes(b"x")
+        (profile / "recognition" / "all-recognition-base-1700000000.pt").write_bytes(b"x")
+
+        resp = c.post("/api/ocr-config/rescan")
+        body1 = resp.json()
+        det_keys = {opt["key"] for opt in body1["detection_options"]}
+        assert "all/all-base-1700000000" in det_keys, body1
+
+
+def test_post_rescan_preserves_current_selection_when_still_valid(
+    client: TestClient,
+) -> None:
+    """A rescan must not silently rewrite the user's selection when the
+    selected key is still present in the freshly-discovered options.
+
+    Sequence: POST a non-default selection (``huggingface``) → rescan
+    (selection still surfaces because HF option is always present) →
+    response reflects the user's pick, not a picker-derived default.
+    """
+    resp_set = client.post(
+        "/api/ocr-config/models",
+        json={"detection_key": "huggingface", "recognition_key": "huggingface"},
+    )
+    assert resp_set.status_code == 200
+
+    resp_rescan = client.post("/api/ocr-config/rescan")
+    body = resp_rescan.json()
+    assert body["selected_detection"] == "huggingface"
+    assert body["selected_recognition"] == "huggingface"
+
+
+def test_post_rescan_falls_back_when_selected_key_no_longer_surfaces(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rescan that drops a previously-surfaced key (e.g. local pair
+    deleted from disk between calls) must reconcile the carrier: the
+    selection falls back to ``"stock"`` rather than leaving the user
+    with a key that no longer appears in any option list.
+
+    Pre-rescan: a local pair is on disk; user POSTs the local key. The
+    pair's files are deleted; the rescan walks an empty tree, the local
+    key vanishes from the option list, and the carrier is reset to
+    stock for both detection and recognition. The next GET reflects the
+    same reconciled state — i.e. the rescan persisted the fallback.
+    """
+    from pd_ocr_labeler_spa.api import ocr_config as _ocr_config_mod
+
+    models_root = tmp_path / "models"
+    profile = models_root / "all"
+    (profile / "detection").mkdir(parents=True)
+    (profile / "recognition").mkdir(parents=True)
+    det_pt = profile / "detection" / "all-detection-base-1700000000.pt"
+    reco_pt = profile / "recognition" / "all-recognition-base-1700000000.pt"
+    det_pt.write_bytes(b"x")
+    reco_pt.write_bytes(b"x")
+
+    monkeypatch.setattr(_ocr_config_mod, "fetch_hf_last_modified", lambda: None)
+    monkeypatch.setattr(_ocr_config_mod, "_resolve_local_models_root", lambda: models_root)
+
+    settings = _make_settings(tmp_path)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        local_key = "all/all-base-1700000000"
+        resp_set = c.post(
+            "/api/ocr-config/models",
+            json={"detection_key": local_key, "recognition_key": local_key},
+        )
+        assert resp_set.status_code == 200
+        assert resp_set.json()["selected_detection"] == local_key
+
+        # Drop the pair from disk → rescan must surface the fallback.
+        det_pt.unlink()
+        reco_pt.unlink()
+
+        resp_rescan = c.post("/api/ocr-config/rescan")
+        body_rescan = resp_rescan.json()
+        assert body_rescan["selected_detection"] == "stock"
+        assert body_rescan["selected_recognition"] == "stock"
+
+        # Subsequent GET sees the same reconciled state — the rescan
+        # persisted the fallback into the carrier (not just echoed).
+        body_after = c.get("/api/ocr-config").json()
+        assert body_after["selected_detection"] == "stock"
+        assert body_after["selected_recognition"] == "stock"
+
+
 def test_corrupt_sidecar_does_not_crash_startup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
