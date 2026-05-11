@@ -1,5 +1,9 @@
 # 19 — Auto-Rotation + Manual Rotate
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#42
+
 Pages from book scans sometimes arrive rotated (sideways, upside-down).
 The SPA must detect, optionally auto-correct, and always allow manual
 correction.
@@ -35,6 +39,7 @@ Returns: PagePayload
 ```
 
 Backend behaviour:
+
 - Rotate the in-memory page image by `degrees` (CCW positive in
   numpy / OpenCV convention; CW positive in PIL — be explicit:
   CW positive on the wire).
@@ -92,6 +97,7 @@ Layout in `<PageActions />`:
 - Color: gray (auto), blue (manual).
 
 Tooltip text variants:
+
 - `rotation_source == "auto"` → "Auto-rotated 90° clockwise. Click to revert."
 - `rotation_source == "manual"` → "Manually rotated 90° clockwise."
 - `rotation_source == "none"` → (badge hidden)
@@ -194,6 +200,7 @@ The user's question Q-A1 surfaces here: where does
 ```
 
 Verify legacy v2.1 reader behaviour first:
+
 - Legacy uses `extra="ignore"` (or equivalent) on the nested provenance
   blocks but `extra="forbid"` on the schema field check. **Test:** open
   a v2.2 envelope in legacy. If it crashes, ship Q-A1 option **(B)**
@@ -232,10 +239,12 @@ Auto-rotation is a **post-GA enhancement**:
 Add as a new milestone in [`16-milestones.md`](16-milestones.md):
 
 > ### M9.1 — Manual rotation
+>
 > Outcome: rotate-CW/CCW buttons in PageActions. POST
 > .../rotate triggers Reload OCR. Source badge shows rotation.
-
+>
 > ### M9.2 — Auto-rotation
+>
 > Outcome: project-load pass detects rotation per page; configurable
 > method (gt-best-match / layout). Indicator badge distinguishes
 > auto vs manual.

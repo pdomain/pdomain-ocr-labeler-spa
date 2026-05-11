@@ -1,5 +1,9 @@
 # 04 — Image Viewport (Left Pane)
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#12
+
 The left pane shows the page image with paragraph/line/word bounding-box
 overlays. It supports four interaction modes (select, rebox, add-word,
 erase) and persistent layer-visibility / selection-mode prefs.

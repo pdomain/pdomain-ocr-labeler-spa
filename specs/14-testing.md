@@ -1,5 +1,9 @@
 # 14 — Testing Strategy
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#32
+
 How the SPA's correctness is asserted: backend pytest, frontend
 Vitest, end-to-end Playwright, plus golden-file conformance against
 the legacy.
@@ -275,6 +279,7 @@ driver agent.
 ### 4.4 Performance e2e
 
 `tests/e2e/test_performance.py`:
+
 - Load a 200-line page; assert visible-line render < 200ms (via
   `performance.measure`).
 - Validate 100 words via toolbar batch; assert mutation round-trip
@@ -308,6 +313,7 @@ compatibility — fix immediately.
 ### 5.2 SPA writes readable by legacy
 
 Manual test (M9 acceptance criterion):
+
 1. SPA: load fixture, edit words, Save Page, exit.
 2. Legacy: open the same project, navigate to the saved page, verify
    it renders.
@@ -370,6 +376,7 @@ The openapi-drift job is **required** — closes pgdp-prep gap.
 Each milestone's "acceptance tests" list (in
 [`16-milestones.md`](16-milestones.md)) is the minimum bar. Implementing
 agents must:
+
 1. Write the named tests **first** (fail).
 2. Implement until the tests pass.
 3. Add any tests they discovered along the way.

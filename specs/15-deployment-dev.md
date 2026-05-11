@@ -1,5 +1,9 @@
 # 15 — Deployment + Developer Workflow
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#34
+
 How `pd-ocr-labeler-spa` is built, packaged, distributed, and developed.
 
 > Cross-refs:

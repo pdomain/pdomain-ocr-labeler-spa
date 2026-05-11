@@ -1,5 +1,9 @@
 # 18 — Text Normalization (Long-S, Ligatures, Glyph Variants)
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#40
+
 How the SPA handles old-typesetting glyphs (`ſ`, `ﬁ`, `ﬂ`, `ﬃ`, `ﬄ`,
 `ſt`-ligature, `ct`-ligature, ...) that diverge from the ASCII
 ground-truth conventions used by PGDP and DocTR training corpora.
@@ -149,6 +153,7 @@ When pd-book-tools `pd_book_tools.text.normalize` is unavailable
 ≥ X.Y.Z" hint and the toggles are disabled.
 
 testids:
+
 - `normalize-gt-matching-checkbox`
 - `normalize-plaintext-checkbox`
 - `normalize-profile-select`

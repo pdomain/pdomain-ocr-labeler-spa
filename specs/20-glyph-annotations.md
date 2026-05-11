@@ -1,5 +1,9 @@
 # 20 — Glyph-level Side-channel Annotations
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#44
+
 How the SPA records and edits **typographic features** (ct/st ligatures,
 long-s positions, swash caps, …) that the canonical GT text deliberately
 throws away. Glyph annotations live **alongside** GT text, never inside
@@ -42,9 +46,9 @@ features the canonical GT discards. Three concepts in v1:
 - **Swash flag** — boolean: this word is set in a swash (decorative
   cap) variant.
 
-**Tri-state per word.** `glyph_annotations is None` means *not yet
-reviewed*. `glyph_annotations = GlyphAnnotations()` (empty but
-present) means *reviewed, nothing to mark*. This distinction drives
+**Tri-state per word.** `glyph_annotations is None` means _not yet
+reviewed_. `glyph_annotations = GlyphAnnotations()` (empty but
+present) means _reviewed, nothing to mark_. This distinction drives
 the progress metric (§5).
 
 **The classifier is advisory.** When pd-ocr-trainer ships a
@@ -255,6 +259,7 @@ inline under `<WordCell>` GT input:
 ```
 
 Clicking any chip opens the panel. Used in two places:
+
 - Right-pane `<WordCell>` (compact view).
 - `<WordEditDialog>` chip row above the Typography section.
 

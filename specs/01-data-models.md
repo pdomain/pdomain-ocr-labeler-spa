@@ -1,5 +1,9 @@
 # 01 — Data Models
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#6
+
 Every Pydantic, dataclass, and on-disk JSON schema. **Compatibility
 with the legacy `pd-ocr-labeler` is mandatory** for everything the
 labeler reads or writes from the user's data root, because the same

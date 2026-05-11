@@ -1,5 +1,9 @@
 # 17 — Architecture Decisions Log
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#38
+
 A chronological log of design decisions: what was decided, why, and
 when. New entries on top.
 

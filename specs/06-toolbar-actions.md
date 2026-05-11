@@ -1,5 +1,9 @@
 # 06 — Toolbar Action Grid
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#16
+
 The 14-column grid above the matches view, with one row per scope
 (page / paragraph / line / word). Plus the Apply Style row and the
 Add Word row.
@@ -164,6 +168,7 @@ multi-add until clicked again. ([04-image-viewport.md](04-image-viewport.md) §4
 
 The toolbar's enabled-states derive from `useSelectionStore`. The
 store is updated:
+
 - On viewport drag (M4).
 - On clicking a paragraph/line/word checkbox.
 - On clicking inside a paragraph/line/word bbox.

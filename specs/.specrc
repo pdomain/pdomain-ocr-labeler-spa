@@ -1,0 +1,30 @@
+# Spec lint config
+# All 21 specs below predate the 9-section template; they are legacy-exempted from Rule 1.
+
+legacy:
+  - 00-overview.md
+  - 01-data-models.md
+  - 02-backend.md
+  - 03-frontend.md
+  - 04-image-viewport.md
+  - 05-word-matches.md
+  - 06-toolbar-actions.md
+  - 07-word-edit-dialog.md
+  - 08-page-actions.md
+  - 09-persistence.md
+  - 10-export.md
+  - 11-notifications.md
+  - 12-hotkeys-a11y.md
+  - 13-driver-contract.md
+  - 14-testing.md
+  - 15-deployment-dev.md
+  - 16-milestones.md
+  - 17-decisions.md
+  - 18-text-normalization.md
+  - 19-auto-rotation.md
+  - 20-glyph-annotations.md
+
+cap_lines:
+  default: 800
+  # ADR log grows with every decision; cap raised to accommodate
+  17-decisions.md: 2000

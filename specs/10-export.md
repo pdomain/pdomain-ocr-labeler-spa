@@ -1,5 +1,9 @@
 # 10 — Export Dialog + DocTR Export Operation
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#24
+
 The Export dialog drives the DocTR training-export pipeline against
 labeled-projects. Output: per-page detection + recognition training
 data, optionally filtered by style or component.
@@ -71,6 +75,7 @@ labels seen in saved validated pages. The UI lists one checkbox per.
 
 Mutually exclusive: either "All (no style filter)" is checked OR
 one or more individual styles. Implementation:
+
 - Click "All" → uncheck all individual styles.
 - Click any individual style → uncheck "All".
 
@@ -168,6 +173,7 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
 ```
 
 The pd-book-tools API used:
+
 - `Page.generate_doctr_detection_training_set`
 - `Page.generate_doctr_recognition_training_set`
 - `pd_ocr_labeler_spa.export.WordFilter` (port from legacy)
@@ -187,6 +193,7 @@ The pd-book-tools API used:
 ```
 
 `<subfolder>` is:
+
 - `"all"` if no style filter.
 - The style label (e.g. `"italics"`) if a single style is selected.
 - `"classification"` if `include_classification=true`.
@@ -228,7 +235,7 @@ boot the FastAPI server; reads envelopes directly from disk.
   - golden-file comparison of `labels.json` against legacy output
 - Backend: `tests/integration/test_export_classification.py`.
 - E2E: `test_export_dialog.py` — open dialog, select "All Validated"
-  + "italics", click Export, see progress, see results row.
+  - "italics", click Export, see progress, see results row.
 - Headless CLI: `tests/cli/test_export_cli.py` — argparse correctness,
   matches dialog output for the same inputs.
 

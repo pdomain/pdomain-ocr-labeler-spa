@@ -1,5 +1,9 @@
 # 12 — Hotkeys + Accessibility
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#28
+
 The complete keymap and accessibility contract.
 
 > Cross-refs:
@@ -83,6 +87,7 @@ Confirms via shadcn `<AlertDialog />` for destructive actions.
 | `+` / `-` | Zoom viewport (future, off by default) |
 
 Drag modifiers (mouse + key combos):
+
 - Plain drag → replace selection
 - `Shift+drag` → remove from selection
 - `Ctrl+drag` → toggle selection (XOR)

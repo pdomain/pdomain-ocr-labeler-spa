@@ -1,5 +1,9 @@
 # 11 — Notifications, Busy Overlays, and SSE Jobs
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#26
+
 How user-visible feedback flows from server actions to the UI.
 
 > Cross-refs:

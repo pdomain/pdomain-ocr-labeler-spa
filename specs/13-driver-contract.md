@@ -1,5 +1,9 @@
 # 13 — Driver-Compatibility Contract
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#30
+
 The `pd-ocr-labeler-driver` agent operates the labeler UI through
 Playwright. It uses **stable `data-testid` attributes** and **stable
 URL paths** to find and click things. The SPA must preserve every
@@ -292,6 +296,7 @@ detect operation failures.
 ## 3. ARIA + accessible-name guarantees
 
 For every interactive element above:
+
 - Buttons have either visible text **or** an `aria-label`. Icon-only
   buttons (delete, close, sort) MUST have `aria-label`.
 - Selects/radios have associated `<label>` or `aria-label`.
@@ -369,6 +374,7 @@ The driver agent navigates to:
 - `/` — placeholder OR last-loaded redirect.
 
 Edge cases (verbatim from legacy `_initialize_from_url:523`):
+
 1. Project `foo` not in the discovered list: try absolute path
    resolution; try `<source_projects_root>/foo`; try `cwd/foo`. If
    none found, render "Project not found" but keep the URL.

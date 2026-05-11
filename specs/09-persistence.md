@@ -1,5 +1,9 @@
 # 09 — Persistence
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#22
+
 Every byte the SPA writes to disk. Schema-version-stable so the legacy
 labeler can interop ([D-003](17-decisions.md)). Crash-safe via the
 auto-save-to-cache lane ([`08-page-actions.md`](08-page-actions.md)).

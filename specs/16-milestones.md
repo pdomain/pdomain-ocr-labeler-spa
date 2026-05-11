@@ -1,5 +1,9 @@
 # 16 — Milestones
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#36
+
 The roadmap. Each milestone is bounded enough that a single AI coding
 agent can deliver it in one session, with the listed acceptance tests
 passing.

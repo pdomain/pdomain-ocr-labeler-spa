@@ -1,5 +1,9 @@
 # 07 — Word Edit Dialog
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#18
+
 A modal dialog focused on a single word: preview, image-with-marker,
 merge/split/delete, crop, refine, fine-tune nudge, drag-erase, tag
 chips. The most behaviourally complex single component in the labeler.
@@ -103,10 +107,12 @@ factor.
 
 #### Interactive image
 A `<Stage>` (Konva) containing:
+
 - The word's bbox slice from the page's `original` cached image.
 - Layer for overlay markers/rects (`<DialogImageOverlay />`).
 
 Mouse interactions:
+
 - **mouseenter** / **mousemove**: show a *vertical guide line* at the
   cursor x-position (dashed gray).
 - **click**: place / replace the persistent click marker (solid blue,
@@ -115,6 +121,7 @@ Mouse interactions:
 
 When erase mode is active (toggled via Esc-to-marker, see §4.6), the
 mouse handlers switch to:
+
 - **mousedown** / **mousemove** / **mouseup**: draw an erase rect
   staged in the dialog state. Multiple erase rects can stack.
 
@@ -123,6 +130,7 @@ both use the marker's x-position as the split/crop x-coordinate
 (in source pixels).
 
 #### OCR + GT
+
 - `dialog-current-ocr-text`: read-only label showing `word.ocr_text`.
 - `dialog-gt-input`: text input pre-filled with `word.ground_truth_text`.
   Hotkey: `Enter` commits via `POST /api/.../words/{l}/{w}/ground-truth`.
@@ -222,6 +230,7 @@ Step size: `bbox_nudge_step_px = 5` (configurable via setting; not
 exposed in UI for v1).
 
 Direction semantics (matches legacy):
+
 - `nudge-left-minus` → move left edge inward (shrink left)
 - `nudge-left-plus` → move left edge outward (expand left)
 - `nudge-right-minus` → move right edge inward (shrink right)
@@ -276,6 +285,7 @@ a click would place the marker.
 
 Activated via a small `Erase` toggle in the image's chrome (testid
 `dialog-erase-toggle`). When on:
+
 - mousedown starts a drag rect.
 - mousemove resizes it.
 - mouseup commits it to the staged-erase list.

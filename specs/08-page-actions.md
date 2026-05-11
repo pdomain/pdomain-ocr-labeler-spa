@@ -1,5 +1,9 @@
 # 08 — Page Actions
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#20
+
 The horizontal row of buttons just below the project navigation
 controls. Persistence + OCR + GT-rematch live here.
 
@@ -23,6 +27,7 @@ controls. Persistence + OCR + GT-rematch live here.
 Buttons left-to-right, then a divider, then the page name + source
 badge + rotation badge. The Rotate buttons (D-029) ship in M9.1 and
 are present-but-hidden until then. All buttons disabled while:
+
 - `useIsLoading(["page", pid, idx])` (page loading).
 - `useIsMutating({mutationKey:["page", pid, idx]}) > 0`.
 - An active job is targeting this page.
@@ -42,11 +47,13 @@ Returns `202 Accepted` with a `Job` body. SPA opens
 message ("Loading detection model…", "Running OCR…", etc.).
 
 On terminal `complete`:
+
 - Invalidate `["page", pid, idx]`.
 - Refetch produces a `PageRecord` with `page_source = "ocr"`.
 - Toast `"OCR complete"`.
 
 On `error`:
+
 - Show the error message in a sticky negative toast.
 - The page state stays as it was.
 
@@ -75,6 +82,7 @@ button when `has_edited_image` is false (read from `PagePayload`).
 Synchronous. `POST /api/projects/{id}/pages/{idx}/save {saved_by:"Save Page"}`.
 
 Backend:
+
 1. `_resolve_save_directory` → `<data>/labeled-projects/<project_id>/`.
 2. Copy the source image to `<save_dir>/<project_id>_<page:03d>.png`
    (only if not already there).
@@ -86,6 +94,7 @@ Backend:
 Returns `SavePageResponse {page: PagePayload, saved_path: Path}`.
 
 SPA:
+
 - Optimistically flip the source badge to "LABELED" while the
   request is in flight.
 - On error, revert + toast.
@@ -130,6 +139,7 @@ Synchronous. `POST /api/projects/{id}/pages/{idx}/load`.
 
 Discards in-memory edits for this page and re-loads from disk. Order
 of preference (matches legacy):
+
 1. `<data>/labeled-projects/<project_id>/<project_id>_<page:03d>.json`
 2. `<cache>/page-images/<project_id>_<page:03d>_envelope.json` (cache lane)
 3. (None — error 404)
@@ -148,6 +158,7 @@ to confirm before posting.
 Synchronous. `POST /api/projects/{id}/pages/{idx}/rematch-gt`.
 
 Backend:
+
 1. Wipe per-word `ground_truth_text` overrides.
 2. Re-run `Page.add_ground_truth(page_text_gt)` on the page.
 3. Auto-save to cache.
@@ -190,6 +201,7 @@ Right side of the row:
 | `rotation-badge` | Rotation pill (D-029); hidden when `rotation_degrees == 0` |
 
 Badge styles:
+
 - `LABELED` → green (`bg-green-100 text-green-900`)
 - `CACHED OCR` → yellow (`bg-yellow-100 text-yellow-900`)
 - `RAW OCR` → blue (`bg-blue-100 text-blue-900`)
@@ -224,6 +236,7 @@ notifications stream.
 The backend's `core/page_state.py` mirrors the legacy: every mutation
 that changes the page (structural edit, bbox edit, validation toggle,
 GT edit) triggers `_auto_save_to_cache`. This:
+
 - Writes a `UserPageEnvelope` to `<cache>/page-images/<project>_<page:03d>_envelope.json`
   with `source_lane="cached"`, `saved_by="Auto-save"`,
   `update_page_source=False`.

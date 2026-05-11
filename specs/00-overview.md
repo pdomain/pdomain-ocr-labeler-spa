@@ -1,5 +1,9 @@
 # 00 — Overview
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#4
+
 `pd-ocr-labeler-spa` reimplements the existing
 `pd-ocr-labeler` (NiceGUI, server-rendered Quasar UI) as a
 **FastAPI + React/Vite/TypeScript SPA**, structurally modelled on

@@ -1,5 +1,9 @@
 # 03 — Frontend (React/Vite/TS)
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#10
+
 The SPA half of `pd-ocr-labeler-spa`. Built with Vite, served from the
 FastAPI wheel in production, served via Vite dev-server with proxy in
 development.
@@ -422,6 +426,7 @@ and binds them all. Respects active form-control focus by default
 ## 9. Component organisation
 
 Three folders:
+
 - `pages/` — one per route. Owns top-level data fetching. Composes
   components.
 - `components/` — presentational + small bits of state. **Re-usable**
@@ -470,6 +475,7 @@ const mutation = useMutation({
 ```
 
 Key rules:
+
 - **Always** invalidate (or patch) the relevant query on success.
 - Never rely on `refetchOnWindowFocus`.
 - When the server returns `PagePayload` (multi-word effects),
@@ -480,12 +486,14 @@ Key rules:
 ## 11. Modals + dialogs
 
 shadcn `Dialog` for everything modal:
+
 - `<OCRConfigModal />`
 - `<SourceFolderDialog />`
 - `<WordEditDialog />`
 - `<ExportDialog />`
 
 shadcn ships:
+
 - Focus trap (Radix).
 - Escape closes (Radix).
 - Background scroll lock (Radix).

@@ -1,5 +1,9 @@
 # 05 — Word Matches View (Right Pane)
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#14
+
 The right pane shows OCR-vs-GT comparisons line by line. It's the
 densest piece of UI in the labeler and the most performance-sensitive.
 
@@ -113,6 +117,7 @@ Header row contents:
 ```
 
 Icons:
+
 - `📊` chart-bar from `lucide-react`.
 - `✓` `check-circle` (green).
 - `⚠` `alert-triangle` (yellow).
@@ -148,6 +153,7 @@ column has 5 rows:
 #### Row 1 — Selection cell
 
 Three controls per word:
+
 - Word checkbox (testid `word-checkbox-{l}-{w}`). Bound to
   `useSelectionStore.selectedWords`.
 - Edit button (testid `edit-word-button-{l}-{w}`). `lucide-react Pencil`
@@ -159,6 +165,7 @@ Three controls per word:
 #### Row 2 — Image cell
 
 Two variants:
+
 - **Unmatched-GT** word (`match_status === "unmatched_gt"`): show a
   `Type` (lucide) icon in blue (`text-blue-600`). No image.
 - **Other**: CSS-clip the page's `original` cached image at the
@@ -276,6 +283,7 @@ Fuzz score (when not exact) shown as a tiny text below the icon:
 | Clear chip | `POST /api/.../words/{l}/{w}/style {style: "x", scope:"clear"}` | `WordMatch` |
 
 Optimistic-update semantics:
+
 - Single-word mutations: patch the WordMatch in the cache directly.
 - Multi-word mutations: replace the whole `PagePayload` from the response.
 

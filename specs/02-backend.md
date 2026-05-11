@@ -1,5 +1,9 @@
 # 02 — Backend (FastAPI)
 
+> **Status**: Active
+> **Last updated**: 2026-05-11
+> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#8
+
 The Python side of `pd-ocr-labeler-spa`. Ships as a single wheel; the
 `pd-ocr-labeler-spa-ui` console script boots a `uvicorn` server that
 serves both the API and the bundled SPA.
@@ -68,6 +72,7 @@ src/pd_ocr_labeler_spa/
 ```
 
 Where this differs from pgdp-prep:
+
 - No `dispatcher/`, no `core/queue/single_executor.py`. Single in-process
   job runner with an in-memory Job dict.
 - Full `IOCREngine` adapter axis (D-018): `local_doctr | modal | shared_container`.
@@ -82,6 +87,7 @@ Where this differs from pgdp-prep:
 `src/pd_ocr_labeler_spa/bootstrap.py` exports `build_app(settings: Settings | None = None) -> FastAPI`.
 
 Order:
+
 1. `configure_logging(settings.log_format)`.
 2. Build adapters: `IStorage`, `IAuth`, `IOCREngine`.
 3. Build `JobEventBroker` + `JobRunner`.
@@ -475,6 +481,7 @@ addition: `BoundingBox.is_geometry_normalization_error` → `422
 geometry_error`.
 
 Handler chain:
+
 1. `StarletteHTTPException` → original status, `error="http_<n>"`.
 2. `RequestValidationError` → `400 validation_error`, `details = exc.errors()`.
 3. `BoundingBoxGeometryError` (custom exception in `core/exceptions.py`)
@@ -489,6 +496,7 @@ The SPA's `client.ts` parses `{error, message, details}` uniformly.
 ## 9. RequestId + structured logging
 
 Verbatim port from pgdp-prep:
+
 - `api/middleware/request_id.py` — ASGI middleware reading/echoing
   `X-Request-ID`, minting `uuid4().hex` if absent, stamping a
   `ContextVar`.
@@ -498,6 +506,7 @@ Verbatim port from pgdp-prep:
   `_pdlabeler_managed = True` so `--reload` doesn't double-log.
 
 Per-route audit log (closes pgdp-prep gap):
+
 - `request_start` info log on entry (path, method, request_id).
 - `request_end` info log on exit (status, duration_ms).
 
@@ -506,6 +515,7 @@ Per-route audit log (closes pgdp-prep gap):
 ## 10. SPA / static serving
 
 `bootstrap._mount_static_frontend(app, settings)`:
+
 - Skipped when `settings.frontend_dev_url` is set.
 - Resolves `pd_ocr_labeler_spa/static/` via `importlib.resources.files()`.
 - Defines a manual catch-all `/{full_path:path}` that:
@@ -571,6 +581,7 @@ Same as pgdp-prep. Acceptable because the SPA serves from the same
 origin in production; wide setting unblocks Vite-dev (5173 → 8080).
 
 Middleware order (Starlette applies outermost first):
+
 1. `RequestIdMiddleware` (added last → outermost)
 2. `CORSMiddleware`
 
@@ -581,6 +592,7 @@ No additional middleware in v1.
 ## 13. Background discovery + restoration
 
 In `app_state.startup()`:
+
 1. Read YAML config; resolve `source_projects_root`.
 2. Scan for project subdirectories.
 3. Read `session_state.json`. If `last_project_path` exists and is a
@@ -597,6 +609,7 @@ Discovery runs in `await app_state.startup()` so the very first
 ## 14. Testing seam
 
 `tests/conftest.py`:
+
 - `settings` fixture: filesystem storage, `auth_mode=none`, hermetic
   tmpdir for config/data/cache, no `frontend_dev_url`.
 - `client` fixture: `TestClient(build_app(settings))` as ctx mgr.
