@@ -92,8 +92,8 @@ run; the rows below stay ⛔ until that iteration lands).
 | Vite + React 19 + Vitest scaffold | 🟡 partial | Files exist (App.tsx + smoke test); **never built or run end-to-end**. |
 | Tailwind / shadcn pin | 🟡 partial | `tailwind.config.js` content-glob test passes by inspection (B-18 resolved); shadcn not actually installed. |
 | ESLint config | ⬜ not started | Q-A9 picked (A) by default; `eslint.config.ts` not yet authored. |
-| Header bar + EmptyProjectState | 🟡 spec written | Q-A8 resolved 2026-05-07. Specs: [21-header-bar.md](../specs/21-header-bar.md), [22-root-page.md](../specs/22-root-page.md). Chore issues #84, #89–#93 in pipeline. |
-| Project load controls + dropdown | 🟡 spec written | Covered in [21-header-bar.md](../specs/21-header-bar.md) (ProjectLoadControls). Chore #90 in pipeline. |
+| Header bar + EmptyProjectState | 🟡 spec written | #83 → `specs/21-header-bar.md`; #85 → `specs/22-root-page.md` |
+| Project load controls + dropdown | 🟡 spec written | Covered in #83 (`specs/21-header-bar.md`) |
 | SourceFolderDialog | ⛔ Q-A8 | M2. |
 | OCRConfigModal | ⛔ Q-A8 | M3. |
 | Page image canvas (Konva) | ⛔ Q-A8 | M3 base + M4 overlays. |
