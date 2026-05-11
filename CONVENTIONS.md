@@ -82,3 +82,111 @@ fast (<200 ms warm) and always selects the project venv.
 - One-off REPL commands typed in CT's interactive shell — out of scope for this rule.
 
 <!-- workspace-conventions:end -->
+
+---
+
+## Rule: OpenAPI types are generated, never hand-edited
+
+**The rule.** `frontend/src/api/types.ts` is machine-generated from the
+FastAPI OpenAPI schema. Run `make openapi-export` to regenerate it after
+any change to a FastAPI request or response model. Never edit
+`types.ts` by hand.
+
+**Why.** Hand edits drift silently from the backend schema and produce
+type errors that only surface at runtime. The generation step is the
+contract; the file is its artifact.
+
+**Common high-confidence violations** (bot auto-fix candidates)
+
+- A commit that modifies a `src/pd_ocr_labeler_spa/api/` model but does not
+  include a matching change to `frontend/src/api/types.ts`.
+- A PR description that says "updated response model" without mentioning
+  `make openapi-export`.
+
+**Common judgment-call violations** (bot flags, CT decides)
+
+- A temporary local edit to `types.ts` made while the backend shape was still
+  in flux — flag if the PR reaches review without reverting to generated output.
+
+---
+
+## Rule: data-testid values must match specs/13-driver-contract.md exactly
+
+**The rule.** Every interactive element visible to the Playwright driver
+must carry the exact `data-testid` string listed in
+`specs/13-driver-contract.md`. Do not invent new testids without first
+adding them to that spec; do not rename or remove existing ones without
+explicit approval (see spec §9 versioning).
+
+**Why.** The `pd-ocr-labeler-driver` agent selects elements exclusively
+by `data-testid`. Any mismatch silently breaks the driver pre-pass with
+no compile-time signal.
+
+**Common high-confidence violations** (bot auto-fix candidates)
+
+- A `data-testid` string in a React component that differs from the
+  catalogue by case, spelling, or trailing/leading characters.
+- An interactive button or input rendered without any `data-testid` when
+  the spec catalogue lists one for that element.
+
+**Common judgment-call violations** (bot flags, CT decides)
+
+- A new component that has no catalogue entry yet — flag for spec update
+  before merge, don't auto-assign a testid.
+- A per-index testid (e.g. `line-card-{n}`) that uses a different index
+  variable than the spec specifies.
+
+---
+
+## Rule: FastAPI route handlers must declare an explicit response_model
+
+**The rule.** Every `@router.get`, `@router.post`, etc. handler must
+include a `response_model=` keyword argument pointing to a concrete
+Pydantic model. Returning `dict`, `Any`, or `JSONResponse` without a
+model is not permitted.
+
+**Why.** Without a `response_model`, FastAPI cannot validate the outgoing
+shape, `make openapi-export` generates an untyped schema, and the
+generated `types.ts` degrades to `unknown`. The entire typed-REST surface
+depends on this discipline.
+
+**Common high-confidence violations** (bot auto-fix candidates)
+
+- A route decorator with no `response_model=` argument.
+- `response_model=dict` or `response_model=Any`.
+- A return type annotation of `-> dict` or `-> Any` on a route handler
+  (use this as a secondary signal; the decorator attribute is canonical).
+
+**Common judgment-call violations** (bot flags, CT decides)
+
+- A streaming endpoint (`StreamingResponse` for SSE) that intentionally
+  cannot declare a Pydantic model — document with an inline comment
+  explaining why and reference the spec section.
+
+---
+
+## Rule: New stateful React components require a Vitest test file
+
+**The rule.** Any new React component that manages interactive state
+(controlled inputs, local `useState`/`useReducer`, react-query mutations,
+or Konva canvas interactions) must ship with a corresponding Vitest test
+file under `frontend/src/` beside the component. The test file name is
+`<ComponentName>.test.tsx`.
+
+**Why.** Stateful components are where bugs live. A component delivered
+without tests forces the next developer to reverse-engineer intent before
+they can safely change it. The rule does not apply to pure presentational
+components with no local state.
+
+**Common high-confidence violations** (bot auto-fix candidates)
+
+- A new `*.tsx` file containing `useState` or `useMutation` with no
+  sibling `*.test.tsx` file in the same directory.
+
+**Common judgment-call violations** (bot flags, CT decides)
+
+- A component that is stateful but whose behaviour is already fully
+  covered by an E2E test in `tests/e2e/` — flag; CT decides whether
+  unit coverage is still needed.
+- Wrapper components that delegate all state to a child already under
+  test — flag; they may not need their own test file.
