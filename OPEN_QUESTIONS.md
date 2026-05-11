@@ -51,79 +51,28 @@ costs one session; a post-hoc rewrite of the full overlay system costs more.
 ---
 
 ### Q-A5 — Does the legacy labeler tolerate a v2.2 `UserPageEnvelope` (with `glyph_annotations`)?
-> GitHub: ConcaveTrillion/pd-ocr-labeler-spa#56
+> GitHub: ConcaveTrillion/pd-ocr-labeler-spa#56 — **CLOSED**
 
-**Q.** When the SPA saves a page that has any glyph annotation, it bumps the
-envelope's `schema.version` to `"2.2"` and writes a `glyph_annotations` key
-into the payload. The legacy labeler's `UserPageEnvelopeSchema` Pydantic model
-may have `extra="forbid"`, which would cause it to reject v2.2 envelopes
-outright. Does the legacy labeler tolerate these new nested fields on read, or
-does it crash?
+**Resolution.** The legacy labeler uses hand-rolled `from_dict` (pure `data.get`
+— no Pydantic, no strict validation). Extra/unknown fields are silently ignored.
+A v2.2 envelope is loaded without error; the new fields are simply never accessed.
+**No compatibility shim needed** for the read path. The write path would strip
+new fields (legacy `to_dict` only emits the five fields it knows), which is
+acceptable during the transition window. Option **(A)**: SPA writes v2.2 freely.
 
-**Context.** `specs/20-glyph-annotations.md` §4 describes the v2.1→v2.2 schema
-delta. The SPA's writer rule (§4.2) is: "emit v2.2 if the page has any non-None
-annotation OR Q-A5 resolves to 'legacy tolerates v2.2'; otherwise the SPA may
-emit v2.1 for backward safety." Without resolving this question, the SPA cannot
-decide whether to write v2.2 envelopes or fall back to the sidecar approach
-(`<project_id>_<page:03d>.glyph.json`). This blocks M11.
-
-**Options.**
-
-- **(A) Legacy tolerates v2.2.** `UserPageEnvelopeSchema` uses `extra="ignore"`
-  (or `extra="allow"`) and silently drops `glyph_annotations`. SPA writes v2.2
-  freely. No sidecar needed.
-- **(B) Legacy rejects v2.2.** SPA writes v2.1 envelopes and stores glyph
-  annotations in a sidecar file (mirror of D-032 / Q-A1 fallback). A future
-  legacy patch then absorbs the sidecar into the envelope.
-- **(C) Probe at runtime.** SPA sends a test v2.2 envelope write in a dry-run
-  check during startup (or on first save) and auto-selects (A) vs (B).
-
-**Recommendation.** **(A)** if confirmed by reading the legacy labeler's Pydantic
-model config; fall back to **(B)** if the legacy uses `extra="forbid"` — sidecar
-is safe and reversible. A `pd-ocr-labeler` agent read of the Pydantic config would
-settle this in minutes.
-
-**Blocks.** M11 (glyph annotations milestone) — `specs/16-milestones.md` §M11
-pre-conditions.
-
-**Owner.** CT.
-
-**Status.** Open.
+**Status.** Resolved 2026-05-11.
 
 ---
 
 ### Q-A6 — Predictions-overlay ghost color on `<PageImageCanvas>`
-> GitHub: ConcaveTrillion/pd-ocr-labeler-spa#57
+> GitHub: ConcaveTrillion/pd-ocr-labeler-spa#57 — **CLOSED**
 
-**Q.** What color should the ghost outline be on `<PageImageCanvas>` for words
-that have classifier predictions (`glyph_predictions != None`) but no confirmed
-annotation yet (`glyph_annotations is None`)? The spec's current placeholder
-recommendation is amber-50 to match the corner-badge palette.
+**Resolution.** Translucent blue (`#3B82F6` / Tailwind `blue-500`) at 40%
+opacity, exposed as CSS custom property `--predictions-ghost-color` on `:root`
+so operators can theme it without a code change.
+Spec updated: `specs/20-glyph-annotations.md` §5.6.
 
-**Context.** `specs/20-glyph-annotations.md` §5.6 describes the optional
-predictions overlay: "ghost-color outlines on words with `glyph_predictions != None`
-and `glyph_annotations is None`." The corner badge is already amber (`#FFF7ED` /
-Tailwind `amber-50`) when predictions exist. Picking a consistent color now
-prevents a design revision after M11 ships. The overlay toggle testid
-`predictions-overlay-toggle` is already in the driver contract.
-
-**Options.**
-
-- **(A) Amber-50 (`#FFF7ED`).** Matches the corner badge; consistent amber =
-  "prediction, needs review" palette. Apply at ~40% opacity so the page image
-  remains legible beneath the ghost outline.
-- **(B) A distinct hue.** E.g. sky-blue or purple, to visually separate "overlay
-  on canvas" from "badge in word cell."
-- **(C) Defer to M11.x polish.** Spec already calls this "Optional, M11.x
-  polish" — decide the color in that milestone rather than now.
-
-**Recommendation.** **(A)** — amber-50 at 40% opacity; consistent with the badge palette.
-
-**Blocks.** M11 (`specs/16-milestones.md` §M11 pre-conditions).
-
-**Owner.** CT.
-
-**Status.** Open.
+**Status.** Resolved 2026-05-11.
 
 ---
 

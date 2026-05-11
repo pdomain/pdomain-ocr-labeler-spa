@@ -325,6 +325,11 @@ Optional, M11.x polish — ghost-color outlines on words with
 can see at-a-glance which words the classifier wants attention on.
 Toggle in `<ImageTabsHeader>` ("Show prediction hints").
 
+**Ghost color (Q-A6, resolved).** Default: translucent blue (`#3B82F6`,
+Tailwind `blue-500`) at 40% opacity. This is the `--predictions-ghost-color`
+CSS custom property on `:root`; operators can override it in their theme
+without a code change.
+
 ---
 
 ## 6. Backend FastAPI endpoints
