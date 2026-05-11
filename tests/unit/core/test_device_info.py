@@ -75,7 +75,7 @@ def test_describe_device_swallows_exceptions(monkeypatch):
     """A broken torch (raising on attr access) must not propagate."""
 
     class _BoomCuda:
-        def is_available(self):  # noqa: D401
+        def is_available(self):
             raise RuntimeError("driver mismatch")
 
     fake_torch = types.ModuleType("torch")

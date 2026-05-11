@@ -61,9 +61,8 @@ def _make_audit_app() -> FastAPI:
 def test_request_start_emitted_with_path_method(caplog) -> None:
     """``request_start`` info record carries ``path`` and ``method``."""
     app = _make_audit_app()
-    with caplog.at_level(logging.INFO, logger=AUDIT_LOGGER):
-        with TestClient(app) as client:
-            response = client.get("/probe")
+    with caplog.at_level(logging.INFO, logger=AUDIT_LOGGER), TestClient(app) as client:
+        response = client.get("/probe")
     assert response.status_code == 200
 
     starts = [r for r in caplog.records if r.name == AUDIT_LOGGER and r.message == "request_start"]
@@ -76,9 +75,8 @@ def test_request_start_emitted_with_path_method(caplog) -> None:
 def test_request_end_emitted_with_status_duration(caplog) -> None:
     """``request_end`` info record carries ``status`` + non-negative ``duration_ms``."""
     app = _make_audit_app()
-    with caplog.at_level(logging.INFO, logger=AUDIT_LOGGER):
-        with TestClient(app) as client:
-            response = client.get("/probe")
+    with caplog.at_level(logging.INFO, logger=AUDIT_LOGGER), TestClient(app) as client:
+        response = client.get("/probe")
     assert response.status_code == 200
 
     ends = [r for r in caplog.records if r.name == AUDIT_LOGGER and r.message == "request_end"]
@@ -107,9 +105,8 @@ def test_audit_log_carries_request_id(caplog) -> None:
     caplog.handler.addFilter(rid_filter)
     try:
         app = _make_audit_app()
-        with caplog.at_level(logging.INFO, logger=AUDIT_LOGGER):
-            with TestClient(app) as client:
-                response = client.get("/probe", headers={"X-Request-ID": "audit-trace-1"})
+        with caplog.at_level(logging.INFO, logger=AUDIT_LOGGER), TestClient(app) as client:
+            response = client.get("/probe", headers={"X-Request-ID": "audit-trace-1"})
         assert response.status_code == 200
 
         audit = [r for r in caplog.records if r.name == AUDIT_LOGGER]
@@ -144,7 +141,7 @@ def test_request_end_emitted_when_call_next_raises(caplog) -> None:
     response start message.
     """
     app = _make_audit_app()
-    with caplog.at_level(logging.INFO, logger=AUDIT_LOGGER):
+    with caplog.at_level(logging.INFO, logger=AUDIT_LOGGER):  # noqa: SIM117  # comment below explains the unusual raise_server_exceptions=False flag; keeping separate for readability
         # ``raise_server_exceptions=False`` so the test client surfaces
         # the resulting 500 response (built by Starlette's
         # ``ServerErrorMiddleware``) rather than re-raising into the test.

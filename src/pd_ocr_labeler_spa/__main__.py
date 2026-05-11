@@ -29,6 +29,7 @@ filed pending user decision before adding a new Settings field.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import socket
 import sys
 import threading
@@ -250,10 +251,8 @@ def _open_when_ready(
         # silently. The server itself may still come up later; the
         # user can navigate manually.
         return
-    try:
+    with contextlib.suppress(Exception):
         webbrowser.open(url, new=1)
-    except Exception:  # noqa: BLE001 — see docstring
-        pass
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -262,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.version:
         from . import __version__
 
-        print(__version__)
+        print(__version__)  # noqa: T201  # intentional CLI output — not a debug print
         return 0
 
     # spec/02-backend.md §3: build Settings *once* from CLI overrides + env.
@@ -280,10 +279,10 @@ def main(argv: list[str] | None = None) -> int:
     # the boot log still surfaces the listen address.
     from .core.device_info import describe_device
 
-    print(describe_device())
+    print(describe_device())  # noqa: T201  # intentional CLI boot banner
 
     url = f"http://{host}:{port}"
-    print(f"Listening on {url}")
+    print(f"Listening on {url}")  # noqa: T201  # intentional CLI boot banner
 
     if not args.no_browser and not args.reload:
         # B-68 fix: do not open the browser before uvicorn binds the port.

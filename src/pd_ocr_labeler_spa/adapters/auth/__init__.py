@@ -5,4 +5,4 @@ from __future__ import annotations
 from .base import IAuth, UserContext
 from .none_ import NoneAuth
 
-__all__ = ["IAuth", "UserContext", "NoneAuth"]
+__all__ = ["IAuth", "NoneAuth", "UserContext"]

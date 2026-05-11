@@ -24,7 +24,7 @@ imports.
 from __future__ import annotations
 
 
-class NotImplementedYet(NotImplementedError):
+class NotImplementedYet(NotImplementedError):  # noqa: N818  # intentional name: a "not yet" sentinel, not an error-type label
     """Adapter / endpoint exists in shape; v1 impl deliberately deferred.
 
     Raise from a stubbed backend method when the user has selected it via

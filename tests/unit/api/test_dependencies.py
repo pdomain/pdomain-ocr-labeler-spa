@@ -244,12 +244,14 @@ def test_provider_raises_runtime_error_on_unwired_app(
     ) -> dict[str, str]:
         return {"ok": "yes"}
 
-    with TestClient(app, raise_server_exceptions=True) as client:
-        with pytest.raises(
+    with (
+        TestClient(app, raise_server_exceptions=True) as client,
+        pytest.raises(
             RuntimeError,
             match=rf"app\.state\.{missing_attr}.*bootstrap\.build_app",
-        ):
-            client.get("/probe")
+        ),
+    ):
+        client.get("/probe")
 
 
 # ── direct call shape (no FastAPI plumbing) ───────────────────────────────

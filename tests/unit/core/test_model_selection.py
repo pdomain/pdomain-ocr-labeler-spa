@@ -276,7 +276,7 @@ class TestPreferredProfilePriority:
 
     def test_latest_within_preferred_wins(self) -> None:
         now = _now()
-        det, reco, reason = pick_default_keys(
+        det, reco, _reason = pick_default_keys(
             [
                 _hf(None),
                 _local(

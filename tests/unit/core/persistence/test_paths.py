@@ -181,7 +181,7 @@ def test_paths_module_does_not_call_os_or_platform() -> None:
             # the ``ast.Import`` / ``ast.ImportFrom`` walkers above.
             func = node.func
             # Form 1: ``__import__("os")`` — call to a Name.
-            if isinstance(func, ast.Name) and func.id == "__import__":
+            if isinstance(func, ast.Name) and func.id == "__import__":  # noqa: SIM102  # outer checks type+id; inner checks args; combining loses the Form-1 comment grouping
                 if node.args and isinstance(node.args[0], ast.Constant):
                     arg = node.args[0].value
                     assert arg not in forbidden_imports, (
@@ -225,7 +225,7 @@ def test_paths_purity_scan_catches_dynamic_import_call() -> None:
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             func = node.func
-            if isinstance(func, ast.Name) and func.id == "__import__":
+            if isinstance(func, ast.Name) and func.id == "__import__":  # noqa: SIM102  # outer checks type+id; inner checks args; mirrors production scan structure
                 if node.args and isinstance(node.args[0], ast.Constant):
                     arg = node.args[0].value
                     if arg in forbidden_imports:

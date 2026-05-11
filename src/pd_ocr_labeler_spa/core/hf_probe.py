@@ -75,7 +75,7 @@ def fetch_hf_last_modified(*, revision: str | None = None, timeout: float = 5.0)
             revision=revision,
             timeout=timeout,
         )
-    except Exception as exc:  # noqa: BLE001 — see module docstring on contract
+    except Exception as exc:
         logger.info(
             "HF probe failed for %s@%s: %s",
             HF_DEFAULT_REPO,

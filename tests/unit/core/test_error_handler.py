@@ -199,9 +199,8 @@ def test_unhandled_exception_emits_full_traceback_log(caplog) -> None:
     (which contains the ``"internal secret"`` token from the route).
     """
     error_logger = "pd_ocr_labeler_spa.api.middleware.error_handler"
-    with caplog.at_level(logging.ERROR, logger=error_logger):
-        with _client() as client:
-            client.get("/_probe/boom")
+    with caplog.at_level(logging.ERROR, logger=error_logger), _client() as client:
+        client.get("/_probe/boom")
     error_records = [r for r in caplog.records if r.name == error_logger and r.levelno >= logging.ERROR]
     assert error_records, (
         f"expected ERROR-level record from {error_logger}; got "

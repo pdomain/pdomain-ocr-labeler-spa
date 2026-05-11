@@ -81,13 +81,17 @@ line-length = 110
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP"]
+select = ["E", "F", "W", "I", "N", "B", "SIM", "UP", "RUF", "ERA", "T20"]
 ignore = [
     # FastAPI's canonical pattern for dependency injection puts Depends()
     # in default arguments. Ignoring this rule across the whole repo.
     "B008",
     # `Foo(str, Enum)` — Pydantic patterns use this idiom widely.
     "UP042",
+    # En-dash (–) appears in spec line-range citations throughout docstrings
+    # (e.g. "lines 503–576"). This is deliberate typographic convention;
+    # # noqa cannot silence rules inside string literals.
+    "RUF002",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -97,3 +101,11 @@ ignore = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.pyright]
+include = ["src", "tests", "scripts"]
+typeCheckingMode = "basic"
+
+[[tool.pyright.executionEnvironments]]
+root = "src"
+typeCheckingMode = "strict"

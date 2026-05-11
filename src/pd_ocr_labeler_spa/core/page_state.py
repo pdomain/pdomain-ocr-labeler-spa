@@ -218,9 +218,9 @@ def ensure_page_model(
     # callers for the same page_index will serialize here; the second
     # one re-checks the cache after acquiring the lock (the
     # double-checked-locking pattern below).
-    with state._lock:  # noqa: SLF001 — intentional, see module docstring
+    with state._lock:
         if not force_ocr:
-            existing = state._page_states.get(page_index)  # noqa: SLF001
+            existing = state._page_states.get(page_index)
             if existing is not None and existing.page_record is not None:
                 return existing.page_record
 
@@ -234,10 +234,7 @@ def ensure_page_model(
                 outcome = labeled
             else:
                 cached = loader.load_cached(page_index)
-                if cached is not None:
-                    outcome = cached
-                else:
-                    outcome = loader.run_ocr(page_index)
+                outcome = cached if cached is not None else loader.run_ocr(page_index)
         else:
             outcome = loader.run_ocr(page_index)
 
@@ -246,12 +243,12 @@ def ensure_page_model(
         # lock and bump generation — we're already inside the lock and
         # mutating the dict directly is the cheaper path. Generation
         # bump is still desired so SSE consumers see the new state.
-        existing = state._page_states.get(page_index)  # noqa: SLF001
+        existing = state._page_states.get(page_index)
         if existing is None:
             existing = PageState(page_index=page_index)
-            state._page_states[page_index] = existing  # noqa: SLF001
+            state._page_states[page_index] = existing
         existing.page_record = outcome
-        state._generation += 1  # noqa: SLF001
+        state._generation += 1
         return outcome
 
 

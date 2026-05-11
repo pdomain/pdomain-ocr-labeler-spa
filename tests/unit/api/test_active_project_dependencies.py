@@ -165,9 +165,11 @@ def test_get_active_project_carrier_raises_on_unwired_app() -> None:
     ) -> dict[str, object]:  # pragma: no cover - never reached
         return {"ok": True}
 
-    with TestClient(bare_app, raise_server_exceptions=True) as c:
-        with pytest.raises(RuntimeError, match="active_project_carrier"):
-            c.get("/_probe/carrier")
+    with (
+        TestClient(bare_app, raise_server_exceptions=True) as c,
+        pytest.raises(RuntimeError, match="active_project_carrier"),
+    ):
+        c.get("/_probe/carrier")
 
 
 def test_get_active_project_raises_on_unwired_app() -> None:
@@ -181,6 +183,8 @@ def test_get_active_project_raises_on_unwired_app() -> None:
     ) -> dict[str, object]:  # pragma: no cover - never reached
         return {"ok": True}
 
-    with TestClient(bare_app, raise_server_exceptions=True) as c:
-        with pytest.raises(RuntimeError, match="active_project_carrier"):
-            c.get("/_probe/active")
+    with (
+        TestClient(bare_app, raise_server_exceptions=True) as c,
+        pytest.raises(RuntimeError, match="active_project_carrier"),
+    ):
+        c.get("/_probe/active")

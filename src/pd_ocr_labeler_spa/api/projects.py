@@ -265,17 +265,20 @@ def list_projects(
 
     selected: str | None = None
     snap = carrier.snapshot()
-    if snap is not None and settings.source_projects_root is not None:
-        if _is_under_root(snap.path, settings.source_projects_root):
-            # Match by resolved path so a symlinked project entry still
-            # marks correctly (slice-4-starter resolves project_root in
-            # the EnumeratedProject; we resolve snap.path here too to be
-            # symmetric).
-            snap_resolved = snap.path.resolve()
-            for p in enumerated:
-                if p.project_root == snap_resolved:
-                    selected = p.project_id
-                    break
+    if (
+        snap is not None
+        and settings.source_projects_root is not None
+        and _is_under_root(snap.path, settings.source_projects_root)
+    ):
+        # Match by resolved path so a symlinked project entry still
+        # marks correctly (slice-4-starter resolves project_root in
+        # the EnumeratedProject; we resolve snap.path here too to be
+        # symmetric).
+        snap_resolved = snap.path.resolve()
+        for p in enumerated:
+            if p.project_root == snap_resolved:
+                selected = p.project_id
+                break
 
     # Sentinel empty path when no root is configured — keeps the
     # response shape stable (spec §2 line 209 declares the field
@@ -295,7 +298,7 @@ def list_projects(
 @router.post("/load")
 def load_project(
     body: LoadProjectRequest,
-    request: Request,  # noqa: ARG001  reserved for future SSE / session-state plumbing
+    request: Request,
     settings: Settings = Depends(get_settings),
     carrier: ActiveProjectCarrier = Depends(get_active_project_carrier),
     project_state: ProjectState = Depends(get_project_state),
@@ -506,9 +509,9 @@ def install_projects_router(app) -> None:  # type: ignore[no-untyped-def]
 
 
 __all__ = [
+    "ListProjectsResponse",
     "LoadProjectRequest",
     "LoadProjectResponse",
-    "ListProjectsResponse",
     "ProjectKey",
     "install_projects_router",
     "router",

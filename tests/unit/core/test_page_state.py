@@ -273,7 +273,7 @@ def test_concurrent_callers_do_not_double_run_ocr() -> None:
     # ``run_ocr`` because the second is gated by the project lock.
     # So we trip the barrier from the test thread to avoid deadlock if
     # only one thread enters ``run_ocr``.
-    try:
+    try:  # noqa: SIM105  # BrokenBarrierError after wait(timeout=) is a normal control path; suppress(…) hides the timeout semantic
         barrier.wait(timeout=2.0)
     except threading.BrokenBarrierError:
         pass

@@ -104,9 +104,8 @@ def test_request_id_tagged_on_log_lines(caplog) -> None:
         return {"ok": True}
 
     try:
-        with caplog.at_level(logging.INFO):
-            with TestClient(app) as client:
-                response = client.get("/log", headers={"X-Request-ID": "trace-xyz"})
+        with caplog.at_level(logging.INFO), TestClient(app) as client:
+            response = client.get("/log", headers={"X-Request-ID": "trace-xyz"})
         assert response.status_code == 200
         records = [r for r in caplog.records if r.name == "test.rid"]
         assert records, "expected a log record from the handler"

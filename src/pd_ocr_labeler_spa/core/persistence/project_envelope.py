@@ -228,7 +228,7 @@ def read_project_metadata(project_root: Path) -> dict[str, Any] | None:
     try:
         with open(project_json_path, encoding="utf-8") as f:
             data = json.load(f)
-    except Exception as exc:  # noqa: BLE001  (we WANT to swallow on read)
+    except Exception as exc:
         logger.warning("Failed to read %s: %s", project_json_path, exc)
         return None
 
@@ -299,10 +299,7 @@ def build_project_from_directory(
     persisted_cursor = metadata.get("current_page_index", 0)
     if not isinstance(persisted_cursor, int):
         persisted_cursor = 0
-    if image_paths:
-        clamped_cursor = max(0, min(persisted_cursor, len(image_paths) - 1))
-    else:
-        clamped_cursor = 0
+    clamped_cursor = max(0, min(persisted_cursor, len(image_paths) - 1)) if image_paths else 0
     overrides["current_page_index"] = clamped_cursor
 
     return project_from_dict(

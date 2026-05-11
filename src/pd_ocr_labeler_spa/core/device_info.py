@@ -37,7 +37,7 @@ def describe_device() -> str:
     """
     try:
         import torch  # local import: see module docstring
-    except Exception:  # noqa: BLE001 — every failure → CPU fallback
+    except Exception:
         return "device: cpu (torch unavailable)"
 
     # ``monkeypatch.setitem(sys.modules, "torch", None)`` makes
@@ -53,7 +53,7 @@ def describe_device() -> str:
         idx = cuda.current_device()
         name = cuda.get_device_name(idx)
         return f"device: cuda:{idx} ({name})"
-    except Exception as exc:  # noqa: BLE001 — graceful CPU fallback
+    except Exception as exc:
         # Surface the underlying reason so a misconfigured GPU
         # (e.g. driver mismatch) is at least diagnosable from the
         # startup line.

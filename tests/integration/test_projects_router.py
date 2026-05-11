@@ -461,7 +461,7 @@ def test_post_load_validation_error_on_missing_body_field(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# GET /api/projects/{project_id}
+# GET /api/projects/{project_id}  # noqa: ERA001  # section-separator comment, not commented-out code
 # ──────────────────────────────────────────────────────────────────────
 #
 # Spec §02-backend.md line 220 — ``GET /api/projects/{project_id} →

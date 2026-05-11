@@ -98,7 +98,7 @@ def _make_lifespan(
     """
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # M3 slice 8c-iv-b: seed the OCRConfigCarrier from the
         # ``ocr_config.json`` sidecar (if present + valid). A missing
         # / corrupt sidecar returns ``None`` and the carrier keeps its

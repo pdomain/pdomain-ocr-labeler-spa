@@ -154,7 +154,7 @@ def test_image_cache_treats_oserror_subclasses_as_404(tmp_path: Path, exc: BaseE
     """
 
     class _RaisingStorage:
-        async def get_bytes(self, key: str) -> bytes:  # noqa: ARG002
+        async def get_bytes(self, key: str) -> bytes:
             raise exc
 
     s = Settings(
@@ -548,7 +548,7 @@ def test_resolve_static_dir_handles_non_path_traversable() -> None:
         def read_bytes(self) -> bytes:
             return self._real.read_bytes()
 
-        def open(self, mode: str = "r", *args, **kwargs):  # noqa: ANN001
+        def open(self, mode: str = "r", *args, **kwargs):
             return self._real.open(mode, *args, **kwargs)
 
         # The resolver must NOT do Path(str(self)) — that would produce
@@ -664,7 +664,7 @@ def test_resolve_resource_dir_cache_keyed_on_logical_identity_not_id() -> None:
         def read_bytes(self) -> bytes:
             return self._real.read_bytes()
 
-        def open(self, mode: str = "r", *args, **kwargs):  # noqa: ANN001
+        def open(self, mode: str = "r", *args, **kwargs):
             return self._real.open(mode, *args, **kwargs)
 
         def __str__(self) -> str:
@@ -788,7 +788,7 @@ def test_resolve_resource_dir_cache_evicts_stale_entry_after_tmpdir_vanishes() -
         def read_bytes(self) -> bytes:
             return self._real.read_bytes()
 
-        def open(self, mode: str = "r", *args, **kwargs):  # noqa: ANN001
+        def open(self, mode: str = "r", *args, **kwargs):
             return self._real.open(mode, *args, **kwargs)
 
         def __str__(self) -> str:

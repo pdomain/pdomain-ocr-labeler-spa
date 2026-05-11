@@ -10,4 +10,4 @@ from __future__ import annotations
 from .base import IStorage
 from .filesystem import FilesystemStorage
 
-__all__ = ["IStorage", "FilesystemStorage"]
+__all__ = ["FilesystemStorage", "IStorage"]

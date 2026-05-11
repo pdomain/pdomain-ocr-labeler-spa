@@ -150,7 +150,7 @@ def load_ground_truth_from_directory(directory: Path) -> dict[str, str]:
                 manifest_path,
             )
             return merged
-        except Exception as exc:  # noqa: BLE001  (we WANT to fall through on any manifest error)
+        except Exception as exc:
             logger.warning(
                 "Failed to load %s (%s); falling back to %s: %s",
                 PAGES_MANIFEST_FILENAME,
@@ -165,7 +165,7 @@ def load_ground_truth_from_directory(directory: Path) -> dict[str, str]:
         return {}
     try:
         raw = json.loads(pages_json.read_text(encoding="utf-8"))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Failed to parse %s: %s", pages_json, exc)
         return {}
     if not isinstance(raw, dict):
@@ -234,7 +234,7 @@ def _load_from_manifest(manifest_path: Path) -> dict[str, str]:
 
         try:
             source_data = json.loads(source_path.read_text(encoding="utf-8"))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("Failed to parse manifest source %s: %s", source_path, exc)
             continue
 

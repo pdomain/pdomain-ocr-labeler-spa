@@ -322,7 +322,7 @@ def test_main_opens_browser_in_default_mode(monkeypatch: pytest.MonkeyPatch, tmp
             monkeypatch.delenv(var, raising=False)
 
     class _FakeSock:
-        def __enter__(self) -> _FakeSock:  # noqa: PYI034
+        def __enter__(self) -> _FakeSock:
             return self
 
         def __exit__(self, *_a: Any) -> None:
@@ -654,7 +654,7 @@ def test_open_when_ready_waits_for_listener_then_opens(
     attempts = {"n": 0}
 
     class _FakeSock:
-        def __enter__(self) -> _FakeSock:  # noqa: PYI034
+        def __enter__(self) -> _FakeSock:
             return self
 
         def __exit__(self, *_a: Any) -> None:
@@ -716,7 +716,7 @@ def test_open_when_ready_swallows_webbrowser_exceptions(
     from pd_ocr_labeler_spa.__main__ import _open_when_ready
 
     class _FakeSock:
-        def __enter__(self) -> _FakeSock:  # noqa: PYI034
+        def __enter__(self) -> _FakeSock:
             return self
 
         def __exit__(self, *_a: Any) -> None:

@@ -195,7 +195,7 @@ def test_main_does_not_mutate_settings_post_construction() -> None:
                     f"settings.{node.target.attr} <op>= ... at line {node.lineno}"  # type: ignore[attr-defined]
                 )
         # ``settings.foo: int = ...`` (B-13)
-        elif isinstance(node, ast.AnnAssign):
+        elif isinstance(node, ast.AnnAssign):  # noqa: SIM102  # elif branch: comment on this line explains AnnAssign form; body guard is separate concern
             if _is_settings_attr(node.target):
                 bad_assignments.append(
                     f"settings.{node.target.attr}: ... = ... at line {node.lineno}"  # type: ignore[attr-defined]
@@ -238,8 +238,6 @@ def test_ast_scanner_catches_all_three_assignment_forms() -> None:
         for node in ast.walk(tree):
             if isinstance(node, ast.Assign):
                 flagged = flagged or any(_is_settings_attr(t) for t in node.targets)
-            elif isinstance(node, ast.AugAssign):
-                flagged = flagged or _is_settings_attr(node.target)
-            elif isinstance(node, ast.AnnAssign):
+            elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
                 flagged = flagged or _is_settings_attr(node.target)
         assert flagged, f"AST scanner missed {label} form: {src!r}"

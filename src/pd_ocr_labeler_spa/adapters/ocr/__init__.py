@@ -16,8 +16,8 @@ from .shared_container import SharedContainerOCR
 
 __all__ = [
     "IOCREngine",
-    "OCRProvenance",
     "LocalDoctrOCR",
     "ModalOCR",
+    "OCRProvenance",
     "SharedContainerOCR",
 ]
