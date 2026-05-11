@@ -18,6 +18,7 @@ line links the resulting ADR and the entry moves to the archive.
 ---
 
 ### Q-A14 — M4 renderer: must Konva be validated by spike before M4 starts?
+> GitHub: ConcaveTrillion/pd-ocr-labeler-spa#55
 
 **Q.** Spec 04 (`specs/04-image-viewport.md`) is written for Konva, but explicitly
 notes that a spike at M4 start may recommend raw canvas instead. Must the spike be
@@ -50,6 +51,7 @@ costs one session; a post-hoc rewrite of the full overlay system costs more.
 ---
 
 ### Q-A5 — Does the legacy labeler tolerate a v2.2 `UserPageEnvelope` (with `glyph_annotations`)?
+> GitHub: ConcaveTrillion/pd-ocr-labeler-spa#56
 
 **Q.** When the SPA saves a page that has any glyph annotation, it bumps the
 envelope's `schema.version` to `"2.2"` and writes a `glyph_annotations` key
@@ -91,6 +93,7 @@ pre-conditions.
 ---
 
 ### Q-A6 — Predictions-overlay ghost color on `<PageImageCanvas>`
+> GitHub: ConcaveTrillion/pd-ocr-labeler-spa#57
 
 **Q.** What color should the ghost outline be on `<PageImageCanvas>` for words
 that have classifier predictions (`glyph_predictions != None`) but no confirmed
@@ -125,6 +128,7 @@ prevents a design revision after M11 ships. The overlay toggle testid
 ---
 
 ### Q-A7 — Per-mark provenance: is object-level `source` granular enough?
+> GitHub: ConcaveTrillion/pd-ocr-labeler-spa#58
 
 **Q.** In v1, `GlyphAnnotations.source` is a single `Literal["human",
 "predicted", "human_confirmed"]` field on the whole `GlyphAnnotations` object —
