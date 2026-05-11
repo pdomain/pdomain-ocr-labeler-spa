@@ -288,15 +288,41 @@ representation. The driver-facing URL bar still uses 1-based
   (operates on the page-level image, scoped to bbox).
 - `DELETE /.../words/{line_index}/{word_index}` → `PagePayload`. Single-word delete.
 - `POST /.../words/delete-batch` → `PagePayload`. Body: `DeleteScopeRequest` with `scope="word"`.
+- `POST /.../words/style-batch`
+  → `SavePageResponse`. Body: `{ style: str, scope: "whole" | "part", word_keys: list[WordKey] }`.
+  Set the style tag for all specified words in one shot. Used by the toolbar Apply Style
+  button ([`06-toolbar-actions.md`](06-toolbar-actions.md) §3).
+- `POST /.../words/component-batch`
+  → `SavePageResponse`. Body: `{ component: str, enabled: bool, word_keys: list[WordKey] }`.
+  Set or clear a component tag for all specified words in one shot. Used by the toolbar
+  Apply Component and Clear Component buttons ([`06-toolbar-actions.md`](06-toolbar-actions.md) §3).
+- `POST /.../words/{line_index}/{word_index}/crop`
+  → `WordMatch`. Body: `{ side: "above" | "below" | "left" | "right", marker_x: int, marker_y: int }`.
+  Clip the word's bbox at the click marker coordinate. Used by the Crop row in the word
+  edit dialog ([`07-word-edit-dialog.md`](07-word-edit-dialog.md) §3.5 / §4.4).
+- `POST /.../words/{line_index}/{word_index}/refine-bbox`
+  → `WordMatch`. Body: `{}` (no body). Re-run bbox refinement for a single word using
+  the current OCR model. Dialog re-renders with the updated bbox preview
+  ([`07-word-edit-dialog.md`](07-word-edit-dialog.md) §3.6).
+- `POST /.../words/{line_index}/{word_index}/expand-and-refine-bbox`
+  → `WordMatch`. Body: `{ margin_px: int }`. Expand the word's bbox by `margin_px` then
+  refine. Paired with the Expand + Refine button in the word edit dialog
+  ([`07-word-edit-dialog.md`](07-word-edit-dialog.md) §3.6).
 
 `PagePayload` is returned for any operation that may have changed
 counts/positions of other words (split, merge, add, batch-validate,
-delete). Single-word style/validate/nudge return just the updated
+delete). Single-word style/validate/nudge/crop/refine return just the updated
 `WordMatch` so the SPA can apply a targeted reconciliation.
 
 ### 5.5 Lines
 
 - `POST /.../lines/{line_index}/copy-gt` → `PagePayload`. Body: `CopyLineGtRequest`.
+- `POST /.../lines/copy-gt-batch`
+  → `SavePageResponse`. Body: `{ line_indices: list[int], direction: "gt_to_ocr" | "ocr_to_gt" }`.
+  Copy ground truth from OCR (or vice-versa) for a set of lines in one shot. The toolbar
+  sends `line_indices` = all matched line indices on the page for the page-scope GT↔OCR
+  actions, or the indices for the selected paragraph for paragraph-scope
+  ([`06-toolbar-actions.md`](06-toolbar-actions.md) §2).
 - `POST /.../lines/{line_index}/validate` → `PagePayload`. Body: `ToggleValidatedRequest`.
 - `POST /.../lines/{line_index}/split-after-word`
   → `PagePayload`. Body: `SplitLineAfterWordRequest`.
