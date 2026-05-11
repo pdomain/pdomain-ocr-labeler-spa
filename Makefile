@@ -1,4 +1,4 @@
-.PHONY: help setup refresh-version install uninstall reset remove-venv lint format \
+.PHONY: help setup refresh-version install uninstall reset remove-venv lint fast-check format \
         pre-commit-check test e2e build clean ci dev run \
         frontend-install frontend-build frontend-dev frontend-test \
         openapi-export upgrade-pd-book-tools \
@@ -151,6 +151,8 @@ print(json.dumps(build_app().openapi(), indent=2))" > frontend/openapi.json
 lint: ## Run ruff checks
 	uv run ruff check --select I --fix
 	uv run ruff check --fix
+
+fast-check: lint ## Quick lint check (alias used by style-review-apply.py)
 
 format: ## Format code with ruff
 	uv run ruff format
