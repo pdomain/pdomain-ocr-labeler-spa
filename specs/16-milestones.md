@@ -568,8 +568,15 @@ image. `rotation-badge` shows current rotation.
 
 **Specs.** [`19-auto-rotation.md`](19-auto-rotation.md) §1.1, §4.
 
-**Acceptance tests.** Click rotate-CW; image visibly rotates; matches
-view re-renders with new bboxes; envelope persists `rotation_degrees=90`.
+**Acceptance tests.**
+
+- Frontend: `data-testid="rotate-cw-button"` and `data-testid="rotate-ccw-button"`
+  clickable in `<PageActions />`.
+- Frontend: Playwright `test_manual_rotate.py::rotate_cw` — click
+  `rotate-cw-button`, image visibly rotates, matches view re-renders
+  with rotated bboxes, `rotation-badge` shows ±90°.
+- Backend: `tests/integration/test_rotate_endpoint.py` — POST
+  `.../rotate {degrees: 90}` persists `rotation_degrees=90` in envelope.
 
 **Pre-conditions.** M9.
 
@@ -590,6 +597,19 @@ Indicator badge distinguishes auto vs manual.
   section.
 - `tests/integration/test_gt_best_match_rotation.py`.
 - `tests/e2e/test_auto_rotate_indicator.py`.
+
+**Acceptance tests.**
+
+- Frontend: `<OCRConfigModal>` contains an "Auto-rotation" section
+  with `data-testid="auto-rotate-checkbox"` toggle and
+  `data-testid="auto-rotate-method-select"` dropdown (gt-best-match /
+  layout).
+- Backend: `tests/integration/test_gt_best_match_rotation.py` —
+  fixture with sideways scan auto-rotates to 90° on load; envelope
+  persists `rotation_degrees=90` with `rotation_source="auto_layout"`.
+- Frontend: Playwright `test_auto_rotate_indicator.py` — badge shows
+  "↻ 90° auto"; user can toggle auto-rotation off via modal; disable
+  reverts badge.
 
 **Pre-conditions.** M9.1, plus pd-book-tools `rotation` module
 shipping (delegated 2026-05-06).
