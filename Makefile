@@ -1,7 +1,7 @@
 .PHONY: help setup refresh-version install uninstall reset remove-venv lint fast-check format \
         pre-commit-check test e2e build clean ci dev run \
         frontend-install frontend-build frontend-dev frontend-test \
-        openapi-export upgrade-pd-book-tools \
+        openapi-export upgrade-pd-book-tools upgrade-deps upgrade-deps-local \
         mise-download mise-setup mise-doctor \
         docker-build docker-run docker-shell \
         release-patch release-minor release-major _do-release
@@ -49,6 +49,45 @@ remove-venv: ## Remove the virtual environment
 
 reset: clean remove-venv setup ## Rebuild the virtual environment
 	@echo "Environment Reset!"
+
+upgrade-deps: ## Upgrade dependency lockfile (refuses in a dev-local venv)
+	@if uv pip show pd-book-tools 2>/dev/null | grep -q "Editable project location"; then \
+		echo "upgrade-deps refused: editable pd-book-tools detected (probe 1)."; \
+		echo "  'make upgrade-deps' would silently revert it to the pinned release."; \
+		echo "  Use 'make upgrade-deps-local' to upgrade and re-install editable."; \
+		exit 1; \
+	fi
+	@if [ -f .venv/.pd-dev-local ]; then \
+		echo "upgrade-deps refused: .venv/.pd-dev-local marker present (probe 2)."; \
+		echo "  Use 'make upgrade-deps-local' to upgrade and preserve dev-local state."; \
+		exit 1; \
+	fi
+	@if [ "$${PD_DEV_LOCAL:-0}" = "1" ]; then \
+		echo "upgrade-deps refused: PD_DEV_LOCAL=1 in environment (probe 3)."; \
+		echo "  Use 'make upgrade-deps-local' to upgrade and preserve dev-local state."; \
+		exit 1; \
+	fi
+	@echo "Upgrading dependency lockfile..."
+	uv lock --upgrade
+	@echo "Syncing upgraded dependencies..."
+	uv sync --group dev
+	@echo "Dependencies upgraded and environment synced."
+
+upgrade-deps-local: ## [dev-local] Upgrade deps then restore dev-local state (editable siblings)
+	@echo "Upgrading dependency lockfile..."
+	uv lock --upgrade
+	@echo "Syncing upgraded dependencies..."
+	uv sync --group dev
+	@echo "Restoring dev-local environment..."
+	@RESTORE_SCRIPT="../scripts/pd-dev-local-restore.sh"; \
+	if [ -f "$$RESTORE_SCRIPT" ]; then \
+		bash "$$RESTORE_SCRIPT"; \
+	else \
+		echo "  workspace script not found at $$RESTORE_SCRIPT — skipping dev-local restore."; \
+	fi
+	@echo "Writing .venv/.pd-dev-local marker..."
+	@touch .venv/.pd-dev-local
+	@echo "Dependencies upgraded; .venv/.pd-dev-local marker written."
 
 # ---------------------------------------------------------------------------
 # Optional: mise-managed tool versions (mirrors pd-prep-for-pgdp pattern)
@@ -149,9 +188,22 @@ print(json.dumps(build_app().openapi(), indent=2))" > frontend/openapi.json
 # Lint / format / test / build
 # ---------------------------------------------------------------------------
 
-lint: ## Run ruff checks
+lint: ## Run ruff + eslint + tsc --noEmit (backend + frontend)
 	uv run ruff check --select I --fix
 	uv run ruff check --fix
+	@if $(HAVE_MISE); then \
+		eslint_bin=frontend/node_modules/.bin/eslint; \
+	else \
+		eslint_bin=frontend/node_modules/.bin/eslint; \
+	fi; \
+	if [ -f frontend/node_modules/.bin/eslint ]; then \
+		echo "  Running eslint..."; \
+		$(call _npm,run lint); \
+		echo "  Running tsc --noEmit..."; \
+		$(call _npm,run typecheck); \
+	else \
+		echo "  [lint] eslint not installed — run 'make frontend-install' to enable frontend lint."; \
+	fi
 
 fast-check: lint ## Quick lint check (alias used by style-review-apply.py)
 
