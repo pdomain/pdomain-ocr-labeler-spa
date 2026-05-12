@@ -63,6 +63,11 @@ replace selection, `Shift+drag` = remove, `Ctrl+drag` = toggle (XOR).
 `ArrowLeft/Right` (prev/next word), `Shift+Arrow` (nudge edges), `R`/`Shift+R` (refine),
 `M`/`Shift+M` (apply style/component), `Delete` (delete word with confirm).
 
+**Source-folder dialog:** `Enter` (on path input — open typed path), `Esc` (cancel).
+
+**GT input:** `Tab`/`Shift+Tab` (next/prev input), `Enter` (commit), `Esc` (revert).
+`enableOnFormTags: ["INPUT"]` required so these fire inside the form element.
+
 ### Hotkey help modal
 
 `?` opens shadcn `<Dialog />`, scrollable list keyed by scope. Reads directly from
