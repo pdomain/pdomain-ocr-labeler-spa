@@ -48,8 +48,10 @@ tests/
     └── fixtures/projects/tiny-fixture/
 ```
 
-`conftest.py` shape: `Settings(tmp_path)` with `storage_backend="filesystem"`,
-`auth_mode="none"`, `ocr_engine="local_doctr"`. `TestClient(build_app(settings))`.
+`conftest.py` shape: `Settings(data_root=tmp_path/"data", cache_root=tmp_path/"cache",
+source_projects_root=tmp_path/"data"/"source-pgdp-data"/"output",
+storage_backend="filesystem", auth_mode="none", ocr_engine="local_doctr",
+log_format="plain")`. `TestClient(build_app(settings))`.
 
 ### Frontend test layout
 
