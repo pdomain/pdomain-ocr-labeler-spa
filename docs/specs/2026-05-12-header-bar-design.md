@@ -30,8 +30,8 @@ scope: SourceFolderDialog, OCRConfigModal, accessibility keymap, auth/managed-ad
   selected in the dropdown.
 - **Controls-only, no app title.** Matches legacy UI; adding a logo would change the visual
   weight without benefit.
-- **`ProjectLoadControls` co-located in `HeaderBar.tsx`.** Not a separate file for v1 — the
-  component is not reused elsewhere. If it grows beyond ~100 lines, extract it then.
+- **`ProjectLoadControls` is a separate file** (`components/ProjectLoadControls.tsx`), per
+  `specs/16-milestones.md §M1`. HeaderBar imports and renders it.
 - **Source folder button and OCR config trigger open their respective dialogs** (SourceFolderDialog,
   OCRConfigModal), which are implemented in separate specs. HeaderBar only renders the trigger
   buttons; dialog state lives in the dialogs.
@@ -40,8 +40,9 @@ scope: SourceFolderDialog, OCRConfigModal, accessibility keymap, auth/managed-ad
 
 ### File structure
 
-`frontend/src/components/HeaderBar.tsx` — exports `HeaderBar` (default) and `ProjectLoadControls`
-(named, for testing). `ProjectLoadControls` is a `React.FC` that takes no props (reads from
+`frontend/src/components/HeaderBar.tsx` — exports `HeaderBar` (default) only.
+`frontend/src/components/ProjectLoadControls.tsx` — exports `ProjectLoadControls` (default
+and named for testing). `ProjectLoadControls` is a `React.FC` that takes no props (reads from
 zustand `useProjectStore` directly).
 
 ### HeaderBar layout
@@ -112,9 +113,9 @@ mutation is in flight (`useIsMutating(["project", "load"]) > 0`).
 
 ## Trade-offs considered
 
-**`ProjectLoadControls` in same file vs separate file.** Separate file adds an import and a
-props interface for a component used in exactly one place. Co-location is simpler for v1.
-Extract when the file exceeds ~100 lines or the component is reused. Chosen: co-located.
+**`ProjectLoadControls` in same file vs separate file.** Co-location would be simpler, but
+`specs/16-milestones.md §M1` explicitly lists `components/ProjectLoadControls.tsx` as a
+separate M1 delivery file. Chosen: separate file to stay consistent with the milestone scope.
 
 **Dropdown disabled vs placeholder text when no projects.** Disabled dropdown gives no feedback
 on why it's empty; placeholder text "No projects found" is self-documenting. Chosen: placeholder.
