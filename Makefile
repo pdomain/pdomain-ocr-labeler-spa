@@ -190,16 +190,19 @@ print(json.dumps(build_app().openapi(), indent=2))" > frontend/openapi.json
 lint: ## Run ruff + eslint + tsc --noEmit (backend + frontend)
 	uv run ruff check --select I --fix
 	uv run ruff check --fix
-	@if $(HAVE_MISE); then \
-		eslint_bin=frontend/node_modules/.bin/eslint; \
-	else \
-		eslint_bin=frontend/node_modules/.bin/eslint; \
-	fi; \
-	if [ -f frontend/node_modules/.bin/eslint ]; then \
+	@if [ -f frontend/node_modules/.bin/eslint ]; then \
 		echo "  Running eslint..."; \
-		$(call _npm,run lint); \
+		if $(HAVE_MISE); then \
+			$(MISE) exec -- bash -c "cd frontend && npm run lint"; \
+		else \
+			bash -c "cd frontend && npm run lint"; \
+		fi; \
 		echo "  Running tsc --noEmit..."; \
-		$(call _npm,run typecheck); \
+		if $(HAVE_MISE); then \
+			$(MISE) exec -- bash -c "cd frontend && npm run typecheck"; \
+		else \
+			bash -c "cd frontend && npm run typecheck"; \
+		fi; \
 	else \
 		echo "  [lint] eslint not installed — run 'make frontend-install' to enable frontend lint."; \
 	fi
