@@ -6,7 +6,7 @@
 
 ## TL;DR
 
-Ten milestones (M0–M9) plus two post-GA addenda (M9.1, M9.2). Each milestone is bounded enough
+Ten milestones (M0–M9) plus five post-GA addenda (M9.1, M9.2, M9.5, M10, M11). Each milestone is bounded enough
 for one AI coding agent in one session, with listed acceptance tests as the completion gate.
 Milestones build strictly on the previous; no milestone may start before its precondition
 milestone's acceptance tests pass. Each agent must write named tests first (fail), implement
@@ -119,6 +119,24 @@ Outcome: project-load pass detects rotation per page using gt-best-match or layo
 Configurable in OCR config modal. Indicator badge distinguishes auto vs manual. Acceptance:
 fixture with sideways scan → auto-rotate to 90°; badge shows "↻ 90 auto"; click revert → badge
 hides.
+
+### M9.5 — Full keyboard-driven editing audit (post-GA, D-022)
+
+Outcome: every action reachable from keyboard; audit + fill gaps from M5–M8 keymap; document
+via `?` help modal. Spec: `specs/12-hotkeys-a11y.md`. Pre-conditions: M9.
+
+### M10 — Text normalization (post-GA, D-025)
+
+Outcome: OCR config gains normalization toggle; `ſhall` vs `shall` reports `exact` when
+toggle on; plaintext tabs can render ASCII-normalized. Pre-conditions: `pd_book_tools.text
+.normalize` available (upstream delegation pending). Spec: `specs/18-text-normalization.md`.
+
+### M11 — Glyph-level side-channel annotations (post-GA)
+
+Outcome: per-word typography annotations (CT/ST ligatures, long-s) editable in
+`<WordEditDialog>` and chip-row under each `<WordCell>`; bulk-mark dialog with driver testids;
+`UserPageEnvelope` bumps to v2.2. Pre-conditions: `pd_book_tools.ocr.glyph_annotations` and
+`IGlyphPredictor` adapter available upstream. Spec: `specs/20-glyph-annotations.md`.
 
 ## Contract / Acceptance
 
