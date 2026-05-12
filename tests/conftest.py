@@ -24,6 +24,26 @@ from pd_ocr_labeler_spa.bootstrap import build_app
 from pd_ocr_labeler_spa.settings import Settings
 
 
+def _has_gpu_available() -> bool:
+    """Check if GPU is available on the system."""
+    try:
+        import torch
+
+        return torch.cuda.is_available()
+    except (ImportError, RuntimeError):
+        return False
+
+
+@pytest.fixture
+def gpu_available() -> bool:
+    """Fixture indicating whether GPU is available for tests.
+
+    Tests can use @pytest.mark.skipif("not gpu_available", reason="...")
+    to skip when GPU is not available.
+    """
+    return _has_gpu_available()
+
+
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
     return Settings(
