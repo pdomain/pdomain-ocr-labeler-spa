@@ -8,7 +8,7 @@
 
 The left pane shows the scanned page image with paragraph/line/word bbox overlays and
 supports four interaction modes (select, rebox, add-word, erase). Renderer: **Konva**
-(confirmed at M4 research spike per D-020). Overlays use `mix-blend-mode: multiply` with
+(planned default; D-020 defers final choice to a research spike at M4 start). Overlays use `mix-blend-mode: multiply` with
 legacy-exact RGBA color values. Coordinate translation between source pixels (backend)
 and display pixels (Konva Stage) is via `PagePayload.encoded.scale`.
 
@@ -21,9 +21,9 @@ selection, drag-rebox, and add-word operations without server round-trips for th
 itself. Only mutations (selection POST, rebox POST, add-word POST, erase POST) require a
 network call.
 
-The renderer decision was deferred to M4 (D-020) with a research spike on a real
-~600-word fixture. The spike confirmed Konva holds 60 Hz on drag-move. This spec
-documents the Konva path.
+The renderer decision is deferred to M4 (D-020) with a research spike on a real ~600-word
+fixture. Konva is the planned path documented here; the spike may confirm or revise this choice
+before M4 implementation begins.
 
 ## Constraints
 
@@ -118,9 +118,10 @@ active until toggled off or Escape.
 
 ## Trade-offs considered
 
-**Konva vs raw `<canvas>` vs SVG.** Konva won the M4 research spike on a 600-word
-fixture at 60 Hz. Raw canvas would require hand-rolling hit detection and layer
-management. SVG degrades on large bbox counts. Konva chosen.
+**Konva vs raw `<canvas>` vs SVG.** Konva is the planned choice: scene-graph abstraction
+makes bbox overlay and interaction modes tractable; raw canvas requires hand-rolling hit
+detection and layer management; SVG degrades on large bbox counts. D-020 spike at M4 start
+will validate Konva at 60 Hz on a 600-word fixture before implementation commits.
 
 **Client-side selection state vs server-only.** Optimistic updates (client mirrors
 before server confirms) give instant visual feedback on click/drag. The server is
@@ -145,7 +146,9 @@ Header placement mirrors legacy UI positioning.
 
 ## Open questions
 
-None — renderer choice resolved at M4 spike (D-020 updated).
+- **D-020 / Q-A14 — renderer choice.** Konva vs raw canvas is deferred to the M4 research
+  spike. If the spike recommends raw canvas, this spec's Decision and Contract sections must
+  be revised before M4 implementation begins. See `OPEN_QUESTIONS.md §Q-A14`.
 
 ## References
 
