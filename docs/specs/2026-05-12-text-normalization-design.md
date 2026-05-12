@@ -138,7 +138,9 @@ Chosen: SPA is a thin caller.
 
 ## Open questions
 
-None.
+- **Q-A2 — Toggle scope.** Should `normalize_display` be per-project (stored in `OCRConfig`)
+  or per-word? Source spec bet: project-level. Pending user confirmation. See
+  `specs/18-text-normalization.md §10` and `OPEN_QUESTIONS.md` (entry pending).
 
 ## References
 
