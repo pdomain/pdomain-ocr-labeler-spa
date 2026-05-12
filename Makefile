@@ -193,17 +193,9 @@ lint: ## Run ruff + eslint + tsc --noEmit (backend + frontend)
 	uv run ruff check --fix
 	@if [ -f frontend/node_modules/.bin/eslint ]; then \
 		echo "  Running eslint..."; \
-		if $(HAVE_MISE); then \
-			$(MISE) exec -- bash -c "cd frontend && npm run lint"; \
-		else \
-			bash -c "cd frontend && npm run lint"; \
-		fi; \
+		$(call _npm,run lint); \
 		echo "  Running tsc --noEmit..."; \
-		if $(HAVE_MISE); then \
-			$(MISE) exec -- bash -c "cd frontend && npm run typecheck"; \
-		else \
-			bash -c "cd frontend && npm run typecheck"; \
-		fi; \
+		$(call _npm,run typecheck); \
 	else \
 		echo "  [lint] eslint not installed — run 'make frontend-install' to enable frontend lint."; \
 	fi
