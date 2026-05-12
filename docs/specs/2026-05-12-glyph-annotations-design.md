@@ -147,7 +147,9 @@ iterate pages; page-scope is sufficient for v1. Chosen: page-scope synchronous b
 
 ## Open questions
 
-None.
+- **Q-A7 — Per-mark provenance granularity.** v1 puts `source` at the object level
+  (`GlyphAnnotations.source`), not per `LigatureMark` or per `long_s_positions` entry. Is
+  object-level granularity sufficient for training-data needs? See `OPEN_QUESTIONS.md §Q-A7`.
 
 ## References
 
@@ -156,4 +158,4 @@ None.
 - `specs/17-decisions.md §D-025, §D-026, §D-032, §D-034` — relevant ADR entries
 - `specs/13-driver-contract.md §2.x` — glyph testid additions for driver bulk-mark
 - `pd_book_tools.ocr.glyph_annotations` — data model home (pd-book-tools team)
-- `OPEN_QUESTIONS.md §Q-A5, §Q-A6, §Q-A7` — unresolved questions affecting this spec
+- `OPEN_QUESTIONS.md §Q-A7` — per-mark provenance question (Q-A5 and Q-A6 resolved)
