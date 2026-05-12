@@ -97,7 +97,9 @@ to-paragraph/gt-to-ocr/ocr-to-gt/validate/unvalidate/delete).
 `dialog-split-h-button`, `dialog-split-v-button`, `dialog-delete-word-button`,
 `dialog-crop-{above,below,left,right}-button`, `dialog-refine-button`,
 `dialog-expand-refine-button`, `dialog-nudge-{edge}-{sign}-button` (8 buttons),
-`dialog-reset-button`, `dialog-apply-button`, `dialog-apply-refine-button`.
+`dialog-reset-button`, `dialog-apply-button`, `dialog-apply-refine-button`,
+`dialog-previous-preview-column`, `dialog-current-preview-column`,
+`dialog-next-preview-column`, `dialog-tag-chips-slot`, `dialog-current-zoom-toggle`.
 
 **Export dialog:** `export-dialog`, `export-scope-current`, `export-scope-all`,
 `export-style-all-checkbox`, `export-style-checkbox-{key}`, `export-button`, `export-results`,
