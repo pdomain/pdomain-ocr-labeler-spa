@@ -139,7 +139,13 @@ with little GT overlap. The threshold is a config value (not hardcoded) so it ca
 
 ## Open questions
 
-None.
+- **Q-A1 — Envelope schema bump.** Before writing v2.2 envelopes, verify that the legacy
+  reader's `extra="ignore"` tolerates new nested fields. If it crashes, fall back to sidecar
+  `<project_id>_<page:03d>.rotation.json` (option B). Pending verification. See
+  `specs/19-auto-rotation.md §9` and `OPEN_QUESTIONS.md` (entry pending).
+- **Q-A3 — Indicator UI placement.** Three options: (A) inline text in toolbar, (B) separate
+  badge below nav, (C) tooltip on rotate button. Source spec bet: option B (separate badge).
+  Pending confirmation. See `specs/19-auto-rotation.md §9`.
 
 ## References
 
