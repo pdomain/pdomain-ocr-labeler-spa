@@ -77,7 +77,7 @@ Failed pages listed in a dismissible panel.
 
 ### Hotkeys (page-action scope)
 
-`Ctrl+R` — Save Page. `Shift+R` — Reload OCR. `E` — Export (open dialog).
+`Mod+S` — Save Page. `Mod+R` — Reload OCR. `E` — Export (open dialog).
 Remaining hotkeys from `specs/12-hotkeys-a11y.md`.
 
 ## Contract / Acceptance
