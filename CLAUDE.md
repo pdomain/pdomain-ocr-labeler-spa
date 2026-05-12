@@ -56,9 +56,3 @@ for all design decisions. Milestone acceptance gates in `specs/16-milestones.md`
 - `../pd-book-tools/` — shared OCR/layout primitives (upstream dependency).
 - `../pd-prep-for-pgdp/` — structural reference (FastAPI + React single-wheel pattern).
 - `../pd-ocr-labeler/` — legacy NiceGUI UI being replaced; parity tracked in `docs/PARITY_STATUS.md`.
-
-## Spec lifecycle
-
-Design spec files (`docs/specs/<date>-<topic>-design.md`) live in `docs/specs/` while the
-milestone's chore issues are open. When the last chore closes and the implementation ships,
-move the file to `docs/architecture/` and commit. See workspace `docs/conventions.md`.
