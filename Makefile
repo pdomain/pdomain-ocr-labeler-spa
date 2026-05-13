@@ -209,7 +209,7 @@ clean: ## Clean cache + build artifacts
 	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
 	rm -rf dist/ src/pd_ocr_labeler_spa/static/ frontend/dist/ 2>/dev/null || true
 
-ci: setup test frontend-test build ## Full CI pipeline
+ci: setup frontend-build lint test frontend-test ## Full CI pipeline
 
 # ---------------------------------------------------------------------------
 # Docker
