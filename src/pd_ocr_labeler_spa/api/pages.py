@@ -1,142 +1,172 @@
-"""``/api/projects/{project_id}/pages`` router — page wire shapes (M3+).
+"""``/api/projects/{project_id}/pages`` router.
 
-Spec authority:
-- ``specs/01-data-models.md §2`` — wire shapes for page routes.
-- ``specs/02-backend.md §5.3`` — endpoint contracts.
+Spec authority: ``specs/02-backend.md §5.3``.
 
-Wire shapes are defined here per the no-DTO-layer rule. Route handlers
-are stubs returning 501 until M3 OCR/page-cache plumbing lands.
+What this slice (issue #185) ships:
+
+- ``GET /{idx}`` — validates project + page-index; returns 501 until M3
+  wires ``ensure_page_model`` + ``PagePayload`` construction.
+- ``POST /{idx}/save`` — validates project + page-index; returns 501
+  until M3 wires the labeled-lane persistence layer.
+- ``POST /{idx}/load`` — validates project + page-index; returns 501
+  until M3 wires the reload-from-disk lane.
+- ``POST /{idx}/reload-ocr`` — 202 Accepted with a ``job_id``; the job
+  handler in ``core/jobs/runner.py`` is a stub that immediately
+  completes. M3 will replace the stub body with the real doctr pipeline.
+
+``POST /api/projects/{pid}/save-all`` lives here logically (it's a
+project-scoped page operation) but is registered on the projects router
+prefix to match the spec URL shape.
+
+Validation order for all page endpoints:
+
+1. ``project_id`` matches the currently loaded project in ``ProjectState``
+   → ``404 project_not_found`` if not.
+2. ``page_index`` is in range ``[0, total_pages)``
+   → ``404 page_not_found`` if out of range.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
+import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 
-from ..core.models import EncodedDims, LineFilter, LineMatch, PageRecord
+from ..core.jobs import JobRunner
+from ..core.project_state import ProjectState
+from .dependencies import get_job_runner, get_project_state
+from .middleware.error_handler import ApiError
 
-router = APIRouter(prefix="/api/projects", tags=["pages"])
+log = logging.getLogger(__name__)
 
-
-# ──────────────────────────────────────────────────────────────────────
-# Wire shapes — spec §01-data-models.md §2 "Page routes"
-# ──────────────────────────────────────────────────────────────────────
-
-
-class PagePayload(BaseModel):
-    """Full page data bundle returned by GET and POST page endpoints.
-
-    Spec §2 lines 241-250.
-    """
-
-    record: PageRecord
-    encoded: EncodedDims
-    line_matches: list[LineMatch]
-    paragraph_indices: list[int]
-    page_text_ocr: str
-    page_text_gt: str
-    image_url: str
-    overlay_urls: dict[str, str]
-    has_edited_image: bool
-
-
-class GetPageRequest(BaseModel):
-    """Query parameters for ``GET /api/projects/{id}/pages/{idx}``.
-
-    Spec §2 lines 252-255. Used as Depends() to declare query params;
-    not a POST body — does not appear in the OpenAPI schema components
-    directly, but ``LineFilter`` surfaces through route query params.
-    """
-
-    project_id: str
-    page_index: int
-    line_filter: LineFilter = LineFilter.UNVALIDATED
-
-
-class SavePageRequest(BaseModel):
-    """Body for ``POST /api/projects/{id}/pages/{idx}/save`` — spec §2 line 257."""
-
-    saved_by: str = "Save Page"
-
-
-class SavePageResponse(BaseModel):
-    """Response for ``POST .../save`` — spec §2 lines 258-260."""
-
-    page: PagePayload
-    saved_path: Path
-
-
-class SaveFailure(BaseModel):
-    """One page's save failure record — spec §2 ``SaveFailure``."""
-
-    page_index: int
-    page_number: int
-    reason: str
-
-
-class SaveProjectResponse(BaseModel):
-    """Response for ``POST /api/projects/{id}/save-all`` — spec §2 lines 262-267."""
-
-    saved_count: int
-    skipped_count: int
-    failed_count: int
-    total_count: int
-    failures: list[SaveFailure] = []
-
-
-class ReloadOCRRequest(BaseModel):
-    """Body for ``POST .../reload-ocr`` — spec §2 lines 275-276."""
-
-    use_edited_image: bool = False
-
-
-class RematchGtRequest(BaseModel):
-    """Body for ``POST .../rematch-gt`` — spec §2 line 278. Empty body."""
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Stub routes — full implementations land in M3
-# ──────────────────────────────────────────────────────────────────────
-
-_NOT_IMPLEMENTED = JSONResponse(
-    status_code=501,
-    content={"error": "not_implemented", "message": "page routes land in M3"},
+router = APIRouter(
+    prefix="/api/projects/{project_id}/pages",
+    tags=["pages"],
 )
 
 
-@router.get("/{project_id}/pages/{page_index}", response_model=PagePayload)
+def _project_not_found(project_id: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content=ApiError(
+            error="project_not_found",
+            message=f"project not found: {project_id}",
+        ).model_dump(),
+    )
+
+
+def _page_not_found(page_index: int) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content=ApiError(
+            error="page_not_found",
+            message=f"page not found: {page_index}",
+        ).model_dump(),
+    )
+
+
+def _not_implemented(message: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=501,
+        content=ApiError(
+            error="not_implemented",
+            message=message,
+        ).model_dump(),
+    )
+
+
+def _check_project_and_page(
+    project_id: str,
+    page_index: int,
+    project_state: ProjectState,
+) -> JSONResponse | None:
+    """Return an error response if the project/page isn't valid, else None."""
+    project = project_state.loaded_project
+    if project is None or project.project_id != project_id:
+        return _project_not_found(project_id)
+    if page_index < 0 or page_index >= project.total_pages:
+        return _page_not_found(page_index)
+    return None
+
+
+# ── Routes ───────────────────────────────────────────────────────────
+
+
+@router.get("/{page_index}")
 def get_page(
-    project_id: str, page_index: int, line_filter: LineFilter = LineFilter.UNVALIDATED
+    project_id: str,
+    page_index: int,
+    project_state: ProjectState = Depends(get_project_state),
 ) -> JSONResponse:
-    """``GET /api/projects/{id}/pages/{idx}`` — stub; M3."""
-    return _NOT_IMPLEMENTED
+    """``GET /api/projects/{pid}/pages/{idx}`` — load page payload.
+
+    Spec §5.3: lazily loads via labeled → cached → OCR lanes.
+    M3 will wire ``ensure_page_model`` + ``PagePayload`` construction.
+    Until then returns 501 for in-range pages.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+    return _not_implemented("GET page payload requires M3 OCR plumbing")
 
 
-@router.post("/{project_id}/pages/{page_index}/save", response_model=SavePageResponse)
-def save_page(project_id: str, page_index: int, body: SavePageRequest) -> JSONResponse:
-    """``POST .../save`` — stub; M3."""
-    return _NOT_IMPLEMENTED
+@router.post("/{page_index}/save")
+def save_page(
+    project_id: str,
+    page_index: int,
+    project_state: ProjectState = Depends(get_project_state),
+) -> JSONResponse:
+    """``POST .../save`` — write labeled envelope to disk.
+
+    Returns 501 until M3 wires ``persist_page_to_file``.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+    return _not_implemented("save page requires M3 persistence plumbing")
 
 
-@router.post("/{project_id}/save-all", response_model=SaveProjectResponse)
-def save_project(project_id: str) -> JSONResponse:
-    """``POST /api/projects/{id}/save-all`` — stub; M3."""
-    return _NOT_IMPLEMENTED
+@router.post("/{page_index}/load")
+def load_page(
+    project_id: str,
+    page_index: int,
+    project_state: ProjectState = Depends(get_project_state),
+) -> JSONResponse:
+    """``POST .../load`` — reload page from disk, discard in-memory edits.
+
+    Returns 501 until M3 wires the reload-from-disk lane.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+    return _not_implemented("reload page from disk requires M3 persistence plumbing")
 
 
-@router.post("/{project_id}/pages/{page_index}/reload-ocr", response_model=PagePayload)
-def reload_ocr(project_id: str, page_index: int, body: ReloadOCRRequest) -> JSONResponse:
-    """``POST .../reload-ocr`` — stub; M3."""
-    return _NOT_IMPLEMENTED
+@router.post("/{page_index}/reload-ocr")
+def reload_ocr(
+    project_id: str,
+    page_index: int,
+    project_state: ProjectState = Depends(get_project_state),
+    runner: JobRunner = Depends(get_job_runner),
+) -> JSONResponse:
+    """``POST .../reload-ocr`` → ``202 {job_id}``.
 
+    Spec §5.3: long-running; returns 202 Accepted immediately.
+    The job handler is a stub that immediately completes (M3 will wire
+    the real doctr pipeline). Callers track progress via
+    ``GET /api/jobs/{job_id}/events``.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
 
-@router.post("/{project_id}/pages/{page_index}/rematch-gt", response_model=PagePayload)
-def rematch_gt(project_id: str, page_index: int, body: RematchGtRequest) -> JSONResponse:
-    """``POST .../rematch-gt`` — stub; M3."""
-    return _NOT_IMPLEMENTED
+    job_id = runner.submit(
+        "reload_ocr",
+        project_id=project_id,
+        payload={"page_index": page_index},
+    )
+    return JSONResponse(status_code=202, content={"job_id": job_id})
 
 
 def install_pages_router(app) -> None:  # type: ignore[no-untyped-def]
@@ -144,15 +174,4 @@ def install_pages_router(app) -> None:  # type: ignore[no-untyped-def]
     app.include_router(router)
 
 
-__all__ = [
-    "GetPageRequest",
-    "PagePayload",
-    "ReloadOCRRequest",
-    "RematchGtRequest",
-    "SaveFailure",
-    "SavePageRequest",
-    "SavePageResponse",
-    "SaveProjectResponse",
-    "install_pages_router",
-    "router",
-]
+__all__ = ["install_pages_router", "router"]

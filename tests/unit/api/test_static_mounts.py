@@ -367,7 +367,8 @@ def test_b72_test_isolation_does_not_mutate_real_static_assets(spa_dir: Path) ->
     "path",
     [
         "/api/nonexistent",
-        "/api/truly-unknown-route",
+        "/api/projects/foo/pages/0",
+        "/api/jobs/nonexistent_job_id",
     ],
 )
 def test_spa_fallback_does_not_swallow_api_routes(settings: Settings, spa_dir: Path, path: str) -> None:

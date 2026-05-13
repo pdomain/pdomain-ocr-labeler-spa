@@ -65,6 +65,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ..core.active_project import ActiveProjectCarrier, InvalidProjectDirError
+from ..core.jobs import JobRunner
 from ..core.models import Project
 from ..core.persistence.ground_truth import load_ground_truth_from_directory
 from ..core.persistence.project_envelope import build_project_from_directory
@@ -78,6 +79,7 @@ from ..core.project_state import ProjectState
 from ..settings import Settings
 from .dependencies import (
     get_active_project_carrier,
+    get_job_runner,
     get_project_state,
     get_settings,
 )
@@ -516,13 +518,73 @@ def get_project_by_id(
     return JSONResponse(status_code=200, content=project.model_dump(mode="json"))
 
 
-@router.post("/source-root", response_model=SetSourceProjectsRootResponse)
-def set_source_projects_root(body: SetSourceProjectsRootRequest) -> JSONResponse:
-    """``POST /api/projects/source-root`` — stub; M2-proper config milestone."""
+@router.post("/source-root")
+def set_source_root(
+    request: Request,
+) -> JSONResponse:
+    """``POST /api/projects/source-root`` — persist source root to YAML config.
+
+    Deferred to M2-proper config milestone (requires YAML config plumbing).
+    Returns 501 until that slice lands.
+    """
     return JSONResponse(
         status_code=501,
-        content={"error": "not_implemented", "message": "source-root route lands in M2-proper"},
+        content=ApiError(
+            error="not_implemented",
+            message="POST /api/projects/source-root requires M2-proper YAML config plumbing",
+        ).model_dump(),
     )
+
+
+@router.post("/{project_id}/save-all")
+def save_all(
+    project_id: str,
+    project_state: ProjectState = Depends(get_project_state),
+    runner: JobRunner = Depends(get_job_runner),
+) -> JSONResponse:
+    """``POST /api/projects/{pid}/save-all`` → ``202 {job_id}``.
+
+    Spec §5.3: long-running save of all loaded pages. Returns 202 Accepted.
+    The job handler is a stub that immediately completes (M3 will wire
+    the real labeled-lane persistence). Callers track progress via
+    ``GET /api/jobs/{job_id}/events``.
+    """
+    project = project_state.loaded_project
+    if project is None or project.project_id != project_id:
+        return _api_error(
+            404,
+            "project_not_found",
+            f"project not found: {project_id}",
+        )
+
+    job_id = runner.submit("save_project", project_id=project_id)
+    return JSONResponse(status_code=202, content={"job_id": job_id})
+
+
+@router.delete("/{project_id}")
+def delete_project(
+    project_id: str,
+    project_state: ProjectState = Depends(get_project_state),
+    carrier: ActiveProjectCarrier = Depends(get_active_project_carrier),
+) -> JSONResponse:
+    """``DELETE /api/projects/{project_id}`` → ``204``.
+
+    Spec §5.2: forgets the project from in-memory state without touching
+    disk. Clears both ``ProjectState`` and the ``ActiveProjectCarrier``
+    so subsequent requests see no project loaded.
+    """
+    project = project_state.loaded_project
+    if project is None or project.project_id != project_id:
+        return _api_error(
+            404,
+            "project_not_found",
+            f"project not found: {project_id}",
+        )
+
+    project_state.clear()
+    carrier.clear()
+    return JSONResponse(status_code=204, content=None)
+
 
 
 def install_projects_router(app) -> None:  # type: ignore[no-untyped-def]
