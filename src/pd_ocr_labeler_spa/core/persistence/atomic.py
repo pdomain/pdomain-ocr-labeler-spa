@@ -1,10 +1,4 @@
-"""Atomic write helpers to prevent partial files on crash.
-
-Spec: `specs/2026-05-12-persistence-design.md` § Atomic write helper.
-
-`write_json_atomic(path, data)` and `write_bytes_atomic(path, data)` write
-to a `.tmp` file then `os.replace` to the target path atomically.
-"""
+"""Atomic write helpers. Spec: specs/2026-05-12-persistence-design.md § Atomic write helper."""
 
 from __future__ import annotations
 
@@ -15,15 +9,7 @@ from typing import Any
 
 
 def write_json_atomic(path: Path, data: Any) -> None:
-    """Write JSON data atomically via tmp+replace.
-
-    Writes to `path.with_suffix('.tmp')` first, then atomically replaces
-    the target with `os.replace`. Prevents partial files on crash.
-
-    Args:
-        path: Target file path.
-        data: JSON-serializable data.
-    """
+    """Write JSON data atomically via tmp+replace."""
     path = Path(path)
     tmp_path = path.with_suffix(".tmp")
 
@@ -34,15 +20,7 @@ def write_json_atomic(path: Path, data: Any) -> None:
 
 
 def write_bytes_atomic(path: Path, data: bytes) -> None:
-    """Write bytes atomically via tmp+replace.
-
-    Writes to `path.with_suffix('.tmp')` first, then atomically replaces
-    the target with `os.replace`. Prevents partial files on crash.
-
-    Args:
-        path: Target file path.
-        data: Bytes to write.
-    """
+    """Write bytes data atomically via tmp+replace."""
     path = Path(path)
     tmp_path = path.with_suffix(".tmp")
 
