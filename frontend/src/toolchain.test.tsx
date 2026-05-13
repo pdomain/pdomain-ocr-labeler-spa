@@ -1,8 +1,3 @@
-/**
- * Issue #190: Build toolchain validation
- * Tests that vite.config.ts, vitest.config.ts, tsconfig.app.json,
- * eslint, and tailwind are properly configured.
- */
 import { describe, it, expect } from 'vitest';
 
 describe('Issue #190: Frontend toolchain', () => {
