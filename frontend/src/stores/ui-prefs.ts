@@ -1,14 +1,3 @@
-/**
- * Cross-page UI preferences store.
- * Persists within a browser session (not localStorage):
- * - Line filter selection
- * - Layer visibility toggles (paragraph/line/word)
- * - Panel split position
- * - Selection mode
- *
- * Implements a zustand-like API (getState/setState) for testing until zustand is added.
- */
-
 export interface LayerVisibility {
   paragraph: boolean;
   line: boolean;
