@@ -36,11 +36,7 @@ def _has_gpu_available() -> bool:
 
 @pytest.fixture
 def gpu_available() -> bool:
-    """Fixture indicating whether GPU is available for tests.
-
-    Tests can use @pytest.mark.skipif("not gpu_available", reason="...")
-    to skip when GPU is not available.
-    """
+    """True if a CUDA GPU is available on the system."""
     return _has_gpu_available()
 
 
