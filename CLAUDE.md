@@ -1,6 +1,6 @@
 # CLAUDE — pd-ocr-labeler-spa
 
-FastAPI + React/Vite/TS replacement for the NiceGUI pd-ocr-labeler. Spec-driven,
+FastAPI + React/Vite/TS replacement for the NiceGUI `pd-ocr-labeler`. Spec-driven,
 milestone-by-milestone implementation (M0…M9). Architecture: `specs/00-overview.md`.
 
 ## Commands
@@ -9,13 +9,12 @@ milestone-by-milestone implementation (M0…M9). Architecture: `specs/00-overvie
 |---|---|
 | `make setup` | `uv sync` + pre-commit hooks + hatch-vcs version refresh |
 | `make frontend-install` | `npm install` inside `frontend/` |
-| `make test` | pytest — unit + integration, excludes e2e/ |
+| `make test` | pytest — unit + integration, excludes `e2e/` |
 | `make frontend-test` | vitest (jsdom) |
 | `make e2e` | Playwright E2E (requires `playwright install chromium`) |
-| `make lint` | ruff check |
-| `make format` | ruff format + ruff check --fix |
+| `make lint` / `make format` | ruff (format runs `--fix` too) |
 | `make pre-commit-check` | all pre-commit hooks on every tracked file |
-| `make dev` | uvicorn --reload + points at Vite dev server on :5173 |
+| `make dev` | uvicorn --reload, points at Vite dev server on :5173 |
 | `make frontend-dev` | Vite HMR dev server on :5173 |
 | `make frontend-build` | builds SPA into `src/pd_ocr_labeler_spa/static/` |
 | `make openapi-export` | exports `/openapi.json` → regenerates `frontend/src/api/types.ts` |
@@ -26,8 +25,9 @@ milestone-by-milestone implementation (M0…M9). Architecture: `specs/00-overvie
 
 ## Rules
 
-- Make targets first; fall back to direct tool invocations only when no target exists.
+- Make targets first; fall back to `uv run …` (or `npm`, `vitest`) only when no target exists.
 - Never `python -m pytest`. Always `uv run pytest` or `make test`.
+  Bare `python`/`python3`/`.venv/bin/python` miss the venv.
 - Backend: FastAPI + uvicorn. Frontend: React 19 + Vite + TS + TanStack Query + Tailwind + Konva.
 - `data-testid` contract governs Playwright driver integration — see `specs/13-driver-contract.md`.
 - Modeled structurally on `../pd-prep-for-pgdp/` — consult it for scaffolding patterns.
@@ -48,11 +48,11 @@ See `docs/ROADMAP.md` for per-slice details.
 
 ## Specs
 
-Full spec set in `specs/00-overview.md` through `specs/20-*.md`. Canonical source of truth
-for all design decisions. Milestone acceptance gates in `specs/16-milestones.md`.
+Full spec set: `specs/00-overview.md` through `specs/20-*.md`. Canonical source of truth.
+Milestone acceptance gates: `specs/16-milestones.md`.
 
 ## Sibling repos
 
-- `../pd-book-tools/` — shared OCR/layout primitives (upstream dependency).
+- `../pd-book-tools/` — upstream dependency.
 - `../pd-prep-for-pgdp/` — structural reference (FastAPI + React single-wheel pattern).
 - `../pd-ocr-labeler/` — legacy NiceGUI UI being replaced; parity tracked in `docs/PARITY_STATUS.md`.
