@@ -1,12 +1,4 @@
-"""Tests for atomic write helpers.
-
-Spec: `specs/2026-05-12-persistence-design.md` § Atomic write helper.
-
-Acceptance:
-- `write_json_atomic` writes to `.tmp` then `os.replace`
-- `write_bytes_atomic` similarly atomic
-- Power-fail test: no partial file left after mid-write exit
-"""
+"""Tests for atomic write helpers. Spec: specs/2026-05-12-persistence-design.md § Atomic write helper."""
 
 from __future__ import annotations
 
