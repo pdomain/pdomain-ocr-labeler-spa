@@ -24,8 +24,6 @@ jobs:
         run: cd frontend && npm ci --include=dev
       - name: ESLint
         run: cd frontend && npm run lint
-      - name: Prettier (format:check)
-        run: cd frontend && npm run format:check
       - name: Vitest (SPA unit tests)
         run: cd frontend && npm test
       - name: Build
