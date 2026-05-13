@@ -1,27 +1,10 @@
 """Domain models — the typed in-memory shapes shared by adapters + wire.
 
 Spec authority:
-- ``specs/01-data-models.md §1`` lines 21-44 — ``Project`` model.
-- ``specs/01-data-models.md`` opening lines 7-12 — convention: domain
-  models live here and are reused by both the ``IStorage`` /
-  ``IOCREngine`` Protocols AND the wire (no separate DTO layer).
-
-What this iter-4 (M2 skeleton) ships:
-
-- ``Project`` — minimal slice-5-ready shape: all spec-§1 fields, but
-  no ``from_dict`` / ``to_dict`` round-trip yet (slice 5 lands the
-  ``UserPageEnvelope``-bytes-compatible persistence layer per spec
-  ``§09-persistence.md``).
-
-What this iter-4 deliberately does NOT do:
-
-- Ship the M3+ models (``PageRecord``, ``WordMatch``, ``LineMatch``,
-  ``BBox``, ``Selection``, ``LineFilter``, ``EncodedDims``, etc.).
-  They land milestone-by-milestone as the routes that need them ship.
-- Ship persistence ``from_dict`` / ``to_dict``. The legacy
-  ``UserPageEnvelope`` v2.1 contract is a hard one (see workspace
-  memory ``project_d003_extras_tolerance.md``) and deserves its own
-  round-trip test suite — slice 5.
+- ``specs/01-data-models.md §1`` — all domain model shapes.
+- ``specs/01-data-models.md`` lines 7-12 — convention: domain models
+  live here and are reused by both the ``IStorage`` / ``IOCREngine``
+  Protocols AND the wire (no separate DTO layer).
 
 Adding new models: append; never reorder. Generated TS via
 ``make openapi-export`` keys on field name + position.
@@ -29,43 +12,21 @@ Adding new models: append; never reorder. Generated TS via
 
 from __future__ import annotations
 
+from enum import StrEnum
 from pathlib import Path
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from pd_ocr_labeler_spa.core.persistence.user_page_envelope import OCRProvenance
+
+_MAX_DISPLAY_DIMENSION = 1200
 
 
 class Project(BaseModel):
     """One labeler project — ``specs/01-data-models.md §1`` lines 28-44.
 
     Mirrors legacy ``pd_ocr_labeler/models/project_model.py:9``.
-
-    Field semantics:
-
-    - ``project_id``: derived from ``project_root.name``. The legacy
-      labeler treats this as the URL-stable identifier (M2-proper's
-      ``GET /api/projects/{id}`` keys on it).
-    - ``project_root``: absolute path to the project directory.
-    - ``image_paths``: sorted list of page image files. Order is
-      authoritative — ``page_index`` indexes into this list.
-    - ``ground_truth_map``: normalized ``{stem -> text}`` mapping read
-      from per-image GT sidecars.
-    - ``version`` / ``source_lib``: provenance fields written into
-      ``project.json`` for legacy round-trip; defaults match the
-      legacy labeler's defaults so a round-trip of an unsaved project
-      doesn't churn these fields.
-    - ``total_pages``: == ``len(image_paths)``. Carried as a separate
-      field (and not just a property) so the JSON envelope keeps the
-      legacy v2.1 shape.
-    - ``saved_pages`` / ``current_page_index``: persisted UI state.
-    - ``include_images`` / ``copied_images``: legacy export-bundle
-      flags; M2 carries them through unchanged for round-trip parity.
-
-    Validation: top-level envelope so ``extra="forbid"`` per
-    ``specs/01-data-models.md`` line 15. (Per workspace memory
-    ``project_d003_extras_tolerance.md``, ``extra="forbid"`` is
-    correct for ``UserPageEnvelope`` and project-level envelopes; the
-    extras-tolerance carve-out applies to *session_state.json* and
-    other D-003-shared sidecar files.)
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -84,12 +45,157 @@ class Project(BaseModel):
 
     @property
     def page_count(self) -> int:
-        """``== len(image_paths)`` per spec §1 line 43.
-
-        Computed (not stored) so callers always see the live count even
-        if a future code path mutates ``image_paths`` in place.
-        """
         return len(self.image_paths)
 
 
-__all__ = ["Project"]
+class PageSource(StrEnum):
+    """``specs/01-data-models.md §1`` lines 55-59."""
+
+    OCR = "ocr"
+    CACHED_OCR = "cached_ocr"
+    FILESYSTEM = "filesystem"
+    FALLBACK = "fallback"
+
+
+class MatchStatus(StrEnum):
+    """Five-value match status — ``specs/01-data-models.md §1`` lines 87-93.
+
+    Matches legacy ``pd_ocr_labeler.models.word_match.MatchStatus`` exactly.
+    """
+
+    EXACT = "exact"
+    FUZZY = "fuzzy"
+    MISMATCH = "mismatch"
+    UNMATCHED_OCR = "unmatched_ocr"
+    UNMATCHED_GT = "unmatched_gt"
+
+
+class BBox(BaseModel):
+    """Image-coordinate bounding box — ``specs/01-data-models.md §1`` lines 137-143."""
+
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+class EncodedDims(BaseModel):
+    """Source + display dimensions with scale factor.
+
+    Algorithm matches legacy ``image_tabs._compute_encoded_dimensions:962``:
+    display_width = min(src_width, 1200), display_height proportional (integer
+    math), scale = display_width / src_width.
+    """
+
+    src_width: int
+    src_height: int
+    display_width: int
+    display_height: int
+    scale: float
+
+    @classmethod
+    def from_source_dims(cls, src_width: int, src_height: int) -> EncodedDims:
+        display_width = min(src_width, _MAX_DISPLAY_DIMENSION)
+        display_height = int(src_height * display_width / src_width)
+        scale = display_width / src_width
+        return cls(
+            src_width=src_width,
+            src_height=src_height,
+            display_width=display_width,
+            display_height=display_height,
+            scale=scale,
+        )
+
+
+class CachedImageSet(BaseModel):
+    """Optional filenames for each cached image type."""
+
+    original: str | None = None
+    lines: str | None = None
+    paragraphs: str | None = None
+    words: str | None = None
+    matched_words: str | None = None
+
+
+class PageRecord(BaseModel):
+    """Per-page metadata — ``specs/01-data-models.md §1`` lines 49-80.
+
+    The actual ``Page`` object lives in ``PageState`` in-memory; it is
+    NOT serialised through this model.
+    """
+
+    page_index: int
+    page_number: int
+    image_path: Path
+    page_source: PageSource = PageSource.OCR
+    ocr_failed: bool = False
+    ocr_provenance: OCRProvenance | None = None
+    saved_provenance: dict[str, Any] | None = None
+    cached_images: CachedImageSet = Field(default_factory=CachedImageSet)
+
+
+class WordMatch(BaseModel):
+    """Per-word match result — ``specs/01-data-models.md §1`` lines 96-109."""
+
+    line_index: int
+    word_index: int | None
+    ocr_text: str
+    ground_truth_text: str
+    match_status: MatchStatus
+    fuzz_score: float | None = None
+    is_validated: bool = False
+    text_style_labels: list[str] = Field(default_factory=list)
+    word_components: list[str] = Field(default_factory=list)
+    bbox: BBox
+    word_id: str | None = None
+
+
+class LineMatch(BaseModel):
+    """Per-line rollup with pre-computed counters — ``specs/01-data-models.md §1``."""
+
+    line_index: int
+    paragraph_index: int | None
+    ocr_line_text: str
+    ground_truth_line_text: str
+    word_matches: list[WordMatch]
+    overall_match_status: MatchStatus
+    exact_count: int
+    fuzzy_count: int
+    mismatch_count: int
+    unmatched_gt_count: int
+    unmatched_ocr_count: int
+    validated_word_count: int
+    total_word_count: int
+    is_fully_validated: bool
+
+
+class Selection(BaseModel):
+    """Backend-canonical per-page UI selection state."""
+
+    selection_mode: Literal["paragraph", "line", "word"] = "word"
+    selected_paragraphs: set[int] = Field(default_factory=set)
+    selected_lines: set[int] = Field(default_factory=set)
+    selected_words: set[tuple[int, int]] = Field(default_factory=set)
+
+
+class LineFilter(StrEnum):
+    """Line filter toggle — ``specs/01-data-models.md §1`` lines 183-192."""
+
+    UNVALIDATED = "unvalidated"
+    MISMATCHED = "mismatched"
+    ALL = "all"
+
+
+__all__ = [
+    "BBox",
+    "CachedImageSet",
+    "EncodedDims",
+    "LineFilter",
+    "LineMatch",
+    "MatchStatus",
+    "PageRecord",
+    "PageSource",
+    "Project",
+    "Selection",
+    "WordMatch",
+]
