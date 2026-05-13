@@ -24,7 +24,7 @@ function createStore<T>(initialState: T): Store<T> {
   return {
     getState: () => state,
     setState: (arg: SetStateArg<T>) => {
-      const newState = typeof arg === "function" ? (arg as Function)(state) : arg;
+      const newState = typeof arg === "function" ? (arg as (s: T) => T)(state) : arg;
       state = { ...state, ...newState };
     },
   };
