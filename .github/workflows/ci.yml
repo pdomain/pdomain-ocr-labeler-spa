@@ -22,10 +22,10 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: npm install
         run: cd frontend && npm ci --include=dev
-      - name: ESLint
-        run: cd frontend && npm run lint
       - name: Prettier (format:check)
         run: cd frontend && npm run format:check
+      - name: ESLint
+        run: cd frontend && npm run lint
       - name: Vitest (SPA unit tests)
         run: cd frontend && npm test
       - name: Build
