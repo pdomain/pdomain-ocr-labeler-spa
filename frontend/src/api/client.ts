@@ -1,10 +1,3 @@
-/**
- * Thin fetch wrapper for API calls.
- * - Base URL from window.__ENV__.API_BASE
- * - JSON serialization and Content-Type header
- * - Throws ApiError on non-2xx responses
- */
-
 export class ApiError extends Error {
   constructor(
     public status: number,
