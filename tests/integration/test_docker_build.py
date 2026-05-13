@@ -68,11 +68,7 @@ def _get_image_history(image: str) -> str:
 
 
 def _run_container_and_check_healthz(image: str, port: int = 8080, timeout: int = 30) -> bool:
-    """Run the container and check if /healthz returns 200.
-
-    Returns True if healthz is reachable, False otherwise.
-    Cleans up the container after testing.
-    """
+    """Run container and check /healthz returns 200; cleans up after."""
     container_id = None
     try:
         # Start the container in detached mode
@@ -121,11 +117,6 @@ def _check_spa_served(port: int = 8080) -> bool:
         return False
     # Check if response looks like an HTML page (contains html/body tags)
     return "<html" in result.stdout.lower() or "<body" in result.stdout.lower()
-
-
-# ---------------------------------------------------------------------------
-# Acceptance tests
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
