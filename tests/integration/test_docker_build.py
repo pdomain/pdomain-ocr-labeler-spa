@@ -145,11 +145,14 @@ class TestDockerBuild:
             assert result.returncode == 0, f"Failed to start container: {result.stderr}"
             container_id = result.stdout.strip()
 
-            # Wait for container to be ready
-            time.sleep(2)
-
-            # Check if SPA is served at /
-            spa_served = _check_spa_served(8080)
+            # Poll until SPA is served (up to 30s; fixed sleep was too short in CI)
+            deadline = time.time() + 30
+            spa_served = False
+            while time.time() < deadline:
+                if _check_spa_served(8080):
+                    spa_served = True
+                    break
+                time.sleep(0.5)
             assert spa_served, "SPA not served at / from container"
         finally:
             if container_id:
