@@ -8,7 +8,6 @@ export interface BBox {
   height: number;
 }
 
-// Multiply x/y/width/height by scale to convert from source to display pixels
 export function srcToDisplay(bbox: BBox, scale: number): BBox {
   return {
     x: bbox.x * scale,
@@ -18,7 +17,6 @@ export function srcToDisplay(bbox: BBox, scale: number): BBox {
   };
 }
 
-// Divide by scale and round to convert from display to source pixels
 export function displayToSrc(bbox: BBox, scale: number): BBox {
   return {
     x: Math.round(bbox.x / scale),
