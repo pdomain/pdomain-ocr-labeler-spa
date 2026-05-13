@@ -3,8 +3,6 @@ import { useUiPrefs } from "./ui-prefs";
 
 describe("ui-prefs store", () => {
   beforeEach(() => {
-    // Reset the store before each test
-    const store = useUiPrefs.getState();
     useUiPrefs.setState({
       lineFilter: null,
       layerVisibility: {
