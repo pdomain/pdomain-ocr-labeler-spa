@@ -20,7 +20,7 @@ export default function PageImageCanvas({
       className="page-image-canvas"
       data-width={dims.width}
       data-height={dims.height}
-      data-testid="canvas"
+      data-testid="image-viewport"
     />
   );
 }
