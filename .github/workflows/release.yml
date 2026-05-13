@@ -1,18 +1,13 @@
-# Release workflow: builds the wheel + sdist on `v*` tag pushes and
-# attaches them as assets to the GitHub Release for that tag.
-#
-# install.sh / install.ps1 download the published wheel from the
-# Release attached here (no `git+` install path, so end users don't
-# need Node/npm to build the SPA). There is no PyPI publish — see
-# Q-A10 in OPEN_QUESTIONS.md for the deferred PyPI decision.
-#
-# Mirrors pd-prep-for-pgdp/.github/workflows/release.yml in shape but
-# scoped to the publish-on-tag path only. GitHub Actions branch-CI is
-# not yet configured for this repo (no `ci.yml` workflow exists);
-# `make ci` is the local equivalent and runs in pre-commit / on
-# contributor laptops today. (B-36)
-
 name: release
+
+# Triggered by an annotated tag push (`v*`). The local pre-flight
+# (`scripts/do-release.sh` → `make ci`) is the primary safety net;
+# this workflow is the build + publish step.
+#
+# build-wheel uploads the wheel + sdist as assets on the GitHub Release
+# for the pushed tag; install.sh downloads that asset directly (no git+
+# install, so end users don't need Node/npm). There is no PyPI publish —
+# see Q-A10 in OPEN_QUESTIONS.md.
 
 on:
   push:
@@ -37,66 +32,25 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  release:
-    name: build + publish wheel
+  build-frontend:
+    name: build SPA
     runs-on: ubuntu-latest
-    # Tag pushes attach the wheel + sdist to the GitHub Release; the
-    # action below needs `contents: write` to create/update the
-    # Release. Scoped to this job (not the workflow) per least-
-    # privilege.
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
-          # hatch-vcs needs full history (and the tag) to derive the
-          # version. Without fetch-depth: 0 the build produces a
-          # `0.0.0` placeholder and the wheel filename loses the
-          # version that `install.sh` is looking for.
-          fetch-depth: 0
-
+          fetch-depth: 0  # hatch-vcs needs full history for the version
       - uses: actions/setup-node@v4
         with:
           # Pinned to match mise.toml. Bump both together so the
           # devcontainer and CI stay aligned.
           node-version: "24"
           # B-37: npm cache disabled until Q-A8 unblocks a checked-in
-          # `frontend/package-lock.json`. `actions/setup-node@v4`
-          # treats a missing `cache-dependency-path` target as a hard
-          # error ("Dependencies lock file is not found in …") rather
-          # than a graceful no-op — which would fail the workflow at
-          # the Setup Node.js step BEFORE the iter-26 two-pass install
-          # gets a chance to bootstrap the lockfile, silently
-          # re-opening B-28. Re-enable `cache: "npm"` +
+          # `frontend/package-lock.json`. Re-enable `cache: "npm"` +
           # `cache-dependency-path: frontend/package-lock.json` in the
           # iter that closes Q-A8 and lands the real lockfile.
-          # The uv cache is still primed below (`enable-cache: true`
-          # on setup-uv) — uv.lock exists today, so that side pays
-          # off immediately.
-
-      - uses: astral-sh/setup-uv@v4
-        with:
-          # B-34: `python-version` is intentionally NOT set here.
-          # `astral-sh/setup-uv` only installs the `uv` binary; the
-          # `python-version` parameter pre-provisions a uv-managed
-          # Python (which is useful for `uv run` paths). This workflow
-          # only invokes `uv build`, which spawns a build-isolated env
-          # via PEP 517 and provisions its own Python — so a setup-uv
-          # `python-version` pin would download Python 3.13 only to
-          # have `uv build` ignore it. mise.toml stays the single
-          # source of truth for Python version. If a future step re-
-          # adds `python-version:` (e.g. setup-python@v5), the
-          # `test_python_pin_in_release_workflow_matches_mise_if_set`
-          # drift-check pins it to mise.toml.
-          # B-31: cache `~/.cache/uv` between runs. `uv build`
-          # populates this with build-isolated env wheels (hatchling,
-          # hatch-vcs, etc.); priming saves 10–20s of resolver work
-          # on warm runs.
-          enable-cache: true
-
       - name: Build SPA bundle
         # B-28 / B-19 / B-38: keep this block IDENTICAL in shell to
         # the corresponding block in `Dockerfile` (stage `spa`) — both
@@ -125,12 +79,6 @@ jobs:
         # because `npm run build` needs vite + tsc devDependencies and
         # we don't want a future `NODE_ENV=production` env to silently
         # omit them.
-        #
-        # `npm run build` writes to `frontend/dist/`; the hatchling
-        # build hook in pyproject.toml force-includes that directory
-        # into `src/pd_ocr_labeler_spa/static/` inside the wheel, and
-        # `build_hooks/spa_check.py` refuses to build a wheel without
-        # an `index.html` present.
         run: |
           cd frontend
           if [ ! -f package-lock.json ]; then
@@ -138,12 +86,46 @@ jobs:
           fi
           npm ci --include=dev
           npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 7
 
-      - name: Build wheel + sdist
-        # `uv build` produces both `dist/*.whl` and `dist/*.tar.gz`.
-        # No PYPI_TOKEN, no twine — see Q-A10.
-        run: uv build
-
+  build-wheel:
+    name: build wheel
+    runs-on: ubuntu-latest
+    needs: [build-frontend]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # hatch-vcs needs full history for the version
+      - uses: astral-sh/setup-uv@v4
+        with:
+          # B-34: `python-version` is intentionally NOT set here.
+          # `astral-sh/setup-uv` only installs the `uv` binary; the
+          # `python-version` parameter pre-provisions a uv-managed
+          # Python (which is useful for `uv run` paths). This workflow
+          # only invokes `uv build`, which spawns a build-isolated env
+          # via PEP 517 and provisions its own Python — so a setup-uv
+          # `python-version` pin would download Python 3.13 only to
+          # have `uv build` ignore it. mise.toml stays the single
+          # source of truth for Python version.
+          # B-31: cache `~/.cache/uv` between runs.
+          enable-cache: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+      # The hatchling build hook (pyproject.toml force-include) copies
+      # frontend/dist/ into src/pd_ocr_labeler_spa/static/ inside the wheel.
+      # `--wheel` skips sdist so the build hook doesn't trip on a missing
+      # static/ directory inside an unpacked sdist. We also build the sdist
+      # explicitly below after confirming the wheel is healthy.
+      - name: Build wheel
+        run: uv build --wheel
       - name: Verify wheel contains SPA bundle
         # Belt-and-braces: build_hooks/spa_check.py already gates
         # this, but a regression there would silently ship a blank-
@@ -164,7 +146,13 @@ jobs:
               exit 1
             fi
           done
-
+      - name: Build sdist
+        run: uv build --sdist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
       - name: Publish wheel + sdist to GitHub Release
         # Creates the Release for the tag if missing, otherwise
         # uploads the assets to the existing Release. install.sh
@@ -177,6 +165,27 @@ jobs:
             dist/*.whl
             dist/*.tar.gz
           fail_on_unmatched_files: true
+
+  build-container:
+    name: build managed-mode container
+    runs-on: ubuntu-latest
+    needs: [build-frontend]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image (no push — wire up your registry)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          docker build \
+            --build-arg "VERSION=${VERSION}" \
+            -t "pd-ocr-labeler-spa:${GITHUB_REF_NAME}" .
+          docker images pd-ocr-labeler-spa
 
 # PyPI publishing is intentionally NOT wired here. If/when it lands it
 # must use OIDC trusted publishing (pypa/gh-action-pypi-publish with

@@ -3,7 +3,8 @@
         frontend-install frontend-build frontend-dev frontend-test \
         openapi-export upgrade-pd-book-tools upgrade-deps upgrade-deps-local \
         mise-download mise-setup mise-doctor \
-        docker-build docker-run docker-shell
+        docker-build docker-run docker-shell \
+        release-patch release-minor release-major _do-release
 
 # ---------------------------------------------------------------------------
 # Help / discovery
@@ -313,3 +314,31 @@ docker-run: ## Run the built image (host:container port $(DOCKER_PORT):8080)
 
 docker-shell: ## Open a debugging shell in the built image
 	@$(call _docker,run --rm -it --entrypoint /bin/bash $(DOCKER_IMAGE):$(DOCKER_TAG))
+
+# ---------------------------------------------------------------------------
+# Release
+# ---------------------------------------------------------------------------
+# Three public targets delegate to `_do-release` with the bump kind.
+# `_do-release` calls scripts/do-release.sh, which runs the full `make ci`
+# pre-flight, creates an annotated three-component tag, and pushes.
+#
+# Usage:
+#   make release-patch   # v0.4.2 → v0.4.3
+#   make release-minor   # v0.4.2 → v0.5.0
+#   make release-major   # v0.4.2 → v1.0.0
+#
+# Escape hatches (passed through to do-release.sh):
+#   FORCE=1      skip repo-state guards (dirty tree / branch / origin sync)
+#   SKIP_PUSH=1  create tag locally but don't push or trigger the workflow
+
+release-patch: ## Tag + push a patch release (vX.Y.Z+1)
+	@$(MAKE) --no-print-directory _do-release BUMP=patch
+
+release-minor: ## Tag + push a minor release (vX.Y+1.0)
+	@$(MAKE) --no-print-directory _do-release BUMP=minor
+
+release-major: ## Tag + push a major release (vX+1.0.0)
+	@$(MAKE) --no-print-directory _do-release BUMP=major
+
+_do-release:
+	BUMP=$(or $(BUMP),minor) ./scripts/do-release.sh
