@@ -18,19 +18,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-          # B-37: npm cache disabled until Q-A8 unblocks a checked-in
-          # `frontend/package-lock.json`. Re-enable `cache: "npm"` +
-          # `cache-dependency-path: frontend/package-lock.json` in the
-          # iter that closes Q-A8 and lands the real lockfile.
-      - name: npm install (two-pass)
-        # Two-pass: generate lockfile if missing (Q-A8), then npm ci.
-        # Once a real lockfile is committed the first pass is a no-op.
-        run: |
-          cd frontend
-          if [ ! -f package-lock.json ]; then
-            npm install --package-lock-only --include=dev
-          fi
-          npm ci --include=dev
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: npm install
+        run: cd frontend && npm ci --include=dev
       - name: ESLint
         run: cd frontend && npm run lint
       - name: Prettier (format:check)

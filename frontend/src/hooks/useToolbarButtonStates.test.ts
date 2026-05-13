@@ -5,10 +5,6 @@ import {
   useToolbarButtonStates,
 } from "./useToolbarButtonStates";
 
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
-
 const emptySelection: Selection = {
   selection_mode: "word",
   selected_paragraphs: [],
@@ -42,10 +38,6 @@ function makePage(overrides?: {
 
 const emptyPage: PageData = { lines: [] };
 
-// ---------------------------------------------------------------------------
-// §1 Page row — always enabled (selection-independent)
-// ---------------------------------------------------------------------------
-
 describe("page row — always enabled", () => {
   it("refine, expand_refine, expand, gt_to_ocr, ocr_to_gt are true with empty selection", () => {
     const s = useToolbarButtonStates(emptySelection, emptyPage);
@@ -71,10 +63,6 @@ describe("page row — always enabled", () => {
     expect(s.page_ocr_to_gt).toBe(true);
   });
 });
-
-// ---------------------------------------------------------------------------
-// §2 Page validate / unvalidate
-// ---------------------------------------------------------------------------
 
 describe("page validate / unvalidate", () => {
   it("page_validate is false when page has no words", () => {
@@ -121,10 +109,6 @@ describe("page validate / unvalidate", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §3 Para row — requires ≥1 paragraph selected
-// ---------------------------------------------------------------------------
-
 describe("para row — requires ≥1 paragraph selected", () => {
   it("all para buttons are false with empty selection", () => {
     const s = useToolbarButtonStates(emptySelection, makePage());
@@ -158,10 +142,6 @@ describe("para row — requires ≥1 paragraph selected", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §4 Para merge — requires ≥2 paragraphs
-// ---------------------------------------------------------------------------
-
 describe("para merge", () => {
   it("para_merge is false with 1 paragraph selected", () => {
     const sel: Selection = { ...emptySelection, selected_paragraphs: [0] };
@@ -184,10 +164,6 @@ describe("para merge", () => {
     expect(s.para_merge).toBe(true);
   });
 });
-
-// ---------------------------------------------------------------------------
-// §5 Para validate / unvalidate
-// ---------------------------------------------------------------------------
 
 describe("para validate / unvalidate", () => {
   it("para_validate is false with no paragraphs selected", () => {
@@ -231,10 +207,6 @@ describe("para validate / unvalidate", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §6 Line row — requires ≥1 line selected
-// ---------------------------------------------------------------------------
-
 describe("line row — requires ≥1 line selected", () => {
   it("all line buttons are false with empty selection", () => {
     const s = useToolbarButtonStates(emptySelection, makePage());
@@ -265,10 +237,6 @@ describe("line row — requires ≥1 line selected", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §7 Line merge — requires ≥2 lines
-// ---------------------------------------------------------------------------
-
 describe("line merge", () => {
   it("line_merge is false with 1 line selected", () => {
     const sel: Selection = { ...emptySelection, selected_lines: [0] };
@@ -282,10 +250,6 @@ describe("line merge", () => {
     expect(s.line_merge).toBe(true);
   });
 });
-
-// ---------------------------------------------------------------------------
-// §8 SplitAfter / SplitSelected (line scope) — all words in same line
-// ---------------------------------------------------------------------------
 
 describe("line split_after and split_selected", () => {
   it("line_split_after and line_split_selected are false with no words selected", () => {
@@ -332,10 +296,6 @@ describe("line split_after and split_selected", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §9 Line validate / unvalidate
-// ---------------------------------------------------------------------------
-
 describe("line validate / unvalidate", () => {
   it("line_validate is false with no lines selected", () => {
     const s = useToolbarButtonStates(emptySelection, makePage());
@@ -369,10 +329,6 @@ describe("line validate / unvalidate", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §10 Word row — requires ≥1 word selected
-// ---------------------------------------------------------------------------
-
 describe("word row — requires ≥1 word selected", () => {
   it("all word buttons are false with empty selection", () => {
     const s = useToolbarButtonStates(emptySelection, makePage());
@@ -403,10 +359,6 @@ describe("word row — requires ≥1 word selected", () => {
     expect(s.word_delete).toBe(true);
   });
 });
-
-// ---------------------------------------------------------------------------
-// §11 W→L — all selected words in same line
-// ---------------------------------------------------------------------------
 
 describe("word w_to_l", () => {
   it("word_w_to_l is false with no words selected", () => {
@@ -445,10 +397,6 @@ describe("word w_to_l", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// §12 word_to_para and line_to_para — requires ≥1 word OR ≥1 line selected
-// ---------------------------------------------------------------------------
-
 describe("word_to_para and line_to_para", () => {
   it("word_to_para is true with only words selected", () => {
     const sel: Selection = { ...emptySelection, selected_words: [[0, 0]] };
@@ -484,10 +432,6 @@ describe("word_to_para and line_to_para", () => {
     expect(s.line_to_para).toBe(false);
   });
 });
-
-// ---------------------------------------------------------------------------
-// §13 Word validate / unvalidate
-// ---------------------------------------------------------------------------
 
 describe("word validate / unvalidate", () => {
   it("word_validate is false with no words selected", () => {
@@ -541,10 +485,6 @@ describe("word validate / unvalidate", () => {
     expect(s.word_validate).toBe(true);
   });
 });
-
-// ---------------------------------------------------------------------------
-// §14 Delete rules
-// ---------------------------------------------------------------------------
 
 describe("delete rules", () => {
   it("para_delete requires ≥1 paragraph", () => {

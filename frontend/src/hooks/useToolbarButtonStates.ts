@@ -1,4 +1,3 @@
-// Pure disabled-state hook for the toolbar action grid.
 // Spec: docs/specs/2026-05-12-toolbar-actions-design.md §Decision
 // Grid layout: specs/06-toolbar-actions.md §1
 
@@ -84,14 +83,10 @@ export function useToolbarButtonStates(
   const nLines = selection.selected_lines.length;
   const nWords = selection.selected_words.length;
 
-  // For SplitAfter, SplitSelected (line scope), and W→L: all selected words same line?
   const wordLineIndices = selection.selected_words.map(([li]) => li);
   const uniqueWordLines = new Set(wordLineIndices);
   const allWordsInSameLine = nWords > 0 && uniqueWordLines.size === 1;
 
-  // ── Validation helpers ──────────────────────────────────────────────────
-
-  // Build word lookup: "li-wi" → is_validated
   const wordValidated = new Map<string, boolean>();
   for (const line of page.lines) {
     for (const word of line.words) {
@@ -99,13 +94,11 @@ export function useToolbarButtonStates(
     }
   }
 
-  // Build line lookup: line_index → LineValidationInfo
   const lineMap = new Map<number, LineValidationInfo>();
   for (const line of page.lines) {
     lineMap.set(line.line_index, line);
   }
 
-  // Build para lookup: paragraph_index → lines in that paragraph
   const paraLines = new Map<number, LineValidationInfo[]>();
   for (const line of page.lines) {
     if (line.paragraph_index !== null) {
@@ -115,13 +108,11 @@ export function useToolbarButtonStates(
     }
   }
 
-  // Page-level validation state
   const pageHasUnvalidated = page.lines.some(
     (l) => l.validated_word_count < l.total_word_count,
   );
   const pageHasValidated = page.lines.some((l) => l.validated_word_count > 0);
 
-  // Para-level validation for selected paragraphs
   const selectedParasHaveUnvalidated = selection.selected_paragraphs.some(
     (pi) => (paraLines.get(pi) ?? []).some((l) => l.validated_word_count < l.total_word_count),
   );
@@ -129,7 +120,6 @@ export function useToolbarButtonStates(
     (pi) => (paraLines.get(pi) ?? []).some((l) => l.validated_word_count > 0),
   );
 
-  // Line-level validation for selected lines
   const selectedLinesHaveUnvalidated = selection.selected_lines.some((li) => {
     const line = lineMap.get(li);
     return line ? line.validated_word_count < line.total_word_count : false;
@@ -139,7 +129,6 @@ export function useToolbarButtonStates(
     return line ? line.validated_word_count > 0 : false;
   });
 
-  // Word-level validation for selected words
   // Unknown words (not in pageData) are treated as unvalidated
   const selectedWordsHaveUnvalidated = selection.selected_words.some(
     ([li, wi]) => wordValidated.get(`${li}-${wi}`) !== true,
@@ -149,7 +138,6 @@ export function useToolbarButtonStates(
   );
 
   return {
-    // ── Page row ────────────────────────────────────────────────────────
     page_refine: true,
     page_expand_refine: true,
     page_expand: true,
@@ -158,7 +146,6 @@ export function useToolbarButtonStates(
     page_validate: pageHasUnvalidated,
     page_unvalidate: pageHasValidated,
 
-    // ── Para row ────────────────────────────────────────────────────────
     para_merge: nParas >= 2,
     para_refine: nParas >= 1,
     para_expand_refine: nParas >= 1,
@@ -171,15 +158,12 @@ export function useToolbarButtonStates(
     para_unvalidate: nParas >= 1 && selectedParasHaveValidated,
     para_delete: nParas >= 1,
 
-    // ── Line row ────────────────────────────────────────────────────────
     line_merge: nLines >= 2,
     line_refine: nLines >= 1,
     line_expand_refine: nLines >= 1,
     line_expand: nLines >= 1,
-    // SplitAfter / SplitSelected: ≥1 word selected and all in same line
     line_split_after: allWordsInSameLine,
     line_split_selected: allWordsInSameLine,
-    // →Para: ≥1 word/line selected
     line_to_para: nLines >= 1 || nWords >= 1,
     line_gt_to_ocr: nLines >= 1,
     line_ocr_to_gt: nLines >= 1,
@@ -187,13 +171,10 @@ export function useToolbarButtonStates(
     line_unvalidate: nLines >= 1 && selectedLinesHaveValidated,
     line_delete: nLines >= 1,
 
-    // ── Word row ────────────────────────────────────────────────────────
     word_refine: nWords >= 1,
     word_expand_refine: nWords >= 1,
     word_expand: nWords >= 1,
-    // W→L: ≥1 word selected, all in same line
     word_w_to_l: allWordsInSameLine,
-    // →Para: ≥1 word/line selected
     word_to_para: nWords >= 1 || nLines >= 1,
     word_gt_to_ocr: nWords >= 1,
     word_ocr_to_gt: nWords >= 1,
