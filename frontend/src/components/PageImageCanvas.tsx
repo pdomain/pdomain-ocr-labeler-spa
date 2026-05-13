@@ -13,8 +13,7 @@ export default function PageImageCanvas({
   const stageRef = useRef<HTMLDivElement>(null);
   const dims = getStageDimensions(encoded);
 
-  // Placeholder component structure for M4 Konva implementation
-  // Stage will be implemented after D-020 research spike confirms Konva choice
+  // Konva canvas not yet implemented; stub renders dimensions for testing.
   return (
     <div
       ref={stageRef}
@@ -22,8 +21,6 @@ export default function PageImageCanvas({
       data-width={dims.width}
       data-height={dims.height}
       data-testid="canvas"
-    >
-      {/* Konva Stage and Layers to be implemented in M4 */}
-    </div>
+    />
   );
 }
