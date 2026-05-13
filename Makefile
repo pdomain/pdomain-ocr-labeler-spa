@@ -138,9 +138,9 @@ mise-doctor: ## [optional] Show resolved tool versions (mise binary + PATH fallb
 define _npm
 	if $(HAVE_MISE); then \
 		echo "  (via $(MISE) exec)"; \
-		cd frontend && $(MISE) exec -- npm $(1); \
+		( cd frontend && $(MISE) exec -- npm $(1) ); \
 	elif command -v npm >/dev/null 2>&1; then \
-		cd frontend && npm $(1); \
+		( cd frontend && npm $(1) ); \
 	else \
 		echo "no npm available."; \
 		echo "   Options:"; \
