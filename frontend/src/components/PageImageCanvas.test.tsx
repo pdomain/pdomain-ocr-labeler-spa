@@ -55,7 +55,7 @@ describe("PageImageCanvas", () => {
       <PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />
     );
 
-    const canvas = getByTestId("canvas");
+    const canvas = getByTestId("image-viewport");
     expect(canvas.getAttribute("data-width")).toBe("800");
     expect(canvas.getAttribute("data-height")).toBe("600");
   });
