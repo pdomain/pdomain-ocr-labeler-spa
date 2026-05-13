@@ -207,10 +207,7 @@ def _build_overrides(args: argparse.Namespace) -> dict[str, object]:
     if args.project_dir is not None:
         overrides["cli_project_dir"] = Path(args.project_dir)
     if args.verbose >= 2:
-        # -vv and higher enable DEBUG logging. -v (single) is INFO, which is the default,
-        # so we don't add it to overrides to preserve env precedence (same pattern as
-        # other omitted-by-default flags). Anything >= 2 is DEBUG for the app, though
-        # -vvv may have future meaning for turning on pd-book-tools / third-party modes.
+        # -vv enables DEBUG; -v is INFO (default), omitted here to preserve env precedence.
         overrides["log_level"] = logging.DEBUG
     return overrides
 
