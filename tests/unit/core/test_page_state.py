@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -327,3 +328,96 @@ def test_page_loader_protocol_is_runtime_checkable() -> None:
     assert callable(loader.run_ocr)
     # Exists in the module's public surface:
     assert PageLoader is not None
+
+
+# ─── 7. persist_page_to_file + _resolve_save_directory ───────────────────────
+# Spec authority:
+#  - specs/16-milestones.md line 240 ("_resolve_save_directory, persist_page_to_file")
+#  - specs/09-persistence.md §1 line 29 ("labeled-lane" path shape)
+#  - Legacy: pd-ocr-labeler/pd_ocr_labeler/state/project_state.py:save_current_page
+
+
+def test_resolve_save_directory_returns_project_subdir(tmp_path: Path) -> None:
+    """_resolve_save_directory(data_root, project_id) returns <data>/labeled-projects/<pid>."""
+    from pd_ocr_labeler_spa.core.page_state import _resolve_save_directory
+
+    result = _resolve_save_directory(tmp_path, "mybook")
+    assert result == tmp_path / "labeled-projects" / "mybook"
+
+
+def test_resolve_save_directory_does_not_create_dirs(tmp_path: Path) -> None:
+    """_resolve_save_directory is a pure path derivation — no mkdir."""
+    from pd_ocr_labeler_spa.core.page_state import _resolve_save_directory
+
+    result = _resolve_save_directory(tmp_path / "nonexistent", "book")
+    assert not result.exists()
+
+
+def test_persist_page_to_file_writes_labeled_envelope(tmp_path: Path) -> None:
+    """persist_page_to_file writes a readable envelope to the labeled lane."""
+    import json
+
+    from pd_ocr_labeler_spa.core.page_state import persist_page_to_file
+    from pd_ocr_labeler_spa.core.persistence.user_page_envelope import (
+        is_user_page_envelope,
+        labeled_envelope_path,
+    )
+
+    # Build a minimal Page-stub that has to_dict().
+    @dataclass
+    class _StubPage:
+        words: list = field(default_factory=list)
+
+        def to_dict(self) -> dict:
+            return {"words": [], "paragraphs": [], "lines": [], "source_identifier": "001.png"}
+
+    project = _make_project(total_pages=3)
+    page = _StubPage()
+    data_root = tmp_path / "data"
+
+    persist_page_to_file(
+        page=page,
+        project=project,
+        page_index=0,
+        data_root=data_root,
+    )
+
+    expected_path = labeled_envelope_path(data_root, project.project_id, 0)
+    assert expected_path.exists(), f"Labeled envelope not written to {expected_path}"
+    raw = json.loads(expected_path.read_text())
+    assert is_user_page_envelope(raw), "Written file is not a valid UserPageEnvelope"
+
+
+def test_persist_page_to_file_creates_parent_dirs(tmp_path: Path) -> None:
+    """persist_page_to_file creates the labeled-projects/<pid>/ directory tree."""
+
+    @dataclass
+    class _MinimalPage:
+        def to_dict(self) -> dict:
+            return {"words": [], "paragraphs": [], "lines": [], "source_identifier": "001.png"}
+
+    from pd_ocr_labeler_spa.core.page_state import persist_page_to_file
+
+    project = _make_project(total_pages=1)
+    data_root = tmp_path / "data"
+    # Parent does not exist yet.
+    assert not data_root.exists()
+    persist_page_to_file(page=_MinimalPage(), project=project, page_index=0, data_root=data_root)
+    from pd_ocr_labeler_spa.core.persistence.user_page_envelope import labeled_envelope_path
+
+    assert labeled_envelope_path(data_root, project.project_id, 0).exists()
+
+
+def test_persist_page_to_file_index_out_of_range_raises(tmp_path: Path) -> None:
+    """persist_page_to_file raises IndexError for out-of-range page_index."""
+
+    @dataclass
+    class _MinimalPage:
+        def to_dict(self) -> dict:
+            return {}
+
+    from pd_ocr_labeler_spa.core.page_state import persist_page_to_file
+
+    project = _make_project(total_pages=2)
+    with pytest.raises(IndexError):
+        persist_page_to_file(page=_MinimalPage(), project=project, page_index=5, data_root=tmp_path)

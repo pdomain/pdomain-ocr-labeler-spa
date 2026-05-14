@@ -86,8 +86,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+from .models import Project
+from .persistence.atomic import write_json_atomic
+from .persistence.paths import labeled_projects_root
+from .persistence.user_page_envelope import OCRProvenance, build_envelope, labeled_envelope_path
 from .project_state import PageState, ProjectState
 
 
@@ -252,11 +257,82 @@ def ensure_page_model(
         return outcome
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Save-lane helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _resolve_save_directory(data_root: Path, project_id: str) -> Path:
+    """Return the labeled-lane directory for *project_id* under *data_root*.
+
+    Pure path derivation — no I/O, no mkdir. The directory is
+    ``<data_root>/labeled-projects/<project_id>/`` (mirrors
+    ``labeled_projects_root`` from ``persistence.paths`` + one
+    project-level subdir).
+
+    Spec authority: ``specs/16-milestones.md`` line 240 —
+    ``"_resolve_save_directory"``.
+    """
+    return labeled_projects_root(data_root) / project_id
+
+
+def persist_page_to_file(
+    *,
+    page: Any,
+    project: Project,
+    page_index: int,
+    data_root: Path,
+    ocr_provenance: OCRProvenance | None = None,
+) -> None:
+    """Write *page* to the labeled lane for *project* / *page_index*.
+
+    Creates the parent directory tree if it does not exist. Raises
+    ``IndexError`` (same type as ``build_envelope``) if *page_index* is
+    out of range for the project.
+
+    Spec authority: ``specs/16-milestones.md`` line 240 —
+    ``"persist_page_to_file"``.
+
+    Parameters
+    ----------
+    page
+        Any object exposing ``to_dict() -> dict``
+        (a ``pd_book_tools.ocr.page.Page`` in production; a stub in
+        tests).
+    project
+        The bound ``Project`` — used for ``project_id`` and image path
+        derivation inside ``build_envelope``.
+    page_index
+        0-based page index. ``IndexError`` if out of range.
+    data_root
+        Root of the per-run data tree; passed to ``labeled_envelope_path``.
+    ocr_provenance
+        Optional OCR provenance block. Defaults to ``OCRProvenance()``
+        (all-unknown) when omitted — appropriate for tests and for
+        saves that don't originate from a fresh OCR run.
+    """
+    if page_index < 0 or page_index >= project.total_pages:
+        raise IndexError(f"page_index {page_index} out of range (total_pages={project.total_pages})")
+
+    envelope = build_envelope(
+        page=page,
+        project=project,
+        page_index=page_index,
+        ocr_provenance=ocr_provenance if ocr_provenance is not None else OCRProvenance(),
+    )
+
+    path = labeled_envelope_path(data_root, project.project_id, page_index)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_json_atomic(path, envelope.to_dict())
+
+
 __all__ = [
     "PageImageNotFoundError",
     "PageIndexOutOfRangeError",
     "PageLoadOutcome",
     "PageLoader",
     "PageSource",
+    "_resolve_save_directory",
     "ensure_page_model",
+    "persist_page_to_file",
 ]
