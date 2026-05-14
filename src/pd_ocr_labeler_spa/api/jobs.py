@@ -118,15 +118,32 @@ async def job_events(
 
 
 @router.post("/{job_id}/cancel", response_model=Job)
-def cancel_job(
+async def cancel_job(
     job_id: str,
     runner: JobRunner = Depends(get_job_runner),
 ) -> JSONResponse:
-    """``POST /api/jobs/{job_id}/cancel`` — cooperative cancel stub."""
+    """``POST /api/jobs/{job_id}/cancel`` — cooperative cancel.
+
+    Spec §5.10 line 337: cooperative cancel; only valid for queued /
+    running. Returns the updated ``Job`` in ``cancelled`` state, or 404
+    if not found, or 409 if already in a terminal state (spec "only
+    valid for queued / running").
+    """
     job = runner.get_job(job_id)
     if job is None:
         return _job_not_found(job_id)
-    return JSONResponse(status_code=200, content=_runner_job_to_dict(job))
+    if job.status in _TERMINAL:
+        return JSONResponse(
+            status_code=409,
+            content=ApiError(
+                error="job_already_terminal",
+                message=f"job {job_id} is already in terminal state {job.status}",
+            ).model_dump(),
+        )
+    updated = await runner.request_cancel(job_id)
+    if updated is None:
+        return _job_not_found(job_id)
+    return JSONResponse(status_code=200, content=_runner_job_to_dict(updated))
 
 
 def install_jobs_router(app) -> None:  # type: ignore[no-untyped-def]
