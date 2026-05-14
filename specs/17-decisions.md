@@ -1,7 +1,7 @@
 # 17 — Architecture Decisions Log
 
 > **Status**: Active
-> **Last updated**: 2026-05-11
+> **Last updated**: 2026-05-14
 > **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#38
 
 A chronological log of design decisions: what was decided, why, and
@@ -137,6 +137,13 @@ defer JWT/PKCE adapters indefinitely.
 - Single-user use case. JWT pre-mature.
 - Cheap to keep the seam; saves a refactor when (if) we go multi-tenant.
 
+**Alternatives considered.**
+
+- Full JWT auth from day one. Rejected: over-engineering for a
+  single-user desktop tool; adds key-management burden with no user benefit.
+- No `IAuth` seam at all. Rejected: the Protocol costs nothing now and
+  avoids a large refactor if auth ever lands.
+
 **Refs.** [`OPEN_QUESTIONS.md Q2`](../OPEN_QUESTIONS.md), [`02-backend.md`](02-backend.md) §7.
 
 ---
@@ -155,6 +162,15 @@ synchronous JSON over HTTP.
 - Long-running jobs need progress feedback.
 - Mirrors pgdp-prep's job-runner pattern; avoids per-mutation SSE
   overhead.
+
+**Alternatives considered.**
+
+- WebSocket for all real-time updates. Rejected: full duplex not needed;
+  SSE is simpler to implement and test for server-push-only jobs.
+- Polling for long jobs. Rejected: polling adds latency and wastes
+  bandwidth; SSE gives instant progress without client hammering.
+- Pure async HTTP with `202 Accepted` + subsequent GET. Rejected:
+  requires extra round-trips; SSE is cleaner for streaming progress.
 
 **Refs.** [`OPEN_QUESTIONS.md Q3`](../OPEN_QUESTIONS.md), [`02-backend.md`](02-backend.md) §11.
 
@@ -199,6 +215,13 @@ with monospace CSS. Drop CodeMirror.
 - Smaller bundle.
 - React state for big strings is fine.
 
+**Alternatives considered.**
+
+- Keep CodeMirror. Rejected: adds ~200 KB to the bundle for zero UX
+  benefit; the plain-text tabs are read-only anyway.
+- Use Monaco editor (VS Code engine). Rejected: even heavier bundle;
+  designed for code editing, not plain OCR text display.
+
 **Refs.** [`OPEN_QUESTIONS.md Q8`](../OPEN_QUESTIONS.md), [`05-word-matches.md`](05-word-matches.md) §1.
 
 ---
@@ -215,6 +238,15 @@ in v1. Use `react-hotkeys-hook`.
 
 - Migrating the UI is a one-time chance to fix the keyboard story.
 - The legacy 5 keybindings are preserved; the new ones are additive.
+
+**Alternatives considered.**
+
+- Defer the keyboard wishlist to a post-GA milestone. Rejected: the
+  migration is the natural moment to close the gap; deferring means
+  shipping a regression relative to power-user expectations.
+- Raw `addEventListener` / `useEffect` for keybindings. Rejected:
+  `react-hotkeys-hook` handles scope/focus management and chord
+  sequences; rolling bespoke hotkey logic is error-prone.
 
 **Refs.** [`OPEN_QUESTIONS.md Q10`](../OPEN_QUESTIONS.md), [`12-hotkeys-a11y.md`](12-hotkeys-a11y.md).
 
@@ -233,7 +265,16 @@ for SPA routes, byte-identical to legacy.
 - Diverging to `/projects/{id}/pages/{idx0}` (pgdp-prep convention)
   would force a coordinated driver-agent update.
 
+**Alternatives considered.**
+
+- Use pgdp-prep plural convention from day one. Rejected: would
+  immediately break the Playwright driver without a coordinated update.
+- Use 0-based indices. Rejected: the legacy and human-visible bookmarks
+  all use 1-based; changing would confuse users comparing URLs.
+
 **Refs.** [`OPEN_QUESTIONS.md Q19`](../OPEN_QUESTIONS.md), [`13-driver-contract.md`](13-driver-contract.md) §1.
+
+*Note: superseded by D-030, which adopts pgdp-prep plural convention with legacy 301 redirects.*
 
 ---
 
@@ -324,6 +365,15 @@ testids; no testid is renamed.
 - The browser-test fixtures from the legacy port directly to
   Playwright e2e.
 
+**Alternatives considered.**
+
+- Use semantic role / aria-label selectors in tests. Rejected: the
+  driver agent's selectors are already written against `data-testid`;
+  renaming them requires a coordinated multi-repo update.
+- Rename testids to match the new SPA component tree. Rejected: any
+  rename breaks the driver agent immediately; old testids are stable
+  identifiers, not implementation details.
+
 **Refs.** [`13-driver-contract.md`](13-driver-contract.md).
 
 ---
@@ -341,6 +391,14 @@ testids; no testid is renamed.
 - Closes the pgdp-prep drift gap explicitly noted in the architecture
   extract (section 4 "When this regenerates").
 - Forces frontend/backend sync.
+
+**Alternatives considered.**
+
+- Trust developers to run `make openapi-export` manually. Rejected:
+  pgdp-prep had exactly this gap and accumulated silent drift.
+- Generate types at frontend build time (not CI gate). Rejected:
+  wouldn't catch drift that exists in the committed `openapi.json`
+  between CI runs.
 
 **Refs.** [`14-testing.md`](14-testing.md) §7.
 
@@ -360,6 +418,15 @@ side-channel is preserved on read AND write.
   and re-open in legacy.
 - The 5-bool side-channel was a backward-compat hack in legacy; we
   inherit it because dropping it would break older saves silently.
+
+**Alternatives considered.**
+
+- Define a new v3.0 envelope schema, drop the 5-bool side-channel.
+  Rejected: would break every existing `.json` save file; users mid-
+  migration lose their labels.
+- Strip the 5-bool side-channel on write, keep it on read. Rejected:
+  round-tripping through the SPA would silently corrupt files that
+  the legacy later re-opens.
 
 **Refs.** [`09-persistence.md`](09-persistence.md), [`01-data-models.md`](01-data-models.md) §3.
 
@@ -555,6 +622,14 @@ resolved.
 **Why.**
 
 - User: "No, labeler won't use it."
+- The labeler's job is OCR review, not image optimization; PNG
+  optimization belongs in the upload/ingest pipeline, not the labeler.
+
+**Alternatives considered.**
+
+- Auto-optimize page images on project load to reduce memory.
+  Rejected: user explicitly declined; the labeler doesn't own the
+  pipeline step that produces the images.
 
 **Refs.** [`OPEN_QUESTIONS.md Q13`](../OPEN_QUESTIONS.md).
 
@@ -604,6 +679,22 @@ in OCR output. Normalization is opt-in.
 `bbox.refine_robust(...)` consolidation is a pd-book-tools roadmap
 item, delegated 2026-05-06. Same as D-007 + Q15 recommendation.
 
+**Why.**
+
+- The refine-bbox logic lives in pd-book-tools; refactoring it inside
+  the SPA would duplicate work and diverge from the shared library.
+- Delegating to pd-book-tools means all consumers benefit from the
+  improvement, not just the SPA.
+
+**Alternatives considered.**
+
+- Inline a bespoke `bbox.refine_robust` in the SPA. Rejected: code
+  duplication; the SPA is not the right owner of image-processing
+  geometry primitives.
+- Block the SPA's M3 on the pd-book-tools refactor landing first.
+  Rejected: the refactor is a nice-to-have; the existing API is
+  sufficient for v1.
+
 **Refs.** [`OPEN_QUESTIONS.md Q15`](../OPEN_QUESTIONS.md), [`16-milestones.md`](16-milestones.md) §Cross-cutting.
 
 ---
@@ -616,6 +707,22 @@ item, delegated 2026-05-06. Same as D-007 + Q15 recommendation.
 SSE — same shape as Reload OCR (page) and Refine Bboxes (page).
 The user noted: "don't we have a 'jobs' possibly available in our
 new spec?" — yes, see [`02-backend.md`](02-backend.md) §11.
+
+**Why.**
+
+- Export over a full project is a long-running operation; SSE progress
+  is the only user-visible signal that work is happening.
+- Reusing the existing job-runner avoids a second execution model; the
+  in-memory `dict[str, Job]` is already the contract (D-011).
+
+**Alternatives considered.**
+
+- Synchronous blocking export endpoint. Rejected: a large project
+  export could block the uvicorn thread for seconds; no progress
+  feedback.
+- A separate task queue (celery / arq). Rejected: single-user
+  single-process; a second process adds deployment complexity for
+  no benefit (D-011).
 
 **Refs.** [`OPEN_QUESTIONS.md Q16`](../OPEN_QUESTIONS.md),
 [`10-export.md`](10-export.md),
@@ -637,6 +744,17 @@ that the same Make targets work; they're not required.
 - User: "not everyone may be using dev container, we should follow
   the other makefile setup/dev that allows for developer to manage
   their env or us to 'help'".
+- Mirrors pgdp-prep's onboarding model; keeps the two sibling repos
+  consistent.
+
+**Alternatives considered.**
+
+- Make the devcontainer mandatory (all CI inside it). Rejected:
+  forces contributors without VS Code / Docker to install extra
+  tooling before seeing any output.
+- Two separate onboarding paths: devcontainer and bare-metal.
+  Rejected: doubles the maintenance surface; `make setup` works
+  equally well inside a container or outside.
 
 **Refs.** [`OPEN_QUESTIONS.md Q17`](../OPEN_QUESTIONS.md), [`15-deployment-dev.md`](15-deployment-dev.md) §11.
 
@@ -714,8 +832,26 @@ Default canonical URL emitted by the SPA: the `pageno/{n}` form (human-friendly)
 
 ## D-031 — Auto-open browser tab with `--no-browser` opt-out
 
-**Date.** 2026-05-06. Same as D-006 sibling. Shipped per Q20
-recommendation.
+**Date.** 2026-05-06.
+
+**Decision.** On startup, `pd-ocr-labeler-ui` opens a browser tab
+automatically (same behaviour as the legacy). A `--no-browser` flag
+suppresses the auto-open for headless/CI contexts.
+
+**Why.**
+
+- Matches the legacy UX: the labeler is a one-command tool; the user
+  should not need a separate step to open the UI.
+- Mirrors pgdp-prep's auto-open pattern (`02-backend.md §2`).
+- `--no-browser` is cheap to add and required for CI smoke tests and
+  driver-agent headless use.
+
+**Alternatives considered.**
+
+- Never auto-open; always print the URL. Rejected: would regress the
+  legacy UX; single-user tool should be point-and-click.
+- Always auto-open with no opt-out. Rejected: breaks headless/CI
+  runs; the driver agent needs `--no-browser`.
 
 **Refs.** [`OPEN_QUESTIONS.md Q20`](../OPEN_QUESTIONS.md), [`02-backend.md`](02-backend.md) §2.
 
@@ -736,6 +872,23 @@ first v2.2 file is written; if legacy rejects, fall back to sidecar
 `<project>_<page:03d>.rotation.json` (Q-A1 option B) with auto-cleanup
 on next legacy save.
 
+**Why.**
+
+- Additive schema with a version bump preserves backward compat:
+  legacy readers that ignore unknown fields continue to work for v2.1
+  files; only non-default rotation state triggers v2.2.
+- Keeping `version: "2.1"` for the common case (no rotation) means
+  existing save files are never touched unless rotation is applied.
+
+**Alternatives considered.**
+
+- Always write v2.2 regardless of rotation state. Rejected: would
+  make every saved file incompatible with strict legacy readers even
+  for unchanged pages.
+- Rotation sidecar only (no schema bump). Rejected: a separate sidecar
+  file per page is messier to manage; additive envelope fields are the
+  cleaner option if legacy tolerates them.
+
 **Refs.** [`OPEN_QUESTIONS.md Q-A1`](../OPEN_QUESTIONS.md),
 [`01-data-models.md`](01-data-models.md) §3,
 [`19-auto-rotation.md`](19-auto-rotation.md) §Persistence.
@@ -750,6 +903,22 @@ on next legacy save.
 toggle lives in the OCR config modal and persists in `OCRConfig`.
 Whole-project scope; books are typographically homogeneous within
 themselves, so per-page toggling is unnecessary churn.
+
+**Why.**
+
+- Books are typographically uniform — a long-s or ligature used on
+  one page will appear throughout; a project-level toggle is
+  sufficient granularity.
+- Placing the toggle in the OCR config modal collocates it with the
+  other OCR quality controls (model, confidence threshold).
+
+**Alternatives considered.**
+
+- Per-page normalization toggle. Rejected: adds per-page UI surface
+  and storage overhead; books don't change typography mid-volume.
+- Global application-level preference (not per-project). Rejected:
+  different projects may use different historical scripts; project
+  scope is the right isolation boundary.
 
 **Refs.** [`OPEN_QUESTIONS.md Q-A2`](../OPEN_QUESTIONS.md), [`18-text-normalization.md`](18-text-normalization.md) §Implementation.
 
@@ -767,6 +936,22 @@ manual-rotation button itself also carries a tooltip explaining the
 current rotation state so users hovering the button see the same info
 without having to find the badge.
 
+**Why.**
+
+- Rotation is a distinct dimension from labeling status; merging them
+  into one badge conflates two independent concepts.
+- The pill + tooltip pattern matches shadcn/ui conventions already
+  used throughout the toolbar (D-004).
+
+**Alternatives considered.**
+
+- Embed rotation state into the existing source badge (e.g.
+  `[LABELED ↻90]`). Rejected: conflates source provenance with
+  geometric transform; each badge should have a single responsibility.
+- Surface rotation state only in the button tooltip, no separate badge.
+  Rejected: users who glance at the header need persistent visual
+  confirmation of rotation without hovering.
+
 **Refs.** [`OPEN_QUESTIONS.md Q-A3`](../OPEN_QUESTIONS.md), [`19-auto-rotation.md`](19-auto-rotation.md) §UI, [`13-driver-contract.md`](13-driver-contract.md).
 
 ---
@@ -779,6 +964,22 @@ without having to find the badge.
 `/projects/{id}` and peer redirects from D-030. SPA routes are
 GET-only, so 308's method-preservation guarantee buys nothing here;
 301 has the broadest support across older clients and crawlers.
+
+**Why.**
+
+- The legacy routes are pure GET bookmarks; method preservation (the
+  point of 308) is irrelevant.
+- 301 is universally understood by browsers and HTTP clients; 308 is
+  newer and less consistently cached.
+
+**Alternatives considered.**
+
+- Use 308 Permanent Redirect for stronger method guarantee. Rejected:
+  the SPA has no POST routes at these legacy paths; 308 adds no value
+  over 301 and risks compatibility with older clients.
+- Use 302 Temporary Redirect. Rejected: the old paths are permanently
+  deprecated; 302 would prevent browsers from updating cached
+  bookmarks to the new canonical URL.
 
 **Refs.** [`OPEN_QUESTIONS.md Q-A4`](../OPEN_QUESTIONS.md), [`13-driver-contract.md`](13-driver-contract.md) §1.
 
@@ -799,6 +1000,24 @@ mise is the canonical path. The previously-floated
 Node source would diverge from `mise.toml`. M1.h frontend acceptance
 clauses are unblocked.
 
+**Why.**
+
+- mise is already the workspace-wide runtime-version manager (Python
+  3.13 is also pinned via `mise.toml`); using it for Node is
+  consistent and avoids a second version-management tool.
+- A devcontainer feature for Node would add a parallel Node source
+  that could drift from the pinned version in `mise.toml`.
+
+**Alternatives considered.**
+
+- `ghcr.io/devcontainers/features/node:1` devcontainer feature.
+  Rejected: a second Node source diverges from `mise.toml`; superseded
+  by this decision.
+- System Node from `apt`. Rejected: Node LTS in package repos often
+  lags; users on non-devcontainer setups would get a different version.
+- `.nvmrc` + nvm. Rejected: nvm is user-managed and not available in
+  all CI environments; mise is already present as the workspace tool.
+
 **Refs.** [`OPEN_QUESTIONS.md Q-A8`](../OPEN_QUESTIONS.md), [`15-deployment-dev.md`](15-deployment-dev.md) §10–11.
 
 ---
@@ -817,6 +1036,22 @@ clause "ESLint passes clean" becomes verifiable. The shape-pin test
 in `tests/unit/test_frontend_config.py` flips from "if `lint` exists
 then eslint must be installed" to "`lint` must exist".
 
+**Why.**
+
+- ESLint's legacy `.eslintrc.*` format is deprecated as of ESLint 9;
+  flat config is the only supported path for new projects.
+- `typescript-eslint` v8 ships a unified flat-config API that pairs
+  cleanly with the existing `tsconfig.json`.
+
+**Alternatives considered.**
+
+- Legacy `.eslintrc.js` format. Rejected: deprecated and unsupported
+  in ESLint 9+; a new repo should not start on a deprecated path.
+- Biome as a combined linter + formatter. Rejected: Vite + shadcn
+  tooling docs target ESLint; switching to Biome would require
+  adapting the pgdp-prep scaffolding baseline and has less ecosystem
+  coverage for React hooks rules.
+
 **Refs.** [`OPEN_QUESTIONS.md Q-A9`](../OPEN_QUESTIONS.md), [`16-milestones.md`](16-milestones.md) §M0.
 
 ---
@@ -834,6 +1069,25 @@ that index repo is built; the `release.yml` workflow stays
 PyPI-token-free, and the existing release-workflow tests continue to
 forbid `PYPI_TOKEN` references. OIDC trusted publishing (option B)
 remains a future option but isn't being wired now.
+
+**Why.**
+
+- Consistent with every other pd-* repo's release strategy
+  (workspace decision 2026-05-06).
+- GitHub Releases do not require PyPI API tokens; no token management
+  for a tool that is not yet public.
+- `pd-index` (self-hosted PEP 503) allows `pip install` from the org
+  index without PyPI registration.
+
+**Alternatives considered.**
+
+- Publish directly to PyPI with OIDC trusted publishing. Rejected:
+  not all pd-* repos are public yet; the pd-index pattern is the
+  agreed workspace standard; PyPI can be added later without breaking
+  the existing install scripts.
+- Manual wheel distribution (no release automation). Rejected: the
+  release workflow already automates GitHub Releases; removing it
+  would regress the distribution story.
 
 **Refs.** [`OPEN_QUESTIONS.md Q-A10`](../OPEN_QUESTIONS.md), [`15-deployment-dev.md`](15-deployment-dev.md) §release-pipeline.
 
