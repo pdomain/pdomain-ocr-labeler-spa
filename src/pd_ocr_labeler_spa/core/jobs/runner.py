@@ -56,6 +56,8 @@ class Job(BaseModel):
     completed_at: datetime | None = None
 
 
+_TERMINAL = {JobStatus.COMPLETE, JobStatus.ERROR, JobStatus.CANCELLED}
+
 Handler = Callable[["JobRunner", Job], Coroutine[Any, Any, None]]
 
 
@@ -117,6 +119,38 @@ class JobRunner:
     async def stop(self) -> None:
         """Signal ``run_forever`` to exit at the next iteration boundary."""
         self._stop.set()
+
+    async def request_cancel(self, job_id: str) -> Job | None:
+        """Cooperatively cancel a queued or running job.
+
+        Sets the job's status to ``CANCELLED`` and emits a cancel event via
+        the broker. Returns the updated ``Job`` (in CANCELLED state) whether
+        or not a real state change occurred. Returns ``None`` if the job is
+        not found.
+
+        Spec §5.10 "Cooperative cancel; only valid for queued / running."
+        For terminal jobs (already complete/error/cancelled) the method
+        returns the existing job unchanged — idempotent on terminal states.
+
+        The running task is NOT forcibly stopped — handlers must periodically
+        check their cancellation token. Stub handlers (sleep(0)) complete
+        before cancel arrives in practice; the cancel path is exercised via
+        the ``queued`` state in tests.
+        """
+        job = self._jobs.get(job_id)
+        if job is None:
+            return None
+        if job.status in _TERMINAL:
+            return job  # already terminal — return as-is
+        cancelled = job.model_copy(
+            update={
+                "status": JobStatus.CANCELLED,
+                "completed_at": datetime.now(UTC),
+            }
+        )
+        self._jobs[job_id] = cancelled
+        await self._emit(cancelled)
+        return cancelled
 
     async def update_progress(
         self,
@@ -208,9 +242,15 @@ async def _handle_save_project(runner: JobRunner, job: Job) -> None:
     await asyncio.sleep(0)
 
 
+async def _handle_export(runner: JobRunner, job: Job) -> None:
+    """Stub export handler. Full DocTR export pipeline wired in M3+."""
+    await asyncio.sleep(0)
+
+
 _HANDLERS: dict[str, Handler] = {
     "reload_ocr": _handle_reload_ocr,
     "save_project": _handle_save_project,
+    "export": _handle_export,
 }
 
 
