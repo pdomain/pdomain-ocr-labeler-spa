@@ -353,6 +353,15 @@ ambiguous as an OPEN_QUESTIONS.md entry first.
 - [x] **#203 (2026-05-14)** `WordCell` — 5-row per-word grid; controlled GT `<input>` with
   blur-commit (fires `onCommitGt` only when changed); style/component tag chips; status icon.
   `useUpdateWordGt` mutation hook for POST `.../words/{l}/{w}/gt`.
+- [x] **#236 (2026-05-14)** `useGlobalHotkeys` hook — wires `Mod+S` (Save Page),
+  `Mod+Shift+S` (Save Project), `Mod+L` (Load Page), `Mod+G` (Rematch GT), `Mod+E` (Export),
+  and page-nav combos (`Mod+Arrow/Home/End`); `disabled` flag suppresses all.
+  `ConfirmDialog` component for destructive-action confirms.
+- [x] **#196 (2026-05-14)** `ImageTabsHeader` — layer checkboxes
+  (`layer-paragraphs-checkbox`, `layer-lines-checkbox`, `layer-words-checkbox`),
+  selection-mode radios (`selection-mode-paragraph/line/word`), `erase-pixels-button`.
+  `BBoxOverlay` — legacy-exact RGBA color constants exported as `LAYER_COLORS`; stub
+  component ready for Konva wiring at M4.
 
 ## Iteration index (this repo)
 
