@@ -1,26 +1,4 @@
-"""``/api/jobs`` router — job list + SSE stream.
-
-Spec authority: ``specs/02-backend.md §5.10``.
-
-Endpoints:
-
-- ``GET /api/jobs`` → ``list[Job]`` (in-memory snapshot).
-- ``GET /api/jobs/{job_id}`` → ``Job``.
-- ``GET /api/jobs/{job_id}/events`` → ``text/event-stream``.
-  SSE: first frame = current job snapshot; subsequent = broker events;
-  ends on terminal state (``complete`` | ``error`` | ``cancelled``).
-- ``POST /api/jobs/{job_id}/cancel`` → ``Job`` (cooperative; honours
-  only ``queued``/``running`` jobs — deferred to M3-proper).
-
-SSE pattern: always emit the current job state first (snapshot frame),
-then subscribe to the broker for live events. This handles two races:
-
-1. The job completed BEFORE the SSE client connected — the snapshot
-   shows terminal state; the generator returns immediately without
-   subscribing.
-2. The job is still running — the snapshot shows current progress;
-   subsequent broker events carry the rest.
-"""
+"""``/api/jobs`` router — list, get, SSE stream, cancel. Spec §5.10."""
 
 from __future__ import annotations
 
