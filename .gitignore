@@ -37,6 +37,7 @@ src/pd_ocr_labeler_spa/static/*
 frontend/node_modules/
 frontend/dist/
 frontend/openapi.json
+frontend/coverage/
 # Incremental TypeScript build cache — regenerated on every `tsc -b`,
 # never load-bearing for reproducibility (unlike package-lock.json,
 # which IS committed).

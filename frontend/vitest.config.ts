@@ -22,6 +22,36 @@ export default defineConfig({
     typecheck: {
       tsconfig: "./tsconfig.test.json",
     },
+    // Coverage: ≥80% overall; 100% on lib/* (pure utility functions).
+    // Run with `npm run test:coverage` or `vitest run --coverage`.
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html"],
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: [
+        "src/**/*.test.{ts,tsx}",
+        "src/**/*.spec.{ts,tsx}",
+        "src/test/**",
+        "src/main.tsx",
+        "src/vite-env.d.ts",
+        // Auto-generated from OpenAPI — not subject to coverage thresholds.
+        "src/api/types.ts",
+      ],
+      thresholds: {
+        global: {
+          lines: 80,
+          functions: 80,
+          branches: 80,
+          statements: 80,
+        },
+        "src/lib/": {
+          lines: 100,
+          functions: 100,
+          branches: 100,
+          statements: 100,
+        },
+      },
+    },
   },
   esbuild: {
     // React 19's automatic JSX runtime — no `import React` needed in tests.
