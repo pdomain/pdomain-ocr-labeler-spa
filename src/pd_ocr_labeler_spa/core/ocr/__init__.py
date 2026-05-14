@@ -1,6 +1,6 @@
 """Core OCR helpers — predictor cache, provenance, etc.
 
-Spec: ``specs/02-backend.md §1`` (line 62 — ``predictor.py``) and
+Spec: ``docs/architecture/02-backend.md §1`` (line 62 — ``predictor.py``) and
 ``specs/16-milestones.md`` M3 row.
 
 The cache lives here (settings-agnostic, no FastAPI imports) so the

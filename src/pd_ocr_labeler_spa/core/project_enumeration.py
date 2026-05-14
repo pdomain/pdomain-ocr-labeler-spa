@@ -2,11 +2,11 @@
 
 Spec authority:
 
-- ``specs/02-backend.md §5.2`` (line 208-213): ``GET /api/projects``
+- ``docs/architecture/02-backend.md §5.2`` (line 208-213): ``GET /api/projects``
   reads ``Settings.source_projects_root``, scans for project dirs,
   returns sorted list with the currently selected one.
-- ``specs/02-backend.md §13`` step 2: "Scan for project subdirectories."
-- ``specs/01-data-models.md §2`` lines 212-216: ``ProjectKey`` wire
+- ``docs/architecture/02-backend.md §13`` step 2: "Scan for project subdirectories."
+- ``docs/architecture/01-data-models.md §2`` lines 212-216: ``ProjectKey`` wire
   shape — ``project_id`` (basename, URL-stable), ``project_root``
   (absolute path), ``label`` (display label = project_id + dedup
   suffix on collision).

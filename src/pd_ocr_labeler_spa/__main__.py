@@ -6,8 +6,8 @@ Mirrors the legacy ``pd-ocr-labeler-ui`` flag set
 
 Spec authority:
 
-- ``specs/15-deployment-dev.md §3`` — canonical CLI flag set.
-- ``specs/02-backend.md §3`` — Settings precedence (default → env → CLI),
+- ``docs/architecture/15-deployment-dev.md §3`` — canonical CLI flag set.
+- ``docs/architecture/02-backend.md §3`` — Settings precedence (default → env → CLI),
   built **once** in ``main()`` and passed into ``build_app(settings)``.
 
 Precedence is enforced by only adding a key to the ``overrides`` dict

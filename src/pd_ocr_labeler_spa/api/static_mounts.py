@@ -1,6 +1,6 @@
 """Static-asset mounts: ``/image-cache/{key:path}`` + SPA catch-all.
 
-Spec: ``specs/02-backend.md §2 step 12`` and ``§10`` (SPA / static
+Spec: ``docs/architecture/02-backend.md §2 step 12`` and ``§10`` (SPA / static
 serving), plus ``§4`` (URL invariants — `/image-cache/{key:path}` is a
 read-only StaticFiles-shaped mount served *through* the ``IStorage``
 adapter, not directly off the filesystem; per D-019 the seam is the
@@ -71,7 +71,7 @@ _RESERVED_TOPLEVEL: tuple[tuple[str, bool], ...] = (
 def install_image_cache(app: FastAPI) -> None:
     """Register `GET /image-cache/{key:path}` against ``app.state.storage``.
 
-    Spec: ``specs/02-backend.md §10`` + D-019. Read-only over HTTP — the
+    Spec: ``docs/architecture/02-backend.md §10`` + D-019. Read-only over HTTP — the
     server is the only writer. The key is matched as a FastAPI ``path``
     converter so forward-slash-joined keys (``page-images/<project>/
     <hash>.png``) round-trip without URL-encoding the slashes.
@@ -293,7 +293,7 @@ def _is_reserved(full_path: str) -> bool:
 def install_spa_fallback(app: FastAPI) -> None:
     """Register the SPA catch-all. MUST be called AFTER every other route.
 
-    Spec: ``specs/02-backend.md §10``. Resolves ``frontend/dist`` (which
+    Spec: ``docs/architecture/02-backend.md §10``. Resolves ``frontend/dist`` (which
     is copied into ``src/pd_ocr_labeler_spa/static/`` by ``make
     frontend-build`` / the Dockerfile spa stage) and serves
     ``index.html`` for any non-reserved path. Static assets like

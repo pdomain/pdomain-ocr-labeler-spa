@@ -3,10 +3,10 @@ wires the iter-7 OCR config DTOs into the public HTTP surface.
 
 Spec authority:
 
-- ``specs/02-backend.md §5.8`` lines 317-322 — endpoint contracts
+- ``docs/architecture/02-backend.md §5.8`` lines 317-322 — endpoint contracts
   (``GET /api/ocr-config``, ``POST /api/ocr-config/models``,
   ``POST /api/ocr-config/rescan``).
-- ``specs/01-data-models.md §`` lines 374-400 — wire shapes
+- ``docs/architecture/01-data-models.md §`` lines 374-400 — wire shapes
   (``OCRModelOption``, ``GetOCRConfigResponse``,
   ``SetOCRModelsRequest``).
 
@@ -777,7 +777,7 @@ def test_idempotent_post_does_not_rewrite_sidecar(
 
 def test_post_rescan_returns_200(client: TestClient) -> None:
     """The route exists at the spec-canonical URL
-    (``specs/02-backend.md §5.8`` line 321).
+    (``docs/architecture/02-backend.md §5.8`` line 321).
     """
     resp = client.post("/api/ocr-config/rescan")
     assert resp.status_code == 200, resp.text

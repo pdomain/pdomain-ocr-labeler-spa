@@ -1,11 +1,11 @@
-"""Pin OCR config DTO shapes against ``specs/01-data-models.md`` §OCR.
+"""Pin OCR config DTO shapes against ``docs/architecture/01-data-models.md`` §OCR.
 
 These models are M3 prerequisites — ``GET /api/ocr-config`` /
 ``POST /api/ocr-config/models`` / ``POST /api/ocr-config/rescan`` all
 key on them. Shipping the typed shells now (no router yet) lets the
 M3 router land as a thin wiring slice without re-deriving the schema.
 
-Spec authority: ``specs/01-data-models.md`` lines 377-400 (commit
+Spec authority: ``docs/architecture/01-data-models.md`` lines 377-400 (commit
 ``c49f14f``-era; see line numbers in each test for the exact
 field/option being pinned).
 """

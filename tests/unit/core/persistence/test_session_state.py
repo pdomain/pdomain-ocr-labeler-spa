@@ -1,6 +1,6 @@
 """Round-trip + failure-mode pins for ``core/persistence/session_state.py``.
 
-Spec: ``specs/09-persistence.md §6`` + ``specs/01-data-models.md §3``.
+Spec: ``docs/architecture/09-persistence.md §6`` + ``docs/architecture/01-data-models.md §3``.
 
 The session-state file is shared with the legacy ``pd-ocr-labeler``
 binary under D-003 (same ``data_root``, both binaries read+write it),

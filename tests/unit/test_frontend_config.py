@@ -26,9 +26,9 @@ VITEST_CONFIG = FRONTEND / "vitest.config.ts"
 MAKEFILE = REPO_ROOT / "Makefile"
 
 # Canonical openapi-typescript output path, repeated by Makefile +
-# package.json + spec. Source of truth: ``specs/01-data-models.md:712``
+# package.json + spec. Source of truth: ``docs/architecture/01-data-models.md:712``
 # ("openapi-typescript openapi.json -o src/api/types.ts" — relative to
-# ``frontend/``) and ``specs/15-deployment-dev.md:127`` ("writes
+# ``frontend/``) and ``docs/architecture/15-deployment-dev.md:127`` ("writes
 # frontend/openapi.json + frontend/src/api/types.ts").
 EXPECTED_TS_TYPES = "src/api/types.ts"
 EXPECTED_OPENAPI_INPUT = "openapi.json"  # relative to frontend/
@@ -103,9 +103,9 @@ def test_openapi_gen_path_is_consistent_across_makefile_and_package_json() -> No
 
     # Spec keeps the same canonical path — guards against the spec
     # drifting away from code without us noticing.
-    spec_text = (REPO_ROOT / "specs" / "01-data-models.md").read_text(encoding="utf-8")
+    spec_text = (REPO_ROOT / "docs" / "architecture" / "01-data-models.md").read_text(encoding="utf-8")
     assert f"openapi-typescript openapi.json -o {EXPECTED_TS_TYPES}" in spec_text, (
-        "specs/01-data-models.md no longer documents the canonical openapi-typescript invocation."
+        "docs/architecture/01-data-models.md no longer documents the canonical openapi-typescript invocation."
     )
 
 

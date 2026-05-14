@@ -2,11 +2,11 @@
 
 Spec authority:
 
-- ``specs/09-persistence.md §1`` — source-lane GT files (read-only to
+- ``docs/architecture/09-persistence.md §1`` — source-lane GT files (read-only to
   the labeler) live alongside the page images in
   ``<source_projects_root>/<project>/pages.json`` (or the multi-source
   ``pages_manifest.json``).
-- ``specs/01-data-models.md §1`` line 33 — ``Project.ground_truth_map``
+- ``docs/architecture/01-data-models.md §1`` line 33 — ``Project.ground_truth_map``
   is the post-load shape (``dict[str, str]`` keyed by image filename).
 - ``specs/16-milestones.md`` line 159 — slice 5 scope.
 

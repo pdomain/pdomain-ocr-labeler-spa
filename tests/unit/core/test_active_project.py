@@ -18,9 +18,9 @@ Slice 2 deliberately STOPS at: project enumeration, lifespan wiring
 (slice 3), and HTTP routes that change the active project (slice 4).
 
 Spec authority:
-- ``specs/02-backend.md §13`` — background discovery + restoration
+- ``docs/architecture/02-backend.md §13`` — background discovery + restoration
   (``POST /api/projects/load`` ultimately sets ``current_project_id``).
-- ``specs/00-overview.md`` "State model" §lines-179-201 — backend keeps
+- ``docs/architecture/00-overview.md`` "State model" §lines-179-201 — backend keeps
   a single ``AppState`` with a per-project ``ProjectState`` map; this
   slice ships the *active-pointer* carrier; the per-project
   ``ProjectState`` map (with loaded ``Project``, GT, page states) is

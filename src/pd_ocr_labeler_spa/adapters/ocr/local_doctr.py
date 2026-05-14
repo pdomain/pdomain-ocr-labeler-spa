@@ -1,6 +1,6 @@
 """Local-DocTR OCR backend.
 
-Spec: ``specs/02-backend.md §7`` (``local_doctr.py wraps
+Spec: ``docs/architecture/02-backend.md §7`` (``local_doctr.py wraps
 pd_book_tools.ocr.document.Document.from_image_ocr_via_doctr and a
 predictor cache``) and ``specs/16-milestones.md`` M3.
 
@@ -90,7 +90,7 @@ class LocalDoctrOCR:
     ) -> tuple[Page, OCRProvenance]:
         raise NotImplementedError(
             "LocalDoctrOCR.ocr_page is unwired — use LocalDoctrPageLoader.run_ocr "
-            "for in-process OCR runs (specs/02-backend.md §7)."
+            "for in-process OCR runs (docs/architecture/02-backend.md §7)."
         )
 
 

@@ -1,7 +1,7 @@
 """Reader tests for ``core/persistence/ground_truth.py``.
 
-Spec: ``specs/09-persistence.md`` §1 (source lane = ``pages.json`` /
-``pages_manifest.json``) + ``specs/01-data-models.md §1`` (the
+Spec: ``docs/architecture/09-persistence.md`` §1 (source lane = ``pages.json`` /
+``pages_manifest.json``) + ``docs/architecture/01-data-models.md §1`` (the
 ``ground_truth_map`` field on ``Project``).
 
 Why these pins matter — D-003 byte-compat with legacy:

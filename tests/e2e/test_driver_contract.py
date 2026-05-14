@@ -1,7 +1,7 @@
 """Driver-contract conformance E2E test.
 
 Loads the tiny-fixture project, walks the full UI, and asserts that every
-testid catalogued in ``specs/13-driver-contract.md §2`` (or the spec doc
+testid catalogued in ``docs/architecture/13-driver-contract.md §2`` (or the spec doc
 ``docs/specs/2026-05-12-driver-contract-design.md §Testid catalogue``) is
 either:
 

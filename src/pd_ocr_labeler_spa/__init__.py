@@ -3,7 +3,7 @@
 The package ships as a single wheel with the prebuilt SPA bundled under
 ``pd_ocr_labeler_spa/static/``. The console script ``pd-ocr-labeler-ui``
 boots a uvicorn server that serves both the REST API and the SPA. See
-``specs/00-overview.md`` for the full architecture.
+``docs/architecture/00-overview.md`` for the full architecture.
 """
 
 from importlib.metadata import PackageNotFoundError, version

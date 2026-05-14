@@ -1,6 +1,6 @@
 // WordTagRow.test.tsx — Style/Component tag row (#212)
 // Spec: docs/specs/2026-05-12-word-edit-dialog-design.md §Action rows
-//      specs/07-word-edit-dialog.md §3.3
+//      docs/architecture/07-word-edit-dialog.md §3.3
 //
 // Acceptance:
 //   - dialog-style-select, dialog-scope-select, dialog-apply-style-button present

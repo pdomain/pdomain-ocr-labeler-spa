@@ -8,7 +8,7 @@ file + nodeid as one of M1's acceptance bars:
     warnings.
 
 The post-M1 lifespan adds project discovery + session restoration in
-``app_state.startup()`` (per ``specs/02-backend.md §13``); this M1
+``app_state.startup()`` (per ``docs/architecture/02-backend.md §13``); this M1
 landing only pins the no-resource-leak invariant against the
 M1.a-through-M1.g wiring graph (CORS + RequestId + error handlers +
 healthz + env.js + image-cache + SPA fallback). When M2 layers a real

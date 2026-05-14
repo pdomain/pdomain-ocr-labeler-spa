@@ -1,10 +1,10 @@
 """``/api/projects/{project_id}/export`` router.
 
 Spec authority:
-- ``specs/02-backend.md §5.9`` lines 325-328 — endpoint contracts.
-- ``specs/01-data-models.md §2`` lines 415-425 — ``ExportScope``,
+- ``docs/architecture/02-backend.md §5.9`` lines 325-328 — endpoint contracts.
+- ``docs/architecture/01-data-models.md §2`` lines 415-425 — ``ExportScope``,
   ``ExportRequest``, ``ExportResponse`` shapes.
-- ``specs/10-export.md`` — export dialog + DocTR export operation.
+- ``docs/architecture/10-export.md`` — export dialog + DocTR export operation.
 
 Routes:
 - ``POST /api/projects/{project_id}/export`` → 202 ``ExportResponse{job_id}``.

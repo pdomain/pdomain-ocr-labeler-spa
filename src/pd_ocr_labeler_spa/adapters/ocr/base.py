@@ -1,6 +1,6 @@
 """``IOCREngine`` Protocol — every OCR backend conforms to this surface.
 
-Spec: ``specs/02-backend.md §7``. The Protocol intentionally returns a
+Spec: ``docs/architecture/02-backend.md §7``. The Protocol intentionally returns a
 tuple ``(Page, OCRProvenance)`` so the engine reports both the parsed
 document and which models / revisions produced it. ``Page`` is the
 ``pd_book_tools`` domain class; deferring its import to ``TYPE_CHECKING``

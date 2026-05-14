@@ -1,6 +1,6 @@
 """Shared pytest fixtures for ``pd-ocr-labeler-spa``.
 
-Per ``specs/02-backend.md §14``:
+Per ``docs/architecture/02-backend.md §14``:
 
 - ``settings`` builds a hermetic ``Settings`` rooted at ``tmp_path`` so
   filesystem storage / cache / config never escape the test sandbox.

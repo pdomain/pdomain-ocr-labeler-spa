@@ -3,13 +3,13 @@ detection / recognition model keys (M3 slice 8c-iv-a).
 
 Spec authority:
 
-- ``specs/02-backend.md §5.8`` lines 317-322 — ``GET /api/ocr-config``
+- ``docs/architecture/02-backend.md §5.8`` lines 317-322 — ``GET /api/ocr-config``
   must return the *currently selected* models, and
   ``POST /api/ocr-config/models`` must update that selection. Today
   (pre-8c-iv) the POST is stateless echo: a subsequent GET still
   reports the stock defaults. This carrier is the in-process state
   that closes the gap.
-- ``specs/01-data-models.md`` lines 374-400 — the wire DTOs the
+- ``docs/architecture/01-data-models.md`` lines 374-400 — the wire DTOs the
   carrier surfaces (``selected_detection``, ``selected_recognition``,
   ``hf_pinned_revision``).
 - ``specs/17-decisions.md`` D-042 — local-mode persistence is the

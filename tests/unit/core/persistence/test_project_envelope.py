@@ -1,7 +1,7 @@
 """Round-trip tests for ``core/persistence/project_envelope.py``.
 
-Spec: ``specs/09-persistence.md §5`` (the ``project.json`` shape) +
-``specs/01-data-models.md §1`` (the ``Project`` model) +
+Spec: ``docs/architecture/09-persistence.md §5`` (the ``project.json`` shape) +
+``docs/architecture/01-data-models.md §1`` (the ``Project`` model) +
 ``specs/16-milestones.md`` line 159 (slice 5 scope).
 
 What slice 5 ships in this module:

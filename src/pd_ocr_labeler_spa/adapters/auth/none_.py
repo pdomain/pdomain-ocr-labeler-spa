@@ -1,6 +1,6 @@
 """No-auth adapter — every request resolves to the same local user.
 
-Spec: ``specs/02-backend.md §7`` ("``none_.py`` returns
+Spec: ``docs/architecture/02-backend.md §7`` ("``none_.py`` returns
 ``UserContext('local', 'Local User')`` for any input") +
 ``specs/17-decisions.md D-005`` (single anonymous principal in v1).
 """

@@ -1,6 +1,6 @@
 // useDialogHotkeys.ts — word-edit dialog scope hotkeys (#237, #212)
 // Spec: docs/specs/2026-05-12-hotkeys-a11y-design.md §Word edit dialog
-//      specs/07-word-edit-dialog.md §4.6
+//      docs/architecture/07-word-edit-dialog.md §4.6
 //
 // Dialog hotkeys:
 //   ArrowLeft/Right        — prev/next word (navigation without closing)
@@ -42,7 +42,7 @@ interface UseDialogHotkeysOptions {
  *
  * Shift+Arrow: nudge left/top edges.
  * Ctrl+Arrow: nudge right/bottom edges.
- * These mirror the legacy keybindings from specs/07-word-edit-dialog.md §4.6.
+ * These mirror the legacy keybindings from docs/architecture/07-word-edit-dialog.md §4.6.
  */
 export function useDialogHotkeys({
   enabled = true,

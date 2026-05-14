@@ -3,11 +3,11 @@ carrier + Settings into the public HTTP surface.
 
 Spec authority:
 
-- ``specs/02-backend.md §5.2`` lines 208-217 — endpoint contracts.
-- ``specs/01-data-models.md §2`` lines 205-230 — wire shapes
+- ``docs/architecture/02-backend.md §5.2`` lines 208-217 — endpoint contracts.
+- ``docs/architecture/01-data-models.md §2`` lines 205-230 — wire shapes
   (``ListProjectsResponse``, ``ProjectKey``, ``LoadProjectRequest``,
   ``LoadProjectResponse``).
-- ``specs/02-backend.md §13`` — startup discovery + the carrier
+- ``docs/architecture/02-backend.md §13`` — startup discovery + the carrier
   semantics that ``POST /api/projects/load`` mutates.
 
 What slice 4 ships under TDD:

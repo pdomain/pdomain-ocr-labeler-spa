@@ -1,7 +1,7 @@
 """Integration tests for ``api/jobs.py`` — list, get, SSE stream, cancel.
 
 Spec authority:
-- ``specs/02-backend.md §5.10`` — endpoint contracts.
+- ``docs/architecture/02-backend.md §5.10`` — endpoint contracts.
 
 Acceptance (issue #187):
 - job cancel: POST /api/jobs/{id}/cancel terminates the running task.

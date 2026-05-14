@@ -4,7 +4,7 @@ Acceptance criteria for issue #186:
 - pytest integration tests for each endpoint (happy path + 404 guard)
 
 Spec authority:
-- ``specs/02-backend.md §5.5`` — line/paragraph endpoint contracts.
+- ``docs/architecture/02-backend.md §5.5`` — line/paragraph endpoint contracts.
 """
 
 from __future__ import annotations

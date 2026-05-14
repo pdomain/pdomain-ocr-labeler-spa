@@ -1,6 +1,6 @@
 """``AppState`` — the typed singleton container for adapters + settings.
 
-Spec: ``specs/02-backend.md §2 step 4`` ("Build ``AppState(settings,
+Spec: ``docs/architecture/02-backend.md §2 step 4`` ("Build ``AppState(settings,
 storage, auth, ocr_engine, broker, runner)``") and ``§6`` (the
 ``api/dependencies.py`` providers read ``request.app.state.app_state``
 to surface this object to route handlers).

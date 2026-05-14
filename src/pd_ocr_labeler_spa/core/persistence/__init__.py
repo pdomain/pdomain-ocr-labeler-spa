@@ -1,7 +1,7 @@
 """On-disk persistence helpers for ``pd-ocr-labeler-spa``.
 
-Spec: ``specs/09-persistence.md`` (lanes, envelopes, atomic writes) +
-``specs/01-data-models.md §5`` (OS-aware roots).
+Spec: ``docs/architecture/09-persistence.md`` (lanes, envelopes, atomic writes) +
+``docs/architecture/01-data-models.md §5`` (OS-aware roots).
 
 This package owns:
 

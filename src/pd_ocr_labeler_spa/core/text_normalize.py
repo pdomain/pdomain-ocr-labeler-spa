@@ -7,7 +7,7 @@ sets ``is_available() == False`` so callers can show the "requires pd-book-tools
 
 Spec authority:
 - ``docs/specs/2026-05-12-text-normalization-design.md``
-- ``specs/18-text-normalization.md``
+- ``docs/architecture/18-text-normalization.md``
 """
 
 from __future__ import annotations

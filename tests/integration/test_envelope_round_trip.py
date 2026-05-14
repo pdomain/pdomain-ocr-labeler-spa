@@ -2,14 +2,14 @@
 
 Spec authority:
 
-- ``specs/09-persistence.md §2`` lines 102–109 — round-trip identity
+- ``docs/architecture/09-persistence.md §2`` lines 102–109 — round-trip identity
   invariant: ``parse → rebuild`` must equal the original data.
-- ``specs/09-persistence.md §11`` lines 343–357 — incompatible_envelope:
+- ``docs/architecture/09-persistence.md §11`` lines 343–357 — incompatible_envelope:
   schema versions the SPA doesn't understand raise an error with code
   ``incompatible_envelope`` that maps to ``422``.
-- ``specs/09-persistence.md §12`` lines 362–373 — test checklist naming
+- ``docs/architecture/09-persistence.md §12`` lines 362–373 — test checklist naming
   ``test_envelope_round_trip.py`` as the golden-fixture test.
-- ``specs/01-data-models.md §3`` lines 503–576 — ``UserPageEnvelope``
+- ``docs/architecture/01-data-models.md §3`` lines 503–576 — ``UserPageEnvelope``
   v2.1 wire shape.
 - ``docs/specs/2026-05-12-persistence-design.md`` — D-003 byte-compat
   guarantee.

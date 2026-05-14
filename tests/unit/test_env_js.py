@@ -1,12 +1,12 @@
 """``GET /env.js`` contract — parametrised across ``Settings.mode``.
 
-Per ``specs/02-backend.md §2`` step 12, ``/env.js`` (and the future
+Per ``docs/architecture/02-backend.md §2`` step 12, ``/env.js`` (and the future
 ``/image-cache`` mount + SPA fallback) is only installed when
 ``settings.mode != "api_only"``. ``api_only`` is the
 OpenAPI-export / pure-API integration shape — the SPA bootstrap shim
 has no business existing there.
 
-Per ``specs/02-backend.md §5.1`` the body shape is exactly::
+Per ``docs/architecture/02-backend.md §5.1`` the body shape is exactly::
 
     window.__ENV__ = {"API_BASE": "", "API_TOKEN": null};
 

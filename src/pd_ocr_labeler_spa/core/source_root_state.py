@@ -1,7 +1,7 @@
 """Mutable holder for the runtime ``source_projects_root`` override.
 
-Spec authority: ``specs/09-persistence.md §7`` (config.yaml) +
-``specs/02-backend.md §5.2`` (``POST /api/projects/source-root``).
+Spec authority: ``docs/architecture/09-persistence.md §7`` (config.yaml) +
+``docs/architecture/02-backend.md §5.2`` (``POST /api/projects/source-root``).
 
 The ``POST /api/projects/source-root`` endpoint persists a new projects
 root to ``config.yaml`` AND updates the in-process state so that

@@ -1,7 +1,7 @@
 """Pure-derivation pins for ``core/persistence/paths.py``.
 
-Spec: ``specs/01-data-models.md §5`` (OS-aware paths table) +
-``specs/09-persistence.md §1, §5-§7``.
+Spec: ``docs/architecture/01-data-models.md §5`` (OS-aware paths table) +
+``docs/architecture/09-persistence.md §1, §5-§7``.
 
 These tests fix the **subdirectory layout** the helpers produce. The
 OS-aware roots themselves are owned by ``Settings`` (and tested in

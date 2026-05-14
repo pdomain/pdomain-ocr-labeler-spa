@@ -1,6 +1,6 @@
 """In-memory pub/sub broker for job progress events.
 
-Spec: ``specs/02-backend.md §11``. Verbatim port of
+Spec: ``docs/architecture/02-backend.md §11``. Verbatim port of
 ``pd-prep-for-pgdp/core/job_events.py:27-67`` with no meaningful changes —
 same fan-out model, same ``_CLOSED`` sentinel, same subscribe/publish/close
 contract.

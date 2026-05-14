@@ -1,6 +1,6 @@
 """GET /env.js — runtime config shim for the SPA.
 
-Per ``specs/02-backend.md §5.1``::
+Per ``docs/architecture/02-backend.md §5.1``::
 
     GET /env.js → text/javascript
         window.__ENV__ = {API_BASE: "", API_TOKEN: null}

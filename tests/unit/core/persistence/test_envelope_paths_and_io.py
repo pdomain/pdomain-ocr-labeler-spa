@@ -2,7 +2,7 @@
 
 Spec authority:
 
-- ``specs/09-persistence.md §1`` lines 19–32 — three on-disk lanes:
+- ``docs/architecture/09-persistence.md §1`` lines 19–32 — three on-disk lanes:
 
   - **Labeled lane**: ``<data_root>/labeled-projects/<project_id>/
     <project_id>_<page:03d>.json`` (D-003 byte-compat with legacy).
@@ -10,7 +10,7 @@ Spec authority:
     <page:03d>_envelope.json`` (SPA-specific filename with the
     ``_envelope`` suffix, per spec line 28).
 
-- ``specs/09-persistence.md §2`` lines 79–86 — reader API surface.
+- ``docs/architecture/09-persistence.md §2`` lines 79–86 — reader API surface.
 
 Slice 8b-iv ships:
 

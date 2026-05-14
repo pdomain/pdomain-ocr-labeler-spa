@@ -2,8 +2,8 @@
 
 Spec authority:
 
-- ``specs/02-backend.md §5.8`` lines 317-322 — endpoint contracts.
-- ``specs/01-data-models.md`` lines 374-400 — DTO shapes (defined in
+- ``docs/architecture/02-backend.md §5.8`` lines 317-322 — endpoint contracts.
+- ``docs/architecture/01-data-models.md`` lines 374-400 — DTO shapes (defined in
   ``core/ocr_models.py`` per iter 7 / commit 9201caa).
 
 What slice 8a shipped:
@@ -462,7 +462,7 @@ def post_ocr_config_rescan(
 ) -> GetOCRConfigResponse:
     """Re-run model discovery and reconcile the carrier (slice 8c-v-b).
 
-    Spec ``specs/02-backend.md §5.8`` line 321. The handler walks the
+    Spec ``docs/architecture/02-backend.md §5.8`` line 321. The handler walks the
     discovery pipeline fresh (HF probe + local-models tree) so a model
     pair that landed on disk after startup surfaces, and a pair that was
     deleted between calls no longer does.

@@ -2,5 +2,5 @@
 
 M1 ships ``exceptions`` (the spec-named ``NotImplementedYet``). Later
 milestones add ``app_state``, ``project_state``, ``page_state``,
-``persistence/`` etc. per ``specs/02-backend.md §1``.
+``persistence/`` etc. per ``docs/architecture/02-backend.md §1``.
 """

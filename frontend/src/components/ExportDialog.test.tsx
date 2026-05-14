@@ -1,6 +1,6 @@
 // ExportDialog.test.tsx — Export dialog (#227)
 // Spec: docs/specs/2026-05-12-export-design.md
-// driver-contract: specs/13-driver-contract.md §2.12
+// driver-contract: docs/architecture/13-driver-contract.md §2.12
 //
 // Acceptance:
 //   - export-dialog testid present when open

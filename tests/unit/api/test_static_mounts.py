@@ -1,6 +1,6 @@
 """Static-asset mounts: ``/image-cache/{key:path}`` + SPA fallback.
 
-Spec: ``specs/02-backend.md §2 step 12`` + ``§10`` + D-019.
+Spec: ``docs/architecture/02-backend.md §2 step 12`` + ``§10`` + D-019.
 
 The image-cache mount serves bytes via the wired ``IStorage`` adapter
 (NOT directly through ``StaticFiles``); so we exercise it end-to-end

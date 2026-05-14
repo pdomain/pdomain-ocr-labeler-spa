@@ -5,7 +5,7 @@ Acceptance criteria for issue #186:
 - Autosave side-effect: each mutation writes to cached lane
 
 Spec authority:
-- ``specs/02-backend.md §5.4`` — word endpoint contracts.
+- ``docs/architecture/02-backend.md §5.4`` — word endpoint contracts.
 - ``docs/specs/2026-05-12-backend-design.md`` — autosave + 404 guard.
 """
 

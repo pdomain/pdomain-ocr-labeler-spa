@@ -3,13 +3,13 @@ feeds the result into ``app.state.active_project_carrier``.
 
 Spec authority:
 
-- ``specs/02-backend.md §13`` — background discovery + restoration.
+- ``docs/architecture/02-backend.md §13`` — background discovery + restoration.
   Step 4 ("If ``Settings.cli_project_dir`` is set, override the
   restore — load the CLI dir") + step 3 (session_state restore)
   together describe the precedence already implemented as a pure
   function in ``core/startup_discovery.resolve_initial_project``.
   Slice 1 (iter 52) shipped that function.
-- ``specs/02-backend.md §2`` step 5 names ``lifespan`` as a discrete
+- ``docs/architecture/02-backend.md §2`` step 5 names ``lifespan`` as a discrete
   build_app step. Slice 2 (iter 53) wired
   ``app.state.active_project_carrier`` but did not yet add the
   startup hook. **This slice (slice 3) is the missing connector.**

@@ -1,6 +1,6 @@
 // WordRefineNudgeRows.test.tsx — Refine/Nudge/Apply rows (#212)
 // Spec: docs/specs/2026-05-12-word-edit-dialog-design.md §Action rows
-//      specs/07-word-edit-dialog.md §3.6, §3.7, §3.8
+//      docs/architecture/07-word-edit-dialog.md §3.6, §3.7, §3.8
 //
 // Acceptance:
 //   - Refine calls onRefine

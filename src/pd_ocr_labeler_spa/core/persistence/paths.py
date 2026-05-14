@@ -1,7 +1,7 @@
 """Pure path-derivation helpers (no I/O).
 
-Spec: ``specs/01-data-models.md §5`` (OS-aware paths) +
-``specs/09-persistence.md §1`` (the three on-disk lanes) + ``§5-§7``
+Spec: ``docs/architecture/01-data-models.md §5`` (OS-aware paths) +
+``docs/architecture/09-persistence.md §1`` (the three on-disk lanes) + ``§5-§7``
 (per-purpose files: ``project.json``, ``session_state.json``,
 ``config.yaml``).
 
@@ -20,7 +20,7 @@ inputs → same outputs, no filesystem touch. ``mkdir`` lives at the
 write site (the ``save_*`` helpers in sibling modules), never here, so
 ``build_app(Settings())`` continues to be a pure factory (B-54 invariant).
 
-Spec mapping (from ``specs/01-data-models.md §5``):
+Spec mapping (from ``docs/architecture/01-data-models.md §5``):
 
 - ``data_root`` (root)         → caller passes in
 - ``cache_root`` (root)        → caller passes in
@@ -56,7 +56,7 @@ OCR_CONFIG_FILENAME = "ocr_config.json"
 def labeled_projects_root(data_root: Path) -> Path:
     """``<data_root>/labeled-projects/`` — explicit user saves.
 
-    Spec: ``specs/09-persistence.md §1`` ("Labeled lane") + §5 (where
+    Spec: ``docs/architecture/09-persistence.md §1`` ("Labeled lane") + §5 (where
     ``project.json`` lives). The labeler is the only writer; the legacy
     binary writes here too (D-003 shared-data-root contract).
     """
@@ -112,6 +112,6 @@ def config_yaml_path(config_root: Path) -> Path:
 
     ``config_root`` is expected to already include the app-name suffix
     (``Settings`` handles that via its OS defaults — see
-    ``specs/01-data-models.md §5``).
+    ``docs/architecture/01-data-models.md §5``).
     """
     return config_root / CONFIG_YAML_FILENAME

@@ -2,11 +2,11 @@
 
 Spec authority:
 
-- ``specs/02-backend.md §13`` — background discovery + restoration.
+- ``docs/architecture/02-backend.md §13`` — background discovery + restoration.
   ``POST /api/projects/load`` ultimately sets the per-process active
   project (line 217: "Sets ``app_state.current_project_id``"); this
   module ships the carrier that endpoint will mutate.
-- ``specs/00-overview.md`` "State model" lines 179-201 — backend keeps
+- ``docs/architecture/00-overview.md`` "State model" lines 179-201 — backend keeps
   a single ``AppState`` with a per-project ``ProjectState`` map. The
   *active-pointer* (which project is the current one for THIS server
   process) is its own concern; this module is that pointer.

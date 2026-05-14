@@ -4,7 +4,7 @@ Iter-5 review B-03: ``allow_origins=["*"]`` paired with
 ``allow_credentials=True`` is invalid per the CORS spec — browsers
 reject the response. ``pd-prep-for-pgdp`` (the declared structural
 model) sets only ``allow_origins``/``allow_methods``/``allow_headers``;
-spec ``specs/02-backend.md §step-7`` matches.
+spec ``docs/architecture/02-backend.md §step-7`` matches.
 
 We introspect ``app.user_middleware`` because Starlette stores
 middleware-class + kwargs on each entry. That's the cheapest way to
@@ -55,7 +55,7 @@ def test_cors_middleware_does_not_enable_credentials() -> None:
 
 
 def test_cors_middleware_matches_pgdp_prep_shape() -> None:
-    # Spec specs/02-backend.md §step-7 lists the three wildcards; pgdp-prep
+    # Spec docs/architecture/02-backend.md §step-7 lists the three wildcards; pgdp-prep
     # uses the same shape. Pin it so a refactor doesn't silently
     # reintroduce credentials.
     app = build_app(Settings(mode="api_only"))

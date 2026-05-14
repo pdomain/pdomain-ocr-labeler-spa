@@ -1,6 +1,6 @@
 """``config.yaml`` reader / writer — spec §7.
 
-Spec authority: ``specs/09-persistence.md §7``.
+Spec authority: ``docs/architecture/09-persistence.md §7``.
 
 The file lives at ``<config_root>/config.yaml`` (``paths.config_yaml_path``).
 Single-key schema:

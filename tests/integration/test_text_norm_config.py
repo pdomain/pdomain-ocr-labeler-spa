@@ -8,7 +8,7 @@ Acceptance criteria:
 
 Spec authority:
 - docs/specs/2026-05-12-text-normalization-design.md - GT validation contract
-- specs/09-persistence.md - config.yaml persistence
+- docs/architecture/09-persistence.md - config.yaml persistence
 """
 
 from __future__ import annotations

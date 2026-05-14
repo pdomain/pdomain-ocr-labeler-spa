@@ -1,9 +1,9 @@
 """In-memory notification queue with ring-buffer and SSE fan-out.
 
 Spec authority:
-- ``specs/01-data-models.md §2 Notifications`` — ``NotificationKind``,
+- ``docs/architecture/01-data-models.md §2 Notifications`` — ``NotificationKind``,
   ``Notification`` shapes.
-- ``specs/11-notifications.md §2`` — ring buffer cap (~100), ``queue_once``
+- ``docs/architecture/11-notifications.md §2`` — ring buffer cap (~100), ``queue_once``
   dedupe, snapshot-on-connect semantics.
 - Legacy parity: ``pd-ocr-labeler/pd_ocr_labeler/state/app_state.py``
   ``queue_notification`` / ``pop_notification`` / ``_safe_notify_once``.
@@ -35,7 +35,7 @@ _MAX_NOTIFICATIONS = 100
 
 
 class NotificationKind(StrEnum):
-    """Notification severity — ``specs/01-data-models.md §2``."""
+    """Notification severity — ``docs/architecture/01-data-models.md §2``."""
 
     POSITIVE = "positive"
     NEGATIVE = "negative"
@@ -44,7 +44,7 @@ class NotificationKind(StrEnum):
 
 
 class Notification(BaseModel):
-    """A single server-pushed notification — ``specs/01-data-models.md §2``."""
+    """A single server-pushed notification — ``docs/architecture/01-data-models.md §2``."""
 
     model_config = ConfigDict(extra="forbid")
 

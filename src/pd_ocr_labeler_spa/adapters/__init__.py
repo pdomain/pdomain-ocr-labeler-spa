@@ -1,4 +1,4 @@
-"""Adapter axes per ``specs/02-backend.md §1, §7``.
+"""Adapter axes per ``docs/architecture/02-backend.md §1, §7``.
 
 Three axes selected by ``Settings``:
 

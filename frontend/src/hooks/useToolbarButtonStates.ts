@@ -1,5 +1,5 @@
 // Spec: docs/specs/2026-05-12-toolbar-actions-design.md §Decision
-// Grid layout: specs/06-toolbar-actions.md §1
+// Grid layout: docs/architecture/06-toolbar-actions.md §1
 
 export interface Selection {
   selection_mode: "paragraph" | "line" | "word";

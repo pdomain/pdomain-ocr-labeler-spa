@@ -1,6 +1,6 @@
 """GET /healthz — operational liveness probe.
 
-Per ``specs/02-backend.md §5.1``::
+Per ``docs/architecture/02-backend.md §5.1``::
 
     GET /healthz → {"status": "ok", "version": "..."}
 

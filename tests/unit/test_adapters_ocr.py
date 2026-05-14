@@ -1,6 +1,6 @@
 """OCR adapter Protocol + stub impls shape pins.
 
-Spec: ``specs/02-backend.md §1`` (full adapter axis,
+Spec: ``docs/architecture/02-backend.md §1`` (full adapter axis,
 ``local_doctr | modal | shared_container``), ``§7`` (`IOCREngine`
 Protocol signature), ``specs/17-decisions.md D-018`` (the seam is real
 in v1 even though only ``local_doctr`` is wired).

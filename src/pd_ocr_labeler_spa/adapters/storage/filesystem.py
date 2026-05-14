@@ -1,7 +1,7 @@
 """Filesystem-backed ``IStorage`` impl.
 
 Wraps ``anyio.Path`` for async I/O over a configured root directory.
-Includes the path-traversal guard required by ``specs/02-backend.md
+Includes the path-traversal guard required by ``docs/architecture/02-backend.md
 §7``: keys with ``..`` or absolute-path tricks must not escape the
 root, or the labeler running under a multi-tenant deployment could
 read arbitrary host files via crafted ``GET /image-cache/...`` paths.

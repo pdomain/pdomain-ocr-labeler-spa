@@ -1,6 +1,6 @@
 // WordRefineNudgeRows.tsx — Refine row + Nudge accumulator + Apply/Reset row (#212)
 // Spec: docs/specs/2026-05-12-word-edit-dialog-design.md §Action rows
-//      specs/07-word-edit-dialog.md §3.6 (refine), §3.7 (nudge), §3.8 (apply/reset)
+//      docs/architecture/07-word-edit-dialog.md §3.6 (refine), §3.7 (nudge), §3.8 (apply/reset)
 //
 // Refine buttons fire immediately (onRefine / onExpandRefine).
 // Nudge is accumulated locally; Apply emits onApply(pendingNudge, refineAfter).

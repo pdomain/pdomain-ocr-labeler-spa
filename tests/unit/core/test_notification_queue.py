@@ -1,10 +1,10 @@
 """Unit tests for ``core/notifications.py`` — ``NotificationQueue``.
 
 Spec authority:
-- ``specs/11-notifications.md §2`` — ring buffer cap (~100), ``queue_once``
+- ``docs/architecture/11-notifications.md §2`` — ring buffer cap (~100), ``queue_once``
   dedupe, snapshot-on-connect semantics.
 - ``specs/07-notifications.md`` (referenced as §7 in spec set) and
-  ``specs/11-notifications.md §2.3`` — SSE shape.
+  ``docs/architecture/11-notifications.md §2.3`` — SSE shape.
 """
 
 from __future__ import annotations

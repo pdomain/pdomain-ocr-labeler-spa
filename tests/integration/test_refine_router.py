@@ -5,7 +5,7 @@ Acceptance criteria for issue #186:
 - refine-bboxes 202+job SSE cycle covered
 
 Spec authority:
-- ``specs/02-backend.md §5.6`` — refine endpoint contract (202 + job SSE).
+- ``docs/architecture/02-backend.md §5.6`` — refine endpoint contract (202 + job SSE).
 - ``docs/specs/2026-05-12-backend-design.md`` — long-running operations return
   202 Accepted with {job_id}; callers open EventSource(/api/jobs/{id}/events).
 """

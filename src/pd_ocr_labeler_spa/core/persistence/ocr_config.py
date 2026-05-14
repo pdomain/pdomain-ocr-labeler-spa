@@ -1,7 +1,7 @@
 """Read/write of ``<data_root>/ocr_config.json`` — SPA-only sidecar for
 ``OCRConfigCarrier`` (M3 slice 8c-iv-b).
 
-Spec: ``specs/09-persistence.md §7a`` + ``specs/01-data-models.md`` (the
+Spec: ``docs/architecture/09-persistence.md §7a`` + ``docs/architecture/01-data-models.md`` (the
 ``ocr_config.json`` cross-ref).
 
 This is the disk half of the in-process ``OCRConfigCarrier`` (slice

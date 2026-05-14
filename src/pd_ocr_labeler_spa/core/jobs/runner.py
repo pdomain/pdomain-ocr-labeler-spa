@@ -1,6 +1,6 @@
 """In-process asyncio job runner.
 
-Spec: ``specs/02-backend.md §11``. Simpler than pgdp-prep's
+Spec: ``docs/architecture/02-backend.md §11``. Simpler than pgdp-prep's
 ``InProcessJobRunner`` because this labeler needs no database backend,
 no multi-user enumeration, and no distributed queue. Every job row lives
 in ``self._jobs`` (lost on restart — the on-disk labeled envelopes are

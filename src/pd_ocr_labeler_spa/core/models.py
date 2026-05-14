@@ -1,8 +1,8 @@
 """Domain models — the typed in-memory shapes shared by adapters + wire.
 
 Spec authority:
-- ``specs/01-data-models.md §1`` — all domain model shapes.
-- ``specs/01-data-models.md`` lines 7-12 — convention: domain models
+- ``docs/architecture/01-data-models.md §1`` — all domain model shapes.
+- ``docs/architecture/01-data-models.md`` lines 7-12 — convention: domain models
   live here and are reused by both the ``IStorage`` / ``IOCREngine``
   Protocols AND the wire (no separate DTO layer).
 
@@ -25,7 +25,7 @@ _MAX_DISPLAY_DIMENSION = 1200
 
 
 class Project(BaseModel):
-    """One labeler project — ``specs/01-data-models.md §1`` lines 28-44.
+    """One labeler project — ``docs/architecture/01-data-models.md §1`` lines 28-44.
 
     Mirrors legacy ``pd_ocr_labeler/models/project_model.py:9``.
     """
@@ -72,7 +72,7 @@ class MatchStatus(StrEnum):
 
 
 class BBox(BaseModel):
-    """Image-coordinate bounding box — ``specs/01-data-models.md §1`` lines 137-143."""
+    """Image-coordinate bounding box — ``docs/architecture/01-data-models.md §1`` lines 137-143."""
 
     x: int
     y: int

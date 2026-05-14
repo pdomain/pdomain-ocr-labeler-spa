@@ -2,9 +2,9 @@
 
 Spec authority:
 
-- ``specs/01-data-models.md §3`` lines 503–576 — ``UserPageEnvelope``
+- ``docs/architecture/01-data-models.md §3`` lines 503–576 — ``UserPageEnvelope``
   v2.1 / v2.2 wire shape.
-- ``specs/09-persistence.md §2`` lines 44–110 — schema details, reader
+- ``docs/architecture/09-persistence.md §2`` lines 44–110 — schema details, reader
   surface (``is_user_page_envelope``, ``parse_envelope``,
   ``build_envelope``), round-trip identity invariant.
 

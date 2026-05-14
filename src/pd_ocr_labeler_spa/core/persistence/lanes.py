@@ -2,11 +2,11 @@
 
 Spec authority:
 
-- ``specs/09-persistence.md §1`` lines 18–40 — lane definitions:
+- ``docs/architecture/09-persistence.md §1`` lines 18–40 — lane definitions:
   source (read-only), labeled (explicit user saves), cached (auto-save
   after every mutation). Read precedence: labeled → cached → OCR →
   fallback.
-- ``specs/01-data-models.md §1`` lines 55–59 — ``PageSource`` enum.
+- ``docs/architecture/01-data-models.md §1`` lines 55–59 — ``PageSource`` enum.
 - Issue #221 acceptance criteria.
 
 ### Three lanes
@@ -96,7 +96,7 @@ class LaneResolver:
     Instances are cheap to create (no I/O on __init__) — they can be
     constructed per-request or once per project load.
 
-    Spec: ``specs/09-persistence.md §1`` + issue #221.
+    Spec: ``docs/architecture/09-persistence.md §1`` + issue #221.
     """
 
     def __init__(
@@ -115,7 +115,7 @@ class LaneResolver:
     def load_page_from_disk(self, page_index: int) -> LaneReadResult | None:
         """Probe labeled → cached lanes; return first hit or ``None``.
 
-        Spec: ``specs/09-persistence.md §1`` lines 32–40.
+        Spec: ``docs/architecture/09-persistence.md §1`` lines 32–40.
 
         - Labeled lane checked first (highest authority — explicit user
           save; shared with legacy labeler under D-003).
@@ -200,7 +200,7 @@ class LaneResolver:
 
         Never raises — I/O errors are logged as WARNING and swallowed
         so a failed cache-write does not turn a successful mutation into
-        a 500.  Spec: ``specs/09-persistence.md §4.2`` last paragraph.
+        a 500.  Spec: ``docs/architecture/09-persistence.md §4.2`` last paragraph.
         """
         path = cached_envelope_path(self._cache_root, self._project_id, page_index)
         try:

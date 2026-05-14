@@ -1,6 +1,6 @@
 """Structured logging setup — stdlib-only.
 
-Per ``specs/02-backend.md §9``: JSON or plain logs with request-id
+Per ``docs/architecture/02-backend.md §9``: JSON or plain logs with request-id
 correlation. Default behaviour is ``plain`` (matches pgdp-prep); opt
 in to JSON by setting ``PDLABELER_LOG_FORMAT=json`` or by passing
 ``log_format="json"`` to ``Settings``.

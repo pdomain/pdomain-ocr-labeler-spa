@@ -3,7 +3,7 @@
 Reads ``PDLABELER_*`` env vars. Read **once** in
 ``pd_ocr_labeler_spa.__main__.main()`` and passed into ``build_app(settings)``.
 
-The Settings shape mirrors ``specs/02-backend.md §3`` verbatim — every
+The Settings shape mirrors ``docs/architecture/02-backend.md §3`` verbatim — every
 field listed there must exist here, even if its consumer is M2 / M3
 deferred. The "lean stub" policy from earlier milestones was retired
 in iter 51 (B-63) after the iter-47 M1.g work added pre-emptive fields
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
-        # Spec §3 (specs/02-backend.md:148-149): "override after construction
+        # Spec §3 (docs/architecture/02-backend.md:148-149): "override after construction
         # is forbidden." Enforce via pydantic frozen so any future regression
         # to mutate ``settings.<field> = …`` post-construction fails loudly
         # at the call-site instead of silently desyncing process state.
@@ -60,12 +60,12 @@ class Settings(BaseSettings):
 
     request_id_header: str = "X-Request-ID"
 
-    # ── OS-aware roots (specs/01-data-models.md §5) ──────────────────────────
+    # ── OS-aware roots (docs/architecture/01-data-models.md §5) ──────────────────────────
     config_root: Path = Field(default_factory=lambda: Path.home() / ".config" / "pd-ocr-labeler")
     data_root: Path = Field(default_factory=lambda: Path.home() / "pd-ocr-labeler")
     cache_root: Path = Field(default_factory=lambda: Path.home() / ".cache" / "pd-ocr-labeler")
 
-    # ── Project discovery (specs/02-backend.md §3 lines 130-132) ─────────────
+    # ── Project discovery (docs/architecture/02-backend.md §3 lines 130-132) ─────────────
     # Both fields are CLI-overridable seams; their consumers land in M2
     # (project discovery + load). Declared here so the M1.g ``__main__``
     # CLI can thread CLI args through ``Settings(**overrides)`` today.
@@ -90,7 +90,7 @@ class Settings(BaseSettings):
     mode: Mode = "normal"
     """``api_only`` skips the SPA static mount — useful for tests and headless ops."""
 
-    # ── Adapter axes (specs/02-backend.md §3) ────────────────────────────────
+    # ── Adapter axes (docs/architecture/02-backend.md §3) ────────────────────────────────
     # Wired by ``core.app_state.build_app_state`` (M1.d). Flipping these
     # fields is the only entry point for swapping backends; route code
     # never branches on adapter choice.
@@ -103,7 +103,7 @@ class Settings(BaseSettings):
     ocr_engine: OCREngine = "local_doctr"
     """``modal`` / ``shared_container`` are ``NotImplementedYet`` (D-018); only ``local_doctr`` is wired."""
 
-    # ── Job runner (specs/02-backend.md §3 line 138) ─────────────────────────
+    # ── Job runner (docs/architecture/02-backend.md §3 line 138) ─────────────────────────
     # Consumer lands in M3 (JobRunner background loop). Declared now so
     # the Settings shape matches spec §3 verbatim — drift between spec
     # and impl is the failure mode B-63 was filed against, even though
@@ -111,7 +111,7 @@ class Settings(BaseSettings):
     poll_interval_seconds: float = 0.5
     """Background JobRunner poll cadence — M3-deferred consumer."""
 
-    # ── OCR (specs/02-backend.md §3 lines 141-142) ───────────────────────────
+    # ── OCR (docs/architecture/02-backend.md §3 lines 141-142) ───────────────────────────
     # Consumers land in M3 (OCR predictor cache + model prefetch). The
     # `hf_repo` default mirrors legacy `pd-ocr-labeler/...` — see
     # spec §3 for the canonical name.
@@ -121,7 +121,7 @@ class Settings(BaseSettings):
     no_prefetch: bool = False
     """When True, skip the startup model-prefetch step — M3-deferred consumer."""
 
-    # ── Error-handler debug surface (specs/02-backend.md §8 / D-040) ─────────
+    # ── Error-handler debug surface (docs/architecture/02-backend.md §8 / D-040) ─────────
     # Q-A11 (resolved 2026-05-07, option B): the unhandled-`Exception`
     # 500 envelope's ``details`` field surfaces the last 3 traceback
     # lines on a single-user laptop (default) but can be redacted on

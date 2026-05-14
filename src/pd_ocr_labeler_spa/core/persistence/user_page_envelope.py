@@ -2,9 +2,9 @@
 
 Spec authority:
 
-- ``specs/01-data-models.md §3`` lines 503–576 — ``UserPageEnvelope``
+- ``docs/architecture/01-data-models.md §3`` lines 503–576 — ``UserPageEnvelope``
   v2.1 / v2.2 wire shape + reader API.
-- ``specs/09-persistence.md §2`` lines 44–110 — schema, reader surface,
+- ``docs/architecture/09-persistence.md §2`` lines 44–110 — schema, reader surface,
   round-trip identity invariant.
 
 **Byte-compat target.** Legacy
@@ -47,7 +47,7 @@ Deferred to later slices:
   fields for them lands with M9.
 
 Module-name policy: ``user_page_envelope`` (singular envelope) per
-``specs/01-data-models.md`` line 567 + ``specs/09-persistence.md`` line
+``docs/architecture/01-data-models.md`` line 567 + ``docs/architecture/09-persistence.md`` line
 79. Legacy was ``user_page_persistence`` — renamed in the SPA so the
 filename describes the shape, not the verb.
 """
@@ -518,7 +518,7 @@ def parse_envelope(data: dict[str, Any]) -> UserPageEnvelope:
     legacy ``UserPageEnvelope.from_dict``). Coerces or substitutes
     defaults silently for all shape mismatches.
 
-    Version check (spec §11, ``specs/09-persistence.md``):
+    Version check (spec §11, ``docs/architecture/09-persistence.md``):
     ``schema.version`` must start with major ``"2"`` (i.e. "2.1",
     "2.2", or any future additive "2.x" bump). Anything with a
     different major (e.g. "3.0", "1.0", …) raises
@@ -613,7 +613,7 @@ def _envelope_filename(project_id: str, page_index: int) -> str:
 def labeled_envelope_path(data_root: Path, project_id: str, page_index: int) -> Path:
     """Path to the labeled-lane envelope file.
 
-    Spec: ``specs/09-persistence.md §1`` line 22 —
+    Spec: ``docs/architecture/09-persistence.md §1`` line 22 —
     ``<data_root>/labeled-projects/<project_id>/<project_id>_<page:03d>.json``.
 
     Page numbering is 1-based zero-padded to **at least** three digits
@@ -627,7 +627,7 @@ def labeled_envelope_path(data_root: Path, project_id: str, page_index: int) -> 
 def cached_envelope_path(cache_root: Path, project_id: str, page_index: int) -> Path:
     """Path to the cached-lane envelope file.
 
-    Spec: ``specs/09-persistence.md §1`` line 28 + §4.2 line 161 —
+    Spec: ``docs/architecture/09-persistence.md §1`` line 28 + §4.2 line 161 —
     ``<cache_root>/page-images/<project_id>_<page:03d>_envelope.json``.
 
     The ``_envelope`` suffix is **SPA-specific**: legacy writes plain

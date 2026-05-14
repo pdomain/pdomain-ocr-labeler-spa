@@ -1,6 +1,6 @@
 """GET /healthz contract.
 
-Spec: ``specs/02-backend.md §5.1`` — ``{"status": "ok", "version": "..."}``.
+Spec: ``docs/architecture/02-backend.md §5.1`` — ``{"status": "ok", "version": "..."}``.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 // WordActionRows.tsx — Merge/Split/Delete/Crop rows for the word-edit dialog (#211)
 // Spec: docs/specs/2026-05-12-word-edit-dialog-design.md §Action rows
-//      specs/07-word-edit-dialog.md §4.3 (split), §4.2 (merge), §4.4 (crop)
+//      docs/architecture/07-word-edit-dialog.md §4.3 (split), §4.2 (merge), §4.4 (crop)
 //
 // All mutations fire synchronous POSTs and call onRefetch on success.
 // The dialog stays open after merge/split/delete (legacy behaviour).

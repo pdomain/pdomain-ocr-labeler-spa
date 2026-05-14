@@ -1,9 +1,9 @@
 """Read/write of ``<data_root>/session_state.json``.
 
-Spec: ``specs/09-persistence.md §6`` + ``specs/01-data-models.md §3``
+Spec: ``docs/architecture/09-persistence.md §6`` + ``docs/architecture/01-data-models.md §3``
 ("session_state.json"). Tiny single-file persistence: where was the
 user when they last closed the app? Re-applied on next startup
-(``app_state.startup()`` step 3 per ``specs/02-backend.md §13``).
+(``app_state.startup()`` step 3 per ``docs/architecture/02-backend.md §13``).
 
 Extras-tolerance policy (D-041, 2026-05-07): the SPA and legacy
 share this file and either may add additive fields without a

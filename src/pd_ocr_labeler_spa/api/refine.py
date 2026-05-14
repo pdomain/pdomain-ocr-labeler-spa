@@ -1,8 +1,8 @@
 """``/api/projects/{project_id}/pages/{page_index}/refine`` router (§5.6).
 
 Spec authority:
-- ``specs/01-data-models.md §2`` — ``RefineScopeRequest`` shape.
-- ``specs/02-backend.md §5.6`` — endpoint contract: 202 Accepted + job_id.
+- ``docs/architecture/01-data-models.md §2`` — ``RefineScopeRequest`` shape.
+- ``docs/architecture/02-backend.md §5.6`` — endpoint contract: 202 Accepted + job_id.
 - ``docs/specs/2026-05-12-backend-design.md`` — long-running operations
   return 202 Accepted with {job_id}; callers open EventSource on the job.
 

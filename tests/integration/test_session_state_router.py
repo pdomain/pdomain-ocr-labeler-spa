@@ -2,7 +2,7 @@
 
 Spec authority:
 - ``docs/specs/2026-05-12-root-page-design.md §Decision`` — endpoint contract.
-- ``specs/09-persistence.md §6`` — session_state.json schema.
+- ``docs/architecture/09-persistence.md §6`` — session_state.json schema.
 
 Contract:
 - GET /api/session-state returns 200 with ``last_project_path: null``

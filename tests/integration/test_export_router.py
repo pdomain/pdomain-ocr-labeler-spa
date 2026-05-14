@@ -1,9 +1,9 @@
 """Integration tests for ``api/export.py`` — 202 + job SSE cycle.
 
 Spec authority:
-- ``specs/02-backend.md §5.9`` — ``POST /api/projects/{pid}/export``
+- ``docs/architecture/02-backend.md §5.9`` — ``POST /api/projects/{pid}/export``
   returns 202 ``ExportResponse{job_id}``.
-- ``specs/02-backend.md §5.10`` — ``GET /api/jobs/{job_id}/events``
+- ``docs/architecture/02-backend.md §5.10`` — ``GET /api/jobs/{job_id}/events``
   SSE stream ends on terminal event.
 
 Acceptance (issue #187):

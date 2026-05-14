@@ -1,7 +1,7 @@
 """Unit tests for core/persistence/config_yaml.py.
 
 Spec authority:
-- ``specs/09-persistence.md §7`` — config.yaml shape + semantics.
+- ``docs/architecture/09-persistence.md §7`` — config.yaml shape + semantics.
   Single key ``source_projects_root``; auto-created on first run;
   must survive forwards-compat extras (extra="ignore").
 """

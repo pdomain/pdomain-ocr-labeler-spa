@@ -3,7 +3,7 @@
 CORS middleware mirrors ``pd-prep-for-pgdp`` so Vite-dev (5173 → 8080)
 works out of the box.
 
-Per ``specs/02-backend.md §2`` the full factory order is
+Per ``docs/architecture/02-backend.md §2`` the full factory order is
 
     1. configure_logging                                    [done]
     2. build adapters (storage / auth / ocr)                [done — via build_app_state]
@@ -84,7 +84,7 @@ def _make_lifespan(
 ):
     """Build the FastAPI ``lifespan`` async context manager.
 
-    Spec authority: ``specs/02-backend.md §2`` step 5 (lifespan) +
+    Spec authority: ``docs/architecture/02-backend.md §2`` step 5 (lifespan) +
     ``§13`` (background discovery + restoration). M2 slice 3 wires
     the startup half; the shutdown half is a no-op for now (the
     JobRunner background task arrives in M3).
@@ -250,7 +250,7 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # spec, browsers reject ``Access-Control-Allow-Origin: *`` paired
     # with ``Access-Control-Allow-Credentials: true``. Matches
     # pd-prep-for-pgdp/src/pd_prep_for_pgdp/bootstrap.py and
-    # specs/02-backend.md §step-7. Auth (M2+) will switch to a concrete
+    # docs/architecture/02-backend.md §step-7. Auth (M2+) will switch to a concrete
     # origin list and may then re-enable credentials.
     app.add_middleware(
         CORSMiddleware,
@@ -395,7 +395,7 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # Used by OCRConfigModal to gate normalize UI toggles. Issue #261.
     install_normalize_router(app)
 
-    # Per specs/02-backend.md §2 step 12: /env.js, /image-cache, and the
+    # Per docs/architecture/02-backend.md §2 step 12: /env.js, /image-cache, and the
     # SPA fallback only land in non-api_only modes. api_only is the
     # OpenAPI-export / pure-API integration shape — the SPA bootstrap
     # shim has no business existing there.

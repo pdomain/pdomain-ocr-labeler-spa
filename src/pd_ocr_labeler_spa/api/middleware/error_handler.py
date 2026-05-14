@@ -5,7 +5,7 @@ Verbatim port of ``pd-prep-for-pgdp``'s
 ``BoundingBoxGeometryError`` (raised from the OCR / refine paths when
 geometry normalization fails) maps to ``422 geometry_error``.
 
-Handler chain (per ``specs/02-backend.md §8``):
+Handler chain (per ``docs/architecture/02-backend.md §8``):
 
 1. ``StarletteHTTPException`` → preserve ``exc.status_code``, error tag
    ``http_<n>``. Covers ``HTTPException(404, ...)`` raised from routes
@@ -16,7 +16,7 @@ Handler chain (per ``specs/02-backend.md §8``):
    specific case from spec §8 — the SPA's toast layer recognises this
    tag and shows "this box is degenerate" rather than a generic toast.
 4. ``IncompatibleEnvelopeError`` → ``422 incompatible_envelope`` (spec
-   §11 of ``specs/09-persistence.md``). Raised by ``parse_envelope``
+   §11 of ``docs/architecture/09-persistence.md``). Raised by ``parse_envelope``
    when a saved page has a schema version this binary cannot read.
 5. ``Exception`` (catch-all) → ``500 internal_error``. The full
    traceback is logged via ``logger.exception(...)`` so operators see

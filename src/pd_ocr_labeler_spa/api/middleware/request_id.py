@@ -1,4 +1,4 @@
-"""Request-ID middleware for log correlation (specs/02-backend.md §9).
+"""Request-ID middleware for log correlation (docs/architecture/02-backend.md §9).
 
 Reads the configured header (default ``X-Request-ID``) from the
 incoming request — orchestrators / load balancers / Sentry typically

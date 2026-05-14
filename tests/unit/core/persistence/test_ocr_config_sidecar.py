@@ -1,6 +1,6 @@
 """Round-trip + failure-mode pins for ``core/persistence/ocr_config.py``.
 
-Spec: ``specs/09-persistence.md §7a`` + ``specs/01-data-models.md`` (the
+Spec: ``docs/architecture/09-persistence.md §7a`` + ``docs/architecture/01-data-models.md`` (the
 ``ocr_config.json`` cross-ref).
 
 This is the M3 slice 8c-iv-b filesystem sidecar that backs

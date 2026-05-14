@@ -1,8 +1,8 @@
 """``/api/projects/{project_id}/pages/{page_index}/lines`` and ``/paragraphs`` router (§5.5).
 
 Spec authority:
-- ``specs/01-data-models.md §2`` — wire shapes for line/paragraph routes.
-- ``specs/02-backend.md §5.5`` — endpoint contracts.
+- ``docs/architecture/01-data-models.md §2`` — wire shapes for line/paragraph routes.
+- ``docs/architecture/02-backend.md §5.5`` — endpoint contracts.
 - ``docs/specs/2026-05-12-backend-design.md`` — autosave constraint.
 
 Each mutation handler:

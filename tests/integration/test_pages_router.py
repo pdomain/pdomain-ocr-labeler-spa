@@ -6,9 +6,9 @@ Acceptance criteria for issue #185:
 - Legacy-path redirects: GET /project/foo → 301 → /projects/foo
 
 Spec authority:
-- ``specs/02-backend.md §5.3`` — pages endpoint contracts.
-- ``specs/02-backend.md §5.10`` — jobs/SSE endpoint contracts.
-- ``specs/02-backend.md §4`` — legacy redirect convention.
+- ``docs/architecture/02-backend.md §5.3`` — pages endpoint contracts.
+- ``docs/architecture/02-backend.md §5.10`` — jobs/SSE endpoint contracts.
+- ``docs/architecture/02-backend.md §4`` — legacy redirect convention.
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 
 This is the spec-canonical ``ProjectState`` named in
 ``specs/16-milestones.md`` line 158 (M2 backend bullet 1) and described
-in ``specs/00-overview.md`` lines 185-187:
+in ``docs/architecture/00-overview.md`` lines 185-187:
 
 > ``ProjectState`` (per project) — knows the loaded ``Project``, the
 > current page index, the per-page-index ``PageState`` map, the GT map.
@@ -47,8 +47,8 @@ What this iter-4 skeleton deliberately does NOT do:
   (spec §1 line 630) lands when the GT map exists — slice 5.
 
 Spec authority:
-- ``specs/00-overview.md`` lines 179-201 — state model.
-- ``specs/01-data-models.md §1`` lines 21-44 — ``Project`` model.
+- ``docs/architecture/00-overview.md`` lines 179-201 — state model.
+- ``docs/architecture/01-data-models.md §1`` lines 21-44 — ``Project`` model.
 - ``specs/16-milestones.md`` M2 backend bullet 1 — file + scope.
 """
 
@@ -233,7 +233,7 @@ def test_set_page_state_bumps_generation() -> None:
 
 
 def test_set_page_state_rejects_negative_index() -> None:
-    """Page indices are 0-based per ``specs/00-overview.md``; negatives invalid."""
+    """Page indices are 0-based per ``docs/architecture/00-overview.md``; negatives invalid."""
     state = ProjectState()
     with pytest.raises(ValueError, match="page_index must be non-negative"):
         state.set_page_state(-1, PageState(page_index=-1))

@@ -1,6 +1,6 @@
 """``build_app(settings)`` smoke tests — M0 surface.
 
-Spec: ``specs/02-backend.md §2``. M0 only verifies that the factory
+Spec: ``docs/architecture/02-backend.md §2``. M0 only verifies that the factory
 returns a real FastAPI app with /healthz and /env.js wired and that
 ``app.state.settings`` is the same object that was passed in.
 """
@@ -32,7 +32,7 @@ def test_build_app_is_pure_same_settings_same_routes() -> None:
     # Spec: "The factory is pure — same Settings always produces the
     # same wired graph."
     # Use mode="normal" so /env.js IS expected on the route table —
-    # api_only intentionally drops it (specs/02-backend.md §2 step 12).
+    # api_only intentionally drops it (docs/architecture/02-backend.md §2 step 12).
     s = Settings(mode="normal")
     app1 = build_app(s)
     app2 = build_app(s)

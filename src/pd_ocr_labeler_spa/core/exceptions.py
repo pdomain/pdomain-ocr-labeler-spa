@@ -1,6 +1,6 @@
 """Domain-level exceptions for ``pd-ocr-labeler-spa``.
 
-Spec naming: ``NotImplementedYet`` (per ``specs/02-backend.md §7``,
+Spec naming: ``NotImplementedYet`` (per ``docs/architecture/02-backend.md §7``,
 ``§10``, ``specs/17-decisions.md D-018``, ``D-019``) marks adapter
 seams that are wired in shape but whose v1 impl raises rather than
 delivers — e.g. the ``s3`` storage backend or the ``modal`` /
@@ -9,7 +9,7 @@ so generic except-clauses still catch it, but greppable by name so
 "this is a deliberate seam" is distinguishable from "this is a TODO
 inside something otherwise complete".
 
-``BoundingBoxGeometryError`` (per ``specs/02-backend.md §8``) is the
+``BoundingBoxGeometryError`` (per ``docs/architecture/02-backend.md §8``) is the
 one labeler-specific addition to pgdp-prep's verbatim error chain:
 geometry-normalization failures (degenerate / non-finite / inverted
 boxes) surfaced from the OCR / refine paths must come back to the SPA
@@ -20,7 +20,7 @@ explicitly — keep it here (not at a use-site) so route code can ``from
 .core.exceptions import BoundingBoxGeometryError`` without circular
 imports.
 
-``IncompatibleEnvelopeError`` (per ``specs/09-persistence.md §11``)
+``IncompatibleEnvelopeError`` (per ``docs/architecture/09-persistence.md §11``)
 is raised when ``parse_envelope`` encounters a schema version it does
 not recognise. The error handler maps this to ``422
 incompatible_envelope`` so the SPA toast layer can show a targeted
@@ -50,7 +50,7 @@ class BoundingBoxGeometryError(ValueError):
     negative width/height), non-finite, inverted, or otherwise
     un-normalisable to the unit square. The error handler in
     ``api/middleware/error_handler.py`` maps this to ``422
-    geometry_error`` per ``specs/02-backend.md §8`` — distinct from the
+    geometry_error`` per ``docs/architecture/02-backend.md §8`` — distinct from the
     generic 500 catch-all so the SPA can render a targeted toast.
 
     Subclasses ``ValueError`` so that any code path that catches

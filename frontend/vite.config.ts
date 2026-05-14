@@ -6,7 +6,7 @@ import react from "@vitejs/plugin-react";
 // `pd-ocr-labeler-ui --frontend-dev http://localhost:5173`.
 //
 // Backend port matches `Settings.port` default (8080) — see
-// `src/pd_ocr_labeler_spa/settings.py` and `specs/02-backend.md §3`.
+// `src/pd_ocr_labeler_spa/settings.py` and `docs/architecture/02-backend.md §3`.
 // Keep these literals in sync; `tests/unit/test_vite_config.py`
 // asserts the proxy targets parse-equal to :8080.
 //

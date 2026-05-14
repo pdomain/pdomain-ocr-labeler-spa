@@ -1,6 +1,6 @@
 """FastAPI ``Depends`` providers — surface ``AppState`` to route handlers.
 
-Spec: ``specs/02-backend.md §6``. Each provider reads from
+Spec: ``docs/architecture/02-backend.md §6``. Each provider reads from
 ``request.app.state.<name>`` directly rather than chaining through
 ``Depends(get_app_state)`` — this matches the spec snippet literally
 and keeps dependency-resolution flat (FastAPI doesn't dedupe two
@@ -49,7 +49,7 @@ def _state_attr(request: Request, name: str) -> object:
         # ``test_provider_raises_runtime_error_on_unwired_app``.)
         msg = (
             f"app.state.{name} not set — call bootstrap.build_app(settings) "
-            f"to wire the dependency graph (specs/02-backend.md §2 step 9)."
+            f"to wire the dependency graph (docs/architecture/02-backend.md §2 step 9)."
         )
         raise RuntimeError(msg) from exc
 
@@ -115,7 +115,7 @@ def get_active_project(request: Request) -> ActiveProject | None:
 def get_project_state(request: Request) -> ProjectState:
     """The mutable ``ProjectState`` carrier — loaded ``Project`` + per-page graph.
 
-    Spec authority: ``specs/00-overview.md`` lines 185-187 (the
+    Spec authority: ``docs/architecture/00-overview.md`` lines 185-187 (the
     per-project state container) + ``specs/16-milestones.md`` line 158
     (M2 backend bullet 1). Distinct from ``ActiveProjectCarrier``:
 
@@ -153,7 +153,7 @@ def get_job_events(request: Request) -> JobEventBroker:
 def get_notification_queue(request: Request) -> NotificationQueue:
     """The ``NotificationQueue`` — in-process ring buffer + SSE fan-out.
 
-    Spec authority: ``specs/02-backend.md §5.11`` + ``specs/11-notifications.md``.
+    Spec authority: ``docs/architecture/02-backend.md §5.11`` + ``docs/architecture/11-notifications.md``.
     One ``NotificationQueue`` per ``build_app`` instance (no module-global state).
     """
     nq = _state_attr(request, "notification_queue")
@@ -165,7 +165,7 @@ def get_ocr_config_carrier(request: Request) -> OCRConfigCarrier:
     """The mutable ``OCRConfigCarrier`` — selected OCR detection + recognition
     model keys (M3 slice 8c-iv-a).
 
-    Spec authority: ``specs/02-backend.md §5.8`` lines 317-322 — ``GET
+    Spec authority: ``docs/architecture/02-backend.md §5.8`` lines 317-322 — ``GET
     /api/ocr-config`` returns the *currently selected* models; ``POST
     /api/ocr-config/models`` updates the selection. The carrier is the
     in-process state that lets a POST persist into a subsequent GET
@@ -180,8 +180,8 @@ def get_ocr_config_carrier(request: Request) -> OCRConfigCarrier:
 def get_source_root_carrier(request: Request) -> SourceRootCarrier:
     """The mutable ``SourceRootCarrier`` — runtime-effective source projects root.
 
-    Spec authority: ``specs/09-persistence.md §7`` (config.yaml) +
-    ``specs/02-backend.md §5.2`` (``POST /api/projects/source-root``).
+    Spec authority: ``docs/architecture/09-persistence.md §7`` (config.yaml) +
+    ``docs/architecture/02-backend.md §5.2`` (``POST /api/projects/source-root``).
 
     The carrier holds the effective ``source_projects_root`` as mutated
     by ``POST /api/projects/source-root`` at runtime.  It is seeded at

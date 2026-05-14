@@ -1,4 +1,4 @@
-"""Shared fixtures for ``tests/unit/core/`` (specs/02-backend.md §9).
+"""Shared fixtures for ``tests/unit/core/`` (docs/architecture/02-backend.md §9).
 
 Tests in this directory routinely call ``configure_logging(...)`` —
 either directly (``test_logging_config.py``) or transitively via

@@ -2,13 +2,13 @@
 
 Spec authority:
 
-- ``specs/02-backend.md §5.2`` lines 208-217 — endpoint contracts.
-- ``specs/01-data-models.md §2`` lines 205-230 — wire shapes
+- ``docs/architecture/02-backend.md §5.2`` lines 208-217 — endpoint contracts.
+- ``docs/architecture/01-data-models.md §2`` lines 205-230 — wire shapes
   (``ListProjectsResponse``, ``ProjectKey``, ``LoadProjectRequest``,
   ``LoadProjectResponse``).
-- ``specs/02-backend.md §13`` — the carrier semantics that
+- ``docs/architecture/02-backend.md §13`` — the carrier semantics that
   ``POST /api/projects/load`` mutates.
-- ``specs/02-backend.md §8`` — uniform error envelope (``ApiError``,
+- ``docs/architecture/02-backend.md §8`` — uniform error envelope (``ApiError``,
   ``{error: <tag>, message: <str>, details: <any>}``); flat shape, not
   nested under ``error.code``.
 

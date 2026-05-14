@@ -1,6 +1,6 @@
 """Resolve which project (if any) the labeler should open at startup.
 
-Spec authority: ``specs/02-backend.md §13`` (background discovery +
+Spec authority: ``docs/architecture/02-backend.md §13`` (background discovery +
 restoration), step 4 ("If ``Settings.cli_project_dir`` is set, override
 the restore — load the CLI dir.") and step 3 (session_state restore).
 
@@ -115,7 +115,7 @@ def resolve_initial_project(
 ) -> ResolvedInitialProject | None:
     """Resolve which project to open on startup.
 
-    Precedence (per ``specs/02-backend.md §13``):
+    Precedence (per ``docs/architecture/02-backend.md §13``):
 
     1. ``settings.cli_project_dir`` if set AND valid → ``cli``.
     2. ``session_state.last_project_path`` if set AND valid →

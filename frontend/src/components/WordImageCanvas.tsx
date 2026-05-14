@@ -1,6 +1,6 @@
 // WordImageCanvas.tsx — interactive Konva image Stage for the word-edit dialog (#210)
 // Spec: docs/specs/2026-05-12-word-edit-dialog-design.md §Interactive Konva image
-//      specs/07-word-edit-dialog.md §4.1 (image area, zoom, marker, erase rects)
+//      docs/architecture/07-word-edit-dialog.md §4.1 (image area, zoom, marker, erase rects)
 //
 // Renders the word image slice at 1×/2×/5×/10× zoom.
 // Overlays:

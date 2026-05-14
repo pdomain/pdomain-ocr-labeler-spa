@@ -2,9 +2,9 @@
 
 Spec authority:
 - ``docs/specs/2026-05-12-testing-design.md`` — conformance test rationale.
-- ``specs/09-persistence.md §2`` lines 102–109 — round-trip identity invariant.
-- ``specs/09-persistence.md §12`` — test checklist for golden-fixture tests.
-- ``specs/01-data-models.md §3`` — ``UserPageEnvelope`` v2.1 wire shape.
+- ``docs/architecture/09-persistence.md §2`` lines 102–109 — round-trip identity invariant.
+- ``docs/architecture/09-persistence.md §12`` — test checklist for golden-fixture tests.
+- ``docs/architecture/01-data-models.md §3`` — ``UserPageEnvelope`` v2.1 wire shape.
 - D-003 (docs/specs/2026-05-12-persistence-design.md) — byte-compat guarantee.
 
 What these tests guard:

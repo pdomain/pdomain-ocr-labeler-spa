@@ -1,6 +1,6 @@
 """Auth adapter Protocol + ``none_`` impl shape pins.
 
-Spec: ``specs/02-backend.md §7`` defines ``IAuth`` and ``UserContext``.
+Spec: ``docs/architecture/02-backend.md §7`` defines ``IAuth`` and ``UserContext``.
 ``specs/17-decisions.md D-005`` and the spec's §6 dependency wiring fix
 the no-auth shape — every request resolves to
 ``UserContext(user_id="local", display_name="Local User")``.

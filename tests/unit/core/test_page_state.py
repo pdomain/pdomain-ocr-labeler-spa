@@ -2,11 +2,11 @@
 
 Pins the contract surface for the M3 lazy-page-loader. The actual
 DocTR run, ``PageRecord`` construction (per
-``specs/01-data-models.md §1`` lines 49–80) and persistence/OCR
+``docs/architecture/01-data-models.md §1`` lines 49–80) and persistence/OCR
 adapter wiring slip to a later slice — this slice ships *the
 contract*: idempotency, cache-key shape, lock discipline, exception
 types, and the load-precedence order spec'd in
-``specs/09-persistence.md`` lines 32–40 (``labeled → cached → ocr
+``docs/architecture/09-persistence.md`` lines 32–40 (``labeled → cached → ocr
 → fallback``).
 
 Why test-first with stubbed loaders: the rich loader pulls in
@@ -23,7 +23,7 @@ Spec authority:
 - ``specs/16-milestones.md`` line 235 — "``core/page_state.py`` —
   minimal version: ``ensure_page_model`` (load cache > load saved
   > run OCR), ``_resolve_save_directory``, ``persist_page_to_file``."
-- ``specs/09-persistence.md`` lines 32–40 — load precedence:
+- ``docs/architecture/09-persistence.md`` lines 32–40 — load precedence:
   labeled-lane → cached-lane → run OCR → fallback.
 - Legacy reference: ``pd-ocr-labeler/pd_ocr_labeler/state/
   project_state.py:420`` (``ensure_page_model``).
@@ -134,7 +134,7 @@ def test_page_index_above_total_raises() -> None:
         ensure_page_model(state, 3, loader=StubLoader())
 
 
-# ─── 2. Load precedence (specs/09-persistence.md §1) ──────────────────────
+# ─── 2. Load precedence (docs/architecture/09-persistence.md §1) ──────────────────────
 
 
 def test_labeled_lane_wins_over_cached_and_ocr() -> None:
@@ -229,7 +229,7 @@ def test_force_ocr_bypasses_labeled_and_cached_lanes() -> None:
 def test_concurrent_callers_do_not_double_run_ocr() -> None:
     """Two threads calling for the same page must produce one OCR run.
 
-    Per ``specs/00-overview.md`` line 187-189 / legacy
+    Per ``docs/architecture/00-overview.md`` line 187-189 / legacy
     ``project_state.py:702-723``, OCR is run under the project lock so
     two near-simultaneous page-loads can't both spend the OCR cost.
     """
@@ -333,7 +333,7 @@ def test_page_loader_protocol_is_runtime_checkable() -> None:
 # ─── 7. persist_page_to_file + _resolve_save_directory ───────────────────────
 # Spec authority:
 #  - specs/16-milestones.md line 240 ("_resolve_save_directory, persist_page_to_file")
-#  - specs/09-persistence.md §1 line 29 ("labeled-lane" path shape)
+#  - docs/architecture/09-persistence.md §1 line 29 ("labeled-lane" path shape)
 #  - Legacy: pd-ocr-labeler/pd_ocr_labeler/state/project_state.py:save_current_page
 
 

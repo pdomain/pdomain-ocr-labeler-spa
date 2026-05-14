@@ -1,6 +1,6 @@
 """Settings contract — ``PDLABELER_*`` env prefix and field defaults.
 
-Spec: ``specs/02-backend.md §3``.
+Spec: ``docs/architecture/02-backend.md §3``.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from pd_ocr_labeler_spa.settings import Settings
 @pytest.mark.parametrize(
     ("field_name", "expected_default"),
     [
-        # Server (specs/02-backend.md §3 lines 117-119)
+        # Server (docs/architecture/02-backend.md §3 lines 117-119)
         ("host", "127.0.0.1"),
         ("port", 8080),
         ("frontend_dev_url", None),
@@ -41,7 +41,7 @@ from pd_ocr_labeler_spa.settings import Settings
 def test_settings_has_spec_section_3_fields_with_correct_defaults(
     monkeypatch: pytest.MonkeyPatch, field_name: str, expected_default: object
 ) -> None:
-    """B-63 (iter 51): every field listed in ``specs/02-backend.md §3``
+    """B-63 (iter 51): every field listed in ``docs/architecture/02-backend.md §3``
     must exist on ``Settings`` with the spec-stated default.
 
     Drift-pin test: if a future spec edit changes a default, this fails
@@ -63,7 +63,7 @@ def test_settings_has_spec_section_3_fields_with_correct_defaults(
     s = Settings()
     assert hasattr(s, field_name), (
         f"Settings is missing spec-§3 field {field_name!r} — drift "
-        "between specs/02-backend.md §3 and src/pd_ocr_labeler_spa/"
+        "between docs/architecture/02-backend.md §3 and src/pd_ocr_labeler_spa/"
         "settings.py."
     )
     assert getattr(s, field_name) == expected_default, (
@@ -136,7 +136,7 @@ def test_settings_accepts_explicit_overrides(tmp_path: Path) -> None:
 
 
 def test_settings_is_frozen_post_construction() -> None:
-    """Spec §3 (specs/02-backend.md:148-149): "override after construction
+    """Spec §3 (docs/architecture/02-backend.md:148-149): "override after construction
     is forbidden."
 
     Regression for B-04: M0 ``__main__.py`` previously mutated

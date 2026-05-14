@@ -1,4 +1,4 @@
-"""OCR config DTOs — ``specs/01-data-models.md`` lines 377-400.
+"""OCR config DTOs — ``docs/architecture/01-data-models.md`` lines 377-400.
 
 These shapes are M3 prerequisites. The M3 router
 (``api/ocr_config.py`` — `GET /api/ocr-config`,
@@ -18,7 +18,7 @@ Generated TS via ``make openapi-export`` keys on field name + position
 — append-only, never reorder.
 
 Validation — top-level envelopes, so ``extra="forbid"`` per
-``specs/01-data-models.md`` line 15. (Per workspace memory
+``docs/architecture/01-data-models.md`` line 15. (Per workspace memory
 ``project_d003_extras_tolerance.md``, the extras-tolerance carve-out
 is ``session_state.json``-specific and does not apply here.)
 """

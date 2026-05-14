@@ -2,9 +2,9 @@
 
 Spec authority:
 
-- ``specs/09-persistence.md §5`` — ``project.json`` shape (per the
+- ``docs/architecture/09-persistence.md §5`` — ``project.json`` shape (per the
   labeled-projects lane: ``<labeled-projects>/<project_id>/project.json``).
-- ``specs/01-data-models.md §1`` lines 28-44 — ``Project`` model.
+- ``docs/architecture/01-data-models.md §1`` lines 28-44 — ``Project`` model.
 - ``specs/16-milestones.md`` line 159 — slice 5 scope.
 
 Three responsibilities in this module:
@@ -252,7 +252,7 @@ def read_project_metadata(project_root: Path) -> dict[str, Any] | None:
 def write_project_json(project_root: Path, project: Project) -> None:
     """Write ``project.json`` to ``project_root`` atomically.
 
-    Spec: ``specs/09-persistence.md §5`` — written on every Save Project.
+    Spec: ``docs/architecture/09-persistence.md §5`` — written on every Save Project.
     Schema ``pd_ocr_labeler.project`` v1.0; byte-compatible with legacy
     ``project_operations.py:162-175`` under D-003.
 

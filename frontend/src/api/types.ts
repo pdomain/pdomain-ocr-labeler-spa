@@ -1111,7 +1111,7 @@ export interface paths {
          * Post Ocr Config Rescan
          * @description Re-run model discovery and reconcile the carrier (slice 8c-v-b).
          *
-         *     Spec ``specs/02-backend.md §5.8`` line 321. The handler walks the
+         *     Spec ``docs/architecture/02-backend.md §5.8`` line 321. The handler walks the
          *     discovery pipeline fresh (HF probe + local-models tree) so a model
          *     pair that landed on disk after startup surfaces, and a pair that was
          *     deleted between calls no longer does.
@@ -1247,7 +1247,7 @@ export interface components {
         };
         /**
          * BBox
-         * @description Image-coordinate bounding box — ``specs/01-data-models.md §1`` lines 137-143.
+         * @description Image-coordinate bounding box — ``docs/architecture/01-data-models.md §1`` lines 137-143.
          */
         BBox: {
             /** X */

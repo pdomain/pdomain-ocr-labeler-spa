@@ -1,6 +1,6 @@
 // WordTagRow.tsx — Style/scope/component tag row for the word-edit dialog (#212)
 // Spec: docs/specs/2026-05-12-word-edit-dialog-design.md §Action rows
-//      specs/07-word-edit-dialog.md §3.3 (tag row)
+//      docs/architecture/07-word-edit-dialog.md §3.3 (tag row)
 //
 // Style select + Scope select -> Apply Style.
 // Component select -> Apply Component + Clear Component.

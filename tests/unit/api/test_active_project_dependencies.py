@@ -16,8 +16,8 @@ Verifies:
   ocr providers.
 
 Spec authority:
-- ``specs/02-backend.md §6`` (DI provider shape).
-- ``specs/02-backend.md §13`` (active-project lifecycle).
+- ``docs/architecture/02-backend.md §6`` (DI provider shape).
+- ``docs/architecture/02-backend.md §13`` (active-project lifecycle).
 """
 
 from __future__ import annotations

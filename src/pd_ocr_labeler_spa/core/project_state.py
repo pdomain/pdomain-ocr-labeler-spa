@@ -2,12 +2,12 @@
 
 Spec authority:
 
-- ``specs/00-overview.md`` lines 185-187 — "``ProjectState`` (per
+- ``docs/architecture/00-overview.md`` lines 185-187 — "``ProjectState`` (per
   project) — knows the loaded ``Project``, the current page index, the
   per-page-index ``PageState`` map, the GT map."
 - ``specs/16-milestones.md`` line 158 (M2 backend bullet 1) —
   ``core/project_state.py`` ships ``ProjectState`` minus per-page work.
-- ``specs/01-data-models.md §1`` — ``Project`` model lives in
+- ``docs/architecture/01-data-models.md §1`` — ``Project`` model lives in
   ``core/models.py``.
 
 What this iter-4 skeleton ships:
@@ -15,7 +15,7 @@ What this iter-4 skeleton ships:
 - ``PageState`` — *placeholder* dataclass with just ``page_index``.
   The rich version (``pd_book_tools.ocr.page.Page`` object, dirty
   flags, selection sets, per-line/per-word event hooks per
-  ``specs/00-overview.md`` line 187-189) is M3 territory.
+  ``docs/architecture/00-overview.md`` line 187-189) is M3 territory.
 - ``ProjectState`` — mutable container holding the active
   ``Project | None``, a ``dict[int, PageState]`` map, a current-page
   cursor, and a monotonically-increasing generation counter for
@@ -227,7 +227,7 @@ class ProjectState:
 
         Validation:
 
-        - ``page_index >= 0`` (per ``specs/00-overview.md`` "0-based
+        - ``page_index >= 0`` (per ``docs/architecture/00-overview.md`` "0-based
           ``idx0``" — see the URL-shape rule the spec enforces against
           public route paths).
         - ``state.page_index == page_index`` — the dict key and the

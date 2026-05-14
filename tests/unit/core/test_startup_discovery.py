@@ -3,7 +3,7 @@
 M2 startup-discovery slice 1 (iter 52). Pins the contract that:
 
 - ``cli_project_dir`` overrides any session restore (per
-  ``specs/02-backend.md §13`` step 4: "If ``Settings.cli_project_dir``
+  ``docs/architecture/02-backend.md §13`` step 4: "If ``Settings.cli_project_dir``
   is set, override the restore — load the CLI dir.").
 - A ``cli_project_dir`` that doesn't exist / isn't a directory / isn't
   readable is logged at WARNING and treated as if unset (slice 1 is
@@ -28,7 +28,7 @@ lifespan (the lifespan stub still has no startup hook; that's M2
 proper too). What slice 1 ships is a pure, unit-testable function the
 M2 endpoint layer will plumb when it lands.
 
-Spec authority: ``specs/02-backend.md §13`` (background discovery +
+Spec authority: ``docs/architecture/02-backend.md §13`` (background discovery +
 restoration), ``specs/16-milestones.md`` M2 outcome.
 """
 

@@ -1,6 +1,6 @@
 """Shared-container OCR backend — Protocol seam only; raises ``NotImplementedYet``.
 
-Spec: ``specs/02-backend.md §7`` + ``specs/17-decisions.md D-018``. Same
+Spec: ``docs/architecture/02-backend.md §7`` + ``specs/17-decisions.md D-018``. Same
 shape as ``modal.py`` — the Protocol seam exists in v1 so a future
 deployment that hits a shared OCR container is a wiring change not a
 route refactor.

@@ -1,6 +1,6 @@
 """Modal OCR backend — Protocol seam only; raises ``NotImplementedYet``.
 
-Spec: ``specs/02-backend.md §7`` ("``modal.py`` ... raises
+Spec: ``docs/architecture/02-backend.md §7`` ("``modal.py`` ... raises
 ``NotImplementedYet('modal OCR adapter not yet wired')`` from its
 ``ocr_page`` method") + ``specs/17-decisions.md D-018``.
 

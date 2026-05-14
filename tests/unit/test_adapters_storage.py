@@ -1,6 +1,6 @@
 """Storage adapter Protocol + filesystem impl shape pins.
 
-Spec: ``specs/02-backend.md §1`` (module layout), ``§7`` (`IStorage`
+Spec: ``docs/architecture/02-backend.md §1`` (module layout), ``§7`` (`IStorage`
 Protocol — exact method signatures), ``§10`` (image cache served via
 ``IStorage`` per D-019). The Protocol surface is the source of truth
 for every storage backend; the filesystem impl is the only one wired

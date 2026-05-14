@@ -5,7 +5,7 @@ Spec authority:
 - ``specs/16-milestones.md`` line 235 — "``core/page_state.py`` —
   minimal version: ``ensure_page_model`` (load cache > load saved
   > run OCR), ``_resolve_save_directory``, ``persist_page_to_file``."
-- ``specs/09-persistence.md`` lines 32–40 — load precedence:
+- ``docs/architecture/09-persistence.md`` lines 32–40 — load precedence:
   labeled-lane → cached-lane → run OCR → fallback. The SPA preserves
   this exact precedence.
 - Legacy reference: ``pd-ocr-labeler/pd_ocr_labeler/state/
@@ -14,7 +14,7 @@ Spec authority:
 What this slice ships:
 
 - ``PageSource`` enum mirroring the spec'd ``PageSource`` (per
-  ``specs/01-data-models.md §1`` lines 55–59); the canonical
+  ``docs/architecture/01-data-models.md §1`` lines 55–59); the canonical
   pydantic ``PageSource`` will eventually live in ``core/models.py``
   alongside ``PageRecord`` (M3-proper). It's defined locally here as
   a ``StrEnum`` so this slice doesn't depend on the M3-proper
@@ -22,7 +22,7 @@ What this slice ships:
   ``PageLoadOutcome`` below for the seam.
 - ``PageLoadOutcome`` — placeholder result type holding
   ``page_index``, ``source``, and an ``Any`` ``payload`` slot. M3-proper
-  will replace this with ``PageRecord`` (per ``specs/01-data-models.md
+  will replace this with ``PageRecord`` (per ``docs/architecture/01-data-models.md
   §1.PageRecord``); ``ensure_page_model``'s contract (idempotency,
   precedence, lock discipline) is invariant under that swap.
 - ``PageLoader`` — the dispatch protocol:
@@ -97,7 +97,7 @@ from .project_state import PageState, ProjectState
 
 
 class PageSource(StrEnum):
-    """Mirrors ``specs/01-data-models.md §1.PageRecord`` lines 55–59.
+    """Mirrors ``docs/architecture/01-data-models.md §1.PageRecord`` lines 55–59.
 
     Defined locally rather than imported from ``core/models.py`` so
     this slice doesn't depend on the M3-proper ``PageRecord`` import.
@@ -116,7 +116,7 @@ class PageLoadOutcome:
     """Placeholder result type for ``ensure_page_model``.
 
     M3-proper replaces this with the spec'd ``PageRecord``
-    (``specs/01-data-models.md §1`` lines 49–80). The
+    (``docs/architecture/01-data-models.md §1`` lines 49–80). The
     ``ensure_page_model`` contract (precedence, idempotency, lock
     discipline, exception types) is invariant under that swap —
     consumers of this module that hold a ``PageLoadOutcome`` reference
@@ -165,7 +165,7 @@ class PageLoader(Protocol):
     ``ensure_page_model`` can be tested and reviewed independently of
     the heavy machinery.
 
-    Per ``specs/09-persistence.md`` lines 32–40, the precedence is:
+    Per ``docs/architecture/09-persistence.md`` lines 32–40, the precedence is:
 
     1. ``load_labeled(page_index)`` — labeled-lane envelope; returns
        ``None`` if no envelope exists.

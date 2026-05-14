@@ -1,6 +1,6 @@
 """``IStorage`` Protocol — surface every storage backend conforms to.
 
-Spec: ``specs/02-backend.md §7``. Method set lifted verbatim from the
+Spec: ``docs/architecture/02-backend.md §7``. Method set lifted verbatim from the
 spec so a future drift between Protocol and backend implementations
 fails the ``test_istorage_protocol_has_spec_method_set`` shape pin
 loudly.
@@ -21,7 +21,7 @@ class IStorage(Protocol):
 
     The S3 impl is intentionally absent in v1 (``NotImplementedYet`` per
     D-019); only ``FilesystemStorage`` is wired. The Protocol method set
-    is fixed by ``specs/02-backend.md §7`` — adding a method here means
+    is fixed by ``docs/architecture/02-backend.md §7`` — adding a method here means
     every backend grows it.
     """
 

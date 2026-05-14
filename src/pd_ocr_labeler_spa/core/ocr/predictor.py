@@ -1,8 +1,8 @@
 """Keyed DocTR predictor cache.
 
-Spec: ``specs/02-backend.md §1`` line 62
+Spec: ``docs/architecture/02-backend.md §1`` line 62
 (``core/ocr/predictor.py — _get_or_create_predictor + cache``) and
-``specs/02-backend.md §7`` (``local_doctr.py wraps ... a predictor
+``docs/architecture/02-backend.md §7`` (``local_doctr.py wraps ... a predictor
 cache``).
 
 Legacy reference: ``pd-ocr-labeler/pd_ocr_labeler/operations/ocr/
@@ -154,7 +154,7 @@ class PredictorCache:
 
         # Stock fast-path: both keys are the literal string "stock"
         # (the GET /api/ocr-config DTO contract — see
-        # specs/01-data-models.md §OCRModelOption). No resolver call
+        # docs/architecture/01-data-models.md §OCRModelOption). No resolver call
         # needed.
         if key.detection_key == "stock" and key.recognition_key == "stock":
             return doctr_support.get_default_doctr_predictor()

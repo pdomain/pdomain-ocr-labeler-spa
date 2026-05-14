@@ -1,9 +1,9 @@
 """Integration tests for lifespan session-restore wiring: HTTP surface.
 
 Spec authority:
-- ``specs/02-backend.md §13`` — startup discovery + session restoration.
+- ``docs/architecture/02-backend.md §13`` — startup discovery + session restoration.
   Steps 3–5: session_state.json → resolve_initial_project → carrier.set_active_project.
-- ``specs/02-backend.md §5.2`` — ``GET /api/projects`` returns ``selected``
+- ``docs/architecture/02-backend.md §5.2`` — ``GET /api/projects`` returns ``selected``
   equal to the carrier's current project_id (or null when carrier is empty).
 
 What these tests guard (HTTP-level, not just carrier-level):

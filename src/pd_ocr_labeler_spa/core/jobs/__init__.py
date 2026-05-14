@@ -1,6 +1,6 @@
 """In-process job infrastructure — broker + runner.
 
-Spec authority: ``specs/02-backend.md §11``.
+Spec authority: ``docs/architecture/02-backend.md §11``.
 """
 
 from .events import JobEventBroker

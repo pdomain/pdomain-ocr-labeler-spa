@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 VITE_CONFIG = REPO_ROOT / "frontend" / "vite.config.ts"
 
 # Settings default lives in ``src/pd_ocr_labeler_spa/settings.py`` —
-# spec ``specs/02-backend.md §3`` pins it. If the backend port ever
+# spec ``docs/architecture/02-backend.md §3`` pins it. If the backend port ever
 # moves both files must move together; the assertion below catches the
 # half-migration.
 EXPECTED_BACKEND = "http://localhost:8080"
@@ -48,7 +48,7 @@ def test_vite_proxy_targets_backend_port_8080() -> None:
 
 def test_vite_proxy_does_not_reference_stale_8765() -> None:
     # Iter-5 B-02: legacy literal that must never reappear. Spec sources
-    # of truth: specs/02-backend.md §3 (port=8080), specs/15-deployment-dev.md.
+    # of truth: docs/architecture/02-backend.md §3 (port=8080), docs/architecture/15-deployment-dev.md.
     text = VITE_CONFIG.read_text(encoding="utf-8")
     assert "8765" not in text, (
         "vite.config.ts still references the stale :8765 backend port (see docs/BUGS_FOUND.md B-02)"

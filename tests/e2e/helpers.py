@@ -1,7 +1,7 @@
 """High-level E2E helper functions.
 
 Thin wrappers over Playwright ``Page`` that encode the URL/testid
-conventions from ``specs/13-driver-contract.md``. Tests import these
+conventions from ``docs/architecture/13-driver-contract.md``. Tests import these
 instead of calling ``page.goto`` / ``page.locator`` directly, so
 URL-shape changes only need to be fixed here.
 

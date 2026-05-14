@@ -1,6 +1,6 @@
 """``IAuth`` Protocol + ``UserContext`` model.
 
-Spec: ``specs/02-backend.md §7``. Every route depends on ``get_user``
+Spec: ``docs/architecture/02-backend.md §7``. Every route depends on ``get_user``
 which dispatches to the configured ``IAuth.verify`` — flipping
 ``Settings.auth_mode`` from ``none`` to a real auth backend (jwt etc.)
 becomes a wiring change rather than a route-by-route rewrite.

@@ -2,7 +2,7 @@
 
 Spec authority:
 - ``docs/specs/2026-05-12-root-page-design.md §Decision`` — endpoint contract.
-- ``specs/09-persistence.md §6`` — session_state.json schema.
+- ``docs/architecture/09-persistence.md §6`` — session_state.json schema.
 
 The endpoint reads ``session_state.json`` from ``settings.data_root`` and
 returns its contents. If the file is missing or unparsable, returns a

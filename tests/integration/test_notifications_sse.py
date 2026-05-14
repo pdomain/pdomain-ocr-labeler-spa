@@ -1,8 +1,8 @@
 """Integration tests for ``api/notifications.py`` — SSE stream + dismiss.
 
 Spec authority:
-- ``specs/02-backend.md §5.11`` — endpoint contracts.
-- ``specs/11-notifications.md §2.3`` — SSE shape.
+- ``docs/architecture/02-backend.md §5.11`` — endpoint contracts.
+- ``docs/architecture/11-notifications.md §2.3`` — SSE shape.
 
 Acceptance (issue #187):
 - notifications SSE: pushed events appear in EventSource stream.

@@ -2,10 +2,10 @@
 
 Specs:
 
-- ``specs/15-deployment-dev.md §3`` names the canonical CLI flag set
+- ``docs/architecture/15-deployment-dev.md §3`` names the canonical CLI flag set
   (mirrors legacy ``pd-ocr-labeler-ui`` plus pgdp-prep's
   ``--frontend-dev``).
-- ``specs/02-backend.md §3`` makes Settings the single, frozen source
+- ``docs/architecture/02-backend.md §3`` makes Settings the single, frozen source
   of truth — built **once** in ``main()`` from CLI overrides layered on
   top of env defaults.
 

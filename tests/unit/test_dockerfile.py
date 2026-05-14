@@ -5,7 +5,7 @@ don't exec a real `docker build`; we just enforce the structural
 invariants that, if broken, would either make the image fail to build
 or ship a broken runtime.
 
-Spec: ``specs/15-deployment-dev.md`` §6.
+Spec: ``docs/architecture/15-deployment-dev.md`` §6.
 Peer-mirror: ``pd-prep-for-pgdp/Dockerfile``.
 
 Load-bearing invariants (each has a regression here):
@@ -182,7 +182,8 @@ def _console_script_name() -> str:
     # entrypoint. Other scripts may exist later; this one is the one
     # the container should boot.
     assert "pd-ocr-labeler-ui" in scripts, (
-        "pyproject.toml [project.scripts] must declare pd-ocr-labeler-ui (specs/15-deployment-dev.md §2)."
+        "pyproject.toml [project.scripts] must declare pd-ocr-labeler-ui "
+        "(docs/architecture/15-deployment-dev.md §2)."
     )
     return "pd-ocr-labeler-ui"
 

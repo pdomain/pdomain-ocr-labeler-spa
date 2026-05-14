@@ -1,10 +1,10 @@
 """``/api/notifications`` router — SSE stream + dismiss.
 
 Spec authority:
-- ``specs/02-backend.md §5.11`` lines 342-346 — endpoint contracts.
-- ``specs/11-notifications.md §2.3`` — SSE shape (``event: notification``,
+- ``docs/architecture/02-backend.md §5.11`` lines 342-346 — endpoint contracts.
+- ``docs/architecture/11-notifications.md §2.3`` — SSE shape (``event: notification``,
   JSON data: ``{id, kind, message, created_at}``).
-- ``specs/01-data-models.md §2 Notifications`` — wire shapes.
+- ``docs/architecture/01-data-models.md §2 Notifications`` — wire shapes.
 
 Routes:
 - ``GET /api/notifications/stream`` — SSE. First events are the ring-buffer
