@@ -329,6 +329,16 @@ ambiguous as an OPEN_QUESTIONS.md entry first.
     either is picked up — including state-file location convention
     and the in-UI URL display pattern.
 
+## Recently shipped (frontend UI components)
+
+- [x] **#192 (2026-05-14)** `useProject` + `usePage` + `useJobProgress` hooks — TanStack Query
+  wrappers for project/page GET endpoints; EventSource hook for job progress SSE with cleanup.
+- [x] **#200 (2026-05-14)** `TextTabs` shell — three-tab switcher (Matches/GT/OCR), filter
+  segmented control, plain readOnly textareas for GT/OCR. All driver-contract testids.
+- [x] **#214 (2026-05-14)** `PageActions` bar — all action buttons with driver-contract
+  testids, `hasEditedImage` gate on Reload OCR Edited, `PageSource` badge, rotate buttons
+  hidden (M9.1), isBusy disables all.
+
 ## Iteration index (this repo)
 
 See `/workspaces/ocr-container/docs/LOOP_STATE.md` for the full per-

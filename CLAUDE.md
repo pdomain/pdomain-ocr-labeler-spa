@@ -48,17 +48,12 @@ output for debugging.
 ## Current milestone
 
 M0 (repo scaffold) and M1 (settings/adapters/AppState) are both done. M2 (project navigation
-and page loading) is in progress. Notifications stack #230–#233 shipped (2026-05-14).
-Next slices: page-actions (#214-#217), word-matches list (#200-#203), frontend data hooks (#192).
+and page loading) is in progress.
+Next slices: page-actions mutations (#215-#217), word-matches list (#201-#203).
+
+Shipped (2026-05-14): Notifications stack #230–#233, data hooks #192 (useProject/usePage/
+useJobProgress), TextTabs shell #200, PageActions bar layout #214.
 See `docs/ROADMAP.md` for per-slice details.
-
-Key M1.h completions (2026-05-14): EmptyProjectState (#84), RootPage + GET /api/session-state
-(#274), App.tsx BrowserRouter + QueryClient + routes (#240), lifespan session-restore HTTP
-tests (#188), conformance golden tests (#245, #183).
-
-Notifications stack shipped (2026-05-14): NotificationQueue backend (#230, closed),
-useNotificationStream hook + sonner Toaster (#231), BusyOverlay + ProjectLoadingOverlay
-(#232), OcrFailedBanner + ProjectNotFoundBanner + ImageDriftBanner (#233).
 
 ## Specs
 
