@@ -1,0 +1,73 @@
+{
+  "schema": {
+    "name": "pd_ocr_labeler.user_page",
+    "version": "2.1"
+  },
+  "provenance": {
+    "saved_at": "2026-05-10T14:25:00.000Z",
+    "saved_by": "Save Project",
+    "source_lane": "labeled",
+    "app": {
+      "name": "pd_ocr_labeler",
+      "version": "0.3.2",
+      "git_commit": "d4e5f6a"
+    },
+    "toolchain": {
+      "python": "3.13.1",
+      "pd_book_tools": "0.5.1",
+      "opencv_python": "4.10.0.84"
+    },
+    "ocr": {
+      "engine": "doctr",
+      "engine_version": "0.7.0",
+      "models": [
+        {
+          "name": "detection",
+          "weights_id": "db_resnet50"
+        }
+      ]
+    }
+  },
+  "source": {
+    "project_id": "browser-test-project",
+    "page_index": 2,
+    "page_number": 3,
+    "image_path": "003.png",
+    "project_root": "/home/user/projects/browser-test-project",
+    "image_fingerprint": {
+      "size": 98304,
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  },
+  "payload": {
+    "page": {
+      "type": "Page",
+      "page_index": 2,
+      "width": 1240,
+      "height": 1754,
+      "items": []
+    },
+    "original_page": {
+      "type": "Page",
+      "page_index": 2,
+      "width": 1240,
+      "height": 1754,
+      "items": []
+    },
+    "word_attributes": {
+      "word-0100": {
+        "italic": true,
+        "small_caps": false
+      },
+      "word-0101": {
+        "italic": false,
+        "small_caps": true
+      }
+    }
+  },
+  "cached_images": {
+    "original": "browser-test-project_003_original_eeee5555ffff6666.jpg",
+    "words": "browser-test-project_003_words_7777888899990000.jpg",
+    "paragraphs": "browser-test-project_003_paragraphs_aaaabbbbccccdddd.jpg"
+  }
+}

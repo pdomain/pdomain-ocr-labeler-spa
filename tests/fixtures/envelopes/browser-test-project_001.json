@@ -1,0 +1,69 @@
+{
+  "schema": {
+    "name": "pd_ocr_labeler.user_page",
+    "version": "2.1"
+  },
+  "provenance": {
+    "saved_at": "2026-05-10T14:22:31.456Z",
+    "saved_by": "Save Page",
+    "source_lane": "labeled",
+    "app": {
+      "name": "pd_ocr_labeler",
+      "version": "0.3.2",
+      "git_commit": "d4e5f6a"
+    },
+    "toolchain": {
+      "python": "3.13.1",
+      "pd_book_tools": "0.5.1",
+      "opencv_python": "4.10.0.84"
+    },
+    "ocr": {
+      "engine": "doctr",
+      "engine_version": "0.7.0",
+      "models": [
+        {
+          "name": "detection",
+          "version": "stock",
+          "weights_id": "db_resnet50"
+        },
+        {
+          "name": "recognition",
+          "version": "stock",
+          "weights_id": "crnn_vgg16_bn"
+        }
+      ],
+      "config_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "source": {
+    "project_id": "browser-test-project",
+    "page_index": 0,
+    "page_number": 1,
+    "image_path": "001.png",
+    "project_root": "/home/user/projects/browser-test-project",
+    "image_fingerprint": {
+      "size": 102400,
+      "mtime_ns": 1715000000000000000,
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  },
+  "payload": {
+    "page": {
+      "type": "Page",
+      "page_index": 0,
+      "width": 1240,
+      "height": 1754,
+      "items": []
+    },
+    "word_attributes": {
+      "word-0001": {
+        "italic": false,
+        "small_caps": false
+      }
+    }
+  },
+  "cached_images": {
+    "original": "browser-test-project_001_original_aaaa1111bbbb2222.jpg",
+    "lines": "browser-test-project_001_lines_cccc3333dddd4444.jpg"
+  }
+}

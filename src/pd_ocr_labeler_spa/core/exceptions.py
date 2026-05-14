@@ -19,6 +19,16 @@ toast rather than a generic 500. The handler chain in
 explicitly — keep it here (not at a use-site) so route code can ``from
 .core.exceptions import BoundingBoxGeometryError`` without circular
 imports.
+
+``IncompatibleEnvelopeError`` (per ``specs/09-persistence.md §11``)
+is raised when ``parse_envelope`` encounters a schema version it does
+not recognise. The error handler maps this to ``422
+incompatible_envelope`` so the SPA toast layer can show a targeted
+"Upgrade to read this file" message rather than a generic 500. The
+``version`` attribute carries the version string from the file; the
+``supported`` attribute carries the list of versions this binary can
+read — both are emitted in the error response body so the SPA doesn't
+need to string-parse the message.
 """
 
 from __future__ import annotations
@@ -47,3 +57,33 @@ class BoundingBoxGeometryError(ValueError):
     ``ValueError`` for "invalid input" already handles this case
     correctly.
     """
+
+
+class IncompatibleEnvelopeError(ValueError):
+    """A ``UserPageEnvelope`` file has a schema version this binary cannot read.
+
+    Raised by ``parse_envelope`` when the ``schema.version`` field is not
+    in the set of supported versions (currently ``{"2.1", "2.2"}``).  The
+    error handler in ``api/middleware/error_handler.py`` maps this to
+    ``422 incompatible_envelope`` so the SPA toast layer can show a
+    targeted "Upgrade to read this file" message rather than a generic 500.
+
+    Attributes
+    ----------
+    version
+        The version string found in the file (e.g. ``"3.0"``).
+    supported
+        The list of version strings this binary can read (e.g.
+        ``["2.1", "2.2"]``).  Emitted in the error response body.
+    """
+
+    def __init__(self, *, version: str, supported: list[str]) -> None:
+        self.version = version
+        self.supported = supported
+        supported_str = ", ".join(supported)
+        super().__init__(
+            f"UserPageEnvelope schema version {version!r} is not supported by this binary "
+            f"(supported: {supported_str}). "
+            "This page was likely saved by a newer pd-ocr-labeler. "
+            "Upgrade to read it."
+        )

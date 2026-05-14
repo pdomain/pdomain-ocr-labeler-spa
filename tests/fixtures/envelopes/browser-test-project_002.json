@@ -1,0 +1,38 @@
+{
+  "schema": {
+    "name": "pd_ocr_labeler.user_page",
+    "version": "2.1"
+  },
+  "provenance": {
+    "saved_at": "2026-05-10T14:23:45.789Z",
+    "saved_by": "Save Page",
+    "source_lane": "labeled",
+    "app": {
+      "name": "pd_ocr_labeler",
+      "version": "0.3.2"
+    },
+    "toolchain": {
+      "python": "3.13.1",
+      "pd_book_tools": "0.5.1"
+    },
+    "ocr": {
+      "engine": "doctr",
+      "models": []
+    }
+  },
+  "source": {
+    "project_id": "browser-test-project",
+    "page_index": 1,
+    "page_number": 2,
+    "image_path": "002.png"
+  },
+  "payload": {
+    "page": {
+      "type": "Page",
+      "page_index": 1,
+      "width": 1240,
+      "height": 1754,
+      "items": []
+    }
+  }
+}

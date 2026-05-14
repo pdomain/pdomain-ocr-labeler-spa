@@ -15,7 +15,10 @@ Handler chain (per ``specs/02-backend.md §8``):
 3. ``BoundingBoxGeometryError`` → ``422 geometry_error``. The labeler-
    specific case from spec §8 — the SPA's toast layer recognises this
    tag and shows "this box is degenerate" rather than a generic toast.
-4. ``Exception`` (catch-all) → ``500 internal_error``. The full
+4. ``IncompatibleEnvelopeError`` → ``422 incompatible_envelope`` (spec
+   §11 of ``specs/09-persistence.md``). Raised by ``parse_envelope``
+   when a saved page has a schema version this binary cannot read.
+5. ``Exception`` (catch-all) → ``500 internal_error``. The full
    traceback is logged via ``logger.exception(...)`` so operators see
    the full stack with the request-id prefixed by ``RequestIdFilter``.
    Whether the last three traceback lines reach the client in
@@ -56,7 +59,7 @@ from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
-from ...core.exceptions import BoundingBoxGeometryError
+from ...core.exceptions import BoundingBoxGeometryError, IncompatibleEnvelopeError
 
 log = logging.getLogger(__name__)
 
@@ -117,6 +120,24 @@ def install_error_handlers(app: FastAPI) -> None:
             content=ApiError(
                 error="geometry_error",
                 message=str(exc) or exc.__class__.__name__,
+            ).model_dump(),
+        )
+
+    @app.exception_handler(IncompatibleEnvelopeError)
+    async def _incompatible_envelope(_request: Request, exc: IncompatibleEnvelopeError) -> JSONResponse:
+        # spec §11: unknown schema version → 422 incompatible_envelope.
+        # The details dict carries both the encountered version and the
+        # supported range so the SPA toast can show a meaningful message
+        # ("This page was saved by v{version}; upgrade to read it").
+        return JSONResponse(
+            status_code=422,
+            content=ApiError(
+                error="incompatible_envelope",
+                message=str(exc),
+                details={
+                    "version": exc.version,
+                    "supported": exc.supported,
+                },
             ).model_dump(),
         )
 

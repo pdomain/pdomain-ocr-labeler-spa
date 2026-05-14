@@ -60,12 +60,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pd_ocr_labeler_spa.core.exceptions import IncompatibleEnvelopeError
 from pd_ocr_labeler_spa.core.persistence.paths import (
     image_cache_root,
     labeled_projects_root,
 )
 
 logger = logging.getLogger(__name__)
+
+# Supported major version for UserPageEnvelope. Any envelope whose schema
+# version does NOT start with this major (e.g. "3.0", "1.0") is rejected
+# with IncompatibleEnvelopeError. Additive minor/patch bumps within the
+# same major (2.1 → 2.2 → 2.x) are accepted — the dataclass reader
+# tolerates unknown fields via .get() semantics.
+_SUPPORTED_MAJOR = "2"
+# Human-readable list of "known" versions for error messages.
+_KNOWN_VERSIONS = ["2.1", "2.2"]
 
 USER_PAGE_SCHEMA_NAME = "pd_ocr_labeler.user_page"
 USER_PAGE_SCHEMA_VERSION = "2.1"
@@ -483,14 +493,40 @@ def is_user_page_envelope(data: dict[str, Any]) -> bool:
 
 
 def parse_envelope(data: dict[str, Any]) -> UserPageEnvelope:
-    """Permissive reader. Missing keys fall back to defaults. Same
-    failure-mode contract as legacy ``UserPageEnvelope.from_dict``:
-    never raises on shape mismatch; coerces or substitutes defaults
-    silently.
+    """Permissive reader with schema-version guard.
 
-    Callers that want the type-guard check before parsing should call
-    ``is_user_page_envelope(data)`` first.
+    Missing keys fall back to defaults (same failure-mode contract as
+    legacy ``UserPageEnvelope.from_dict``). Coerces or substitutes
+    defaults silently for all shape mismatches.
+
+    Version check (spec §11, ``specs/09-persistence.md``):
+    ``schema.version`` must start with major ``"2"`` (i.e. "2.1",
+    "2.2", or any future additive "2.x" bump). Anything with a
+    different major (e.g. "3.0", "1.0", …) raises
+    ``IncompatibleEnvelopeError``.  Callers at the API layer translate
+    this to ``422 incompatible_envelope``.
+
+    Callers that want the name type-guard check before parsing should
+    call ``is_user_page_envelope(data)`` first.
+
+    Raises
+    ------
+    IncompatibleEnvelopeError
+        When the ``schema.version`` major is not ``"2"`` (e.g. ``"3.0"``
+        written by a future binary this SPA cannot read).
     """
+    schema_block = data.get("schema")
+    if isinstance(schema_block, dict):
+        version_str = str(schema_block.get("version", USER_PAGE_SCHEMA_VERSION))
+        # Reject any version whose major is not "2".  Accept all 2.x
+        # (2.1, 2.2, future 2.3 …) — the dataclass uses .get() throughout
+        # so unknown sub-fields are silently ignored (forward-compat).
+        major = version_str.split(".")[0] if "." in version_str else version_str
+        if major != _SUPPORTED_MAJOR:
+            raise IncompatibleEnvelopeError(
+                version=version_str,
+                supported=_KNOWN_VERSIONS,
+            )
     return UserPageEnvelope.from_dict(data)
 
 
