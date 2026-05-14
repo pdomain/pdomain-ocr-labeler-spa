@@ -1,7 +1,7 @@
 // PageActions.tsx — horizontal action bar below project navigation controls.
 //
 // Spec: docs/specs/2026-05-12-page-actions-design.md
-// Issue #214
+// Issues #214, #217
 //
 // Button layout (left to right):
 //   Reload OCR | Reload OCR (Edited) | Save Page | Save Project | Load Page |
@@ -12,11 +12,17 @@
 // All buttons are disabled while isBusy=true.
 // "Reload OCR (Edited)" is additionally disabled when hasEditedImage=false.
 //
+// Hotkeys (#217):
+//   Mod+R  → Reload OCR  (skipped when isBusy)
+//   Mod+Shift+R → Reload OCR Edited (skipped when isBusy or !hasEditedImage)
+//   E      → Export dialog (skipped when isBusy)
+//
 // data-testids (driver-contract invariants):
 //   reload-ocr-button, reload-ocr-edited-button, save-page-button,
 //   save-project-button, load-page-button, rematch-gt-button, export-button,
 //   page-source-badge, page-name-label
 
+import { useHotkey } from "../hooks/useHotkey";
 import type { components } from "../api/types";
 
 type PageSource = components["schemas"]["PageSource"];
@@ -84,6 +90,17 @@ export function PageActions({
   onExport,
 }: PageActionsProps) {
   const source: PageSource = pageSource ?? "ocr";
+
+  // Hotkeys #217 — fire only when the corresponding button would be enabled
+  useHotkey("mod+r", () => {
+    if (!isBusy) onReloadOcr?.();
+  });
+  useHotkey("mod+shift+r", () => {
+    if (!isBusy && hasEditedImage) onReloadOcrEdited?.();
+  });
+  useHotkey("e", () => {
+    if (!isBusy) onExport?.();
+  });
 
   return (
     <div
