@@ -234,6 +234,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/auto-rotate-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Auto Rotate All
+         * @description ``POST /api/projects/{id}/auto-rotate-all`` → ``202 {job_id}`` — spec §M9.2.
+         *
+         *     Spec: ``docs/specs/2026-05-12-auto-rotation-design.md §Auto-rotate``
+         *
+         *     Enqueues an ``auto_rotate_all`` job that iterates all pages in the
+         *     project, runs auto-rotation detection on each (gt-best-match or
+         *     layout, depending on ``method``), and applies any rotation with
+         *     confidence ≥ 0.6.
+         *
+         *     When ``overwrite_manual=False`` (default), pages with
+         *     ``rotation_source == "manual"`` are skipped.
+         *
+         *     Returns 404 when the requested project is not loaded.
+         *     Returns 503 when the auto-rotate algorithm (``detect_best_rotation``)
+         *     is not available (pd-book-tools not installed or missing the module).
+         */
+        post: operations["post_auto_rotate_all_api_projects__project_id__auto_rotate_all_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/pages/{page_index}": {
         parameters: {
             query?: never;
@@ -1038,6 +1072,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ocr-config/auto-rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Ocr Config Auto Rotate
+         * @description Update auto-rotate settings (M9.2).
+         *
+         *     Spec: ``docs/specs/2026-05-12-auto-rotation-design.md §OCR config additions``
+         *
+         *     Persists ``auto_rotate_on_load`` and ``auto_rotate_method`` to the
+         *     in-process carrier and the ``ocr_config.json`` sidecar.
+         *     Returns the full config snapshot so the modal can refresh.
+         */
+        post: operations["post_ocr_config_auto_rotate_api_ocr_config_auto_rotate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ocr-config/rescan": {
         parameters: {
             query?: never;
@@ -1165,6 +1225,25 @@ export interface components {
              * @enum {string}
              */
             scope: "whole" | "part";
+        };
+        /**
+         * AutoRotateAllRequest
+         * @description Body of ``POST /api/projects/{id}/auto-rotate-all`` — M9.2.
+         *
+         *     Spec: ``docs/specs/2026-05-12-auto-rotation-design.md §Auto-rotate``
+         */
+        AutoRotateAllRequest: {
+            /**
+             * Method
+             * @description Override algorithm for this run. None uses the config default. 'gt-best-match' uses GT text fuzzy match; 'layout' uses layout analysis; 'auto' picks best available.
+             */
+            method?: ("gt-best-match" | "layout" | "auto") | null;
+            /**
+             * Overwrite Manual
+             * @description When False, skip pages with rotation_source=='manual'.
+             * @default false
+             */
+            overwrite_manual: boolean;
         };
         /**
          * BBox
@@ -1352,6 +1431,25 @@ export interface components {
              * @enum {string}
              */
             selection_reason: "hf-latest" | "hf-only" | "local-newer-than-hf" | "local-only-hf-unreachable" | "hf-unreachable-no-local" | "stock-fallback";
+            /**
+             * Auto Rotate On Load
+             * @description When True, auto-rotate pass runs on first project-load. Spec: docs/specs/2026-05-12-auto-rotation-design.md §M9.2
+             * @default true
+             */
+            auto_rotate_on_load: boolean;
+            /**
+             * Auto Rotate Method
+             * @description Auto-rotate algorithm: 'gt-best-match', 'layout', or 'auto' (picks best). Spec: docs/specs/2026-05-12-auto-rotation-design.md §M9.2
+             * @default auto
+             * @enum {string}
+             */
+            auto_rotate_method: "gt-best-match" | "layout" | "auto";
+            /**
+             * Auto Rotate Available
+             * @description True when pd_book_tools.ocr.rotation.detect_best_rotation is importable. When False the auto-rotate toggle is disabled in the UI.
+             * @default false
+             */
+            auto_rotate_available: boolean;
         };
         /**
          * GroupSelectedWordsIntoNewParagraphRequest
@@ -1967,6 +2065,21 @@ export interface components {
             last_page_index: number;
         };
         /**
+         * SetAutoRotateRequest
+         * @description Body of ``POST /api/ocr-config/auto-rotate`` — updates auto-rotate config.
+         *
+         *     Spec: ``docs/specs/2026-05-12-auto-rotation-design.md §OCR config additions``
+         */
+        SetAutoRotateRequest: {
+            /** Auto Rotate On Load */
+            auto_rotate_on_load: boolean;
+            /**
+             * Auto Rotate Method
+             * @enum {string}
+             */
+            auto_rotate_method: "gt-best-match" | "layout" | "auto";
+        };
+        /**
          * SetOCRModelsRequest
          * @description Body of ``POST /api/ocr-config/models`` — spec lines 397-400.
          */
@@ -2339,6 +2452,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SaveProjectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_auto_rotate_all_api_projects__project_id__auto_rotate_all_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutoRotateAllRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -3553,6 +3701,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SetOCRModelsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetOCRConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ocr_config_auto_rotate_api_ocr_config_auto_rotate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAutoRotateRequest"];
             };
         };
         responses: {

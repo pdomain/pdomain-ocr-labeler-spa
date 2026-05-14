@@ -27,7 +27,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from pd_ocr_labeler_spa.core.ocr_config_state import AutoRotateMethod
 
 
 class OCRModelOption(BaseModel):
@@ -77,6 +79,27 @@ class GetOCRConfigResponse(BaseModel):
         "hf-unreachable-no-local",
         "stock-fallback",
     ]
+    auto_rotate_on_load: bool = Field(
+        default=True,
+        description=(
+            "When True, auto-rotate pass runs on first project-load. "
+            "Spec: docs/specs/2026-05-12-auto-rotation-design.md §M9.2"
+        ),
+    )
+    auto_rotate_method: AutoRotateMethod = Field(
+        default="auto",
+        description=(
+            "Auto-rotate algorithm: 'gt-best-match', 'layout', or 'auto' (picks best). "
+            "Spec: docs/specs/2026-05-12-auto-rotation-design.md §M9.2"
+        ),
+    )
+    auto_rotate_available: bool = Field(
+        default=False,
+        description=(
+            "True when pd_book_tools.ocr.rotation.detect_best_rotation is importable. "
+            "When False the auto-rotate toggle is disabled in the UI."
+        ),
+    )
 
 
 class SetOCRModelsRequest(BaseModel):
@@ -89,8 +112,45 @@ class SetOCRModelsRequest(BaseModel):
     hf_pinned_revision: str | None = None
 
 
+class SetAutoRotateRequest(BaseModel):
+    """Body of ``POST /api/ocr-config/auto-rotate`` — updates auto-rotate config.
+
+    Spec: ``docs/specs/2026-05-12-auto-rotation-design.md §OCR config additions``
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    auto_rotate_on_load: bool
+    auto_rotate_method: AutoRotateMethod
+
+
+class AutoRotateAllRequest(BaseModel):
+    """Body of ``POST /api/projects/{id}/auto-rotate-all`` — M9.2.
+
+    Spec: ``docs/specs/2026-05-12-auto-rotation-design.md §Auto-rotate``
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    method: AutoRotateMethod | None = Field(
+        default=None,
+        description=(
+            "Override algorithm for this run. None uses the config default. "
+            "'gt-best-match' uses GT text fuzzy match; 'layout' uses layout analysis; "
+            "'auto' picks best available."
+        ),
+    )
+    overwrite_manual: bool = Field(
+        default=False,
+        description="When False, skip pages with rotation_source=='manual'.",
+    )
+
+
 __all__ = [
+    "AutoRotateAllRequest",
+    "AutoRotateMethod",
     "GetOCRConfigResponse",
     "OCRModelOption",
+    "SetAutoRotateRequest",
     "SetOCRModelsRequest",
 ]

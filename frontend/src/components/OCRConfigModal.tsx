@@ -1,16 +1,21 @@
-// OCRConfigModal.tsx — OCR configuration modal with text-normalization section.
+// OCRConfigModal.tsx — OCR configuration modal with text-normalization and auto-rotation sections.
 // Spec: docs/specs/2026-05-12-text-normalization-design.md §Toggle UI
-// Issue #261
+// Spec: docs/specs/2026-05-12-auto-rotation-design.md §OCR config additions
+// Issues #261, #264
 //
 // Sections:
 //   - Text normalization: normalize-gt-matching-checkbox, normalize-plaintext-checkbox,
 //     normalize-profile-select (greyed out in v1, only "ascii" available)
+//   - Auto-rotation: auto-rotate-checkbox, auto-rotate-method-select
+//     (disabled when auto_rotate_available=false)
 //   - When pd_book_tools.text.normalize unavailable: shows disabled message
 //
 // Testids: ocr-config-modal, normalize-gt-matching-checkbox, normalize-plaintext-checkbox,
-//          normalize-profile-select
+//          normalize-profile-select, auto-rotate-checkbox, auto-rotate-method-select
 
 import { useQuery } from "@tanstack/react-query";
+
+type AutoRotateMethod = "gt-best-match" | "layout" | "auto";
 
 // Minimal in-line fetch wrappers to avoid adding openapi-ts-generated fetch
 // before #276 completes the client setup.
@@ -21,10 +26,41 @@ async function fetchNormalizeAvailable(): Promise<boolean> {
   return Boolean(data.available);
 }
 
+async function fetchOcrConfig(): Promise<{
+  auto_rotate_available: boolean;
+  auto_rotate_on_load: boolean;
+  auto_rotate_method: AutoRotateMethod;
+} | null> {
+  const resp = await fetch("/api/ocr-config");
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  return {
+    auto_rotate_available: Boolean(data.auto_rotate_available),
+    auto_rotate_on_load: Boolean(data.auto_rotate_on_load ?? true),
+    auto_rotate_method: (data.auto_rotate_method ?? "auto") as AutoRotateMethod,
+  };
+}
+
+async function postAutoRotateConfig(settings: {
+  auto_rotate_on_load: boolean;
+  auto_rotate_method: AutoRotateMethod;
+}): Promise<void> {
+  await fetch("/api/ocr-config/auto-rotate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+}
+
 export interface NormalizeSettings {
   normalize_for_gt_matching: boolean;
   normalize_plaintext_tabs: boolean;
   normalize_profile: string;
+}
+
+export interface AutoRotateSettings {
+  auto_rotate_on_load: boolean;
+  auto_rotate_method: AutoRotateMethod;
 }
 
 interface OCRConfigModalProps {
@@ -70,6 +106,33 @@ export function OCRConfigModal({
     staleTime: 60_000, // 1 minute — module presence doesn't change at runtime
     enabled: open,
   });
+
+  // Fetch OCR config (auto-rotate settings + availability).
+  const { data: ocrConfig, refetch: refetchOcrConfig } = useQuery({
+    queryKey: ["ocr-config-auto-rotate"],
+    queryFn: fetchOcrConfig,
+    staleTime: 30_000,
+    enabled: open,
+  });
+  const autoRotateAvailable = ocrConfig?.auto_rotate_available ?? false;
+  const autoRotateOnLoad = ocrConfig?.auto_rotate_on_load ?? true;
+  const autoRotateMethod: AutoRotateMethod = ocrConfig?.auto_rotate_method ?? "auto";
+
+  async function handleAutoRotateOnLoadChange(e: React.ChangeEvent<HTMLInputElement>) {
+    await postAutoRotateConfig({
+      auto_rotate_on_load: e.target.checked,
+      auto_rotate_method: autoRotateMethod,
+    });
+    void refetchOcrConfig();
+  }
+
+  async function handleAutoRotateMethodChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    await postAutoRotateConfig({
+      auto_rotate_on_load: autoRotateOnLoad,
+      auto_rotate_method: e.target.value as AutoRotateMethod,
+    });
+    void refetchOcrConfig();
+  }
 
   function handleGtMatchingChange(e: React.ChangeEvent<HTMLInputElement>) {
     onNormalizeChange?.({
@@ -203,6 +266,75 @@ export function OCRConfigModal({
                   <option value="ascii">ascii</option>
                 </select>
                 <span className="text-xs text-gray-400">(v1: ascii only)</span>
+              </div>
+            </div>
+          </section>
+
+          {/* Auto-rotation section */}
+          <section aria-labelledby="auto-rotate-section-heading" className="mt-4">
+            <h3 id="auto-rotate-section-heading" className="text-sm font-medium text-gray-700 mb-2">
+              Auto-rotation
+            </h3>
+
+            {!autoRotateAvailable && (
+              <p
+                className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 mb-3"
+                data-testid="auto-rotate-unavailable-message"
+              >
+                Requires pd-book-tools with rotation module. Update pd-book-tools to enable
+                auto-rotation.
+              </p>
+            )}
+
+            <div className="space-y-2">
+              {/* Auto-rotate on load toggle */}
+              <label
+                className={`flex items-center gap-2 text-sm ${
+                  autoRotateAvailable ? "text-gray-800" : "text-gray-400"
+                }`}
+                title={
+                  autoRotateAvailable
+                    ? undefined
+                    : "Requires pd-book-tools rotation module to enable auto-rotation."
+                }
+              >
+                <input
+                  type="checkbox"
+                  data-testid="auto-rotate-checkbox"
+                  checked={autoRotateOnLoad}
+                  disabled={!autoRotateAvailable}
+                  onChange={handleAutoRotateOnLoadChange}
+                  className="accent-blue-600"
+                />
+                Auto-rotate pages on load
+              </label>
+
+              {/* Method select */}
+              <div
+                className={`flex items-center gap-2 text-sm ${
+                  autoRotateAvailable ? "text-gray-800" : "text-gray-400"
+                }`}
+              >
+                <label htmlFor="auto-rotate-method-select" className="shrink-0">
+                  Method:
+                </label>
+                <select
+                  id="auto-rotate-method-select"
+                  data-testid="auto-rotate-method-select"
+                  value={autoRotateMethod}
+                  disabled={!autoRotateAvailable || !autoRotateOnLoad}
+                  onChange={handleAutoRotateMethodChange}
+                  className={`border border-gray-200 rounded text-xs px-1 py-0.5 ${
+                    autoRotateAvailable && autoRotateOnLoad
+                      ? "bg-white"
+                      : "bg-gray-50 cursor-not-allowed"
+                  }`}
+                  aria-label="Auto-rotation method"
+                >
+                  <option value="auto">auto</option>
+                  <option value="gt-best-match">gt-best-match</option>
+                  <option value="layout">layout</option>
+                </select>
               </div>
             </div>
           </section>

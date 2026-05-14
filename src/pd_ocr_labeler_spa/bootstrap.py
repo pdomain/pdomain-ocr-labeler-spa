@@ -135,6 +135,11 @@ def _make_lifespan(
                 recognition_key=persisted.selected_recognition_key,
                 hf_pinned_revision=persisted.hf_pinned_revision,
             )
+            # M9.2: restore auto-rotate settings from sidecar.
+            ocr_carrier.set_auto_rotate(
+                auto_rotate_on_load=persisted.auto_rotate_on_load,
+                auto_rotate_method=persisted.auto_rotate_method,
+            )
 
         # Step 1: read session_state (best-effort, never raises).
         session = load_session_state(settings.data_root)

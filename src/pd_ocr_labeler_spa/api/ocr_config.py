@@ -65,13 +65,28 @@ from ..core.model_discovery import (
     pairs_to_model_option_records,
 )
 from ..core.model_selection import HF_LATEST_KEY, ModelOptionRecord, pick_default_keys
-from ..core.ocr_config_state import OCRConfigCarrier
-from ..core.ocr_models import GetOCRConfigResponse, OCRModelOption, SetOCRModelsRequest
+from ..core.ocr_config_state import AutoRotateMethod, OCRConfigCarrier
+from ..core.ocr_models import (
+    GetOCRConfigResponse,
+    OCRModelOption,
+    SetAutoRotateRequest,
+    SetOCRModelsRequest,
+)
 from ..core.persistence.ocr_config import OCRConfigSidecar, save_ocr_config
 from ..settings import Settings
 from .dependencies import get_ocr_config_carrier, get_settings
 
 router = APIRouter(prefix="/api/ocr-config", tags=["ocr-config"])
+
+# Probe whether the auto-rotate algorithm is available in pd_book_tools.
+# Evaluated once at import time; routes read this flag to populate
+# ``GetOCRConfigResponse.auto_rotate_available``.
+try:
+    from pd_book_tools.ocr.rotation import detect_best_rotation as _detect_best_rotation  # noqa: F401
+
+    _AUTO_ROTATE_AVAILABLE = True
+except ImportError:
+    _AUTO_ROTATE_AVAILABLE = False
 
 MODEL_STORE_DIRNAME = "pd-ml-models"
 """Trainer-managed weights directory name. Mirror of legacy
@@ -253,6 +268,8 @@ def _build_snapshot(
     selected_detection: str,
     selected_recognition: str,
     hf_pinned_revision: str | None,
+    auto_rotate_on_load: bool = True,
+    auto_rotate_method: AutoRotateMethod = "auto",
 ) -> GetOCRConfigResponse:
     """Compose a ``GetOCRConfigResponse`` from the surfaced option lists +
     a real ``selection_reason`` derived from the discovery pipeline.
@@ -265,6 +282,9 @@ def _build_snapshot(
     Slice 8c-iii-c's ``selection_reason`` contract still applies — the
     picker's reason is honest about what *would* be the default; the
     user's actual selection (``selected_*``) is sourced from the carrier.
+
+    M9.2: ``auto_rotate_on_load`` / ``auto_rotate_method`` / ``auto_rotate_available``
+    are threaded from the carrier and the module-level probe flag.
     """
     local_pairs, records = _gather_pairs_and_records()
     _, _, reason = pick_default_keys(records)
@@ -280,6 +300,9 @@ def _build_snapshot(
         selected_recognition=selected_recognition,
         hf_pinned_revision=hf_pinned_revision,
         selection_reason=reason,
+        auto_rotate_on_load=auto_rotate_on_load,
+        auto_rotate_method=auto_rotate_method,
+        auto_rotate_available=_AUTO_ROTATE_AVAILABLE,
     )
 
 
@@ -306,6 +329,8 @@ def get_ocr_config(
         selected_detection=detection,
         selected_recognition=recognition,
         hf_pinned_revision=revision,
+        auto_rotate_on_load=carrier.auto_rotate_on_load,
+        auto_rotate_method=carrier.auto_rotate_method,
     )
 
 
@@ -384,6 +409,49 @@ def post_ocr_config_models(
         selected_detection=req.detection_key,
         selected_recognition=req.recognition_key,
         hf_pinned_revision=req.hf_pinned_revision,
+        auto_rotate_on_load=carrier.auto_rotate_on_load,
+        auto_rotate_method=carrier.auto_rotate_method,
+    )
+
+
+@router.post("/auto-rotate", response_model=GetOCRConfigResponse)
+def post_ocr_config_auto_rotate(
+    req: SetAutoRotateRequest,
+    carrier: OCRConfigCarrier = Depends(get_ocr_config_carrier),
+    settings: Settings = Depends(get_settings),
+) -> GetOCRConfigResponse:
+    """Update auto-rotate settings (M9.2).
+
+    Spec: ``docs/specs/2026-05-12-auto-rotation-design.md §OCR config additions``
+
+    Persists ``auto_rotate_on_load`` and ``auto_rotate_method`` to the
+    in-process carrier and the ``ocr_config.json`` sidecar.
+    Returns the full config snapshot so the modal can refresh.
+    """
+    changed = carrier.set_auto_rotate(
+        auto_rotate_on_load=req.auto_rotate_on_load,
+        auto_rotate_method=req.auto_rotate_method,
+    )
+    if changed:
+        # Read current model selection to keep sidecar consistent.
+        det, reco, rev = carrier.snapshot()
+        save_ocr_config(
+            settings.data_root,
+            OCRConfigSidecar(
+                selected_detection_key=det,
+                selected_recognition_key=reco,
+                hf_pinned_revision=rev,
+                auto_rotate_on_load=req.auto_rotate_on_load,
+                auto_rotate_method=req.auto_rotate_method,
+            ),
+        )
+    det, reco, rev = carrier.snapshot()
+    return _build_snapshot(
+        selected_detection=det,
+        selected_recognition=reco,
+        hf_pinned_revision=rev,
+        auto_rotate_on_load=req.auto_rotate_on_load,
+        auto_rotate_method=req.auto_rotate_method,
     )
 
 
@@ -455,6 +523,9 @@ def post_ocr_config_rescan(
         selected_recognition=next_reco,
         hf_pinned_revision=current_rev,
         selection_reason=reason,
+        auto_rotate_on_load=carrier.auto_rotate_on_load,
+        auto_rotate_method=carrier.auto_rotate_method,
+        auto_rotate_available=_AUTO_ROTATE_AVAILABLE,
     )
 
 

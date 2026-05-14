@@ -266,11 +266,22 @@ async def _handle_rotate_page(runner: JobRunner, job: Job) -> None:
     await handle_rotate_page(runner, job)
 
 
+async def _handle_auto_rotate_all(runner: JobRunner, job: Job) -> None:
+    """Auto-rotate-all handler — delegates to ``core/jobs/handlers/auto_rotate_all``.
+
+    Issue #264: M9.2 auto-rotate-all (202+job pattern).
+    """
+    from .handlers.auto_rotate_all import handle_auto_rotate_all  # lazy import
+
+    await handle_auto_rotate_all(runner, job)
+
+
 _HANDLERS: dict[str, Handler] = {
     "reload_ocr": _handle_reload_ocr,
     "save_project": _handle_save_project,
     "export": _handle_export,
     "rotate_page": _handle_rotate_page,
+    "auto_rotate_all": _handle_auto_rotate_all,
 }
 
 

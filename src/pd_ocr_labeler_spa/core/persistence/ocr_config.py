@@ -58,6 +58,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from pd_ocr_labeler_spa.core.ocr_config_state import AutoRotateMethod
 from pd_ocr_labeler_spa.core.persistence.paths import ocr_config_path
 
 logger = logging.getLogger(__name__)
@@ -113,6 +114,21 @@ class OCRConfigSidecar(BaseModel):
         description=(
             "Optional HF Hub revision pin (commit / tag). Mirrors "
             "``GetOCRConfigResponse.hf_pinned_revision``."
+        ),
+    )
+    auto_rotate_on_load: bool = Field(
+        default=True,
+        description=(
+            "When True, auto-rotate pass runs on project load. "
+            "Mirrors ``GetOCRConfigResponse.auto_rotate_on_load``."
+        ),
+    )
+    auto_rotate_method: AutoRotateMethod = Field(
+        default="auto",
+        description=(
+            "Auto-rotate algorithm: 'gt-best-match' (uses GT text), "
+            "'layout' (no GT required), or 'auto' (picks best available). "
+            "Mirrors ``GetOCRConfigResponse.auto_rotate_method``."
         ),
     )
 

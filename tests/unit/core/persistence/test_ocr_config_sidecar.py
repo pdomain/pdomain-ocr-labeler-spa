@@ -74,13 +74,16 @@ def test_default_construction_matches_carrier_defaults() -> None:
 
 def test_field_names() -> None:
     """Spec-pin: field names match the wire DTOs (slice-8c-i
-    ``SetOCRModelsRequest`` / slice-8c-i ``GetOCRConfigResponse``)."""
+    ``SetOCRModelsRequest`` / slice-8c-i ``GetOCRConfigResponse``).
+    M9.2 adds ``auto_rotate_on_load`` and ``auto_rotate_method``."""
     fields = set(OCRConfigSidecar.model_fields.keys())
     assert fields == {
         "schema_version",
         "selected_detection_key",
         "selected_recognition_key",
         "hf_pinned_revision",
+        "auto_rotate_on_load",
+        "auto_rotate_method",
     }
 
 
@@ -230,7 +233,8 @@ def test_save_overwrites_existing_state(tmp_path: Path) -> None:
 
 
 def test_saved_json_matches_spec_shape(tmp_path: Path) -> None:
-    """Dump the saved file; assert key set + types match spec §7a."""
+    """Dump the saved file; assert key set + types match spec §7a.
+    M9.2 adds ``auto_rotate_on_load`` and ``auto_rotate_method``."""
     state = OCRConfigSidecar(
         selected_detection_key="stock",
         selected_recognition_key="stock",
@@ -243,12 +247,16 @@ def test_saved_json_matches_spec_shape(tmp_path: Path) -> None:
         "selected_detection_key",
         "selected_recognition_key",
         "hf_pinned_revision",
+        "auto_rotate_on_load",
+        "auto_rotate_method",
     }
     assert on_disk["schema_version"] == "1.0"
     assert isinstance(on_disk["schema_version"], str)
     assert on_disk["selected_detection_key"] == "stock"
     assert on_disk["selected_recognition_key"] == "stock"
     assert on_disk["hf_pinned_revision"] == "rev-pin"
+    assert on_disk["auto_rotate_on_load"] is True
+    assert on_disk["auto_rotate_method"] == "auto"
 
 
 def test_saved_json_serialises_null_revision(tmp_path: Path) -> None:

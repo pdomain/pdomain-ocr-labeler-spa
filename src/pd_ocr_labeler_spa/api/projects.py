@@ -67,6 +67,7 @@ from pydantic import BaseModel
 from ..core.active_project import ActiveProjectCarrier, InvalidProjectDirError
 from ..core.jobs import JobRunner
 from ..core.models import Project
+from ..core.ocr_models import AutoRotateAllRequest
 from ..core.persistence.config_yaml import AppConfig, save_config
 from ..core.persistence.ground_truth import load_ground_truth_from_directory
 from ..core.persistence.project_envelope import build_project_from_directory
@@ -661,12 +662,77 @@ def delete_project(
     return Response(status_code=204)
 
 
+@router.post("/{project_id}/auto-rotate-all")
+def post_auto_rotate_all(
+    project_id: str,
+    body: AutoRotateAllRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    runner: JobRunner = Depends(get_job_runner),
+) -> JSONResponse:
+    """``POST /api/projects/{id}/auto-rotate-all`` → ``202 {job_id}`` — spec §M9.2.
+
+    Spec: ``docs/specs/2026-05-12-auto-rotation-design.md §Auto-rotate``
+
+    Enqueues an ``auto_rotate_all`` job that iterates all pages in the
+    project, runs auto-rotation detection on each (gt-best-match or
+    layout, depending on ``method``), and applies any rotation with
+    confidence ≥ 0.6.
+
+    When ``overwrite_manual=False`` (default), pages with
+    ``rotation_source == "manual"`` are skipped.
+
+    Returns 404 when the requested project is not loaded.
+    Returns 503 when the auto-rotate algorithm (``detect_best_rotation``)
+    is not available (pd-book-tools not installed or missing the module).
+    """
+    project = project_state.loaded_project
+    if project is None or project.project_id != project_id:
+        return JSONResponse(
+            status_code=404,
+            content=ApiError(
+                error="project_not_found",
+                message=f"project not found or not loaded: {project_id}",
+            ).model_dump(),
+        )
+
+    # Graceful degradation — spec: "When rotation module absent: auto-rotate
+    # disabled with tooltip; no 500."  Return 503 so the frontend can show
+    # the disabled state rather than a crash.
+    try:
+        from pd_book_tools.ocr.rotation import detect_best_rotation  # noqa: F401
+    except ImportError:
+        return JSONResponse(
+            status_code=503,
+            content=ApiError(
+                error="auto_rotate_unavailable",
+                message=(
+                    "Auto-rotate is not available: "
+                    "pd_book_tools.ocr.rotation.detect_best_rotation not found. "
+                    "Upgrade pd-book-tools to a version that includes this function."
+                ),
+            ).model_dump(),
+        )
+
+    job_id = runner.submit(
+        "auto_rotate_all",
+        project_id=project_id,
+        payload={
+            "project_id": project_id,
+            "method": body.method,
+            "overwrite_manual": body.overwrite_manual,
+            "page_count": project.total_pages,
+        },
+    )
+    return JSONResponse(status_code=202, content={"job_id": job_id})
+
+
 def install_projects_router(app) -> None:  # type: ignore[no-untyped-def]
     """Register the projects router. Called from ``bootstrap.build_app``."""
     app.include_router(router)
 
 
 __all__ = [
+    "AutoRotateAllRequest",
     "ListProjectsResponse",
     "LoadProjectRequest",
     "LoadProjectResponse",
