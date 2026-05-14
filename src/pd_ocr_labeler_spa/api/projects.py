@@ -311,6 +311,56 @@ def list_projects(
     )
 
 
+@router.post("/discover", response_model=ListProjectsResponse)
+def discover_projects(
+    settings: Settings = Depends(get_settings),
+    carrier: ActiveProjectCarrier = Depends(get_active_project_carrier),
+) -> ListProjectsResponse:
+    """``POST /api/projects/discover`` — force re-scan of the projects root.
+
+    Spec §5.2 line 218 — "Force re-scan." Identical logic to
+    ``GET /api/projects`` but registered as a POST so clients can
+    explicitly trigger a refresh without relying on HTTP caching semantics
+    (some proxies cache GET responses; a POST is always forwarded).
+
+    Returns the same ``ListProjectsResponse`` shape as the GET endpoint.
+    No body is required or accepted.
+    """
+    enumerated = enumerate_projects(settings.source_projects_root)
+    projects = [
+        ProjectKey(
+            project_id=p.project_id,
+            project_root=p.project_root,
+            label=p.label,
+        )
+        for p in enumerated
+    ]
+
+    selected: str | None = None
+    snap = carrier.snapshot()
+    if (
+        snap is not None
+        and settings.source_projects_root is not None
+        and _is_under_root(snap.path, settings.source_projects_root)
+    ):
+        snap_resolved = snap.path.resolve()
+        for p in enumerated:
+            if p.project_root == snap_resolved:
+                selected = p.project_id
+                break
+
+    projects_root = (
+        settings.source_projects_root.resolve() if settings.source_projects_root is not None else Path("")
+    )
+
+    return ListProjectsResponse(
+        projects=projects,
+        selected=selected,
+        projects_root=projects_root,
+        config_source="default",
+    )
+
+
 @router.post("/load")
 def load_project(
     body: LoadProjectRequest,

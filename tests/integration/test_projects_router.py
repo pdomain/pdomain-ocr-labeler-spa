@@ -634,3 +634,64 @@ def test_get_project_by_id_404_when_id_mismatches_loaded(
     assert resp.status_code == 404
     body = resp.json()
     assert body["error"] == "project_not_found"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# POST /api/projects/discover
+# ──────────────────────────────────────────────────────────────────────
+# Spec §5.2 line 218 — "Force re-scan." Returns the same shape as GET
+# /api/projects but re-enumerates from disk on every call.
+
+
+def test_post_discover_returns_list_projects_response(
+    client_with_root: TestClient,
+) -> None:
+    """POST /api/projects/discover returns a ListProjectsResponse body."""
+    resp = client_with_root.post("/api/projects/discover")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "projects" in body
+    assert "projects_root" in body
+    assert "config_source" in body
+
+
+def test_post_discover_lists_same_projects_as_get(
+    client_with_root: TestClient,
+) -> None:
+    """POST /discover returns the same project list as GET /api/projects."""
+    get_resp = client_with_root.get("/api/projects")
+    post_resp = client_with_root.post("/api/projects/discover")
+    assert get_resp.status_code == 200
+    assert post_resp.status_code == 200
+    assert get_resp.json()["projects"] == post_resp.json()["projects"]
+
+
+def test_post_discover_picks_up_new_project_dir(
+    tmp_path: Path,
+    projects_root: Path,
+) -> None:
+    """POST /discover re-scans so a newly-added dir appears immediately."""
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        before = c.get("/api/projects").json()
+        project_ids_before = {p["project_id"] for p in before["projects"]}
+
+        # Add a new project dir after the app has started.
+        (projects_root / "delta").mkdir()
+
+        after = c.post("/api/projects/discover").json()
+        project_ids_after = {p["project_id"] for p in after["projects"]}
+
+    assert "delta" not in project_ids_before
+    assert "delta" in project_ids_after
+
+
+def test_post_discover_no_root_configured_returns_empty_list(
+    client_no_root: TestClient,
+) -> None:
+    """POST /discover with no source_projects_root → empty list, 200."""
+    resp = client_no_root.post("/api/projects/discover")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["projects"] == []
