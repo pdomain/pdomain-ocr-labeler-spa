@@ -14,6 +14,8 @@
 //   dialog-erase-rect, dialog-word-stage
 
 import { useState } from "react";
+import { WordActionRows } from "./WordActionRows";
+import type { WordActionCallbacks } from "./WordActionRows";
 import { WordImageCanvas } from "./WordImageCanvas";
 import type { EraseRect, MarkerPoint } from "./WordImageCanvas";
 
@@ -22,7 +24,7 @@ export interface DialogTarget {
   wordIndex: number;
 }
 
-interface WordEditDialogProps {
+interface WordEditDialogProps extends WordActionCallbacks {
   /** Whether the dialog is visible. */
   open: boolean;
   /** Current word target (line/word indices, 0-based). */
@@ -66,6 +68,10 @@ export function WordEditDialog({
   onNavigate,
   onApply,
   onClose,
+  onMerge,
+  onSplit,
+  onDelete,
+  onCrop,
 }: WordEditDialogProps) {
   const [eraseRects, setEraseRects] = useState<EraseRect[]>([]);
   const [marker, setMarker] = useState<MarkerPoint | null>(null);
@@ -221,7 +227,17 @@ export function WordEditDialog({
             onEraseRectAdd={handleEraseRectAdd}
             onMarkerPlace={(pt) => setMarker(pt)}
           />
-          {/* Action rows (#211, #212 will add Merge/Split/Delete/Crop/Refine/Tag rows here) */}
+          {/* Merge/Split/Delete/Crop rows — #211 */}
+          <WordActionRows
+            hasPrev={wordIndex > 0}
+            hasNext={wordIndex < lineWords.length - 1}
+            splitFraction={marker ? marker.x / 200 : 0.5}
+            onMerge={onMerge}
+            onSplit={onSplit}
+            onDelete={onDelete}
+            onCrop={onCrop}
+          />
+          {/* Refine/nudge/tag rows — #212 */}
         </div>
       </div>
     </div>
