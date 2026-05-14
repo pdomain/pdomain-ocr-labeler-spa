@@ -27,7 +27,14 @@ router = APIRouter(
 
 
 class PagePayload(BaseModel):
-    """Full per-page payload — spec §5.3 / §1 ``PagePayload``."""
+    """Full per-page payload — spec §5.3 / §1 ``PagePayload``.
+
+    ``page_text_ocr`` and ``page_text_gt`` are pre-built plaintext strings
+    assembled from the page's OCR / GT words.  When
+    ``normalize_plaintext_tabs=True`` in ``AppConfig`` these are normalised
+    (long-s → ASCII etc.) before serialisation.  The envelope itself is never
+    modified.
+    """
 
     project_id: str
     page_index: int
@@ -38,6 +45,9 @@ class PagePayload(BaseModel):
     line_filter: LineFilter = LineFilter.ALL
     image_url: str | None = None
     generation: int = 0
+    # Plaintext representations — spec §1 ``PagePayload``.
+    page_text_ocr: str | None = None
+    page_text_gt: str | None = None
     extra: dict[str, Any] = Field(default_factory=dict)
 
 

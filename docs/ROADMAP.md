@@ -362,6 +362,25 @@ ambiguous as an OPEN_QUESTIONS.md entry first.
   selection-mode radios (`selection-mode-paragraph/line/word`), `erase-pixels-button`.
   `BBoxOverlay` — legacy-exact RGBA color constants exported as `LAYER_COLORS`; stub
   component ready for Konva wiring at M4.
+- [x] **#209 (2026-05-14)** `WordEditDialog` shell — header (Apply&Close, × Close),
+  3-column preview row (prev/current/next word), prev/next navigation, backdrop close.
+  data-testids: `dialog-header-label`, `dialog-apply-close-button`, `dialog-close-button`,
+  `dialog-prev-button`, `dialog-next-button`, `dialog-prev-word`, `dialog-current-word`,
+  `dialog-next-word`. Action rows slot for #210–#212.
+- [x] **#207 (2026-05-14)** `ToolbarActionGrid` — 4×14 grid (page/para/line/word scopes),
+  stub cells with `data-testid-stub="true"`, disabled-state computed by
+  `useToolbarButtonStates`. Apply Style row (`apply-style-select`, `apply-scope-select`,
+  `apply-component-select`, `apply-style-button`, `clear-style-button`).
+  Add Word row (`add-word-button`, `aria-pressed`).
+- [x] **#197 (2026-05-14)** `PageImageCanvas` Select mode — drag box-select with DragRect
+  preview (`ocr-drag-rect`), modifier key dispatch (replace/remove/toggle),
+  `onBoxSelect` callback on mouseup, Escape cancels. `useViewportStore` +
+  `useSelectionStore` created.
+- [x] **#260 (2026-05-14)** text-norm: `core.text_normalize` module (`is_available()`,
+  `normalize_string()`); `PagePayload` gains `page_text_ocr: str | None` and
+  `page_text_gt: str | None`; `ExportRequest` gains `normalize_recognition_labels: bool = False`;
+  openapi-export regenerated. Normalize delegates to `pd_book_tools.text.normalize`;
+  falls back silently when module absent.
 
 ## Iteration index (this repo)
 

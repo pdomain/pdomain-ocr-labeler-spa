@@ -38,7 +38,13 @@ class ExportScope(str, enum.Enum):
 
 
 class ExportRequest(BaseModel):
-    """Body for ``POST /api/projects/{id}/export`` — spec §2 lines 414-420."""
+    """Body for ``POST /api/projects/{id}/export`` — spec §2 lines 414-420.
+
+    ``normalize_recognition_labels``: when ``True``, recognition ``labels.json``
+    strings are normalised (long-s → ASCII, ligatures → ASCII) before write.
+    Image bytes are unchanged.  Requires ``pd_book_tools.text.normalize``;
+    silently ignored when the module is absent.  Spec: §18-text-normalization.
+    """
 
     scope: ExportScope
     style_filters: list[str] = []
@@ -46,6 +52,7 @@ class ExportRequest(BaseModel):
     include_classification: bool = False
     detection_only: bool = False
     recognition_only: bool = False
+    normalize_recognition_labels: bool = False
 
 
 class ExportResponse(BaseModel):

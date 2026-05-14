@@ -1183,6 +1183,11 @@ export interface components {
         /**
          * ExportRequest
          * @description Body for ``POST /api/projects/{id}/export`` — spec §2 lines 414-420.
+         *
+         *     ``normalize_recognition_labels``: when ``True``, recognition ``labels.json``
+         *     strings are normalised (long-s → ASCII, ligatures → ASCII) before write.
+         *     Image bytes are unchanged.  Requires ``pd_book_tools.text.normalize``;
+         *     silently ignored when the module is absent.  Spec: §18-text-normalization.
          */
         ExportRequest: {
             scope: components["schemas"]["ExportScope"];
@@ -1208,6 +1213,11 @@ export interface components {
              * @default false
              */
             recognition_only: boolean;
+            /**
+             * Normalize Recognition Labels
+             * @default false
+             */
+            normalize_recognition_labels: boolean;
         };
         /**
          * ExportResponse
@@ -1561,6 +1571,12 @@ export interface components {
         /**
          * PagePayload
          * @description Full per-page payload — spec §5.3 / §1 ``PagePayload``.
+         *
+         *     ``page_text_ocr`` and ``page_text_gt`` are pre-built plaintext strings
+         *     assembled from the page's OCR / GT words.  When
+         *     ``normalize_plaintext_tabs=True`` in ``AppConfig`` these are normalised
+         *     (long-s → ASCII etc.) before serialisation.  The envelope itself is never
+         *     modified.
          */
         PagePayload: {
             /** Project Id */
@@ -1581,6 +1597,10 @@ export interface components {
              * @default 0
              */
             generation: number;
+            /** Page Text Ocr */
+            page_text_ocr?: string | null;
+            /** Page Text Gt */
+            page_text_gt?: string | null;
             /** Extra */
             extra?: {
                 [key: string]: unknown;
