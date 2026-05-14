@@ -1,14 +1,21 @@
-// WordEditDialog.tsx — word-edit dialog shell (#209)
-// Spec: docs/specs/2026-05-12-word-edit-dialog-design.md §Header §Preview row
+// WordEditDialog.tsx — word-edit dialog (#209, #210)
+// Spec: docs/specs/2026-05-12-word-edit-dialog-design.md
 //
-// Shell covers: header (Apply&Close + Close), 3-column preview row, prev/next nav.
-// Later issues (#210–#212) add Konva image, action rows, hotkeys.
+// Shell (#209): header (Apply&Close + Close), 3-column preview row, prev/next nav.
+// Konva image (#210): interactive Stage at 1×/2×/5×/10× zoom, click marker,
+//   hover guide, staged erase rects.
 //
 // data-testids (driver-contract):
 //   dialog-backdrop, dialog-header-label
 //   dialog-apply-close-button, dialog-close-button
 //   dialog-prev-button, dialog-next-button
 //   dialog-prev-word, dialog-current-word, dialog-next-word
+//   dialog-current-zoom-toggle, dialog-current-marker, dialog-hover-guide
+//   dialog-erase-rect, dialog-word-stage
+
+import { useState } from "react";
+import { WordImageCanvas } from "./WordImageCanvas";
+import type { EraseRect, MarkerPoint } from "./WordImageCanvas";
 
 export interface DialogTarget {
   lineIndex: number;
@@ -22,10 +29,14 @@ interface WordEditDialogProps {
   target: DialogTarget;
   /** OCR text of each word in the current line (for 3-column preview). */
   lineWords: string[];
+  /** URL of the current word's image slice (for the Konva canvas). */
+  wordImageUrl?: string;
+  /** Whether erase mode is active (toggles Konva drag-erase). */
+  eraseMode?: boolean;
   /** Called when prev/next navigation is requested. */
   onNavigate: (target: DialogTarget) => void;
   /** Called when Apply & Close is clicked (commits pending changes). */
-  onApply: () => void;
+  onApply: (eraseRects: EraseRect[], marker: MarkerPoint | null) => void;
   /** Called when × Close or backdrop is clicked (discards pending changes). */
   onClose: () => void;
 }
@@ -50,10 +61,15 @@ export function WordEditDialog({
   open,
   target,
   lineWords,
+  wordImageUrl,
+  eraseMode = false,
   onNavigate,
   onApply,
   onClose,
 }: WordEditDialogProps) {
+  const [eraseRects, setEraseRects] = useState<EraseRect[]>([]);
+  const [marker, setMarker] = useState<MarkerPoint | null>(null);
+
   if (!open) return null;
 
   const { lineIndex, wordIndex } = target;
@@ -65,8 +81,12 @@ export function WordEditDialog({
   const nextWord = hasNext ? lineWords[wordIndex + 1] : null;
 
   function handleApplyClose() {
-    onApply();
+    onApply(eraseRects, marker);
     onClose();
+  }
+
+  function handleEraseRectAdd(rect: EraseRect) {
+    setEraseRects((prev) => [...prev, rect]);
   }
 
   function handlePrev() {
@@ -189,13 +209,19 @@ export function WordEditDialog({
           </div>
         </div>
 
-        {/* Action rows slot — populated by #210 (Konva image), #211, #212 */}
+        {/* Konva interactive word image — #210 */}
         <div
           data-testid="dialog-action-rows"
-          className="flex-1 min-h-[8rem] p-4 text-sm text-gray-400 text-center flex items-center justify-center"
+          className="flex-1 p-4 flex flex-col items-center gap-3"
         >
-          {/* Action rows will be added in #210–#212 */}
-          <span>Action rows (coming in #210–#212)</span>
+          <WordImageCanvas
+            imageUrl={wordImageUrl}
+            eraseMode={eraseMode}
+            eraseRects={eraseRects}
+            onEraseRectAdd={handleEraseRectAdd}
+            onMarkerPlace={(pt) => setMarker(pt)}
+          />
+          {/* Action rows (#211, #212 will add Merge/Split/Delete/Crop/Refine/Tag rows here) */}
         </div>
       </div>
     </div>

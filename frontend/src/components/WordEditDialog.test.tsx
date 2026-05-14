@@ -7,6 +7,50 @@
 
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
+
+// WordEditDialog now embeds a Konva Stage — mock react-konva to avoid canvas errors in jsdom.
+vi.mock("react-konva", () => ({
+  Stage: ({
+    children,
+    width,
+    height,
+    "data-testid": testId,
+  }: {
+    children?: React.ReactNode;
+    width?: number;
+    height?: number;
+    "data-testid"?: string;
+    [key: string]: unknown;
+  }) => (
+    <div data-testid={testId ?? "konva-stage"} data-width={width} data-height={height}>
+      {children}
+    </div>
+  ),
+  Layer: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  Rect: ({
+    "data-testid": testId,
+    x,
+    y,
+    width,
+    height,
+  }: {
+    "data-testid"?: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    [key: string]: unknown;
+  }) => (
+    <div
+      data-testid={testId ?? "konva-rect"}
+      data-x={x}
+      data-y={y}
+      data-width={width}
+      data-height={height}
+    />
+  ),
+}));
+
 import { WordEditDialog } from "./WordEditDialog";
 
 const baseTarget = { lineIndex: 2, wordIndex: 1 };
