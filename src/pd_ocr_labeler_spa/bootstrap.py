@@ -324,11 +324,14 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # /api/jobs/* router — issue #185 (SSE for long-running operations).
     install_jobs_router(app)
 
+    install_export_router(app)
+    install_refine_router(app)
+    install_words_router(app)
+
     # Legacy SPA path redirects — spec §4 / issue #185 bullet 3.
     # /project/{id} → /projects/{id} (and /project/{id}/page/{n}
     # → /projects/{id}/pages/pageno/{n}) as 301 Moved Permanently.
     _install_legacy_redirects(app)
-
 
     # /api/ocr-config router — M3 slice 8a. Read-only stock-fallback
     # skeleton composed from the iter-7 OCR config DTOs; spec §5.8

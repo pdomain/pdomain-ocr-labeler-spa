@@ -19,11 +19,6 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/api/projects", tags=["export"])
 
 
-# ──────────────────────────────────────────────────────────────────────
-# Wire shapes — spec §01-data-models.md §2 "Export"
-# ──────────────────────────────────────────────────────────────────────
-
-
 class ExportScope(str, enum.Enum):
     """Export scope discriminant — spec §2 lines 411-412."""
 
@@ -46,11 +41,6 @@ class ExportResponse(BaseModel):
     """Response for export — spec §2 lines 422-423."""
 
     job_id: str
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Stub route
-# ──────────────────────────────────────────────────────────────────────
 
 
 @router.post("/{project_id}/export", response_model=ExportResponse)

@@ -135,22 +135,14 @@ def get_project_state(request: Request) -> ProjectState:
 
 
 def get_job_runner(request: Request) -> JobRunner:
-    """The in-process ``JobRunner`` — submit + track long-running jobs.
-
-    Spec §5.10 / §11. Wired in ``bootstrap.build_app`` alongside the
-    lifespan hook that calls ``runner.run_forever()``.
-    """
+    """The in-process ``JobRunner`` — spec §5.10 / §11."""
     runner = _state_attr(request, "job_runner")
     assert isinstance(runner, JobRunner)
     return runner
 
 
 def get_job_events(request: Request) -> JobEventBroker:
-    """The ``JobEventBroker`` for SSE fan-out.
-
-    Spec §11: per-job ``asyncio.Queue`` fan-out. Wired alongside
-    ``job_runner`` in ``bootstrap.build_app``.
-    """
+    """The ``JobEventBroker`` for SSE fan-out — spec §11."""
     broker = _state_attr(request, "job_events")
     assert isinstance(broker, JobEventBroker)
     return broker
