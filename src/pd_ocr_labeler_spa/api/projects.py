@@ -60,11 +60,12 @@ import logging
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ..core.active_project import ActiveProjectCarrier, InvalidProjectDirError
+from ..core.jobs import JobRunner
 from ..core.models import Project
 from ..core.persistence.ground_truth import load_ground_truth_from_directory
 from ..core.persistence.project_envelope import build_project_from_directory
@@ -78,10 +79,12 @@ from ..core.project_state import ProjectState
 from ..settings import Settings
 from .dependencies import (
     get_active_project_carrier,
+    get_job_runner,
     get_project_state,
     get_settings,
 )
 from .middleware.error_handler import ApiError
+from .pages import SaveProjectResponse
 
 log = logging.getLogger(__name__)
 
@@ -138,6 +141,19 @@ class LoadProjectRequest(BaseModel):
 
     project_root: Path
     initial_page_index: int = 0
+
+
+class SetSourceProjectsRootRequest(BaseModel):
+    """Body for ``POST /api/projects/source-root`` — spec §2 line 230."""
+
+    path: Path
+
+
+class SetSourceProjectsRootResponse(BaseModel):
+    """Response for ``POST /api/projects/source-root`` — spec §2 lines 232-234."""
+
+    projects_root: Path
+    projects: list[ProjectKey]
 
 
 class LoadProjectResponse(BaseModel):
@@ -503,6 +519,65 @@ def get_project_by_id(
     return JSONResponse(status_code=200, content=project.model_dump(mode="json"))
 
 
+@router.post("/source-root", response_model=SetSourceProjectsRootResponse)
+def set_source_root(
+    body: SetSourceProjectsRootRequest,
+) -> JSONResponse:
+    """``POST /api/projects/source-root`` — stub; M2-proper config milestone."""
+    return JSONResponse(
+        status_code=501,
+        content=ApiError(
+            error="not_implemented",
+            message="POST /api/projects/source-root requires M2-proper YAML config plumbing",
+        ).model_dump(),
+    )
+
+
+@router.post("/{project_id}/save-all", response_model=SaveProjectResponse)
+def save_all(
+    project_id: str,
+    project_state: ProjectState = Depends(get_project_state),
+    runner: JobRunner = Depends(get_job_runner),
+) -> JSONResponse:
+    """``POST /api/projects/{pid}/save-all`` → ``202 {job_id}``.
+
+    Spec §5.3: long-running save of all loaded pages. Returns 202 Accepted.
+    The job handler is a stub that immediately completes (M3 will wire
+    the real labeled-lane persistence). Callers track progress via
+    ``GET /api/jobs/{job_id}/events``.
+    """
+    project = project_state.loaded_project
+    if project is None or project.project_id != project_id:
+        return _api_error(
+            404,
+            "project_not_found",
+            f"project not found: {project_id}",
+        )
+
+    job_id = runner.submit("save_project", project_id=project_id)
+    return JSONResponse(status_code=202, content={"job_id": job_id})
+
+
+@router.delete("/{project_id}", status_code=204, response_model=None)
+def delete_project(
+    project_id: str,
+    project_state: ProjectState = Depends(get_project_state),
+    carrier: ActiveProjectCarrier = Depends(get_active_project_carrier),
+) -> Response:
+    """``DELETE /api/projects/{project_id}`` → ``204`` — spec §5.2."""
+    project = project_state.loaded_project
+    if project is None or project.project_id != project_id:
+        return _api_error(  # type: ignore[return-value]
+            404,
+            "project_not_found",
+            f"project not found: {project_id}",
+        )
+
+    project_state.clear()
+    carrier.clear()
+    return Response(status_code=204)
+
+
 def install_projects_router(app) -> None:  # type: ignore[no-untyped-def]
     """Register the projects router. Called from ``bootstrap.build_app``."""
     app.include_router(router)
@@ -513,6 +588,8 @@ __all__ = [
     "LoadProjectRequest",
     "LoadProjectResponse",
     "ProjectKey",
+    "SetSourceProjectsRootRequest",
+    "SetSourceProjectsRootResponse",
     "install_projects_router",
     "router",
 ]

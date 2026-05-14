@@ -28,6 +28,7 @@ from ..adapters.ocr import IOCREngine
 from ..adapters.storage import IStorage
 from ..core.active_project import ActiveProject, ActiveProjectCarrier
 from ..core.app_state import AppState
+from ..core.jobs import JobEventBroker, JobRunner
 from ..core.ocr_config_state import OCRConfigCarrier
 from ..core.project_state import ProjectState
 from ..settings import Settings
@@ -133,6 +134,20 @@ def get_project_state(request: Request) -> ProjectState:
     return state
 
 
+def get_job_runner(request: Request) -> JobRunner:
+    """The in-process ``JobRunner`` — spec §5.10 / §11."""
+    runner = _state_attr(request, "job_runner")
+    assert isinstance(runner, JobRunner)
+    return runner
+
+
+def get_job_events(request: Request) -> JobEventBroker:
+    """The ``JobEventBroker`` for SSE fan-out — spec §11."""
+    broker = _state_attr(request, "job_events")
+    assert isinstance(broker, JobEventBroker)
+    return broker
+
+
 def get_ocr_config_carrier(request: Request) -> OCRConfigCarrier:
     """The mutable ``OCRConfigCarrier`` — selected OCR detection + recognition
     model keys (M3 slice 8c-iv-a).
@@ -154,6 +169,8 @@ __all__ = [
     "get_active_project_carrier",
     "get_app_state",
     "get_auth",
+    "get_job_events",
+    "get_job_runner",
     "get_ocr_config_carrier",
     "get_ocr_engine",
     "get_project_state",

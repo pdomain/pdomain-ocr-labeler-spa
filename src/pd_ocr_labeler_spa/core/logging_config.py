@@ -129,7 +129,7 @@ class JsonFormatter(logging.Formatter):
 
 
 def configure_logging(log_format: LogFormat = "plain", level: int = logging.INFO) -> None:
-    """Install one stdout handler on the root logger.
+    """Install one stderr handler on the root logger.
 
     Idempotent: removes any handlers we previously installed before
     adding the new one, so repeated calls (uvicorn ``--reload``) don't
@@ -145,7 +145,7 @@ def configure_logging(log_format: LogFormat = "plain", level: int = logging.INFO
         if getattr(handler, "_pdlabeler_managed", False):
             root.removeHandler(handler)
 
-    handler = logging.StreamHandler(stream=sys.stdout)
+    handler = logging.StreamHandler(stream=sys.stderr)
     handler._pdlabeler_managed = True  # type: ignore[attr-defined]
     handler.addFilter(RequestIdFilter())
 

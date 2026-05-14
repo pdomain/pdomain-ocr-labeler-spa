@@ -170,3 +170,40 @@ def test_makefile_phony_targets_declared() -> None:
     }
     missing = must_be_phony - declared
     assert not missing, f"targets missing from .PHONY: {sorted(missing)}"
+
+
+@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+def test_ci_calls_pre_commit_check() -> None:
+    """`make ci` must invoke pre-commit-check so hooks run in CI."""
+    result = subprocess.run(
+        ["make", "-C", str(REPO_ROOT), "-n", "ci"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, f"`make -n ci` failed (rc={result.returncode}):\n{result.stderr}"
+    assert "pre-commit run" in result.stdout, (
+        f"`make ci` does not call pre-commit-check (pre-commit run --all-files):\n{result.stdout}"
+    )
+
+
+@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+def test_ci_calls_openapi_export_before_frontend_build() -> None:
+    """`make ci` must call openapi-export before frontend-build."""
+    result = subprocess.run(
+        ["make", "-C", str(REPO_ROOT), "-n", "ci"],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, f"`make -n ci` failed (rc={result.returncode}):\n{result.stderr}"
+    out = result.stdout
+    assert "openapi" in out.lower(), f"`make ci` does not call openapi-export:\n{out}"
+    assert "frontend" in out.lower(), f"`make ci` does not call frontend-build:\n{out}"
+    openapi_pos = out.lower().find("openapi")
+    frontend_build_pos = out.lower().find("building frontend")
+    if frontend_build_pos == -1:
+        frontend_build_pos = out.lower().find("frontend-build")
+    assert openapi_pos < frontend_build_pos, (
+        f"openapi-export must appear before frontend-build in `make ci` output:\n{out}"
+    )

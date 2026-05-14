@@ -368,7 +368,7 @@ def test_b72_test_isolation_does_not_mutate_real_static_assets(spa_dir: Path) ->
     [
         "/api/nonexistent",
         "/api/projects/foo/pages/0",
-        "/api/jobs",
+        "/api/jobs/nonexistent_job_id",
     ],
 )
 def test_spa_fallback_does_not_swallow_api_routes(settings: Settings, spa_dir: Path, path: str) -> None:
@@ -376,6 +376,10 @@ def test_spa_fallback_does_not_swallow_api_routes(settings: Settings, spa_dir: P
 
     A 200 HTML response for an unknown ``/api/...`` would mask backend
     bugs and confuse the driver agent's pre-pass.
+
+    Paths that match stub routes (e.g. ``/api/jobs``, page routes) are
+    intentionally excluded — they return 501 (not 404), and are covered
+    by the wire-shapes tests.
     """
     del spa_dir  # bundle present; reserved-prefix carve-out is what we exercise
     app = build_app(settings)

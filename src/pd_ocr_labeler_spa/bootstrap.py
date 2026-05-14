@@ -30,6 +30,8 @@ not at construction.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -38,17 +40,24 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.env_js import install_env_js
+from .api.export import install_export_router
 from .api.healthz import install_healthz
+from .api.jobs import install_jobs_router
+from .api.lines_paragraphs import install_lines_paragraphs_router
 from .api.middleware.error_handler import install_error_handlers
 from .api.middleware.request_id import RequestIdMiddleware
 from .api.ocr_config import install_ocr_config_router
+from .api.pages import install_pages_router
 from .api.projects import install_projects_router
+from .api.refine import install_refine_router
 from .api.static_mounts import install_image_cache, install_spa_fallback
+from .api.words import install_words_router
 from .core.active_project import (
     ActiveProjectCarrier,
     InvalidProjectDirError,
 )
 from .core.app_state import build_app_state
+from .core.jobs import JobEventBroker, JobRunner
 from .core.logging_config import configure_logging
 from .core.ocr_config_state import OCRConfigCarrier
 from .core.persistence.ocr_config import load_ocr_config
@@ -64,6 +73,7 @@ def _make_lifespan(
     settings: Settings,
     carrier: ActiveProjectCarrier,
     ocr_carrier: OCRConfigCarrier,
+    runner: JobRunner,
 ):
     """Build the FastAPI ``lifespan`` async context manager.
 
@@ -137,13 +147,42 @@ def _make_lifespan(
                     },
                 )
 
+        runner_task = asyncio.create_task(runner.run_forever())
         try:
             yield
         finally:
-            # No shutdown work yet; M3's JobRunner will land here.
-            pass
+            await runner.stop()
+            runner_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await runner_task
 
     return lifespan
+
+
+def _install_legacy_redirects(app: FastAPI) -> None:
+    """Register 301 redirects for the legacy single-word SPA paths.
+
+    Spec §4 / issue #185 bullet 3. Legacy paths:
+
+    - ``/project/{id}`` → ``/projects/{id}``
+    - ``/project/{id}/page/{n}`` → ``/projects/{id}/pages/pageno/{n}``
+
+    Registered with ``include_in_schema=False`` so they don't pollute
+    the OpenAPI schema. They're SPA routes (not API routes) so they
+    don't need a schema entry.
+    """
+    from fastapi.responses import RedirectResponse
+
+    @app.get("/project/{project_id}", include_in_schema=False)
+    def legacy_project_redirect(project_id: str) -> RedirectResponse:
+        return RedirectResponse(url=f"/projects/{project_id}", status_code=301)
+
+    @app.get("/project/{project_id}/page/{page_number}", include_in_schema=False)
+    def legacy_page_redirect(project_id: str, page_number: str) -> RedirectResponse:
+        return RedirectResponse(
+            url=f"/projects/{project_id}/pages/pageno/{page_number}",
+            status_code=301,
+        )
 
 
 def build_app(settings: Settings | None = None) -> FastAPI:
@@ -175,7 +214,12 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # ``build_app`` instance so test isolation holds (no module-global
     # state).
     ocr_carrier = OCRConfigCarrier()
-    lifespan = _make_lifespan(settings, carrier, ocr_carrier)
+    # Spec §2 step 3 + §11: build the JobEventBroker and JobRunner before
+    # the lifespan so the runner can be started in the lifespan task and
+    # stashed on ``app.state`` for DI. Per-``build_app`` for test isolation.
+    broker = JobEventBroker()
+    runner = JobRunner(broker)
+    lifespan = _make_lifespan(settings, carrier, ocr_carrier, runner)
 
     app = FastAPI(title="pd-ocr-labeler-spa", lifespan=lifespan)
 
@@ -253,6 +297,12 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # isolation, same as ``ProjectState``.
     app.state.ocr_config_carrier = ocr_carrier
 
+    # Spec §2 step 3 + §11: stash the job runner + event broker so DI
+    # providers ``get_job_runner`` / ``get_job_events`` can resolve them.
+    # Both are per-``build_app`` instances (no module-global state).
+    app.state.job_runner = runner
+    app.state.job_events = broker
+
     # Spec §2 step 10: install error handlers AFTER middleware (CORS +
     # RequestId) so a 500 still passes back through both on the way
     # out — the response keeps its CORS headers AND its X-Request-ID
@@ -268,6 +318,22 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # /healthz for symmetry. M2-proper will add /api/pages, /api/words,
     # etc.
     install_projects_router(app)
+
+    # /api/projects/{id}/pages/* router — issue #185.
+    install_pages_router(app)
+
+    # /api/jobs/* router — issue #185 (SSE for long-running operations).
+    install_jobs_router(app)
+
+    install_export_router(app)
+    install_refine_router(app)
+    install_words_router(app)
+    install_lines_paragraphs_router(app)
+
+    # Legacy SPA path redirects — spec §4 / issue #185 bullet 3.
+    # /project/{id} → /projects/{id} (and /project/{id}/page/{n}
+    # → /projects/{id}/pages/pageno/{n}) as 301 Moved Permanently.
+    _install_legacy_redirects(app)
 
     # /api/ocr-config router — M3 slice 8a. Read-only stock-fallback
     # skeleton composed from the iter-7 OCR config DTOs; spec §5.8
