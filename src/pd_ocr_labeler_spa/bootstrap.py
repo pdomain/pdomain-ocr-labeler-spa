@@ -46,6 +46,7 @@ from .api.jobs import install_jobs_router
 from .api.lines_paragraphs import install_lines_paragraphs_router
 from .api.middleware.error_handler import install_error_handlers
 from .api.middleware.request_id import RequestIdMiddleware
+from .api.normalize import install_normalize_router
 from .api.notifications import install_notifications_router
 from .api.ocr_config import install_ocr_config_router
 from .api.pages import install_pages_router
@@ -376,6 +377,10 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # GET /api/session-state — returns last-loaded project path for RootPage
     # redirect-on-mount logic. Issue #274.
     install_session_state_router(app)
+
+    # GET /api/normalize/available — probe for pd_book_tools.text.normalize.
+    # Used by OCRConfigModal to gate normalize UI toggles. Issue #261.
+    install_normalize_router(app)
 
     # Per specs/02-backend.md §2 step 12: /env.js, /image-cache, and the
     # SPA fallback only land in non-api_only modes. api_only is the
