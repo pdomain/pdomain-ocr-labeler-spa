@@ -155,16 +155,68 @@ describe("PageActions", () => {
     });
   });
 
-  describe("rotate buttons (M9.1 — hidden in DOM)", () => {
-    it("rotate-ccw-button and rotate-cw-button exist but are hidden", () => {
+  describe("rotate buttons (M9.1 — wired in #263)", () => {
+    it("rotate-ccw-button and rotate-cw-button exist and are visible", () => {
       render(<PageActions />);
       const ccw = screen.getByTestId("rotate-ccw-button");
       const cw = screen.getByTestId("rotate-cw-button");
       expect(ccw).toBeInTheDocument();
       expect(cw).toBeInTheDocument();
-      // Buttons must be hidden via inline style (display:none) per spec
-      expect(ccw).toHaveStyle({ display: "none" });
-      expect(cw).toHaveStyle({ display: "none" });
+      // Buttons are now visible (M9.1 wired); no display:none
+      expect(ccw).not.toHaveStyle({ display: "none" });
+      expect(cw).not.toHaveStyle({ display: "none" });
+    });
+
+    it("rotate-cw fires onRotateCw on click", async () => {
+      const onRotateCw = vi.fn();
+      render(<PageActions onRotateCw={onRotateCw} />);
+      const cw = screen.getByTestId("rotate-cw-button");
+      fireEvent.click(cw);
+      expect(onRotateCw).toHaveBeenCalledOnce();
+    });
+
+    it("rotate-ccw fires onRotateCcw on click", async () => {
+      const onRotateCcw = vi.fn();
+      render(<PageActions onRotateCcw={onRotateCcw} />);
+      const ccw = screen.getByTestId("rotate-ccw-button");
+      fireEvent.click(ccw);
+      expect(onRotateCcw).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe("rotation-badge (M9.1)", () => {
+    it("rotation-badge is always in the DOM", () => {
+      render(<PageActions />);
+      expect(screen.getByTestId("rotation-badge")).toBeInTheDocument();
+    });
+
+    it("rotation-badge is hidden when rotationDegrees=0", () => {
+      render(<PageActions rotationDegrees={0} />);
+      const badge = screen.getByTestId("rotation-badge");
+      expect(badge).toHaveStyle({ display: "none" });
+    });
+
+    it("rotation-badge is visible when rotationDegrees!=0", () => {
+      render(<PageActions rotationDegrees={90} rotationSource="manual" />);
+      const badge = screen.getByTestId("rotation-badge");
+      expect(badge).not.toHaveStyle({ display: "none" });
+    });
+
+    it("rotation-badge shows degree + source text", () => {
+      render(<PageActions rotationDegrees={90} rotationSource="auto" />);
+      const badge = screen.getByTestId("rotation-badge");
+      expect(badge).toHaveTextContent("90");
+      expect(badge).toHaveTextContent("auto");
+    });
+
+    it("rotation-badge fires onRotateRevert when source=auto and clicked", () => {
+      const onRotateRevert = vi.fn();
+      render(
+        <PageActions rotationDegrees={90} rotationSource="auto" onRotateRevert={onRotateRevert} />,
+      );
+      const badge = screen.getByTestId("rotation-badge");
+      fireEvent.click(badge);
+      expect(onRotateRevert).toHaveBeenCalledOnce();
     });
   });
 });

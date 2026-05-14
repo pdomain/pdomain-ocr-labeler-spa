@@ -256,10 +256,21 @@ async def _handle_export(runner: JobRunner, job: Job) -> None:
     await handle_export(runner, job)
 
 
+async def _handle_rotate_page(runner: JobRunner, job: Job) -> None:
+    """Rotate-page handler — delegates to ``core/jobs/handlers/rotate``.
+
+    Issue #263: M9.1 manual rotate (202+job pattern).
+    """
+    from .handlers.rotate import handle_rotate_page  # lazy import
+
+    await handle_rotate_page(runner, job)
+
+
 _HANDLERS: dict[str, Handler] = {
     "reload_ocr": _handle_reload_ocr,
     "save_project": _handle_save_project,
     "export": _handle_export,
+    "rotate_page": _handle_rotate_page,
 }
 
 

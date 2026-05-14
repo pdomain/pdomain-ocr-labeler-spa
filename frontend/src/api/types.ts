@@ -334,6 +334,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate Page
+         * @description ``POST .../rotate`` → ``202 {job_id}`` — spec §19 (M9.1).
+         *
+         *     Enqueues a ``rotate_page`` job that rotates the source image, re-runs
+         *     OCR, updates ``PageRecord.rotation_degrees`` / ``rotation_source``, and
+         *     auto-saves the envelope.
+         *
+         *     ``degrees`` must be one of ``-90``, ``90``, ``180``; other values are
+         *     rejected with ``400 invalid_degrees``.  ``manual=True`` (default) sets
+         *     ``rotation_source="manual"``; ``False`` sets ``"auto"`` (used by the
+         *     auto-rotate-all pass in M9.2).
+         */
+        post: operations["rotate_page_api_projects__project_id__pages__page_index__rotate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs": {
         parameters: {
             query?: never;
@@ -1677,6 +1706,11 @@ export interface components {
          *     The actual ``Page`` object lives in ``PageState`` in-memory and is
          *     NOT serialised here. Wire shapes that need page contents use
          *     ``PagePayload`` (defined in ``api/pages.py``).
+         *
+         *     v2.2 rotation fields (spec §19 / issue #263):
+         *     ``rotation_degrees`` tracks cumulative rotation applied since original
+         *     image; ``rotation_source`` distinguishes auto (OCR+GT best-match),
+         *     manual (user-initiated), and none (original orientation).
          */
         PageRecord: {
             /** Page Index */
@@ -1701,6 +1735,13 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             cached_images?: components["schemas"]["CachedImageSet"];
+            /**
+             * Rotation Degrees
+             * @default 0
+             */
+            rotation_degrees: number;
+            /** @default none */
+            rotation_source: components["schemas"]["RotationSource"];
         };
         /**
          * PageSource
@@ -1805,6 +1846,40 @@ export interface components {
          * @description Body for ``POST .../rematch-gt`` — spec §5.3.
          */
         RematchGtRequest: Record<string, never>;
+        /**
+         * RotatePageRequest
+         * @description Body for ``POST .../rotate`` — spec §19 (M9.1).
+         *
+         *     ``degrees`` must be one of ``-90``, ``90``, ``180``.
+         *     ``manual`` distinguishes user-initiated (``True``) from
+         *     auto-rotate (``False``) for ``rotation_source`` tracking.
+         */
+        RotatePageRequest: {
+            /** Degrees */
+            degrees: number;
+            /**
+             * Manual
+             * @default true
+             */
+            manual: boolean;
+        };
+        /**
+         * RotatePageResponse
+         * @description Response for ``POST .../rotate`` → ``202 Accepted`` — spec §19 (M9.1).
+         */
+        RotatePageResponse: {
+            /** Job Id */
+            job_id: string;
+        };
+        /**
+         * RotationSource
+         * @description How a page's rotation was determined.
+         *
+         *     Spec: ``docs/specs/2026-05-12-auto-rotation-design.md §PageRecord`` /
+         *     issue #263 (M9.1).  Defaults to ``"none"`` (original orientation).
+         * @enum {string}
+         */
+        RotationSource: "none" | "auto" | "manual";
         /**
          * SaveFailure
          * @description Error detail for failed save operations — spec §5.3.
@@ -2436,6 +2511,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotate_page_api_projects__project_id__pages__page_index__rotate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RotatePageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RotatePageResponse"];
                 };
             };
             /** @description Validation Error */

@@ -97,6 +97,24 @@ class RematchGtRequest(BaseModel):
     pass
 
 
+class RotatePageRequest(BaseModel):
+    """Body for ``POST .../rotate`` — spec §19 (M9.1).
+
+    ``degrees`` must be one of ``-90``, ``90``, ``180``.
+    ``manual`` distinguishes user-initiated (``True``) from
+    auto-rotate (``False``) for ``rotation_source`` tracking.
+    """
+
+    degrees: int
+    manual: bool = True
+
+
+class RotatePageResponse(BaseModel):
+    """Response for ``POST .../rotate`` → ``202 Accepted`` — spec §19 (M9.1)."""
+
+    job_id: str
+
+
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
@@ -222,6 +240,51 @@ def rematch_gt(
     return _not_implemented("rematch-gt requires M3 plumbing")
 
 
+@router.post("/{page_index}/rotate", response_model=RotatePageResponse)
+def rotate_page(
+    project_id: str,
+    page_index: int,
+    body: RotatePageRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    runner: JobRunner = Depends(get_job_runner),
+) -> JSONResponse:
+    """``POST .../rotate`` → ``202 {job_id}`` — spec §19 (M9.1).
+
+    Enqueues a ``rotate_page`` job that rotates the source image, re-runs
+    OCR, updates ``PageRecord.rotation_degrees`` / ``rotation_source``, and
+    auto-saves the envelope.
+
+    ``degrees`` must be one of ``-90``, ``90``, ``180``; other values are
+    rejected with ``400 invalid_degrees``.  ``manual=True`` (default) sets
+    ``rotation_source="manual"``; ``False`` sets ``"auto"`` (used by the
+    auto-rotate-all pass in M9.2).
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    if body.degrees not in (-90, 90, 180):
+        return JSONResponse(
+            status_code=400,
+            content=ApiError(
+                error="invalid_degrees",
+                message=f"degrees must be -90, 90, or 180; got {body.degrees}",
+            ).model_dump(),
+        )
+
+    job_id = runner.submit(
+        "rotate_page",
+        project_id=project_id,
+        payload={
+            "project_id": project_id,
+            "page_index": page_index,
+            "degrees": body.degrees,
+            "manual": body.manual,
+        },
+    )
+    return JSONResponse(status_code=202, content={"job_id": job_id})
+
+
 def install_pages_router(app) -> None:  # type: ignore[no-untyped-def]
     """Register the pages router. Called from ``bootstrap.build_app``."""
     app.include_router(router)
@@ -232,6 +295,8 @@ __all__ = [
     "ReloadOCRRequest",
     "ReloadOCRResponse",
     "RematchGtRequest",
+    "RotatePageRequest",
+    "RotatePageResponse",
     "SaveFailure",
     "SavePageRequest",
     "SavePageResponse",

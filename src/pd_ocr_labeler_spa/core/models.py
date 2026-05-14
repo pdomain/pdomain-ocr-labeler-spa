@@ -118,12 +118,29 @@ class CachedImageSet(BaseModel):
     matched_words: str | None = None
 
 
+class RotationSource(StrEnum):
+    """How a page's rotation was determined.
+
+    Spec: ``docs/specs/2026-05-12-auto-rotation-design.md §PageRecord`` /
+    issue #263 (M9.1).  Defaults to ``"none"`` (original orientation).
+    """
+
+    NONE = "none"
+    AUTO = "auto"
+    MANUAL = "manual"
+
+
 class PageRecord(BaseModel):
     """Per-page metadata — spec §1 ``PageRecord``.
 
     The actual ``Page`` object lives in ``PageState`` in-memory and is
     NOT serialised here. Wire shapes that need page contents use
     ``PagePayload`` (defined in ``api/pages.py``).
+
+    v2.2 rotation fields (spec §19 / issue #263):
+    ``rotation_degrees`` tracks cumulative rotation applied since original
+    image; ``rotation_source`` distinguishes auto (OCR+GT best-match),
+    manual (user-initiated), and none (original orientation).
     """
 
     page_index: int
@@ -134,6 +151,9 @@ class PageRecord(BaseModel):
     ocr_provenance: OCRProvenance | None = None
     saved_provenance: dict[str, Any] | None = None
     cached_images: CachedImageSet = Field(default_factory=CachedImageSet)
+    # M9.1 rotation fields (issue #263 / spec §19)
+    rotation_degrees: int = 0
+    rotation_source: RotationSource = RotationSource.NONE
 
 
 class WordMatch(BaseModel):
@@ -251,6 +271,7 @@ __all__ = [
     "PageRecord",
     "PageSource",
     "Project",
+    "RotationSource",
     "Selection",
     "WordMatch",
 ]

@@ -1,13 +1,17 @@
 // PageActions.tsx — horizontal action bar below project navigation controls.
 //
 // Spec: docs/specs/2026-05-12-page-actions-design.md
-// Issues #214, #217
+// Spec: docs/specs/2026-05-12-auto-rotation-design.md §Manual rotate (M9.1)
+// Issues #214, #217, #263
 //
 // Button layout (left to right):
 //   Reload OCR | Reload OCR (Edited) | Save Page | Save Project | Load Page |
-//   Rematch GT | [Rotate — hidden until M9.1] | Export…
+//   Rematch GT | Rotate CCW (↺) | Rotate CW (↻) | Export…
 //
-// Right side: page-name label, source badge, rotation badge (hidden until M9.1).
+// Right side: page-name label, source badge, rotation badge.
+//   rotation-badge: always in DOM; visible only when rotation_degrees != 0.
+//   Shows "↻ {deg}° {source}" — gray for auto, blue for manual.
+//   Clicking auto badge fires onRotateRevert (reverse rotation POST).
 //
 // All buttons are disabled while isBusy=true.
 // "Reload OCR (Edited)" is additionally disabled when hasEditedImage=false.
@@ -20,12 +24,14 @@
 // data-testids (driver-contract invariants):
 //   reload-ocr-button, reload-ocr-edited-button, save-page-button,
 //   save-project-button, load-page-button, rematch-gt-button, export-button,
-//   page-source-badge, page-name-label
+//   page-source-badge, page-name-label, rotation-badge,
+//   rotate-ccw-button, rotate-cw-button
 
 import { useHotkey } from "../hooks/useHotkey";
 import type { components } from "../api/types";
 
 type PageSource = components["schemas"]["PageSource"];
+type RotationSource = components["schemas"]["RotationSource"];
 
 /** Human-readable labels for each PageSource value. */
 const PAGE_SOURCE_LABELS: Record<PageSource, string> = {
@@ -52,6 +58,10 @@ interface PageActionsProps {
   pageSource?: PageSource | null;
   /** Display name for the current page (e.g. "page_001.png"). */
   pageName?: string | null;
+  /** Cumulative rotation applied to the current page (0 = original). */
+  rotationDegrees?: number;
+  /** How the current rotation was determined. */
+  rotationSource?: RotationSource | null;
 
   /** Callback: user clicked Reload OCR. */
   onReloadOcr?: () => void;
@@ -67,6 +77,12 @@ interface PageActionsProps {
   onRematchGt?: () => void;
   /** Callback: user clicked Export. */
   onExport?: () => void;
+  /** Callback: user clicked Rotate CW (+90°). */
+  onRotateCw?: () => void;
+  /** Callback: user clicked Rotate CCW (-90°). */
+  onRotateCcw?: () => void;
+  /** Callback: user clicked the rotation badge (revert auto rotation). */
+  onRotateRevert?: () => void;
 }
 
 /**
@@ -74,13 +90,15 @@ interface PageActionsProps {
  *
  * All action buttons are disabled while `isBusy` is true.
  * "Reload OCR (Edited)" is also disabled when `hasEditedImage` is false.
- * Rotate buttons exist in the DOM but are hidden (display:none) until M9.1.
+ * Rotate buttons wired in M9.1 (#263); rotation-badge always in DOM.
  */
 export function PageActions({
   isBusy = false,
   hasEditedImage = false,
   pageSource,
   pageName,
+  rotationDegrees = 0,
+  rotationSource = null,
   onReloadOcr,
   onReloadOcrEdited,
   onSavePage,
@@ -88,8 +106,12 @@ export function PageActions({
   onLoadPage,
   onRematchGt,
   onExport,
+  onRotateCw,
+  onRotateCcw,
+  onRotateRevert,
 }: PageActionsProps) {
   const source: PageSource = pageSource ?? "ocr";
+  const isRotated = rotationDegrees !== 0;
 
   // Hotkeys #217 — fire only when the corresponding button would be enabled
   useHotkey("mod+r", () => {
@@ -165,22 +187,20 @@ export function PageActions({
           Rematch GT
         </ActionButton>
 
-        {/* Rotate buttons — present in DOM, hidden until M9.1 */}
+        {/* Rotate buttons — M9.1 (#263) */}
         <ActionButton
           testid="rotate-ccw-button"
           disabled={isBusy}
-          onClick={undefined}
-          title="Rotate counter-clockwise (M9.1)"
-          style={{ display: "none" }}
+          onClick={onRotateCcw}
+          title="Rotate counter-clockwise (-90°)"
         >
           ↺
         </ActionButton>
         <ActionButton
           testid="rotate-cw-button"
           disabled={isBusy}
-          onClick={undefined}
-          title="Rotate clockwise (M9.1)"
-          style={{ display: "none" }}
+          onClick={onRotateCw}
+          title="Rotate clockwise (+90°)"
         >
           ↻
         </ActionButton>
@@ -217,6 +237,28 @@ export function PageActions({
         >
           {PAGE_SOURCE_LABELS[source]}
         </span>
+
+        {/* rotation-badge: always in DOM; visible only when rotated.
+            Spec §19: gray for auto, blue for manual.
+            Clicking auto badge reverts (fires onRotateRevert). */}
+        <button
+          data-testid="rotation-badge"
+          style={isRotated ? undefined : { display: "none" }}
+          onClick={rotationSource === "auto" ? onRotateRevert : undefined}
+          disabled={rotationSource !== "auto" || isBusy}
+          title={
+            rotationSource === "auto"
+              ? `Auto-rotated ${rotationDegrees}° clockwise. Click to revert.`
+              : `Manually rotated ${rotationDegrees}° clockwise.`
+          }
+          className={[
+            "px-2 py-0.5 text-xs font-semibold rounded",
+            rotationSource === "manual" ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800",
+            "disabled:cursor-default",
+          ].join(" ")}
+        >
+          ↻ {rotationDegrees}° {rotationSource ?? ""}
+        </button>
       </div>
     </div>
   );
