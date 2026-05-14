@@ -7,29 +7,29 @@ milestone-by-milestone implementation (M0…M9). Architecture: `specs/00-overvie
 
 | target | does |
 |---|---|
-| `make setup` | `uv sync` + pre-commit hooks + hatch-vcs version refresh |
-| `make frontend-install` | `npm install` inside `frontend/` |
-| `make test` | pytest — unit + integration, excludes `e2e/` |
-| `make frontend-test` | vitest (jsdom) |
-| `make e2e` | Playwright E2E (requires `playwright install chromium`) |
-| `make lint` / `make format` | ruff (format runs `--fix` too) |
-| `make pre-commit-check` | all pre-commit hooks on every tracked file |
+| `make setup AI=1` | `uv sync` + pre-commit hooks + hatch-vcs version refresh |
+| `make frontend-install AI=1` | `npm install` inside `frontend/` |
+| `make test AI=1` | pytest — unit + integration, excludes `e2e/` |
+| `make frontend-test AI=1` | vitest (jsdom) |
+| `make e2e AI=1` | Playwright E2E (requires `playwright install chromium`) |
+| `make lint AI=1` / `make format AI=1` | ruff (format runs `--fix` too) |
+| `make pre-commit-check AI=1` | all pre-commit hooks on every tracked file |
 | `make dev` | uvicorn --reload, points at Vite dev server on :5173 |
 | `make frontend-dev` | Vite HMR dev server on :5173 |
-| `make frontend-build` | builds SPA into `src/pd_ocr_labeler_spa/static/` |
-| `make openapi-export` | exports `/openapi.json` → regenerates `frontend/src/api/types.ts` |
-| `make build` | builds the wheel (requires populated `static/`) |
+| `make frontend-build AI=1` | builds SPA into `src/pd_ocr_labeler_spa/static/` |
+| `make openapi-export AI=1` | exports `/openapi.json` → regenerates `frontend/src/api/types.ts` |
+| `make build AI=1` | builds the wheel (requires populated `static/`) |
 | `make run` | builds SPA if missing, then `pd-ocr-labeler-ui` (production-style) |
-| `make ci` | setup + test + frontend-test + build |
+| `make ci AI=1` | setup + test + frontend-test + build |
 | `make docker-build` | builds the production Docker image |
 
-Always pass `AI=1` to make targets: `make ci AI=1`, `make test AI=1`, etc.
-This captures verbose output to `.ci-ai.log` and prints only `✅ <target>
-passed` on success or filtered failure sections on error. Remove `AI=1` only
-if you need full verbose output for debugging.
+`AI=1` captures verbose output to `.ci-ai.log`; stdout shows `✅` on pass or
+filtered failure sections on error. Remove `AI=1` only if you need full verbose
+output for debugging.
 
 ## Rules
 
+- Always run `make ci AI=1` before committing.
 - Make targets first; fall back to `uv run …` (or `npm`, `vitest`) only when no target exists.
 - Never `python -m pytest`. Always `uv run pytest` or `make test`.
   Bare `python`/`python3`/`.venv/bin/python` miss the venv.
