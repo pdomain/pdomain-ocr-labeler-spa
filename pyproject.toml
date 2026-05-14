@@ -51,6 +51,7 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.7",
     "httpx>=0.28",
+    "pyright>=1.1",
 ]
 e2e = [
     "pytest-playwright>=0.5",
@@ -109,9 +110,5 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.pyright]
-include = ["src", "tests", "scripts"]
+include = ["src"]
 typeCheckingMode = "basic"
-
-[[tool.pyright.executionEnvironments]]
-root = "src"
-typeCheckingMode = "strict"

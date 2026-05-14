@@ -36,6 +36,7 @@ import threading
 import time
 import webbrowser
 from pathlib import Path
+from typing import Any
 
 import uvicorn
 
@@ -184,7 +185,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
-def _build_overrides(args: argparse.Namespace) -> dict[str, object]:
+def _build_overrides(args: argparse.Namespace) -> dict[str, Any]:
     """Translate parsed CLI args into a Settings overrides dict.
 
     Only keys the user explicitly passed land in the dict. argparse
@@ -193,7 +194,7 @@ def _build_overrides(args: argparse.Namespace) -> dict[str, object]:
     """
     import logging
 
-    overrides: dict[str, object] = {}
+    overrides: dict[str, Any] = {}
     if args.host is not None:
         overrides["host"] = args.host
     if args.port is not None:

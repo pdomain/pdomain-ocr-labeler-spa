@@ -202,9 +202,10 @@ print(json.dumps(build_app().openapi(), indent=2))" > frontend/openapi.json
 # Lint / format / test / build
 # ---------------------------------------------------------------------------
 
-lint: ## Run ruff + eslint + tsc --noEmit (backend + frontend)
+lint: ## Run ruff + pyright + eslint + tsc --noEmit (backend + frontend)
 	uv run ruff check --select I --fix
 	uv run ruff check --fix
+	uv run pyright src/
 	@if [ -f frontend/node_modules/.bin/eslint ]; then \
 		echo "  Running eslint..."; \
 		$(call _npm,run lint); \

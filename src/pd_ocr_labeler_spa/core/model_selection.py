@@ -78,7 +78,9 @@ algorithm and the wire DTO.
 
 # Defensive sync check — if the DTO Literal evolves the algorithm
 # must follow. ``__args__`` on Literal returns the value tuple.
-_DTO_REASONS = set(GetOCRConfigResponse.model_fields["selection_reason"].annotation.__args__)
+_selection_reason_annotation = GetOCRConfigResponse.model_fields["selection_reason"].annotation
+assert _selection_reason_annotation is not None, "selection_reason annotation must not be None"
+_DTO_REASONS = set(_selection_reason_annotation.__args__)  # type: ignore[union-attr]
 _LOCAL_REASONS = {
     "hf-latest",
     "hf-only",

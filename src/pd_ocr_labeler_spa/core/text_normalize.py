@@ -52,7 +52,7 @@ def normalize_string(text: str, profile: str = "ascii") -> str:
     - ``normalize_string("shall", "ascii") == "shall"``  # idempotent
     - Never raises; returns input unchanged on any error.
     """
-    if not _AVAILABLE:
+    if not _AVAILABLE or _pd_normalize is None:
         return text
     try:
         result: str = _pd_normalize(text, profile=profile)

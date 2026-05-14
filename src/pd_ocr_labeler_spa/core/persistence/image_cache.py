@@ -141,7 +141,7 @@ def _maybe_downscale(image: PilImage.Image) -> PilImage.Image:
 
     scale = _MAX_CACHED_DIMENSION / max(w, h)
     new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
-    return image.resize((new_w, new_h), Image.LANCZOS)
+    return image.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
 
 def _jpeg_is_acceptable(original: PilImage.Image, jpeg_bytes: bytes) -> bool:

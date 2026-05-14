@@ -18,7 +18,7 @@ env:
   CUDA_VISIBLE_DEVICES: ""
 
 # ---------------------------------------------------------------------------
-# 1. lint — ruff + eslint + tsc --noEmit
+# 1. lint — ruff + pyright + eslint + tsc --noEmit
 # ---------------------------------------------------------------------------
 jobs:
   lint:
@@ -41,7 +41,7 @@ jobs:
             npm install --package-lock-only --include=dev
           fi
           npm ci --include=dev
-      - name: Run lint (ruff + eslint + tsc)
+      - name: Run lint (ruff + pyright + eslint + tsc)
         run: make lint
 
 # ---------------------------------------------------------------------------

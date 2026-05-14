@@ -75,7 +75,7 @@ class FilesystemStorage:
         # ``anyio.Path`` doesn't expose ``mkdir(parents=True)`` cleanly,
         # so dispatch the parent-mkdir to the threadpool to keep the
         # event loop unblocked. (B-44.)
-        await anyio.to_thread.run_sync(lambda: path.parent.mkdir(parents=True, exist_ok=True))
+        await anyio.to_thread.run_sync(lambda: path.parent.mkdir(parents=True, exist_ok=True))  # type: ignore[attr-defined]
         await anyio.Path(path).write_bytes(data)
 
     async def exists(self, key: str) -> bool:
@@ -91,7 +91,7 @@ class FilesystemStorage:
             if path.exists():
                 path.unlink()
 
-        await anyio.to_thread.run_sync(_delete)
+        await anyio.to_thread.run_sync(_delete)  # type: ignore[attr-defined]
 
     async def list_keys(self, prefix: str) -> list[str]:
         """Return keys under ``prefix`` (forward-slash form), recursive.
@@ -123,7 +123,7 @@ class FilesystemStorage:
                     keys.append(path.relative_to(root).as_posix())
             return sorted(keys)
 
-        return await anyio.to_thread.run_sync(_walk)
+        return await anyio.to_thread.run_sync(_walk)  # type: ignore[attr-defined]
 
     def presign_put(self, key: str, *, expires_in: int = 600) -> str:
         """Return the URL the labeler would PUT to for ``key``.

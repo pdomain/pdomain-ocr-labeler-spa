@@ -35,7 +35,7 @@ def _job_not_found(job_id: str) -> JSONResponse:
     )
 
 
-def _job_snapshot(job: Job) -> dict:
+def _job_snapshot(job: RunnerJob) -> dict:
     ev_type = job.status.value if job.status in _TERMINAL else "progress"
     return {
         "type": ev_type,
