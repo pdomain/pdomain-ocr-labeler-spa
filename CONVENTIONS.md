@@ -190,6 +190,10 @@ depends on this discipline.
 - A streaming endpoint (`StreamingResponse` for SSE) that intentionally
   cannot declare a Pydantic model — document with an inline comment
   explaining why and reference the spec section.
+- A `204 No Content` route: use `@router.delete(..., status_code=204, response_model=None)`
+  and return `None` (or a `Response` with no body) — `response_model=None` is the
+  explicit FastAPI idiom for "no response body"; it is NOT the same as omitting
+  `response_model=` entirely, and must be stated explicitly.
 
 ---
 

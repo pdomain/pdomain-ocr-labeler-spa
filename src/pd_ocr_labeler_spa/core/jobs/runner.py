@@ -74,8 +74,6 @@ class JobRunner:
         self._stop = asyncio.Event()
         self._running_tasks: set[asyncio.Task] = set()
 
-    # ── Public API ──────────────────────────────────────────────────────
-
     def get_job(self, job_id: str) -> Job | None:
         return self._jobs.get(job_id)
 
@@ -142,8 +140,6 @@ class JobRunner:
         self._jobs[job_id] = updated
         await self._emit(updated)
 
-    # ── Internal ────────────────────────────────────────────────────────
-
     async def _emit(self, job: Job) -> None:
         terminal = {JobStatus.COMPLETE, JobStatus.ERROR, JobStatus.CANCELLED}
         ev_type = job.status.value if job.status in terminal else "progress"
@@ -200,9 +196,6 @@ class JobRunner:
         )
         self._jobs[completed.job_id] = completed
         await self._emit(completed)
-
-
-# ── Job handlers ─────────────────────────────────────────────────────
 
 
 async def _handle_reload_ocr(runner: JobRunner, job: Job) -> None:

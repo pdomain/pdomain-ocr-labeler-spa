@@ -60,7 +60,7 @@ import logging
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -558,21 +558,16 @@ def save_all(
     return JSONResponse(status_code=202, content={"job_id": job_id})
 
 
-@router.delete("/{project_id}")
+@router.delete("/{project_id}", status_code=204, response_model=None)
 def delete_project(
     project_id: str,
     project_state: ProjectState = Depends(get_project_state),
     carrier: ActiveProjectCarrier = Depends(get_active_project_carrier),
-) -> JSONResponse:
-    """``DELETE /api/projects/{project_id}`` → ``204``.
-
-    Spec §5.2: forgets the project from in-memory state without touching
-    disk. Clears both ``ProjectState`` and the ``ActiveProjectCarrier``
-    so subsequent requests see no project loaded.
-    """
+) -> Response:
+    """``DELETE /api/projects/{project_id}`` → ``204`` — spec §5.2."""
     project = project_state.loaded_project
     if project is None or project.project_id != project_id:
-        return _api_error(
+        return _api_error(  # type: ignore[return-value]
             404,
             "project_not_found",
             f"project not found: {project_id}",
@@ -580,7 +575,7 @@ def delete_project(
 
     project_state.clear()
     carrier.clear()
-    return JSONResponse(status_code=204, content=None)
+    return Response(status_code=204)
 
 
 def install_projects_router(app) -> None:  # type: ignore[no-untyped-def]
