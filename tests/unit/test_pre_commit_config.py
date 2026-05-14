@@ -191,3 +191,77 @@ def test_refresh_version_hooks_share_single_script_entry(config: dict) -> None:
             f"hook {hook.get('id')!r} doesn't depend on staged files; must always_run"
         )
         assert hook.get("pass_filenames") is False, f"hook {hook.get('id')!r} takes no filename args"
+
+
+def _local_hook_ids(config: dict) -> list[str]:
+    """Return all hook ids from the `local` repo entry."""
+    for entry in config["repos"]:
+        if entry["repo"] == "local":
+            return [h["id"] for h in entry["hooks"]]
+    return []
+
+
+def test_frontend_tsc_hook_present(config: dict) -> None:
+    """Issue #279: frontend-tsc hook must be in the local-repo entry.
+
+    Mirrors pd-prep-for-pgdp/.pre-commit-config.yaml. Without this hook
+    TypeScript errors only surface in `make lint`, not at commit time.
+    """
+    ids = _local_hook_ids(config)
+    assert "frontend-tsc" in ids, (
+        "frontend-tsc hook missing from local repo — add it to mirror pd-prep-for-pgdp"
+    )
+
+
+def test_frontend_eslint_hook_present(config: dict) -> None:
+    """Issue #279: frontend-eslint hook must be in the local-repo entry."""
+    ids = _local_hook_ids(config)
+    assert "frontend-eslint" in ids, (
+        "frontend-eslint hook missing from local repo — add it to mirror pd-prep-for-pgdp"
+    )
+
+
+def test_frontend_prettier_hook_present(config: dict) -> None:
+    """Issue #279: frontend-prettier hook must be in the local-repo entry."""
+    ids = _local_hook_ids(config)
+    assert "frontend-prettier" in ids, (
+        "frontend-prettier hook missing from local repo — add it to mirror pd-prep-for-pgdp"
+    )
+
+
+def test_frontend_hooks_are_local_system_language(config: dict) -> None:
+    """Issue #279: frontend hooks must use `language: system` so they
+    resolve `npm`/`npx` from the mise-activated PATH, not a sandboxed
+    pre-commit virtualenv where those tools aren't available.
+    """
+    for entry in config["repos"]:
+        if entry["repo"] != "local":
+            continue
+        for hook in entry["hooks"]:
+            if hook.get("id") in ("frontend-tsc", "frontend-eslint", "frontend-prettier"):
+                assert hook.get("language") == "system", (
+                    f"hook {hook['id']!r} must use language: system; got {hook.get('language')!r}"
+                )
+                assert hook.get("pass_filenames") is False, (
+                    f"hook {hook['id']!r} must not pass filenames (runs over full tree)"
+                )
+
+
+def test_frontend_hooks_have_file_filters(config: dict) -> None:
+    """Issue #279: frontend hooks must declare `files:` patterns so they
+    only trigger on frontend changes (not on every Python edit).
+    """
+    for entry in config["repos"]:
+        if entry["repo"] != "local":
+            continue
+        for hook in entry["hooks"]:
+            if hook.get("id") in ("frontend-tsc", "frontend-eslint", "frontend-prettier"):
+                files_pattern = hook.get("files")
+                assert files_pattern, (
+                    f"hook {hook['id']!r} must declare a `files:` pattern "
+                    "so it only fires on frontend changes"
+                )
+                assert "frontend/" in files_pattern, (
+                    f"hook {hook['id']!r} `files:` pattern must be scoped to the "
+                    f"frontend/ directory; got {files_pattern!r}"
+                )

@@ -207,3 +207,41 @@ def test_ci_calls_openapi_export_before_frontend_build() -> None:
     assert openapi_pos < frontend_build_pos, (
         f"openapi-export must appear before frontend-build in `make ci` output:\n{out}"
     )
+
+
+@pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
+def test_ci_runs_frontend_install_before_pre_commit_check() -> None:
+    """`make ci` must run frontend-install before pre-commit-check.
+
+    Issue #279: the frontend pre-commit hooks (frontend-tsc, frontend-eslint,
+    frontend-prettier) invoke `npm run` / `npx`, which fail with
+    `tsc/eslint/prettier not found` if node_modules does not exist.
+    Running frontend-install first ensures node_modules is populated
+    before pre-commit-check fires the hooks.
+    """
+    # Read the Makefile directly to check the ci target's dependency order.
+    # `make -n ci` expands all dependencies recursively, but the ordering
+    # we care about is at the ci target level, which is most clearly
+    # verified by reading the target line.
+    makefile_text = MAKEFILE.read_text()
+    # Find the ci target line
+    ci_line = ""
+    for line in makefile_text.splitlines():
+        if line.startswith("ci:"):
+            ci_line = line
+            break
+    assert ci_line, "ci: target not found in Makefile"
+    # Both dependencies must appear on the ci target line
+    assert "frontend-install" in ci_line, (
+        f"frontend-install missing from `ci:` target dependencies: {ci_line!r}"
+    )
+    assert "pre-commit-check" in ci_line, (
+        f"pre-commit-check missing from `ci:` target dependencies: {ci_line!r}"
+    )
+    # frontend-install must appear before pre-commit-check
+    fi_pos = ci_line.index("frontend-install")
+    pc_pos = ci_line.index("pre-commit-check")
+    assert fi_pos < pc_pos, (
+        f"frontend-install must appear before pre-commit-check in ci: target "
+        f"so node_modules exists when pre-commit hooks fire; got: {ci_line!r}"
+    )
