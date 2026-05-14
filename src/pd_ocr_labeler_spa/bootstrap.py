@@ -51,6 +51,7 @@ from .api.ocr_config import install_ocr_config_router
 from .api.pages import install_pages_router
 from .api.projects import install_projects_router
 from .api.refine import install_refine_router
+from .api.session_state import install_session_state_router
 from .api.static_mounts import install_image_cache, install_spa_fallback
 from .api.words import install_words_router
 from .core.active_project import (
@@ -371,6 +372,10 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # generated client without conditional gating. Slice 8b+ will add
     # the POST mutate / rescan routes against this same prefix.
     install_ocr_config_router(app)
+
+    # GET /api/session-state — returns last-loaded project path for RootPage
+    # redirect-on-mount logic. Issue #274.
+    install_session_state_router(app)
 
     # Per specs/02-backend.md §2 step 12: /env.js, /image-cache, and the
     # SPA fallback only land in non-api_only modes. api_only is the

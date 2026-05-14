@@ -1010,6 +1010,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/session-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Session State
+         * @description Read and return the last-loaded session state.
+         *
+         *     Always returns 200. Missing or corrupt session_state.json is treated
+         *     as a cold start (``last_project_path: null``) — the frontend falls
+         *     back to the EmptyProjectState in that case.
+         *
+         *     Spec: ``docs/specs/2026-05-12-root-page-design.md §Decision``.
+         */
+        get: operations["get_session_state_api_session_state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1758,6 +1784,28 @@ export interface components {
                 number,
                 number
             ][];
+        };
+        /**
+         * SessionStateResponse
+         * @description Response model for GET /api/session-state.
+         *
+         *     Matches the ``session_state.json`` schema (spec §6) for direct
+         *     frontend consumption. ``last_project_path`` is ``null`` on first
+         *     run or when the file is missing/corrupt.
+         */
+        SessionStateResponse: {
+            /**
+             * Schema Version
+             * @default 1.0
+             */
+            schema_version: string;
+            /** Last Project Path */
+            last_project_path?: string | null;
+            /**
+             * Last Page Index
+             * @default 0
+             */
+            last_page_index: number;
         };
         /**
          * SetOCRModelsRequest
@@ -3318,6 +3366,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GetOCRConfigResponse"];
+                };
+            };
+        };
+    };
+    get_session_state_api_session_state_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionStateResponse"];
                 };
             };
         };
