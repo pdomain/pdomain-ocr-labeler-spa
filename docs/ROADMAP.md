@@ -419,6 +419,20 @@ ambiguous as an OPEN_QUESTIONS.md entry first.
   `rotation_source` fields. `POST /api/projects/{id}/pages/{idx}/rotate` (202+job; degrees -90|90|180).
   `rotate_page` job handler stub. `rotation-badge` in PageActions (always in DOM, hidden when
   degrees=0, gray=auto/blue=manual, auto-click fires revert). Rotate buttons wired. 10 backend tests.
+- [x] **#176 (2026-05-14)** pyright added to dev deps + pre-commit hook + `make lint` target;
+  `typeCheckingMode=basic` on `src/` only; 10 type errors resolved across
+  `__main__.py`, `storage/filesystem.py`, `api/jobs.py`, `core/model_selection.py`,
+  `core/persistence/image_cache.py`, `core/text_normalize.py`.
+- [x] **#238 (2026-05-14)** a11y: ARIA roles (`role=region` on WordMatchView, `role=status` /
+  `role=alert` live regions in App.tsx), `aria-label` on rotate buttons, validated badge,
+  word-match container; `axe-core` E2E audit (`tests/e2e/test_a11y.py`, 4 tests).
+- [x] **#264 (2026-05-14)** Rotation M9.2 auto-rotate-all: `OCRConfigCarrier` gains
+  `auto_rotate_on_load` / `auto_rotate_method` / `set_auto_rotate()`; `OCRConfigSidecar`
+  persists both fields; `GET /api/ocr-config` returns auto-rotate availability + settings;
+  `POST /api/ocr-config/auto-rotate` persists toggle + method; `POST /api/projects/{id}/auto-rotate-all`
+  → 202+job (503 when detect_best_rotation unavailable); `auto_rotate_all` job handler iterates
+  pages with progress; OCRConfigModal adds `auto-rotate-checkbox` + `auto-rotate-method-select`
+  section; openapi-export regenerated.
 
 ## Iteration index (this repo)
 
