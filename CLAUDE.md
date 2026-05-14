@@ -47,9 +47,13 @@ output for debugging.
 
 ## Current milestone
 
-M0 (repo scaffold) and M1 (settings/adapters/AppState) are both ~97% in progress; M1.h frontend
-components (`HeaderBar`, `EmptyProjectState`, `RootPage`) and two medium bugs (B-51, B-58) remain.
-See `docs/ROADMAP.md` for per-slice details.
+M0 (repo scaffold) and M1 (settings/adapters/AppState) are both done. M2 (project navigation
+and page loading) is in progress. Next slices: notifications stack (#230-#233), page-actions
+(#214-#217), word-matches list (#200-#203). See `docs/ROADMAP.md` for per-slice details.
+
+Key M1.h completions (2026-05-14): EmptyProjectState (#84), RootPage + GET /api/session-state
+(#274), App.tsx BrowserRouter + QueryClient + routes (#240), lifespan session-restore HTTP
+tests (#188), conformance golden tests (#245, #183).
 
 ## Specs
 
