@@ -6,31 +6,219 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
+env:
+  UV_PYTHON: "3.13"
+  CUDA_VISIBLE_DEVICES: ""
+
+# ---------------------------------------------------------------------------
+# 1. lint — ruff + eslint + tsc --noEmit
+# ---------------------------------------------------------------------------
 jobs:
-  ci:
-    name: ci
+  lint:
+    name: lint
     runs-on: ubuntu-latest
-    env:
-      # Pin Python 3.13 — uv would otherwise pick up the newest matching
-      # `requires-python` (3.14), which segfaults on TestClient teardown
-      # via anyio + sqlite3 worker threads. Drop this once anyio + SQLite
-      # are 3.14-clean.
-      UV_PYTHON: "3.13"
-      # Prevent CUDA from initialising on CPU-only CI runners. pd-book-tools
-      # depends on cupy-cuda12x; conftest._detect_gpu() imports cupy at
-      # collection time, which triggers CUDA library init. Without a GPU the
-      # CUDA driver teardown segfaults at process exit (exit code 139).
-      # CUDA_VISIBLE_DEVICES="" suppresses GPU enumeration before cupy loads.
-      CUDA_VISIBLE_DEVICES: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install backend deps
+        run: uv sync --group dev
+      - name: Install frontend deps
+        run: |
+          cd frontend
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only --include=dev
+          fi
+          npm ci --include=dev
+      - name: Run lint (ruff + eslint + tsc)
+        run: make lint
+
+# ---------------------------------------------------------------------------
+# 2. test-backend — pytest unit + integration + conformance
+# ---------------------------------------------------------------------------
+  test-backend:
+    name: test-backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+      - name: Install backend deps
+        run: uv sync --group dev
+      - name: Run backend tests (excludes e2e/)
+        run: make test
+
+# ---------------------------------------------------------------------------
+# 3. test-frontend — vitest + frontend-build; uploads SPA artifact
+# ---------------------------------------------------------------------------
+  test-frontend:
+    name: test-frontend
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+      - name: Install frontend deps
+        run: |
+          cd frontend
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only --include=dev
+          fi
+          npm ci --include=dev
+      - name: Run vitest suite
+        run: |
+          cd frontend
+          npm test
+      - name: Build SPA bundle
+        run: |
+          cd frontend
+          npm run build
+      - name: Copy bundle to static/
+        run: |
+          mkdir -p src/pd_ocr_labeler_spa/static
+          rm -rf src/pd_ocr_labeler_spa/static/*
+          cp -r frontend/dist/. src/pd_ocr_labeler_spa/static/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist-${{ github.run_id }}
+          path: frontend/dist/
+          retention-days: 1
+
+# ---------------------------------------------------------------------------
+# 4. test-e2e — Playwright against the pre-built SPA
+# ---------------------------------------------------------------------------
+  test-e2e:
+    name: test-e2e
+    runs-on: ubuntu-latest
+    needs: [test-frontend]
+    steps:
+      - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
         with:
-          version: latest
-      - run: make ci
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install backend deps (includes e2e group)
+        run: uv sync --group dev --group e2e
+      - name: Download pre-built SPA
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist-${{ github.run_id }}
+          path: frontend/dist/
+      - name: Copy bundle to static/
+        run: |
+          mkdir -p src/pd_ocr_labeler_spa/static
+          rm -rf src/pd_ocr_labeler_spa/static/*
+          cp -r frontend/dist/. src/pd_ocr_labeler_spa/static/
+      - name: Install Playwright browsers
+        run: uv run playwright install chromium --with-deps
+      - name: Run Playwright E2E tests
+        run: uv run --group e2e pytest tests/e2e -v
+
+# ---------------------------------------------------------------------------
+# 5. build-wheel — assert static/index.html is present in the wheel zip
+# ---------------------------------------------------------------------------
+  build-wheel:
+    name: build-wheel
+    runs-on: ubuntu-latest
+    needs: [test-frontend]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+      - name: Download pre-built SPA
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist-${{ github.run_id }}
+          path: frontend/dist/
+      - name: Copy bundle to static/
+        run: |
+          mkdir -p src/pd_ocr_labeler_spa/static
+          rm -rf src/pd_ocr_labeler_spa/static/*
+          cp -r frontend/dist/. src/pd_ocr_labeler_spa/static/
+      - name: Build wheel
+        run: uv build --wheel
+      - name: Assert static/index.html is in wheel zip
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          wheels=(dist/*.whl)
+          if [ ${#wheels[@]} -eq 0 ]; then
+            echo "::error::no wheel produced under dist/"
+            exit 1
+          fi
+          for whl in "${wheels[@]}"; do
+            echo "checking $whl"
+            if ! python3 -m zipfile -l "$whl" | grep -q 'pd_ocr_labeler_spa/static/index\.html'; then
+              echo "::error::$whl is missing pd_ocr_labeler_spa/static/index.html"
+              python3 -m zipfile -l "$whl"
+              exit 1
+            fi
+            echo "ok: $whl contains pd_ocr_labeler_spa/static/index.html"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ github.run_id }}
+          path: dist/*.whl
+          retention-days: 7
+
+# ---------------------------------------------------------------------------
+# 6. openapi-drift — fail if types.ts / openapi.json differ from committed
+# ---------------------------------------------------------------------------
+  openapi-drift:
+    name: openapi-drift
+    runs-on: ubuntu-latest
+    needs: [test-frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install backend deps
+        run: uv sync --group dev
+      - name: Install frontend deps
+        run: |
+          cd frontend
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only --include=dev
+          fi
+          npm ci --include=dev
+      - name: Download pre-built SPA
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist-${{ github.run_id }}
+          path: frontend/dist/
+      - name: Copy bundle to static/
+        run: |
+          mkdir -p src/pd_ocr_labeler_spa/static
+          rm -rf src/pd_ocr_labeler_spa/static/*
+          cp -r frontend/dist/. src/pd_ocr_labeler_spa/static/
+      - name: Re-export OpenAPI schema and regenerate types.ts
+        run: make openapi-export
+      - name: Fail if types.ts or openapi.json differ from committed version
+        run: |
+          git diff --exit-code frontend/src/api/types.ts frontend/openapi.json || {
+            echo "::error::OpenAPI types are out of sync. Run 'make openapi-export' locally and commit."
+            git diff frontend/src/api/types.ts frontend/openapi.json
+            exit 1
+          }
