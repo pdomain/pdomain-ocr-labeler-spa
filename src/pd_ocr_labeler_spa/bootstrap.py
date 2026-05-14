@@ -43,6 +43,7 @@ from .api.env_js import install_env_js
 from .api.export import install_export_router
 from .api.healthz import install_healthz
 from .api.jobs import install_jobs_router
+from .api.lines_paragraphs import install_lines_paragraphs_router
 from .api.middleware.error_handler import install_error_handlers
 from .api.middleware.request_id import RequestIdMiddleware
 from .api.ocr_config import install_ocr_config_router
@@ -327,6 +328,7 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     install_export_router(app)
     install_refine_router(app)
     install_words_router(app)
+    install_lines_paragraphs_router(app)
 
     # Legacy SPA path redirects — spec §4 / issue #185 bullet 3.
     # /project/{id} → /projects/{id} (and /project/{id}/page/{n}

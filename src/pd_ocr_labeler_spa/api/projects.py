@@ -84,6 +84,7 @@ from .dependencies import (
     get_settings,
 )
 from .middleware.error_handler import ApiError
+from .pages import SaveProjectResponse
 
 log = logging.getLogger(__name__)
 
@@ -518,15 +519,11 @@ def get_project_by_id(
     return JSONResponse(status_code=200, content=project.model_dump(mode="json"))
 
 
-@router.post("/source-root")
+@router.post("/source-root", response_model=SetSourceProjectsRootResponse)
 def set_source_root(
-    request: Request,
+    body: SetSourceProjectsRootRequest,
 ) -> JSONResponse:
-    """``POST /api/projects/source-root`` — persist source root to YAML config.
-
-    Deferred to M2-proper config milestone (requires YAML config plumbing).
-    Returns 501 until that slice lands.
-    """
+    """``POST /api/projects/source-root`` — stub; M2-proper config milestone."""
     return JSONResponse(
         status_code=501,
         content=ApiError(
@@ -536,7 +533,7 @@ def set_source_root(
     )
 
 
-@router.post("/{project_id}/save-all")
+@router.post("/{project_id}/save-all", response_model=SaveProjectResponse)
 def save_all(
     project_id: str,
     project_state: ProjectState = Depends(get_project_state),
@@ -584,7 +581,6 @@ def delete_project(
     project_state.clear()
     carrier.clear()
     return JSONResponse(status_code=204, content=None)
-
 
 
 def install_projects_router(app) -> None:  # type: ignore[no-untyped-def]

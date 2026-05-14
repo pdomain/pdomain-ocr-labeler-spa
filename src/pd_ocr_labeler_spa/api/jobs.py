@@ -30,7 +30,9 @@ import logging
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from ..core.jobs import Job, JobEventBroker, JobRunner, JobStatus
+from ..core.jobs import Job as RunnerJob
+from ..core.jobs import JobEventBroker, JobRunner, JobStatus
+from ..core.models import Job, JobProgress, JobType  # noqa: F401
 from .dependencies import get_job_events, get_job_runner
 from .middleware.error_handler import ApiError
 
@@ -39,6 +41,10 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 _TERMINAL = {JobStatus.COMPLETE, JobStatus.ERROR, JobStatus.CANCELLED}
+
+
+def _runner_job_to_dict(job: RunnerJob) -> dict:
+    return job.model_dump(mode="json")
 
 
 def _job_not_found(job_id: str) -> JSONResponse:
@@ -70,15 +76,15 @@ def _sse_line(event: str, data: dict) -> str:
 # ── Routes ───────────────────────────────────────────────────────────
 
 
-@router.get("")
+@router.get("", response_model=list[Job])
 def list_jobs(
     runner: JobRunner = Depends(get_job_runner),
-) -> list[dict]:
+) -> JSONResponse:
     """``GET /api/jobs`` — in-memory job list."""
-    return [j.model_dump(mode="json") for j in runner.list_jobs()]
+    return JSONResponse(status_code=200, content=[_runner_job_to_dict(j) for j in runner.list_jobs()])
 
 
-@router.get("/{job_id}")
+@router.get("/{job_id}", response_model=Job)
 def get_job(
     job_id: str,
     runner: JobRunner = Depends(get_job_runner),
@@ -87,10 +93,15 @@ def get_job(
     job = runner.get_job(job_id)
     if job is None:
         return _job_not_found(job_id)
-    return JSONResponse(status_code=200, content=job.model_dump(mode="json"))
+    return JSONResponse(status_code=200, content=_runner_job_to_dict(job))
 
 
-@router.get("/{job_id}/events")
+@router.get(
+    "/{job_id}/events",
+    response_class=StreamingResponse,
+    # SSE: no Pydantic response_model; text/event-stream cannot be
+    # declared as a typed schema — spec §5.10 intentional exception.
+)
 async def job_events(
     job_id: str,
     runner: JobRunner = Depends(get_job_runner),
@@ -128,7 +139,7 @@ async def job_events(
     return StreamingResponse(stream(), media_type="text/event-stream")
 
 
-@router.post("/{job_id}/cancel")
+@router.post("/{job_id}/cancel", response_model=Job)
 def cancel_job(
     job_id: str,
     runner: JobRunner = Depends(get_job_runner),
@@ -137,7 +148,7 @@ def cancel_job(
     job = runner.get_job(job_id)
     if job is None:
         return _job_not_found(job_id)
-    return JSONResponse(status_code=200, content=job.model_dump(mode="json"))
+    return JSONResponse(status_code=200, content=_runner_job_to_dict(job))
 
 
 def install_jobs_router(app) -> None:  # type: ignore[no-untyped-def]
