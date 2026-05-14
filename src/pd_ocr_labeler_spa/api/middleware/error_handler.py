@@ -99,14 +99,23 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _validation_exc(_request: Request, exc: RequestValidationError) -> JSONResponse:
-        # ``exc.errors()`` is the pydantic-shaped list — JSON-safe
-        # already, callers can render field-level diagnostics.
+        # ``exc.errors()`` is the pydantic-shaped list. Pydantic v2
+        # ``field_validator`` errors include ``ctx={'error': <ExcInstance>}``
+        # which is not JSON-serializable — convert exception instances to
+        # their string repr so the response is always serializable.
+        def _safe_ctx(ctx: object) -> object:
+            if not isinstance(ctx, dict):
+                return ctx
+            return {k: str(v) if isinstance(v, BaseException) else v for k, v in ctx.items()}
+
+        raw = exc.errors()
+        safe = [{k: (_safe_ctx(v) if k == "ctx" else v) for k, v in err.items()} for err in raw]
         return JSONResponse(
             status_code=400,
             content=ApiError(
                 error="validation_error",
                 message="request body failed validation",
-                details=exc.errors(),
+                details=safe,
             ).model_dump(),
         )
 

@@ -41,11 +41,29 @@ class AppConfig(BaseModel):
 
     Forward-compat: ``extra="ignore"`` silently drops keys this version
     doesn't know about (matches ``SessionState`` D-041 contract).
+
+    Text-normalization fields (issue #259 / spec
+    ``docs/specs/2026-05-12-text-normalization-design.md``):
+
+    - ``normalize_for_gt_matching`` — when True, the GT-matching pipeline
+      normalizes OCR and GT strings before comparing (long-s, ligatures →
+      ASCII). Default False (OCR fidelity wins by default, D-025).
+    - ``normalize_plaintext_tabs`` — when True, plaintext tab content is
+      normalized before display. Default False.
+    - ``normalize_profile`` — the normalization profile name passed to
+      ``pd_book_tools.text.normalize.normalize_string``. Default ``"ascii"``;
+      only ``"ascii"`` is available in v1 (future: ``"gaelic"``, etc.).
     """
 
     model_config = ConfigDict(extra="ignore")
 
     source_projects_root: Path | None = None
+
+    # Text-normalization toggles (all default False / "ascii" to match legacy
+    # behaviour — pages with long-s / ligatures are stored as-is by default).
+    normalize_for_gt_matching: bool = False
+    normalize_plaintext_tabs: bool = False
+    normalize_profile: str = "ascii"
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -110,6 +128,9 @@ def save_config(config_root: Path, cfg: AppConfig) -> None:
         "source_projects_root": (
             str(cfg.source_projects_root) if cfg.source_projects_root is not None else None
         ),
+        "normalize_for_gt_matching": cfg.normalize_for_gt_matching,
+        "normalize_plaintext_tabs": cfg.normalize_plaintext_tabs,
+        "normalize_profile": cfg.normalize_profile,
     }
     content = yaml.dump(data, default_flow_style=False, allow_unicode=True)
     write_bytes_atomic(path, content.encode("utf-8"))

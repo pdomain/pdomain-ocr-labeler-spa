@@ -17,15 +17,43 @@ export interface paths {
          *
          *     Spec §5.2 lines 208-211. Pure read; never mutates the carrier.
          *
-         *     The "is the active project under the configured root?" check uses
-         *     ``_is_under_root`` so an off-root active project (e.g. one set via
-         *     ``--project`` CLI override pointing outside the configured
-         *     ``source_projects_root``) shows up as ``selected: None`` — the SPA
-         *     dropdown can't mark an entry it doesn't display.
+         *     The effective root comes from ``SourceRootCarrier`` (which is seeded
+         *     at boot from CLI/env ``Settings.source_projects_root`` and can be
+         *     updated at runtime by ``POST /api/projects/source-root``). This
+         *     ensures a call to ``POST /source-root`` is immediately visible in
+         *     the next ``GET /api/projects`` within the same process.
          */
         get: operations["list_projects_api_projects_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Discover Projects
+         * @description ``POST /api/projects/discover`` — force re-scan of the projects root.
+         *
+         *     Spec §5.2 line 218 — "Force re-scan." Identical logic to
+         *     ``GET /api/projects`` but registered as a POST so clients can
+         *     explicitly trigger a refresh without relying on HTTP caching semantics
+         *     (some proxies cache GET responses; a POST is always forwarded).
+         *
+         *     Returns the same ``ListProjectsResponse`` shape as the GET endpoint.
+         *     No body is required or accepted.
+         */
+        post: operations["discover_projects_api_projects_discover_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -153,7 +181,26 @@ export interface paths {
         put?: never;
         /**
          * Set Source Root
-         * @description ``POST /api/projects/source-root`` — stub; M2-proper config milestone.
+         * @description ``POST /api/projects/source-root`` — persist root to config.yaml + re-scan.
+         *
+         *     Spec §5.2 line 224 — "Body: ``SetSourceProjectsRootRequest``.
+         *     Persists to YAML config + re-scans."
+         *
+         *     Validation:
+         *     - ``body.path`` must resolve to an existing directory.  A missing
+         *       path or a regular-file path both return ``400 invalid_path``.
+         *
+         *     On success:
+         *     1. Writes the new root to ``<config_root>/config.yaml`` atomically.
+         *     2. Updates the in-process ``SourceRootCarrier`` so subsequent
+         *        ``GET /api/projects`` and ``POST /discover`` calls see the new
+         *        root immediately (without a server restart).
+         *     3. Returns ``SetSourceProjectsRootResponse{projects_root, projects}``
+         *        where ``projects`` is the freshly-scanned list under the new root.
+         *
+         *     Config-write failure (``OSError``) is surfaced as a 500 — a write
+         *     failure means the change would be lost on restart, which is more
+         *     serious than a session-state save failure and warrants surfacing.
          */
         post: operations["set_source_root_api_projects_source_root_post"];
         delete?: never;
@@ -1875,6 +1922,11 @@ export interface components {
             /** Fuzz Score */
             fuzz_score?: number | null;
             /**
+             * Normalized Match
+             * @default false
+             */
+            normalized_match: boolean;
+            /**
              * Is Validated
              * @default false
              */
@@ -1897,6 +1949,26 @@ export interface components {
 export type $defs = Record<string, never>;
 export interface operations {
     list_projects_api_projects_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListProjectsResponse"];
+                };
+            };
+        };
+    };
+    discover_projects_api_projects_discover_post: {
         parameters: {
             query?: never;
             header?: never;

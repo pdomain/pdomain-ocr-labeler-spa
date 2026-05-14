@@ -145,6 +145,12 @@ class WordMatch(BaseModel):
     ground_truth_text: str
     match_status: MatchStatus
     fuzz_score: float | None = None
+    normalized_match: bool = False
+    """True when ``match_status=exact`` was only achieved after normalization
+    (long-s / ligature → ASCII). The UI renders a ``≈`` badge on this word's
+    status icon. Default False (non-normalized exact or any other status).
+    Added in issue #259 / spec
+    ``docs/specs/2026-05-12-text-normalization-design.md``."""
     is_validated: bool = False
     text_style_labels: list[str] = Field(default_factory=list)
     word_components: list[str] = Field(default_factory=list)

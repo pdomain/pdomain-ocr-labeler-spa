@@ -18,13 +18,19 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from ..core.models import BBox
 from ..core.project_state import ProjectState
 from .dependencies import get_project_state
 from .middleware.error_handler import ApiError
 from .pages import PagePayload
+
+# Forbidden codepoint ranges for GT input.
+# U+FB00-U+FB06: Latin ligatures (ff, fi, fl, ffi, ffl, long-st variants).
+# U+017F: Latin small letter long s.
+# Spec: docs/specs/2026-05-12-text-normalization-design.md - GT validation.
+_GT_FORBIDDEN_CODEPOINTS: frozenset[int] = frozenset(range(0xFB00, 0xFB07)) | {0x017F}
 
 router = APIRouter(prefix="/api/projects", tags=["words"])
 
@@ -36,6 +42,27 @@ class UpdateWordGroundTruthRequest(BaseModel):
     """Spec §2 line 285."""
 
     text: str
+
+    @field_validator("text")
+    @classmethod
+    def _reject_forbidden_codepoints(cls, v: str) -> str:
+        """Reject GT text containing ligature codepoints or long-s.
+
+        Spec (docs/specs/2026-05-12-text-normalization-design.md):
+        'Backend rejects GT input containing U+FB00-U+FB06 or U+017F
+        with 400 validation_error.'
+
+        GT strings must be clean ASCII / normalized Unicode. The SPA should
+        normalize these before calling the API; if raw glyph codepoints arrive
+        here, it is a client-side bug and the 400 surfaces it clearly.
+        """
+        bad = [hex(ord(ch)) for ch in v if ord(ch) in _GT_FORBIDDEN_CODEPOINTS]
+        if bad:
+            raise ValueError(
+                f"GT text contains forbidden codepoints: {', '.join(bad)}. "
+                "Normalize ligatures and long-s to ASCII before saving GT."
+            )
+        return v
 
 
 class ApplyStyleRequest(BaseModel):
