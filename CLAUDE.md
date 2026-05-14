@@ -49,10 +49,11 @@ output for debugging.
 
 M0 (repo scaffold) and M1 (settings/adapters/AppState) are both done. M2 (project navigation
 and page loading) is in progress.
-Next slices: page-actions mutations (#215-#217), word-matches list (#201-#203).
+Next slices: page-action hotkeys #217, word-matches LineCard header #202, WordCell #203.
 
 Shipped (2026-05-14): Notifications stack #230–#233, data hooks #192 (useProject/usePage/
-useJobProgress), TextTabs shell #200, PageActions bar layout #214.
+useJobProgress), TextTabs shell #200, PageActions bar layout #214, page-action mutations
+issues 215 (Reload OCR) + 216 (Save/Load/Rematch GT), virtualised LineCard list issue 201.
 See `docs/ROADMAP.md` for per-slice details.
 
 ## Specs
