@@ -90,6 +90,15 @@ flipping between them preserves user data.
 - After GA, we may swap the legacy out and the data root keeps the
   legacy name forever.
 
+**Alternatives considered.**
+
+- New `pd-ocr-labeler-spa/` data root, separate from the legacy.
+  Rejected: users mid-migration would lose access to existing labels
+  until they ran an explicit migration script.
+- Copy-on-first-open: read legacy root, write to new root. Rejected:
+  creates two live copies that diverge; the pidfile approach is
+  simpler and avoids the dual-copy problem.
+
 **Refs.** [`OPEN_QUESTIONS.md Q1`](../OPEN_QUESTIONS.md), [`09-persistence.md`](09-persistence.md).
 
 ---
@@ -197,6 +206,19 @@ else.
   Mitigation: profile in M4; fall back to single-canvas paint if
   needed.
 
+**Alternatives considered.**
+
+- Raw `<canvas>` for the image viewport from the start. Rejected for
+  M1–M3: Konva's transformer and drag handles reduce boilerplate
+  significantly; we defer the raw-canvas option to M4 research
+  (see D-020).
+- CSS-positioned `<div>` overlays for word bounding boxes. Rejected:
+  accurate sub-pixel transforms and drag handles require canvas-level
+  control; DOM overlay at 600 elements stresses layout/reflow.
+- SVG overlays. Rejected: SVG at that element count has similar
+  performance concerns as DOM; Konva already in the dep tree via
+  pgdp-prep.
+
 **Refs.** [`OPEN_QUESTIONS.md Q6`](../OPEN_QUESTIONS.md), [`04-image-viewport.md`](04-image-viewport.md) §7.
 
 ---
@@ -297,6 +319,14 @@ SQLite jobs table. Server restart drops in-flight jobs.
 - Crashing during a long Save Project loses the in-flight progress.
   The completed pages are still saved.
 
+**Alternatives considered.**
+
+- SQLite jobs table (same as pgdp-prep). Rejected: adds a migration
+  layer and a second persistence file for a single-user tool that
+  never needs restart-resilient job tracking.
+- Redis as a job store. Rejected: external process dependency for a
+  desktop tool; overkill for the single-user, single-process shape.
+
 **Refs.** [`02-backend.md`](02-backend.md) §11, [`OPEN_QUESTIONS.md Q3`](../OPEN_QUESTIONS.md).
 
 ---
@@ -319,6 +349,15 @@ second sees the first's result.
 
 - Latency for two simultaneous edits doubles. Acceptable for
   single-user.
+
+**Alternatives considered.**
+
+- No locking at all; last writer always wins silently. Rejected: race
+  windows are short but real; a fast double-click on two words could
+  corrupt the saved envelope with a partial merge.
+- Global server-wide lock across all projects. Rejected: unnecessarily
+  serializes unrelated projects; per-project lock is the right
+  granularity.
 
 **Refs.** [`02-backend.md`](02-backend.md) §12.
 
@@ -344,6 +383,19 @@ storage-adapter abstraction for the image cache (even though we have
 
 - If we ever multi-host the labeler, we need to introduce a real
   IStorage seam for the cache. Re-evaluate then.
+
+**Alternatives considered.**
+
+- Full `IStorage` abstraction for the image cache from day one.
+  Rejected (at D-013 time): the desktop-only deploy shape made S3
+  abstraction premature; StaticFiles mount is simpler and has no
+  observable API difference.
+- Serve images via a CDN or object-store URL embedded in API responses.
+  Rejected: adds external network dependency; images are large and
+  served from the local filesystem.
+
+Note: D-013 was later superseded by D-019, which did add the storage
+adapter for the image cache.
 
 **Refs.** [`OPEN_QUESTIONS.md Q5`](../OPEN_QUESTIONS.md), [`02-backend.md`](02-backend.md) §10.
 
@@ -451,6 +503,16 @@ toolbar-disabled states.
 - Each viewport drag posts to the backend. Network chatter increases.
   Mitigation: debounce drag-move events.
 
+**Alternatives considered.**
+
+- Pure client-side selection state with no backend sync. Rejected:
+  toolbar disabled-state depends on selection cardinality; if each tab
+  computes this locally, two tabs on the same page would show
+  conflicting toolbar states, which is confusing.
+- Backend selection state without optimistic updates (wait for server
+  round-trip before re-rendering). Rejected: drag selection would feel
+  laggy; optimistic updates give immediate visual feedback.
+
 **Refs.** [`04-image-viewport.md`](04-image-viewport.md) §4.1, [`06-toolbar-actions.md`](06-toolbar-actions.md) §5.
 
 ---
@@ -479,6 +541,16 @@ the OCR adapter is concerned.
 - `Settings.ocr_engine` becomes `Literal["local_doctr", "modal", "shared_container"]`.
 - Modal adapter brings the `[modal]` extra dep (lazy-imported).
 
+**Alternatives considered.**
+
+- Ship only `local_doctr`; add other engines later when needed.
+  Rejected: retrofitting a Protocol seam across existing callers is
+  more expensive than stubbing it now; the user explicitly chose the
+  full axis.
+- Single `IOCREngine` class with conditional logic (`if engine ==
+  "modal": ...`). Rejected: conditional branching in a monolithic class
+  is harder to test than separate adapter impls behind a Protocol.
+
 **Refs.** [`OPEN_QUESTIONS.md Q4`](../OPEN_QUESTIONS.md), [`02-backend.md`](02-backend.md) §1, §7.
 
 ---
@@ -505,6 +577,15 @@ Supersedes D-013.
 - Per-image-type filename layout unchanged.
 - `s3` adapter raises `NotImplementedYet` — same shape as `modal`
   OCR engine.
+
+**Alternatives considered.**
+
+- Keep D-013's `StaticFiles` mount and never expose a storage adapter
+  for images. Rejected: the user chose option (B) — the seam is worth
+  having even if S3 is not implemented.
+- Implement both filesystem and S3 storage adapters immediately.
+  Rejected: S3 is explicitly out of scope for v1 (D-042 deferred axis);
+  shipping a stub is cheaper and keeps the adapter seam real.
 
 **Refs.** [`OPEN_QUESTIONS.md Q5`](../OPEN_QUESTIONS.md),
 [`02-backend.md`](02-backend.md) §10,
@@ -535,6 +616,16 @@ without measurable lag.
 - M4 has a "research spike" sub-task before component implementation
   begins.
 
+**Alternatives considered.**
+
+- Commit to Konva before M4 without a research spike. Rejected: user
+  explicitly acknowledged uncertainty; premature commitment risks
+  re-writing the viewport component if Konva proves too slow at 600
+  word rects.
+- Commit to raw canvas before M4. Rejected: the default-of-record
+  is raw canvas (user answer B), but Konva may still be viable and
+  worth confirming via measurement before discarding it.
+
 **Refs.** [`OPEN_QUESTIONS.md Q6`](../OPEN_QUESTIONS.md),
 [`04-image-viewport.md`](04-image-viewport.md),
 [`16-milestones.md`](16-milestones.md) M4.
@@ -561,6 +652,15 @@ these to a per-user backend store when multi-user lands.
 - Future: when auth lands (D-005 follow-up), introduce
   `GET/PUT /api/user/prefs` and migrate the store.
 
+**Alternatives considered.**
+
+- Server-side pref storage from day one (`config.yaml` or a prefs
+  endpoint). Rejected: single-user tool; `localStorage` is sufficient
+  and avoids an extra API surface and persistence file for v1.
+- No pref persistence at all (reset to defaults on each load). Rejected:
+  filter toggle, zoom level, and splitter position are frequent
+  adjustments; losing them on every reload is a usability regression.
+
 **Refs.** [`OPEN_QUESTIONS.md Q9`](../OPEN_QUESTIONS.md), [`03-frontend.md`](03-frontend.md) §6.
 
 ---
@@ -583,6 +683,16 @@ or later).
 - Spec 12 ships the wishlist for v1.
 - Spec 16 gets a new entry: M9.5 — "Full keyboard-driven editing
   audit" (post-GA polish).
+
+**Alternatives considered.**
+
+- Ship only the 5 legacy hotkeys; defer the full wishlist entirely.
+  Rejected: migration is the natural moment to close the gap;
+  re-opening keyboard work post-GA costs more context-switching than
+  doing it once.
+- Ship the full wishlist and also complete the "full keyboard editing"
+  audit in the same milestone. Rejected: scoping is already aggressive
+  for v1; a dedicated M9.5 milestone is the right boundary.
 
 **Refs.** [`OPEN_QUESTIONS.md Q10`](../OPEN_QUESTIONS.md), [`12-hotkeys-a11y.md`](12-hotkeys-a11y.md), [`16-milestones.md`](16-milestones.md).
 
@@ -607,6 +717,15 @@ locking for multi-user phase.
   serializes writes; concurrent reads always see the latest.
 - Multi-user follow-up (when D-005 expands): introduce a `version`
   field on `PageRecord` + `If-Match`-style optimistic concurrency.
+
+**Alternatives considered.**
+
+- Optimistic locking with a `version` field from v1. Rejected: D-042
+  deferred multi-user; adding version vectors now would ship untested
+  complexity with no single-user benefit.
+- WebSocket-based real-time page-state sync across tabs. Rejected:
+  full-duplex WebSocket is heavier than needed; last-writer-wins via
+  the asyncio.Lock is sufficient for single-user multi-tab.
 
 **Refs.** [`OPEN_QUESTIONS.md Q11`](../OPEN_QUESTIONS.md), [`02-backend.md`](02-backend.md) §12.
 
@@ -666,6 +785,15 @@ in OCR output. Normalization is opt-in.
 - The labeler's matches view *can* opt into normalization-aware GT
   comparison so `ſhall` matches `shall` as exact, without modifying
   either string. Default off in v1; toggle exposed in M9 polish.
+
+**Alternatives considered.**
+
+- Inline normalization directly in the SPA's GT matching logic. Rejected:
+  the SPA would then own typography normalization that every downstream
+  consumer also needs; pd-book-tools is the right library owner.
+- Normalize OCR output on ingest (modify the stored labeled text).
+  Rejected: destructive; labeled artefacts should preserve OCR fidelity
+  so reviewers can see what the model actually produced.
 
 **Refs.** [`OPEN_QUESTIONS.md Q14`](../OPEN_QUESTIONS.md), [`18-text-normalization.md`](18-text-normalization.md).
 
@@ -786,6 +914,19 @@ name).
   in the envelope (via additive v2.2 schema bump? — see Q-A1 below).
 - Manual rotate button POST `/api/projects/{id}/pages/{idx}/rotate {degrees: 90 | -90 | 180}`.
 
+**Alternatives considered.**
+
+- Manual buttons only, no auto-rotation pass. Rejected: the user
+  explicitly requested both (B and C); auto-rotation reduces manual
+  work for uniformly mis-oriented scans.
+- Auto-rotation only (no manual buttons). Rejected: auto-rotation
+  heuristics can be wrong; manual override is necessary for edge cases
+  where the GT-best-match heuristic fails.
+- Auto-rotation using a dedicated orientation-detection model rather
+  than GT-best-match. Rejected: requires an extra ML model dependency;
+  GT-best-match is sufficient when ground truth is available and is
+  cheaper to implement.
+
 **Refs.** [`OPEN_QUESTIONS.md Q18`](../OPEN_QUESTIONS.md), [`19-auto-rotation.md`](19-auto-rotation.md), [`08-page-actions.md`](08-page-actions.md).
 
 ---
@@ -823,6 +964,16 @@ Default canonical URL emitted by the SPA: the `pageno/{n}` form (human-friendly)
 - Driver-contract spec heavily revised.
 - M2 router supports all three forms + redirects.
 - `routes.ts` exposes both `buildPageIndexUrl` and `buildPageNumberUrl`.
+
+**Alternatives considered.**
+
+- Keep legacy singular paths forever, never adopt pgdp-prep convention.
+  Rejected: inconsistency across the two sibling apps makes the shared
+  codebase harder to reason about; the driver hasn't run yet so the
+  migration cost is low now.
+- Adopt pgdp-prep convention immediately, with no redirects. Rejected:
+  any existing bookmarks or driver scripts using the singular form
+  would silently 404; 301 redirects preserve them at no ongoing cost.
 
 **Refs.** [`OPEN_QUESTIONS.md Q19`](../OPEN_QUESTIONS.md),
 [`13-driver-contract.md`](13-driver-contract.md) §1,
