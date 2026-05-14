@@ -1,9 +1,12 @@
-// WordEditDialog.tsx — word-edit dialog (#209, #210)
+// WordEditDialog.tsx — word-edit dialog (#209, #210, #211, #212)
 // Spec: docs/specs/2026-05-12-word-edit-dialog-design.md
 //
 // Shell (#209): header (Apply&Close + Close), 3-column preview row, prev/next nav.
-// Konva image (#210): interactive Stage at 1×/2×/5×/10× zoom, click marker,
+// Konva image (#210): interactive Stage at 1x/2x/5x/10x zoom, click marker,
 //   hover guide, staged erase rects.
+// Action rows (#211): Merge/Split/Delete/Crop
+// Refine/Nudge/Tag rows (#212): Refine + nudge accumulator + Style/Component tag row
+//   + dialog hotkeys (Shift+Arrow nudge).
 //
 // data-testids (driver-contract):
 //   dialog-backdrop, dialog-header-label
@@ -12,12 +15,20 @@
 //   dialog-prev-word, dialog-current-word, dialog-next-word
 //   dialog-current-zoom-toggle, dialog-current-marker, dialog-hover-guide
 //   dialog-erase-rect, dialog-word-stage
+//   dialog-refine-button, dialog-expand-refine-button
+//   dialog-nudge-{left|right|top|bottom}-{minus|plus}
+//   dialog-nudge-display, dialog-reset-button, dialog-apply-button, dialog-apply-refine-button
+//   dialog-style-select, dialog-scope-select, dialog-component-select
+//   dialog-apply-style-button, dialog-apply-component-button, dialog-clear-component-button
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { WordActionRows } from "./WordActionRows";
 import type { WordActionCallbacks } from "./WordActionRows";
 import { WordImageCanvas } from "./WordImageCanvas";
 import type { EraseRect, MarkerPoint } from "./WordImageCanvas";
+import { WordRefineNudgeRows } from "./WordRefineNudgeRows";
+import type { PendingNudge, WordRefineNudgeRowsHandle } from "./WordRefineNudgeRows";
+import { WordTagRow } from "./WordTagRow";
 
 export interface DialogTarget {
   lineIndex: number;
@@ -35,29 +46,45 @@ interface WordEditDialogProps extends WordActionCallbacks {
   wordImageUrl?: string;
   /** Whether erase mode is active (toggles Konva drag-erase). */
   eraseMode?: boolean;
+  /** Available style labels for the tag row. */
+  styleOptions?: string[];
+  /** Available component labels for the tag row. */
+  componentOptions?: string[];
   /** Called when prev/next navigation is requested. */
   onNavigate: (target: DialogTarget) => void;
-  /** Called when Apply & Close is clicked (commits pending changes). */
-  onApply: (eraseRects: EraseRect[], marker: MarkerPoint | null) => void;
-  /** Called when × Close or backdrop is clicked (discards pending changes). */
+  /**
+   * Called when Apply & Close is clicked (commits pending changes).
+   * Passes erase rects, marker position, and accumulated nudge.
+   */
+  onApply: (eraseRects: EraseRect[], marker: MarkerPoint | null, nudge: PendingNudge) => void;
+  /** Called when x Close or backdrop is clicked (discards pending changes). */
   onClose: () => void;
+  /** Called when Refine is clicked. */
+  onRefine?: () => Promise<void>;
+  /** Called when Expand+Refine is clicked. */
+  onExpandRefine?: () => Promise<void>;
+  /** Called when Apply (nudge only) is clicked. */
+  onApplyNudge?: (nudge: PendingNudge, refineAfter: boolean) => Promise<void>;
+  /** Called with style + scope when Apply Style is clicked. */
+  onApplyStyle?: (style: string, scope: "whole" | "part") => Promise<void>;
+  /** Called with component + enabled when Apply/Clear Component is clicked. */
+  onApplyComponent?: (component: string, enabled: boolean) => Promise<void>;
 }
 
 /**
  * Word-edit dialog shell.
  *
  * Displays a modal with:
- * - Header: title ("Edit Line N, Word M"), Apply & Close button, × Close button.
+ * - Header: title ("Edit Line N, Word M"), Apply & Close button, x Close button.
  * - 3-column preview row: previous word | current word (highlighted) | next word.
  * - Prev/Next navigation within the same line.
+ * - Interactive Konva Stage for the current word (#210).
+ * - Merge/Split/Delete/Crop rows (#211).
+ * - Refine/Nudge/Tag rows + dialog hotkeys (#212).
  *
- * Apply & Close fires onApply then onClose.
- * × Close fires onClose only (discards).
+ * Apply & Close fires onApply (with pending erase rects, marker, and nudge) then onClose.
+ * x Close fires onClose only (discards).
  * Backdrop click fires onClose (discards).
- *
- * #210 will add the interactive Konva Stage for the current word.
- * #211 will add Merge/Split/Delete/Crop rows.
- * #212 will add Refine/Nudge/Tag rows and dialog hotkeys.
  */
 export function WordEditDialog({
   open,
@@ -65,6 +92,8 @@ export function WordEditDialog({
   lineWords,
   wordImageUrl,
   eraseMode = false,
+  styleOptions,
+  componentOptions,
   onNavigate,
   onApply,
   onClose,
@@ -72,9 +101,15 @@ export function WordEditDialog({
   onSplit,
   onDelete,
   onCrop,
+  onRefine,
+  onExpandRefine,
+  onApplyNudge,
+  onApplyStyle,
+  onApplyComponent,
 }: WordEditDialogProps) {
   const [eraseRects, setEraseRects] = useState<EraseRect[]>([]);
   const [marker, setMarker] = useState<MarkerPoint | null>(null);
+  const nudgeRef = useRef<WordRefineNudgeRowsHandle>(null);
 
   if (!open) return null;
 
@@ -86,8 +121,11 @@ export function WordEditDialog({
   const currentWord = lineWords[wordIndex] ?? "";
   const nextWord = hasNext ? lineWords[wordIndex + 1] : null;
 
+  const zeroNudge: PendingNudge = { left: 0, right: 0, top: 0, bottom: 0 };
+
   function handleApplyClose() {
-    onApply(eraseRects, marker);
+    const nudge = nudgeRef.current?.getPendingNudge() ?? zeroNudge;
+    onApply(eraseRects, marker, nudge);
     onClose();
   }
 
@@ -237,7 +275,20 @@ export function WordEditDialog({
             onDelete={onDelete}
             onCrop={onCrop}
           />
-          {/* Refine/nudge/tag rows — #212 */}
+          {/* Refine/Nudge/Tag rows — #212 */}
+          <WordRefineNudgeRows
+            ref={nudgeRef}
+            onRefine={onRefine}
+            onExpandRefine={onExpandRefine}
+            onApply={onApplyNudge}
+            onReset={() => setEraseRects([])}
+          />
+          <WordTagRow
+            styleOptions={styleOptions}
+            componentOptions={componentOptions}
+            onApplyStyle={onApplyStyle}
+            onApplyComponent={onApplyComponent}
+          />
         </div>
       </div>
     </div>
