@@ -23,6 +23,9 @@ Specs are now organized into two trees:
 | 16 | [`16-milestones.md`](16-milestones.md) | M0…M9 milestone breakdown — living roadmap |
 | 17 | [`17-decisions.md`](17-decisions.md) | ADRs / decisions log — append-only |
 | 20 | [`20-glyph-annotations.md`](20-glyph-annotations.md) | Glyph-level annotations (open issues #267–#270, blocked on `pd-book-tools` upstream) |
+| 21 | [`21-konva-renderer.md`](21-konva-renderer.md) | Konva renderer for `PageImageCanvas` + `BBoxOverlay` (supersedes D-020 via D-043) |
+| 22 | [`22-page-surface-wireup.md`](22-page-surface-wireup.md) | Mount the real labeling surface in `ProjectPage` |
+| 23 | [`23-page-payload-backend.md`](23-page-payload-backend.md) | Real handlers for `GET /pages/{idx}` + 19 mutation endpoints |
 
 ## Implemented specs (under `docs/architecture/`)
 

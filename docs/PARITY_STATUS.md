@@ -1,175 +1,212 @@
 # Parity status — pd-ocr-labeler-spa vs pd-ocr-labeler
 
-**Snapshot:** 2026-05-14 (post-iter-7 loop: `POST /api/projects/discover` +
-`POST /api/projects/source-root` (config.yaml persistence) shipped; B-58
-closed — `SessionState extra="ignore"` + WARNING-level dropped-keys log +
-`persist_page_to_file` + `_resolve_save_directory` Save-lane helpers landed).
-**Audience:** user, deciding next priorities.
-**Scope:** what the SPA replacement covers today vs what the legacy
-NiceGUI labeler ships.
+**Snapshot.** 2026-05-14 (rewritten after the parity audit captured in
+[`PARITY_GAPS_2026_05_14.md`](PARITY_GAPS_2026_05_14.md)).
+**Audience.** CT, deciding next priorities.
+**Scope.** What the SPA replacement covers today vs what the legacy
+NiceGUI labeler ships, with explicit columns for **component-built**
+vs **wired-into-the-page**.
+
+> **Why the rewrite.** Prior versions of this file claimed the
+> frontend was `⛔ Q-A8` blocked while every M1–M9.1 component had
+> in fact shipped and is unit-tested. They also claimed M4 was done
+> when `PageImageCanvas.tsx` is a DOM stub. The new layout separates
+> **component built** (the component exists, has tests, looks right
+> in isolation) from **wired** (it actually renders inside the
+> running app). Almost every frontend row is `✅ built / ⛔ not wired`.
 
 ---
 
 ## 1. One-paragraph status
 
-The SPA is **scaffolding-complete; M1 done (~99%); M2 ~85% shipped**.
-M1: settings + adapters + AppState + middleware + lifespan; B-51/B-58 both
-closed. M2 backend routes: `GET /api/projects` + `POST /api/projects/load`
-(full persistence I/O — image scan, ground-truth read, `project.json`
-merge, `SessionState` writeback), `GET /api/projects/{id}`, `DELETE
-/api/projects/{id}`, `POST /api/projects/discover` (force-rescan),
-`POST /api/projects/source-root` (config.yaml persistence via
-`core/persistence/config_yaml.py` + `SourceRootCarrier`). Save-lane
-helpers (`persist_page_to_file`, `_resolve_save_directory`) landed;
-`ensure_page_model` dispatcher (labeled → cached → OCR precedence)
-landed. Still stub (501): `GET .../pages/{idx}`, `POST .../pages/{idx}/save`,
-`POST .../pages/{idx}/load` — blocked on M3 OCR plumbing.
-**Zero user-facing domain endpoints emit real page data yet** (no OCR,
-no GT editing, no save/load payload, no export) — M3+ work.
-**Q-A8 has now eased**: `mise` is installed in this dev environment
-(verified `mise --version` 2026.5.1, `mise exec -- node --version`
-v24.15.0, `mise exec -- npm --version` 11.12.1), so the previously
-"can't iterate at all" frontend story is now "needs a single iter to
-run `mise install` + `npm install` + commit `package-lock.json`".
-That iteration hasn't run yet — the frontend (currently a single
-smoke test) is still not built or runtime-verified, so the M0/M1
-frontend acceptance bars remain ungated. Backend parity is
-constrained to M2's prerequisite seams — adapters, request-id, audit
-log, error envelope, image-cache route shape — none of which yet
-read or write a real project.
+The SPA scaffolding is comprehensive. Backend has M0/M1/M2 fully
+shipped (settings, adapters, AppState, project enumeration, session
+state, ground-truth persistence, three-lane persistence model,
+config.yaml persistence, source-root carrier). Backend rotate and
+export job handlers are real (#263/#264/#226). **Every other per-page
+endpoint is a 501 or no-op stub** ([`api/pages.py:174`](../src/pd_ocr_labeler_spa/api/pages.py),
+[`api/words.py:180-189`](../src/pd_ocr_labeler_spa/api/words.py)).
+Frontend has all 15 user-facing components built and unit-tested,
+but **only `HeaderBar` and `LineCard` (via `WordMatchView`) are
+rendered by the route tree**. `ProjectPage.tsx` is a 76-line stub
+that displays "Project: X — Page Y (full UI in progress)". No image
+renders. No edit flows function end-to-end. The toolchain works; the
+notifications stack works; the project picker works; nothing past
+that.
+
+The path forward is captured in three new specs:
+[`specs/21-konva-renderer.md`](../specs/21-konva-renderer.md) replaces
+the `PageImageCanvas` DOM stub with real Konva (supersedes D-020 via
+[D-043](../specs/17-decisions.md#d-043--konva-renderer-commitment-supersedes-d-020));
+[`specs/22-page-surface-wireup.md`](../specs/22-page-surface-wireup.md)
+mounts the existing components into `ProjectPage`;
+[`specs/23-page-payload-backend.md`](../specs/23-page-payload-backend.md)
+fills in the 501 stubs. Order: 21 → 23 → 22.
 
 ---
 
-## 2. Backend parity table
+## 2. Legend
 
-| Capability | Status | Notes |
-|---|---|---|
-| CLI entry (`pd-ocr-labeler-ui`) | ✅ done | `__main__.main()` parses `--host/--port/--reload/--data-root/-v/--no-browser`; opens browser; iter 47. Q-A13 deferred (`--log-level` not wired). |
-| Healthcheck `/healthz` | ✅ done | M0; `tests/unit/test_healthz.py`. |
-| Lifespan + shutdown clean | ✅ done | iter 48 closed the M1 acceptance gate; `tests/integration/test_lifespan.py`. B-69 (filter scoping) resolved iter 51. |
-| Settings (env-driven, frozen) | ✅ done | `PDLABELER_*`; spec §3 fields filled iter 51 (B-63 closed). |
-| Storage adapter (filesystem) | ✅ done | Path-traversal guard; B-44/B-45/B-53/B-54 mostly closed. No S3/cloud impl (per D-019). |
-| Auth adapter (none) | ✅ done | B-42 still open re: `verify` signature drift from spec §7. |
-| OCR adapter Protocol | 🟡 partial | Protocol + `none_`/`local_doctr`/`modal`/`shared_container` files exist; **bodies are `NotImplementedYet`**. Real OCR lands M3. |
-| Request-ID middleware + audit log | ✅ done | Raw-ASGI rewrite iter 41 (B-50); `request_start`/`request_end` iter 36; B-43/B-50/B-56 closed. |
-| Error handler (500 envelope) | ✅ done | Catch-all wired; B-51 closed iter 53 (`Settings.debug_unhandled_traceback` flag — D-040). |
-| Image-cache HTTP route | 🟡 partial | Route shape + 404-on-OSError logic landed (B-57); **no images served yet** because no project loads. |
-| Static SPA fallback | ✅ done | `index.html` carries `Cache-Control: no-store` (B-62); reserved-prefix carve-out per spec §10 (B-66 resolved iter 51). |
-| `/env.js` | ✅ done | Mode-gated; B-01 closed. |
-| Project discovery (scan project root) | 🟡 partial | M2 slices 1+2+3+4+5 shipped. Slice 1 (iter 52): pure `resolve_initial_project` + `validate_project_dir`. Slice 2 (iter 53): `ActiveProjectCarrier` + DI + bootstrap. Slice 3 (iter 55): FastAPI lifespan startup hook so CLI/session boot opens a project. Slice 4 (loop iter-2/3): `core/project_enumeration.py` + `api/projects.py` `GET /api/projects` + `POST /api/projects/load` (interim stub). **Slice 5 (loop iter-5)**: persistence I/O wired — `POST /api/projects/load` now reads `pages.json`/`pages_manifest.json` (`core/persistence/ground_truth.py`), scans images + reads optional `project.json` to build a full `Project` model (`core/persistence/project_envelope.py`), mutates the new `ProjectState` carrier (`set_loaded_project` → seeds cursor, resets per-page-state map), and returns spec-canonical `LoadProjectResponse{project, current_page_index, generation}` (replacing slice-4 stub). `current_page: PagePayload` deferred to M3 (PagePayload requires PageRecord/EncodedDims/LineMatch[]/image-cache-URLs); slice 5 ships `current_page_index: int` instead — URL stable so M3 expansion is field-rename only. 41 new tests across `tests/unit/core/persistence/test_ground_truth.py`, `tests/unit/core/persistence/test_project_envelope.py`, and `tests/integration/test_projects_router.py` (422 → 463). **Iter 6 closeout**: `GET /api/projects/{id}` reader landed (`c49f14f` — returns active `LoadProjectResponse` or 404); session-state writeback on `POST /api/projects/load` landed (`885ccf0` — atomic write per spec §02-backend §5.2 + §09-persistence §6). **Iter 7 (this session)**: `POST /api/projects/discover` (force-rescan variant of GET list) + `POST /api/projects/source-root` (reads/writes `config.yaml` via new `core/persistence/config_yaml.py` + `core/source_root_state.py` carrier; validates path, atomically persists, updates runtime carrier). Legacy: `operations/persistence/project_discovery_operations.py`, `project_operations.py`. |
-| Session restore (last project, last page) | ✅ done | `core/persistence/session_state.py` reader (iter 44) + lifespan caller (iter 55) + writer wired into `POST /api/projects/load` (loop iter 6, `885ccf0`) — every load now persists `last_project_path` so next boot restores it. **B-58 closed** (iter 7): `extra="ignore"` + WARNING-level `session_state_extras_dropped` log (D-041). |
-| Page enumeration (`pages.json` / manifest) | ✅ done | `core/persistence/ground_truth.py` (loop iter-5) — byte-compat re-implementation of legacy `load_ground_truth_from_directory`: manifest-first with offset-remap, single-file `pages.json` fallback, PGDP normalization, lowercase + extension-less aliases, every failure mode → warn-and-empty. |
-| OCR overlay data (paragraphs/lines/words + bboxes) | ⬜ not started | M3–M4. |
-| Ground-truth editing endpoint | ⬜ not started | M5 (`POST /api/.../words/{wid}/ground-truth`). |
-| Word/line/paragraph batch ops + role labels | ⬜ not started | M6 toolbar + role-label preservation (per user-memory rule). |
-| Refine bboxes (page + project) | ⬜ not started | M7 job; `pd-book-tools` `bbox.refine_robust` is the upstream dep (D-026, delegated). |
-| Save / atomic-write `<project>_NNN.json` | ⬜ not started | M8; `UserPageEnvelope` v2.1 byte-compat. |
-| Save Project (multi-page job) | ⬜ not started | M8 SSE job. |
-| Export (per-style `labels.json`) | ⬜ not started | M9. |
-| Notification SSE | ⬜ not started | M9. |
-| Auto-rotation pass | ⬜ not started | M9.2; gated on pd-book-tools `rotation` module + Q-A1 envelope bump. |
+- ✅ **done** — built, tested, in the running tree.
+- 🟩 **built** — built and unit-tested but **not wired into the page**.
+- 🟡 **partial** — some parts built, others stub.
+- ⬜ **not started** — no implementation.
+- ⛔ **blocked** — explicitly waiting on a decision or upstream.
+
+The `Wired` column says yes/no for whether the component renders in
+the actual running app.
 
 ---
 
-## 3. Frontend parity table
+## 3. Backend parity table
 
-Almost every row reads ⛔ **Q-A8** (mise is now installed but the
-frontend has not yet been bootstrapped — `mise install` + `npm
-install` + `package-lock.json` commit + first `npm run build` haven't
-run; the rows below stay ⛔ until that iteration lands).
-
-| Capability | Status | Notes |
-|---|---|---|
-| Vite + React 19 + Vitest scaffold | 🟡 partial | Files exist (App.tsx + smoke test); **never built or run end-to-end**. |
-| Tailwind / shadcn pin | 🟡 partial | `tailwind.config.js` content-glob test passes by inspection (B-18 resolved); shadcn not actually installed. |
-| ESLint config | ⬜ not started | Q-A9 picked (A) by default; `eslint.config.ts` not yet authored. |
-| Header bar + EmptyProjectState | ⛔ Q-A8 | M1 acceptance test specifies `data-testid="project-load-button"`; not authored. |
-| Project load controls + dropdown | ⛔ Q-A8 | M2. |
-| SourceFolderDialog | ⛔ Q-A8 | M2. |
-| OCRConfigModal | ⛔ Q-A8 | M3. |
-| Page image canvas (Konva) | ⛔ Q-A8 | M3 base + M4 overlays. |
-| BBox overlays (paragraph/line/word) + drag selection | ⛔ Q-A8 | M4; legacy color-parity required (`image_tabs.py:280-285`). |
-| WordMatchView (virtualised) + LineCard + WordCell | ⛔ Q-A8 | M5. |
-| Inline GT edit (Tab/Shift-Tab/Enter) | ⛔ Q-A8 | M5. |
-| Toolbar action grid (page/paragraph/line/word scopes) | ⛔ Q-A8 | M6. |
-| WordEditDialog (split/merge/erase/nudge/refine) | ⛔ Q-A8 | M7. |
-| Save/Load/Rematch GT buttons + SaveStatus | ⛔ Q-A8 | M8. |
-| Driver-contract `data-testid` conformance | ⛔ Q-A8 | M8 conformance test; legacy testids must be byte-identical. |
-| Export dialog | ⛔ Q-A8 | M9. |
-| Hotkey help modal + full keyboard audit | ⛔ Q-A8 | M9.5 (D-022). |
-
----
-
-## 4. Outstanding blockers (user-decision queue)
-
-| Q | Why it gates work |
-|---|---|
-| **Q-A8** Frontend toolchain | **Eased 2026-05-07.** mise is now installed in the dev container; `mise exec -- node` and `mise exec -- npm` resolve cleanly. The remaining work is mechanical: a single iteration that runs `mise install` + `mise exec -- npm install` inside `frontend/`, commits `frontend/package-lock.json`, runs `mise exec -- npm run build` once to populate `src/pd_ocr_labeler_spa/static/`, then verifies `make frontend-test`/`make frontend-build`/`make build` end-to-end. After that lands, M0 acceptance criteria 2-6 can flip green and the M1 `data-testid="project-load-button"` driver-contract test becomes runnable. |
-| **Q-A12** `session_state.json` extras-tolerance | **Closed** 2026-05-14 — `extra="ignore"` + WARNING-level `session_state_extras_dropped` log implemented (D-041). B-58 closed. |
-
-(Q-A11 — 500 redact-vs-verbatim — **resolved + implemented** iter 53 per
-D-040; B-51 closed. Q-A13 `--log-level` resolved (D) drop; no action
-needed.)
+| Capability | Status | Wired | Notes |
+|---|---|---|---|
+| CLI entry (`pd-ocr-labeler-ui`) | ✅ done | yes | iter 47 |
+| `/healthz` | ✅ done | yes | M0 |
+| Lifespan + shutdown clean | ✅ done | yes | iter 48 |
+| Settings (env-driven, frozen) | ✅ done | yes | B-63 closed |
+| Storage adapter (filesystem) | ✅ done | yes | S3 deferred per D-019/D-042 |
+| Auth adapter (none) | ✅ done | yes | B-42 minor signature drift |
+| OCR adapter Protocol | 🟡 partial | partial | `LocalDoctrPageLoader` + `PredictorCache` shipped; `modal`/`shared_container` are `NotImplementedYet` per D-042 |
+| Request-ID middleware + audit log | ✅ done | yes | |
+| Error handler (500 envelope) | ✅ done | yes | D-040 |
+| `/env.js` | ✅ done | yes | |
+| Static SPA fallback | ✅ done | yes | |
+| Image-cache HTTP route | 🟡 partial | yes | Route works; nothing tells it to serve a page image yet |
+| Project discovery / enumeration | ✅ done | yes | `GET /api/projects`, `POST /api/projects/load`, `POST /api/projects/discover`, `POST /api/projects/source-root` |
+| Session restore (last project, last page) | ✅ done | yes | session_state read+write, D-041 |
+| Ground-truth + project envelope read | ✅ done | yes | `core/persistence/ground_truth.py`, `project_envelope.py` |
+| Three-lane persistence model (labeled/cached/ocr) | ✅ done | yes | `ensure_page_model` dispatcher + `LaneResolver` |
+| `GET /api/projects/{id}/pages/{idx}` payload | ⬜ not started | no | **501 stub** — spec 23-A is P0 |
+| `POST .../pages/{idx}/save` | ⬜ not started | no | **501 stub**; `persist_page_to_file` exists, no caller |
+| `POST .../pages/{idx}/load` | ⬜ not started | no | 501 stub |
+| `POST .../pages/{idx}/reload-ocr` | 🟡 partial | no | 202+`asyncio.sleep(0)` — handler not implemented |
+| `POST .../pages/{idx}/rematch-gt` | ⬜ not started | no | 501 stub |
+| `POST .../pages/{idx}/rotate` (manual) | ✅ done | no | M9.1 (#263); endpoint live; frontend rotate button not mounted |
+| `POST .../auto-rotate-all` | ✅ done | no | M9.2 (#264); endpoint live; OCR config UI not mounted |
+| Word mutation endpoints (×11) | 🟡 partial | no | URL shapes + Pydantic validation real; handlers return empty `PagePayload` |
+| Line / paragraph mutation endpoints (×8) | 🟡 partial | no | Same |
+| Selection endpoint | ⬜ not started | no | Spec 23-E |
+| Refine bboxes (page + project) | ✅ done | no | Job handler shipped; frontend launcher missing |
+| Save Project (multi-page job) | 🟡 partial | no | 202+sleep-0 handler — spec 23-B |
+| Export (per-style `labels.json`) | ✅ done | no | `handle_export` real (#226); frontend `ExportDialog` not mounted |
+| Notification SSE | ✅ done | yes | NotificationQueue + `/api/notifications/stream` + `useNotificationStream` |
+| OCR config snapshot endpoint | ✅ done | no | `GET /api/ocr-config` etc.; `OCRConfigModal` not mounted |
 
 ---
 
-## 5. Open bugs of consequence (medium+)
+## 4. Frontend parity table — built vs wired
+
+The killer column is **Wired**: a `⛔ no` means the component renders
+nowhere in the running tree. A `🟩 built ⛔ no` row means the
+component is real, tests pass, and it's invisible to a user.
+
+| Capability | Built | Wired | Notes |
+|---|---|---|---|
+| Vite + React 19 + Vitest scaffold | ✅ | yes | #246 — toolchain works, MSW + Konva mock + coverage |
+| Tailwind | ✅ | yes | B-18 resolved |
+| ESLint + tsc + pyright in CI | ✅ | yes | #176 |
+| Router (`react-router-dom`) + `QueryClient` | ✅ | yes | #240, #193 |
+| Header bar | ✅ | yes | #272 |
+| `ProjectLoadControls` (dropdown + LOAD) | ✅ | yes | shipped; powers M2 load flow |
+| `EmptyProjectState` + `RootPage` | ✅ | yes | #84, #274 |
+| `Toaster` (sonner) | ✅ | yes | #231 |
+| `useNotificationStream` (SSE → toasts) | ✅ | yes | #231 |
+| **`ProjectPage` (real shell)** | ⬜ | no | **Stub only** — 76-LOC placeholder; spec 22 mounts the real surface |
+| `ProjectNavigationControls` (Prev/Next/GoTo) | ⬜ | no | Stub `display:none` block for driver-contract testids only |
+| `PageActions` (Reload/Save/Load/Rematch/Rotate) | 🟩 | no | 313 LOC real component, not mounted |
+| `ImageTabsHeader` (layer checkboxes + selection mode + Erase) | 🟩 | no | #196; bug: paragraph radio hardcoded `&& false` (line 108); SelectionMode type uses `box` instead of `paragraph` |
+| `PageImageCanvas` (Konva) | ⬜ | no | **DOM stub** — imageUrl unused; spec 21 ships real renderer |
+| `BBoxOverlay` (Konva rects) | ⬜ | no | **Test-only `<div>` stub** — spec 21 |
+| `TextTabs` (Matches / GT / OCR) | 🟩 | no | 181 LOC |
+| `WordMatchView` (virtualized) | 🟩 | no | 118 LOC; uses `@tanstack/react-virtual` |
+| `LineCard` (per-line GT/OCR + per-word controls) | 🟩 | partial | Imported by `WordMatchView`; rendered only if `WordMatchView` is — which it isn't |
+| `WordCell` + GT-input | 🟩 | no | #203 |
+| `WordTagRow` + tag chips | 🟩 | no | |
+| `FilterToggle` (Unvalidated/Mismatched/All) | ⬜ | no | Not yet built; spec 22 §8 adds it |
+| `ToolbarActionGrid` (Page/Paragraph/Line/Word × actions) | 🟩 | no | 332 LOC; #207 |
+| `WordEditDialog` (merge/split/erase/nudge/refine) | 🟩 | no | 296 LOC; #209 |
+| `WordImageCanvas` (Konva, in dialog) | ✅ | partial | **Real Konva** — only via dialog when launched, which never happens because dialog not mounted |
+| `WordActionRows`, `WordRefineNudgeRows` | 🟩 | no | |
+| `OCRConfigModal` | 🟩 | no | 398 LOC; #261 normalize section + auto-rotation section |
+| `ExportDialog` | 🟩 | no | 431 LOC; backend export shipped |
+| `HotkeyHelpModal` | 🟩 | no | #235 |
+| `ConfirmDialog` | 🟩 | no | #236 |
+| `BusyOverlay` | 🟩 | no | #232 |
+| `InlineBanners` (OCR-failed / not-found / image-drift) | 🟩 | no | #233 |
+| `Splitter` (horizontal pane resize) | ⬜ | no | Not yet built; spec 22 §9 adds it |
+| Hotkey hooks (`useHotkey`, `useGlobalHotkeys`, viewport/matches/dialog) | ✅ | partial | #235/#236/#237/#202 — wired only where their consumer components are mounted |
+| Data hooks (`useProject`, `usePage`, `useJobProgress`, mutations) | ✅ | partial | #192/#215/#216/#202 |
+| Driver-contract conformance E2E test | ✅ | yes | #241/#242/#247 — passes against stub testids |
+
+---
+
+## 5. Outstanding blockers (user-decision queue)
+
+(2026-05-14 status — Q-A14 closed by D-043 in this commit.)
+
+None. All blocking questions are resolved. The path forward is
+described entirely by specs 21 / 22 / 23 and does not require new
+input from CT until those specs land.
+
+Q-A7 (per-mark glyph provenance) is open but only blocks M11; not on
+the critical path for the audit-driven re-spec.
+
+---
+
+## 6. Open bugs of consequence (medium+)
 
 | ID | Severity | One-line |
 |---|---|---|
-| **B-42** | low | `IAuth.verify` signature drifts from spec §7 (`creds: HTTPAuthorizationCredentials \| None` → `credentials: str \| None`). One-line spec/impl alignment. |
+| **B-42** | low | `IAuth.verify` signature drift; one-line fix |
+| **(new) BBL-AUDIT-1** | medium | `ImageTabsHeader.tsx:108` — paragraph radio hardcoded `&& false`; `SelectionMode` type uses `box` not `paragraph` (spec 21 §8) |
 
-(B-72 closed iter 7 — test isolation fixed before this snapshot. B-58 closed iter 7 — `extra="ignore"` + WARNING log implemented.)
-
-Everything else open is **nit/low** (B-68 browser-open race, B-70
-empty-string `--host` bypass, B-71 `_keepalive` micro-leak). Full table
-in `docs/BUGS_FOUND.md`. **B-51 closed iter 53** (D-040 impl).
+Closed since previous snapshot: B-58, B-72, Q-A12. See
+[`docs/archive/BUGS_RESOLVED.md`](archive/BUGS_RESOLVED.md).
 
 ---
 
-## 6. Recommendation: next priorities
+## 7. Recommendation: next priorities
 
-(B-58, B-72, Q-A12 all closed as of 2026-05-14. Remaining medium work:)
+(The audit makes the prior "Bootstrap the frontend toolchain"
+recommendation obsolete — that's been done.)
 
-1. **Bootstrap the frontend toolchain (Q-A8 mechanical
-   close)** (~30 min, requires outbound network for the npm
-   registry). Run `mise install` (Node 24 + Python 3.13 per
-   `mise.toml`), then `mise exec -- npm install` inside `frontend/`,
-   commit `frontend/package-lock.json`, run `mise exec -- npm run
-   build` once to populate `src/pd_ocr_labeler_spa/static/`, then
-   verify `make frontend-test` + `make frontend-build` + `make build`.
-   This flips M0 acceptance criteria 2-6 green and the M1
-   `data-testid="project-load-button"` driver-contract sanity test
-   from `specs/16-milestones.md:144` becomes runnable.
-2. **Close B-42** (~5 min). `IAuth.verify` signature drift — one-line
-   spec/impl alignment.
-3. **M3 OCR plumbing** — wire `LocalDoctrPageLoader` + `GET /api/projects/{id}/pages/{idx}`
-   real impl. Requires `pd_book_tools` OCR adapter.
+1. **Land spec 21** (Konva renderer). Three sub-issues. P0.
+2. **Land spec 23-A + 23-B** (`GET /pages/{idx}` real impl + reload-OCR
+   real handler). Without these the wired page renders nothing.
+3. **Land spec 22** (page surface wireup). After 21 and 23-A this
+   becomes the iter that makes the SPA usable for the first time.
+4. **Land spec 23-C/D/E** (mutation handlers + selection endpoint).
+   Unblocks edit operations.
+5. **Polish** — `ImageTabsHeader` paragraph-radio fix, `FilterToggle`,
+   `Splitter`, `OCRConfigModal` launcher, `ExportDialog` launcher,
+   banners + busy overlay in tree.
 
 ---
 
-## 7. Risk register
+## 8. Risk register
 
-1. **Frontend backlog compounds until the Q-A8 bootstrap iter
-   runs.** mise is installed (2026-05-07) but `npm install` /
-   `package-lock.json` / first `npm run build` haven't happened yet.
-   Every iter that lands a backend endpoint without its frontend
-   half widens the gap that one bursty session has to close.
-   **Mitigation:** schedule the bootstrap iter soon so frontend +
-   backend can co-evolve; in the meantime, keep frontend work
-   tightly tied to its spec (write the component .tsx by inspection
-   the day the endpoint lands) so the eventual catch-up is
-   mechanical, not design-from-scratch.
-2. **`UserPageEnvelope` v2.1 byte-compat is unproven.** No
-   round-trip test against a legacy-written file exists yet; M8 will
-   discover divergence late if M3's reader/writer drifts. **Mitigation:**
-   ship `tests/integration/test_envelope_round_trip.py` (golden
-   file from a real legacy save) **the same iter** the M3
-   reader/writer lands, not at M8.
-3. **OCR adapter is currently a Protocol with no tested
-   implementation.** The first M3 iter will discover whether
-   `Document.from_image_ocr_via_doctr` integrates cleanly into the
-   adapter shape, or whether the protocol needs revision. **Mitigation:**
-   stand up `tests/integration/test_first_ocr.py` against a tiny
-   fixture image (one page, no real model) before M3 closes; the
-   real-model path can stay slow/marked.
+1. **pd-book-tools mutation methods may not all exist.** Spec 23-C/D
+   assumes `Word.set_ground_truth_text`, `Word.apply_style`,
+   `Word.set_validated`, `Word.rebox`, `Page.add_word`,
+   `Page.merge_words`, `Line.copy_gt_to_ocr`, `Page.delete_line`,
+   etc. Mitigation: per-handler audit during spec 23-C; route any
+   missing methods to `pd-book-tools` agent before that issue starts.
+2. **`use-image` adds a dep.** Spec 21 §5 commits to it. Mitigation:
+   pinned to `^1.1` (small surface, stable); fallback pattern from
+   `WordImageCanvas.ImageLayer` documented if we ever need to drop.
+3. **Driver-contract sidecar divs.** Spec 21 §6 keeps `data-testid`
+   sidecar divs alongside Konva nodes. Mitigation: dev/test-only via
+   `import.meta.env.MODE !== "production"`; bundle stays clean.
+
+---
+
+## 9. References
+
+- Audit: [`docs/PARITY_GAPS_2026_05_14.md`](PARITY_GAPS_2026_05_14.md)
+- Konva spec: [`specs/21-konva-renderer.md`](../specs/21-konva-renderer.md)
+- Wireup spec: [`specs/22-page-surface-wireup.md`](../specs/22-page-surface-wireup.md)
+- Backend payload spec: [`specs/23-page-payload-backend.md`](../specs/23-page-payload-backend.md)
+- D-043: [`specs/17-decisions.md`](../specs/17-decisions.md#d-043--konva-renderer-commitment-supersedes-d-020)
+- Legacy UI inventory: [`pd-ocr-labeler/docs/architecture/ui-action-buttons.md`](../../pd-ocr-labeler/docs/architecture/ui-action-buttons.md)

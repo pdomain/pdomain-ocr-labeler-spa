@@ -138,6 +138,40 @@ the user.
 
 ---
 
+## Q-A14 — M4 renderer: must Konva be validated by spike before M4 starts?
+
+**Filed.** 2026-05-11 (ConcaveTrillion/pd-ocr-labeler-spa#55).
+
+**Background.** `docs/architecture/04-image-viewport.md` is written
+against a Konva component tree, but D-020 left the renderer choice
+deferred to a research spike "at the start of M4". The spike never
+ran; `PageImageCanvas` and `BBoxOverlay` shipped as DOM stubs at
+M4, accumulating "shipped" status while the actual implementation
+stayed empty. The 2026-05-14 parity audit
+([`docs/PARITY_GAPS_2026_05_14.md`](../PARITY_GAPS_2026_05_14.md))
+forced the question to a head.
+
+**Choice.**
+
+- (A) Run the spike now — measure 4 K-page perf, commit to a
+  renderer, then implement.
+- (B) Commit to Konva without the spike — `WordImageCanvas`
+  already proves Konva works at our scale; raw-canvas fallback is
+  cost without benefit; ship the renderer and revisit only if a
+  measured failure surfaces.
+
+**Resolution.** **(B)** — D-043 commits to Konva. The
+`use-image@^1.1` dep is added; `specs/21-konva-renderer.md` is the
+implementation spec; D-020 is superseded.
+
+**Refs.** [D-043](../../specs/17-decisions.md#d-043--konva-renderer-commitment-supersedes-d-020),
+[`specs/21-konva-renderer.md`](../../specs/21-konva-renderer.md),
+[`docs/PARITY_GAPS_2026_05_14.md`](../PARITY_GAPS_2026_05_14.md).
+
+**Status.** Resolved 2026-05-14.
+
+---
+
 ## Resolution log
 
 All initial questions resolved by user on 2026-05-06; sub-questions
@@ -176,6 +210,7 @@ Decisions live in [`../specs/17-decisions.md`](../specs/17-decisions.md).
 | Q-A13 | `--log-level` CLI flag | (D) drop it; `-v/--verbose` (count) is spec-canonical and matches legacy (resolved 2026-05-07) | [D-039](../specs/17-decisions.md) |
 | Q-A11 | 500 traceback `details` redaction | (B) `Settings.debug_unhandled_traceback: bool = True` default; `False` redacts client `details` while `logger.exception` keeps full server log + X-Request-ID correlation (resolved 2026-05-07; impl iter 53) | [D-040](../specs/17-decisions.md) |
 | Q-A12 | session_state.json extras tolerance | (A) with WARNING-level drift signal — `extra="ignore"` + `logger.warning("session_state_extras_dropped …")` so library/SPA-legacy drift in a release that shouldn't have had it surfaces as a grep-able log signal (resolved 2026-05-07; impl commit `c10e914`) | [D-041](../specs/17-decisions.md) |
+| Q-A14 | M4 renderer Konva spike requirement | (B) commit to Konva without spike; `WordImageCanvas` proves the toolchain works; D-020 superseded; spec 21 is implementation spec (resolved 2026-05-14) | [D-043](../specs/17-decisions.md) |
 
 ### Delegations to peer-repo agents (2026-05-06)
 

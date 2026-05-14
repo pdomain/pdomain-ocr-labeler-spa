@@ -1485,6 +1485,67 @@ body redaction); [`00-overview.md` Non-goals](../docs/architecture/00-overview.m
 
 ---
 
+## D-043 — Konva renderer commitment supersedes D-020
+
+**Date.** 2026-05-14.
+
+**Decision.** Konva (via `react-konva` + `use-image`) is the
+committed renderer for the image viewport, both `PageImageCanvas` and
+all `BBoxOverlay` instances. The raw-canvas fallback option from
+D-020 is dropped. The "research spike before M4 starts" gate is
+removed.
+
+**Why.**
+
+- The 2026-05-14 parity audit
+  ([`docs/PARITY_GAPS_2026_05_14.md`](../docs/PARITY_GAPS_2026_05_14.md))
+  found that `PageImageCanvas.tsx` shipped as a DOM stub because
+  the D-020 spike never ran. Eight months of "soon" without a
+  measurement, while downstream issues (#197, #198) closed against
+  the stub contracts.
+- `WordImageCanvas.tsx` already proves Konva works end-to-end in our
+  toolchain (jsdom Vitest mock + production bundle).
+- The bbox-count budget per page (~2 400 nodes for a 200-line page
+  across four layers) is well below Konva's documented
+  ~10 000-node ceiling.
+- The component contract in `04-image-viewport.md` is already
+  Konva-shaped (Stage / Layer / Rect tree). Switching to raw canvas
+  would require rewriting every downstream overlay/selection spec.
+
+**Implications.**
+
+- `specs/21-konva-renderer.md` is the implementation spec; it
+  replaces `04-image-viewport.md` §0 ("research spike at M4 start").
+- `OPEN_QUESTIONS.md` Q-A14 is resolved: the spike is unnecessary.
+  Move Q-A14 to `docs/archive/QUESTIONS_RESOLVED.md` in the same
+  commit that lands this ADR.
+- `use-image@^1.1` is added to `frontend/package.json` as a runtime
+  dependency.
+- All future bbox-overlay work uses `react-konva` `<Rect>` nodes;
+  test introspection moves to test-only sidecar divs (per spec 21
+  §6) so driver-contract `data-testid` selectors still resolve.
+
+**Alternatives considered.**
+
+- Run the spike now. Rejected: the audit shows the renderer is
+  already gating the entire labeling surface; another iter of
+  unresolved deferral is more harmful than committing on the
+  ergonomically-better stack and revisiting only if a measured
+  perf failure forces it.
+- Raw canvas + hand-rolled hit testing. Rejected: rewrite cost
+  across overlays, selection, drag-rect preview, and hover-guide
+  layers is real; the legacy comparison point ran an SVG overlay
+  string render at every websocket roundtrip and is the *worse*
+  reference, not the better.
+
+**Refs.** [`OPEN_QUESTIONS.md Q-A14`](../OPEN_QUESTIONS.md),
+[`21-konva-renderer.md`](21-konva-renderer.md),
+[`docs/architecture/04-image-viewport.md`](../docs/architecture/04-image-viewport.md),
+[`docs/PARITY_GAPS_2026_05_14.md`](../docs/PARITY_GAPS_2026_05_14.md),
+D-020 (superseded).
+
+---
+
 ## Pending decisions
 
 See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for any sub-questions

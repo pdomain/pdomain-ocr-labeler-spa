@@ -17,39 +17,6 @@ line links the resulting ADR and the entry moves to the archive.
 
 ---
 
-### Q-A14 — M4 renderer: must Konva be validated by spike before M4 starts?
-> GitHub: ConcaveTrillion/pd-ocr-labeler-spa#55
-
-**Q.** Spec 04 (`docs/architecture/04-image-viewport.md`) is written for Konva, but explicitly
-notes that a spike at M4 start may recommend raw canvas instead. Must the spike be
-completed and an ADR committed to `specs/17-decisions.md` *before* any M4 component
-code is written? And if the spike recommends raw canvas, how much of spec 04 needs
-revision before implementation proceeds?
-
-**Context.** M4 introduces the image viewport with paragraph/line/word bbox overlays.
-Konva is the current default, but raw canvas may outperform it at 4K-page scale
-(many hundreds of overlay rects). Committing component code before the spike risks
-rewriting `BBoxOverlay.tsx`, `PageImageCanvas.tsx`, and related drag-selection logic
-if the recommendation changes.
-
-**Options.**
-
-- (A) Spike is mandatory before any M4 component code lands. Spike result → ADR →
-  spec 04 revision (if needed) → implementation. Higher upfront cost; no rewrite risk.
-- (B) Start M4 with Konva, treat the spike as an optional optimisation later. Lower
-  upfront cost; rewrite risk if 4K-page performance is unacceptable.
-
-**Recommendation.** (A) — the spec author's bet. A spike on a single fixture 4K page
-costs one session; a post-hoc rewrite of the full overlay system costs more.
-
-**Blocks.** M4 component implementation.
-
-**Owner.** CT.
-
-**Status.** Open.
-
----
-
 ### Q-A5 — Does the legacy labeler tolerate a v2.2 `UserPageEnvelope` (with `glyph_annotations`)?
 > GitHub: ConcaveTrillion/pd-ocr-labeler-spa#56 — **CLOSED**
 
