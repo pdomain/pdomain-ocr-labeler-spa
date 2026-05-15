@@ -1,30 +1,55 @@
 // Rail.test.tsx — Tests for the Rail target/mode selector panel.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 10.
+// Hi-fi gaps P1.d (Gaps 10,11,12), P1.e (Gaps 11,13,15), P1.f (Gap 14).
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { Rail } from "./Rail";
 import { railStore } from "../../stores/rail-store";
 
-describe("Rail — target + mode selectors (Slice 10)", () => {
+// Silence dialogStore open call (not wired in jsdom tests).
+vi.mock("../../stores/dialog-store", () => ({
+  dialogStore: { open: vi.fn() },
+}));
+
+describe("Rail — target + mode selectors (Slice 10 / P1.d,e,f)", () => {
   beforeEach(() => {
+    localStorage.clear(); // clear first so reset() reads the default "word" target
     railStore.reset();
-    localStorage.clear();
   });
+
+  // ── Container ──────────────────────────────────────────────────────────────
 
   it("renders the rail with data-testid", () => {
     render(<Rail />);
     expect(screen.getByTestId("rail")).toBeInTheDocument();
   });
 
-  it("renders B / L / W target buttons", () => {
+  it("rail container uses bg-bg-surface", () => {
     render(<Rail />);
-    expect(screen.getByTestId("rail-target-block")).toBeInTheDocument();
-    expect(screen.getByTestId("rail-target-line")).toBeInTheDocument();
-    expect(screen.getByTestId("rail-target-word")).toBeInTheDocument();
+    expect(screen.getByTestId("rail").className).toContain("bg-bg-surface");
   });
 
-  it("renders V / R / A / E mode buttons", () => {
+  // ── Section labels (Gap 13) ────────────────────────────────────────────────
+
+  it("renders MODE section label", () => {
+    render(<Rail />);
+    expect(screen.getByText("MODE")).toBeInTheDocument();
+  });
+
+  it("renders TARGET section label", () => {
+    render(<Rail />);
+    expect(screen.getByText("TARGET")).toBeInTheDocument();
+  });
+
+  it("renders LAYERS section label", () => {
+    render(<Rail />);
+    expect(screen.getByText("LAYERS")).toBeInTheDocument();
+  });
+
+  // ── Mode icon-cards (P1.d — Gaps 10, 11, 12) ──────────────────────────────
+
+  it("renders all four mode buttons by testid", () => {
     render(<Rail />);
     expect(screen.getByTestId("rail-mode-view")).toBeInTheDocument();
     expect(screen.getByTestId("rail-mode-region")).toBeInTheDocument();
@@ -32,30 +57,18 @@ describe("Rail — target + mode selectors (Slice 10)", () => {
     expect(screen.getByTestId("rail-mode-erase")).toBeInTheDocument();
   });
 
-  it("active target button reflects initial store state (word)", () => {
+  it("mode buttons show text labels (not bare letters)", () => {
     render(<Rail />);
-    const wordBtn = screen.getByTestId("rail-target-word");
-    expect(wordBtn).toHaveAttribute("data-active", "true");
-    expect(screen.getByTestId("rail-target-block")).not.toHaveAttribute("data-active", "true");
+    expect(screen.getByText("View")).toBeInTheDocument();
+    expect(screen.getByText("Refine")).toBeInTheDocument();
+    expect(screen.getByText("Annotate")).toBeInTheDocument();
+    expect(screen.getByText("Erase")).toBeInTheDocument();
   });
 
-  it("clicking B target button updates store to block", () => {
+  it("active mode button reflects store state (view by default)", () => {
     render(<Rail />);
-    fireEvent.click(screen.getByTestId("rail-target-block"));
-    expect(railStore.getState().target).toBe("block");
-  });
-
-  it("clicking L target button updates store to line", () => {
-    render(<Rail />);
-    fireEvent.click(screen.getByTestId("rail-target-line"));
-    expect(railStore.getState().target).toBe("line");
-  });
-
-  it("clicking active target re-renders with that target still active", () => {
-    render(<Rail />);
-    fireEvent.click(screen.getByTestId("rail-target-block"));
-    expect(screen.getByTestId("rail-target-block")).toHaveAttribute("data-active", "true");
-    expect(screen.getByTestId("rail-target-word")).not.toHaveAttribute("data-active", "true");
+    expect(screen.getByTestId("rail-mode-view")).toHaveAttribute("data-active", "true");
+    expect(screen.getByTestId("rail-mode-region")).not.toHaveAttribute("data-active", "true");
   });
 
   it("clicking a mode button updates store mode", () => {
@@ -64,44 +77,115 @@ describe("Rail — target + mode selectors (Slice 10)", () => {
     expect(railStore.getState().mode).toBe("annotate");
   });
 
-  it("active mode button reflects store state", () => {
+  it("active mode button has bgSunk styling class", () => {
     render(<Rail />);
-    expect(screen.getByTestId("rail-mode-view")).toHaveAttribute("data-active", "true");
+    const viewBtn = screen.getByTestId("rail-mode-view");
+    expect(viewBtn.className).toContain("bg-bg-sunk");
+  });
+
+  it("switching mode updates active state", () => {
+    render(<Rail />);
     fireEvent.click(screen.getByTestId("rail-mode-erase"));
     expect(screen.getByTestId("rail-mode-erase")).toHaveAttribute("data-active", "true");
     expect(screen.getByTestId("rail-mode-view")).not.toHaveAttribute("data-active", "true");
   });
 
-  it("rail container uses bg-bg-surface not bg-background", () => {
+  // ── Target cells (P1.d + P1.f — Gaps 11, 12, 14) ─────────────────────────
+
+  it("renders all four target buttons (block, para, line, word)", () => {
     render(<Rail />);
-    const rail = screen.getByTestId("rail");
-    expect(rail.className).toContain("bg-bg-surface");
-    expect(rail.className).not.toContain("bg-background");
+    expect(screen.getByTestId("rail-target-block")).toBeInTheDocument();
+    expect(screen.getByTestId("rail-target-para")).toBeInTheDocument();
+    expect(screen.getByTestId("rail-target-line")).toBeInTheDocument();
+    expect(screen.getByTestId("rail-target-word")).toBeInTheDocument();
+  });
+
+  it("target buttons show text labels", () => {
+    render(<Rail />);
+    // Use getAllByText since "Block"/"Line"/"Word" also appear in LAYERS section
+    expect(screen.getAllByText("Block").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Line").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Word").length).toBeGreaterThanOrEqual(1);
+    // "Para" appears in target + layers as "¶Para"
+    expect(screen.getByText("Para")).toBeInTheDocument();
+  });
+
+  it("active target button reflects initial store state (word)", () => {
+    render(<Rail />);
+    expect(screen.getByTestId("rail-target-word")).toHaveAttribute("data-active", "true");
+    expect(screen.getByTestId("rail-target-block")).not.toHaveAttribute("data-active", "true");
+  });
+
+  it("clicking block target updates store to block", () => {
+    render(<Rail />);
+    fireEvent.click(screen.getByTestId("rail-target-block"));
+    expect(railStore.getState().target).toBe("block");
+  });
+
+  it("clicking para target updates store to para", () => {
+    render(<Rail />);
+    fireEvent.click(screen.getByTestId("rail-target-para"));
+    expect(railStore.getState().target).toBe("para");
+  });
+
+  it("clicking line target updates store to line", () => {
+    render(<Rail />);
+    fireEvent.click(screen.getByTestId("rail-target-line"));
+    expect(railStore.getState().target).toBe("line");
   });
 
   it("active target button has layer-color border class", () => {
     render(<Rail />);
     // Default active is 'word'
-    const wordBtn = screen.getByTestId("rail-target-word");
-    expect(wordBtn.className).toContain("border-layer-word");
-    // Block not active — should not have layer-block border
-    const blockBtn = screen.getByTestId("rail-target-block");
-    expect(blockBtn.className).not.toContain("border-layer-block");
+    expect(screen.getByTestId("rail-target-word").className).toContain("border-layer-word");
+    expect(screen.getByTestId("rail-target-block").className).not.toContain("border-layer-block");
   });
 
-  it("switching target updates layer-color border to new target", () => {
+  it("switching to block adds layer-block border", () => {
     render(<Rail />);
     fireEvent.click(screen.getByTestId("rail-target-block"));
-    const blockBtn = screen.getByTestId("rail-target-block");
-    expect(blockBtn.className).toContain("border-layer-block");
-    const wordBtn = screen.getByTestId("rail-target-word");
-    expect(wordBtn.className).not.toContain("border-layer-word");
+    expect(screen.getByTestId("rail-target-block").className).toContain("border-layer-block");
+    expect(screen.getByTestId("rail-target-word").className).not.toContain("border-layer-word");
   });
 
-  it("active line target has border-layer-line class", () => {
+  it("switching to line adds layer-line border", () => {
     render(<Rail />);
     fireEvent.click(screen.getByTestId("rail-target-line"));
-    const lineBtn = screen.getByTestId("rail-target-line");
-    expect(lineBtn.className).toContain("border-layer-line");
+    expect(screen.getByTestId("rail-target-line").className).toContain("border-layer-line");
+  });
+
+  it("switching to para adds layer-para border", () => {
+    render(<Rail />);
+    fireEvent.click(screen.getByTestId("rail-target-para"));
+    expect(screen.getByTestId("rail-target-para").className).toContain("border-layer-para");
+  });
+
+  // ── LAYERS swatches (P1.e — Gap 15) ──────────────────────────────────────
+
+  it("renders layer legend swatches for Block, Para, Line, Word", () => {
+    render(<Rail />);
+    // LAYERS section has Block, ¶Para, Line, Word labels
+    expect(screen.getByText("¶Para")).toBeInTheDocument();
+  });
+
+  // ── Footer buttons (P1.e — Gap 15) ────────────────────────────────────────
+
+  it("renders Bulk button in footer", () => {
+    render(<Rail />);
+    expect(screen.getByTestId("rail-bulk-button")).toBeInTheDocument();
+    expect(screen.getByText("Bulk")).toBeInTheDocument();
+  });
+
+  it("renders Hotkeys button in footer", () => {
+    render(<Rail />);
+    expect(screen.getByTestId("rail-hotkeys-button")).toBeInTheDocument();
+    expect(screen.getByText("Hotkeys")).toBeInTheDocument();
+  });
+
+  it("Hotkeys button opens hotkey help dialog", async () => {
+    const { dialogStore } = await import("../../stores/dialog-store");
+    render(<Rail />);
+    fireEvent.click(screen.getByTestId("rail-hotkeys-button"));
+    expect(dialogStore.open).toHaveBeenCalledWith("hotkeyHelp");
   });
 });

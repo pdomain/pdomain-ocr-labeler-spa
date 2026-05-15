@@ -1,14 +1,18 @@
-// HeaderBar.tsx — 40px top chrome, present on every route.
+// HeaderBar.tsx — 56px top chrome, present on every route.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 9.
 //       specs/22-page-surface-wireup.md §3, §6 (issue #309)
+//       docs/plans/hifi-gaps-plan.md P1.a (Gaps 1, 3, 5)
 // IS-2: added navSlot + actionsSlot props for project-route header wiring.
 //
 // Layout:
-//   Left:   logo glyph + (project name when on a project route)
-//   Center: [navSlot] ProjectLoadControls + [actionsSlot] dialog trigger buttons
+//   Left:   logo glyph + Projects / <project-name> breadcrumb chip (project routes)
+//   Center: [navSlot] metrics strip + [actionsSlot] dialog trigger buttons
 //   Right:  UserMenu (avatar + caret) — Theme stub + Sign out
 //
-// 40px height (`h-10`), `bg-bg-page`, `border-b border-border-1`.
+// 56px height (`h-14`), `bg-bg-page`, `border-b border-border-1`.
+// Gap 1: header height 40→56px (DONE).
+// Gap 3: Projects / <name> breadcrumb in left area.
+// Gap 5: metrics strip pill row (N words · N exact · N fuzzy · N ✗ · N/M validated).
 
 import type * as React from "react";
 import { Link, useMatch } from "react-router-dom";
@@ -16,6 +20,7 @@ import { ChevronDown } from "lucide-react";
 
 import ProjectLoadControls from "./ProjectLoadControls";
 import { useProject } from "../hooks/useProject";
+import { usePage } from "../hooks/usePage";
 import { dialogStore } from "../stores/dialog-store";
 import { useThemePreference, useUiPrefs, type ThemePreference } from "../stores/ui-prefs";
 import {
@@ -37,6 +42,10 @@ interface ProjectRouteInfo {
    * ProjectLoadControls.
    */
   projectName: string | undefined;
+  /** 0-based page index when on a page route; undefined otherwise. */
+  pageIndex: number | undefined;
+  /** Project identifier string when on a project route; undefined otherwise. */
+  projectId: string | undefined;
 }
 
 function useProjectRouteInfo(): ProjectRouteInfo {
@@ -49,16 +58,129 @@ function useProjectRouteInfo(): ProjectRouteInfo {
     matchPageIdx?.params.projectId ??
     matchProject?.params.projectId;
 
+  // Derive 0-based page index from URL.
+  const pageNo = matchPageNo?.params.pageNo;
+  const idx0Raw = matchPageIdx?.params.idx0;
+  let pageIndex: number | undefined;
+  if (pageNo !== undefined) {
+    const n = parseInt(pageNo, 10);
+    if (Number.isFinite(n) && n >= 1) pageIndex = n - 1;
+  } else if (idx0Raw !== undefined) {
+    const n = parseInt(idx0Raw, 10);
+    if (Number.isFinite(n) && n >= 0) pageIndex = n;
+  }
+
   const { data, isLoading, isError } = useProject(projectId);
 
   if (!projectId || isLoading || isError || !data) {
-    return { controlsDisabled: true, projectName: undefined };
+    return { controlsDisabled: true, projectName: undefined, pageIndex, projectId };
   }
 
   // Derive display label: last path segment of project_root, or project_id.
   const label = data.project_root.split("/").filter(Boolean).pop() ?? projectId;
 
-  return { controlsDisabled: false, projectName: label };
+  return { controlsDisabled: false, projectName: label, pageIndex, projectId };
+}
+
+// ─── MetricsStrip ─────────────────────────────────────────────────────────────
+
+interface PageMetrics {
+  totalWords: number;
+  exactCount: number;
+  fuzzyCount: number;
+  mismatchCount: number;
+  validatedCount: number;
+}
+
+function usePageMetrics(
+  projectId: string | undefined,
+  pageIndex: number | undefined,
+): PageMetrics | null {
+  const { data } = usePage(projectId, pageIndex);
+  if (!data?.line_matches?.length) return null;
+
+  let totalWords = 0;
+  let exactCount = 0;
+  let fuzzyCount = 0;
+  let mismatchCount = 0;
+  let validatedCount = 0;
+
+  for (const lm of data.line_matches) {
+    totalWords += lm.total_word_count;
+    exactCount += lm.exact_count;
+    fuzzyCount += lm.fuzzy_count;
+    mismatchCount += lm.mismatch_count;
+    validatedCount += lm.validated_word_count;
+  }
+
+  return { totalWords, exactCount, fuzzyCount, mismatchCount, validatedCount };
+}
+
+interface MetricsPillProps {
+  label: string;
+  value: number;
+  colorClass: string;
+}
+
+function MetricsPill({ label, value, colorClass }: MetricsPillProps) {
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${colorClass}`}
+    >
+      <span className="tabular-nums">{value}</span>
+      <span className="text-[9px] opacity-70">{label}</span>
+    </span>
+  );
+}
+
+interface MetricsStripProps {
+  projectId: string | undefined;
+  pageIndex: number | undefined;
+}
+
+export function MetricsStrip({ projectId, pageIndex }: MetricsStripProps) {
+  const metrics = usePageMetrics(projectId, pageIndex);
+  if (!metrics) return null;
+
+  const { totalWords, exactCount, fuzzyCount, mismatchCount, validatedCount } = metrics;
+
+  return (
+    <div
+      data-testid="metrics-strip"
+      className="flex items-center gap-1 shrink-0"
+      aria-label={`Page metrics: ${totalWords} words, ${exactCount} exact, ${fuzzyCount} fuzzy, ${mismatchCount} mismatched, ${validatedCount} of ${totalWords} validated`}
+    >
+      <MetricsPill
+        label="words"
+        value={totalWords}
+        colorClass="bg-bg-raised text-ink-2 border border-border-2"
+      />
+      <MetricsPill
+        label="exact"
+        value={exactCount}
+        colorClass="text-status-exact border border-border-2 bg-bg-raised"
+      />
+      <MetricsPill
+        label="fuzzy"
+        value={fuzzyCount}
+        colorClass="text-status-fuzzy border border-border-2 bg-bg-raised"
+      />
+      <MetricsPill
+        label="✗"
+        value={mismatchCount}
+        colorClass="text-status-mismatch border border-border-2 bg-bg-raised"
+      />
+      <span
+        data-testid="metrics-validated-pill"
+        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium text-accent border border-border-2 bg-bg-raised"
+      >
+        <span className="tabular-nums">
+          {validatedCount}/{totalWords}
+        </span>
+        <span className="text-[9px] opacity-70">validated</span>
+      </span>
+    </div>
+  );
 }
 
 // ─── ThemeChips ──────────────────────────────────────────────────────────────
@@ -168,12 +290,17 @@ export interface HeaderBarProps {
 }
 
 export default function HeaderBar({ navSlot, actionsSlot }: HeaderBarProps = {}) {
-  const { controlsDisabled: isControlsDisabled, projectName } = useProjectRouteInfo();
+  const {
+    controlsDisabled: isControlsDisabled,
+    projectName,
+    pageIndex,
+    projectId,
+  } = useProjectRouteInfo();
 
   return (
     <header
       data-testid="header-bar"
-      className="h-10 flex items-center gap-2 px-3 bg-bg-page border-b border-border-1"
+      className="h-14 flex items-center gap-2 px-3 bg-bg-page border-b border-border-1"
     >
       {/* Left: logo */}
       <Link
@@ -192,9 +319,14 @@ export default function HeaderBar({ navSlot, actionsSlot }: HeaderBarProps = {})
       {/* Center-left: navigation slot (project route only) */}
       {navSlot}
 
-      {/* Center: load controls + dialog triggers */}
+      {/* Center: load controls + metrics strip + dialog triggers */}
       <div className="flex items-center gap-2 flex-1 min-w-0">
         <ProjectLoadControls projectName={projectName} />
+
+        {/* Metrics strip — Gap 5: visible when on a page route */}
+        {projectId !== undefined && pageIndex !== undefined && (
+          <MetricsStrip projectId={projectId} pageIndex={pageIndex} />
+        )}
 
         {/* Center-right: actions slot (project route only) */}
         {actionsSlot}

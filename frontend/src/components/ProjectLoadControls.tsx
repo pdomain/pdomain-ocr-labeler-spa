@@ -96,10 +96,14 @@ export default function ProjectLoadControls({ projectName }: ProjectLoadControls
         <>
           <span
             data-testid="project-breadcrumb"
-            className="text-body text-ink-2 truncate max-w-[180px] select-none"
+            className="flex items-center gap-1 text-body text-ink-2 truncate max-w-[220px] select-none"
             title={projectName}
           >
-            {projectName}
+            <span className="text-ink-3 shrink-0">Projects</span>
+            <span className="text-ink-3 shrink-0" aria-hidden="true">
+              /
+            </span>
+            <span className="text-ink-1 font-medium truncate">{projectName}</span>
           </span>
           <button
             type="button"

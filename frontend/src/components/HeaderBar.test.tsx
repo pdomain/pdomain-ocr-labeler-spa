@@ -345,6 +345,136 @@ describe("HeaderBar: #326 — project breadcrumb on project routes", () => {
   });
 });
 
+// --- P1.a Gap 3: Projects / <name> breadcrumb prefix --------------------------
+
+describe("HeaderBar: P1.a — breadcrumb shows 'Projects / <name>'", () => {
+  it("project-breadcrumb contains 'Projects' prefix and project name", async () => {
+    server.use(
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [],
+          selected: null,
+          projects_root: "",
+          config_source: "default",
+        }),
+      ),
+      http.get("/api/projects/proj-1", () =>
+        HttpResponse.json({
+          project_id: "proj-1",
+          project_root: "/data/my-project",
+          image_paths: ["p1.png"],
+          ground_truth_map: {},
+          version: "1.0",
+          source_lib: "doctr-pd-labeled",
+          total_pages: 1,
+          saved_pages: 0,
+          current_page_index: 0,
+          include_images: true,
+          copied_images: false,
+        }),
+      ),
+    );
+
+    renderHeaderBar({ route: "/projects/proj-1/pages/pageno/1" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-breadcrumb")).toBeInTheDocument();
+    });
+
+    const crumb = screen.getByTestId("project-breadcrumb");
+    expect(crumb).toHaveTextContent("Projects");
+    expect(crumb).toHaveTextContent("my-project");
+  });
+});
+
+// --- P1.a Gap 5: MetricsStrip -------------------------------------------------
+
+describe("HeaderBar: P1.a — MetricsStrip (Gap 5)", () => {
+  it("metrics-strip appears when on a page route with line_matches", async () => {
+    server.use(
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [],
+          selected: null,
+          projects_root: "",
+          config_source: "default",
+        }),
+      ),
+      http.get("/api/projects/proj-1", () =>
+        HttpResponse.json({
+          project_id: "proj-1",
+          project_root: "/data/proj-1",
+          image_paths: ["p1.png"],
+          ground_truth_map: {},
+          version: "1.0",
+          source_lib: "doctr-pd-labeled",
+          total_pages: 1,
+          saved_pages: 0,
+          current_page_index: 0,
+          include_images: true,
+          copied_images: false,
+        }),
+      ),
+      http.get("/api/projects/proj-1/pages/0", () =>
+        HttpResponse.json({
+          project_id: "proj-1",
+          page_index: 0,
+          line_filter: "all",
+          generation: 1,
+          line_matches: [
+            {
+              line_index: 0,
+              paragraph_index: 0,
+              ocr_line_text: "hello world",
+              ground_truth_line_text: "hello world",
+              word_matches: [],
+              overall_match_status: "exact",
+              exact_count: 2,
+              fuzzy_count: 1,
+              mismatch_count: 0,
+              unmatched_gt_count: 0,
+              unmatched_ocr_count: 0,
+              validated_word_count: 1,
+              total_word_count: 3,
+              is_fully_validated: false,
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderHeaderBar({ route: "/projects/proj-1/pages/pageno/1" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("metrics-strip")).toBeInTheDocument();
+    });
+
+    const strip = screen.getByTestId("metrics-strip");
+    // aria-label aggregates all counts
+    expect(strip.getAttribute("aria-label")).toMatch(/3 words/);
+    expect(strip.getAttribute("aria-label")).toMatch(/2 exact/);
+    expect(strip.getAttribute("aria-label")).toMatch(/1 fuzzy/);
+    expect(strip.getAttribute("aria-label")).toMatch(/0 mismatched/);
+    expect(strip.getAttribute("aria-label")).toMatch(/1 of 3 validated/);
+  });
+
+  it("metrics-strip is absent on root route (no page)", async () => {
+    server.use(
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [],
+          selected: null,
+          projects_root: "",
+          config_source: "default",
+        }),
+      ),
+    );
+    renderHeaderBar({ route: "/" });
+    await screen.findByTestId("header-bar");
+    expect(screen.queryByTestId("metrics-strip")).not.toBeInTheDocument();
+  });
+});
+
 // --- IS-2: navSlot + actionsSlot props ----------------------------------------
 
 describe("HeaderBar: IS-2 — navSlot and actionsSlot (integration slots)", () => {
@@ -420,11 +550,11 @@ describe("HeaderBar: Slice 9 — 40px chrome evolution", () => {
     );
   }
 
-  it("header root has h-10 height class (40px)", async () => {
+  it("header root has h-14 height class (56px — Gap 1)", async () => {
     withEmptyProjects();
     renderHeaderBar();
     const header = await screen.findByTestId("header-bar");
-    expect(header.className).toMatch(/h-10/);
+    expect(header.className).toMatch(/h-14/);
   });
 
   it("renders logo testid", async () => {
