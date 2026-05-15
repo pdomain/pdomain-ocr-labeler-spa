@@ -1128,6 +1128,78 @@ def test_explicit_port_free_starts_normally(monkeypatch: pytest.MonkeyPatch, tmp
     assert captured["kwargs"]["port"] == 9999
 
 
+def test_env_port_busy_exits_with_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """PDLABELER_PORT=N (no --port) with N busy → exit 1, stderr contains 'Port N is already in use'."""
+    _clear_pdlabeler_env(monkeypatch)
+    monkeypatch.setenv("PDLABELER_PORT", "9000")
+
+    class _FakeSock:
+        def __enter__(self) -> _FakeSock:
+            return self
+
+        def __exit__(self, *_: Any) -> None:
+            pass
+
+        def setsockopt(self, *_: Any) -> None:
+            pass
+
+        def bind(self, addr: tuple[str, int]) -> None:
+            raise OSError("address in use")
+
+    monkeypatch.setattr(main_mod._socket, "socket", lambda *_a, **_kw: _FakeSock())
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--no-browser", "--data-root", str(tmp_path)])
+
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "Port 9000 is already in use" in err
+
+
+def test_env_port_free_starts_normally(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """PDLABELER_PORT=N (no --port) with N free → uvicorn called with N, .pdlabeler-port contains N."""
+    _clear_pdlabeler_env(monkeypatch)
+    monkeypatch.setenv("PDLABELER_PORT", "9000")
+
+    captured: dict[str, Any] = {}
+
+    def _capture_run(*args: Any, **kwargs: Any) -> None:
+        captured["kwargs"] = kwargs
+
+    class _FakeSock:
+        def __enter__(self) -> _FakeSock:
+            return self
+
+        def __exit__(self, *_: Any) -> None:
+            pass
+
+        def setsockopt(self, *_: Any) -> None:
+            pass
+
+        def bind(self, addr: tuple[str, int]) -> None:
+            pass  # port 9000 is "free"
+
+        def getsockname(self) -> tuple[str, int]:
+            return ("127.0.0.1", 9000)
+
+    monkeypatch.setattr(main_mod._socket, "socket", lambda *_a, **_kw: _FakeSock())
+    monkeypatch.chdir(tmp_path)
+
+    with (
+        patch.object(main_mod, "uvicorn") as mock_uv,
+        patch.object(main_mod, "webbrowser"),
+    ):
+        mock_uv.run.side_effect = _capture_run
+        rc = main(["--no-browser", "--data-root", str(tmp_path)])
+
+    assert rc == 0
+    assert captured["kwargs"]["port"] == 9000
+    port_file = tmp_path / ".pdlabeler-port"
+    assert port_file.read_text().strip() == "9000"
+
+
 def test_port_file_written_on_start(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Every successful start writes the actual port to .pdlabeler-port in cwd."""
     _clear_pdlabeler_env(monkeypatch)

@@ -305,8 +305,17 @@ def main(argv: list[str] | None = None) -> int:
     # Determine whether the user explicitly set a port via CLI or env.
     import os as _os
 
-    _explicit_port = args.port is not None or _os.environ.get("PDLABELER_PORT") is not None
-    _requested_port = args.port if args.port is not None else _DEFAULT_PORT
+    _env_port_str = _os.environ.get("PDLABELER_PORT")
+    _explicit_port = args.port is not None or _env_port_str is not None
+    if args.port is not None:
+        _requested_port = args.port
+    elif _env_port_str is not None:
+        try:
+            _requested_port = _tcp_port(_env_port_str)  # reuse existing validator
+        except (argparse.ArgumentTypeError, ValueError):
+            _requested_port = _DEFAULT_PORT  # pydantic-settings will catch invalid value later
+    else:
+        _requested_port = _DEFAULT_PORT
 
     if _explicit_port:
         # Fail fast if the explicitly-requested port is busy.
