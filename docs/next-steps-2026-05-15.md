@@ -81,11 +81,11 @@ navigating; falls through to project list on failure.
 
 ## 4 — Frontend polish (after testing confirms wiring is stable)
 
-| FO | What | Effort |
-|----|------|--------|
-| FO-4 | Migrate `BBoxOverlay` stroke colors from hardcoded hex to `useLayerColors()` CSS vars | S |
-| FO-6 | Bridge legacy `hotkeyMap.ts` entries into `hotkey-registry.ts` so the modal is complete | S |
-| FO-7 | Block-level sibling walk (no-op until `PagePayload` grows `block_index`) | depends on backend |
+| FO | What | Effort | Status |
+|----|------|--------|--------|
+| FO-4 | Migrate `BBoxOverlay` stroke colors from hardcoded hex to `useLayerColors()` CSS vars | S | ✅ #328 |
+| FO-6 | Bridge legacy `hotkeyMap.ts` entries into `hotkey-registry.ts` so the modal is complete | S | ✅ #329 |
+| FO-7 | Block-level sibling walk (no-op until `PagePayload` grows `block_index`) | depends on backend | ⬜ |
 
 ---
 
