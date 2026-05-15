@@ -2,6 +2,29 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { Chip } from "./Chip";
 
+// Issue #325 (FO-5): data-testid forwarding
+
+describe("Chip — data-testid forwarding", () => {
+  it("forwards data-testid on tristate variant", () => {
+    render(
+      <Chip variant="tristate" value="off" data-testid="my-chip" onChange={() => {}}>
+        Label
+      </Chip>,
+    );
+    expect(screen.getByTestId("my-chip")).toBeInTheDocument();
+    expect(screen.getByTestId("my-chip")).toHaveAttribute("data-tristate-value", "off");
+  });
+
+  it("forwards data-testid on static variant", () => {
+    render(
+      <Chip variant="static" data-testid="static-chip">
+        Badge
+      </Chip>,
+    );
+    expect(screen.getByTestId("static-chip")).toBeInTheDocument();
+  });
+});
+
 describe("Chip — static variant", () => {
   it("renders children", () => {
     render(<Chip variant="static">Exact</Chip>);

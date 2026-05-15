@@ -27,23 +27,10 @@
 //   char-ranges-delete-{i}       — delete button per row
 
 import { useState } from "react";
-import { type TristateValue } from "../../ui/Chip";
+import { Chip, type TristateValue } from "../../ui/Chip";
 import { Button } from "../../ui/button";
 import { useApplyStyle } from "../../../hooks/useWordMutations";
 import type { components } from "../../../api/types";
-
-// Static lookup maps — Tailwind purge cannot resolve interpolated classes.
-const tristateWrapperClasses: Record<TristateValue, string> = {
-  off: "bg-raised border-border-2 text-ink-2",
-  on: "bg-accent/10 border-accent text-accent",
-  mixed: "bg-raised border-border-2 text-ink-3",
-};
-
-const tristateCycle: Record<TristateValue, TristateValue> = {
-  off: "on",
-  on: "mixed",
-  mixed: "off",
-};
 
 type WordMatch = components["schemas"]["WordMatch"];
 
@@ -192,24 +179,17 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
             : `Range: ${pendingStart ?? anchor}..${pendingEnd ?? "_"}`}
         </p>
         <div className="flex flex-wrap gap-1">
-          {STYLE_KEYS.map((s) => {
-            const v = styles[s];
-            return (
-              <button
-                key={s}
-                type="button"
-                data-testid={`char-ranges-chip-${s}`}
-                data-tristate-value={v}
-                onClick={() => handleChipChange(s, tristateCycle[v])}
-                className={[
-                  "inline-flex items-center h-6 px-2.5 rounded-[12px] border cursor-pointer select-none text-[10px] font-semibold transition-colors duration-100",
-                  tristateWrapperClasses[v],
-                ].join(" ")}
-              >
-                {s}
-              </button>
-            );
-          })}
+          {STYLE_KEYS.map((s) => (
+            <Chip
+              key={s}
+              variant="tristate"
+              value={styles[s]}
+              data-testid={`char-ranges-chip-${s}`}
+              onChange={(next) => handleChipChange(s, next)}
+            >
+              {s}
+            </Chip>
+          ))}
         </div>
         <div className="flex justify-end">
           <Button

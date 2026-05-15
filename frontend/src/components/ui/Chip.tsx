@@ -10,6 +10,8 @@ export interface ChipProps {
   onChange?: (next: TristateValue) => void;
   children: React.ReactNode;
   className?: string;
+  /** Forwarded to the root element so Chip is addressable in tests/E2E. */
+  "data-testid"?: string;
 }
 
 const cycle: Record<TristateValue, TristateValue> = {
@@ -37,6 +39,7 @@ export function Chip({
   onChange,
   children,
   className,
+  "data-testid": dataTestId,
 }: ChipProps) {
   if (variant === "tristate") {
     const handleClick = () => {
@@ -49,6 +52,7 @@ export function Chip({
         tabIndex={0}
         data-tristate
         data-tristate-value={value}
+        data-testid={dataTestId}
         onClick={handleClick}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -74,6 +78,7 @@ export function Chip({
   // Static variant
   return (
     <span
+      data-testid={dataTestId}
       className={cn(
         "inline-flex items-center gap-1.5 h-5 px-2.5 rounded-[10px] bg-raised border border-border-2 text-ink-2 text-[10px] font-semibold select-none",
         className,
