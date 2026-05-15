@@ -1,19 +1,24 @@
 // hotkey-registry.ts — runtime hotkey registry for the HotkeyHelpModal.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 25.
+// Issue #329 (FO-6): bridge legacy hotkeyMap.ts into registry for completeness.
 //
 // Purpose: each `useXHotkeys` hook registers its hotkeys here; the modal
 // reads from the registry to build the grouped display with KeyCap components.
 //
 // Groups:
-//   - Selection  (1/2/3, V/R/A/E keys)
+//   - Selection  (viewport mode keys, layer toggles)
 //   - Navigation (←/→ pages, ⌥ arrows breadcrumb)
-//   - Editing    (Enter/Esc)
-//   - View       (theme toggle, drawer collapse, hotkey help)
+//   - Editing    (saves, reload, GT ops, word/line mutations, dialog hotkeys)
+//   - View       (theme toggle, drawer collapse, hotkey help, OCR config)
+//   - Other      (source-folder, gt-input helpers)
 //
-// The registry is module-singleton; hooks call `registerHotkeys()` on mount
-// and `unregisterHotkeys()` on unmount (both are no-ops in the current
-// implementation — registry is populated from HOTKEY_MAP at module load and
-// augmented by the static group definitions below).
+// Entries come from two sources:
+//   1. `buildBridgedEntries()` — all HOTKEY_MAP entries, converted from combo
+//      strings and scope-mapped to groups. Single source of truth for anything
+//      in hotkeyMap.ts.
+//   2. Static extras below — entries for hotkeys NOT in HOTKEY_MAP (breadcrumb
+//      navigation, drawer toggle, theme cycle). These use human-friendly
+//      display keyCaps that don't map 1:1 to a react-hotkeys-hook combo.
 
 export type HotkeyGroup = "selection" | "navigation" | "editing" | "view" | "other";
 
@@ -39,34 +44,15 @@ export interface HotkeyGroupDef {
   entries: RegistryEntry[];
 }
 
-// ─── Static registry ─────────────────────────────────────────────────────────
+import { buildBridgedEntries } from "./hotkey-bridge";
+
+// ─── Static extras (entries NOT in HOTKEY_MAP) ────────────────────────────────
 //
-// Populated from the spec-defined groups. Hooks may call `registerHotkeys()`
-// to augment at runtime (e.g. when a section mounts).
+// These cover UI affordances that are registered via breadcrumb/Rail event
+// handlers rather than useHotkey combos, so they don't appear in HOTKEY_MAP.
 
-const _entries: RegistryEntry[] = [
-  // ── Selection ──────────────────────────────────────────────────────────────
-  { group: "selection", label: "Paragraph mode", keyCaps: [["1"]], order: 1 },
-  { group: "selection", label: "Line mode", keyCaps: [["2"]], order: 2 },
-  { group: "selection", label: "Word mode", keyCaps: [["3"]], order: 3 },
-  { group: "selection", label: "Validate line", keyCaps: [["V"]], order: 4 },
-  { group: "selection", label: "Refine word", keyCaps: [["R"]], order: 5 },
-  { group: "selection", label: "Add word mode", keyCaps: [["A"]], order: 6 },
-  { group: "selection", label: "Erase mode", keyCaps: [["E"]], order: 7 },
-
-  // ── Navigation ─────────────────────────────────────────────────────────────
-  {
-    group: "navigation",
-    label: "Previous page",
-    keyCaps: [["Ctrl", "←"]],
-    order: 1,
-  },
-  {
-    group: "navigation",
-    label: "Next page",
-    keyCaps: [["Ctrl", "→"]],
-    order: 2,
-  },
+const STATIC_EXTRAS: RegistryEntry[] = [
+  // Breadcrumb keyboard navigation (Alt+arrow, handled by BreadcrumbNav component)
   {
     group: "navigation",
     label: "Breadcrumb — up",
@@ -86,15 +72,16 @@ const _entries: RegistryEntry[] = [
     order: 5,
   },
 
-  // ── Editing ────────────────────────────────────────────────────────────────
-  { group: "editing", label: "Commit / confirm", keyCaps: [["Enter"]], order: 1 },
-  { group: "editing", label: "Cancel / close", keyCaps: [["Esc"]], order: 2 },
-
-  // ── View ───────────────────────────────────────────────────────────────────
+  // Rail / drawer controls (handled by keyboard events on the Rail component)
   { group: "view", label: "Toggle drawer", keyCaps: [["["]], order: 1 },
-  { group: "view", label: "Show hotkey help", keyCaps: [["?"]], order: 2 },
   { group: "view", label: "Cycle theme", keyCaps: [["T"]], order: 3 },
 ];
+
+// ─── Registry state ───────────────────────────────────────────────────────────
+//
+// Seeded with bridged HOTKEY_MAP entries + static extras (items not in the map).
+
+const _entries: RegistryEntry[] = [...buildBridgedEntries(), ...STATIC_EXTRAS];
 
 /** Group metadata (label + display order). */
 export const HOTKEY_GROUP_DEFS: HotkeyGroupDef[] = [
