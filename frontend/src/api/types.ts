@@ -277,7 +277,12 @@ export interface paths {
         };
         /**
          * Get Page
-         * @description ``GET /api/projects/{pid}/pages/{idx}`` — stub; M3.
+         * @description ``GET /api/projects/{pid}/pages/{idx}`` — populated PagePayload.
+         *
+         *     Spec authority: ``specs/23-page-payload-backend.md §3`` (issue #306,
+         *     spec-23-A).  The keystone backend slice — every Phase D mutation
+         *     endpoint (spec-23-C/D/E) reuses the ``_page_payload`` helper this
+         *     slice introduces.
          */
         get: operations["get_page_api_projects__project_id__pages__page_index__get"];
         put?: never;

@@ -96,12 +96,24 @@ def test_get_page_returns_404_when_index_out_of_range(
     assert resp.json()["error"] == "page_not_found"
 
 
-def test_get_page_returns_501_for_valid_index(
+def test_get_page_returns_200_for_valid_index(
     loaded_client: TestClient,
 ) -> None:
-    """Valid page_index on a loaded project → 501 (M3 pending)."""
+    """Valid page_index on a loaded project → 200 PagePayload (spec-23-A).
+
+    The fixture writes ``b"\\x00"`` as the PNG bytes; PIL can't open
+    those so ``encoded_dims`` falls back to ``None`` and ``image_url``
+    omits the ``?w=`` query — the URL is still well-formed.  Unit tests
+    in ``tests/unit/api/test_pages_get.py`` cover the populated-dims
+    path against the real tiny-fixture PNGs.
+    """
     resp = loaded_client.get("/api/projects/book1/pages/0")
-    assert resp.status_code == 501
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["project_id"] == "book1"
+    assert body["page_index"] == 0
+    # Degraded path: PIL couldn't read the fake bytes → image_url has no ?w=
+    assert body["image_url"] == "/api/projects/book1/pages/0/image"
 
 
 def test_post_save_page_returns_404_when_no_project(bare_client: TestClient) -> None:

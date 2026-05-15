@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from ..core import text_normalize
 from ..core.jobs import JobRunner
 from ..core.models import EncodedDims, LineFilter, LineMatch, PageRecord, Selection
 from ..core.project_state import ProjectState
-from .dependencies import get_job_runner, get_project_state
+from ..settings import Settings
+from .dependencies import get_job_runner, get_project_state, get_settings
 from .middleware.error_handler import ApiError
 
 log = logging.getLogger(__name__)
@@ -162,6 +165,182 @@ def _check_project_and_page(
     return None
 
 
+# ── Payload assembly helpers — spec-23-A (issue #306) ─────────────────
+
+
+def _read_source_dims(image_path: Path) -> tuple[int, int] | None:
+    """Return ``(src_width, src_height)`` for ``image_path`` or ``None``.
+
+    Uses ``PIL.Image.open`` lazily; missing-file / unreadable-bytes
+    fall through to ``None`` so ``_page_payload`` can still respond
+    with a degraded-but-useful payload (the image route serves the
+    bytes when called).
+    """
+    try:
+        from PIL import Image  # lazy — PIL ships with pd-book-tools deps.
+
+        with Image.open(image_path) as img:
+            return int(img.size[0]), int(img.size[1])
+    except Exception as exc:  # pragma: no cover - defensive
+        log.debug("failed to read image dims for %s: %s", image_path, exc)
+        return None
+
+
+def _build_image_url(
+    project_id: str,
+    page_index: int,
+    encoded_dims: EncodedDims | None,
+) -> str:
+    """Return the relative image-route URL for this page.
+
+    Shape (spec §3): ``/api/projects/{id}/pages/{idx}/image?w={display_width}``.
+
+    When ``encoded_dims is None`` (image unreadable at GET time), the
+    ``?w=`` query param is omitted — the frontend can still hit the
+    route and the image-cache layer is allowed to choose a default
+    width.  This keeps the URL valid in the degraded path.
+    """
+    base = f"/api/projects/{project_id}/pages/{page_index}/image"
+    if encoded_dims is None:
+        return base
+    return f"{base}?w={encoded_dims.display_width}"
+
+
+def _render_plaintext(
+    line_matches: list[LineMatch],
+    *,
+    source: str,
+    normalize_tabs: bool,
+) -> str:
+    """Join per-line text into a single plaintext string.
+
+    ``source="ocr"`` uses ``LineMatch.ocr_line_text``;
+    ``source="gt"`` uses ``LineMatch.ground_truth_line_text``.  Lines
+    are joined with ``"\\n"`` — matches legacy plaintext rendering
+    in ``pd-ocr-labeler/operations/.../page_text.py`` (one line per
+    OCR line, no trailing newline).
+
+    When ``normalize_tabs=True``, delegates to
+    ``core.text_normalize.normalize_string`` (per
+    ``AppConfig.normalize_plaintext_tabs`` — spec §3).  When
+    pd_book_tools.text.normalize is unavailable, ``normalize_string``
+    is a no-op (see ``core/text_normalize.py`` for the contract).
+    """
+    if source == "ocr":
+        lines = [lm.ocr_line_text for lm in line_matches]
+    elif source == "gt":
+        lines = [lm.ground_truth_line_text for lm in line_matches]
+    else:  # pragma: no cover - defensive
+        raise ValueError(f"unknown source: {source!r}")
+
+    text = "\n".join(lines)
+    if normalize_tabs and text:
+        text = text_normalize.normalize_string(text)
+    return text
+
+
+def _page_payload(
+    *,
+    project_id: str,
+    page_index: int,
+    project_state: ProjectState,
+    settings: Settings,
+) -> PagePayload:
+    """Build a ``PagePayload`` from current in-memory state — spec §3.
+
+    Keystone helper for spec-23.  Mutation endpoints in spec-23-C/D/E
+    apply a state change then call ``_page_payload(...)`` to refresh
+    the response shape; ``GET /pages/{idx}`` is the read-only entry
+    point.
+
+    Pre-condition (caller responsibility): ``project_state.loaded_project``
+    is the project with ``project_id`` and ``page_index`` is in range.
+    ``_check_project_and_page`` enforces this on the HTTP path.
+
+    Today's behavior:
+
+    - ``page_record``, ``line_matches`` come from
+      ``PageState.page_record`` when present (a future slice will wire
+      ``ensure_page_model`` with a real ``LocalDoctrPageLoader`` so a
+      first-call GET runs OCR).  When no OCR has run yet they are
+      ``None`` / ``[]`` — the frontend renders the image and an empty
+      lines pane.
+    - ``encoded_dims`` is computed from the on-disk image (PIL).
+    - ``selection`` / ``line_filter`` default to ``Selection()`` /
+      ``LineFilter.ALL`` — the current ``PageState`` shape does not
+      yet carry per-page selection state (spec-23-E wires that).
+    - ``generation`` echoes ``ProjectState.generation`` so SSE
+      consumers can diff against a remembered value.
+    - ``page_text_ocr`` / ``page_text_gt`` are rendered from
+      ``line_matches`` (empty when no OCR has run).
+
+    Concurrency: pure read over ``ProjectState`` — no lock needed
+    here.  The mutation endpoints that call this helper hold the
+    per-project lock for their state change; the snapshot returned
+    here is consistent with the state at the moment the lock was
+    released.
+    """
+    project = project_state.loaded_project
+    # Pre-condition guaranteed by _check_project_and_page on the HTTP
+    # path; assert here so misuse from a non-HTTP caller fails loudly.
+    assert project is not None and project.project_id == project_id
+    assert 0 <= page_index < project.total_pages
+
+    pstate = project_state.get_page_state(page_index)
+
+    # Page record + line matches: pulled from the cached PageState.
+    # When no OCR has run yet, both are absent — the response is still
+    # well-formed (PagePayload allows them None / []).
+    page_record: PageRecord | None = None
+    line_matches: list[LineMatch] = []
+    outcome = pstate.page_record if pstate is not None else None
+    if outcome is not None:
+        # ``PageLoadOutcome.payload`` divergence between lanes (see
+        # ``core/page_state.py`` module docstring):
+        # - run_ocr → payload is a ``pd_book_tools.ocr.page.Page``
+        # - load_labeled / load_cached → payload is a ``UserPageEnvelope``
+        # Both lifts are out-of-scope for this slice; future slices
+        # (spec-23-C/D/E) attach ``page_record`` / ``line_matches``
+        # directly onto ``PageState`` after the mutation.
+        candidate_record = getattr(outcome, "record", None)
+        if isinstance(candidate_record, PageRecord):
+            page_record = candidate_record
+        candidate_matches = getattr(outcome, "line_matches", None)
+        if isinstance(candidate_matches, list):
+            line_matches = candidate_matches
+
+    # Encoded dims from on-disk image.  None when PIL can't open the
+    # bytes; the URL builder degrades gracefully.
+    encoded_dims: EncodedDims | None = None
+    if 0 <= page_index < len(project.image_paths):
+        dims = _read_source_dims(project.image_paths[page_index])
+        if dims is not None:
+            encoded_dims = EncodedDims.from_source_dims(*dims)
+
+    image_url = _build_image_url(project_id, page_index, encoded_dims)
+
+    # Plaintext: empty until OCR runs.  normalize_tabs defaults to
+    # False; AppConfig wiring lands in a follow-up slice (the
+    # ``settings`` parameter is reserved on the signature so the
+    # change is additive).
+    page_text_ocr = _render_plaintext(line_matches, source="ocr", normalize_tabs=False)
+    page_text_gt = _render_plaintext(line_matches, source="gt", normalize_tabs=False)
+
+    return PagePayload(
+        project_id=project_id,
+        page_index=page_index,
+        page_record=page_record,
+        line_matches=line_matches,
+        selection=Selection(),
+        encoded_dims=encoded_dims,
+        line_filter=LineFilter.ALL,
+        image_url=image_url,
+        generation=project_state.generation,
+        page_text_ocr=page_text_ocr,
+        page_text_gt=page_text_gt,
+    )
+
+
 # ── Routes ───────────────────────────────────────────────────────────
 
 
@@ -170,12 +349,26 @@ def get_page(
     project_id: str,
     page_index: int,
     project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
 ) -> JSONResponse:
-    """``GET /api/projects/{pid}/pages/{idx}`` — stub; M3."""
+    """``GET /api/projects/{pid}/pages/{idx}`` — populated PagePayload.
+
+    Spec authority: ``specs/23-page-payload-backend.md §3`` (issue #306,
+    spec-23-A).  The keystone backend slice — every Phase D mutation
+    endpoint (spec-23-C/D/E) reuses the ``_page_payload`` helper this
+    slice introduces.
+    """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
         return err
-    return _not_implemented("GET page payload requires M3 OCR plumbing")
+
+    payload = _page_payload(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+    )
+    return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
 @router.post("/{page_index}/save", response_model=SavePageResponse)
@@ -301,6 +494,9 @@ __all__ = [
     "SavePageRequest",
     "SavePageResponse",
     "SaveProjectResponse",
+    "_build_image_url",
+    "_page_payload",
+    "_render_plaintext",
     "install_pages_router",
     "router",
 ]
