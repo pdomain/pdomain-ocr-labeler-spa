@@ -144,6 +144,15 @@ function getDrawerOpenSnapshot(): boolean {
   return useUiPrefs.getState().drawerOpen;
 }
 
+// ─── rightPanelOpen subscriber — IS-6 ────────────────────────────────────────
+
+function subscribeRightPanelOpen(cb: () => void): () => void {
+  return useUiPrefs.subscribe(cb);
+}
+function getRightPanelOpenSnapshot(): boolean {
+  return useUiPrefs.getState().rightPanelOpen;
+}
+
 // ─── selection-store subscriber ─────────────────────────────────────────────
 
 function subscribeSelection(cb: () => void): () => void {
@@ -206,6 +215,12 @@ export default function ProjectPage() {
     subscribeDrawerOpen,
     getDrawerOpenSnapshot,
     getDrawerOpenSnapshot,
+  );
+  // IS-6: rightPanelOpen via store's native subscribe.
+  const rightPanelOpen = useSyncExternalStore(
+    subscribeRightPanelOpen,
+    getRightPanelOpenSnapshot,
+    getRightPanelOpenSnapshot,
   );
   const selection = useSyncExternalStore(
     subscribeSelection,
@@ -503,18 +518,20 @@ export default function ProjectPage() {
   // Right panel slot — RightPanel routes on selection-store.level.
   // Word-level content is WordDetail (Slice 16). WordMatchView stays in the
   // canvas TextTabs.
+  // IS-6: onCollapse wired to useUiPrefs.setState({ rightPanelOpen: false }).
   const wordDetailSlot =
     pagePayload && projectId ? (
       <WordDetail page={pagePayload} projectId={projectId} pageIndex={idx0} />
     ) : undefined;
-  const rightSlot = (
+  const rightSlot = rightPanelOpen ? (
     <RightPanel
       page={pagePayload ?? undefined}
       projectId={projectId ?? undefined}
       pageIndex={idx0}
       wordSlot={wordDetailSlot}
+      onCollapse={() => useUiPrefs.setState({ rightPanelOpen: false })}
     />
-  );
+  ) : null;
 
   return (
     <div data-testid="project-page" className="h-full">

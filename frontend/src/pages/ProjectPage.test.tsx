@@ -26,6 +26,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { server } from "../test/server";
 import { ROUTES } from "../lib/routes";
 import { dialogStore } from "../stores/dialog-store";
+import { useUiPrefs } from "../stores/ui-prefs";
 
 // ─── IS-1: mock useNavigate ──────────────────────────────────────────────────
 const mockNavigate = vi.fn();
@@ -142,6 +143,9 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
   beforeEach(() => {
     dialogStore.reset();
     mockNavigate.mockReset();
+    // IS-3/IS-6: Reset drawer + right panel prefs to defaults between tests
+    // so store mutations in one test don't bleed into the next.
+    useUiPrefs.setState({ drawerOpen: true, rightPanelOpen: true });
     // Default success handlers for project + page.
     server.use(
       http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
@@ -369,5 +373,44 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     // Default drawerOpen=true → drawerCollapsed=false → data-collapsed absent.
     const drawerZone = screen.getByTestId("studio-shell-drawer");
     expect(drawerZone.getAttribute("data-collapsed")).toBeNull();
+  });
+
+  it("IS-6: clicking drawer-collapse-btn sets drawerCollapsed=true on StudioShell", async () => {
+    renderProjectPage();
+    await screen.findByTestId("drawer");
+    // Default: open. Collapse button is inside the Drawer header.
+    const collapseBtn = screen.getByTestId("drawer-collapse-btn");
+    fireEvent.click(collapseBtn);
+    await waitFor(() => {
+      const drawerZone = screen.getByTestId("studio-shell-drawer");
+      expect(drawerZone.getAttribute("data-collapsed")).toBe("true");
+    });
+  });
+
+  it("IS-6: clicking drawer-expand-btn after collapse re-opens the drawer", async () => {
+    renderProjectPage();
+    await screen.findByTestId("drawer");
+    // Collapse first.
+    fireEvent.click(screen.getByTestId("drawer-collapse-btn"));
+    await waitFor(() => {
+      expect(screen.getByTestId("drawer-expand-btn")).toBeInTheDocument();
+    });
+    // Expand.
+    fireEvent.click(screen.getByTestId("drawer-expand-btn"));
+    await waitFor(() => {
+      const drawerZone = screen.getByTestId("studio-shell-drawer");
+      expect(drawerZone.getAttribute("data-collapsed")).toBeNull();
+    });
+  });
+
+  it("IS-6: clicking right-panel-collapse hides the right zone", async () => {
+    renderProjectPage();
+    await screen.findByTestId("right-panel");
+    const collapseBtn = screen.getByTestId("right-panel-collapse");
+    fireEvent.click(collapseBtn);
+    await waitFor(() => {
+      // When rightPanelOpen=false, rightSlot is null → RightPanel not in DOM.
+      expect(screen.queryByTestId("right-panel")).toBeNull();
+    });
   });
 });

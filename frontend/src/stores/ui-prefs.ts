@@ -63,6 +63,8 @@ export interface UiPrefsState {
   drawerOpen: boolean;
   /** Active drawer tab. Spec: Slice 11. */
   drawerTab: DrawerTab;
+  /** IS-6: Whether the right panel is open. Default: true. */
+  rightPanelOpen: boolean;
   /** Theme preference — Slice 24. Default: "system". */
   theme: ThemePreference;
 }
@@ -210,6 +212,7 @@ export const useUiPrefs = createStore<UiPrefsState>({
   matchFilter: "unvalidated",
   drawerOpen: true,
   drawerTab: "worklist",
+  rightPanelOpen: true,
   theme: readPersistedTheme(),
 });
 
