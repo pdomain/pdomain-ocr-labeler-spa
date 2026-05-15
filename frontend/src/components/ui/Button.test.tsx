@@ -39,6 +39,11 @@ describe("Button", () => {
     expect(container.firstChild).toHaveClass("h-[34px]");
   });
 
+  it("default size has 30px height class", () => {
+    const { container } = render(<Button size="default">Default</Button>);
+    expect(container.firstChild).toHaveClass("h-[30px]");
+  });
+
   it("click fires callback", () => {
     const handler = vi.fn();
     render(<Button onClick={handler}>Click</Button>);
