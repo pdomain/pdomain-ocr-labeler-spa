@@ -11,9 +11,17 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from ..core import text_normalize
+from ..core.ground_truth_matcher import rematch_page
 from ..core.jobs import JobRunner
 from ..core.models import EncodedDims, LineFilter, LineMatch, PageRecord, Selection
 from ..core.page_state import ensure_page_model, persist_page_to_file
+from ..core.persistence.ground_truth import find_ground_truth_text
+from ..core.persistence.lanes import LaneResolver
+from ..core.persistence.user_page_envelope import (
+    USER_PAGE_SOURCE_LANE_CACHED,
+    OCRProvenance,
+    build_envelope,
+)
 from ..core.project_state import PageState, ProjectState
 from ..core.selection import SelectionMode, apply_selection
 from ..settings import Settings
@@ -580,12 +588,142 @@ def rematch_gt(
     page_index: int,
     body: RematchGtRequest,
     project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
 ) -> JSONResponse:
-    """``POST .../rematch-gt`` — stub; M3."""
+    """``POST .../rematch-gt`` — re-run page-level GT matching (spec §7).
+
+    Spec authority: ``specs/23-page-payload-backend.md §7``.
+
+    Re-runs ``core/ground_truth_matcher.rematch_page`` — a thin wrapper
+    over ``pd_book_tools.ocr.ground_truth_matching`` reached via the
+    ``Page.remove_ground_truth`` / ``Page.add_ground_truth`` pair.
+    Replaces ``page.line_matches`` with freshly-matched results; per-word
+    GT edits are *discarded* (legacy semantics, mirrored from
+    ``pd_ocr_labeler/state/page_state.py:2357 rematch_ground_truth``).
+
+    Error envelopes:
+
+    - ``project_not_found`` (404) — unknown ``project_id``.
+    - ``page_not_found`` (404) — ``page_index`` out of range.
+    - ``page_not_loaded`` (400) — ``PageState`` empty (caller must
+      ``GET /pages/{idx}`` first to run OCR or load envelope).
+    - ``no_ground_truth`` (400) — the page's image filename has no
+      entry in ``Project.ground_truth_map``. Legacy parity: the
+      legacy ``_GroundTruthRematchSkippedError`` path; surfaces a
+      banner in the SPA so the user knows GT must be supplied
+      before rematching.
+    - ``rematch_failed`` (400) — the page object lacks the
+      ``remove_ground_truth`` / ``add_ground_truth`` method pair
+      (e.g. a legacy page-dict that was never wrapped in
+      ``pd_book_tools.ocr.page.Page``).
+
+    Body (``RematchGtRequest``) is intentionally empty — the
+    confirmation prompt is the frontend's responsibility
+    (``ConfirmDialog`` per spec 22). The endpoint is unconditional
+    when GT is available.
+    """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
         return err
-    return _not_implemented("rematch-gt requires M3 plumbing")
+
+    project = project_state.loaded_project
+    assert project is not None  # _check_project_and_page guarantees
+
+    pstate = project_state.get_page_state(page_index)
+    if pstate is None or pstate.page_record is None:
+        return JSONResponse(
+            status_code=400,
+            content=ApiError(
+                error="page_not_loaded",
+                message=(f"page {page_index} has no in-memory page record; load or run OCR first"),
+            ).model_dump(),
+        )
+    page = getattr(pstate.page_record, "payload", None)
+    if page is None:
+        return JSONResponse(
+            status_code=400,
+            content=ApiError(
+                error="page_not_loaded",
+                message=(f"page {page_index} record carries no payload; load or run OCR first"),
+            ).model_dump(),
+        )
+
+    # Resolve GT source text for this page via the project's
+    # ground-truth map (keyed by image filename / stem variants).
+    # Legacy parity: ``_rematch_page_ground_truth`` raises
+    # ``_GroundTruthRematchSkippedError`` when GT is unavailable;
+    # the SPA returns 400 so the frontend can surface a banner.
+    image_name = (
+        project.image_paths[page_index].name
+        if 0 <= page_index < len(project.image_paths)
+        else ""  # pragma: no cover - bounds already enforced above
+    )
+    gt_text = find_ground_truth_text(image_name, project.ground_truth_map)
+    if not gt_text:
+        return JSONResponse(
+            status_code=400,
+            content=ApiError(
+                error="no_ground_truth",
+                message=(
+                    f"no ground-truth text available for page {page_index} "
+                    f"(image {image_name!r}); add a pages.json or manifest entry "
+                    "before rematching"
+                ),
+            ).model_dump(),
+        )
+
+    # Mutate under the per-page lock — spec §13. The wrapper itself
+    # never raises (it returns False on missing methods); we surface
+    # that as a 400 rather than a 500.
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        ok = rematch_page(page, gt_text)
+        if not ok:
+            return JSONResponse(
+                status_code=400,
+                content=ApiError(
+                    error="rematch_failed",
+                    message=(
+                        f"page {page_index} payload type "
+                        f"{type(page).__name__!r} lacks "
+                        "remove_ground_truth / add_ground_truth"
+                    ),
+                ).model_dump(),
+            )
+        pstate.generation += 1
+
+    # Best-effort cached-envelope autosave — spec §12. Mirrors the
+    # spec-23-C/D word/line mutation pattern: log + swallow on failure
+    # so a disk-full doesn't turn a successful rematch into a 5xx.
+    try:
+        envelope = build_envelope(
+            page=page,
+            project=project,
+            page_index=page_index,
+            ocr_provenance=OCRProvenance(),
+            source_lane=USER_PAGE_SOURCE_LANE_CACHED,
+        )
+        resolver = LaneResolver(
+            data_root=settings.data_root,
+            cache_root=settings.cache_root,
+            project_id=project.project_id,
+        )
+        resolver.write_cached(page_index, envelope)
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning(
+            "rematch-gt: cached-envelope write failed project=%s page=%d: %s — continuing",
+            project.project_id,
+            page_index,
+            exc,
+        )
+
+    payload = _page_payload(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+    )
+    return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
 @router.post("/{page_index}/rotate", response_model=RotatePageResponse)

@@ -394,7 +394,37 @@ export interface paths {
         put?: never;
         /**
          * Rematch Gt
-         * @description ``POST .../rematch-gt`` — stub; M3.
+         * @description ``POST .../rematch-gt`` — re-run page-level GT matching (spec §7).
+         *
+         *     Spec authority: ``specs/23-page-payload-backend.md §7``.
+         *
+         *     Re-runs ``core/ground_truth_matcher.rematch_page`` — a thin wrapper
+         *     over ``pd_book_tools.ocr.ground_truth_matching`` reached via the
+         *     ``Page.remove_ground_truth`` / ``Page.add_ground_truth`` pair.
+         *     Replaces ``page.line_matches`` with freshly-matched results; per-word
+         *     GT edits are *discarded* (legacy semantics, mirrored from
+         *     ``pd_ocr_labeler/state/page_state.py:2357 rematch_ground_truth``).
+         *
+         *     Error envelopes:
+         *
+         *     - ``project_not_found`` (404) — unknown ``project_id``.
+         *     - ``page_not_found`` (404) — ``page_index`` out of range.
+         *     - ``page_not_loaded`` (400) — ``PageState`` empty (caller must
+         *       ``GET /pages/{idx}`` first to run OCR or load envelope).
+         *     - ``no_ground_truth`` (400) — the page's image filename has no
+         *       entry in ``Project.ground_truth_map``. Legacy parity: the
+         *       legacy ``_GroundTruthRematchSkippedError`` path; surfaces a
+         *       banner in the SPA so the user knows GT must be supplied
+         *       before rematching.
+         *     - ``rematch_failed`` (400) — the page object lacks the
+         *       ``remove_ground_truth`` / ``add_ground_truth`` method pair
+         *       (e.g. a legacy page-dict that was never wrapped in
+         *       ``pd_book_tools.ocr.page.Page``).
+         *
+         *     Body (``RematchGtRequest``) is intentionally empty — the
+         *     confirmation prompt is the frontend's responsibility
+         *     (``ConfirmDialog`` per spec 22). The endpoint is unconditional
+         *     when GT is available.
          */
         post: operations["rematch_gt_api_projects__project_id__pages__page_index__rematch_gt_post"];
         delete?: never;
