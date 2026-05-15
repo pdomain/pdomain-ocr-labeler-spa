@@ -18,6 +18,7 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -297,5 +298,30 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     );
     renderProjectPage();
     expect(await screen.findByTestId("banner-project-not-found")).toBeInTheDocument();
+  });
+
+  it("mounts BusyOverlay inside image-pane and shows it while a save mutation is in-flight (#293)", async () => {
+    // Keep the save endpoint hanging so isMutating stays true long enough to assert.
+    server.use(http.post("/api/projects/:pid/pages/:idx/save", () => new Promise(() => {})));
+    renderProjectPage();
+    // Wait for the page to fully render.
+    const saveBtnEl = await screen.findByTestId("save-page-button");
+    // Click Save Page — triggers useSavePage mutation (isMutating becomes true).
+    await userEvent.click(saveBtnEl);
+    // BusyOverlay renders inside the image-pane while the mutation is pending.
+    expect(await screen.findByTestId("busy-overlay")).toBeInTheDocument();
+    // Confirm it is inside the image-pane (not a sibling of the page root).
+    const imagePaneEl = screen.getByTestId("image-pane");
+    expect(imagePaneEl.contains(screen.getByTestId("busy-overlay"))).toBe(true);
+  });
+
+  it("mounts the inline-banners region inside image-pane and InlineBanners components are wired (#293)", async () => {
+    renderProjectPage();
+    // inline-banners container is always present (even with no active banners).
+    const bannersEl = await screen.findByTestId("inline-banners");
+    expect(bannersEl).toBeInTheDocument();
+    // It must be inside the image-pane per spec 22 §3.
+    const imagePaneEl = screen.getByTestId("image-pane");
+    expect(imagePaneEl.contains(bannersEl)).toBe(true);
   });
 });
