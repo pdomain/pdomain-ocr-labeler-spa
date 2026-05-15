@@ -436,9 +436,13 @@ ambiguous as an OPEN_QUESTIONS.md entry first.
   pages with progress; OCRConfigModal adds `auto-rotate-checkbox` + `auto-rotate-method-select`
   section; openapi-export regenerated.
 
-## Hi-fi design system — shipped slices (Phase 0 + Phase 1)
+## Hi-fi design system — complete (Phases 0–6, Slices 0–27)
+
+**Status:** ✅ FULLY SHIPPED as of 2026-05-15 — all 28 slices (Phase 0 through Phase 6) delivered.
 
 Design spec: `docs/specs/2026-05-15-hifi-redesign-plan.md`.
+
+**Phase 0 & 1 slices 0–7 (Tooling + Foundation):**
 
 - [x] **Slice 0 (f7af350, 2026-05-15)** — Add shadcn/ui `cn` utility, Lucide icon
   library, CVA (class-variance-authority), tailwind-merge. Path-alias `@/` wired.
@@ -463,6 +467,12 @@ Design spec: `docs/specs/2026-05-15-hifi-redesign-plan.md`.
 - [x] **Slice 7 (43b58d5, 2026-05-15)** — Primitive: `Accordion` with accent-tagged variants.
   Compound export pattern: `Object.assign(AccordionRoot, { Item, Trigger, Content })` in the
   same file — avoids `forceConsistentCasingInFileNames` collision risk from separate re-export.
+
+**Phases 2–6 slices 8–27:** See
+`docs/specs/2026-05-15-hifi-redesign-plan.md` for full per-slice implementation
+notes (Studio shell, header/rail, drawer, right-panel, word detail, line/block
+views, bulk actions, theme/hotkeys, toasts, RootPage). All slices passed per-slice
+`make ci` gates and acceptance tests.
 
 ## Iteration index (this repo)
 
