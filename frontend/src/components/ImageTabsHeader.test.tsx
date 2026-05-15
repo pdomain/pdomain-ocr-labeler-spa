@@ -160,4 +160,66 @@ describe("ImageTabsHeader (#196)", () => {
     );
     expect(screen.getByTestId("erase-pixels-button")).toHaveAttribute("aria-pressed", "true");
   });
+
+  // Regression: paragraph radio must reflect selectionMode prop, not be hardcoded (bug #292)
+  it("paragraph radio is checked when selectionMode is paragraph", () => {
+    render(
+      <ImageTabsHeader
+        layerVisibility={defaultVisibility}
+        selectionMode="paragraph"
+        eraseActive={false}
+        onLayerToggle={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onEraseToggle={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("selection-mode-paragraph")).toBeChecked();
+    expect(screen.getByTestId("selection-mode-line")).not.toBeChecked();
+    expect(screen.getByTestId("selection-mode-word")).not.toBeChecked();
+  });
+
+  it("paragraph radio is unchecked when selectionMode is line or word", () => {
+    const { rerender } = render(
+      <ImageTabsHeader
+        layerVisibility={defaultVisibility}
+        selectionMode="line"
+        eraseActive={false}
+        onLayerToggle={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onEraseToggle={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("selection-mode-paragraph")).not.toBeChecked();
+    expect(screen.getByTestId("selection-mode-line")).toBeChecked();
+
+    rerender(
+      <ImageTabsHeader
+        layerVisibility={defaultVisibility}
+        selectionMode="word"
+        eraseActive={false}
+        onLayerToggle={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onEraseToggle={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("selection-mode-paragraph")).not.toBeChecked();
+    expect(screen.getByTestId("selection-mode-word")).toBeChecked();
+  });
+
+  // Regression: SelectionMode must be "paragraph"|"line"|"word", not "box" (bug #292)
+  it("onSelectionModeChange fires with 'paragraph' when paragraph radio clicked", () => {
+    const onSelectionModeChange = vi.fn();
+    render(
+      <ImageTabsHeader
+        layerVisibility={defaultVisibility}
+        selectionMode="line"
+        eraseActive={false}
+        onLayerToggle={vi.fn()}
+        onSelectionModeChange={onSelectionModeChange}
+        onEraseToggle={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("selection-mode-paragraph"));
+    expect(onSelectionModeChange).toHaveBeenCalledWith("paragraph");
+  });
 });
