@@ -91,3 +91,80 @@ describe("Accordion", () => {
     }
   });
 });
+
+// P2.g — Accordion trigger hint + keycap (Gap 32, 54)
+describe("Accordion trigger redesign (P2.g)", () => {
+  it("renders hint text when hint prop is provided", () => {
+    render(
+      <Accordion type="single" collapsible>
+        <Accordion.Item value="x">
+          <Accordion.Trigger hint="coords · nudge">Bbox</Accordion.Trigger>
+          <Accordion.Content>body</Accordion.Content>
+        </Accordion.Item>
+      </Accordion>,
+    );
+    expect(screen.getByText("coords · nudge")).toBeInTheDocument();
+  });
+
+  it("renders no hint span when hint prop is omitted", () => {
+    render(
+      <Accordion type="single" collapsible>
+        <Accordion.Item value="x">
+          <Accordion.Trigger>Bbox</Accordion.Trigger>
+          <Accordion.Content>body</Accordion.Content>
+        </Accordion.Item>
+      </Accordion>,
+    );
+    // The label text should be there but no hint span
+    expect(screen.getByText("Bbox")).toBeInTheDocument();
+    // No element with text-ink-3 hint style — just check the hint text is absent
+    expect(screen.queryByText("coords · nudge")).not.toBeInTheDocument();
+  });
+
+  it("renders keycap chip when keycap prop is provided", () => {
+    render(
+      <Accordion type="single" collapsible>
+        <Accordion.Item value="x">
+          <Accordion.Trigger keycap="B">Bbox</Accordion.Trigger>
+          <Accordion.Content>body</Accordion.Content>
+        </Accordion.Item>
+      </Accordion>,
+    );
+    expect(screen.getByText("B")).toBeInTheDocument();
+  });
+
+  it("renders both hint and keycap together", () => {
+    render(
+      <Accordion type="single" collapsible>
+        <Accordion.Item value="x">
+          <Accordion.Trigger hint="draw new box" keycap="R">
+            Rebox
+          </Accordion.Trigger>
+          <Accordion.Content>body</Accordion.Content>
+        </Accordion.Item>
+      </Accordion>,
+    );
+    expect(screen.getByText("Rebox")).toBeInTheDocument();
+    expect(screen.getByText("draw new box")).toBeInTheDocument();
+    expect(screen.getByText("R")).toBeInTheDocument();
+  });
+
+  it("hint text has lowercase normal tracking (not uppercase)", () => {
+    const { container } = render(
+      <Accordion type="single" collapsible>
+        <Accordion.Item value="x">
+          <Accordion.Trigger hint="per-char styles">Char Ranges</Accordion.Trigger>
+          <Accordion.Content>body</Accordion.Content>
+        </Accordion.Item>
+      </Accordion>,
+    );
+    // Find the hint span by text content
+    const hintEl = Array.from(container.querySelectorAll("span")).find(
+      (el) => el.textContent === "per-char styles",
+    );
+    expect(hintEl).toBeTruthy();
+    if (hintEl) {
+      expect(hintEl.className).toContain("normal-case");
+    }
+  });
+});

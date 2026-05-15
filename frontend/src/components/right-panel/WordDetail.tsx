@@ -176,7 +176,9 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
       >
         {/* 1 — Bounding Box */}
         <Accordion.Item value="bbox">
-          <Accordion.Trigger>Bounding Box</Accordion.Trigger>
+          <Accordion.Trigger hint="coords · crop · nudge" keycap="B">
+            Bounding Box
+          </Accordion.Trigger>
           <Accordion.Content>
             <BBoxSection word={word} projectId={projectId} pageIndex={pageIndex} />
           </Accordion.Content>
@@ -184,7 +186,9 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
 
         {/* 2 — Rebox (Slice 17) */}
         <Accordion.Item value="rebox" tag="accent">
-          <Accordion.Trigger>Rebox</Accordion.Trigger>
+          <Accordion.Trigger hint="draw new box" keycap="R">
+            Rebox
+          </Accordion.Trigger>
           <Accordion.Content>
             <ReboxSection hasPrev={wordIdx > 0} hasNext={hasNextWord} />
           </Accordion.Content>
@@ -192,7 +196,9 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
 
         {/* 3 — Erase Pixels (Slice 17) */}
         <Accordion.Item value="erase" tag="mismatch">
-          <Accordion.Trigger>Erase Pixels</Accordion.Trigger>
+          <Accordion.Trigger hint="brush · lasso · auto" keycap="E">
+            Erase Pixels
+          </Accordion.Trigger>
           <Accordion.Content>
             <ErasePixelsSection backendAvailable={refineAvailable} />
           </Accordion.Content>
@@ -200,7 +206,9 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
 
         {/* 4 — Structure (Slice 18) */}
         <Accordion.Item value="structure">
-          <Accordion.Trigger>Structure</Accordion.Trigger>
+          <Accordion.Trigger hint="neighbors · merge · split" keycap="S">
+            Structure
+          </Accordion.Trigger>
           <Accordion.Content>
             <StructureSection word={word} page={page} projectId={projectId} pageIndex={pageIndex} />
           </Accordion.Content>
@@ -208,7 +216,9 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
 
         {/* 5 — Char Ranges (Slice 19) */}
         <Accordion.Item value="char-ranges">
-          <Accordion.Trigger>Char Ranges</Accordion.Trigger>
+          <Accordion.Trigger hint="per-char styles" keycap="C">
+            Char Ranges
+          </Accordion.Trigger>
           <Accordion.Content>
             <CharRangesSection word={word} projectId={projectId} pageIndex={pageIndex} />
           </Accordion.Content>
@@ -216,7 +226,9 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
 
         {/* 6 — Char Fixer (Slice 20) */}
         <Accordion.Item value="char-fixer">
-          <Accordion.Trigger>Char Fixer</Accordion.Trigger>
+          <Accordion.Trigger hint="edit · fix · unicode" keycap="F">
+            Char Fixer
+          </Accordion.Trigger>
           <Accordion.Content>
             <CharFixerSection word={word} projectId={projectId} pageIndex={pageIndex} />
           </Accordion.Content>

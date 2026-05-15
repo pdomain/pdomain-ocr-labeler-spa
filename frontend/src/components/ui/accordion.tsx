@@ -3,6 +3,7 @@ import * as AccordionPrimitive from "@radix-ui/react-accordion";
 import { ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { KeyCap } from "./KeyCap";
 
 // Static class lookup for tag variants — no string interpolation for Tailwind
 type AccordionTagVariant = "accent" | "mismatch";
@@ -30,10 +31,19 @@ const AccordionItem = React.forwardRef<
 ));
 AccordionItem.displayName = "AccordionItem";
 
+// Extended trigger props: optional helper text + keycap hint.
+// P2.g (Gap 32, 54): spec'd row is: UPPERCASE LABEL · hint text · keycap
+type AccordionTriggerProps = React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Trigger> & {
+  /** Short helper text shown between the label and the chevron (e.g. "crop, nudge"). */
+  hint?: string;
+  /** Keyboard shortcut shown as a KeyCap chip at the right (e.g. "B" or ["⌘","B"]). */
+  keycap?: string | string[];
+};
+
 const AccordionTrigger = React.forwardRef<
   React.ElementRef<typeof AccordionPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Trigger>
->(({ className, children, ...props }, ref) => (
+  AccordionTriggerProps
+>(({ className, children, hint, keycap, ...props }, ref) => (
   <AccordionPrimitive.Header className="flex">
     <AccordionPrimitive.Trigger
       ref={ref}
@@ -46,8 +56,21 @@ const AccordionTrigger = React.forwardRef<
       )}
       {...props}
     >
-      {children}
-      <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+      {/* Left: label (always uppercase via CSS) + optional hint text */}
+      <span className="flex items-baseline gap-2 min-w-0">
+        <span className="shrink-0">{children}</span>
+        {hint && (
+          <span className="text-[9px] font-normal normal-case tracking-normal text-ink-3 truncate">
+            {hint}
+          </span>
+        )}
+      </span>
+
+      {/* Right: optional keycap + chevron */}
+      <span className="flex items-center gap-2 shrink-0 ml-2">
+        {keycap && <KeyCap keys={keycap} />}
+        <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+      </span>
     </AccordionPrimitive.Trigger>
   </AccordionPrimitive.Header>
 ));
@@ -82,4 +105,4 @@ const Accordion = Object.assign(AccordionRoot, {
 });
 
 export { Accordion, AccordionItem, AccordionTrigger, AccordionContent };
-export type { AccordionItemProps, AccordionTagVariant };
+export type { AccordionItemProps, AccordionTagVariant, AccordionTriggerProps };
