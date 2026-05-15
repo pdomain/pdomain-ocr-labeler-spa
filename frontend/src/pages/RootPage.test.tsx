@@ -37,10 +37,14 @@ describe("EmptyProjectState", () => {
   });
 });
 
+// Note: EmptyProjectState is kept for backward compatibility with
+// legacy code that may reference it. The new Slice 27 implementation
+// uses ProjectListView to show projects with StatusPips.
+
 // --- RootPage: renders_empty_state ---
 
 describe("RootPage: renders_empty_state", () => {
-  it("renders EmptyProjectState when session-state returns null last_project_path", async () => {
+  it("renders ProjectListView when session-state returns null last_project_path", async () => {
     server.use(
       http.get("/api/session-state", () =>
         HttpResponse.json({
@@ -49,32 +53,54 @@ describe("RootPage: renders_empty_state", () => {
           last_page_index: 0,
         }),
       ),
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [],
+          selected: null,
+          projects_root: "/data",
+          config_source: "default",
+        }),
+      ),
     );
 
     renderWithProviders(<RootPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("empty-project-state")).toBeInTheDocument();
+      // ProjectListView shows the "Open source folder" button
+      expect(screen.getByRole("button", { name: /open.*folder/i })).toBeInTheDocument();
     });
   });
 
-  it("renders EmptyProjectState when session-state fetch fails", async () => {
-    server.use(http.get("/api/session-state", () => HttpResponse.error()));
+  it("renders ProjectListView when session-state fetch fails", async () => {
+    server.use(
+      http.get("/api/session-state", () => HttpResponse.error()),
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [],
+          selected: null,
+          projects_root: "/data",
+          config_source: "default",
+        }),
+      ),
+    );
 
     renderWithProviders(<RootPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("empty-project-state")).toBeInTheDocument();
+      // ProjectListView shows the "Open source folder" button
+      expect(screen.getByRole("button", { name: /open.*folder/i })).toBeInTheDocument();
     });
   });
 
-  it("renders blank (no empty-project-state) while session-state is loading", () => {
+  it("renders blank while session-state is loading", () => {
     // Never resolves during this test — loading state should stay blank
     server.use(http.get("/api/session-state", () => new Promise(() => {})));
 
     renderWithProviders(<RootPage />);
 
-    expect(screen.queryByTestId("empty-project-state")).not.toBeInTheDocument();
+    // RootPage returns blank div on loading; no project content
+    const buttons = screen.queryAllByRole("button");
+    expect(buttons).toHaveLength(0);
   });
 });
 
@@ -102,5 +128,107 @@ describe("RootPage: redirects_to_last_project", () => {
     // (redirect was issued instead)
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByTestId("empty-project-state")).not.toBeInTheDocument();
+  });
+});
+
+// --- RootPage: Slice 27 — project cards ---
+
+describe("RootPage: Slice 27 — project cards", () => {
+  it("renders project list when projects are available", async () => {
+    server.use(
+      http.get("/api/session-state", () =>
+        HttpResponse.json({
+          schema_version: "1.0",
+          last_project_path: null,
+          last_page_index: 0,
+        }),
+      ),
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [
+            {
+              project_id: "proj-1",
+              project_root: "/data/proj-1",
+              label: "Project One",
+            },
+          ],
+          selected: null,
+          projects_root: "/data",
+          config_source: "default",
+        }),
+      ),
+    );
+
+    renderWithProviders(<RootPage />);
+
+    await waitFor(() => {
+      // ProjectListView renders project cards with their label
+      expect(screen.getByText("Project One")).toBeInTheDocument();
+    });
+  });
+
+  it("displays project cards with labels when projects are available", async () => {
+    server.use(
+      http.get("/api/session-state", () =>
+        HttpResponse.json({
+          schema_version: "1.0",
+          last_project_path: null,
+          last_page_index: 0,
+        }),
+      ),
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [
+            {
+              project_id: "proj-1",
+              project_root: "/data/proj-1",
+              label: "Project One",
+            },
+            {
+              project_id: "proj-2",
+              project_root: "/data/proj-2",
+              label: "Project Two",
+            },
+          ],
+          selected: null,
+          projects_root: "/data",
+          config_source: "default",
+        }),
+      ),
+    );
+
+    renderWithProviders(<RootPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Project One")).toBeInTheDocument();
+      expect(screen.getByText("Project Two")).toBeInTheDocument();
+    });
+  });
+
+  it("shows open folder button with primary variant", async () => {
+    server.use(
+      http.get("/api/session-state", () =>
+        HttpResponse.json({
+          schema_version: "1.0",
+          last_project_path: null,
+          last_page_index: 0,
+        }),
+      ),
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [],
+          selected: null,
+          projects_root: "/data",
+          config_source: "default",
+        }),
+      ),
+    );
+
+    renderWithProviders(<RootPage />);
+
+    await waitFor(() => {
+      const button = screen.getByRole("button", { name: /open.*folder/i });
+      expect(button).toBeInTheDocument();
+    });
   });
 });

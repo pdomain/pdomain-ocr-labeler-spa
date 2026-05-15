@@ -48,6 +48,14 @@ function withNoSession() {
         last_page_index: 0,
       }),
     ),
+    http.get("/api/projects", () =>
+      HttpResponse.json({
+        projects: [],
+        selected: null,
+        projects_root: "/data",
+        config_source: "default",
+      }),
+    ),
   );
 }
 
@@ -60,11 +68,14 @@ describe("App: routing shell", () => {
     });
   });
 
-  it("renders empty-project-state on / when no session", async () => {
+  it("renders project-list view on / when no session (Slice 27)", async () => {
     withNoSession();
     render(<App />);
     await waitFor(() => {
-      expect(screen.getByTestId("empty-project-state")).toBeInTheDocument();
+      // ProjectListView includes the header bar and project list
+      expect(screen.getByTestId("header-bar")).toBeInTheDocument();
+      // With no projects, we expect the "No projects found" message or open folder button
+      expect(screen.getByRole("button", { name: /open.*folder/i })).toBeInTheDocument();
     });
   });
 });
