@@ -60,3 +60,7 @@ docs/spec-chain-report.md
 
 # AI=1 make output capture log
 .ci-ai.log
+
+# Runtime port file written by the server on every start (issue #323).
+# Consumed by vite.config.ts during `npm run dev` to proxy to the correct port.
+.pdlabeler-port

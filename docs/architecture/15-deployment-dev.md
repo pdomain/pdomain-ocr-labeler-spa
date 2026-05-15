@@ -84,6 +84,32 @@ pd-ocr-labeler-ui [project_dir]
 
 Same flag set as legacy + the `--frontend-dev` flag from pgdp-prep.
 
+### 3.1 Auto-port selection
+
+When no explicit port is provided (neither `--port` nor `PDLABELER_PORT`),
+the server scans `8080–8099` and binds the first available port. If all
+20 sequential ports are busy, the OS assigns an ephemeral port (bind to
+port 0). A notice is printed to stderr whenever the actual port differs
+from the default:
+
+```
+Port 8080 in use — starting on port 8081
+```
+
+When an explicit port is provided and it is already in use, the server
+exits immediately with an error:
+
+```
+Error: Port 9999 is already in use
+```
+
+On every successful start, the actual bound port is written as a plain
+integer string to `.pdlabeler-port` in the current working directory.
+`vite.config.ts` reads this file at config evaluation time so that
+`npm run dev` automatically proxies to the correct backend port, even
+when the default shifted. The file falls back to `8080` if absent (e.g.
+on a first `npm run dev` before the server has started).
+
 ---
 
 ## 4. Dev workflow

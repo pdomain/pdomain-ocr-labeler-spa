@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import socket
+import socket as _socket
 import sys
 import threading
 import time
@@ -248,7 +248,7 @@ def _open_when_ready(
     deadline = time.monotonic() + deadline_s
     while time.monotonic() < deadline:
         try:
-            with socket.create_connection((host, port), timeout=0.5):
+            with _socket.create_connection((host, port), timeout=0.5):
                 break
         except OSError:
             time.sleep(poll_s)
@@ -259,6 +259,32 @@ def _open_when_ready(
         return
     with contextlib.suppress(Exception):
         webbrowser.open(url, new=1)
+
+
+_DEFAULT_PORT: int = 8080
+_PORT_SCAN_RANGE: int = 20
+
+
+def _find_free_port(start: int, max_attempts: int = _PORT_SCAN_RANGE) -> int:
+    """Return the first free TCP port in ``[start, start+max_attempts)``.
+
+    If all sequential attempts fail, fall back to an OS-assigned ephemeral
+    port (bind to port 0). Always returns a positive port number.
+
+    Issue #323: auto-select a free port when the default is in use.
+    """
+    for port in range(start, start + max_attempts):
+        try:
+            with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
+                s.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 0)
+                s.bind(("127.0.0.1", port))
+                return port
+        except OSError:
+            continue
+    # All sequential attempts failed — let the OS assign an ephemeral port.
+    with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -273,7 +299,45 @@ def main(argv: list[str] | None = None) -> int:
     # spec/02-backend.md §3: build Settings *once* from CLI overrides + env.
     # Frozen post-construction; precedence dict only includes flags the user
     # explicitly passed (see ``_build_overrides``).
-    settings = Settings(**_build_overrides(args))
+    #
+    # Issue #323: port resolution happens BEFORE Settings is built so that
+    # the resolved port flows into Settings (not the default 8080).
+    # Determine whether the user explicitly set a port via CLI or env.
+    import os as _os
+
+    _explicit_port = args.port is not None or _os.environ.get("PDLABELER_PORT") is not None
+    _requested_port = args.port if args.port is not None else _DEFAULT_PORT
+
+    if _explicit_port:
+        # Fail fast if the explicitly-requested port is busy.
+        try:
+            with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as _s:
+                _s.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 0)
+                _s.bind(("127.0.0.1", _requested_port))
+        except OSError:
+            print(  # noqa: T201  # intentional error output to stderr
+                f"Error: Port {_requested_port} is already in use",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        actual_port = _requested_port
+    else:
+        actual_port = _find_free_port(_DEFAULT_PORT)
+        if actual_port != _DEFAULT_PORT:
+            print(  # noqa: T201  # intentional notice to stderr
+                f"Port {_DEFAULT_PORT} in use — starting on port {actual_port}",
+                file=sys.stderr,
+            )
+
+    # Write the resolved port to .pdlabeler-port so vite.config.ts can
+    # read it during `make frontend-dev` (issue #323).
+    Path(".pdlabeler-port").write_text(str(actual_port))
+
+    # Inject the resolved port into the Settings overrides so the single
+    # Settings instance is authoritative for both host and port.
+    overrides = _build_overrides(args)
+    overrides["port"] = actual_port
+    settings = Settings(**overrides)
     host = settings.host
     port = settings.port
 

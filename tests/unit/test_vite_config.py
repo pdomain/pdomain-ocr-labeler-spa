@@ -3,8 +3,14 @@ backend port, not a phantom one.
 
 Background: iter-5 review (B-02) found the dev proxy targeting :8765
 while every spec + the ``Settings.port`` default agree on :8080. This
-test pins the literal so a future copy-paste regression surfaces in CI
-rather than the first time a contributor runs ``make frontend-dev``.
+test pins the proxy structure so a future copy-paste regression surfaces
+in CI rather than the first time a contributor runs ``make frontend-dev``.
+
+Issue #323: the proxy target is now dynamic — ``vite.config.ts`` reads
+``.pdlabeler-port`` (written on every server start) and falls back to
+8080 when the file is absent. The literal ``http://localhost:8080`` no
+longer appears verbatim; instead we check for the ``readBackendPort``
+helper and the fallback constant ``8080`` inside the function body.
 
 We deliberately read the file as text (no Node available in the Python
 test runner). Same shape as ``test_pre_commit_config.py`` and
@@ -18,12 +24,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VITE_CONFIG = REPO_ROOT / "frontend" / "vite.config.ts"
 
-# Settings default lives in ``src/pd_ocr_labeler_spa/settings.py`` —
-# spec ``docs/architecture/02-backend.md §3`` pins it. If the backend port ever
-# moves both files must move together; the assertion below catches the
-# half-migration.
-EXPECTED_BACKEND = "http://localhost:8080"
-
 # These are the three proxy keys vite.config.ts wires up (see file body
 # + B-02 finding). Any reshuffling that drops one would silently break
 # the SPA dev loop.
@@ -34,16 +34,31 @@ def test_vite_config_exists() -> None:
     assert VITE_CONFIG.exists(), f"vite.config.ts missing at {VITE_CONFIG}"
 
 
-def test_vite_proxy_targets_backend_port_8080() -> None:
+def test_vite_proxy_keys_present() -> None:
+    """All three proxy keys must be wired in vite.config.ts.
+
+    Issue #323: proxy targets are now dynamic (``backendPort`` variable),
+    so we verify the key strings are present rather than the full target URL.
+    """
     text = VITE_CONFIG.read_text(encoding="utf-8")
-    # All three proxy keys must point at :8080.
     for key in EXPECTED_PROXY_KEYS:
-        # Fragment shape: `"/api": "http://localhost:8080"` (or with
-        # single quotes / extra whitespace — keep the test forgiving).
         assert key in text, f"proxy key {key!r} not found in vite.config.ts"
-    assert EXPECTED_BACKEND in text, (
-        f"expected backend target {EXPECTED_BACKEND!r} not present in vite.config.ts (B-02 regression?)"
+
+
+def test_vite_proxy_reads_port_file() -> None:
+    """vite.config.ts must read ``.pdlabeler-port`` and fall back to 8080.
+
+    Issue #323: the port file is written by the server on every start.
+    The config must contain the ``readBackendPort`` helper function and
+    read ``.pdlabeler-port`` from the filesystem, with 8080 as the fallback.
+    """
+    text = VITE_CONFIG.read_text(encoding="utf-8")
+    assert "readBackendPort" in text, (
+        "vite.config.ts must define readBackendPort() to read .pdlabeler-port (issue #323)"
     )
+    assert ".pdlabeler-port" in text, "vite.config.ts must reference .pdlabeler-port (issue #323)"
+    # Fallback port 8080 must appear in the helper body.
+    assert "8080" in text, "vite.config.ts readBackendPort() fallback must be 8080"
 
 
 def test_vite_proxy_does_not_reference_stale_8765() -> None:

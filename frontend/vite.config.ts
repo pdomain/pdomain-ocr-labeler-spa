@@ -1,3 +1,5 @@
+import fs from "fs";
+
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -5,23 +7,36 @@ import react from "@vitejs/plugin-react";
 // server runs on :5173; the user starts FastAPI separately with
 // `pd-ocr-labeler-ui --frontend-dev http://localhost:5173`.
 //
-// Backend port matches `Settings.port` default (8080) — see
-// `src/pd_ocr_labeler_spa/settings.py` and `docs/architecture/02-backend.md §3`.
-// Keep these literals in sync; `tests/unit/test_vite_config.py`
-// asserts the proxy targets parse-equal to :8080.
+// Backend port is read from `.pdlabeler-port` (written by the server on every
+// start, issue #323). Falls back to 8080 if the file is absent so a first
+// `npm run dev` before the server has started still works.
+//
+// See `docs/architecture/02-backend.md §3` for Settings.port precedence and
+// `docs/architecture/15-deployment-dev.md §3` for the port-file contract.
 //
 // Vitest configuration lives in `vitest.config.ts` (sibling) rather than
 // inline here — vitest 2.x bundles its own Vite which conflicts with the
 // project's Vite 6 type-wise. Runtime is fine, but tsc -b chokes; a
 // separate file sidesteps the type collision cleanly.
+
+function readBackendPort(): number {
+  try {
+    return parseInt(fs.readFileSync(".pdlabeler-port", "utf8").trim(), 10) || 8080;
+  } catch {
+    return 8080;
+  }
+}
+
+const backendPort = readBackendPort();
+
 export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://localhost:8080",
-      "/image-cache": "http://localhost:8080",
-      "/env.js": "http://localhost:8080",
+      "/api": `http://localhost:${backendPort}`,
+      "/image-cache": `http://localhost:${backendPort}`,
+      "/env.js": `http://localhost:${backendPort}`,
     },
   },
   build: {
