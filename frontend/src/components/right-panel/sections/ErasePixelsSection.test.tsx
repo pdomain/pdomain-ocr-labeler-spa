@@ -1,58 +1,333 @@
-// ErasePixelsSection.test.tsx — Tests for Slice 17 ErasePixels section.
-// Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 17.
+// ErasePixelsSection.test.tsx — Tests for P3.c hi-fi rebuild (Gap 36).
+// Spec: docs/plans/hifi-gaps-plan.md Slice P3.c.
 
-import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { http, HttpResponse } from "msw";
+import React from "react";
+import { server } from "../../../test/server";
 import { ErasePixelsSection } from "./ErasePixelsSection";
 
-describe("ErasePixelsSection (Slice 17)", () => {
-  it("renders the erase-pixels-section container", () => {
-    render(<ErasePixelsSection />);
-    expect(screen.getByTestId("erase-pixels-section")).toBeInTheDocument();
-  });
+// Mock react-konva so the Stage renders deterministically in jsdom.  We expose
+// mouseDown/Move/Up/Leave events with stub pointer positions so we can drive
+// op-commit flows from the test.
+vi.mock("react-konva", () => ({
+  Stage: ({
+    children,
+    width,
+    height,
+    "data-testid": testId,
+    onMouseDown,
+    onMouseMove,
+    onMouseUp,
+    onMouseLeave,
+  }: {
+    children?: React.ReactNode;
+    width?: number;
+    height?: number;
+    "data-testid"?: string;
+    onMouseDown?: (e: unknown) => void;
+    onMouseMove?: (e: unknown) => void;
+    onMouseUp?: (e: unknown) => void;
+    onMouseLeave?: () => void;
+  }) => {
+    const makeEvent = (x: number, y: number) => ({
+      target: { getStage: () => ({ getPointerPosition: () => ({ x, y }) }) },
+    });
+    return (
+      <div
+        data-testid={testId ?? "konva-stage"}
+        data-width={width}
+        data-height={height}
+        onMouseDown={() => onMouseDown?.(makeEvent(10, 20))}
+        onMouseMove={() => onMouseMove?.(makeEvent(30, 40))}
+        onMouseUp={() => onMouseUp?.(makeEvent(50, 60))}
+        onMouseLeave={() => onMouseLeave?.()}
+      >
+        {children}
+      </div>
+    );
+  },
+  Layer: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  Rect: ({
+    x,
+    y,
+    width,
+    height,
+    "data-testid": testId,
+  }: {
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    "data-testid"?: string;
+  }) => (
+    <div
+      data-testid={testId ?? "konva-rect"}
+      data-x={x}
+      data-y={y}
+      data-width={width}
+      data-height={height}
+    />
+  ),
+}));
 
-  it("Apply button is disabled by default (backendAvailable=false)", () => {
-    render(<ErasePixelsSection />);
-    expect(screen.getByTestId("erase-pixels-apply-button")).toBeDisabled();
-  });
+function makeWrapper() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(QueryClientProvider, { client: qc }, children);
+  };
+}
 
-  it("Apply button has 'Backend not wired' title when backendAvailable=false", () => {
-    render(<ErasePixelsSection />);
-    expect(screen.getByTestId("erase-pixels-apply-button")).toHaveAttribute(
-      "title",
-      "Backend not wired",
+describe("ErasePixelsSection — P3.c probe gating", () => {
+  beforeEach(() => {
+    // Default: probe returns not-available.
+    server.use(
+      http.get("/api/refine/available", () =>
+        HttpResponse.json({ available: false, reason: "engine not wired" }),
+      ),
     );
   });
 
-  it("Apply button is still disabled when markingEnabled but backendAvailable=false", async () => {
-    const user = userEvent.setup();
-    render(<ErasePixelsSection backendAvailable={false} />);
-    await user.click(screen.getByTestId("erase-pixels-toggle"));
-    // Still disabled even with toggle on — backend not available
-    expect(screen.getByTestId("erase-pixels-apply-button")).toBeDisabled();
+  it("shows the not-available banner when probe returns available:false", async () => {
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <ErasePixelsSection />
+      </Wrapper>,
+    );
+    await waitFor(() => expect(screen.getByTestId("erase-not-available")).toBeInTheDocument());
+    expect(screen.queryByTestId("erase-canvas")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("erase-apply")).not.toBeInTheDocument();
   });
 
-  it("Apply button is enabled when backendAvailable=true and toggle is on", async () => {
-    const user = userEvent.setup();
-    render(<ErasePixelsSection backendAvailable={true} />);
-    await user.click(screen.getByTestId("erase-pixels-toggle"));
-    expect(screen.getByTestId("erase-pixels-apply-button")).not.toBeDisabled();
+  it("shows the full canvas UI when probe returns available:true", async () => {
+    server.use(
+      http.get("/api/refine/available", () =>
+        HttpResponse.json({ available: true, reason: "wired" }),
+      ),
+    );
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <ErasePixelsSection />
+      </Wrapper>,
+    );
+    await waitFor(() => expect(screen.getByTestId("erase-canvas")).toBeInTheDocument());
+    expect(screen.getByTestId("erase-tool-brush")).toBeInTheDocument();
+    expect(screen.getByTestId("erase-tool-lasso")).toBeInTheDocument();
+    expect(screen.getByTestId("erase-tool-rect")).toBeInTheDocument();
+    expect(screen.getByTestId("erase-ops-list")).toBeInTheDocument();
+    expect(screen.getByTestId("erase-apply")).toBeInTheDocument();
+    expect(screen.getByTestId("erase-clear")).toBeInTheDocument();
+    expect(screen.queryByTestId("erase-not-available")).not.toBeInTheDocument();
   });
 
-  it("Apply button calls onApply when clicked with backendAvailable=true", async () => {
+  it("respects the backendAvailable prop override (forces UI without probe)", async () => {
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <ErasePixelsSection backendAvailable={true} />
+      </Wrapper>,
+    );
+    // No await needed — override skips loading.
+    expect(screen.getByTestId("erase-canvas")).toBeInTheDocument();
+  });
+
+  it("respects backendAvailable=false override → fallback banner", () => {
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <ErasePixelsSection backendAvailable={false} />
+      </Wrapper>,
+    );
+    expect(screen.getByTestId("erase-not-available")).toBeInTheDocument();
+  });
+});
+
+describe("ErasePixelsSection — P3.c canvas behaviour", () => {
+  const Wrapper = makeWrapper();
+  beforeEach(() => {
+    // useRefineAvailable still fires even when backendAvailable is set —
+    // register a stub so MSW doesn't flag the request as unhandled.
+    server.use(
+      http.get("/api/refine/available", () =>
+        HttpResponse.json({ available: true, reason: "wired" }),
+      ),
+    );
+  });
+
+  it("default tool is brush and brush-size slider is visible", () => {
+    render(
+      <Wrapper>
+        <ErasePixelsSection backendAvailable={true} />
+      </Wrapper>,
+    );
+    expect(screen.getByTestId("erase-tool-brush")).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByTestId("erase-brush-size")).toBeInTheDocument();
+  });
+
+  it("switches tool to lasso and hides the brush-size slider", async () => {
+    const user = userEvent.setup();
+    render(
+      <Wrapper>
+        <ErasePixelsSection backendAvailable={true} />
+      </Wrapper>,
+    );
+    await user.click(screen.getByTestId("erase-tool-lasso"));
+    expect(screen.getByTestId("erase-tool-lasso")).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByTestId("erase-brush-size")).not.toBeInTheDocument();
+  });
+
+  it("switches tool to rect and hides the brush-size slider", async () => {
+    const user = userEvent.setup();
+    render(
+      <Wrapper>
+        <ErasePixelsSection backendAvailable={true} />
+      </Wrapper>,
+    );
+    await user.click(screen.getByTestId("erase-tool-rect"));
+    expect(screen.getByTestId("erase-tool-rect")).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByTestId("erase-brush-size")).not.toBeInTheDocument();
+  });
+
+  it("brush-size slider can be adjusted", async () => {
+    render(
+      <Wrapper>
+        <ErasePixelsSection backendAvailable={true} />
+      </Wrapper>,
+    );
+    const slider = screen.getByTestId("erase-brush-size") as HTMLInputElement;
+    expect(slider.value).toBe("8"); // DEFAULT_BRUSH
+    // userEvent.type does not work well for range inputs; fireEvent.change is cleaner.
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.change(slider, { target: { value: "16" } });
+    expect((screen.getByTestId("erase-brush-size") as HTMLInputElement).value).toBe("16");
+  });
+});
+
+describe("ErasePixelsSection — P3.c ops list", () => {
+  const Wrapper = makeWrapper();
+  beforeEach(() => {
+    server.use(
+      http.get("/api/refine/available", () =>
+        HttpResponse.json({ available: true, reason: "wired" }),
+      ),
+    );
+  });
+
+  it("shows the empty-state hint when no ops are queued", () => {
+    render(
+      <Wrapper>
+        <ErasePixelsSection backendAvailable={true} />
+      </Wrapper>,
+    );
+    expect(screen.getByText(/Draw to mark pixels for erasing/i)).toBeInTheDocument();
+  });
+
+  it("commits a brush op on mouse-up and renders it in the ops list", async () => {
+    const user = userEvent.setup();
+    render(
+      <Wrapper>
+        <ErasePixelsSection backendAvailable={true} />
+      </Wrapper>,
+    );
+    // The mocked Stage fires onMouseUp with x=50, y=60 on click.
+    await user.click(screen.getByTestId("erase-canvas"));
+    // Brush op committed → row visible.
+    expect(screen.getByText(/Op 1: brush at \(50,60\) r=8/)).toBeInTheDocument();
+    expect(screen.getByTestId("erase-op-0-remove")).toBeInTheDocument();
+  });
+
+  it("removes a single op via the × button", async () => {
+    const user = userEvent.setup();
+    render(
+      <Wrapper>
+        <ErasePixelsSection backendAvailable={true} />
+      </Wrapper>,
+    );
+    await user.click(screen.getByTestId("erase-canvas"));
+    expect(screen.getByTestId("erase-op-0-remove")).toBeInTheDocument();
+    await user.click(screen.getByTestId("erase-op-0-remove"));
+    expect(screen.queryByTestId("erase-op-0-remove")).not.toBeInTheDocument();
+    expect(screen.getByText(/Draw to mark pixels for erasing/i)).toBeInTheDocument();
+  });
+
+  it("Clear all empties the ops list", async () => {
+    const user = userEvent.setup();
+    render(
+      <Wrapper>
+        <ErasePixelsSection backendAvailable={true} />
+      </Wrapper>,
+    );
+    await user.click(screen.getByTestId("erase-canvas"));
+    await user.click(screen.getByTestId("erase-canvas"));
+    expect(screen.getByTestId("erase-op-0-remove")).toBeInTheDocument();
+    expect(screen.getByTestId("erase-op-1-remove")).toBeInTheDocument();
+    await user.click(screen.getByTestId("erase-clear"));
+    expect(screen.queryByTestId("erase-op-0-remove")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("erase-op-1-remove")).not.toBeInTheDocument();
+  });
+});
+
+describe("ErasePixelsSection — P3.c commit footer", () => {
+  const Wrapper = makeWrapper();
+  beforeEach(() => {
+    server.use(
+      http.get("/api/refine/available", () =>
+        HttpResponse.json({ available: true, reason: "wired" }),
+      ),
+    );
+  });
+
+  it("Apply button is disabled when ops list is empty", () => {
+    render(
+      <Wrapper>
+        <ErasePixelsSection backendAvailable={true} />
+      </Wrapper>,
+    );
+    expect(screen.getByTestId("erase-apply")).toBeDisabled();
+  });
+
+  it("Clear button is disabled when ops list is empty", () => {
+    render(
+      <Wrapper>
+        <ErasePixelsSection backendAvailable={true} />
+      </Wrapper>,
+    );
+    expect(screen.getByTestId("erase-clear")).toBeDisabled();
+  });
+
+  it("Apply button is enabled once an op is queued", async () => {
+    const user = userEvent.setup();
+    render(
+      <Wrapper>
+        <ErasePixelsSection backendAvailable={true} />
+      </Wrapper>,
+    );
+    await user.click(screen.getByTestId("erase-canvas"));
+    expect(screen.getByTestId("erase-apply")).not.toBeDisabled();
+    expect(screen.getByTestId("erase-clear")).not.toBeDisabled();
+  });
+
+  it("Apply calls onApply with the ops list and clears it on success", async () => {
     const onApply = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
-    render(<ErasePixelsSection backendAvailable={true} onApply={onApply} />);
-    await user.click(screen.getByTestId("erase-pixels-toggle"));
-    await user.click(screen.getByTestId("erase-pixels-apply-button"));
+    render(
+      <Wrapper>
+        <ErasePixelsSection backendAvailable={true} onApply={onApply} />
+      </Wrapper>,
+    );
+    await user.click(screen.getByTestId("erase-canvas"));
+    await user.click(screen.getByTestId("erase-canvas"));
+    await user.click(screen.getByTestId("erase-apply"));
     expect(onApply).toHaveBeenCalledOnce();
-  });
-
-  it("renders 'Mark pixels for erasure' toggle", () => {
-    render(<ErasePixelsSection />);
-    const toggle = screen.getByTestId("erase-pixels-toggle");
-    expect(toggle).toBeInTheDocument();
-    expect(toggle).not.toBeChecked();
+    const ops = onApply.mock.calls[0][0] as Array<{ tool: string }>;
+    expect(ops).toHaveLength(2);
+    expect(ops[0].tool).toBe("brush");
+    // After successful apply, ops should be cleared.
+    await waitFor(() => expect(screen.queryByTestId("erase-op-0-remove")).not.toBeInTheDocument());
   });
 });
