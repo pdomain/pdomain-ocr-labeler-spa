@@ -1,22 +1,42 @@
-// PageImageCanvas.tsx — image viewport with four interaction modes (#197, #198)
-// Spec: docs/specs/2026-05-12-image-viewport-design.md
+// PageImageCanvas.tsx — image viewport with four interaction modes (#197, #198, #297)
 //
-// Supports four interaction modes (via viewportStore):
+// Spec: specs/21-konva-renderer.md §4 (component layout), §12 (testids),
+//       §13 (edge cases — empty state).
+//
+// spec-21-A2 (#297) replaces the DOM-stub viewport with a real react-konva
+// <Stage> host carrying the 6-layer skeleton from spec §4:
+//
+//   image / overlay-paragraphs / overlay-lines / overlay-words / selection / drag
+//
+// Overlay layers stay empty in this slice; spec-21-A3 (#298) wires BBoxOverlay
+// into them and spec-21-C migrates drag handlers from DOM events to Konva
+// Stage events. Until then, drag input is captured by DOM mouse events on the
+// wrapping viewport div — same callbacks, same `data-mode`, same modifiers.
+//
+// Interaction modes (via viewportStore):
 //   select   — drag box-select; fires onBoxSelect(rect, modifier) (#197)
 //   rebox    — drag to set new bbox; fires onRebox(rect) (#198)
 //   add-word — drag to add new word; fires onAddWord(rect) (#198)
 //   erase    — drag erase rect; fires onErasePixels(rect) (#198)
 //
+// Testid layout (spec §12):
+//   image-viewport     — wrapper div around the Stage (also empty-state branch)
+//   image-stage        — sidecar div mirroring Stage geometry (Konva nodes
+//                        cannot themselves carry testids in jsdom or Playwright)
+//   ocr-drag-rect      — drag-preview Rect (must be a DOM sidecar, NOT a Konva
+//                        node — required for Playwright selector access)
+//   bbox-overlay-*     — sidecars rendered by BBoxOverlay (spec-21-A3 #298),
+//                        not by this component
+//
 // DragRect preview: data-testid="ocr-drag-rect", CSS class "ocr-drag-rect".
 // Modifier keys on select mousedown: plain = replace, Shift = remove, Ctrl = toggle.
 // Rebox + erase modes reset to "select" on successful drag; add-word stays active.
-//
-// Konva Stage not wired in this stub — replaced by react-konva at M4 (D-020).
-// Current implementation uses DOM events on a div for acceptance-test coverage.
 
 import { useEffect, useRef, useState } from "react";
+import { Layer, Stage } from "react-konva";
 import { getStageDimensions, type EncodedDims } from "../lib/canvas-utils";
 import type { BBox } from "../lib/coords";
+import { PageImage } from "./PageImage";
 import { setDragRect, clearSelection } from "../stores/selection-store";
 import { viewportStore, exitToSelectMode, type ViewportMode } from "../stores/viewport-store";
 
@@ -29,7 +49,11 @@ interface DragState {
 
 interface PageImageCanvasProps {
   imageUrl: string;
-  encoded: EncodedDims;
+  /**
+   * Page encoding dims. `null` renders the empty-state viewport
+   * (spec §13: `<div data-testid="image-viewport" data-state="empty">`).
+   */
+  encoded: EncodedDims | null;
   /** Project ID for constructing POST URLs. */
   projectId?: string;
   /** Page index (0-based) for constructing POST URLs. */
@@ -80,15 +104,15 @@ const MODE_RECT_COLORS: Record<ViewportMode, string> = {
 };
 
 /**
- * Image viewport canvas — supports four interaction modes.
+ * Image viewport canvas — Konva Stage host with four interaction modes.
  *
- * Drag interaction is handled via DOM mouse events. The DragRect preview
- * is an absolutely-positioned div so Vitest can verify interactions without Konva.
- *
- * Replaced by react-konva at M4 (D-020 research spike).
+ * The wrapping div carries `data-testid="image-viewport"` and captures DOM
+ * mouse events for drag interactions; the Konva `<Stage>` lives inside it
+ * with `data-testid="image-stage"` for Playwright introspection. Drag
+ * handlers will migrate to Konva Stage events in spec-21-C.
  */
 export default function PageImageCanvas({
-  imageUrl: _imageUrl,
+  imageUrl,
   encoded,
   onBoxSelect,
   onRebox,
@@ -96,8 +120,6 @@ export default function PageImageCanvas({
   onErasePixels,
 }: PageImageCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
-  const dims = getStageDimensions(encoded);
-
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dragRect, setLocalDragRect] = useState<BBox | null>(null);
   const [mode, setMode] = useState<ViewportMode>(viewportStore.getState().mode);
@@ -107,6 +129,20 @@ export default function PageImageCanvas({
     const unsub = viewportStore.subscribe((s) => setMode(s.mode));
     return unsub;
   }, []);
+
+  // ── Empty-state branch (spec §13) ──────────────────────────────────────────
+  if (!encoded) {
+    return (
+      <div
+        data-testid="image-viewport"
+        data-state="empty"
+        role="img"
+        aria-label="Page image viewport (no page loaded)"
+      />
+    );
+  }
+
+  const dims = getStageDimensions(encoded);
 
   function getRelativePos(e: React.MouseEvent<HTMLDivElement>): {
     x: number;
@@ -229,7 +265,36 @@ export default function PageImageCanvas({
       onMouseLeave={handleMouseLeave}
       onKeyDown={handleKeyDown}
     >
-      {/* Drag-rect preview overlay */}
+      {/* Sidecar div mirroring Stage geometry (spec §12 — Konva nodes
+          cannot themselves carry testids in jsdom or Playwright). */}
+      <div
+        data-testid="image-stage"
+        data-width={dims.width}
+        data-height={dims.height}
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          visibility: "hidden",
+        }}
+      />
+
+      {/* Konva Stage + 6-layer skeleton from spec §4. Overlay layers
+          stay empty in spec-21-A2; spec-21-A3 (#298) fills BBoxOverlay. */}
+      <Stage width={dims.width} height={dims.height}>
+        <Layer name="image">
+          <PageImage url={imageUrl} width={dims.width} height={dims.height} />
+        </Layer>
+        <Layer name="overlay-paragraphs" listening={false} />
+        <Layer name="overlay-lines" listening={false} />
+        <Layer name="overlay-words" listening={false} />
+        <Layer name="selection" listening={false} />
+        <Layer name="drag" />
+      </Stage>
+
+      {/* Drag-rect preview overlay — DOM sidecar (spec §12).
+          Must NOT be a Konva node; Playwright needs a CSS selector. */}
       {dragRect && (
         <div
           data-testid="ocr-drag-rect"
