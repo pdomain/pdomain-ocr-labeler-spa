@@ -38,30 +38,21 @@ disabled; `useLineMutations` does not yet have a merge endpoint.
 
 ## Frontend-only gaps
 
-### FO-4 — `BBoxOverlay` uses legacy `LAYER_COLORS` constants, not CSS vars
-**Surfaced in:** Slice 13 (canvas bbox overlays)
-**State:** `useLayerColors.ts` was created and exports a hook that reads
-`--layer-*` CSS vars from the DOM, but `BBoxOverlay` still reads from the
-legacy `LAYER_COLORS` constant map. Changing `BBoxOverlay` would break existing
-tests that assert on the hardcoded hex values.
-**To fix:** Migrate `BBoxOverlay`'s stroke-color source from `LAYER_COLORS` to
-`useLayerColors()`. Update `BBoxOverlay.test.tsx` to assert on CSS-var names or
-computed values rather than hardcoded hex strings.
+### FO-4 — `BBoxOverlay` uses legacy `LAYER_COLORS` constants, not CSS vars ✅ DONE
+**Shipped:** #328 (2026-05-15). `LayerColorSpec` moved to `useLayerColors.ts`
+(BBoxOverlay re-exports it). `hexToRgba`, `hexToLayerColorSpec`,
+`SELECTION_LAYER_SPEC`, `DRAG_RECT_LAYER_SPEC` added. BBoxOverlay reads layer
+colors via `useLayerColors()` through `resolveLayerColorSpec()`. Tests updated.
 
 ### FO-5 — `Chip` primitive does not forward `data-testid` ✅ DONE
 **Shipped:** #325 (2026-05-15). Chip forwards `data-testid` on both variants;
 CharRangesSection uses `<Chip variant="tristate">` instead of duplicate inline impl.
 
-### FO-6 — Legacy `hotkeyMap.ts` entries not bridged into hotkey registry
-**Surfaced in:** Slice 25 (HotkeyHelpModal refresh)
-**State:** `HotkeyHelpModal` now reads from `hotkey-registry.ts` (4 groups,
-pre-populated). The legacy `hotkeyMap.ts` / scope-based groups still exist and
-are used programmatically by `useHotkey` hooks, but those entries are not
-reflected in the registry. The modal may miss some hotkeys that are only in the
-legacy map.
-**To fix:** Either bridge the legacy entries into the registry, or migrate
-remaining `useXHotkeys` hooks to call `registerHotkeys()` and deprecate
-`hotkeyMap.ts`.
+### FO-6 — Legacy `hotkeyMap.ts` entries not bridged into hotkey registry ✅ DONE
+**Shipped:** #329 (2026-05-15). `hotkey-bridge.ts` converts all `HOTKEY_MAP`
+entries via `buildBridgedEntries()` — `comboToKeyCap` for display tokens,
+`scopeToGroup` for routing. `hotkey-registry.ts` seeds from the bridge at
+module load. 20 unit tests added.
 
 ### FO-7 — Block-level sibling walk is a no-op
 **Surfaced in:** Slices 12, 15 (Hierarchy tab, selection-store)
