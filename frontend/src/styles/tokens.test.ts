@@ -35,4 +35,19 @@ describe("tokens.css", () => {
     expect(css).toContain("--layer-line: #d088a8");
     expect(css).toContain("--layer-word: #6e9cdf");
   });
+
+  it("has all 5 status tokens in light", () => {
+    expect(css).toContain("--status-exact: #2d8c3a");
+    expect(css).toContain("--status-fuzzy: #b87b1f");
+    expect(css).toContain("--status-mismatch: #b13d32");
+    expect(css).toContain("--status-ocr: #2d6fb5");
+    expect(css).toContain("--status-gt: #6e4ea5");
+  });
+
+  it("has all 4 layer tokens in light", () => {
+    expect(css).toContain("--layer-block: #7a5e3a");
+    expect(css).toContain("--layer-para: #4d8a3a");
+    expect(css).toContain("--layer-line: #a8527a");
+    expect(css).toContain("--layer-word: #3d6bb8");
+  });
 });
