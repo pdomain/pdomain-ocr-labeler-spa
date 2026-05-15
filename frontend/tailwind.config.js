@@ -16,7 +16,55 @@
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        bg: {
+          page: "var(--bg-page)",
+          surface: "var(--bg-surface)",
+          raised: "var(--bg-raised)",
+          sunk: "var(--bg-sunk)",
+        },
+        border: {
+          1: "var(--border-1)",
+          2: "var(--border-2)",
+          3: "var(--border-3)",
+        },
+        ink: {
+          1: "var(--ink-1)",
+          2: "var(--ink-2)",
+          3: "var(--ink-3)",
+          4: "var(--ink-4)",
+        },
+        accent: {
+          DEFAULT: "var(--accent)",
+          ink: "var(--accent-ink)",
+        },
+        status: {
+          exact: "var(--status-exact)",
+          fuzzy: "var(--status-fuzzy)",
+          mismatch: "var(--status-mismatch)",
+          ocr: "var(--status-ocr)",
+          gt: "var(--status-gt)",
+        },
+        layer: {
+          block: "var(--layer-block)",
+          para: "var(--layer-para)",
+          line: "var(--layer-line)",
+          word: "var(--layer-word)",
+        },
+      },
+      fontFamily: {
+        ui: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "ui-monospace", "monospace"],
+      },
+      fontSize: {
+        label: ["9.5px", { lineHeight: "1.1" }],
+        hint: ["10px", { lineHeight: "1.2" }],
+        "btn-sm": ["11px", { lineHeight: "1.2" }],
+        body: ["12px", { lineHeight: "1.4" }],
+        heading: ["13px", { lineHeight: "1.3" }],
+      },
+    },
   },
   plugins: [],
 };
