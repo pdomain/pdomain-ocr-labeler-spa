@@ -78,4 +78,18 @@ describe("App: routing shell", () => {
       expect(screen.getByRole("button", { name: /open.*folder/i })).toBeInTheDocument();
     });
   });
+
+  it("IS-5: main element has overflow-hidden and min-h-0 for viewport-locked StudioShell", async () => {
+    withNoSession();
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByTestId("header-bar")).toBeInTheDocument();
+    });
+    // `<main>` is the direct child of app-shell after the header.
+    const appShell = screen.getByTestId("app-shell");
+    const mainEl = appShell.querySelector("main");
+    expect(mainEl).not.toBeNull();
+    expect(mainEl?.className).toMatch(/overflow-hidden/);
+    expect(mainEl?.className).toMatch(/min-h-0/);
+  });
 });

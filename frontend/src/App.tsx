@@ -126,7 +126,7 @@ function AppShell() {
         aria-atomic="true"
         className="sr-only"
       />
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 min-h-0 overflow-hidden">
         <Routes>
           <Route path={ROUTES.ROOT} element={<RootPage />} />
           <Route path={ROUTES.PROJECT} element={<ProjectRootRedirect />} />
