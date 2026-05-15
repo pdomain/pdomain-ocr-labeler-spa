@@ -14,6 +14,8 @@ type BBox = components["schemas"]["BBox"];
 type ReboxWordRequest = components["schemas"]["ReboxWordRequest"];
 type MergeWordsRequest = components["schemas"]["MergeWordsRequest"];
 type SplitWordRequest = components["schemas"]["SplitWordRequest"];
+type ApplyStyleRequest = components["schemas"]["ApplyStyleRequest"];
+type UpdateWordGroundTruthRequest = components["schemas"]["UpdateWordGroundTruthRequest"];
 
 // ─── internal helpers ──────────────────────────────────────────────────────
 
@@ -123,6 +125,59 @@ export function useSplitWord(projectId: string, pageIndex: number) {
       const body: SplitWordRequest = { x_fraction: xFraction, direction };
       return apiPost<PagePayload>(
         `${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/split`,
+        body,
+      );
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+// ─── useApplyStyle ─────────────────────────────────────────────────────────
+
+/**
+ * Apply a text style label to a word (Slice 19 — Char Ranges).
+ *
+ * Backend endpoint accepts ``scope: "whole" | "part"``. Char-range
+ * position metadata is held as local state in ``CharRangesSection``
+ * until the backend grows positioned ranges; for now we send the
+ * style label with ``scope: "part"`` to signal partial application.
+ */
+export function useApplyStyle(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<
+    PagePayload,
+    Error,
+    { lineIndex: number; wordIndex: number; style: string; scope?: ApplyStyleRequest["scope"] }
+  >({
+    mutationFn: ({ lineIndex, wordIndex, style, scope = "whole" }) => {
+      const body: ApplyStyleRequest = { style, scope };
+      return apiPost<PagePayload>(
+        `${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/style`,
+        body,
+      );
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+// ─── useUpdateWordGroundTruth ──────────────────────────────────────────────
+
+/**
+ * Update the ground-truth text for a word (Slice 20 — Char Fixer).
+ *
+ * Endpoint: ``POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/gt``
+ */
+export function useUpdateWordGroundTruth(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { lineIndex: number; wordIndex: number; text: string }>({
+    mutationFn: ({ lineIndex, wordIndex, text }) => {
+      const body: UpdateWordGroundTruthRequest = { text };
+      return apiPost<PagePayload>(
+        `${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/gt`,
         body,
       );
     },

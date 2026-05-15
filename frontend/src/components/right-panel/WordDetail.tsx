@@ -7,7 +7,7 @@
 //   2. Rebox         — wired (ReboxSection, tag="accent")   [Slice 17]
 //   3. Erase Pixels  — wired (ErasePixelsSection, tag="mismatch") [Slice 17]
 //   4. Structure     — wired (StructureSection)              [Slice 18]
-//   5. Char Ranges   — stub (Slice 19)
+//   5. Char Ranges   — wired (CharRangesSection)              [Slice 19]
 //   6. Char Fixer    — stub (Slice 20)
 //
 // The component receives the selected word via the selection-store path and
@@ -23,6 +23,7 @@ import { BBoxSection } from "./sections/BBoxSection";
 import { ReboxSection } from "./sections/ReboxSection";
 import { ErasePixelsSection } from "./sections/ErasePixelsSection";
 import { StructureSection } from "./sections/StructureSection";
+import { CharRangesSection } from "./sections/CharRangesSection";
 import { selectionStore } from "../../stores/selection-store";
 import type { components } from "../../api/types";
 
@@ -82,7 +83,8 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
     );
   }
 
-  const word = resolveWord(page, path.lineId ?? path.wordId[0], path.wordId);
+  const lineIdx = path.lineId ?? path.wordId[0];
+  const word = resolveWord(page, lineIdx, path.wordId);
 
   if (!word) {
     return (
@@ -91,6 +93,12 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
       </div>
     );
   }
+
+  // Slice 19: derive hasNext from the line length instead of hardcoding true.
+  const currentLine = page.line_matches?.find((l) => l.line_index === lineIdx);
+  const lineLength = currentLine?.word_matches.length ?? 0;
+  const wordIdx = word.word_index ?? 0;
+  const hasNextWord = wordIdx < lineLength - 1;
 
   return (
     <div data-testid="word-detail" className="flex flex-col gap-1">
@@ -116,7 +124,7 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
         <Accordion.Item value="rebox" tag="accent">
           <Accordion.Trigger>Rebox</Accordion.Trigger>
           <Accordion.Content>
-            <ReboxSection hasPrev={(word.word_index ?? 0) > 0} hasNext={true} />
+            <ReboxSection hasPrev={wordIdx > 0} hasNext={hasNextWord} />
           </Accordion.Content>
         </Accordion.Item>
 
@@ -140,7 +148,7 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
         <Accordion.Item value="char-ranges">
           <Accordion.Trigger>Char Ranges</Accordion.Trigger>
           <Accordion.Content>
-            <StubContent label="Char Ranges" />
+            <CharRangesSection word={word} projectId={projectId} pageIndex={pageIndex} />
           </Accordion.Content>
         </Accordion.Item>
 
