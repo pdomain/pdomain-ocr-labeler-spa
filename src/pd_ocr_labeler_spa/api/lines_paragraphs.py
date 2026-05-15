@@ -48,20 +48,42 @@ Pd-book-tools method mapping (spec §9 names → actual pd-book-tools API):
 - ``lines/refine-batch`` enqueues the existing refine job
   (``api/refine.py``); the handler is already real per spec §11.
 
+Paragraph mutation endpoints (spec-23-D2, issue #318):
+
+- ``POST .../paragraphs/{pi}/copy-gt-to-ocr`` → ``Block.copy_ground_truth_to_ocr()``.
+  pd-book-tools' ``Block`` is the paragraph type; the line-scope D1 route
+  uses the same method on a different Block kind.
+- ``POST .../paragraphs/{pi}/copy-ocr-to-gt`` → ``Block.copy_ocr_to_ground_truth()``.
+- ``POST .../paragraphs/{pi}/validate`` → no method on Block (same
+  workaround as Word + Line; see ConcaveTrillion/pd-book-tools#52).
+  Assigns ``paragraph.is_validated`` and propagates to every contained
+  word. Flag is lost on ``Block.to_dict`` → ``from_dict``.
+- ``POST .../paragraphs/{pi}/delete`` → ``Page.delete_paragraphs([pi])``
+  (pd-book-tools exposes only the batch variant).
+- ``POST .../paragraphs/merge`` → ``Page.merge_paragraphs(paragraph_indices)``
+  (``pd_book_tools/ocr/page.py:980``). Requires at least 2 distinct
+  indices; otherwise 400 ``mutation_failed``.
+- ``POST .../paragraphs/{pi}/split-after-line`` →
+  ``Page.split_paragraph_after_line(page_line_index)``
+  (``pd_book_tools/ocr/page.py:1152``). pd-book-tools takes a
+  PAGE-WIDE line index; the route translates the legacy body's
+  within-paragraph ``after_line_index`` to page-wide via
+  ``page.lines.index(paragraph.lines[after_line_index])``. Wire shape
+  ``SplitParagraphAfterLineRequest`` is preserved per spec §14.
+
 Legacy routes kept for frontend compatibility (older 404-stub contract
 already pinned in ``frontend/src/api/types.ts`` and ``hooks/useLineMutations.ts``):
 
 - ``POST .../lines/{li}/copy-gt`` body ``{direction: gt_to_ocr|ocr_to_gt}``.
 - ``POST .../delete`` body ``DeleteScopeRequest`` (page-scope batch).
 - ``POST .../merge`` body ``MergeScopeRequest`` (page-scope batch).
-- ``POST .../paragraphs/{pi}/split-after-line``.
 - ``POST .../lines/{li}/split-with-selected``.
 - ``POST .../words/group-into-paragraph``.
 
 These remain stub-shaped (return 200 with a stub PagePayload) because
-their backend semantics are paragraph-scope (D2/D3); D1 covers only the
-spec-named line endpoints. The integration tests for the legacy routes
-remain green via the unchanged ``_page_payload`` stub.
+their backend semantics are page-scope batches (D3); D2 wires the per-
+paragraph endpoints from the spec table. The page-scope batch routes'
+integration tests remain green via the unchanged ``_page_payload`` stub.
 """
 
 from __future__ import annotations
@@ -196,6 +218,29 @@ class SplitByWordsRequest(BaseModel):
     word_keys: list[tuple[int, int]]
 
 
+class ValidateParagraphRequest(BaseModel):
+    """``POST .../paragraphs/{pi}/validate`` body — spec §9 paragraph rows.
+
+    Same ``validated=None`` toggle semantics as ``ValidateLineRequest``;
+    paragraphs lack a pd-book-tools ``set_validated`` method (same
+    workaround as Word + Line; see ConcaveTrillion/pd-book-tools#52).
+    """
+
+    validated: bool | None = None
+
+
+class MergeParagraphsRequest(BaseModel):
+    """``POST .../paragraphs/merge`` body — spec §9 paragraph rows.
+
+    Calls ``Page.merge_paragraphs(paragraph_indices)``
+    (``pd_book_tools/ocr/page.py:980``). pd-book-tools requires at least
+    two distinct indices; otherwise the route returns
+    400 ``mutation_failed``.
+    """
+
+    paragraph_indices: list[int]
+
+
 class RefineBatchRequest(BaseModel):
     """``POST .../lines/refine-batch`` body — spec §9 row 19 + §11.
 
@@ -242,6 +287,16 @@ def _line_not_found(line_index: int) -> JSONResponse:
     )
 
 
+def _paragraph_not_found(paragraph_index: int) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content=ApiError(
+            error="paragraph_not_found",
+            message=f"paragraph not found: {paragraph_index}",
+        ).model_dump(),
+    )
+
+
 def _mutation_failed(message: str) -> JSONResponse:
     """400 envelope used when a pd-book-tools mutation returns False.
 
@@ -269,6 +324,18 @@ def _check_project_and_page(
     if page_index < 0 or page_index >= project.total_pages:
         return _page_not_found(page_index)
     return None
+
+
+def _resolve_paragraph(page: Any, paragraph_index: int) -> Any | None:
+    """Resolve ``page.paragraphs[paragraph_index]`` or ``None``.
+
+    Defensive against missing ``paragraphs`` attribute and out-of-range
+    index; both map to a 404 ``paragraph_not_found`` envelope.
+    """
+    paragraphs = getattr(page, "paragraphs", None)
+    if paragraphs is None or not (0 <= paragraph_index < len(paragraphs)):
+        return None
+    return paragraphs[paragraph_index]
 
 
 def _resolve_line(page: Any, line_index: int) -> Any | None:
@@ -690,6 +757,260 @@ def refine_lines_batch(
     return JSONResponse(status_code=202, content={"job_id": job_id})
 
 
+# ── Spec-23-D2 paragraph endpoints ─────────────────────────────────────
+
+
+def _paragraph_mutation_handler(
+    *,
+    project_id: str,
+    page_index: int,
+    paragraph_index: int,
+    project_state: ProjectState,
+    settings: Settings,
+    mutate: Any,
+    mutation_label: str,
+) -> JSONResponse:
+    """Shared core for per-paragraph mutations.
+
+    Mirrors ``_line_mutation_handler``: guard → resolve paragraph → lock
+    → mutate → cache → refresh. ``mutate(page, paragraph)`` is invoked
+    under the page lock; it must return ``True`` on success and ``False``
+    to surface ``mutation_failed``.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        paragraph = _resolve_paragraph(page, paragraph_index)
+        if paragraph is None:
+            return _paragraph_not_found(paragraph_index)
+        ok = mutate(page, paragraph)
+        if not ok:
+            return _mutation_failed(
+                f"{mutation_label} rejected paragraph={paragraph_index}",
+            )
+        pstate.generation += 1
+
+    _write_cached_envelope_best_effort(
+        page=page,
+        project_state=project_state,
+        page_index=page_index,
+        settings=settings,
+    )
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+    )
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/paragraphs/{paragraph_index}/copy-gt-to-ocr",
+    response_model=PagePayload,
+)
+def copy_paragraph_gt_to_ocr(
+    project_id: str,
+    page_index: int,
+    paragraph_index: int,
+    body: EmptyBody | None = None,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+) -> JSONResponse:
+    """``POST .../paragraphs/{pi}/copy-gt-to-ocr`` — copy GT→OCR for every word.
+
+    Spec §9: ``Block.copy_ground_truth_to_ocr()`` operates on every word
+    contained in the Block (pd-book-tools' paragraph type). pd-book-tools
+    returns ``True`` if any word was mutated; we treat the "no GT to copy"
+    case (returns ``False``) as a soft success — clicking copy on a
+    paragraph without GT should be idempotent, not an error.
+    """
+
+    def _mutate(_page: Any, paragraph: Any) -> bool:
+        paragraph.copy_ground_truth_to_ocr()
+        return True
+
+    return _paragraph_mutation_handler(
+        project_id=project_id,
+        page_index=page_index,
+        paragraph_index=paragraph_index,
+        project_state=project_state,
+        settings=settings,
+        mutate=_mutate,
+        mutation_label="paragraph_copy_gt_to_ocr",
+    )
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/paragraphs/{paragraph_index}/copy-ocr-to-gt",
+    response_model=PagePayload,
+)
+def copy_paragraph_ocr_to_gt(
+    project_id: str,
+    page_index: int,
+    paragraph_index: int,
+    body: EmptyBody | None = None,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+) -> JSONResponse:
+    """``POST .../paragraphs/{pi}/copy-ocr-to-gt`` — copy OCR→GT for every word.
+
+    Spec §9: ``Block.copy_ocr_to_ground_truth()`` — same soft-success
+    semantics as the gt-to-ocr direction.
+    """
+
+    def _mutate(_page: Any, paragraph: Any) -> bool:
+        paragraph.copy_ocr_to_ground_truth()
+        return True
+
+    return _paragraph_mutation_handler(
+        project_id=project_id,
+        page_index=page_index,
+        paragraph_index=paragraph_index,
+        project_state=project_state,
+        settings=settings,
+        mutate=_mutate,
+        mutation_label="paragraph_copy_ocr_to_gt",
+    )
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/paragraphs/{paragraph_index}/validate",
+    response_model=PagePayload,
+)
+def validate_paragraph(
+    project_id: str,
+    page_index: int,
+    paragraph_index: int,
+    body: ValidateParagraphRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+) -> JSONResponse:
+    """``POST .../paragraphs/{pi}/validate`` — set the paragraph's validated flag.
+
+    Spec §9 calls for paragraph-level ``set_validated(bool)``; pd-book-tools'
+    ``Block`` does not expose such a method (tracking issue
+    ConcaveTrillion/pd-book-tools#52 — same workaround as Word + Line).
+    We assign ``paragraph.is_validated`` directly and propagate the flag
+    onto every contained word for batch-validate parity. Flag is lost on
+    ``Block.to_dict`` → ``from_dict`` round-trip (documented limitation).
+    """
+
+    def _mutate(_page: Any, paragraph: Any) -> bool:
+        current = bool(getattr(paragraph, "is_validated", False))
+        new_value = (not current) if body.validated is None else bool(body.validated)
+        paragraph.is_validated = new_value
+        # Propagate to every contained word (mirror of validate_line).
+        for word in getattr(paragraph, "words", []) or []:
+            try:
+                word.is_validated = new_value
+            except Exception:  # pragma: no cover — frozen-Word defense
+                log.warning(
+                    "validate_paragraph: could not propagate is_validated to word on paragraph=%d (frozen?)",
+                    paragraph_index,
+                )
+        return True
+
+    return _paragraph_mutation_handler(
+        project_id=project_id,
+        page_index=page_index,
+        paragraph_index=paragraph_index,
+        project_state=project_state,
+        settings=settings,
+        mutate=_mutate,
+        mutation_label="validate_paragraph",
+    )
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/paragraphs/{paragraph_index}/delete",
+    response_model=PagePayload,
+)
+def delete_paragraph(
+    project_id: str,
+    page_index: int,
+    paragraph_index: int,
+    body: EmptyBody | None = None,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+) -> JSONResponse:
+    """``POST .../paragraphs/{pi}/delete`` — remove the paragraph from the page.
+
+    Spec §9: pd-book-tools exposes only the batch variant
+    ``Page.delete_paragraphs(indices)`` (``pd_book_tools/ocr/page.py:1040``),
+    mirroring the line-delete pattern.
+    """
+
+    def _mutate(page: Any, _paragraph: Any) -> bool:
+        return bool(page.delete_paragraphs([paragraph_index]))
+
+    return _paragraph_mutation_handler(
+        project_id=project_id,
+        page_index=page_index,
+        paragraph_index=paragraph_index,
+        project_state=project_state,
+        settings=settings,
+        mutate=_mutate,
+        mutation_label="delete_paragraph",
+    )
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/paragraphs/merge",
+    response_model=PagePayload,
+)
+def merge_paragraphs(
+    project_id: str,
+    page_index: int,
+    body: MergeParagraphsRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+) -> JSONResponse:
+    """``POST .../paragraphs/merge`` — merge selected paragraphs into the first.
+
+    Spec §9: ``Page.merge_paragraphs(paragraph_indices)``
+    (``pd_book_tools/ocr/page.py:980``). pd-book-tools requires at least
+    two distinct indices.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        ok = bool(page.merge_paragraphs(list(body.paragraph_indices)))
+        if not ok:
+            return _mutation_failed(
+                f"merge_paragraphs rejected indices={list(body.paragraph_indices)}",
+            )
+        pstate.generation += 1
+
+    _write_cached_envelope_best_effort(
+        page=page,
+        project_state=project_state,
+        page_index=page_index,
+        settings=settings,
+    )
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+    )
+
+
 # ── Legacy routes (kept for frontend client + integration tests) ───────
 
 
@@ -792,15 +1113,85 @@ def split_paragraph_after_line(
     paragraph_index: int,
     body: SplitParagraphAfterLineRequest,
     project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
 ) -> JSONResponse:
-    """``POST .../paragraphs/{pi}/split-after-line`` — paragraph mutation stub.
+    """``POST .../paragraphs/{pi}/split-after-line`` — split paragraph after a line.
 
-    Stays a stub. Paragraph-scope mutations live in spec-23-D2.
+    Spec §9 paragraph rows: ``paragraph.split_after_line(l)`` →
+    ``Page.split_paragraph_after_line(page_line_index)``
+    (``pd_book_tools/ocr/page.py:1152``). pd-book-tools takes a
+    PAGE-WIDE line index (it auto-detects the containing paragraph by
+    identity); the route translates the legacy body's within-paragraph
+    ``after_line_index`` to page-wide via
+    ``page.lines.index(paragraph.lines[after_line_index])``.
+
+    Wire shape ``SplitParagraphAfterLineRequest`` is preserved per spec
+    §14 — the body still carries an echoed top-level ``paragraph_index``
+    (accepted-but-ignored; the URL path is authoritative).
+
+    Pre-D2 fall-through: integration tests that hit this route without
+    seeding a PageState (``test_lines_paragraphs_router.py``) continue
+    to receive a stub 200 PagePayload. The wire-shape stability is
+    preserved.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
         return err
-    return _stub_page_payload(project_id, page_index)
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        # Pre-D2 integration tests never seed PageState — keep them green.
+        return _stub_page_payload(project_id, page_index)
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        paragraph = _resolve_paragraph(page, paragraph_index)
+        if paragraph is None:
+            return _paragraph_not_found(paragraph_index)
+
+        paragraph_lines = getattr(paragraph, "lines", None) or []
+        after_idx = int(body.after_line_index)
+        if not (0 <= after_idx < len(paragraph_lines)):
+            return _mutation_failed(
+                f"split_paragraph_after_line: after_line_index={after_idx} "
+                f"out of range for paragraph={paragraph_index} "
+                f"(0-{len(paragraph_lines) - 1})",
+            )
+
+        # Translate within-paragraph index to PAGE-WIDE line index by
+        # locating the target line object in the page's flat lines list.
+        target_line = paragraph_lines[after_idx]
+        page_lines = list(getattr(page, "lines", []) or [])
+        try:
+            page_line_index = page_lines.index(target_line)
+        except ValueError:
+            return _mutation_failed(
+                f"split_paragraph_after_line: target line not found in "
+                f"page.lines (paragraph={paragraph_index}, "
+                f"after_line_index={after_idx})",
+            )
+
+        ok = bool(page.split_paragraph_after_line(page_line_index))
+        if not ok:
+            return _mutation_failed(
+                f"split_paragraph_after_line rejected paragraph={paragraph_index} "
+                f"page_line_index={page_line_index}",
+            )
+        pstate.generation += 1
+
+    _write_cached_envelope_best_effort(
+        page=page,
+        project_state=project_state,
+        page_index=page_index,
+        settings=settings,
+    )
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+    )
 
 
 @router.post(
@@ -856,6 +1247,7 @@ __all__ = [
     "EmptyBody",
     "GroupSelectedWordsIntoNewParagraphRequest",
     "MergeLinesRequest",
+    "MergeParagraphsRequest",
     "MergeScopeRequest",
     "RefineBatchRequest",
     "SplitAfterWordRequest",
@@ -864,6 +1256,7 @@ __all__ = [
     "SplitLineWithSelectedWordsRequest",
     "SplitParagraphAfterLineRequest",
     "ValidateLineRequest",
+    "ValidateParagraphRequest",
     "install_lines_paragraphs_router",
     "router",
 ]

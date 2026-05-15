@@ -1127,6 +1127,130 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/paragraphs/{paragraph_index}/copy-gt-to-ocr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Paragraph Gt To Ocr
+         * @description ``POST .../paragraphs/{pi}/copy-gt-to-ocr`` — copy GT→OCR for every word.
+         *
+         *     Spec §9: ``Block.copy_ground_truth_to_ocr()`` operates on every word
+         *     contained in the Block (pd-book-tools' paragraph type). pd-book-tools
+         *     returns ``True`` if any word was mutated; we treat the "no GT to copy"
+         *     case (returns ``False``) as a soft success — clicking copy on a
+         *     paragraph without GT should be idempotent, not an error.
+         */
+        post: operations["copy_paragraph_gt_to_ocr_api_projects__project_id__pages__page_index__paragraphs__paragraph_index__copy_gt_to_ocr_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/paragraphs/{paragraph_index}/copy-ocr-to-gt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Paragraph Ocr To Gt
+         * @description ``POST .../paragraphs/{pi}/copy-ocr-to-gt`` — copy OCR→GT for every word.
+         *
+         *     Spec §9: ``Block.copy_ocr_to_ground_truth()`` — same soft-success
+         *     semantics as the gt-to-ocr direction.
+         */
+        post: operations["copy_paragraph_ocr_to_gt_api_projects__project_id__pages__page_index__paragraphs__paragraph_index__copy_ocr_to_gt_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/paragraphs/{paragraph_index}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate Paragraph
+         * @description ``POST .../paragraphs/{pi}/validate`` — set the paragraph's validated flag.
+         *
+         *     Spec §9 calls for paragraph-level ``set_validated(bool)``; pd-book-tools'
+         *     ``Block`` does not expose such a method (tracking issue
+         *     ConcaveTrillion/pd-book-tools#52 — same workaround as Word + Line).
+         *     We assign ``paragraph.is_validated`` directly and propagate the flag
+         *     onto every contained word for batch-validate parity. Flag is lost on
+         *     ``Block.to_dict`` → ``from_dict`` round-trip (documented limitation).
+         */
+        post: operations["validate_paragraph_api_projects__project_id__pages__page_index__paragraphs__paragraph_index__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/paragraphs/{paragraph_index}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete Paragraph
+         * @description ``POST .../paragraphs/{pi}/delete`` — remove the paragraph from the page.
+         *
+         *     Spec §9: pd-book-tools exposes only the batch variant
+         *     ``Page.delete_paragraphs(indices)`` (``pd_book_tools/ocr/page.py:1040``),
+         *     mirroring the line-delete pattern.
+         */
+        post: operations["delete_paragraph_api_projects__project_id__pages__page_index__paragraphs__paragraph_index__delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/paragraphs/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge Paragraphs
+         * @description ``POST .../paragraphs/merge`` — merge selected paragraphs into the first.
+         *
+         *     Spec §9: ``Page.merge_paragraphs(paragraph_indices)``
+         *     (``pd_book_tools/ocr/page.py:980``). pd-book-tools requires at least
+         *     two distinct indices.
+         */
+        post: operations["merge_paragraphs_api_projects__project_id__pages__page_index__paragraphs_merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/pages/{page_index}/lines/{line_index}/copy-gt": {
         parameters: {
             query?: never;
@@ -1210,9 +1334,24 @@ export interface paths {
         put?: never;
         /**
          * Split Paragraph After Line
-         * @description ``POST .../paragraphs/{pi}/split-after-line`` — paragraph mutation stub.
+         * @description ``POST .../paragraphs/{pi}/split-after-line`` — split paragraph after a line.
          *
-         *     Stays a stub. Paragraph-scope mutations live in spec-23-D2.
+         *     Spec §9 paragraph rows: ``paragraph.split_after_line(l)`` →
+         *     ``Page.split_paragraph_after_line(page_line_index)``
+         *     (``pd_book_tools/ocr/page.py:1152``). pd-book-tools takes a
+         *     PAGE-WIDE line index (it auto-detects the containing paragraph by
+         *     identity); the route translates the legacy body's within-paragraph
+         *     ``after_line_index`` to page-wide via
+         *     ``page.lines.index(paragraph.lines[after_line_index])``.
+         *
+         *     Wire shape ``SplitParagraphAfterLineRequest`` is preserved per spec
+         *     §14 — the body still carries an echoed top-level ``paragraph_index``
+         *     (accepted-but-ignored; the URL path is authoritative).
+         *
+         *     Pre-D2 fall-through: integration tests that hit this route without
+         *     seeding a PageState (``test_lines_paragraphs_router.py``) continue
+         *     to receive a stub 200 PagePayload. The wire-shape stability is
+         *     preserved.
          */
         post: operations["split_paragraph_after_line_api_projects__project_id__pages__page_index__paragraphs__paragraph_index__split_after_line_post"];
         delete?: never;
@@ -1955,6 +2094,19 @@ export interface components {
             line_indices: number[];
         };
         /**
+         * MergeParagraphsRequest
+         * @description ``POST .../paragraphs/merge`` body — spec §9 paragraph rows.
+         *
+         *     Calls ``Page.merge_paragraphs(paragraph_indices)``
+         *     (``pd_book_tools/ocr/page.py:980``). pd-book-tools requires at least
+         *     two distinct indices; otherwise the route returns
+         *     400 ``mutation_failed``.
+         */
+        MergeParagraphsRequest: {
+            /** Paragraph Indices */
+            paragraph_indices: number[];
+        };
+        /**
          * MergeScopeRequest
          * @description Legacy ``/merge`` page-scope batch body.
          */
@@ -2591,6 +2743,18 @@ export interface components {
          *     toggle contract); ``validated=bool`` sets to that exact value.
          */
         ValidateLineRequest: {
+            /** Validated */
+            validated?: boolean | null;
+        };
+        /**
+         * ValidateParagraphRequest
+         * @description ``POST .../paragraphs/{pi}/validate`` body — spec §9 paragraph rows.
+         *
+         *     Same ``validated=None`` toggle semantics as ``ValidateLineRequest``;
+         *     paragraphs lack a pd-book-tools ``set_validated`` method (same
+         *     workaround as Word + Line; see ConcaveTrillion/pd-book-tools#52).
+         */
+        ValidateParagraphRequest: {
             /** Validated */
             validated?: boolean | null;
         };
@@ -4028,6 +4192,190 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copy_paragraph_gt_to_ocr_api_projects__project_id__pages__page_index__paragraphs__paragraph_index__copy_gt_to_ocr_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                paragraph_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EmptyBody"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copy_paragraph_ocr_to_gt_api_projects__project_id__pages__page_index__paragraphs__paragraph_index__copy_ocr_to_gt_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                paragraph_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EmptyBody"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_paragraph_api_projects__project_id__pages__page_index__paragraphs__paragraph_index__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                paragraph_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ValidateParagraphRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_paragraph_api_projects__project_id__pages__page_index__paragraphs__paragraph_index__delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                paragraph_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EmptyBody"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merge_paragraphs_api_projects__project_id__pages__page_index__paragraphs_merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MergeParagraphsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
                 };
             };
             /** @description Validation Error */
