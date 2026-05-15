@@ -1,7 +1,7 @@
 // RootPage.test.tsx — Vitest unit tests for RootPage + EmptyProjectState.
 // Issue #84 (EmptyProjectState) + Issue #274 (RootPage + session-state fetch).
 // Spec: docs/specs/2026-05-12-root-page-design.md §Contract
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router-dom";
@@ -116,6 +116,23 @@ describe("RootPage: redirects_to_last_project", () => {
           last_page_index: 2,
         }),
       ),
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [
+            {
+              project_id: "my-project",
+              project_root: "/data/my-project",
+              label: "My Project",
+            },
+          ],
+          selected: null,
+          projects_root: "/data",
+          config_source: "default",
+        }),
+      ),
+      http.post("/api/projects/load", () =>
+        HttpResponse.json({ project_id: "my-project" }, { status: 200 }),
+      ),
     );
 
     // We verify navigation by checking the empty-project-state is NOT rendered
@@ -126,8 +143,111 @@ describe("RootPage: redirects_to_last_project", () => {
 
     // Allow the query to settle; empty-project-state must not appear
     // (redirect was issued instead)
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 100));
     expect(screen.queryByTestId("empty-project-state")).not.toBeInTheDocument();
+  });
+});
+
+// --- RootPage: auto-resume (#327) ------------------------------------------------
+
+describe("RootPage: auto-resume after server restart (#327)", () => {
+  it("fires POST /api/projects/load before navigating when project exists on disk", async () => {
+    const loadHandler = vi.fn(async () => HttpResponse.json({ project_id: "proj-1" }));
+
+    server.use(
+      http.get("/api/session-state", () =>
+        HttpResponse.json({
+          schema_version: "1.0",
+          last_project_path: "/data/proj-1",
+          last_page_index: 0,
+        }),
+      ),
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [{ project_id: "proj-1", project_root: "/data/proj-1", label: "Proj One" }],
+          selected: null,
+          projects_root: "/data",
+          config_source: "default",
+        }),
+      ),
+      http.post("/api/projects/load", loadHandler),
+    );
+
+    renderWithProviders(<RootPage />);
+
+    await waitFor(() => {
+      expect(loadHandler).toHaveBeenCalled();
+    });
+  });
+
+  it("falls back to project list when POST /api/projects/load fails", async () => {
+    server.use(
+      http.get("/api/session-state", () =>
+        HttpResponse.json({
+          schema_version: "1.0",
+          last_project_path: "/data/proj-1",
+          last_page_index: 0,
+        }),
+      ),
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [{ project_id: "proj-1", project_root: "/data/proj-1", label: "Proj One" }],
+          selected: null,
+          projects_root: "/data",
+          config_source: "default",
+        }),
+      ),
+      http.post("/api/projects/load", () =>
+        HttpResponse.json({ message: "Server error" }, { status: 500 }),
+      ),
+    );
+
+    renderWithProviders(<RootPage />);
+
+    await waitFor(() => {
+      // Graceful fallback: project list shows the open-folder button.
+      expect(screen.getByRole("button", { name: /open.*folder/i })).toBeInTheDocument();
+    });
+  });
+
+  it("skips auto-resume when skipSessionRedirect is set", async () => {
+    const loadHandler = vi.fn(async () => HttpResponse.json({}));
+
+    server.use(
+      http.get("/api/session-state", () =>
+        HttpResponse.json({
+          schema_version: "1.0",
+          last_project_path: "/data/proj-1",
+          last_page_index: 0,
+        }),
+      ),
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [{ project_id: "proj-1", project_root: "/data/proj-1", label: "Proj One" }],
+          selected: null,
+          projects_root: "/data",
+          config_source: "default",
+        }),
+      ),
+      http.post("/api/projects/load", loadHandler),
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={[{ pathname: "/", state: { skipSessionRedirect: true } }]}>
+          <RootPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // Wait for queries to settle.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /open.*folder/i })).toBeInTheDocument();
+    });
+
+    // POST /api/projects/load must NOT have been called.
+    expect(loadHandler).not.toHaveBeenCalled();
   });
 });
 

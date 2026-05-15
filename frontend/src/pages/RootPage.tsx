@@ -1,15 +1,18 @@
 // RootPage.tsx — route element for "/".
 // Issue #84 (EmptyProjectState) + Issue #274 (RootPage + session-state fetch) + Slice 27.
+// Issue #327 (auto-resume after server restart: POST /api/projects/load before navigate).
 // Spec: docs/specs/2026-05-12-root-page-design.md + 2026-05-15-hifi-redesign-plan.md Slice 27
 //
 // On mount: calls GET /api/session-state.
-// - If last_project_path is set  → navigate (replace) to project+page URL.
+// - If last_project_path is set AND project exists in disk list:
+//     → POST /api/projects/load to hydrate memory, then navigate to project+page URL.
+//     → If load POST fails → fall through to project list (graceful degradation).
 // - If null / error / loading    → render project list with HeaderBar + open-folder button.
 // - In-flight loading            → render blank <div /> (HeaderBar stays above).
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import type { components } from "../api/types";
 import { Button } from "../components/ui/button";
 import { StatusPip } from "../components/ui/StatusPip";
@@ -31,6 +34,15 @@ async function fetchProjects(): Promise<ListProjectsResponse> {
   const res = await fetch(`${API_BASE}/api/projects`);
   if (!res.ok) throw new Error(`GET /api/projects failed: ${res.status}`);
   return res.json() as Promise<ListProjectsResponse>;
+}
+
+async function postLoadProject(projectPath: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/projects/load`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project_root: projectPath, initial_page_index: 0 }),
+  });
+  if (!res.ok) throw new Error(`POST /api/projects/load failed: ${res.status}`);
 }
 
 /** Derive the project ID from an absolute project-directory path.
@@ -141,12 +153,21 @@ function ProjectListView({ projects }: { projects: ProjectKey[] }) {
 
 /** Route element for "/".
  *
- * Fetches session state on mount. Redirects (replace mode) to the last-viewed
- * page if a prior session exists. Falls back to ProjectListView (Slice 27) otherwise.
+ * Fetches session state on mount. When the last project exists on disk, fires
+ * POST /api/projects/load to hydrate it in memory (handles the server-restart
+ * case where the project is on disk but not in memory), then redirects (replace
+ * mode) to the last-viewed page.
+ *
+ * Falls back to ProjectListView (Slice 27) when:
+ *   - No prior session / no saved project path.
+ *   - Project no longer exists on disk.
+ *   - The load POST fails.
+ *   - skipSessionRedirect flag is set (set by 404-redirect logic).
+ *
  * Loading state renders a blank content area.
  *
  * Spec: docs/specs/2026-05-12-root-page-design.md + Slice 27
- * Issue: #274
+ * Issue: #274, #327
  */
 export default function RootPage() {
   const navigate = useNavigate();
@@ -167,25 +188,57 @@ export default function RootPage() {
   });
 
   const derivedProjectId = data?.last_project_path ? deriveProjectId(data.last_project_path) : null;
+  const lastProjectPath = data?.last_project_path ?? null;
 
   const projectExists =
     derivedProjectId !== null &&
     (projects?.projects ?? []).some((p) => p.project_id === derivedProjectId);
 
+  // #327: POST /api/projects/load before navigating so the project is hydrated
+  // in server memory even after a restart. On success → navigate; on error →
+  // fall through to project list (onError sets loadFailed state).
+  //
+  // Use a ref to track fired/failed state so the effect fires exactly once per
+  // mount (not every time loadMutation state changes).
+  const loadStateRef = useRef<"idle" | "pending" | "success" | "failed">("idle");
+
+  const loadMutation = useMutation({
+    mutationFn: (projectPath: string) => postLoadProject(projectPath),
+    onSuccess: () => {
+      loadStateRef.current = "success";
+      if (!derivedProjectId || !data) return;
+      const pageNo = (data.last_page_index ?? 0) + 1;
+      navigate(`/projects/${derivedProjectId}/pages/pageno/${pageNo}`, { replace: true });
+    },
+    onError: () => {
+      loadStateRef.current = "failed";
+    },
+  });
+
   useEffect(() => {
-    if (!projectExists || !derivedProjectId || skipSessionRedirect) return;
-    const pageNo = (data?.last_page_index ?? 0) + 1;
-    navigate(`/projects/${derivedProjectId}/pages/pageno/${pageNo}`, { replace: true });
-  }, [projectExists, derivedProjectId, data, navigate, skipSessionRedirect]);
+    if (!projectExists || !derivedProjectId || !lastProjectPath || skipSessionRedirect) return;
+    if (loadStateRef.current !== "idle") return;
+    loadStateRef.current = "pending";
+    loadMutation.mutate(lastProjectPath);
+    // Intentionally not including loadMutation in deps — mutate is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectExists, derivedProjectId, lastProjectPath, skipSessionRedirect]);
 
-  // In-flight: blank content area while either query is loading.
-  if (isLoading || isProjectsLoading) return <div />;
+  const loadFailed = loadStateRef.current === "failed";
 
-  // Session error, no saved path, project gone, or redirected here from a 404: show project list.
-  if (isError || !data?.last_project_path || !projectExists || skipSessionRedirect) {
+  // In-flight: blank content area while either query is loading or load POST is pending.
+  if (
+    isLoading ||
+    isProjectsLoading ||
+    (projectExists && !skipSessionRedirect && loadMutation.isPending)
+  )
+    return <div />;
+
+  // Session error, no saved path, project gone, skipRedirect, or load failed: show project list.
+  if (isError || !data?.last_project_path || !projectExists || skipSessionRedirect || loadFailed) {
     return <ProjectListView projects={projects?.projects ?? []} />;
   }
 
-  // Project found: redirect is pending (useEffect fires next tick).
+  // Load mutation succeeded: navigation is pending.
   return <div />;
 }
