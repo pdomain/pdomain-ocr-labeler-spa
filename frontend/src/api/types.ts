@@ -432,6 +432,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/selection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Selection
+         * @description ``POST .../selection`` — fold a delta into ``pstate.selection``.
+         *
+         *     Spec authority: ``specs/23-page-payload-backend.md §10``.
+         *
+         *     Behaviour:
+         *
+         *     1. Validate ``project_id`` / ``page_index`` (``_check_project_and_page``).
+         *     2. Get-or-create a ``PageState`` for ``page_index`` — selection is a
+         *        pure UI carrier that doesn't depend on OCR having run.
+         *     3. Under the per-page lock (spec §13): apply the set operation
+         *        (``core.selection.apply_selection``), bump ``pstate.generation``.
+         *     4. Return the spec-23-A populated ``PagePayload`` so the frontend can
+         *        update its cached page state in one round-trip — matches the
+         *        contract shared with the spec-23-C/D word/line/paragraph
+         *        mutations.
+         *
+         *     No cached-envelope autosave: selection is per-session UI state, not
+         *     part of the saved labeled envelope.
+         */
+        post: operations["update_selection_api_projects__project_id__pages__page_index__selection_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs": {
         parameters: {
             query?: never;
@@ -2695,6 +2732,29 @@ export interface components {
             validated?: boolean | null;
         };
         /**
+         * UpdateSelectionRequest
+         * @description Body for ``POST .../selection`` — spec-23-E §10.
+         *
+         *     ``mode`` chooses the set operation applied to ``pstate.selection``:
+         *
+         *     - ``replace`` — drop the current selection and adopt ``selection``.
+         *     - ``remove`` — subtract ``selection`` from the current selection.
+         *     - ``toggle`` — symmetric-difference: items present in both clear,
+         *       items in exactly one are kept.
+         *
+         *     ``selection`` is the canonical ``Selection`` wire shape from spec
+         *     §01-data-models — ``selection_mode`` + ``selected_paragraphs`` +
+         *     ``selected_lines`` + ``selected_words`` (as ``(line, word)`` pairs).
+         */
+        UpdateSelectionRequest: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "replace" | "remove" | "toggle";
+            selection: components["schemas"]["Selection"];
+        };
+        /**
          * UpdateWordGroundTruthRequest
          * @description Spec §2 line 285.
          */
@@ -3241,6 +3301,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RotatePageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_selection_api_projects__project_id__pages__page_index__selection_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
                 };
             };
             /** @description Validation Error */

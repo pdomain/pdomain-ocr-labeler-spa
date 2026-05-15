@@ -71,7 +71,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any
 
-from .models import Project
+from .models import Project, Selection
 
 
 @dataclass
@@ -110,6 +110,12 @@ class PageState:
     page_record: Any = field(default=None)
     generation: int = 0
     last_saved_generation: int = 0
+    # Per-page UI selection (spec-23-E §10). Mutated by
+    # ``POST /api/projects/{id}/pages/{idx}/selection`` via
+    # ``core.selection.apply_selection``. Default is empty — both
+    # ``GET /pages/{idx}`` and the spec-23-A ``_page_payload`` helper
+    # read ``pstate.selection`` and echo it onto ``PagePayload``.
+    selection: Selection = field(default_factory=Selection)
 
 
 class ProjectState:

@@ -14,7 +14,8 @@ from ..core import text_normalize
 from ..core.jobs import JobRunner
 from ..core.models import EncodedDims, LineFilter, LineMatch, PageRecord, Selection
 from ..core.page_state import ensure_page_model, persist_page_to_file
-from ..core.project_state import ProjectState
+from ..core.project_state import PageState, ProjectState
+from ..core.selection import SelectionMode, apply_selection
 from ..settings import Settings
 from .dependencies import get_job_runner, get_project_state, get_settings
 from .middleware.error_handler import ApiError
@@ -117,6 +118,25 @@ class RotatePageResponse(BaseModel):
     """Response for ``POST .../rotate`` → ``202 Accepted`` — spec §19 (M9.1)."""
 
     job_id: str
+
+
+class UpdateSelectionRequest(BaseModel):
+    """Body for ``POST .../selection`` — spec-23-E §10.
+
+    ``mode`` chooses the set operation applied to ``pstate.selection``:
+
+    - ``replace`` — drop the current selection and adopt ``selection``.
+    - ``remove`` — subtract ``selection`` from the current selection.
+    - ``toggle`` — symmetric-difference: items present in both clear,
+      items in exactly one are kept.
+
+    ``selection`` is the canonical ``Selection`` wire shape from spec
+    §01-data-models — ``selection_mode`` + ``selected_paragraphs`` +
+    ``selected_lines`` + ``selected_words`` (as ``(line, word)`` pairs).
+    """
+
+    mode: SelectionMode
+    selection: Selection
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -267,9 +287,10 @@ def _page_payload(
       ``None`` / ``[]`` — the frontend renders the image and an empty
       lines pane.
     - ``encoded_dims`` is computed from the on-disk image (PIL).
-    - ``selection`` / ``line_filter`` default to ``Selection()`` /
-      ``LineFilter.ALL`` — the current ``PageState`` shape does not
-      yet carry per-page selection state (spec-23-E wires that).
+    - ``selection`` is read from ``PageState.selection`` (spec-23-E
+      §10).  Defaults to empty ``Selection()`` for pages without a
+      ``PageState`` yet.  ``line_filter`` defaults to ``LineFilter.ALL``
+      until M3 wires per-page filter state.
     - ``generation`` echoes ``ProjectState.generation`` so SSE
       consumers can diff against a remembered value.
     - ``page_text_ocr`` / ``page_text_gt`` are rendered from
@@ -327,12 +348,18 @@ def _page_payload(
     page_text_ocr = _render_plaintext(line_matches, source="ocr", normalize_tabs=False)
     page_text_gt = _render_plaintext(line_matches, source="gt", normalize_tabs=False)
 
+    # spec-23-E §10: ``pstate.selection`` is the per-page UI selection
+    # mutated by ``POST .../selection``; echo it onto the payload so a
+    # subsequent ``GET`` sees the same selection. Defaults to empty
+    # ``Selection()`` for pages with no ``PageState`` yet.
+    selection = pstate.selection if pstate is not None else Selection()
+
     return PagePayload(
         project_id=project_id,
         page_index=page_index,
         page_record=page_record,
         line_matches=line_matches,
-        selection=Selection(),
+        selection=selection,
         encoded_dims=encoded_dims,
         line_filter=LineFilter.ALL,
         image_url=image_url,
@@ -606,6 +633,58 @@ def rotate_page(
     return JSONResponse(status_code=202, content={"job_id": job_id})
 
 
+@router.post("/{page_index}/selection", response_model=PagePayload)
+def update_selection(
+    project_id: str,
+    page_index: int,
+    body: UpdateSelectionRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+) -> JSONResponse:
+    """``POST .../selection`` — fold a delta into ``pstate.selection``.
+
+    Spec authority: ``specs/23-page-payload-backend.md §10``.
+
+    Behaviour:
+
+    1. Validate ``project_id`` / ``page_index`` (``_check_project_and_page``).
+    2. Get-or-create a ``PageState`` for ``page_index`` — selection is a
+       pure UI carrier that doesn't depend on OCR having run.
+    3. Under the per-page lock (spec §13): apply the set operation
+       (``core.selection.apply_selection``), bump ``pstate.generation``.
+    4. Return the spec-23-A populated ``PagePayload`` so the frontend can
+       update its cached page state in one round-trip — matches the
+       contract shared with the spec-23-C/D word/line/paragraph
+       mutations.
+
+    No cached-envelope autosave: selection is per-session UI state, not
+    part of the saved labeled envelope.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    if pstate is None:
+        # Selection can be mutated before OCR runs — create an empty
+        # PageState carrier so we have a slot to store ``selection``.
+        pstate = PageState(page_index=page_index)
+        project_state.set_page_state(page_index, pstate)
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        pstate.selection = apply_selection(pstate.selection, body.mode, body.selection)
+        pstate.generation += 1
+
+    payload = _page_payload(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+    )
+    return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
+
+
 def install_pages_router(app) -> None:  # type: ignore[no-untyped-def]
     """Register the pages router. Called from ``bootstrap.build_app``."""
     app.include_router(router)
@@ -622,6 +701,7 @@ __all__ = [
     "SavePageRequest",
     "SavePageResponse",
     "SaveProjectResponse",
+    "UpdateSelectionRequest",
     "_build_image_url",
     "_page_payload",
     "_render_plaintext",
