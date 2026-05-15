@@ -83,6 +83,8 @@ import { WordEditDialog, type DialogTarget } from "../components/WordEditDialog"
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { StudioShell } from "../components/shell/StudioShell";
 import { Rail } from "../components/shell/Rail";
+import { RightPanel } from "../components/shell/RightPanel";
+import { useBreadcrumbHotkeys } from "../hooks/useBreadcrumbHotkeys";
 
 import type {
   Selection as ToolbarSelection,
@@ -214,6 +216,10 @@ export default function ProjectPage() {
   const pagePayload = pageQ.data ?? null;
   const pageRecord = pagePayload?.page_record ?? null;
   const lines: LineMatch[] = pagePayload?.line_matches ?? [];
+
+  // ── Breadcrumb / hierarchy hotkeys (Alt+arrows) ────────────────────────
+  // Registered at the page level so they work anywhere on the project page.
+  useBreadcrumbHotkeys({ page: pagePayload ?? undefined });
 
   // Project not found vs other errors — only the 404 case triggers the banner.
   const projectStatus = (projectQ.error as { status?: number } | null)?.status;
@@ -460,8 +466,10 @@ export default function ProjectPage() {
     </div>
   );
 
-  // Right panel slot — empty stub; RightPanel wired in Slice 14.
-  const rightSlot = <div data-testid="right-panel-placeholder" className="h-full" />;
+  // Right panel slot — RightPanel routes on selection-store.level. Word-level
+  // content is intentionally a placeholder for Slice 14; Slice 16 replaces it
+  // with WordDetail. WordMatchView itself stays in the canvas TextTabs.
+  const rightSlot = <RightPanel page={pagePayload ?? undefined} />;
 
   return (
     <div data-testid="project-page" className="h-full">
