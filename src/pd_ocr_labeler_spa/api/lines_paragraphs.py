@@ -397,13 +397,13 @@ def _line_mutation_handler(
                 f"{mutation_label} rejected line={line_index}",
             )
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,
@@ -649,13 +649,13 @@ def merge_lines(
                 f"merge_lines rejected indices={list(body.line_indices)}",
             )
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,
@@ -703,13 +703,13 @@ def split_by_words(
                 f"split_line_with_selected_words rejected keys={word_keys}",
             )
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,
@@ -797,13 +797,13 @@ def _paragraph_mutation_handler(
                 f"{mutation_label} rejected paragraph={paragraph_index}",
             )
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,
@@ -996,13 +996,13 @@ def merge_paragraphs(
                 f"merge_paragraphs rejected indices={list(body.paragraph_indices)}",
             )
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,
@@ -1179,13 +1179,13 @@ def split_paragraph_after_line(
                 f"page_line_index={page_line_index}",
             )
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,

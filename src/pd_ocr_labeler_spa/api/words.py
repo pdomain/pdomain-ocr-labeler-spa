@@ -379,8 +379,8 @@ def update_word_ground_truth(
 
     Spec 23 §9 row 1: ``word.set_ground_truth_text(text)`` → property
     setter ``word.ground_truth_text = text``. Holds the per-page lock
-    for the mutation + generation bump; releases before the cached
-    write so disk I/O doesn't serialize cross-page edits.
+    for the full mutation window: resolve → mutate → generation bump →
+    cached-envelope write (spec §13).
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -398,13 +398,13 @@ def update_word_ground_truth(
             return _word_not_found(line_index, word_index)
         word.ground_truth_text = body.text
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,
@@ -447,13 +447,13 @@ def apply_style(
             return _word_not_found(line_index, word_index)
         word.apply_style_scope(body.style, body.scope)
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,
@@ -498,13 +498,13 @@ def apply_component(
             return _word_not_found(line_index, word_index)
         word.apply_component(body.component, enabled=body.enabled)
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,
@@ -559,13 +559,13 @@ def toggle_validated(
         new_value = (not current) if body.validated is None else bool(body.validated)
         word.is_validated = new_value
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,
@@ -619,13 +619,13 @@ def validate_batch(
         # the SPA as "I sent a validate-batch and got an updated
         # generation back".
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,
@@ -707,13 +707,13 @@ def add_word(
         if not ok:
             return _mutation_failed(f"add_word_to_page rejected bbox=({x1}, {y1}, {x2}, {y2})")
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,
@@ -762,13 +762,13 @@ def rebox_word(
                 f"rebox_word rejected line={line_index} word={word_index} bbox=({x1}, {y1}, {x2}, {y2})"
             )
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,
@@ -826,13 +826,13 @@ def nudge_bbox(
                 f"deltas=({body.left}, {body.right}, {body.top}, {body.bottom})"
             )
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,
@@ -887,13 +887,13 @@ def split_word(
                 f"split_word rejected line={line_index} word={word_index} fraction={body.x_fraction}"
             )
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,
@@ -947,13 +947,13 @@ def merge_words(
                 f"merge_word_{body.direction} rejected line={line_index} word={word_index}"
             )
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,
@@ -1045,13 +1045,13 @@ def erase_pixels(
         if callable(finalize):
             finalize()
         pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
-    _write_cached_envelope_best_effort(
-        page=page,
-        project_state=project_state,
-        page_index=page_index,
-        settings=settings,
-    )
     return _refresh_payload_response(
         project_id=project_id,
         page_index=page_index,

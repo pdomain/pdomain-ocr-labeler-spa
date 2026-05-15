@@ -266,3 +266,68 @@ def test_concurrent_gt_mutations_serialize_and_both_apply(
     # into place; a torn write would leave one of these behind.
     leftover_tmp = sorted(p.relative_to(settings.cache_root) for p in settings.cache_root.rglob("*.tmp"))
     assert leftover_tmp == [], f"leftover .tmp files: {leftover_tmp}"
+
+
+# ── Spec §13 lock-discipline test ────────────────────────────────────────
+#
+# Verifies that ``LaneResolver.write_cached`` is called INSIDE the per-page
+# lock, not after releasing it (spec 23 §13: every mutation handler acquires
+# the lock for the duration of the call, including the cache write).
+#
+# Strategy: patch ``LaneResolver.write_cached`` to inspect ``lock.locked()``
+# at call time.  If the implementation releases the lock before calling
+# ``write_cached``, ``lock.locked()`` will be ``False`` and the assertion
+# fails.  If the lock is still held, ``lock.locked()`` is ``True``.
+#
+# We use a single-threaded POST (no ThreadPoolExecutor) to keep the assertion
+# deterministic — the property being checked is "lock held during write_cached
+# call", not "two threads race each other".
+
+
+def test_write_cached_runs_inside_page_lock(
+    loaded_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``write_cached`` is called while the per-page lock is held (spec §13).
+
+    The test patches ``LaneResolver.write_cached`` to check
+    ``project_state.get_page_lock(page_index).locked()`` at call time.
+    If the implementation releases the lock before the cache write the
+    patch records ``False`` and the final assertion fails.
+    """
+    page = _make_seeded_page()
+    _seed_page_state(loaded_client, page_index=0, page=page)
+
+    project_state = loaded_client.app.state.project_state  # type: ignore[attr-defined]
+
+    lock_held_during_write: list[bool] = []
+
+    original_write_cached = None
+
+    from pd_ocr_labeler_spa.core.persistence import lanes as lanes_mod
+
+    original_write_cached = lanes_mod.LaneResolver.write_cached
+
+    def _spy_write_cached(self: Any, page_index: int, envelope: Any) -> None:  # type: ignore[misc]
+        lock = project_state.get_page_lock(page_index)
+        lock_held_during_write.append(lock.locked())
+        # Still perform the real write so disk-based gates remain valid.
+        original_write_cached(self, page_index, envelope)
+
+    monkeypatch.setattr(lanes_mod.LaneResolver, "write_cached", _spy_write_cached)
+
+    resp = loaded_client.post(
+        "/api/projects/book1/pages/0/words/0/0/gt",
+        json={"text": "lock-check"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    # The patch must have been called at least once.
+    assert lock_held_during_write, "write_cached spy was never invoked"
+
+    # Every invocation must have seen the lock held.
+    assert all(lock_held_during_write), (
+        f"write_cached was called outside the page lock on "
+        f"{lock_held_during_write.count(False)} of {len(lock_held_during_write)} call(s) "
+        f"(spec 23 §13 violation)"
+    )

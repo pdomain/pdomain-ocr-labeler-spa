@@ -741,8 +741,8 @@ export interface paths {
          *
          *     Spec 23 §9 row 1: ``word.set_ground_truth_text(text)`` → property
          *     setter ``word.ground_truth_text = text``. Holds the per-page lock
-         *     for the mutation + generation bump; releases before the cached
-         *     write so disk I/O doesn't serialize cross-page edits.
+         *     for the full mutation window: resolve → mutate → generation bump →
+         *     cached-envelope write (spec §13).
          */
         post: operations["update_word_ground_truth_api_projects__project_id__pages__page_index__words__line_index___word_index__gt_post"];
         delete?: never;

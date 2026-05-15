@@ -673,9 +673,11 @@ def rematch_gt(
             ).model_dump(),
         )
 
-    # Mutate under the per-page lock — spec §13. The wrapper itself
-    # never raises (it returns False on missing methods); we surface
-    # that as a 400 rather than a 500.
+    # Mutate under the per-page lock — spec §13. The lock covers the
+    # full mutation window: resolve → mutate → generation bump → cache
+    # write.  Keeping the cache write inside the lock prevents a torn
+    # ``write_json_atomic`` race where two concurrent handlers both do
+    # ``os.replace`` on the same ``.tmp`` target for the same page.
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
         ok = rematch_page(page, gt_text)
@@ -693,30 +695,30 @@ def rematch_gt(
             )
         pstate.generation += 1
 
-    # Best-effort cached-envelope autosave — spec §12. Mirrors the
-    # spec-23-C/D word/line mutation pattern: log + swallow on failure
-    # so a disk-full doesn't turn a successful rematch into a 5xx.
-    try:
-        envelope = build_envelope(
-            page=page,
-            project=project,
-            page_index=page_index,
-            ocr_provenance=OCRProvenance(),
-            source_lane=USER_PAGE_SOURCE_LANE_CACHED,
-        )
-        resolver = LaneResolver(
-            data_root=settings.data_root,
-            cache_root=settings.cache_root,
-            project_id=project.project_id,
-        )
-        resolver.write_cached(page_index, envelope)
-    except Exception as exc:  # pragma: no cover - defensive
-        log.warning(
-            "rematch-gt: cached-envelope write failed project=%s page=%d: %s — continuing",
-            project.project_id,
-            page_index,
-            exc,
-        )
+        # Best-effort cached-envelope autosave — spec §12 + §13.
+        # Inside the lock so the cache write is serialised with the
+        # mutation (prevents torn writes from concurrent rematches).
+        try:
+            envelope = build_envelope(
+                page=page,
+                project=project,
+                page_index=page_index,
+                ocr_provenance=OCRProvenance(),
+                source_lane=USER_PAGE_SOURCE_LANE_CACHED,
+            )
+            resolver = LaneResolver(
+                data_root=settings.data_root,
+                cache_root=settings.cache_root,
+                project_id=project.project_id,
+            )
+            resolver.write_cached(page_index, envelope)
+        except Exception as exc:  # pragma: no cover - defensive
+            log.warning(
+                "rematch-gt: cached-envelope write failed project=%s page=%d: %s — continuing",
+                project.project_id,
+                page_index,
+                exc,
+            )
 
     payload = _page_payload(
         project_id=project_id,
