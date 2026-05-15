@@ -66,6 +66,7 @@ import { dialogStore, useDialogStore } from "../stores/dialog-store";
 import { selectionStore, type SelectionState } from "../stores/selection-store";
 
 import { PageActions } from "../components/PageActions";
+import { Drawer } from "../components/shell/Drawer";
 import { ToolbarActionGrid } from "../components/ToolbarActionGrid";
 import { Splitter } from "../components/Splitter";
 import { ImageTabsHeader } from "../components/ImageTabsHeader";
@@ -130,6 +131,19 @@ function getUiPrefsSnapshot() {
   return useUiPrefs.getState();
 }
 
+// ─── drawerOpen subscriber — uses useUiPrefs.subscribe directly ─────────────
+// IS-3: Subscribe to the store's native subscribe so Drawer's internal
+// setDrawerOpen (which calls useUiPrefs.setState) is reflected here.
+// The local `notifyUiPrefs` pattern only covers mutations made via the
+// local helper functions defined above; Drawer mutates the store directly.
+
+function subscribeDrawerOpen(cb: () => void): () => void {
+  return useUiPrefs.subscribe(cb);
+}
+function getDrawerOpenSnapshot(): boolean {
+  return useUiPrefs.getState().drawerOpen;
+}
+
 // ─── selection-store subscriber ─────────────────────────────────────────────
 
 function subscribeSelection(cb: () => void): () => void {
@@ -187,6 +201,12 @@ export default function ProjectPage() {
 
   // ── Store subscribers ──────────────────────────────────────────────────
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefsSnapshot, getUiPrefsSnapshot);
+  // IS-3: drawerOpen via store's native subscribe (catches Drawer's own setState).
+  const drawerOpen = useSyncExternalStore(
+    subscribeDrawerOpen,
+    getDrawerOpenSnapshot,
+    getDrawerOpenSnapshot,
+  );
   const selection = useSyncExternalStore(
     subscribeSelection,
     getSelectionSnapshot,
@@ -398,8 +418,9 @@ export default function ProjectPage() {
   // Rail slot — wired in Slice 10.
   const railSlot = <Rail />;
 
-  // Drawer slot — empty stub; Drawer component wired in Slice 11.
-  const drawerSlot = <div data-testid="drawer-placeholder" className="h-full" />;
+  // IS-3: Drawer wired with real Drawer component.
+  // lineMatches is already computed above; page is pagePayload.
+  const drawerSlot = <Drawer lineMatches={lines} page={pagePayload ?? undefined} />;
 
   const canvasSlot = (
     <div className="flex flex-col h-full min-h-0">
@@ -505,6 +526,7 @@ export default function ProjectPage() {
         drawer={drawerSlot}
         canvas={canvasSlot}
         right={rightSlot}
+        drawerCollapsed={!drawerOpen}
       />
 
       {/* IS-2: hidden PageActions for driver-contract testid preservation §2.5 */}

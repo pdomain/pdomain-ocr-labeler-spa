@@ -355,4 +355,19 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     const imagePaneEl = screen.getByTestId("image-pane");
     expect(imagePaneEl.contains(bannersEl)).toBe(true);
   });
+
+  it("IS-3: Drawer renders with data-testid='drawer' (wired into ProjectPage)", async () => {
+    renderProjectPage();
+    // Drawer is now wired with real lineMatches + page props.
+    // Default drawerOpen is true, so the drawer is visible.
+    expect(await screen.findByTestId("drawer")).toBeInTheDocument();
+  });
+
+  it("IS-3: StudioShell drawerCollapsed reflects drawerOpen from useUiPrefs", async () => {
+    renderProjectPage();
+    await screen.findByTestId("studio-shell");
+    // Default drawerOpen=true → drawerCollapsed=false → data-collapsed absent.
+    const drawerZone = screen.getByTestId("studio-shell-drawer");
+    expect(drawerZone.getAttribute("data-collapsed")).toBeNull();
+  });
 });
