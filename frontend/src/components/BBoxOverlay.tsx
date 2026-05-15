@@ -1,13 +1,23 @@
-// BBoxOverlay.tsx — Konva layer for bounding-box overlays.
-// Spec: docs/specs/2026-05-12-image-viewport-design.md §Layer colors
-// Issue #196
+// BBoxOverlay.tsx — Konva bounding-box overlay (spec-21-A3, #298).
 //
-// Legacy-exact RGBA color values from pd-ocr-labeler/pd_ocr_labeler/views/
-// projects/pages/image_tabs.py:280-285,500-535.
-// mix-blend-mode: multiply on Konva Layer so the underlying image shows through.
+// Spec: specs/21-konva-renderer.md §6 (overlay rendering), §12 (testids).
+// Issues: #196 (LAYER_COLORS RGBA constants), #298 (Konva-rect rewrite).
 //
-// LAYER_COLORS is exported for Vitest snapshot tests.
+// Renders one react-konva <Rect> per item inside whatever <Layer> the caller
+// has provided. Colours come from LAYER_COLORS[layer]; selected items use
+// SELECTION_STROKE_WIDTH (3 px). perfectDrawEnabled=false and listening=false
+// per spec §11 perf pinning (overlay rects never participate in hit-testing).
+//
+// A dev/test-only sidecar <div data-testid="bbox-overlay-${layer}"
+// data-layer data-item-count> is rendered alongside the fragment so the
+// driver-contract Playwright tests can read the per-layer item count
+// without poking into Konva nodes (spec §6, §12). Production bundles drop
+// the sidecar entirely via the `import.meta.env.MODE !== "production"` gate.
+//
+// Legacy-exact RGBA values from
+// pd-ocr-labeler/pd_ocr_labeler/views/projects/pages/image_tabs.py:280-285,500-535.
 
+import { Rect } from "react-konva";
 import type { BBox } from "../lib/coords";
 
 /** Layer name type. */
@@ -18,7 +28,7 @@ export interface LayerColorSpec {
   fill: string;
   stroke: string;
   /** Stroke width in display pixels (default 1). */
-  strokeWidth?: number;
+  strokeWidth: number;
 }
 
 /**
@@ -48,13 +58,13 @@ export const LAYER_COLORS: Record<LayerName, LayerColorSpec> = {
   },
 };
 
-/** Selection stroke multiplier: 3px at 0.70 alpha of border color. */
+/** Selection stroke width: 3 px (spec §6, §8). */
 export const SELECTION_STROKE_WIDTH = 3;
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface BBoxItem {
-  /** 0-based flat index within the layer's array. */
+  /** 0-based flat index within the layer's array (used as React key). */
   id: string;
   bbox: BBox;
   selected?: boolean;
@@ -70,32 +80,46 @@ interface BBoxOverlayProps {
 }
 
 /**
- * BBoxOverlay — renders bounding boxes for one layer.
+ * BBoxOverlay — renders one Konva <Rect> per bounding-box item.
  *
- * In the full Konva implementation this will be a `<Layer>` wrapping
- * `<Rect>` elements with `globalCompositeOperation="multiply"`.
- * For the M4 research spike (D-020) this stub renders a hidden div that
- * carries the correct data attributes so tests can verify the color constants
- * and component interface without a full Konva canvas.
- *
- * Replace the stub body with `<Layer globalCompositeOperation="multiply">…`
- * when Konva is wired up at M4.
+ * Must be mounted inside a parent <Layer>; the component itself returns a
+ * fragment of <Rect> nodes plus the dev/test sidecar div used by the driver
+ * contract.
  */
 export function BBoxOverlay({ layer, items, visible = true }: BBoxOverlayProps) {
-  const colors = LAYER_COLORS[layer];
-
-  // Stub: render nothing when hidden, data-div when visible (for tests/debug).
   if (!visible) return null;
+  const colors = LAYER_COLORS[layer];
+  // Vite injects `import.meta.env.MODE` at build time. The frontend tsconfig
+  // doesn't pull in vite/client typings (which would polute every file with
+  // an `env` global), so we read it through a local narrow cast.
+  const mode = (import.meta as unknown as { env?: { MODE?: string } }).env?.MODE;
+  const isDevOrTest = mode !== "production";
 
   return (
-    <div
-      data-testid={`bbox-overlay-${layer}`}
-      data-layer={layer}
-      data-fill={colors.fill}
-      data-stroke={colors.stroke}
-      data-item-count={items.length}
-      style={{ display: "none" }}
-      aria-hidden="true"
-    />
+    <>
+      {items.map((item) => (
+        <Rect
+          key={item.id}
+          x={item.bbox.x}
+          y={item.bbox.y}
+          width={item.bbox.width}
+          height={item.bbox.height}
+          fill={colors.fill}
+          stroke={colors.stroke}
+          strokeWidth={item.selected ? SELECTION_STROKE_WIDTH : colors.strokeWidth}
+          listening={false}
+          perfectDrawEnabled={false}
+        />
+      ))}
+      {isDevOrTest && (
+        <div
+          data-testid={`bbox-overlay-${layer}`}
+          data-layer={layer}
+          data-item-count={items.length}
+          style={{ position: "absolute", visibility: "hidden", pointerEvents: "none" }}
+          aria-hidden="true"
+        />
+      )}
+    </>
   );
 }
