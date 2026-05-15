@@ -20,6 +20,7 @@
 import { useSyncExternalStore } from "react";
 import { Accordion } from "../ui/accordion";
 import { BBoxSection } from "./sections/BBoxSection";
+import { bboxHint } from "./sections/bboxUtils";
 import { ReboxSection } from "./sections/ReboxSection";
 import { ErasePixelsSection } from "./sections/ErasePixelsSection";
 import { StructureSection } from "./sections/StructureSection";
@@ -187,7 +188,7 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
       >
         {/* 1 — Bounding Box */}
         <Accordion.Item value="bbox">
-          <Accordion.Trigger hint="coords · crop · nudge" keycap="B">
+          <Accordion.Trigger hint={bboxHint(word.bbox)} keycap="B">
             Bounding Box
           </Accordion.Trigger>
           <Accordion.Content>
@@ -195,9 +196,12 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
           </Accordion.Content>
         </Accordion.Item>
 
-        {/* 2 — Rebox (Slice 17) */}
+        {/* 2 — Rebox (Slice 17 / P3.b Konva mini-canvas) */}
         <Accordion.Item value="rebox" tag="accent">
-          <Accordion.Trigger hint="draw new box" keycap="R">
+          <Accordion.Trigger
+            hint={`${Math.round(word.bbox.width)} × ${Math.round(word.bbox.height)} px`}
+            keycap="R"
+          >
             Rebox
           </Accordion.Trigger>
           <Accordion.Content>
