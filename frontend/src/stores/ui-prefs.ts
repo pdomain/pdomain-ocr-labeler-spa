@@ -38,6 +38,8 @@ export function nextMatchFilter(current: MatchFilter): MatchFilter {
   return MATCH_FILTER_CYCLE[nextIdx];
 }
 
+export type DrawerTab = "worklist" | "hierarchy";
+
 export interface UiPrefsState {
   lineFilter: string | null;
   layerVisibility: LayerVisibility;
@@ -46,6 +48,10 @@ export interface UiPrefsState {
   selectionMode: "paragraph" | "line" | "word";
   /** Word-match list filter (spec 22 §8). Default: "unvalidated". */
   matchFilter: MatchFilter;
+  /** Whether the drawer panel is open. Spec: Slice 11. */
+  drawerOpen: boolean;
+  /** Active drawer tab. Spec: Slice 11. */
+  drawerTab: DrawerTab;
 }
 
 type SetStateArg<T> = Partial<T> | ((state: T) => Partial<T>);
@@ -104,4 +110,6 @@ export const useUiPrefs = createStore<UiPrefsState>({
   splitterRatio: 0.5,
   selectionMode: "paragraph",
   matchFilter: "unvalidated",
+  drawerOpen: true,
+  drawerTab: "worklist",
 });
