@@ -33,8 +33,7 @@ export function useRefineAvailable() {
   return useQuery<RefineAvailableResponse>({
     queryKey: ["refine-available"],
     queryFn: fetchRefineAvailable,
-    // Probe once per session; no need to poll — the server restart path is
-    // handled by the reconnect logic in useNotificationStream.
+    // Probe once per session; capability won't change without a server restart.
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
