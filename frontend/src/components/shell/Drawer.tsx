@@ -1,8 +1,8 @@
 // Drawer.tsx — 260px drawer panel with Worklist / Hierarchy tabs and collapse.
-// Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 11.
+// Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 11–12.
 //
 // - Header: tab strip "Worklist" | "Hierarchy" + collapse button.
-// - Body: mounts Worklist (Slice 11) or Hierarchy (Slice 12, placeholder here).
+// - Body: mounts Worklist (Slice 11) or Hierarchy (Slice 12).
 // - Collapse state persisted via useUiPrefs.drawerOpen.
 // - Active tab persisted via useUiPrefs.drawerTab.
 
@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { useUiPrefs, type DrawerTab } from "../../stores/ui-prefs";
 import { Worklist } from "../drawer/Worklist";
 import type { WorklistProps } from "../drawer/Worklist";
+import { Hierarchy } from "../drawer/Hierarchy";
+import type { HierarchyProps } from "../drawer/Hierarchy";
 
 // ─── Subscriber bridge for useUiPrefs (mirrors Splitter/FilterToggle pattern) ─
 
@@ -57,12 +59,12 @@ const TABS: TabConfig[] = [
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export interface DrawerProps extends WorklistProps {
+export interface DrawerProps extends WorklistProps, HierarchyProps {
   /** Expose a custom class on the outer element (optional). */
   className?: string;
 }
 
-export function Drawer({ lineMatches, className }: DrawerProps) {
+export function Drawer({ lineMatches, page, className }: DrawerProps) {
   const open = useSyncExternalStore(subscribeUiPrefs, getDrawerOpen, getDrawerOpen);
   const activeTab = useSyncExternalStore(subscribeUiPrefs, getDrawerTab, getDrawerTab);
 
@@ -118,13 +120,7 @@ export function Drawer({ lineMatches, className }: DrawerProps) {
             {activeTab === "worklist" ? (
               <Worklist lineMatches={lineMatches} />
             ) : (
-              // Hierarchy tab placeholder — filled in Slice 12.
-              <div
-                data-testid="drawer-hierarchy-placeholder"
-                className="p-4 text-ink-3 text-[11px]"
-              >
-                Coming soon
-              </div>
+              <Hierarchy page={page} />
             )}
           </div>
         </>

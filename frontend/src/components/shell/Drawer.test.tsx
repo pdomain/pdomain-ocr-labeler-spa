@@ -41,11 +41,11 @@ describe("Drawer (Slice 11)", () => {
     expect(screen.getByTestId("drawer-tab-hierarchy")).not.toHaveAttribute("data-active", "true");
   });
 
-  it("switching to Hierarchy tab shows placeholder", async () => {
+  it("switching to Hierarchy tab shows hierarchy component", async () => {
     const user = userEvent.setup();
     render(<Drawer />);
     await user.click(screen.getByTestId("drawer-tab-hierarchy"));
-    expect(screen.getByTestId("drawer-hierarchy-placeholder")).toBeInTheDocument();
+    expect(screen.getByTestId("hierarchy")).toBeInTheDocument();
   });
 
   it("switching to Hierarchy tab persists to useUiPrefs.drawerTab", async () => {
