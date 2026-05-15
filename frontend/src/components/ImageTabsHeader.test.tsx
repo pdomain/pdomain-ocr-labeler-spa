@@ -278,4 +278,54 @@ describe("ImageTabsHeader (#196)", () => {
     fireEvent.click(screen.getByTestId("selection-mode-paragraph"));
     expect(onSelectionModeChange).toHaveBeenCalledWith("paragraph");
   });
+
+  // P5.d (Gap 24): zoom buttons
+  it("P5.d: renders zoom-fit-button and zoom-100-button", () => {
+    render(
+      <ImageTabsHeader
+        layerVisibility={defaultVisibility}
+        selectionMode="paragraph"
+        eraseActive={false}
+        onLayerToggle={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onEraseToggle={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("zoom-fit-button")).toBeInTheDocument();
+    expect(screen.getByTestId("zoom-100-button")).toBeInTheDocument();
+  });
+
+  it("P5.d: onZoomFit fires when Fit button clicked", () => {
+    const onZoomFit = vi.fn();
+    render(
+      <ImageTabsHeader
+        layerVisibility={defaultVisibility}
+        selectionMode="paragraph"
+        eraseActive={false}
+        onLayerToggle={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onEraseToggle={vi.fn()}
+        onZoomFit={onZoomFit}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("zoom-fit-button"));
+    expect(onZoomFit).toHaveBeenCalledOnce();
+  });
+
+  it("P5.d: onZoom100 fires when 100% button clicked", () => {
+    const onZoom100 = vi.fn();
+    render(
+      <ImageTabsHeader
+        layerVisibility={defaultVisibility}
+        selectionMode="paragraph"
+        eraseActive={false}
+        onLayerToggle={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onEraseToggle={vi.fn()}
+        onZoom100={onZoom100}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("zoom-100-button"));
+    expect(onZoom100).toHaveBeenCalledOnce();
+  });
 });

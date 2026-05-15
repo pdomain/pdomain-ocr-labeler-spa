@@ -1,11 +1,13 @@
-// ImageTabsHeader.tsx — viewport header: layer checkboxes, selection-mode, erase.
+// ImageTabsHeader.tsx — viewport header: layer checkboxes, selection-mode, erase, zoom.
 // Spec: docs/specs/2026-05-12-image-viewport-design.md §ImageTabsHeader
 // Issue #196
+// P5.d (Gap 24): added Fit and 100% zoom buttons.
 //
 // data-testids (driver-contract invariants):
 //   layer-paragraphs-checkbox, layer-lines-checkbox, layer-words-checkbox
 //   selection-mode-paragraph, selection-mode-line, selection-mode-word
 //   erase-pixels-button
+//   zoom-fit-button, zoom-100-button (P5.d)
 
 export interface LayerVisibility {
   paragraph: boolean;
@@ -32,6 +34,10 @@ interface ImageTabsHeaderProps {
   onSelectionModeChange: (mode: SelectionMode) => void;
   /** Called when the Erase Pixels button is clicked (toggle). */
   onEraseToggle: () => void;
+  /** Called when the Fit zoom button is clicked (P5.d). */
+  onZoomFit?: () => void;
+  /** Called when the 100% zoom button is clicked (P5.d). */
+  onZoom100?: () => void;
 }
 
 /**
@@ -47,6 +53,8 @@ export function ImageTabsHeader({
   onLayerToggle,
   onSelectionModeChange,
   onEraseToggle,
+  onZoomFit,
+  onZoom100,
 }: ImageTabsHeaderProps) {
   return (
     <div
@@ -154,6 +162,28 @@ export function ImageTabsHeader({
       >
         Erase
       </button>
+
+      {/* Zoom buttons (P5.d, Gap 24) */}
+      <div className="ml-auto flex items-center gap-1">
+        <button
+          data-testid="zoom-fit-button"
+          type="button"
+          onClick={onZoomFit}
+          title="Fit page to pane"
+          className="px-2 py-0.5 text-xs rounded border border-border-2 bg-bg-raised text-ink-2 hover:border-accent hover:text-ink-1 transition-colors"
+        >
+          Fit
+        </button>
+        <button
+          data-testid="zoom-100-button"
+          type="button"
+          onClick={onZoom100}
+          title="100% zoom"
+          className="px-2 py-0.5 text-xs rounded border border-border-2 bg-bg-raised text-ink-2 hover:border-accent hover:text-ink-1 transition-colors"
+        >
+          100%
+        </button>
+      </div>
     </div>
   );
 }

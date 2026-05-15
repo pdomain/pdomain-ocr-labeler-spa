@@ -50,7 +50,7 @@ import { expandSelection } from "../lib/selection-expand";
 import { BBoxOverlay, type BBoxItem } from "./BBoxOverlay";
 import { PageImage } from "./PageImage";
 import { scheduleDragUpdate } from "../lib/rafSchedule";
-import { setDragRect, clearSelection } from "../stores/selection-store";
+import { setDragRect, clearSelection, selectionStore } from "../stores/selection-store";
 import {
   viewportStore,
   exitToSelectMode,
@@ -139,6 +139,14 @@ const MODE_CURSORS: Record<ViewportMode, string> = {
   erase: "not-allowed",
 };
 
+/** Human-readable label per mode for the indicator pill (P5.d). */
+const MODE_LABELS: Record<ViewportMode, string> = {
+  select: "VIEW",
+  rebox: "REFINE",
+  "add-word": "ADD",
+  erase: "ERASE",
+};
+
 /** Drag-rect border color per mode. */
 const MODE_RECT_COLORS: Record<ViewportMode, string> = {
   select: "#2563eb", // blue-600
@@ -198,6 +206,14 @@ export default function PageImageCanvas({
   useEffect(() => {
     const unsub = railStore.subscribe(() => setRailTarget(railStore.getState().target));
     return unsub;
+  }, []);
+
+  // Track selected word count for bulk-actions strip (P5.d).
+  const [selectedWordCount, setSelectedWordCount] = useState(
+    () => selectionStore.getState().selectedWords.length,
+  );
+  useEffect(() => {
+    return selectionStore.subscribe((s) => setSelectedWordCount(s.selectedWords.length));
   }, []);
 
   // Focus the wrapper on mount so keyboard hotkeys (Esc / Shift+…) work
@@ -471,6 +487,65 @@ export default function PageImageCanvas({
             backgroundColor: MODE_RECT_FILLS[mode] ?? "transparent",
           }}
         />
+      )}
+
+      {/* Mode-indicator pill (P5.d, Gap 24) — top-left overlay. */}
+      <div
+        data-testid="canvas-mode-pill"
+        className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold pointer-events-none select-none"
+        style={{
+          backgroundColor: `${MODE_RECT_COLORS[mode]}22`,
+          border: `1px solid ${MODE_RECT_COLORS[mode]}88`,
+          color: MODE_RECT_COLORS[mode],
+        }}
+        aria-label={`Canvas mode: ${MODE_LABELS[mode]}`}
+      >
+        <span
+          className="w-[6px] h-[6px] rounded-full flex-shrink-0"
+          style={{ backgroundColor: MODE_RECT_COLORS[mode] }}
+        />
+        {MODE_LABELS[mode]}
+      </div>
+
+      {/* Bulk-actions strip (P5.d, Gap 24) — shown when 2+ words selected. */}
+      {selectedWordCount >= 2 && (
+        <div
+          data-testid="canvas-bulk-actions"
+          className="absolute top-2 right-2 flex items-center gap-1 pointer-events-auto"
+          role="toolbar"
+          aria-label="Bulk word actions"
+        >
+          <button
+            type="button"
+            data-testid="canvas-bulk-validate"
+            className="text-[10px] px-2 py-0.5 rounded border border-status-exact/60 bg-bg-surface/90 text-status-exact hover:bg-status-exact/10 transition-colors"
+            onClick={() => {
+              /* bulk validate — wired when useWordMutations bulk API lands */
+            }}
+          >
+            Validate all
+          </button>
+          <button
+            type="button"
+            data-testid="canvas-bulk-skip"
+            className="text-[10px] px-2 py-0.5 rounded border border-status-fuzzy/60 bg-bg-surface/90 text-status-fuzzy hover:bg-status-fuzzy/10 transition-colors"
+            onClick={() => {
+              /* bulk skip */
+            }}
+          >
+            Skip all
+          </button>
+          <button
+            type="button"
+            data-testid="canvas-bulk-delete"
+            className="text-[10px] px-2 py-0.5 rounded border border-status-mismatch/60 bg-bg-surface/90 text-status-mismatch hover:bg-status-mismatch/10 transition-colors"
+            onClick={() => {
+              /* bulk delete */
+            }}
+          >
+            Delete
+          </button>
+        </div>
       )}
     </div>
   );
