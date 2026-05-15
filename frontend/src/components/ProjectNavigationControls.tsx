@@ -9,9 +9,9 @@
 //
 // Behavior:
 //   - Reads `projectId` + `pageNo` from the URL via `useParams`.
-//   - Reads `total_pages` from `useProject(projectId).data.project.image_paths.length`
-//     (project doesn't expose `total_pages` as a top-level field yet; spec 23 §2
-//     keeps `image_paths` as the source of truth for page count).
+//   - Reads `total_pages` from `useProject(projectId).data.image_paths.length`
+//     (`ProjectResponse` includes a `total_pages` field but `image_paths.length`
+//     is used intentionally for parity with the legacy labeler page-count logic).
 //   - Prev / Next call
 //     `navigate('/projects/${projectId}/pages/pageno/${newPageNo}')`, with
 //     boundary disable (Prev at page 1; Next at last page).

@@ -80,8 +80,8 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
   async function handleApply() {
     if (loading) return;
     setError(null);
-    setLoading(true);
     try {
+      setLoading(true);
       const resp = await fetch("/api/projects/source-root", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -96,19 +96,20 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
         } catch {
           if (text) msg = text;
         }
-        setError(msg);
         setLoading(false);
+        setError(msg);
         return;
       }
-      // Success — reset and close.
+      // Success — clear loading before onClose so state update lands while
+      // the component is still mounted (onClose unmounts the dialog).
+      setLoading(false);
       setCurrentPath("~");
       setInputPath("~");
       setError(null);
       onClose();
     } catch (e) {
-      setError(String(e));
-    } finally {
       setLoading(false);
+      setError(String(e));
     }
   }
 
