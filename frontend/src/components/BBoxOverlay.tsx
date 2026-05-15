@@ -20,6 +20,7 @@
 // stroke #1d4ed8). The legacy renders selection strokes at width 1; spec
 // §6/§8 bumps to 3 px via the `selected` branch on BBoxItem.
 
+import { memo } from "react";
 import { Rect } from "react-konva";
 import type { BBox } from "../lib/coords";
 
@@ -113,8 +114,14 @@ interface BBoxOverlayProps {
  * Must be mounted inside a parent <Layer>; the component itself returns a
  * fragment of <Rect> nodes plus the dev/test sidecar div used by the driver
  * contract.
+ *
+ * Wrapped in `React.memo` (spec §11 perf pinning) so parent re-renders that
+ * keep the same `items` reference skip the entire bbox map. Callers MUST
+ * provide a memoised `items` array (e.g. via `useMemo`) for the memo to
+ * actually catch — passing a freshly-built `[...]` literal each render
+ * defeats the shallow-equal default.
  */
-export function BBoxOverlay({ layer, items, visible = true }: BBoxOverlayProps) {
+function BBoxOverlayInner({ layer, items, visible = true }: BBoxOverlayProps) {
   if (!visible) return null;
   const colors = LAYER_COLORS[layer];
   // Vite injects `import.meta.env.MODE` at build time. The frontend tsconfig
@@ -151,3 +158,11 @@ export function BBoxOverlay({ layer, items, visible = true }: BBoxOverlayProps) 
     </>
   );
 }
+
+/**
+ * Memoised public export. React.memo's default shallow-equal compares
+ * each prop by reference — so a stable `items` array (parent's `useMemo`)
+ * skips the bbox map entirely on parent re-renders. Spec §11.
+ */
+export const BBoxOverlay = memo(BBoxOverlayInner);
+BBoxOverlay.displayName = "BBoxOverlay";

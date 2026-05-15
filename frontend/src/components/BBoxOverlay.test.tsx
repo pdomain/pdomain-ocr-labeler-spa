@@ -17,6 +17,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { render } from "@testing-library/react";
 
+// Counter incremented every time the react-konva Rect mock renders. The memo
+// test renders BBoxOverlay twice with the same `items` reference and asserts
+// the inner Rect count doesn't grow — i.e. React.memo skipped the second
+// invocation entirely (spec §11 perf pinning, spec-21-C2 #305).
+const rectRenderCount = vi.hoisted(() => ({ n: 0 }));
+
 // Mock react-konva BEFORE importing BBoxOverlay so the component pulls the
 // mocked Rect. The mock renders each <Rect> as a probe <div> carrying the
 // props we want to assert against, plus a <Stage>/<Layer> host so we can
@@ -50,20 +56,25 @@ vi.mock("react-konva", () => ({
     strokeWidth?: number;
     listening?: boolean;
     perfectDrawEnabled?: boolean;
-  }) => (
-    <div
-      data-testid="konva-rect"
-      data-x={x}
-      data-y={y}
-      data-width={width}
-      data-height={height}
-      data-fill={fill}
-      data-stroke={stroke}
-      data-stroke-width={strokeWidth}
-      data-listening={listening === undefined ? undefined : String(listening)}
-      data-perfect-draw={perfectDrawEnabled === undefined ? undefined : String(perfectDrawEnabled)}
-    />
-  ),
+  }) => {
+    rectRenderCount.n += 1;
+    return (
+      <div
+        data-testid="konva-rect"
+        data-x={x}
+        data-y={y}
+        data-width={width}
+        data-height={height}
+        data-fill={fill}
+        data-stroke={stroke}
+        data-stroke-width={strokeWidth}
+        data-listening={listening === undefined ? undefined : String(listening)}
+        data-perfect-draw={
+          perfectDrawEnabled === undefined ? undefined : String(perfectDrawEnabled)
+        }
+      />
+    );
+  },
 }));
 
 import { Layer, Stage } from "react-konva";
@@ -260,5 +271,62 @@ describe("BBoxOverlay sidecar div (#298, spec §12)", () => {
       </Stage>,
     );
     expect(getW("bbox-overlay-words").getAttribute("data-item-count")).toBe("3");
+  });
+});
+
+// ── React.memo wrap (spec-21-C2 #305, spec §11) ──────────────────────────────
+//
+// BBoxOverlay is wrapped in React.memo so a parent re-render that keeps the
+// same `items` reference skips the bbox map entirely. We assert this by
+// counting Rect-mock renders across a rerender() call.
+
+describe("BBoxOverlay memoisation (#305, spec §11)", () => {
+  it("skips re-render when items reference is stable", () => {
+    const items = mkItems(50);
+    rectRenderCount.n = 0;
+    const { rerender } = render(
+      <Stage>
+        <Layer>
+          <BBoxOverlay layer="words" items={items} />
+        </Layer>
+      </Stage>,
+    );
+    const initial = rectRenderCount.n;
+    expect(initial).toBe(50);
+
+    // Rerender with the SAME items reference + same props → memo must
+    // short-circuit; no new Rect renders should fire.
+    rerender(
+      <Stage>
+        <Layer>
+          <BBoxOverlay layer="words" items={items} />
+        </Layer>
+      </Stage>,
+    );
+    expect(rectRenderCount.n).toBe(initial);
+  });
+
+  it("re-renders when items reference changes (memo not over-aggressive)", () => {
+    const a = mkItems(10);
+    const b = mkItems(10);
+    rectRenderCount.n = 0;
+    const { rerender } = render(
+      <Stage>
+        <Layer>
+          <BBoxOverlay layer="words" items={a} />
+        </Layer>
+      </Stage>,
+    );
+    const initial = rectRenderCount.n;
+    expect(initial).toBe(10);
+
+    rerender(
+      <Stage>
+        <Layer>
+          <BBoxOverlay layer="words" items={b} />
+        </Layer>
+      </Stage>,
+    );
+    expect(rectRenderCount.n).toBe(initial + 10);
   });
 });

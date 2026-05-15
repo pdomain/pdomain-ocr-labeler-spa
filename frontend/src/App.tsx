@@ -13,10 +13,18 @@ import { BrowserRouter, Routes, Route, Navigate, useParams, useMatch } from "rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 
+import { Suspense, lazy } from "react";
 import HeaderBar from "./components/HeaderBar";
 import RootPage from "./pages/RootPage";
 import ProjectPage from "./pages/ProjectPage";
 import { ROUTES } from "./lib/routes";
+
+// Lazy-load the perf-bench page so the heavy react-konva module graph
+// (and its Node-canvas dependency in jsdom test environments) is only
+// pulled in when /__perf-test is actually visited. The static App.test.tsx
+// renders the root route, which would otherwise dynamic-import react-konva
+// via Konva's Node entry point and fail without a `canvas` install.
+const PerfTestPage = lazy(() => import("./pages/PerfTestPage"));
 import { useNotificationStream } from "./hooks/useNotificationStream";
 import { OCRConfigModal } from "./components/OCRConfigModal";
 import { ExportDialog } from "./components/ExportDialog";
@@ -117,6 +125,18 @@ function AppShell() {
           <Route path={ROUTES.PROJECT} element={<ProjectRootRedirect />} />
           <Route path={ROUTES.PROJECT_PAGE_NO} element={<ProjectPage />} />
           <Route path={ROUTES.PROJECT_PAGE_IDX} element={<ProjectPageIndexRedirect />} />
+          {/* Dev/test-only Konva viewport perf-bench page (#305, spec §11).
+              Lazy-loaded so the react-konva module graph stays out of the
+              root route's bundle (and out of jsdom App.test.tsx).
+              Production-mode renders the disabled stub from PerfTestPage. */}
+          <Route
+            path="/__perf-test"
+            element={
+              <Suspense fallback={<div data-testid="perf-test-loading" />}>
+                <PerfTestPage />
+              </Suspense>
+            }
+          />
           {/* Catch-all: redirect unknown routes to root */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

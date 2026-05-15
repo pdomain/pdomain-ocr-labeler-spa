@@ -324,6 +324,15 @@ describe("PageImageCanvas — Konva Stage scaffold (spec-21-A2, #297)", () => {
     }
   });
 
+  it("image layer has listening=false per spec §11 (perf pinning, #305)", () => {
+    // spec §11: "Only the `drag` layer listens." Image layer carries the
+    // page bitmap and never participates in hit-testing, so it must opt
+    // out of Konva's per-node hit graph.
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
+    const imageLayer = screen.getByTestId("konva-layer-image");
+    expect(imageLayer.getAttribute("data-listening")).toBe("false");
+  });
+
   it("renders PageImage inside the image layer at the encoded display dimensions", () => {
     // use-image returns no image → PageImage renders the grey fallback Rect.
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);

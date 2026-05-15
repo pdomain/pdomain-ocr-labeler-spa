@@ -403,7 +403,7 @@ export default function PageImageCanvas({
         onMouseUp={handleStageMouseUp}
         onMouseLeave={handleStageMouseLeave}
       >
-        <Layer name="image">
+        <Layer name="image" listening={false}>
           <PageImage url={imageUrl} width={dims.width} height={dims.height} />
         </Layer>
         <Layer name="overlay-paragraphs" listening={false} />
