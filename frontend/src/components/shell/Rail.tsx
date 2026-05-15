@@ -1,4 +1,4 @@
-// Rail.tsx — 40px vertical left rail: target (B/L/W) + mode (V/R/A/E) selectors.
+// Rail.tsx — 64px vertical left rail: target (B/L/W) + mode (V/R/A/E) selectors.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 10.
 //
 // Active target button: bg-bg-raised + 2px left accent stripe + layer-color glyph.
@@ -67,7 +67,7 @@ export function Rail() {
   return (
     <div
       data-testid="rail"
-      className="flex flex-col h-full w-10 bg-bg-surface border-r border-border-1"
+      className="flex flex-col h-full w-16 bg-bg-surface border-r border-border-1"
     >
       {/* Target group: B / L / W */}
       <div className="flex flex-col border-b border-border-1">

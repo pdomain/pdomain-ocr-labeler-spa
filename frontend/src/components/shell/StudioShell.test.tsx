@@ -6,7 +6,7 @@ import { render, screen } from "@testing-library/react";
 import { StudioShell } from "./StudioShell";
 
 describe("StudioShell — 5-zone grid (Slice 8)", () => {
-  function renderShell() {
+  function renderShell(rightWidth?: number) {
     return render(
       <StudioShell
         header={<div data-testid="slot-header">header</div>}
@@ -14,6 +14,7 @@ describe("StudioShell — 5-zone grid (Slice 8)", () => {
         drawer={<div data-testid="slot-drawer">drawer</div>}
         canvas={<div data-testid="slot-canvas">canvas</div>}
         right={<div data-testid="slot-right">right</div>}
+        rightWidth={rightWidth}
       />,
     );
   }
@@ -72,5 +73,31 @@ describe("StudioShell — 5-zone grid (Slice 8)", () => {
     const drawerZone = screen.getByTestId("studio-shell-drawer");
     // collapsed: has data-collapsed attribute
     expect(drawerZone).toHaveAttribute("data-collapsed", "true");
+  });
+
+  it("applies hi-fi grid dimensions: 56px header, 64px rail, 320px drawer default", () => {
+    renderShell();
+    const shell = screen.getByTestId("studio-shell");
+    const colTemplate = (shell as HTMLElement).style.gridTemplateColumns;
+    // Rail: 64px; drawer default: var(--drawer-w, 320px); right: var(--right-w, 520px)
+    expect(colTemplate).toContain("64px");
+    expect(colTemplate).toContain("320px");
+    const rowTemplate = (shell as HTMLElement).style.gridTemplateRows;
+    // Header row: 56px
+    expect(rowTemplate).toContain("56px");
+  });
+
+  it("accepts rightWidth prop and applies it as --right-w CSS variable", () => {
+    renderShell(640);
+    const shell = screen.getByTestId("studio-shell") as HTMLElement;
+    // The --right-w CSS variable should be set to 640px
+    expect(shell.style.getPropertyValue("--right-w")).toBe("640px");
+  });
+
+  it("uses default --right-w of 520px when rightWidth is not provided", () => {
+    renderShell();
+    const shell = screen.getByTestId("studio-shell") as HTMLElement;
+    // Default: column template includes var(--right-w, 520px)
+    expect(shell.style.gridTemplateColumns).toContain("520px");
   });
 });
