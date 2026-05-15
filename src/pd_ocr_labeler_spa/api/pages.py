@@ -195,6 +195,46 @@ def _check_project_and_page(
     return None
 
 
+def _write_cached_envelope_best_effort(
+    *,
+    page: Any,
+    project_state: ProjectState,
+    page_index: int,
+    settings: Settings,
+) -> None:
+    """Write the cached-lane envelope; log + swallow on failure.
+
+    Spec 23 §12: cached-lane write is best-effort. ``LaneResolver.write_cached``
+    already swallows ``OSError``; we still wrap broad ``Exception`` here
+    so a misconfigured envelope (e.g. a stub Page whose ``to_dict``
+    raises) cannot turn a successful in-memory mutation into a 500.
+    """
+    project = project_state.loaded_project
+    if project is None:
+        return
+    try:
+        envelope = build_envelope(
+            page=page,
+            project=project,
+            page_index=page_index,
+            ocr_provenance=OCRProvenance(),
+            source_lane=USER_PAGE_SOURCE_LANE_CACHED,
+        )
+        resolver = LaneResolver(
+            data_root=settings.data_root,
+            cache_root=settings.cache_root,
+            project_id=project.project_id,
+        )
+        resolver.write_cached(page_index, envelope)
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning(
+            "pages: cached-envelope write failed project=%s page=%d: %s — continuing",
+            project.project_id,
+            page_index,
+            exc,
+        )
+
+
 # ── Payload assembly helpers — spec-23-A (issue #306) ─────────────────
 
 
@@ -698,27 +738,12 @@ def rematch_gt(
         # Best-effort cached-envelope autosave — spec §12 + §13.
         # Inside the lock so the cache write is serialised with the
         # mutation (prevents torn writes from concurrent rematches).
-        try:
-            envelope = build_envelope(
-                page=page,
-                project=project,
-                page_index=page_index,
-                ocr_provenance=OCRProvenance(),
-                source_lane=USER_PAGE_SOURCE_LANE_CACHED,
-            )
-            resolver = LaneResolver(
-                data_root=settings.data_root,
-                cache_root=settings.cache_root,
-                project_id=project.project_id,
-            )
-            resolver.write_cached(page_index, envelope)
-        except Exception as exc:  # pragma: no cover - defensive
-            log.warning(
-                "rematch-gt: cached-envelope write failed project=%s page=%d: %s — continuing",
-                project.project_id,
-                page_index,
-                exc,
-            )
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
 
     payload = _page_payload(
         project_id=project_id,

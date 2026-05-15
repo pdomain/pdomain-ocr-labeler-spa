@@ -302,8 +302,6 @@ def test_write_cached_runs_inside_page_lock(
 
     lock_held_during_write: list[bool] = []
 
-    original_write_cached = None
-
     from pd_ocr_labeler_spa.core.persistence import lanes as lanes_mod
 
     original_write_cached = lanes_mod.LaneResolver.write_cached
