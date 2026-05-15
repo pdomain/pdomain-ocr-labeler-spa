@@ -134,6 +134,13 @@ class ProjectState:
         self._page_states: dict[int, PageState] = {}
         self._current_page_index: int = 0
         self._generation: int = 0
+        # Per-page locks for serializing concurrent mutations on the same
+        # page (spec 23 §13). Lazily created on first access via
+        # ``get_page_lock``; the dict itself is guarded by ``self._lock``.
+        # threading.Lock (not asyncio.Lock): route handlers are sync
+        # (threadpool workers), and threading.Lock is safe to take from
+        # both sync and async contexts via FastAPI's threadpool dispatch.
+        self._page_locks: dict[int, threading.Lock] = {}
 
     # ── read-only views ──────────────────────────────────────────────────
 
@@ -206,6 +213,7 @@ class ProjectState:
         with self._lock:
             self._loaded_project = project
             self._page_states = {}
+            self._page_locks = {}
             self._current_page_index = project.current_page_index
             self._generation += 1
 
@@ -221,8 +229,35 @@ class ProjectState:
         with self._lock:
             self._loaded_project = None
             self._page_states = {}
+            self._page_locks = {}
             self._current_page_index = 0
             self._generation += 1
+
+    def get_page_lock(self, page_index: int) -> threading.Lock:
+        """Return (creating if needed) the per-page mutation lock.
+
+        Spec 23 §13 calls for per-page locking so concurrent mutations
+        from the same SPA client (e.g. React 19 transitions) serialize
+        on a single page without blocking edits on other pages.
+
+        The spec text says ``asyncio.Lock``, but the route handlers in
+        this codebase are sync (threadpool workers via FastAPI), so we
+        use ``threading.Lock`` for symmetry with the rest of the project
+        carrier locking discipline.
+
+        Lazy: the lock is created on first access, not at
+        ``set_loaded_project`` time. Bounded by ``total_pages`` over the
+        project lifetime; cleared together with ``_page_states`` on
+        ``set_loaded_project`` / ``clear`` (a new project must not share
+        locks with the previous one — different page indices, different
+        consumers).
+        """
+        with self._lock:
+            lock = self._page_locks.get(page_index)
+            if lock is None:
+                lock = threading.Lock()
+                self._page_locks[page_index] = lock
+            return lock
 
     def get_page_state(self, page_index: int) -> PageState | None:
         """Return the ``PageState`` for ``page_index`` or ``None``.

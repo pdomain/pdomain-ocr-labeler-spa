@@ -106,14 +106,21 @@ def test_gt_update_rejects_long_s_u017f(loaded_client: TestClient) -> None:
 
 
 def test_gt_update_accepts_normal_text(loaded_client: TestClient) -> None:
-    """Normal ASCII GT text must be accepted (200 or 404 for page-not-found, but not 400)."""
+    """Normal ASCII GT text must NOT be rejected by the codepoint validator.
+
+    Acceptable outcomes after spec-23-C1 (#315):
+    - 200 — page state loaded, mutation applied.
+    - 404 — page/word index out of range.
+    - 400 ``page_not_loaded`` — PageState not yet seeded (no OCR/load run).
+    The key invariant the codepoint-validator test guards is: clean ASCII
+    must NOT trigger 400 ``validation_error``.
+    """
     resp = loaded_client.post(
         "/api/projects/book1/pages/0/words/0/0/gt",
         json={"text": "hello world"},
     )
-    # 200 = found + accepted; 404 = page/word not found — both are OK here
-    # The key invariant: NOT a 400 validation_error for clean text
-    assert resp.status_code != 400, resp.text
+    if resp.status_code == 400:
+        assert resp.json()["error"] != "validation_error", resp.text
 
 
 # ── A2: normalize_for_gt_matching persists in config.yaml ─────────────

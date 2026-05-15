@@ -89,15 +89,17 @@ def test_update_word_gt_returns_404_for_bad_page(loaded_client: TestClient) -> N
     assert resp.json()["error"] == "page_not_found"
 
 
-def test_update_word_gt_returns_200_for_valid_page(loaded_client: TestClient) -> None:
+def test_update_word_gt_returns_400_when_page_not_loaded(loaded_client: TestClient) -> None:
+    """Spec-23-C1: with no in-memory PageState, the handler can't resolve
+    the target word — returns 400 ``page_not_loaded`` (mirrors save_page
+    #308). Happy-path mutation covered by ``tests/unit/api/test_words_mutate_gt.py``.
+    """
     resp = loaded_client.post(
         "/api/projects/book1/pages/0/words/0/0/gt",
         json={"text": "hello"},
     )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["project_id"] == "book1"
-    assert body["page_index"] == 0
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "page_not_loaded"
 
 
 # ── apply-style ───────────────────────────────────────────────────────
@@ -121,15 +123,14 @@ def test_apply_style_returns_404_for_bad_page(loaded_client: TestClient) -> None
     assert resp.json()["error"] == "page_not_found"
 
 
-def test_apply_style_returns_200_for_valid_page(loaded_client: TestClient) -> None:
+def test_apply_style_returns_400_when_page_not_loaded(loaded_client: TestClient) -> None:
+    """Spec-23-C1: 400 ``page_not_loaded`` until PageState is seeded."""
     resp = loaded_client.post(
         "/api/projects/book1/pages/0/words/0/0/style",
         json={"style": "italic"},
     )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["project_id"] == "book1"
-    assert body["page_index"] == 0
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "page_not_loaded"
 
 
 # ── apply-component ───────────────────────────────────────────────────
@@ -153,14 +154,14 @@ def test_apply_component_returns_404_for_bad_page(loaded_client: TestClient) -> 
     assert resp.json()["error"] == "page_not_found"
 
 
-def test_apply_component_returns_200_for_valid_page(loaded_client: TestClient) -> None:
+def test_apply_component_returns_400_when_page_not_loaded(loaded_client: TestClient) -> None:
+    """Spec-23-C1: 400 ``page_not_loaded`` until PageState is seeded."""
     resp = loaded_client.post(
         "/api/projects/book1/pages/0/words/0/0/component",
         json={"component": "drop_cap", "enabled": True},
     )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["project_id"] == "book1"
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "page_not_loaded"
 
 
 # ── toggle-validated ──────────────────────────────────────────────────
@@ -184,14 +185,14 @@ def test_toggle_validated_returns_404_for_bad_page(loaded_client: TestClient) ->
     assert resp.json()["error"] == "page_not_found"
 
 
-def test_toggle_validated_returns_200_for_valid_page(loaded_client: TestClient) -> None:
+def test_toggle_validated_returns_400_when_page_not_loaded(loaded_client: TestClient) -> None:
+    """Spec-23-C1: 400 ``page_not_loaded`` until PageState is seeded."""
     resp = loaded_client.post(
         "/api/projects/book1/pages/0/words/0/0/validated",
         json={"validated": True},
     )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["project_id"] == "book1"
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "page_not_loaded"
 
 
 # ── validate-batch ────────────────────────────────────────────────────
@@ -215,14 +216,14 @@ def test_validate_batch_returns_404_for_bad_page(loaded_client: TestClient) -> N
     assert resp.json()["error"] == "page_not_found"
 
 
-def test_validate_batch_returns_200_for_valid_page(loaded_client: TestClient) -> None:
+def test_validate_batch_returns_400_when_page_not_loaded(loaded_client: TestClient) -> None:
+    """Spec-23-C1: 400 ``page_not_loaded`` until PageState is seeded."""
     resp = loaded_client.post(
         "/api/projects/book1/pages/0/words/validate-batch",
         json={"scope": "page", "validated": True},
     )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["project_id"] == "book1"
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "page_not_loaded"
 
 
 # ── add-word ──────────────────────────────────────────────────────────

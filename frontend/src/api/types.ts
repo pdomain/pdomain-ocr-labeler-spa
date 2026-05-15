@@ -640,6 +640,11 @@ export interface paths {
         /**
          * Update Word Ground Truth
          * @description ``POST .../words/{li}/{wi}/gt`` — update ground-truth text for a word.
+         *
+         *     Spec 23 §9 row 1: ``word.set_ground_truth_text(text)`` → property
+         *     setter ``word.ground_truth_text = text``. Holds the per-page lock
+         *     for the mutation + generation bump; releases before the cached
+         *     write so disk I/O doesn't serialize cross-page edits.
          */
         post: operations["update_word_ground_truth_api_projects__project_id__pages__page_index__words__line_index___word_index__gt_post"];
         delete?: never;
@@ -660,6 +665,9 @@ export interface paths {
         /**
          * Apply Style
          * @description ``POST .../words/{li}/{wi}/style`` — apply text style label to a word.
+         *
+         *     Spec 23 §9 row 2: ``word.apply_style(style_id, scope)`` →
+         *     ``word.apply_style_scope(style, scope)`` in pd-book-tools.
          */
         post: operations["apply_style_api_projects__project_id__pages__page_index__words__line_index___word_index__style_post"];
         delete?: never;
@@ -680,6 +688,11 @@ export interface paths {
         /**
          * Apply Component
          * @description ``POST .../words/{li}/{wi}/component`` — toggle a word component flag.
+         *
+         *     Spec 23 §9 row 3: ``word.set_component(component_id)`` →
+         *     ``word.apply_component(component, enabled=enabled)`` in pd-book-tools.
+         *     ``enabled=False`` removes the component (idempotent — pd-book-tools'
+         *     ``apply_component`` discards if not present).
          */
         post: operations["apply_component_api_projects__project_id__pages__page_index__words__line_index___word_index__component_post"];
         delete?: never;
@@ -700,6 +713,19 @@ export interface paths {
         /**
          * Toggle Validated
          * @description ``POST .../words/{li}/{wi}/validated`` — toggle the validated flag.
+         *
+         *     Spec 23 §9 row 4 calls for ``word.set_validated(bool)``. pd-book-tools
+         *     does not yet expose this method (tracking issue
+         *     ConcaveTrillion/pd-book-tools#52). Until that lands, we set
+         *     ``word.is_validated`` directly on the Python object: pd-book-tools'
+         *     ``Word`` is a regular class (not frozen), so attribute assignment
+         *     succeeds — but the flag is **lost** on envelope ``from_dict``
+         *     round-trip because ``Word.to_dict`` does not serialize it. This
+         *     matches the documented spec-23-C1 workaround.
+         *
+         *     Body shape:
+         *     - ``validated=None`` → toggle the current flag.
+         *     - ``validated=bool`` → set to that exact value.
          */
         post: operations["toggle_validated_api_projects__project_id__pages__page_index__words__line_index___word_index__validated_post"];
         delete?: never;
@@ -720,6 +746,20 @@ export interface paths {
         /**
          * Validate Batch
          * @description ``POST .../words/validate-batch`` — bulk validate/unvalidate a scope.
+         *
+         *     Spec 23 §9 row 5: iterate over the requested scope and apply
+         *     ``word.is_validated = body.validated`` to each. Scopes:
+         *
+         *     - ``page``: every word on the page.
+         *     - ``paragraph``: words in ``page.paragraphs[pi]`` for each ``pi`` in
+         *       ``paragraph_indices``.
+         *     - ``line``: words in ``page.lines[li]`` for each ``li`` in
+         *       ``line_indices`` (or the single ``body.line_index`` for backward
+         *       compatibility with the existing wire shape).
+         *     - ``word``: each ``(li, wi)`` tuple in ``word_indices``.
+         *
+         *     Single ``pstate.generation`` bump for the whole batch (one
+         *     user-observable mutation event); one cached-envelope write.
          */
         post: operations["validate_batch_api_projects__project_id__pages__page_index__words_validate_batch_post"];
         delete?: never;
