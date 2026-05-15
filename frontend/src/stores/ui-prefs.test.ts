@@ -1,5 +1,11 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { useUiPrefs, clampSplitterRatio, nextMatchFilter } from "./ui-prefs";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import {
+  useUiPrefs,
+  clampSplitterRatio,
+  nextMatchFilter,
+  resolveEffectiveTheme,
+  THEME_STORAGE_KEY,
+} from "./ui-prefs";
 
 describe("ui-prefs store", () => {
   beforeEach(() => {
@@ -203,6 +209,148 @@ describe("ui-prefs store", () => {
       expect(state.lineFilter).toBe("test_filter");
       expect(state.splitterRatio).toBe(0.6);
       expect(state.selectionMode).toBe("line");
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slice 24: theme toggle
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("ui-prefs: theme toggle (Slice 24)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    // Reset theme to system default before each test.
+    useUiPrefs.setState({ theme: "system" });
+    // Reset documentElement.dataset.theme.
+    delete document.documentElement.dataset.theme;
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    delete document.documentElement.dataset.theme;
+    vi.restoreAllMocks();
+  });
+
+  describe("resolveEffectiveTheme", () => {
+    it('resolves "dark" to "dark"', () => {
+      expect(resolveEffectiveTheme("dark")).toBe("dark");
+    });
+
+    it('resolves "light" to "light"', () => {
+      expect(resolveEffectiveTheme("light")).toBe("light");
+    });
+
+    it('resolves "system" to "dark" when prefers-color-scheme: dark', () => {
+      vi.spyOn(window, "matchMedia").mockReturnValue({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      } as unknown as MediaQueryList);
+      expect(resolveEffectiveTheme("system")).toBe("dark");
+    });
+
+    it('resolves "system" to "light" when prefers-color-scheme: light', () => {
+      vi.spyOn(window, "matchMedia").mockReturnValue({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      } as unknown as MediaQueryList);
+      expect(resolveEffectiveTheme("system")).toBe("light");
+    });
+  });
+
+  describe("setTheme updates documentElement.dataset.theme", () => {
+    it('setTheme("dark") sets data-theme="dark"', () => {
+      useUiPrefs.setTheme("dark");
+      expect(document.documentElement.dataset.theme).toBe("dark");
+    });
+
+    it('setTheme("light") sets data-theme="light"', () => {
+      useUiPrefs.setTheme("light");
+      expect(document.documentElement.dataset.theme).toBe("light");
+    });
+
+    it('setTheme("system") applies resolved theme (dark when no media match)', () => {
+      vi.spyOn(window, "matchMedia").mockReturnValue({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      } as unknown as MediaQueryList);
+      useUiPrefs.setTheme("system");
+      expect(document.documentElement.dataset.theme).toBe("dark");
+    });
+
+    it('setTheme("system") applies resolved theme (light when media matches)', () => {
+      vi.spyOn(window, "matchMedia").mockReturnValue({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      } as unknown as MediaQueryList);
+      useUiPrefs.setTheme("system");
+      expect(document.documentElement.dataset.theme).toBe("light");
+    });
+  });
+
+  describe("setTheme updates store state", () => {
+    it("setTheme updates the theme field", () => {
+      useUiPrefs.setTheme("light");
+      expect(useUiPrefs.getState().theme).toBe("light");
+    });
+
+    it("setTheme persists to localStorage", () => {
+      useUiPrefs.setTheme("dark");
+      expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
+    });
+
+    it("setTheme('system') persists 'system' to localStorage", () => {
+      useUiPrefs.setTheme("system");
+      expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("system");
+    });
+  });
+
+  describe("subscribe notifies on theme change", () => {
+    it("listeners are called when theme changes", () => {
+      const listener = vi.fn();
+      const unsub = useUiPrefs.subscribe(listener);
+      useUiPrefs.setTheme("dark");
+      expect(listener).toHaveBeenCalledTimes(1);
+      unsub();
+    });
+
+    it("unsubscribed listener is not called", () => {
+      const listener = vi.fn();
+      const unsub = useUiPrefs.subscribe(listener);
+      unsub();
+      useUiPrefs.setTheme("light");
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("System mode — media query listener", () => {
+    it("registers a prefers-color-scheme listener in system mode", () => {
+      const addEventListenerMock = vi.fn();
+      vi.spyOn(window, "matchMedia").mockReturnValue({
+        matches: false,
+        addEventListener: addEventListenerMock,
+        removeEventListener: vi.fn(),
+      } as unknown as MediaQueryList);
+
+      useUiPrefs.setTheme("system");
+      expect(addEventListenerMock).toHaveBeenCalledWith("change", expect.any(Function));
+    });
+
+    it("does not register a media query listener in dark mode", () => {
+      const addEventListenerMock = vi.fn();
+      vi.spyOn(window, "matchMedia").mockReturnValue({
+        matches: false,
+        addEventListener: addEventListenerMock,
+        removeEventListener: vi.fn(),
+      } as unknown as MediaQueryList);
+
+      useUiPrefs.setTheme("dark");
+      // matchMedia called for resolve but not for listener setup in non-system mode
+      expect(addEventListenerMock).not.toHaveBeenCalled();
     });
   });
 });

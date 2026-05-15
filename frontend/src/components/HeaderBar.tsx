@@ -15,6 +15,7 @@ import { ChevronDown } from "lucide-react";
 import ProjectLoadControls from "./ProjectLoadControls";
 import { useProject } from "../hooks/useProject";
 import { dialogStore } from "../stores/dialog-store";
+import { useThemePreference, useUiPrefs, type ThemePreference } from "../stores/ui-prefs";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -43,6 +44,51 @@ function useIsControlsDisabled(): boolean {
   return false;
 }
 
+// ─── ThemeChips ──────────────────────────────────────────────────────────────
+
+const THEME_CHIPS: { value: ThemePreference; label: string }[] = [
+  { value: "dark", label: "Dark" },
+  { value: "light", label: "Light" },
+  { value: "system", label: "System" },
+];
+
+const CHIP_ACTIVE: Record<ThemePreference, string> = {
+  dark: "bg-accent text-accent-ink border-accent",
+  light: "bg-accent text-accent-ink border-accent",
+  system: "bg-accent text-accent-ink border-accent",
+};
+
+const CHIP_INACTIVE = "bg-bg-sunk text-ink-2 border-border-2 hover:bg-bg-raised hover:text-ink-1";
+
+function ThemeChips() {
+  const theme = useThemePreference();
+  return (
+    <div
+      data-testid="theme-chips"
+      className="flex items-center gap-1"
+      role="radiogroup"
+      aria-label="Theme"
+    >
+      {THEME_CHIPS.map(({ value, label }) => {
+        const active = theme === value;
+        return (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            data-testid={`theme-chip-${value}`}
+            onClick={() => useUiPrefs.setTheme(value)}
+            className={`px-1.5 py-0.5 rounded border text-[10px] font-medium transition-colors ${active ? CHIP_ACTIVE[value] : CHIP_INACTIVE}`}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── UserMenu ────────────────────────────────────────────────────────────────
 
 function UserMenu() {
@@ -66,13 +112,14 @@ function UserMenu() {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="bg-bg-surface border-border-2 text-ink-1">
-        {/* Theme row — stubbed; wired by Slice 24 */}
+        {/* Theme row — Slice 24: 3-state selector */}
         <DropdownMenuItem
           data-testid="user-menu-theme-item"
-          className="text-body text-ink-1 focus:bg-bg-raised focus:text-ink-1"
+          className="text-body text-ink-1 focus:bg-bg-raised focus:text-ink-1 flex items-center justify-between gap-2"
           onSelect={(e) => e.preventDefault()}
         >
-          Theme (stub)
+          <span className="text-ink-2 text-[10px] uppercase tracking-wide shrink-0">Theme</span>
+          <ThemeChips />
         </DropdownMenuItem>
         <DropdownMenuSeparator className="bg-border-1" />
         <DropdownMenuItem
