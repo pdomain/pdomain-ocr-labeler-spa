@@ -929,6 +929,204 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/lines/{line_index}/copy-gt-to-ocr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Line Gt To Ocr
+         * @description ``POST .../lines/{li}/copy-gt-to-ocr`` — copy GT→OCR for every word.
+         *
+         *     Spec §9 row 12: ``line.copy_gt_to_ocr()`` → ``Block.copy_ground_truth_to_ocr()``.
+         *     pd-book-tools returns ``True`` if any word was mutated; we treat the
+         *     "no GT to copy" case (returns ``False``) as a soft success rather
+         *     than ``mutation_failed`` — clicking copy on an empty line should be
+         *     idempotent, not an error.
+         */
+        post: operations["copy_line_gt_to_ocr_api_projects__project_id__pages__page_index__lines__line_index__copy_gt_to_ocr_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/lines/{line_index}/copy-ocr-to-gt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Line Ocr To Gt
+         * @description ``POST .../lines/{li}/copy-ocr-to-gt`` — copy OCR→GT for every word.
+         *
+         *     Spec §9 row 13: ``line.copy_ocr_to_gt()`` → ``Block.copy_ocr_to_ground_truth()``.
+         *     Same soft-success semantics as ``copy-gt-to-ocr``.
+         */
+        post: operations["copy_line_ocr_to_gt_api_projects__project_id__pages__page_index__lines__line_index__copy_ocr_to_gt_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/lines/{line_index}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate Line
+         * @description ``POST .../lines/{li}/validate`` — set the line's validated flag.
+         *
+         *     Spec §9 row 14 calls for ``line.set_validated(bool)``; pd-book-tools'
+         *     ``Block`` does not expose such a method (tracking issue
+         *     ConcaveTrillion/pd-book-tools#52 — same workaround as Word). We
+         *     assign ``line.is_validated`` directly and propagate the flag to every
+         *     contained word so the validate-batch scope=line view stays
+         *     consistent. The flag is lost on ``Block.to_dict`` → ``from_dict``
+         *     round-trip (documented limitation).
+         */
+        post: operations["validate_line_api_projects__project_id__pages__page_index__lines__line_index__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/lines/{line_index}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete Line
+         * @description ``POST .../lines/{li}/delete`` — remove the line from the page.
+         *
+         *     Spec §9 row 15: ``page.delete_line(l)`` → ``Page.delete_lines([l])``
+         *     (pd-book-tools exposes only the batch variant).
+         */
+        post: operations["delete_line_api_projects__project_id__pages__page_index__lines__line_index__delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/lines/{line_index}/split-after-word": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Split Line After Word D1
+         * @description ``POST .../lines/{li}/split-after-word`` — split a line after a word boundary.
+         *
+         *     Spec §9 row 17: ``line.split_after_word(w)`` →
+         *     ``Page.split_line_after_word(li, wi)`` (lives on Page because it
+         *     reorganizes line ordering).
+         */
+        post: operations["split_line_after_word_d1_api_projects__project_id__pages__page_index__lines__line_index__split_after_word_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/lines/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge Lines
+         * @description ``POST .../lines/merge`` — merge selected lines into the first.
+         *
+         *     Spec §9 row 16: ``page.merge_lines(targets)`` →
+         *     ``Page.merge_lines(line_indices)`` (``pd_book_tools/ocr/page.py:1575``).
+         *     pd-book-tools requires at least two distinct indices.
+         */
+        post: operations["merge_lines_api_projects__project_id__pages__page_index__lines_merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/lines/split-by-words": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Split By Words
+         * @description ``POST .../lines/split-by-words`` — extract selected words into a new line.
+         *
+         *     Spec §9 row 18: ``page.split_line_by_words(targets)`` →
+         *     ``Page.split_line_with_selected_words(word_keys)``
+         *     (``pd_book_tools/ocr/page.py:2217``).
+         */
+        post: operations["split_by_words_api_projects__project_id__pages__page_index__lines_split_by_words_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/lines/refine-batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refine Lines Batch
+         * @description ``POST .../lines/refine-batch`` → 202 ``{job_id}``.
+         *
+         *     Spec §9 row 19 + §11: enqueue the existing refine job with
+         *     ``scope=line``. The refine handler is real (see ``api/refine.py:83``);
+         *     this route just adapts the line-batch request to the refine wire shape.
+         *     Returns 202 immediately; the SPA polls
+         *     ``GET /api/jobs/{id}/events`` (SSE) for the terminal ``complete`` event.
+         */
+        post: operations["refine_lines_batch_api_projects__project_id__pages__page_index__lines_refine_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/pages/{page_index}/lines/{line_index}/copy-gt": {
         parameters: {
             query?: never;
@@ -940,7 +1138,13 @@ export interface paths {
         put?: never;
         /**
          * Copy Line Gt
-         * @description ``POST .../lines/{li}/copy-gt`` — copy GT↔OCR text for a line.
+         * @description ``POST .../lines/{li}/copy-gt`` — dispatcher for {direction} body.
+         *
+         *     Kept for frontend compatibility (``hooks/useLineMutations.ts``); the
+         *     spec-named explicit routes ``copy-gt-to-ocr`` and ``copy-ocr-to-gt``
+         *     do the same work. When a project is loaded but the page state isn't
+         *     seeded, falls through to the stub response so the pre-D1 integration
+         *     tests (which never seed PageState) stay green.
          */
         post: operations["copy_line_gt_api_projects__project_id__pages__page_index__lines__line_index__copy_gt_post"];
         delete?: never;
@@ -960,7 +1164,10 @@ export interface paths {
         put?: never;
         /**
          * Delete Scope
-         * @description ``POST .../delete`` — delete a scope (paragraph/line/word set).
+         * @description ``POST .../delete`` — page-scope batch delete (paragraph/line/word).
+         *
+         *     Stays a stub. Spec-23-D1 covers per-line delete; the page-scope batch
+         *     (paragraph/word) is part of D2/D3.
          */
         post: operations["delete_scope_api_projects__project_id__pages__page_index__delete_post"];
         delete?: never;
@@ -980,7 +1187,10 @@ export interface paths {
         put?: never;
         /**
          * Merge Scope
-         * @description ``POST .../merge`` — merge a set of paragraphs or lines.
+         * @description ``POST .../merge`` — page-scope batch merge (paragraphs/lines).
+         *
+         *     Stays a stub. Spec-23-D1 covers the dedicated ``/lines/merge`` route
+         *     (real mutation); the multi-scope page-level batch is D2/D3.
          */
         post: operations["merge_scope_api_projects__project_id__pages__page_index__merge_post"];
         delete?: never;
@@ -1000,29 +1210,11 @@ export interface paths {
         put?: never;
         /**
          * Split Paragraph After Line
-         * @description ``POST .../paragraphs/{pi}/split-after-line`` — split paragraph at a line boundary.
+         * @description ``POST .../paragraphs/{pi}/split-after-line`` — paragraph mutation stub.
+         *
+         *     Stays a stub. Paragraph-scope mutations live in spec-23-D2.
          */
         post: operations["split_paragraph_after_line_api_projects__project_id__pages__page_index__paragraphs__paragraph_index__split_after_line_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{project_id}/pages/{page_index}/lines/{line_index}/split-after-word": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Split Line After Word
-         * @description ``POST .../lines/{li}/split-after-word`` — split line at a word boundary.
-         */
-        post: operations["split_line_after_word_api_projects__project_id__pages__page_index__lines__line_index__split_after_word_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1040,7 +1232,10 @@ export interface paths {
         put?: never;
         /**
          * Split Line With Selected Words
-         * @description ``POST .../lines/{li}/split-with-selected`` — extract selected words into a new line.
+         * @description ``POST .../lines/{li}/split-with-selected`` — legacy stub.
+         *
+         *     Frontend prefers the D1 ``/lines/split-by-words`` collective route.
+         *     Kept stub-shaped for integration-test parity.
          */
         post: operations["split_line_with_selected_words_api_projects__project_id__pages__page_index__lines__line_index__split_with_selected_post"];
         delete?: never;
@@ -1060,7 +1255,9 @@ export interface paths {
         put?: never;
         /**
          * Group Selected Words Into New Paragraph
-         * @description ``POST .../words/group-into-paragraph`` — group selected words into a new paragraph.
+         * @description ``POST .../words/group-into-paragraph`` — paragraph mutation stub.
+         *
+         *     Stays a stub. Paragraph-scope mutations live in spec-23-D2.
          */
         post: operations["group_selected_words_into_new_paragraph_api_projects__project_id__pages__page_index__words_group_into_paragraph_post"];
         delete?: never;
@@ -1393,7 +1590,7 @@ export interface components {
         };
         /**
          * CopyLineGtRequest
-         * @description Spec §2 line 337.
+         * @description Legacy ``/lines/{li}/copy-gt`` body — kept for frontend compat.
          */
         CopyLineGtRequest: {
             /**
@@ -1404,7 +1601,7 @@ export interface components {
         };
         /**
          * DeleteScopeRequest
-         * @description Spec §2 lines 340-344.
+         * @description Legacy ``/delete`` page-scope batch body.
          */
         DeleteScopeRequest: {
             /**
@@ -1431,6 +1628,11 @@ export interface components {
                 number
             ][];
         };
+        /**
+         * EmptyBody
+         * @description Empty JSON body — accepted by copy-gt-to-ocr / copy-ocr-to-gt / delete.
+         */
+        EmptyBody: Record<string, never>;
         /**
          * EncodedDims
          * @description Source + display dimensions with scale factor.
@@ -1567,10 +1769,7 @@ export interface components {
              */
             auto_rotate_available: boolean;
         };
-        /**
-         * GroupSelectedWordsIntoNewParagraphRequest
-         * @description Spec §2 lines 364-365.
-         */
+        /** GroupSelectedWordsIntoNewParagraphRequest */
         GroupSelectedWordsIntoNewParagraphRequest: {
             /** Word Indices */
             word_indices: [
@@ -1744,8 +1943,20 @@ export interface components {
          */
         MatchStatus: "exact" | "fuzzy" | "mismatch" | "unmatched_ocr" | "unmatched_gt";
         /**
+         * MergeLinesRequest
+         * @description ``POST .../lines/merge`` body — spec §9 row 16.
+         *
+         *     Calls ``Page.merge_lines(line_indices)``. pd-book-tools requires at
+         *     least two distinct indices; otherwise the route returns
+         *     400 ``mutation_failed``.
+         */
+        MergeLinesRequest: {
+            /** Line Indices */
+            line_indices: number[];
+        };
+        /**
          * MergeScopeRequest
-         * @description Spec §2 lines 346-349.
+         * @description Legacy ``/merge`` page-scope batch body.
          */
         MergeScopeRequest: {
             /**
@@ -1987,6 +2198,32 @@ export interface components {
          */
         ReboxWordRequest: {
             bbox: components["schemas"]["BBox"];
+        };
+        /**
+         * RefineBatchRequest
+         * @description ``POST .../lines/refine-batch`` body — spec §9 row 19 + §11.
+         *
+         *     Enqueues a refine job (``api/refine.py``) with ``scope=line``. The
+         *     refine handler is already real per spec §11; this endpoint is the
+         *     spec-named entry-point matching the line-mutation route family.
+         */
+        RefineBatchRequest: {
+            /**
+             * Line Indices
+             * @default []
+             */
+            line_indices: number[];
+            /**
+             * Mode
+             * @default refine
+             * @enum {string}
+             */
+            mode: "refine" | "expand_then_refine" | "expand_only";
+            /**
+             * Padding Px
+             * @default 2
+             */
+            padding_px: number;
         };
         /**
          * RefineJobResponse
@@ -2232,19 +2469,40 @@ export interface components {
             projects: components["schemas"]["ProjectKey"][];
         };
         /**
-         * SplitLineAfterWordRequest
-         * @description Spec §2 lines 355-357.
+         * SplitByWordsRequest
+         * @description ``POST .../lines/split-by-words`` body — spec §9 row 18.
+         *
+         *     ``word_keys`` is a list of ``(line_index, word_index)`` tuples; passed
+         *     through to ``Page.split_line_with_selected_words`` (pd-book-tools
+         *     name; spec calls it ``split_line_by_words``).
          */
-        SplitLineAfterWordRequest: {
-            /** Line Index */
-            line_index: number;
-            /** After Word Index */
-            after_word_index: number;
+        SplitByWordsRequest: {
+            /** Word Keys */
+            word_keys: [
+                number,
+                number
+            ][];
         };
         /**
-         * SplitLineWithSelectedWordsRequest
-         * @description Spec §2 lines 359-362.
+         * SplitLineAfterWordRequest
+         * @description ``POST .../lines/{li}/split-after-word`` body — spec §9 row 17.
+         *
+         *     Accepts either ``word_index`` (D1 spec-named field) or
+         *     ``after_word_index`` (legacy field — pinned in older frontend client
+         *     + integration tests). One of the two must be present. The schema
+         *     name is kept as ``SplitLineAfterWordRequest`` (legacy) per spec §14
+         *     "wire-shape stability"; ``SplitAfterWordRequest`` is exported as an
+         *     alias.
          */
+        SplitLineAfterWordRequest: {
+            /** Word Index */
+            word_index?: number | null;
+            /** After Word Index */
+            after_word_index?: number | null;
+            /** Line Index */
+            line_index?: number | null;
+        };
+        /** SplitLineWithSelectedWordsRequest */
         SplitLineWithSelectedWordsRequest: {
             /** Line Index */
             line_index: number;
@@ -2256,10 +2514,7 @@ export interface components {
              */
             mode: "extract_to_new" | "split_into_two";
         };
-        /**
-         * SplitParagraphAfterLineRequest
-         * @description Spec §2 lines 351-353.
-         */
+        /** SplitParagraphAfterLineRequest */
         SplitParagraphAfterLineRequest: {
             /** Paragraph Index */
             paragraph_index: number;
@@ -2327,6 +2582,17 @@ export interface components {
             line_indices: number[];
             /** Validated */
             validated: boolean;
+        };
+        /**
+         * ValidateLineRequest
+         * @description ``POST .../lines/{li}/validate`` body — spec §9 row 14.
+         *
+         *     ``validated=None`` toggles the current flag (mirrors the words.py
+         *     toggle contract); ``validated=bool`` sets to that exact value.
+         */
+        ValidateLineRequest: {
+            /** Validated */
+            validated?: boolean | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -3482,6 +3748,299 @@ export interface operations {
             };
         };
     };
+    copy_line_gt_to_ocr_api_projects__project_id__pages__page_index__lines__line_index__copy_gt_to_ocr_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                line_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EmptyBody"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copy_line_ocr_to_gt_api_projects__project_id__pages__page_index__lines__line_index__copy_ocr_to_gt_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                line_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EmptyBody"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_line_api_projects__project_id__pages__page_index__lines__line_index__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                line_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ValidateLineRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_line_api_projects__project_id__pages__page_index__lines__line_index__delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                line_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EmptyBody"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    split_line_after_word_d1_api_projects__project_id__pages__page_index__lines__line_index__split_after_word_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                line_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SplitLineAfterWordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merge_lines_api_projects__project_id__pages__page_index__lines_merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MergeLinesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    split_by_words_api_projects__project_id__pages__page_index__lines_split_by_words_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SplitByWordsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refine_lines_batch_api_projects__project_id__pages__page_index__lines_refine_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefineBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     copy_line_gt_api_projects__project_id__pages__page_index__lines__line_index__copy_gt_post: {
         parameters: {
             query?: never;
@@ -3605,43 +4164,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SplitParagraphAfterLineRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PagePayload"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    split_line_after_word_api_projects__project_id__pages__page_index__lines__line_index__split_after_word_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-                page_index: number;
-                line_index: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SplitLineAfterWordRequest"];
             };
         };
         responses: {
