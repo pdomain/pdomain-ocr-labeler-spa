@@ -291,6 +291,27 @@ Hotkey: `Enter` on `dialog-gt-input` commits.
 The driver agent specifically watches for `notification-negative-*` to
 detect operation failures.
 
+### 2.14 Rail — mode + target selectors
+
+The Rail is the 64px left column. It has three sections: MODE, TARGET, and LAYERS (legend only).
+
+| Testid | What it is |
+|---|---|
+| `rail` | Outer rail container |
+| `rail-mode-view` | View mode card (Eye icon + "View") |
+| `rail-mode-region` | Refine mode card (Square icon + "Refine") |
+| `rail-mode-annotate` | Annotate mode card (Plus icon + "Annotate") |
+| `rail-mode-erase` | Erase mode card (Eraser icon + "Erase") |
+| `rail-target-block` | Block target cell |
+| `rail-target-para` | Para target cell (between line and block) |
+| `rail-target-line` | Line target cell |
+| `rail-target-word` | Word target cell |
+| `rail-bulk-button` | Bulk actions footer button |
+| `rail-hotkeys-button` | Keyboard shortcuts footer button (opens hotkey overlay) |
+
+Active cells carry `data-active="true"`. Hotkeys: `1`/`2`/`3`/`4` → block/para/line/word;
+`V`/`R`/`A`/`E` → view/region/annotate/erase.
+
 ---
 
 ## 3. ARIA + accessible-name guarantees

@@ -1,8 +1,9 @@
 // useRailHotkeys.test.ts — Tests for Rail keyboard shortcuts.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 10.
+// Hi-fi gap P1.f (Gap 14): added para target on key "2".
 //
 // Shortcuts:
-//   1 → target=block, 2 → target=line, 3 → target=word
+//   1 → target=block, 2 → target=para, 3 → target=line, 4 → target=word
 //   v/V → mode=view, r/R → mode=region, a/A → mode=annotate, e/E → mode=erase
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -11,7 +12,7 @@ import { fireEvent } from "@testing-library/react";
 import { useRailHotkeys } from "./useRailHotkeys";
 import { railStore } from "../stores/rail-store";
 
-describe("useRailHotkeys (Slice 10)", () => {
+describe("useRailHotkeys (Slice 10 / P1.f)", () => {
   beforeEach(() => {
     railStore.reset();
     localStorage.clear();
@@ -31,16 +32,22 @@ describe("useRailHotkeys (Slice 10)", () => {
     expect(railStore.getState().target).toBe("block");
   });
 
-  it("'2' sets target to line", () => {
+  it("'2' sets target to para", () => {
     setup();
     pressKey("2");
+    expect(railStore.getState().target).toBe("para");
+  });
+
+  it("'3' sets target to line", () => {
+    setup();
+    pressKey("3");
     expect(railStore.getState().target).toBe("line");
   });
 
-  it("'3' sets target to word", () => {
+  it("'4' sets target to word", () => {
     setup();
     railStore.getState().setTarget("block"); // change first
-    pressKey("3");
+    pressKey("4");
     expect(railStore.getState().target).toBe("word");
   });
 

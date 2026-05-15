@@ -36,6 +36,8 @@ export function targetToLayerKey(target: RailTarget): "paragraphs" | "lines" | "
   switch (target) {
     case "block":
       return "paragraphs"; // block maps to paragraph layer (closest available)
+    case "para":
+      return "paragraphs"; // para maps to paragraph layer
     case "line":
       return "lines";
     case "word":

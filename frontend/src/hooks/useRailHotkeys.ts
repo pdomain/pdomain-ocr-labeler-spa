@@ -3,8 +3,9 @@
 //
 // Shortcuts (active when no input/textarea is focused):
 //   1 → target=block
-//   2 → target=line
-//   3 → target=word
+//   2 → target=para
+//   3 → target=line
+//   4 → target=word
 //   v/V → mode=view
 //   r/R → mode=region
 //   a/A → mode=annotate
@@ -15,8 +16,9 @@ import { railStore, type RailTarget, type RailMode } from "../stores/rail-store"
 
 const TARGET_KEYS: Record<string, RailTarget> = {
   "1": "block",
-  "2": "line",
-  "3": "word",
+  "2": "para",
+  "3": "line",
+  "4": "word",
 };
 
 const MODE_KEYS: Record<string, RailMode> = {

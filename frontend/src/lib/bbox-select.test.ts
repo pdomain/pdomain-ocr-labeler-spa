@@ -41,6 +41,10 @@ describe("targetToLayerKey", () => {
     expect(targetToLayerKey("block")).toBe("paragraphs");
   });
 
+  it("para → paragraphs", () => {
+    expect(targetToLayerKey("para")).toBe("paragraphs");
+  });
+
   it("line → lines", () => {
     expect(targetToLayerKey("line")).toBe("lines");
   });
@@ -101,6 +105,13 @@ describe("selectByTarget", () => {
   it("target=block picks paragraphs", () => {
     const drag = makeRect(0, 0, 15, 35);
     const result = selectByTarget("block", layers, drag);
+    expect(result.map((i) => i.id)).toContain("p0");
+    expect(result.map((i) => i.id)).not.toContain("l0");
+  });
+
+  it("target=para picks paragraphs (same as block)", () => {
+    const drag = makeRect(0, 0, 15, 35);
+    const result = selectByTarget("para", layers, drag);
     expect(result.map((i) => i.id)).toContain("p0");
     expect(result.map((i) => i.id)).not.toContain("l0");
   });

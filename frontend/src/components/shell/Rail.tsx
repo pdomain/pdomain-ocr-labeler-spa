@@ -1,73 +1,174 @@
-// Rail.tsx — 64px vertical left rail: target (B/L/W) + mode (V/R/A/E) selectors.
+// Rail.tsx — 64px vertical left rail: target (B/L/W/P) + mode (V/R/A/E) selectors.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 10.
+// Hi-fi gaps P1.d (Gaps 10,11,12), P1.e (Gaps 11,13,15), P1.f (Gap 14).
+//
+// Sections:
+//   MODE  — View / Refine / Annotate / Erase icon-card cells
+//   TARGET — Block / Para / Line / Word cells with layer-color swatches
+//   LAYERS — legend swatches for each layer (read-only, from useLayerColors)
+//   Footer  — Bulk + Hotkeys buttons
 //
 // Active target button: bg-bg-raised + 2px left accent stripe + layer-color glyph.
 // Active mode button: same active treatment.
-// Hotkeys: 1/2/3 (target), V/R/A/E (mode) — wired via useRailHotkeys.
+// Hotkeys: 1/2/3/4 (target), V/R/A/E (mode) — wired via useRailHotkeys.
 
 import { useSyncExternalStore } from "react";
-import { railStore, type RailTarget } from "../../stores/rail-store";
+import { Eye, Square, Plus, Eraser, Keyboard, LayoutList } from "lucide-react";
+import { railStore, type RailTarget, type RailMode } from "../../stores/rail-store";
 import { useRailHotkeys } from "../../hooks/useRailHotkeys";
+import { useLayerColors } from "../../hooks/useLayerColors";
+import { dialogStore } from "../../stores/dialog-store";
 import { cn } from "@/lib/utils";
 
-// ─── Static lookup maps (no Tailwind string interpolation) ───────────────────
+// ─── Mode icon + label lookup ─────────────────────────────────────────────────
+
+const MODE_ICONS: Record<RailMode, React.ReactNode> = {
+  view: <Eye size={16} aria-hidden="true" />,
+  region: <Square size={16} aria-hidden="true" />,
+  annotate: <Plus size={16} aria-hidden="true" />,
+  erase: <Eraser size={16} aria-hidden="true" />,
+};
+
+const MODE_LABELS: Record<RailMode, string> = {
+  view: "View",
+  region: "Refine",
+  annotate: "Annotate",
+  erase: "Erase",
+};
+
+// ─── Target layer color CSS class lookup ─────────────────────────────────────
 
 const targetLayerClass: Record<RailTarget, string> = {
   block: "text-layer-block",
+  para: "text-layer-para",
   line: "text-layer-line",
   word: "text-layer-word",
 };
 
-// Layer-color border for active target buttons (B/L/W).
 const targetLayerBorderClass: Record<RailTarget, string> = {
   block: "border border-layer-block",
+  para: "border border-layer-para",
   line: "border border-layer-line",
   word: "border border-layer-word",
 };
 
-// ─── Rail button primitives ───────────────────────────────────────────────────
+const TARGET_LABELS: Record<RailTarget, string> = {
+  block: "Block",
+  para: "Para",
+  line: "Line",
+  word: "Word",
+};
 
-interface RailBtnProps {
-  label: string;
-  testid: string;
-  active: boolean;
-  onClick: () => void;
-  colorClass?: string;
-  /** Optional border class applied in active state (e.g. layer-color border). */
-  activeBorderClass?: string;
-  title?: string;
+const TARGET_HOTKEYS: Record<RailTarget, string> = {
+  block: "1",
+  para: "2",
+  line: "3",
+  word: "4",
+};
+
+// ─── Section label ────────────────────────────────────────────────────────────
+
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div className="px-2 pt-2 pb-0.5 text-[9px] font-bold tracking-widest uppercase text-ink-3 select-none">
+      {label}
+    </div>
+  );
 }
 
-function RailBtn({
-  label,
-  testid,
-  active,
-  onClick,
-  colorClass,
-  activeBorderClass,
-  title,
-}: RailBtnProps) {
+// ─── Mode icon-card cell ──────────────────────────────────────────────────────
+
+interface ModeCardProps {
+  mode: RailMode;
+  active: boolean;
+  onClick: () => void;
+}
+
+function ModeCard({ mode, active, onClick }: ModeCardProps) {
+  const testid = `rail-mode-${mode === "region" ? "region" : mode}`;
   return (
     <button
       type="button"
       data-testid={testid}
       data-active={active ? "true" : undefined}
-      title={title}
+      title={`${MODE_LABELS[mode]} mode (${mode === "view" ? "V" : mode === "region" ? "R" : mode === "annotate" ? "A" : "E"})`}
+      aria-label={`${MODE_LABELS[mode]} mode`}
       onClick={onClick}
       className={cn(
-        "relative w-full h-10 flex items-center justify-center text-[11px] font-bold select-none transition-colors",
+        "relative w-full flex flex-col items-center justify-center gap-0.5 py-2 select-none transition-colors text-[10px] font-medium",
         active
           ? cn(
-              "bg-bg-raised",
+              "bg-bg-sunk text-ink-1",
               "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:bg-accent",
-              colorClass ?? "text-ink-1",
-              activeBorderClass,
             )
           : "text-ink-3 hover:text-ink-2 hover:bg-bg-raised/50",
       )}
     >
-      {label}
+      {MODE_ICONS[mode]}
+      <span className="leading-none">{MODE_LABELS[mode]}</span>
     </button>
+  );
+}
+
+// ─── Target swatch cell ───────────────────────────────────────────────────────
+
+interface TargetCellProps {
+  target: RailTarget;
+  active: boolean;
+  swatchColor: string;
+  onClick: () => void;
+}
+
+function TargetCell({ target, active, swatchColor, onClick }: TargetCellProps) {
+  const testid = `rail-target-${target}`;
+  return (
+    <button
+      type="button"
+      data-testid={testid}
+      data-active={active ? "true" : undefined}
+      title={`${TARGET_LABELS[target]} target (${TARGET_HOTKEYS[target]})`}
+      aria-label={`${TARGET_LABELS[target]} target`}
+      onClick={onClick}
+      className={cn(
+        "relative w-full flex items-center gap-2 px-2 py-1.5 select-none transition-colors text-[11px]",
+        active
+          ? cn(
+              "bg-bg-raised font-semibold",
+              "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:bg-accent",
+              targetLayerClass[target],
+              targetLayerBorderClass[target],
+            )
+          : "text-ink-3 hover:text-ink-2 hover:bg-bg-raised/50",
+      )}
+    >
+      {/* Color swatch */}
+      <span
+        className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+        style={{ background: swatchColor }}
+        aria-hidden="true"
+      />
+      <span>{TARGET_LABELS[target]}</span>
+    </button>
+  );
+}
+
+// ─── Layer legend swatch (read-only) ─────────────────────────────────────────
+
+interface LayerSwatchRowProps {
+  label: string;
+  color: string;
+}
+
+function LayerSwatchRow({ label, color }: LayerSwatchRowProps) {
+  return (
+    <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-ink-3 select-none">
+      <span
+        className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+        style={{ background: color }}
+        aria-hidden="true"
+      />
+      <span>{label}</span>
+    </div>
   );
 }
 
@@ -82,72 +183,83 @@ export function Rail() {
 
   const { target, mode, setTarget, setMode } = state;
 
+  // Layer colors for swatches.
+  const layerColors = useLayerColors();
+
   return (
     <div
       data-testid="rail"
-      className="flex flex-col h-full w-16 bg-bg-surface border-r border-border-1"
+      className="flex flex-col h-full w-16 bg-bg-surface border-r border-border-1 overflow-y-auto"
     >
-      {/* Target group: B / L / W */}
-      <div className="flex flex-col border-b border-border-1">
-        <RailBtn
-          label="B"
-          testid="rail-target-block"
+      {/* MODE section */}
+      <SectionLabel label="MODE" />
+      <div className="flex flex-col border-b border-border-1 pb-1">
+        {(["view", "region", "annotate", "erase"] as RailMode[]).map((m) => (
+          <ModeCard key={m} mode={m} active={mode === m} onClick={() => setMode(m)} />
+        ))}
+      </div>
+
+      {/* TARGET section */}
+      <SectionLabel label="TARGET" />
+      <div className="flex flex-col border-b border-border-1 pb-1">
+        <TargetCell
+          target="block"
           active={target === "block"}
-          colorClass={targetLayerClass.block}
-          activeBorderClass={targetLayerBorderClass.block}
-          title="Block target (1)"
+          swatchColor={layerColors.block}
           onClick={() => setTarget("block")}
         />
-        <RailBtn
-          label="L"
-          testid="rail-target-line"
+        <TargetCell
+          target="para"
+          active={target === "para"}
+          swatchColor={layerColors.para}
+          onClick={() => setTarget("para")}
+        />
+        <TargetCell
+          target="line"
           active={target === "line"}
-          colorClass={targetLayerClass.line}
-          activeBorderClass={targetLayerBorderClass.line}
-          title="Line target (2)"
+          swatchColor={layerColors.line}
           onClick={() => setTarget("line")}
         />
-        <RailBtn
-          label="W"
-          testid="rail-target-word"
+        <TargetCell
+          target="word"
           active={target === "word"}
-          colorClass={targetLayerClass.word}
-          activeBorderClass={targetLayerBorderClass.word}
-          title="Word target (3)"
+          swatchColor={layerColors.word}
           onClick={() => setTarget("word")}
         />
       </div>
 
-      {/* Mode group: V / R / A / E */}
-      <div className="flex flex-col mt-1">
-        <RailBtn
-          label="V"
-          testid="rail-mode-view"
-          active={mode === "view"}
-          title="View mode (V)"
-          onClick={() => setMode("view")}
-        />
-        <RailBtn
-          label="R"
-          testid="rail-mode-region"
-          active={mode === "region"}
-          title="Region mode (R)"
-          onClick={() => setMode("region")}
-        />
-        <RailBtn
-          label="A"
-          testid="rail-mode-annotate"
-          active={mode === "annotate"}
-          title="Annotate mode (A)"
-          onClick={() => setMode("annotate")}
-        />
-        <RailBtn
-          label="E"
-          testid="rail-mode-erase"
-          active={mode === "erase"}
-          title="Erase mode (E)"
-          onClick={() => setMode("erase")}
-        />
+      {/* LAYERS legend section */}
+      <SectionLabel label="LAYERS" />
+      <div className="flex flex-col border-b border-border-1 pb-1">
+        <LayerSwatchRow label="Block" color={layerColors.block} />
+        <LayerSwatchRow label="¶Para" color={layerColors.para} />
+        <LayerSwatchRow label="Line" color={layerColors.line} />
+        <LayerSwatchRow label="Word" color={layerColors.word} />
+      </div>
+
+      {/* Footer — Bulk + Hotkeys */}
+      <div className="mt-auto flex flex-col gap-1 p-1 border-t border-border-1">
+        <button
+          type="button"
+          data-testid="rail-bulk-button"
+          title="Bulk actions"
+          aria-label="Bulk actions"
+          className="w-full flex flex-col items-center justify-center gap-0.5 py-1.5 rounded text-[9px] font-medium text-ink-3 hover:text-ink-2 hover:bg-bg-raised/50 transition-colors select-none"
+        >
+          <LayoutList size={14} aria-hidden="true" />
+          <span>Bulk</span>
+        </button>
+        <button
+          type="button"
+          data-testid="rail-hotkeys-button"
+          title="Keyboard shortcuts (?)"
+          aria-label="Keyboard shortcuts"
+          onClick={() => dialogStore.open("hotkeyHelp")}
+          className="w-full flex flex-col items-center justify-center gap-0.5 py-1.5 rounded text-[9px] font-medium text-ink-3 hover:text-ink-2 hover:bg-bg-raised/50 transition-colors select-none"
+        >
+          <Keyboard size={14} aria-hidden="true" />
+          <span>Hotkeys</span>
+        </button>
       </div>
     </div>
   );

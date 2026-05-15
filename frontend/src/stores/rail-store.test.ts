@@ -1,5 +1,6 @@
 // rail-store.test.ts — Tests for the Rail target/mode store.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 10.
+// Hi-fi gap P1.f (Gap 14): para added as valid target.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { railStore, RAIL_TARGET_STORAGE_KEY } from "./rail-store";
@@ -23,9 +24,14 @@ describe("rail-store (Slice 10)", () => {
     expect(railStore.getState().mode).toBe("view");
   });
 
-  it("setTarget updates target", () => {
+  it("setTarget updates target to block", () => {
     railStore.getState().setTarget("block");
     expect(railStore.getState().target).toBe("block");
+  });
+
+  it("setTarget updates target to para", () => {
+    railStore.getState().setTarget("para");
+    expect(railStore.getState().target).toBe("para");
   });
 
   it("setMode updates mode", () => {
