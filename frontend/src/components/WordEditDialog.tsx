@@ -1,6 +1,11 @@
 // WordEditDialog.tsx — word-edit dialog (#209, #210, #211, #212)
 // Spec: docs/specs/2026-05-12-word-edit-dialog-design.md
 //
+// Slice 20 status: DEMOTED to Esc-fallback. Primary per-character editing
+// now lives in CharFixerSection (right-panel). The dialog remains
+// mountable via dialogStore.openWordEdit for legacy hotkey paths and the
+// driver-contract testids it owns (dialog-*).
+//
 // Shell (#209): header (Apply&Close + Close), 3-column preview row, prev/next nav.
 // Konva image (#210): interactive Stage at 1x/2x/5x/10x zoom, click marker,
 //   hover guide, staged erase rects.

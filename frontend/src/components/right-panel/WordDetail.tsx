@@ -8,7 +8,7 @@
 //   3. Erase Pixels  — wired (ErasePixelsSection, tag="mismatch") [Slice 17]
 //   4. Structure     — wired (StructureSection)              [Slice 18]
 //   5. Char Ranges   — wired (CharRangesSection)              [Slice 19]
-//   6. Char Fixer    — stub (Slice 20)
+//   6. Char Fixer    — wired (CharFixerSection)                [Slice 20]
 //
 // The component receives the selected word via the selection-store path and
 // the page payload from the parent (ProjectPage / RightPanel).
@@ -24,6 +24,7 @@ import { ReboxSection } from "./sections/ReboxSection";
 import { ErasePixelsSection } from "./sections/ErasePixelsSection";
 import { StructureSection } from "./sections/StructureSection";
 import { CharRangesSection } from "./sections/CharRangesSection";
+import { CharFixerSection } from "./sections/CharFixerSection";
 import { selectionStore } from "../../stores/selection-store";
 import type { components } from "../../api/types";
 
@@ -50,12 +51,6 @@ function resolveWord(
   if (!line) return null;
   const [, wi] = wordId;
   return line.word_matches[wi] ?? null;
-}
-
-// ─── StubContent ─────────────────────────────────────────────────────────
-
-function StubContent({ label }: { label: string }) {
-  return <p className="text-[11px] text-ink-3 py-1">{label} — coming in a future slice.</p>;
 }
 
 // ─── WordDetail ───────────────────────────────────────────────────────────
@@ -156,7 +151,7 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
         <Accordion.Item value="char-fixer">
           <Accordion.Trigger>Char Fixer</Accordion.Trigger>
           <Accordion.Content>
-            <StubContent label="Char Fixer" />
+            <CharFixerSection word={word} projectId={projectId} pageIndex={pageIndex} />
           </Accordion.Content>
         </Accordion.Item>
       </Accordion>
