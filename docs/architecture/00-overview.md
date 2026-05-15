@@ -306,7 +306,14 @@ session. If a milestone is too big, split it.
 | Driver-agent compat | `13-driver-contract.md` |
 | Tests | `14-testing.md` |
 | Build / install | `15-deployment-dev.md` |
-| Roadmap | `16-milestones.md` |
+| Roadmap | `../../specs/16-milestones.md` |
+| ADR log | `../../specs/17-decisions.md` |
+| Text normalization | `18-text-normalization.md` |
+| Auto-rotation (M9.1/M9.2) | `19-auto-rotation.md` |
+| Glyph annotations (M11) | `../../specs/20-glyph-annotations.md` |
+| Konva renderer impl | `../../specs/21-konva-renderer.md` |
+| Page surface wire-up | `../../specs/22-page-surface-wireup.md` |
+| Page payload backend impl | `../../specs/23-page-payload-backend.md` |
 
 If a question isn't answered by the linked spec, **stop and add it to
 [`OPEN_QUESTIONS.md`](../../OPEN_QUESTIONS.md)** rather than guessing.

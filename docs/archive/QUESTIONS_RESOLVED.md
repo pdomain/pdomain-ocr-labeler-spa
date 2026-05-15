@@ -13,6 +13,29 @@ Active (unanswered) questions live in [`../OPEN_QUESTIONS.md`](../OPEN_QUESTIONS
 
 ---
 
+## Q-A5 — Does the legacy labeler tolerate a v2.2 `UserPageEnvelope` (with `glyph_annotations`)?
+
+**Resolution.** 2026-05-11 — Option **(A)**: SPA writes v2.2 freely. The legacy
+labeler uses hand-rolled `from_dict` (pure `data.get` — no Pydantic, no strict
+validation). Extra/unknown fields are silently ignored. A v2.2 envelope is
+loaded without error; the new fields are simply never accessed. **No
+compatibility shim needed** for the read path. The write path would strip new
+fields (legacy `to_dict` only emits the five fields it knows), which is
+acceptable during the transition window. GitHub:
+ConcaveTrillion/pd-ocr-labeler-spa#56 (closed).
+
+---
+
+## Q-A6 — Predictions-overlay ghost color on `<PageImageCanvas>`
+
+**Resolution.** 2026-05-11 — Translucent blue (`#3B82F6` / Tailwind `blue-500`)
+at 40% opacity, exposed as CSS custom property `--predictions-ghost-color` on
+`:root` so operators can theme it without a code change. Spec updated:
+`specs/20-glyph-annotations.md` §5.6. GitHub:
+ConcaveTrillion/pd-ocr-labeler-spa#57 (closed).
+
+---
+
 ## Q-A11 — 500 traceback in client `details`: keep verbatim pgdp-prep parity, or redact?
 
 **Resolution.** 2026-05-07 — option **(B)**. Add
@@ -211,6 +234,8 @@ Decisions live in [`../specs/17-decisions.md`](../specs/17-decisions.md).
 | Q-A11 | 500 traceback `details` redaction | (B) `Settings.debug_unhandled_traceback: bool = True` default; `False` redacts client `details` while `logger.exception` keeps full server log + X-Request-ID correlation (resolved 2026-05-07; impl iter 53) | [D-040](../specs/17-decisions.md) |
 | Q-A12 | session_state.json extras tolerance | (A) with WARNING-level drift signal — `extra="ignore"` + `logger.warning("session_state_extras_dropped …")` so library/SPA-legacy drift in a release that shouldn't have had it surfaces as a grep-able log signal (resolved 2026-05-07; impl commit `c10e914`) | [D-041](../specs/17-decisions.md) |
 | Q-A14 | M4 renderer Konva spike requirement | (B) commit to Konva without spike; `WordImageCanvas` proves the toolchain works; D-020 superseded; spec 21 is implementation spec (resolved 2026-05-14) | [D-043](../specs/17-decisions.md) |
+| Q-A5 | Legacy `UserPageEnvelope` v2.2 tolerance | (A) SPA writes v2.2 freely — legacy `from_dict` silently ignores extras (resolved 2026-05-11) | gh#56 |
+| Q-A6 | Predictions-overlay ghost color | Tailwind `blue-500` at 40% opacity, exposed as `--predictions-ghost-color` CSS var (resolved 2026-05-11) | gh#57 + spec 20 §5.6 |
 
 ### Delegations to peer-repo agents (2026-05-06)
 

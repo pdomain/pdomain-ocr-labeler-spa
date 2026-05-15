@@ -47,15 +47,26 @@ output for debugging.
 
 ## Current milestone
 
-M0–M10, M9.1, M9.2 are all ✅ done. See `docs/ROADMAP.md` for full per-milestone detail.
+M0–M10, M9.1, M9.2, M9.5, and hi-fi follow-ons FO-1–FO-9 are all ✅
+done. See `docs/ROADMAP.md` for full per-milestone detail and
+`docs/PARITY_STATUS.md` for the current shipped-vs-wired snapshot.
+
+**Path to usable** — see `docs/plan-to-usable.md` for the gap analysis
+between today's tree and "CT opens the SPA, loads a real scanned-book
+project, edits OCR, saves, replacing the legacy NiceGUI labeler
+end-to-end."
 
 **Open work:**
 
-- Hi-fi follow-ons (FO-1–FO-9): tracked in `docs/hifi-followons.md`; active items have GH issues
-- M9.5 keyboard audit (#286, `status:backlog`): full keyboard-only editing pass
-- M11 glyph annotations (#267–#270, `status:blocked`): needs design decision before implementation
+- M9.5 keyboard audit (#286, `status:backlog`): dedicated keyboard-only
+  end-to-end session walk; hotkeys themselves all shipped (#235–#238).
+- M11 glyph annotations (#267–#270, `status:blocked`): needs Q-A7
+  resolution before implementation.
+- Cut-over gaps (no issue yet): see `docs/plan-to-usable.md` — auto-OCR
+  on first GET, page-image route registration, page-nav session
+  writeback, source-folder picker UI.
 
-See `docs/ROADMAP.md` for per-slice details.
+See `docs/ROADMAP.md` for per-slice history.
 
 ## Specs
 

@@ -1,6 +1,7 @@
 # Parity status — pd-ocr-labeler-spa vs pd-ocr-labeler
 
-**Snapshot.** 2026-05-15 (updated after iter-15 / spec 21+22+23 sweep).
+**Snapshot.** 2026-05-15 (post-M9.5 hygiene + path-to-usable gap analysis).
+Earlier revision: 2026-05-15 (post-spec-21+22+23 sweep).
 **Previous version.** 2026-05-14 (rewritten after parity audit;
 [`PARITY_GAPS_2026_05_14.md`](PARITY_GAPS_2026_05_14.md) explains that rewrite).
 **Audience.** CT, deciding next priorities.
@@ -37,15 +38,18 @@ payload; rematch-gt and selection are wired. Frontend:
 `BusyOverlay`, `InlineBanners`, `Splitter`, `ProjectNavigationControls`,
 `FilterToggle`, and `PlaintextEditor`. Dialogs (`OCRConfigModal`,
 `ExportDialog`, `HotkeyHelpModal`, `ConfirmDialog`) are mounted in
-`App.tsx` and triggered via `useDialogStore`. **Remaining gaps** are
-at the integration boundary: `reload_ocr` requires
-`page_loader` injected into `runner.context` at startup (currently
-NOT wired — returns 503 `page_loader_not_wired` in production);
-`ExportDialog` has no launcher button visible to users (dialog exists,
-trigger in `useDialogStore` exists, but no button calls
-`dialogStore.open("export")`); the image-cache HTTP route works but
-nothing points the page image URL at a real file yet; source-folder
-picker UI is stub-only.
+`App.tsx` and triggered via `useDialogStore`. **Remaining gaps**
+(detailed in [`plan-to-usable.md`](plan-to-usable.md)) are at the
+integration boundary: `GET /pages/{idx}` does NOT call
+`ensure_page_model`, so a fresh project shows empty word panes until
+the user manually clicks Reload OCR per page; the page-image HTTP
+route `/api/projects/{id}/pages/{idx}/image` that `_build_image_url`
+points at is never registered (every page image 404s); the
+`POST /pages/{idx}/load` route 503s in production because the loader
+fallback that the `reload_ocr` job handler uses was never replicated
+onto the route layer; `last_page_index` is never written-back on page
+navigation (session-state writer only fires on initial load); the
+source-folder picker UI is stub-only.
 
 ---
 
@@ -132,7 +136,7 @@ the actual running app.
 | `WordImageCanvas` (Konva, in dialog) | ✅ | yes | real Konva; opens when `WordEditDialog` is triggered |
 | `WordActionRows`, `WordRefineNudgeRows` | ✅ | yes | part of `WordEditDialog` |
 | `OCRConfigModal` | ✅ | yes | mounted in `App.tsx` (#309); header tune-icon triggers via `useDialogStore` |
-| `ExportDialog` | 🟩 | no | mounted in `App.tsx` (#309); **no trigger button yet** — no button calls `dialogStore.open("export")` |
+| `ExportDialog` | ✅ | yes | mounted in `App.tsx` (#309); triggered from `HeaderBar.tsx:64` and `ProjectPage.tsx:324` via `dialogStore.open("export")` |
 | `HotkeyHelpModal` | ✅ | yes | mounted in `App.tsx`; `?` key triggers it |
 | `ConfirmDialog` | ✅ | yes | mounted in `ProjectPage`; `useConfirm()` drives it |
 | `BusyOverlay` | ✅ | yes | mounted in `ProjectPage` (#314) |
@@ -151,23 +155,68 @@ on the critical path.
 **Remaining integration gaps** (no user decision needed, but work is
 outstanding):
 
-1. **`page_loader` not injected at startup.** `bootstrap.py` does not
-   wire a `LocalDoctrPageLoader` instance into `runner.context["page_loader"]`.
-   The `reload_ocr` job handler exists and is correct but returns 503
-   `page_loader_not_wired` in production. Fix: instantiate
-   `LocalDoctrPageLoader` (with `PredictorCache` + default resolver)
-   in `bootstrap.py` after the runner context dict is populated.
+1. **No auto-OCR on first `GET /pages/{idx}`.** `_page_payload`
+   (`api/pages.py:312`) reads `pstate.page_record` directly — it does
+   NOT call `ensure_page_model`. A freshly-loaded project with no
+   labeled / cached envelopes returns `page_record=None` /
+   `line_matches=[]`. The user sees only the image and an empty
+   word-matches pane. Fix: have `_page_payload` (or the `GET /pages`
+   route) call `ensure_page_model` with the on-demand
+   `LocalDoctrPageLoader` built from
+   `runner.context["predictor_cache"]` and
+   `runner.context["ocr_config_carrier"]` (the same construction the
+   `reload_ocr` handler already does at
+   `core/jobs/handlers/reload_ocr.py:136-155`).
 
-2. **`ExportDialog` has no trigger.** The dialog exists and is mounted,
-   but no UI element calls `dialogStore.open("export")`. Fix: add an
-   Export button to `PageActions` or `HeaderBar`.
+2. **Page image route `/api/projects/{id}/pages/{idx}/image` is
+   never registered.** `_build_image_url` (`api/pages.py:259-276`)
+   emits URLs of that shape, but no route in `api/pages.py` or any
+   sibling router serves them. Only `/image-cache/{key:path}` exists
+   (`api/static_mounts.py:80`). Without a real route, every page-image
+   `<img>` in the SPA gets a 404. Fix: either (a) register a real
+   `GET /api/projects/{id}/pages/{idx}/image` that PIL-decodes the
+   on-disk image at the requested width (via
+   `core/persistence/image_cache.py`), or (b) change `_build_image_url`
+   to emit a content-addressed `/image-cache/page-images/...` URL after
+   `ensure_image_cached` populates the cache.
 
-3. **Image-cache file serving.** `_build_image_url` generates URLs;
-   the image-cache HTTP route exists. The missing link is that the
-   image file is not guaranteed to be present in the cache directory
-   before first `GET /pages/{idx}` — the `ensure_page_model` path
-   needs to copy/symlink the page image into the image cache so the
-   URL is actually resolvable.
+3. **`POST /api/projects/{id}/pages/{idx}/load` returns 503 in prod.**
+   The route (`api/pages.py:542-580`) reads
+   `runner.context["page_loader"]` and 503s when absent. Bootstrap
+   does NOT set this key — only the production-fallback keys
+   `predictor_cache` / `ocr_config_carrier` / `settings` are wired
+   (`bootstrap.py:362-364`). The `reload_ocr` job handler builds a
+   loader on-demand from those keys, but the `load` route was never
+   updated to the same pattern. Fix: refactor the `load` route to
+   share `_get_page_loader` (the same helper the `reload_ocr` handler
+   uses), or replicate the on-demand build inline.
+
+4. **`page_loader` injected for tests only.** Same blocker frame as
+   #1 / #3 viewed from bootstrap. Tests inject a fake `page_loader`
+   into `runner.context`; production code never sets it. The handler
+   has the on-demand fallback; the route layer does not. Either move
+   `_get_page_loader` to a shared helper used by both, or wire a real
+   loader into `runner.context["page_loader"]` at bootstrap.
+
+5. **`current_page_index` is not updated on page navigation.** The
+   session-state writer only fires on initial `POST /api/projects/load`
+   (`api/projects.py:491`). The user navigates via React Router URL
+   changes (no server roundtrip), so `session_state.json` keeps
+   `last_page_index=0`. On next launch the user resumes at page 1, not
+   where they left off. Fix: add a small route (e.g.
+   `POST /api/projects/{id}/current-page-index`) that the frontend
+   pings on page change to call `state.set_current_page_index(...)` +
+   `save_session_state(...)`.
+
+6. **Source-folder picker UI is stub-only.** `POST /api/projects/source-root`
+   exists and persists `config.yaml`, but the SPA has no dialog
+   surfacing the picker. Spec 22 §10 covers the picker.
+
+7. **`WeightsResolver` resolves to `None`** (risk register §1). Custom
+   HF weights / local fine-tuned models can be picked in `OCRConfigModal`
+   but the predictor cache resolver returns `None` → stock DocTR is
+   always used. Mitigation: stock is usable today; the picker UI is a
+   no-op for non-stock options. Tracked separately under M3 follow-on.
 
 ---
 
@@ -185,22 +234,27 @@ See [`docs/archive/BUGS_RESOLVED.md`](archive/BUGS_RESOLVED.md).
 
 ## 7. Recommendation: next priorities
 
-(As of 2026-05-15 — specs 21/22/23 are all landed.)
+See [`plan-to-usable.md`](plan-to-usable.md) for the full structured
+gap analysis. Headline order:
 
-1. **Wire `page_loader` in `bootstrap.py`.** One-slice fix; unblocks
-   `reload_ocr` in production. This is the highest-value remaining gap
-   since without it the user can never trigger fresh OCR.
-2. **Add Export trigger button.** One-liner in `PageActions` or
-   `HeaderBar` calling `dialogStore.open("export")`. Unblocks the
-   entire export user flow.
-3. **Image-cache population on first `GET /pages/{idx}`.** Ensure the
-   page image file is present in the image-cache dir when
-   `_build_image_url` returns a URL. May require a small helper in
-   `_page_payload` or `LaneResolver`.
-4. **Source-folder picker UI.** Current `POST /api/projects/source-root`
+1. **Auto-OCR on first `GET /pages/{idx}`.** Wire `_page_payload` to
+   call `ensure_page_model` with an on-demand `LocalDoctrPageLoader`
+   (same fallback pattern the `reload_ocr` handler already implements).
+   Without this the user sees blank panes on every page until they
+   manually click Reload OCR.
+2. **Register the page image HTTP route.** `_build_image_url` emits
+   `/api/projects/{id}/pages/{idx}/image?w=…` but no router serves
+   that path. Page images currently 404 in the SPA. Either implement
+   the route or pivot to a content-addressed `/image-cache/…` URL.
+3. **Fix `POST /pages/{idx}/load`.** Share `_get_page_loader` between
+   the `reload_ocr` handler and the `load` route so production no
+   longer 503s.
+4. **Page-nav writeback into `session_state.json`.** Add a tiny endpoint
+   so resume-on-next-launch returns the user to the page they left.
+5. **Source-folder picker UI.** Current `POST /api/projects/source-root`
    exists and persists `config.yaml`, but the UI has stub buttons with
    no dialog. Spec 22 §10 covers the picker.
-5. **Export trigger + `useProject` shape alignment.** Memory note
+6. **`useProject` shape alignment.** Memory note
    `project_useProject_shape_drift.md` flags that `GET /api/projects/{id}`
    returns a flat `Project`, not `LoadProjectResponse`; hook types may
    diverge; audit and fix if needed.

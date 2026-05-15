@@ -17,32 +17,6 @@ line links the resulting ADR and the entry moves to the archive.
 
 ---
 
-### Q-A5 — Does the legacy labeler tolerate a v2.2 `UserPageEnvelope` (with `glyph_annotations`)?
-> GitHub: ConcaveTrillion/pd-ocr-labeler-spa#56 — **CLOSED**
-
-**Resolution.** The legacy labeler uses hand-rolled `from_dict` (pure `data.get`
-— no Pydantic, no strict validation). Extra/unknown fields are silently ignored.
-A v2.2 envelope is loaded without error; the new fields are simply never accessed.
-**No compatibility shim needed** for the read path. The write path would strip
-new fields (legacy `to_dict` only emits the five fields it knows), which is
-acceptable during the transition window. Option **(A)**: SPA writes v2.2 freely.
-
-**Status.** Resolved 2026-05-11.
-
----
-
-### Q-A6 — Predictions-overlay ghost color on `<PageImageCanvas>`
-> GitHub: ConcaveTrillion/pd-ocr-labeler-spa#57 — **CLOSED**
-
-**Resolution.** Translucent blue (`#3B82F6` / Tailwind `blue-500`) at 40%
-opacity, exposed as CSS custom property `--predictions-ghost-color` on `:root`
-so operators can theme it without a code change.
-Spec updated: `specs/20-glyph-annotations.md` §5.6.
-
-**Status.** Resolved 2026-05-11.
-
----
-
 ### Q-A7 — Per-mark provenance: is object-level `source` granular enough?
 > GitHub: ConcaveTrillion/pd-ocr-labeler-spa#58
 
