@@ -37,8 +37,9 @@ Runner context keys (read-only)
                                                ``LocalDoctrPageLoader``.
                                                If absent and
                                                ``page_loader`` is also
-                                               absent, ``AttributeError``
-                                               follows.
+                                               absent, an error follows
+                                               when the production path
+                                               runs.
 ``ocr_config_carrier`` ``OCRConfigCarrier``  — optional; supplies
                                                ``snapshot()`` for atomic
                                                model-key read. Same

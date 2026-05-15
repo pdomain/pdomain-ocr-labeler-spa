@@ -856,7 +856,8 @@ def get_page_image(
     try:
         from PIL import Image  # lazy — PIL ships with pd-book-tools deps.
 
-        img = Image.open(image_path).convert("RGB")
+        with Image.open(image_path) as img_raw:
+            img = img_raw.convert("RGB")
 
         if w is not None and img.width != w:
             new_h = max(1, int(img.height * w / img.width))
@@ -869,7 +870,7 @@ def get_page_image(
         log.debug("get_page_image: failed to open %s: %s", image_path, exc)
         return JSONResponse(  # type: ignore[return-value]
             status_code=404,
-            content={"error": "image_not_found", "detail": str(exc)},
+            content=ApiError(error="image_not_found", message=str(exc)).model_dump(),
         )
 
     return Response(
