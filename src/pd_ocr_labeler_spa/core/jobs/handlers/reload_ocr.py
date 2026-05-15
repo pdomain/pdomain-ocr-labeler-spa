@@ -22,14 +22,34 @@ Job payload keys
 
 Runner context keys (read-only)
 -------------------------------
-``project_state``     ``ProjectState``     — required.
+``project_state``      ``ProjectState``      — required.
 ``notification_queue`` ``NotificationQueue`` — required.
-``page_loader``       ``PageLoader``       — optional; injected by
-                                              tests or by the route
-                                              layer (M3 wiring). When
-                                              absent the handler raises
-                                              ``RuntimeError`` and the
-                                              runner converts to ``error``.
+``page_loader``        ``PageLoader``        — optional; injected by
+                                               tests or by the route
+                                               layer (M3 wiring). When
+                                               absent the handler falls
+                                               through to the production
+                                               path below.
+``predictor_cache``    ``PredictorCache``    — optional; used by the
+                                               production path in
+                                               ``_get_page_loader`` to
+                                               build
+                                               ``LocalDoctrPageLoader``.
+                                               If absent and
+                                               ``page_loader`` is also
+                                               absent, ``AttributeError``
+                                               follows.
+``ocr_config_carrier`` ``OCRConfigCarrier``  — optional; supplies
+                                               ``snapshot()`` for atomic
+                                               model-key read. Same
+                                               caveat as
+                                               ``predictor_cache``.
+``settings``           ``Settings``          — optional; supplies
+                                               ``data_root`` /
+                                               ``cache_root`` to
+                                               ``LocalDoctrPageLoader``.
+                                               Same caveat as
+                                               ``predictor_cache``.
 
 Progress reporting
 ------------------
@@ -146,7 +166,12 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
     project_id: str = job.project_id or str(payload.get("project_id", ""))
 
     project_state, notification_queue = _get_required_context(runner)
-    settings: Settings = runner.context.get("settings")  # type: ignore[assignment]
+    settings = runner.context.get("settings")
+    if not isinstance(settings, Settings):
+        raise RuntimeError(
+            "reload_ocr: runner.context['settings'] is not wired; "
+            "bootstrap must inject settings before OCR jobs can run"
+        )
 
     log.info(
         "reload_ocr: project=%s page=%d job=%s",
