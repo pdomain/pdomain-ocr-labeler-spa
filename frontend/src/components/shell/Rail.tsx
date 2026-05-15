@@ -18,6 +18,13 @@ const targetLayerClass: Record<RailTarget, string> = {
   word: "text-layer-word",
 };
 
+// Layer-color border for active target buttons (B/L/W).
+const targetLayerBorderClass: Record<RailTarget, string> = {
+  block: "border border-layer-block",
+  line: "border border-layer-line",
+  word: "border border-layer-word",
+};
+
 // ─── Rail button primitives ───────────────────────────────────────────────────
 
 interface RailBtnProps {
@@ -26,10 +33,20 @@ interface RailBtnProps {
   active: boolean;
   onClick: () => void;
   colorClass?: string;
+  /** Optional border class applied in active state (e.g. layer-color border). */
+  activeBorderClass?: string;
   title?: string;
 }
 
-function RailBtn({ label, testid, active, onClick, colorClass, title }: RailBtnProps) {
+function RailBtn({
+  label,
+  testid,
+  active,
+  onClick,
+  colorClass,
+  activeBorderClass,
+  title,
+}: RailBtnProps) {
   return (
     <button
       type="button"
@@ -44,6 +61,7 @@ function RailBtn({ label, testid, active, onClick, colorClass, title }: RailBtnP
               "bg-bg-raised",
               "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:bg-accent",
               colorClass ?? "text-ink-1",
+              activeBorderClass,
             )
           : "text-ink-3 hover:text-ink-2 hover:bg-bg-raised/50",
       )}
@@ -76,6 +94,7 @@ export function Rail() {
           testid="rail-target-block"
           active={target === "block"}
           colorClass={targetLayerClass.block}
+          activeBorderClass={targetLayerBorderClass.block}
           title="Block target (1)"
           onClick={() => setTarget("block")}
         />
@@ -84,6 +103,7 @@ export function Rail() {
           testid="rail-target-line"
           active={target === "line"}
           colorClass={targetLayerClass.line}
+          activeBorderClass={targetLayerBorderClass.line}
           title="Line target (2)"
           onClick={() => setTarget("line")}
         />
@@ -92,6 +112,7 @@ export function Rail() {
           testid="rail-target-word"
           active={target === "word"}
           colorClass={targetLayerClass.word}
+          activeBorderClass={targetLayerBorderClass.word}
           title="Word target (3)"
           onClick={() => setTarget("word")}
         />

@@ -71,4 +71,37 @@ describe("Rail — target + mode selectors (Slice 10)", () => {
     expect(screen.getByTestId("rail-mode-erase")).toHaveAttribute("data-active", "true");
     expect(screen.getByTestId("rail-mode-view")).not.toHaveAttribute("data-active", "true");
   });
+
+  it("rail container uses bg-bg-surface not bg-background", () => {
+    render(<Rail />);
+    const rail = screen.getByTestId("rail");
+    expect(rail.className).toContain("bg-bg-surface");
+    expect(rail.className).not.toContain("bg-background");
+  });
+
+  it("active target button has layer-color border class", () => {
+    render(<Rail />);
+    // Default active is 'word'
+    const wordBtn = screen.getByTestId("rail-target-word");
+    expect(wordBtn.className).toContain("border-layer-word");
+    // Block not active — should not have layer-block border
+    const blockBtn = screen.getByTestId("rail-target-block");
+    expect(blockBtn.className).not.toContain("border-layer-block");
+  });
+
+  it("switching target updates layer-color border to new target", () => {
+    render(<Rail />);
+    fireEvent.click(screen.getByTestId("rail-target-block"));
+    const blockBtn = screen.getByTestId("rail-target-block");
+    expect(blockBtn.className).toContain("border-layer-block");
+    const wordBtn = screen.getByTestId("rail-target-word");
+    expect(wordBtn.className).not.toContain("border-layer-word");
+  });
+
+  it("active line target has border-layer-line class", () => {
+    render(<Rail />);
+    fireEvent.click(screen.getByTestId("rail-target-line"));
+    const lineBtn = screen.getByTestId("rail-target-line");
+    expect(lineBtn.className).toContain("border-layer-line");
+  });
 });
