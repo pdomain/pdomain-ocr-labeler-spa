@@ -726,6 +726,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/refine/available": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Refine Available
+         * @description ``GET /api/refine/available`` — capability probe (FO-9).
+         *
+         *     Returns immediately without requiring a project to be loaded.
+         *     Currently always returns ``available=False`` because the full OCR bbox
+         *     refinement engine (M3-proper) is not yet wired. When the OCR adapter
+         *     is connected, this probe will check ``IOCREngine.supports_refine()``
+         *     and return ``available=True`` with ``reason=""``.
+         *
+         *     The ``ErasePixelsSection`` frontend component calls this on mount
+         *     and uses the result to decide whether to enable the Apply button.
+         */
+        get: operations["refine_available_api_refine_available_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/pages/{page_index}/words/{line_index}/{word_index}/gt": {
         parameters: {
             query?: never;
@@ -1021,6 +1050,33 @@ export interface paths {
          *     word-relative).
          */
         post: operations["erase_pixels_api_projects__project_id__pages__page_index__words__line_index___word_index__erase_pixels_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/words/{line_index}/{word_index}/char-ranges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Char Ranges
+         * @description ``POST .../words/{li}/{wi}/char-ranges`` — set positioned char-range styles (FO-2).
+         *
+         *     Replaces all char-range annotations for the word in one atomic
+         *     operation.  The ranges are stored as ``word.char_ranges`` (a plain
+         *     Python attribute — lost on envelope round-trip).
+         *
+         *     When no PageState is seeded the route falls through to a stub
+         *     PagePayload (same pattern as other mutation endpoints).
+         */
+        post: operations["set_char_ranges_api_projects__project_id__pages__page_index__words__line_index___word_index__char_ranges_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1347,6 +1403,37 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/paragraphs/{paragraph_index}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Paragraph
+         * @description ``PATCH .../paragraphs/{pi}`` — update paragraph-level attributes (FO-1).
+         *
+         *     Currently handles ``layout_type`` only.  The value is stored as a
+         *     Python attribute on the paragraph object (``paragraph.layout_type``);
+         *     it is lost on envelope round-trip until pd-book-tools' ``Block``
+         *     grows a ``layout_type`` property (tracked as ConcaveTrillion/pd-book-tools#52
+         *     family).
+         *
+         *     When no PageState is seeded (project freshly loaded, page not yet
+         *     OCR'd) the route falls through to a stub PagePayload so the pre-
+         *     seeded integration tests and the frontend "save immediately on load"
+         *     flow stay green.
+         */
+        patch: operations["patch_paragraph_api_projects__project_id__pages__page_index__paragraphs__paragraph_index__patch"];
         trace?: never;
     };
     "/api/projects/{project_id}/pages/{page_index}/lines/{line_index}/copy-gt": {
@@ -1826,6 +1913,27 @@ export interface components {
             matched_words?: string | null;
         };
         /**
+         * CharRange
+         * @description A single positioned character range — FO-2.
+         *
+         *     ``start`` and ``end`` are character indices into the word's OCR text
+         *     (0-based, inclusive on both ends).  ``styles`` is the list of style
+         *     labels that apply to this range (e.g. ``["italic", "bold"]``).
+         *
+         *     Pydantic validates that ``start`` and ``end`` are non-negative; the
+         *     route does not validate that they fall within the word's actual text
+         *     length (the word text may change between client render and server
+         *     receipt, and the old positions are still meaningful as metadata).
+         */
+        CharRange: {
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Styles */
+            styles: string[];
+        };
+        /**
          * CopyLineGtRequest
          * @description Legacy ``/lines/{li}/copy-gt`` body — kept for frontend compat.
          */
@@ -2094,6 +2202,8 @@ export interface components {
             line_index: number;
             /** Paragraph Index */
             paragraph_index: number | null;
+            /** Block Index */
+            block_index?: number | null;
             /** Ocr Line Text */
             ocr_line_text: string;
             /** Ground Truth Line Text */
@@ -2425,6 +2535,24 @@ export interface components {
          */
         PageSource: "ocr" | "cached_ocr" | "filesystem" | "fallback";
         /**
+         * PatchParagraphRequest
+         * @description ``PATCH .../paragraphs/{pi}`` body — FO-1 (layout-type save).
+         *
+         *     ``layout_type`` is one of the six documented types from the hi-fi
+         *     redesign spec (Slice 22 — BlockDetail).  Unknown values are rejected
+         *     with 422 so the frontend gets a clear error on client-side bugs.
+         *
+         *     The field is stored as a Python attribute on the paragraph object
+         *     (``paragraph.layout_type``).  pd-book-tools' ``Block`` does not
+         *     expose a ``set_layout_type`` method today; the attribute is lost on
+         *     ``Block.to_dict`` → ``from_dict`` round-trip (same documented
+         *     limitation as ``is_validated``).
+         */
+        PatchParagraphRequest: {
+            /** Layout Type */
+            layout_type: string;
+        };
+        /**
          * ProjectKey
          * @description One discoverable project. Spec §2 lines 212-216.
          *
@@ -2448,6 +2576,27 @@ export interface components {
          */
         ReboxWordRequest: {
             bbox: components["schemas"]["BBox"];
+        };
+        /**
+         * RefineAvailableResponse
+         * @description Response for ``GET /api/refine/available`` — FO-9 capability probe.
+         *
+         *     ``available`` is ``True`` when a wired OCR engine supports bbox refinement.
+         *     Currently always ``False`` (M3-proper OCR adapter not yet wired).
+         *     ``reason`` is empty when ``available=True``; otherwise a human-readable
+         *     explanation of why the feature is not available.
+         */
+        RefineAvailableResponse: {
+            /**
+             * Available
+             * @default false
+             */
+            available: boolean;
+            /**
+             * Reason
+             * @default OCR engine not wired (pending M3-proper)
+             */
+            reason: string;
         };
         /**
          * RefineBatchRequest
@@ -2681,6 +2830,25 @@ export interface components {
              * @enum {string}
              */
             auto_rotate_method: "gt-best-match" | "layout" | "auto";
+        };
+        /**
+         * SetCharRangesRequest
+         * @description ``POST .../words/{li}/{wi}/char-ranges`` body — FO-2.
+         *
+         *     Replaces all character-range annotations for the given word.  An
+         *     empty ``ranges`` list clears all existing ranges.
+         *
+         *     The backend stores the ranges as a Python attribute on the word
+         *     object (``word.char_ranges``).  pd-book-tools does not have a
+         *     first-class ``char_ranges`` concept today; the data is lost on
+         *     ``Word.to_dict`` → ``from_dict`` round-trip (same documented
+         *     limitation as ``is_validated``).  When pd-book-tools grows a
+         *     ``char_ranges`` field, the route can be updated to call the
+         *     appropriate setter.
+         */
+        SetCharRangesRequest: {
+            /** Ranges */
+            ranges: components["schemas"]["CharRange"][];
         };
         /**
          * SetOCRModelsRequest
@@ -3689,6 +3857,26 @@ export interface operations {
             };
         };
     };
+    refine_available_api_refine_available_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefineAvailableResponse"];
+                };
+            };
+        };
+    };
     update_word_ground_truth_api_projects__project_id__pages__page_index__words__line_index___word_index__gt_post: {
         parameters: {
             query?: never;
@@ -4080,6 +4268,44 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ErasePixelsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_char_ranges_api_projects__project_id__pages__page_index__words__line_index___word_index__char_ranges_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                line_index: number;
+                word_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetCharRangesRequest"];
             };
         };
         responses: {
@@ -4557,6 +4783,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["MergeParagraphsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_paragraph_api_projects__project_id__pages__page_index__paragraphs__paragraph_index__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                paragraph_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchParagraphRequest"];
             };
         };
         responses: {

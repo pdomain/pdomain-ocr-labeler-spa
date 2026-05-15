@@ -26,6 +26,7 @@ import { StructureSection } from "./sections/StructureSection";
 import { CharRangesSection } from "./sections/CharRangesSection";
 import { CharFixerSection } from "./sections/CharFixerSection";
 import { selectionStore } from "../../stores/selection-store";
+import { useRefineAvailable } from "../../hooks/useRefineAvailable";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -62,6 +63,9 @@ export interface WordDetailProps {
 }
 
 export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
+  const { data: refineProbe } = useRefineAvailable();
+  const refineAvailable = refineProbe?.available ?? false;
+
   const state = useSyncExternalStore(
     subscribeSelection,
     getSelectionSnapshot,
@@ -127,7 +131,7 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
         <Accordion.Item value="erase" tag="mismatch">
           <Accordion.Trigger>Erase Pixels</Accordion.Trigger>
           <Accordion.Content>
-            <ErasePixelsSection backendAvailable={false} />
+            <ErasePixelsSection backendAvailable={refineAvailable} />
           </Accordion.Content>
         </Accordion.Item>
 
