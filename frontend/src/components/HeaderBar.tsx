@@ -1,14 +1,16 @@
 // HeaderBar.tsx — 40px top chrome, present on every route.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 9.
 //       specs/22-page-surface-wireup.md §3, §6 (issue #309)
+// IS-2: added navSlot + actionsSlot props for project-route header wiring.
 //
 // Layout:
 //   Left:   logo glyph + (project name when on a project route)
-//   Center: ProjectLoadControls + dialog trigger buttons
+//   Center: [navSlot] ProjectLoadControls + [actionsSlot] dialog trigger buttons
 //   Right:  UserMenu (avatar + caret) — Theme stub + Sign out
 //
 // 40px height (`h-10`), `bg-bg-page`, `border-b border-border-1`.
 
+import type * as React from "react";
 import { Link, useMatch } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
 
@@ -135,7 +137,22 @@ function UserMenu() {
 
 // ─── HeaderBar ───────────────────────────────────────────────────────────────
 
-export default function HeaderBar() {
+export interface HeaderBarProps {
+  /**
+   * IS-2: Optional slot rendered in the center-left area (after logo, before
+   * ProjectLoadControls). Used to inject ProjectNavigationControls when on a
+   * project route.
+   */
+  navSlot?: React.ReactNode;
+  /**
+   * IS-2: Optional slot rendered in the center-right area (before the
+   * UserMenu divider). Used to inject PageActionsCompact when on a project
+   * route.
+   */
+  actionsSlot?: React.ReactNode;
+}
+
+export default function HeaderBar({ navSlot, actionsSlot }: HeaderBarProps = {}) {
   const isControlsDisabled = useIsControlsDisabled();
 
   return (
@@ -157,9 +174,15 @@ export default function HeaderBar() {
         <span className="text-heading font-semibold text-ink-1 hidden sm:inline">OCR Labeler</span>
       </Link>
 
+      {/* Center-left: navigation slot (project route only) */}
+      {navSlot}
+
       {/* Center: load controls + dialog triggers */}
       <div className="flex items-center gap-2 flex-1 min-w-0">
         <ProjectLoadControls />
+
+        {/* Center-right: actions slot (project route only) */}
+        {actionsSlot}
 
         <button
           type="button"

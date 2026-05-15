@@ -275,6 +275,65 @@ describe("HeaderBar: dialog triggers (spec 22 §6)", () => {
   });
 });
 
+// --- IS-2: navSlot + actionsSlot props ----------------------------------------
+
+describe("HeaderBar: IS-2 — navSlot and actionsSlot (integration slots)", () => {
+  function withEmptyProjects() {
+    server.use(
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [],
+          selected: null,
+          projects_root: "",
+          config_source: "default",
+        }),
+      ),
+    );
+  }
+
+  it("renders navSlot content when provided", async () => {
+    withEmptyProjects();
+    const qc = makeQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/"]}>
+          <HeaderBar navSlot={<span data-testid="nav-slot-content">Nav</span>} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await screen.findByTestId("header-bar");
+    expect(screen.getByTestId("nav-slot-content")).toBeInTheDocument();
+  });
+
+  it("does not render navSlot content when navSlot is not provided", async () => {
+    withEmptyProjects();
+    renderHeaderBar();
+    await screen.findByTestId("header-bar");
+    expect(screen.queryByTestId("nav-slot-content")).toBeNull();
+  });
+
+  it("renders actionsSlot content when provided", async () => {
+    withEmptyProjects();
+    const qc = makeQueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/"]}>
+          <HeaderBar actionsSlot={<span data-testid="actions-slot-content">Actions</span>} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await screen.findByTestId("header-bar");
+    expect(screen.getByTestId("actions-slot-content")).toBeInTheDocument();
+  });
+
+  it("does not render actionsSlot content when actionsSlot is not provided", async () => {
+    withEmptyProjects();
+    renderHeaderBar();
+    await screen.findByTestId("header-bar");
+    expect(screen.queryByTestId("actions-slot-content")).toBeNull();
+  });
+});
+
 // --- Slice 9: 40px top chrome ------------------------------------------------
 
 describe("HeaderBar: Slice 9 — 40px chrome evolution", () => {

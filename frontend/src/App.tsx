@@ -15,6 +15,8 @@ import { Toaster } from "sonner";
 
 import { Suspense, lazy } from "react";
 import HeaderBar from "./components/HeaderBar";
+import ProjectNavigationControls from "./components/ProjectNavigationControls";
+import { PageActionsCompact } from "./components/PageActionsCompact";
 import RootPage from "./pages/RootPage";
 import ProjectPage from "./pages/ProjectPage";
 import { ROUTES } from "./lib/routes";
@@ -101,9 +103,15 @@ function AppShell() {
   const sourceFolderOpen = useDialogStore((s) => s.sourceFolder.open);
   const { projectId, pageIndex } = useRouteProjectContext();
 
+  // IS-2: Inject nav + actions slots into HeaderBar when on a project route.
+  const onProjectRoute = projectId !== null;
+
   return (
     <div data-testid="app-shell" className="flex flex-col h-screen">
-      <HeaderBar />
+      <HeaderBar
+        navSlot={onProjectRoute ? <ProjectNavigationControls /> : undefined}
+        actionsSlot={onProjectRoute ? <PageActionsCompact /> : undefined}
+      />
       {/*
        * Accessible live regions — spec #238.
        * status-announcer: polite — announces bulk action completions

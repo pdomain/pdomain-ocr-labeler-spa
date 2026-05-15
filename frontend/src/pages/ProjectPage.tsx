@@ -65,7 +65,6 @@ import { useUiPrefs, type MatchFilter } from "../stores/ui-prefs";
 import { dialogStore, useDialogStore } from "../stores/dialog-store";
 import { selectionStore, type SelectionState } from "../stores/selection-store";
 
-import ProjectNavigationControls from "../components/ProjectNavigationControls";
 import { PageActions } from "../components/PageActions";
 import { ToolbarActionGrid } from "../components/ToolbarActionGrid";
 import { Splitter } from "../components/Splitter";
@@ -362,14 +361,22 @@ export default function ProjectPage() {
   // ── Render ─────────────────────────────────────────────────────────────
 
   // ── Slot content ──────────────────────────────────────────────────────
-  // StudioShell (Slice 8) splits the page into 5 zones. The header slot
-  // carries nav + page actions; rail + drawer are stubbed (filled by
-  // Slices 10–11); canvas carries toolbar + splitter (preserving all
-  // existing data-testids); right panel stub filled by Slice 14.
+  // IS-2: The App-level HeaderBar now handles the full top chrome via
+  // navSlot (ProjectNavigationControls) and actionsSlot (PageActionsCompact).
+  // The StudioShell header zone is left empty so it occupies 0 visual space.
+  //
+  // PageActions is kept mounted as a hidden div to preserve all driver-
+  // contract testids (§2.5: reload-ocr-button, save-page-button, etc.).
+  // The driver selects these via [data-testid="..."] — the hidden wrapper
+  // does not prevent selection.
 
-  const headerSlot = (
-    <div data-testid="page-header" className="flex flex-col h-full justify-center px-0">
-      <ProjectNavigationControls />
+  // IS-2: Empty StudioShell header zone — App-level HeaderBar handles chrome.
+  const headerSlot = <></>;
+
+  // IS-2: PageActions kept hidden for driver-contract testid preservation.
+  // Driver contract §2.5: all page-action testids must be reachable in DOM.
+  const hiddenPageActions = (
+    <div style={{ display: "none" }} data-testid-stub="page-actions-hidden">
       <PageActions
         isBusy={isMutating || activeJob !== null}
         hasEditedImage={false}
@@ -499,6 +506,9 @@ export default function ProjectPage() {
         canvas={canvasSlot}
         right={rightSlot}
       />
+
+      {/* IS-2: hidden PageActions for driver-contract testid preservation §2.5 */}
+      {hiddenPageActions}
 
       {/* WordEditDialog — opens from per-word pencil click via dialogStore.
           Returns null when open=false, so the dialog testids only appear

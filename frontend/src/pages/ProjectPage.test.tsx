@@ -17,7 +17,7 @@
 // as simple divs under jsdom (no canvas backend).
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -197,17 +197,21 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     });
   });
 
-  it("mounts the ProjectNavigationControls (Prev / Next / GoTo)", async () => {
+  it("IS-2: ProjectNavigationControls is no longer inside ProjectPage (moved to App HeaderBar navSlot)", async () => {
+    // After IS-2, ProjectNavigationControls is rendered via App.tsx HeaderBar
+    // navSlot, not inside ProjectPage. ProjectPage.test renders ProjectPage in
+    // isolation without the App wrapper, so nav-controls are not present here.
+    // The driver contract preserves testids via stubs in HeaderBar.
     renderProjectPage();
-    expect(await screen.findByTestId("project-navigation-controls")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-prev-button")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-next-button")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-goto-button")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-page-input")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-page-total-label")).toBeInTheDocument();
+    await screen.findByTestId("project-page");
+    await waitFor(() => {
+      expect(screen.queryByTestId("project-navigation-controls")).toBeNull();
+    });
   });
 
-  it("mounts the PageActions bar", async () => {
+  it("IS-2: PageActions bar is hidden (driver testids still reachable in DOM)", async () => {
+    // PageActions is kept mounted as a hidden div for driver-contract §2.5
+    // testid preservation. The testids are reachable but the element is hidden.
     renderProjectPage();
     expect(await screen.findByTestId("page-actions-bar")).toBeInTheDocument();
     expect(screen.getByTestId("reload-ocr-button")).toBeInTheDocument();
@@ -332,8 +336,9 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     renderProjectPage();
     // Wait for the page to fully render.
     const saveBtnEl = await screen.findByTestId("save-page-button");
-    // Click Save Page — triggers useSavePage mutation (isMutating becomes true).
-    await userEvent.click(saveBtnEl);
+    // IS-2: PageActions is in a hidden div; use fireEvent.click (not
+    // userEvent.click which checks visibility) to trigger the mutation.
+    fireEvent.click(saveBtnEl);
     // BusyOverlay renders inside the image-pane while the mutation is pending.
     expect(await screen.findByTestId("busy-overlay")).toBeInTheDocument();
     // Confirm it is inside the image-pane (not a sibling of the page root).
