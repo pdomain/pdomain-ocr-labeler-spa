@@ -20,7 +20,7 @@ import { useSyncExternalStore } from "react";
 // ---------------------------------------------------------------------------
 
 /** Dialog keys with a plain `{ open: boolean }` shape. */
-export type SimpleDialogKey = "ocrConfig" | "export" | "hotkeyHelp";
+export type SimpleDialogKey = "ocrConfig" | "export" | "hotkeyHelp" | "sourceFolder";
 
 export interface WordEditDialogState {
   open: boolean;
@@ -39,6 +39,7 @@ export interface DialogStoreState {
   ocrConfig: { open: boolean };
   export: { open: boolean };
   hotkeyHelp: { open: boolean };
+  sourceFolder: { open: boolean };
   wordEdit: WordEditDialogState;
   confirm: ConfirmDialogState;
 }
@@ -46,7 +47,8 @@ export interface DialogStoreState {
 export interface DialogStoreApi {
   /** Open a simple dialog by key. */
   open: (key: SimpleDialogKey) => void;
-  /** Close any dialog (simple keys + wordEdit + confirm). */
+  /** Close any dialog (simple keys + wordEdit + confirm).
+   *  Note: SimpleDialogKey already includes "sourceFolder". */
   close: (key: SimpleDialogKey | "wordEdit" | "confirm") => void;
   /** Open the word-edit dialog with the target line/word indices. */
   openWordEdit: (params: { lineIdx: number; wordIdx: number }) => void;
@@ -62,6 +64,7 @@ const INITIAL_STATE: DialogStoreState = {
   ocrConfig: { open: false },
   export: { open: false },
   hotkeyHelp: { open: false },
+  sourceFolder: { open: false },
   wordEdit: { open: false },
   confirm: { open: false },
 };

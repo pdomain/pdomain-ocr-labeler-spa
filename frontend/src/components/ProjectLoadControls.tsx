@@ -8,6 +8,7 @@
 
 import { useState, useEffect } from "react";
 import type { components } from "../api/types";
+import { dialogStore } from "../stores/dialog-store";
 
 type ProjectKey = components["schemas"]["ProjectKey"];
 type ListProjectsResponse = components["schemas"]["ListProjectsResponse"];
@@ -103,8 +104,10 @@ export default function ProjectLoadControls() {
       </button>
 
       <button
+        type="button"
         data-testid="source-folder-button"
         aria-label="Browse source folder"
+        onClick={() => dialogStore.open("sourceFolder")}
         className="px-2 py-1 text-sm border rounded"
       >
         {/* FolderIcon placeholder — icon library added in a later milestone */}

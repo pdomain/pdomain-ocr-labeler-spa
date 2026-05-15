@@ -33,6 +33,7 @@ import { useNotificationStream } from "./hooks/useNotificationStream";
 import { OCRConfigModal } from "./components/OCRConfigModal";
 import { ExportDialog } from "./components/ExportDialog";
 import { HotkeyHelpModal } from "./components/HotkeyHelpModal";
+import { SourceFolderDialog } from "./components/SourceFolderDialog";
 import { dialogStore, useDialogStore } from "./stores/dialog-store";
 
 // One QueryClient for the app.
@@ -96,6 +97,7 @@ function AppShell() {
   // Dialog open-state slices — re-render only when these change.
   const ocrConfigOpen = useDialogStore((s) => s.ocrConfig.open);
   const exportOpen = useDialogStore((s) => s.export.open);
+  const sourceFolderOpen = useDialogStore((s) => s.sourceFolder.open);
   const { projectId, pageIndex } = useRouteProjectContext();
 
   return (
@@ -164,6 +166,10 @@ function AppShell() {
         />
       )}
       <HotkeyHelpModal />
+      <SourceFolderDialog
+        open={sourceFolderOpen}
+        onClose={() => dialogStore.close("sourceFolder")}
+      />
     </div>
   );
 }
