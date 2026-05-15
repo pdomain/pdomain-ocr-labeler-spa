@@ -120,10 +120,19 @@ const MODE_CURSORS: Record<ViewportMode, string> = {
 
 /** Drag-rect border color per mode. */
 const MODE_RECT_COLORS: Record<ViewportMode, string> = {
-  select: "#2563eb", // blue
-  rebox: "#16a34a", // green
-  "add-word": "#9333ea", // purple
-  erase: "#dc2626", // red
+  select: "#2563eb", // blue-600
+  rebox: "#16a34a", // green-600
+  "add-word": "#9333ea", // purple-600
+  erase: "#dc2626", // red-600
+};
+
+/**
+ * Drag-rect fill per mode (spec §9). Only erase fills its preview rect —
+ * the other modes use stroke-only so the page image stays visible
+ * underneath the dashed outline.
+ */
+const MODE_RECT_FILLS: Partial<Record<ViewportMode, string>> = {
+  erase: "rgba(220,38,38,0.20)", // red-600 @ 20%
 };
 
 /**
@@ -328,6 +337,7 @@ export default function PageImageCanvas({
               width={dragRect.width}
               height={dragRect.height}
               stroke={MODE_RECT_COLORS[mode]}
+              fill={MODE_RECT_FILLS[mode]}
               strokeWidth={2}
               dash={[4, 2]}
               listening={false}
@@ -349,7 +359,7 @@ export default function PageImageCanvas({
             width: dragRect.width,
             height: dragRect.height,
             border: `2px dashed ${MODE_RECT_COLORS[mode]}`,
-            backgroundColor: "transparent",
+            backgroundColor: MODE_RECT_FILLS[mode] ?? "transparent",
           }}
         />
       )}

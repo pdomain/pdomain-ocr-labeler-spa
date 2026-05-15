@@ -454,6 +454,85 @@ describe("PageImageCanvas — Konva Stage drag handlers (spec-21-A6, #302)", () 
   });
 });
 
+// ── spec-21-A7 (#303): per-mode cursors + drag-preview colours/fill ─────────
+
+describe("PageImageCanvas — per-mode cursors (spec-21-A7, #303, spec §9)", () => {
+  it("cursor is 'cell' in rebox mode", () => {
+    viewportStore.setState({ mode: "rebox", pendingReboxTarget: null });
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
+    expect(screen.getByTestId("image-viewport").style.cursor).toBe("cell");
+  });
+
+  it("cursor is 'copy' in add-word mode", () => {
+    viewportStore.setState({ mode: "add-word", pendingReboxTarget: null });
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
+    expect(screen.getByTestId("image-viewport").style.cursor).toBe("copy");
+  });
+
+  it("cursor is 'not-allowed' in erase mode", () => {
+    viewportStore.setState({ mode: "erase", pendingReboxTarget: null });
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
+    expect(screen.getByTestId("image-viewport").style.cursor).toBe("not-allowed");
+  });
+});
+
+describe("PageImageCanvas — per-mode drag-preview stroke (spec-21-A7, #303, spec §9)", () => {
+  function dragPreviewStroke(mode: "rebox" | "add-word" | "erase"): string | null {
+    viewportStore.setState({ mode, pendingReboxTarget: null });
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
+    const stage = getStage();
+    fireEvent.mouseDown(stage, { clientX: 30, clientY: 40 });
+    fireEvent.mouseMove(stage, { clientX: 130, clientY: 110 });
+    const dragLayer = screen.getByTestId("konva-layer-drag");
+    return (
+      dragLayer.querySelector('[data-testid="konva-drag-preview"]')?.getAttribute("data-stroke") ??
+      null
+    );
+  }
+
+  it("rebox stroke is #16a34a (green-600)", () => {
+    expect(dragPreviewStroke("rebox")).toBe("#16a34a");
+  });
+
+  it("add-word stroke is #9333ea (purple-600)", () => {
+    expect(dragPreviewStroke("add-word")).toBe("#9333ea");
+  });
+
+  it("erase stroke is #dc2626 (red-600)", () => {
+    expect(dragPreviewStroke("erase")).toBe("#dc2626");
+  });
+});
+
+describe("PageImageCanvas — erase drag-preview fill (spec-21-A7, #303, spec §9)", () => {
+  it("erase mode drag-preview Rect has rgba(220,38,38,0.20) fill", () => {
+    viewportStore.setState({ mode: "erase", pendingReboxTarget: null });
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
+    const stage = getStage();
+    fireEvent.mouseDown(stage, { clientX: 30, clientY: 40 });
+    fireEvent.mouseMove(stage, { clientX: 130, clientY: 110 });
+
+    const dragLayer = screen.getByTestId("konva-layer-drag");
+    const dragPreview = dragLayer.querySelector('[data-testid="konva-drag-preview"]');
+    expect(dragPreview?.getAttribute("data-fill")).toBe("rgba(220,38,38,0.20)");
+  });
+
+  it("non-erase modes have no fill on the drag-preview Rect", () => {
+    for (const mode of ["select", "rebox", "add-word"] as const) {
+      viewportStore.setState({ mode, pendingReboxTarget: null });
+      const { unmount } = render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
+      const stage = getStage();
+      fireEvent.mouseDown(stage, { clientX: 30, clientY: 40 });
+      fireEvent.mouseMove(stage, { clientX: 130, clientY: 110 });
+
+      const dragLayer = screen.getByTestId("konva-layer-drag");
+      const dragPreview = dragLayer.querySelector('[data-testid="konva-drag-preview"]');
+      // data-fill is undefined when no fill prop is set (rect mock omits the attr).
+      expect(dragPreview?.getAttribute("data-fill")).toBeNull();
+      unmount();
+    }
+  });
+});
+
 describe("PageImageCanvas — Rebox mode (#198)", () => {
   it("data-mode='rebox' when rebox mode active", () => {
     viewportStore.setState({ mode: "rebox", pendingReboxTarget: { lineIndex: 0, wordIndex: 0 } });
