@@ -1,76 +1,477 @@
-// ProjectPage.tsx — stub for the main labeling surface.
-// Full implementation: M2–M9 milestones per specs/16-milestones.md.
-// This stub provides the route target so React Router doesn't 404 on
-// /projects/:id/pages/pageno/:n while the full UI is being built.
+// ProjectPage.tsx — real labeling shell.
 //
-// Issue #240 (router setup). Full feature: #192 and downstream.
+// Spec: specs/22-page-surface-wireup.md §3 (Layout), §4 (Data flow),
+//       §10 (Driver-contract preservation), §11 (Notifications).
+// Issue #314 (spec-22-C).
 //
-// Stub driver-contract testids (#241): nav controls, source-folder dialog stubs.
-// These carry data-testid-stub="true" and are hidden until real UI ships.
+// Replaces the 76-line `display:none`-stub page with the full §3 layout:
+//
+//   <ProjectPage>
+//     <ProjectLoadingOverlay />
+//     <PageHeader>
+//       <ProjectNavigationControls />
+//       <PageActions />
+//     </PageHeader>
+//     <ToolbarActionGrid />
+//     <Splitter direction="horizontal">
+//       <LeftPane data-testid="image-pane">
+//         <ImageTabsHeader />
+//         <BusyOverlay />
+//         <PageImageCanvas />
+//         <InlineBanners />
+//       </LeftPane>
+//       <RightPane data-testid="text-pane">
+//         <TextTabs>
+//           <FilterToggle /> + <WordMatchView />   // matches sub-tab
+//           <PlaintextEditor source="gt" />        // ground-truth sub-tab
+//           <PlaintextEditor source="ocr" />       // ocr sub-tab
+//         </TextTabs>
+//       </RightPane>
+//     </Splitter>
+//     <WordEditDialog />
+//     <ConfirmDialog />
+//   </ProjectPage>
+//
+// The legacy `display:none` testid stubs (nav-* and source-folder-*) moved
+// to HeaderBar so they remain reachable from every route while the real
+// ProjectNavigationControls renders here without `data-testid-stub`.
+//
+// Data flow:
+//   - `useProject(projectId)` and `usePage(projectId, idx0)` drive the surface.
+//   - Mutation hooks (page actions, word edits, …) invalidate
+//     `["page", projectId, idx0]` so usePage re-fetches.
+//   - `useJobProgress` feeds the BusyOverlay.
+//
+// Hook-order discipline: ALL hooks are called unconditionally at the top
+// before any early return, matching the Rules of Hooks.
 
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+
+import { useProject } from "../hooks/useProject";
+import { usePage } from "../hooks/usePage";
+import { useJobProgress } from "../hooks/useJobProgress";
+import {
+  useReloadOcr,
+  useReloadOcrEdited,
+  useSavePage,
+  useSaveProject,
+  useLoadPage,
+  useRematchGt,
+} from "../hooks/usePageMutations";
+import { useUiPrefs, type MatchFilter } from "../stores/ui-prefs";
+import { dialogStore, useDialogStore } from "../stores/dialog-store";
+import { selectionStore, type SelectionState } from "../stores/selection-store";
+
+import ProjectNavigationControls from "../components/ProjectNavigationControls";
+import { PageActions } from "../components/PageActions";
+import { ToolbarActionGrid } from "../components/ToolbarActionGrid";
+import { Splitter } from "../components/Splitter";
+import { ImageTabsHeader } from "../components/ImageTabsHeader";
+import { BusyOverlay, ProjectLoadingOverlay } from "../components/BusyOverlay";
+import PageImageCanvas from "../components/PageImageCanvas";
+import {
+  OcrFailedBanner,
+  ProjectNotFoundBanner,
+  ImageDriftBanner,
+} from "../components/InlineBanners";
+import { TextTabs } from "../components/TextTabs";
+import { WordMatchView } from "../components/WordMatchView";
+import { PlaintextEditor } from "../components/PlaintextEditor";
+import { WordEditDialog, type DialogTarget } from "../components/WordEditDialog";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+
+import type {
+  Selection as ToolbarSelection,
+  PageData,
+  ButtonStates,
+} from "../hooks/useToolbarButtonStates";
+import type { components } from "../api/types";
+
+type PagePayload = components["schemas"]["PagePayload"];
+type LineMatch = components["schemas"]["LineMatch"];
+
+// ─── ui-prefs subscriber bridge ─────────────────────────────────────────────
+// The hand-rolled `useUiPrefs` store has no native `subscribe()`. We bridge
+// to React via `useSyncExternalStore` so the page re-renders when prefs
+// change (match filter, layer visibility, selection mode, …). Mirrors the
+// pattern used in `Splitter.tsx` and `FilterToggle.tsx`.
+
+const uiPrefsListeners = new Set<() => void>();
+function notifyUiPrefs() {
+  uiPrefsListeners.forEach((fn) => fn());
+}
+function subscribeUiPrefs(cb: () => void): () => void {
+  uiPrefsListeners.add(cb);
+  return () => {
+    uiPrefsListeners.delete(cb);
+  };
+}
+
+function setMatchFilter(filter: MatchFilter) {
+  useUiPrefs.setMatchFilter(filter);
+  notifyUiPrefs();
+}
+
+function setLayerVisibility(layer: "paragraph" | "line" | "word", visible: boolean) {
+  const current = useUiPrefs.getState().layerVisibility;
+  useUiPrefs.setState({ layerVisibility: { ...current, [layer]: visible } });
+  notifyUiPrefs();
+}
+
+function setSelectionMode(mode: "paragraph" | "line" | "word") {
+  useUiPrefs.setState({ selectionMode: mode });
+  notifyUiPrefs();
+}
+
+function getUiPrefsSnapshot() {
+  return useUiPrefs.getState();
+}
+
+// ─── selection-store subscriber ─────────────────────────────────────────────
+
+function subscribeSelection(cb: () => void): () => void {
+  return selectionStore.subscribe(() => cb());
+}
+function getSelectionSnapshot(): SelectionState {
+  return selectionStore.getState();
+}
+
+// ─── Derived data helpers ───────────────────────────────────────────────────
+
+/** Build the `PageData` shape needed by ToolbarActionGrid from a payload.
+ *
+ * `WordMatch.word_index` is nullable in the wire schema (unmatched-GT rows
+ * carry `null`) but `WordValidationInfo.word_index` is required-int. We
+ * drop the null entries — they're already non-targetable for word-scope
+ * toolbar actions.
+ */
+function toToolbarPageData(payload: PagePayload | undefined | null): PageData {
+  const lines = payload?.line_matches ?? [];
+  return {
+    lines: lines.map((line: LineMatch) => ({
+      line_index: line.line_index,
+      paragraph_index: line.paragraph_index ?? null,
+      validated_word_count: line.validated_word_count,
+      total_word_count: line.total_word_count,
+      words: line.word_matches
+        .filter((w): w is typeof w & { word_index: number } => w.word_index !== null)
+        .map((w) => ({
+          line_index: w.line_index,
+          word_index: w.word_index,
+          is_validated: w.is_validated,
+        })),
+    })),
+  };
+}
+
+// ─── Component ──────────────────────────────────────────────────────────────
 
 export default function ProjectPage() {
+  // ── URL params (1-based pageNo → 0-based idx0) ──────────────────────────
   const { projectId, pageNo } = useParams<{ projectId: string; pageNo: string }>();
+  const idx0 = useMemo(() => {
+    const n = parseInt(pageNo ?? "1", 10);
+    return Number.isFinite(n) && n > 0 ? n - 1 : 0;
+  }, [pageNo]);
+
+  // ── Top-level data hooks — always called before any early return ────────
+  const projectQ = useProject(projectId);
+  const pageQ = usePage(projectId, idx0);
+  // Active job tracking — fed by mutation hooks when they return job_ids.
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const jobProgress = useJobProgress(activeJobId);
+
+  // ── Store subscribers ──────────────────────────────────────────────────
+  const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefsSnapshot, getUiPrefsSnapshot);
+  const selection = useSyncExternalStore(
+    subscribeSelection,
+    getSelectionSnapshot,
+    getSelectionSnapshot,
+  );
+  const wordEditState = useDialogStore((s) => s.wordEdit);
+  const confirmState = useDialogStore((s) => s.confirm);
+
+  // ── QueryClient (for explicit invalidation after job-completion / saves) ─
+  const qc = useQueryClient();
+
+  // ── Mutations ──────────────────────────────────────────────────────────
+  // `projectId` may be undefined on first render before the URL resolves;
+  // mutations are stable hooks so we pass "" — the user can't trigger them
+  // until the URL is real (PageActions is disabled while isBusy).
+  const pid = projectId ?? "";
+  const reloadOcr = useReloadOcr(pid, idx0);
+  const reloadOcrEdited = useReloadOcrEdited(pid, idx0);
+  const savePage = useSavePage(pid, idx0);
+  const saveProject = useSaveProject(pid);
+  const loadPage = useLoadPage(pid, idx0);
+  const rematchGt = useRematchGt(pid, idx0);
+
+  // ── Derived view state ─────────────────────────────────────────────────
+  const pagePayload = pageQ.data ?? null;
+  const pageRecord = pagePayload?.page_record ?? null;
+  const lines: LineMatch[] = pagePayload?.line_matches ?? [];
+
+  // Project not found vs other errors — only the 404 case triggers the banner.
+  const projectStatus = (projectQ.error as { status?: number } | null)?.status;
+  const projectNotFound = projectQ.isError && projectStatus === 404;
+
+  // Show ProjectLoadingOverlay during the initial page fetch.
+  const isPageLoading = pageQ.isLoading;
+
+  // Busy state — any mutation in flight OR an active job.
+  const isMutating =
+    reloadOcr.isPending ||
+    reloadOcrEdited.isPending ||
+    savePage.isPending ||
+    saveProject.isPending ||
+    loadPage.isPending ||
+    rematchGt.isPending;
+
+  // Pseudo-Job object for BusyOverlay. BusyOverlay accepts the full
+  // `components.schemas.Job` shape but only branches on `type` / `status`;
+  // we synthesize the minimal shape from the SSE progress event. The
+  // `id` / `project_id` / `created_at` / `updated_at` fields are required
+  // by the type but not consumed by the overlay — placeholder values keep
+  // tsc happy without inventing data.
+  const nowIso = new Date(0).toISOString();
+  const activeJob: components["schemas"]["Job"] | null =
+    jobProgress && jobProgress.status !== "complete" && jobProgress.status !== "error"
+      ? {
+          id: jobProgress.job_id,
+          project_id: projectId ?? null,
+          type: "reload_ocr_page" as components["schemas"]["JobType"],
+          status: jobProgress.status,
+          progress: jobProgress.progress,
+          error_message: jobProgress.error_message ?? null,
+          created_at: nowIso,
+          updated_at: nowIso,
+        }
+      : null;
+
+  // ToolbarActionGrid plumbing
+  const toolbarSelection: ToolbarSelection = useMemo(
+    () => ({
+      selection_mode: uiPrefs.selectionMode,
+      selected_paragraphs: selection.selectedParagraphs,
+      selected_lines: selection.selectedLines,
+      selected_words: selection.selectedWords,
+    }),
+    [
+      uiPrefs.selectionMode,
+      selection.selectedParagraphs,
+      selection.selectedLines,
+      selection.selectedWords,
+    ],
+  );
+  const toolbarPageData: PageData = useMemo(() => toToolbarPageData(pagePayload), [pagePayload]);
+  const [addWordActive, setAddWordActive] = useState(false);
+
+  // WordEditDialog `target` requires both line/word indices; default to 0/0
+  // when the store hasn't been populated (dialog is closed in that case).
+  const dialogTarget: DialogTarget = {
+    lineIndex: wordEditState.lineIdx ?? 0,
+    wordIndex: wordEditState.wordIdx ?? 0,
+  };
+
+  // Words list passed to the dialog for the 3-column preview row.
+  const dialogLine = lines.find((l) => l.line_index === dialogTarget.lineIndex) ?? null;
+  const dialogLineWords = dialogLine?.word_matches.map((w) => w.ocr_text) ?? [];
+
+  // ── Action callbacks ───────────────────────────────────────────────────
+  // Mutations return job_ids for async actions; we route those into
+  // useJobProgress and invalidate on completion. Synchronous mutations
+  // invalidate the page query directly.
+
+  function invalidatePage() {
+    void qc.invalidateQueries({ queryKey: ["page", projectId, idx0] });
+  }
+
+  function trackJob<T extends { job_id?: string | null } | undefined | null>(result: T) {
+    const jobId = result?.job_id ?? null;
+    if (jobId) setActiveJobId(jobId);
+  }
+
+  function handleReloadOcr() {
+    reloadOcr.mutate(undefined, {
+      onSuccess: (data) => trackJob(data),
+      onSettled: () => invalidatePage(),
+    });
+  }
+  function handleReloadOcrEdited() {
+    reloadOcrEdited.mutate(undefined, {
+      onSuccess: (data) => trackJob(data),
+      onSettled: () => invalidatePage(),
+    });
+  }
+  function handleSavePage() {
+    savePage.mutate(undefined, { onSettled: () => invalidatePage() });
+  }
+  function handleSaveProject() {
+    saveProject.mutate(undefined, {
+      onSuccess: (data) => trackJob(data),
+      onSettled: () => invalidatePage(),
+    });
+  }
+  function handleLoadPage() {
+    loadPage.mutate(undefined, { onSettled: () => invalidatePage() });
+  }
+  function handleRematchGt() {
+    rematchGt.mutate(undefined, { onSettled: () => invalidatePage() });
+  }
+  function handleExport() {
+    dialogStore.open("export");
+  }
+
+  function handleToolbarAction(_key: keyof ButtonStates) {
+    // Spec 22 §2 (non-goals): wireup-only. Toolbar action POSTs are wired
+    // by the per-scope mutation hooks listed in spec 22 §4 — those are
+    // either shipped (line mutations, page mutations) or pending (paragraph
+    // batch, word-scope batch). Hooking them up belongs to follow-up slices
+    // that already track each row individually. For now the buttons fire
+    // this callback but invalidate the page so any out-of-band server-side
+    // mutation that lands during the click is reflected.
+    invalidatePage();
+  }
+  function handleApplyStyle() {
+    invalidatePage();
+  }
+  function handleClearStyle() {
+    invalidatePage();
+  }
+  function handleAddWordToggle() {
+    setAddWordActive((v) => !v);
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────
 
   return (
     <div data-testid="project-page" className="flex flex-col h-full">
-      <p className="p-4 text-sm text-gray-500">
-        Project: {projectId} — Page {pageNo} (full UI in progress)
-      </p>
+      <ProjectLoadingOverlay isLoading={isPageLoading} />
 
-      {/* Stub nav controls — driver-contract §2.4, not yet implemented */}
-      <div style={{ display: "none" }}>
-        <button
-          data-testid="nav-prev-button"
-          data-testid-stub="true"
-          aria-label="Previous page (stub)"
-        >
-          Prev
-        </button>
-        <button data-testid="nav-next-button" data-testid-stub="true" aria-label="Next page (stub)">
-          Next
-        </button>
-        <button
-          data-testid="nav-goto-button"
-          data-testid-stub="true"
-          aria-label="Go to page (stub)"
-        >
-          Go
-        </button>
-        <input
-          data-testid="nav-page-input"
-          data-testid-stub="true"
-          aria-label="Page number (stub)"
+      <div data-testid="page-header" className="flex flex-col">
+        <ProjectNavigationControls />
+        <PageActions
+          isBusy={isMutating || activeJob !== null}
+          hasEditedImage={false}
+          pageSource={pageRecord?.page_source}
+          pageName={pageRecord?.image_path?.split("/").pop() ?? null}
+          rotationDegrees={pageRecord?.rotation_degrees ?? 0}
+          rotationSource={pageRecord?.rotation_source ?? null}
+          onReloadOcr={handleReloadOcr}
+          onReloadOcrEdited={handleReloadOcrEdited}
+          onSavePage={handleSavePage}
+          onSaveProject={handleSaveProject}
+          onLoadPage={handleLoadPage}
+          onRematchGt={handleRematchGt}
+          onExport={handleExport}
         />
-        <span data-testid="nav-page-total-label" data-testid-stub="true">
-          / 0
-        </span>
       </div>
 
-      {/* Stub source-folder dialog — driver-contract §2.2, not yet implemented */}
-      <div style={{ display: "none" }}>
-        <span data-testid="source-folder-current-path-label" data-testid-stub="true" />
-        <input data-testid="source-folder-path-input" data-testid-stub="true" />
-        <button data-testid="source-folder-home-button" data-testid-stub="true">
-          Home
-        </button>
-        <button data-testid="source-folder-up-button" data-testid-stub="true">
-          Up
-        </button>
-        <button data-testid="source-folder-open-typed-button" data-testid-stub="true">
-          Open
-        </button>
-        <button data-testid="source-folder-use-current-button" data-testid-stub="true">
-          Use Current
-        </button>
-        <button data-testid="source-folder-cancel-button" data-testid-stub="true">
-          Cancel
-        </button>
-        <button data-testid="source-folder-apply-button" data-testid-stub="true">
-          Apply
-        </button>
+      <ToolbarActionGrid
+        selection={toolbarSelection}
+        pageData={toolbarPageData}
+        onAction={handleToolbarAction}
+        onApplyStyle={handleApplyStyle}
+        onClearStyle={handleClearStyle}
+        addWordActive={addWordActive}
+        onAddWordToggle={handleAddWordToggle}
+      />
+
+      <div className="flex-1 min-h-0">
+        <Splitter
+          direction="horizontal"
+          left={
+            <div data-testid="image-pane" className="relative flex flex-col h-full">
+              <ImageTabsHeader
+                layerVisibility={uiPrefs.layerVisibility}
+                selectionMode={uiPrefs.selectionMode}
+                eraseActive={false}
+                onLayerToggle={(layer) =>
+                  setLayerVisibility(layer, !uiPrefs.layerVisibility[layer])
+                }
+                onSelectionModeChange={(mode) => setSelectionMode(mode)}
+                onEraseToggle={() => {
+                  /* erase toggle wired by PageImageCanvas modes; no-op here */
+                }}
+              />
+              <div className="relative flex-1 min-h-0">
+                <BusyOverlay activeJob={activeJob} isMutating={isMutating} />
+                <PageImageCanvas
+                  imageUrl={pagePayload?.image_url ?? ""}
+                  encoded={pagePayload?.encoded_dims ?? null}
+                  page={pagePayload}
+                  projectId={projectId}
+                  pageIndex={idx0}
+                />
+              </div>
+              <div data-testid="inline-banners" className="flex flex-col gap-1 p-1">
+                <OcrFailedBanner ocrFailed={pageRecord?.ocr_failed === true} />
+                <ProjectNotFoundBanner projectId={projectId} notFound={projectNotFound} />
+                <ImageDriftBanner imageDrift={false} />
+              </div>
+            </div>
+          }
+          right={
+            <div data-testid="text-pane" className="flex flex-col h-full">
+              {/*
+               * TextTabs (shipped #200) already renders the spec 22 §8
+               * `match-filter-toggle` container plus the three sub-button
+               * testids (`match-filter-unvalidated/-mismatched/-all`).
+               * The standalone FilterToggle component (#312) would
+               * duplicate the testid, so we wire the existing TextTabs
+               * filter to `useUiPrefs.matchFilter` instead and feed the
+               * same value through WordMatchView's `filter` prop.
+               */}
+              <TextTabs
+                pageTextGt={pagePayload?.page_text_gt}
+                pageTextOcr={pagePayload?.page_text_ocr}
+                lineFilter={uiPrefs.matchFilter}
+                onLineFilterChange={(f) => setMatchFilter(f as MatchFilter)}
+              >
+                <WordMatchView lines={lines} filter={uiPrefs.matchFilter} />
+              </TextTabs>
+              {/* PlaintextEditor instances are routed by TextTabs internally
+                  in a future slice; for now we mount them as hidden siblings
+                  so the testids (plaintext-editor-gt / -ocr) are reachable
+                  by the driver pre-pass without changing TextTabs' shape. */}
+              <div style={{ display: "none" }}>
+                <PlaintextEditor source="gt" page={pagePayload} />
+                <PlaintextEditor source="ocr" page={pagePayload} />
+              </div>
+            </div>
+          }
+        />
       </div>
+
+      {/* WordEditDialog — opens from per-word pencil click via dialogStore.
+          Returns null when open=false, so the dialog testids only appear
+          when the user opens it. */}
+      <WordEditDialog
+        open={wordEditState.open}
+        target={dialogTarget}
+        lineWords={dialogLineWords}
+        wordImageUrl={undefined}
+        onNavigate={(t) => dialogStore.openWordEdit({ lineIdx: t.lineIndex, wordIdx: t.wordIndex })}
+        onApply={() => {
+          invalidatePage();
+          dialogStore.close("wordEdit");
+        }}
+        onClose={() => dialogStore.close("wordEdit")}
+      />
+
+      {/* ConfirmDialog — opens from useConfirm() via dialogStore. */}
+      <ConfirmDialog
+        open={confirmState.open}
+        message={confirmState.body ?? ""}
+        title={confirmState.title}
+        onConfirm={() => {
+          confirmState.onConfirm?.();
+          dialogStore.close("confirm");
+        }}
+        onCancel={() => dialogStore.close("confirm")}
+      />
     </div>
   );
 }

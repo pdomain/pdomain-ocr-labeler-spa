@@ -21,9 +21,13 @@ import { ROUTES } from "./lib/routes";
 
 // Lazy-load the perf-bench page so the heavy react-konva module graph
 // (and its Node-canvas dependency in jsdom test environments) is only
-// pulled in when /__perf-test is actually visited. The static App.test.tsx
-// renders the root route, which would otherwise dynamic-import react-konva
-// via Konva's Node entry point and fail without a `canvas` install.
+// pulled in when /__perf-test is actually visited. ProjectPage also
+// transitively imports react-konva (via PageImageCanvas) but is NOT
+// lazy-loaded — splitting the chunk caused a Suspense fallback to be
+// visible during E2E navigation, which break tests that look for
+// `[data-testid="project-page"]` immediately after page.goto.
+// App.test.tsx mocks react-konva (module-level vi.mock) instead of
+// relying on lazy-loading to keep canvas out of jsdom.
 const PerfTestPage = lazy(() => import("./pages/PerfTestPage"));
 import { useNotificationStream } from "./hooks/useNotificationStream";
 import { OCRConfigModal } from "./components/OCRConfigModal";

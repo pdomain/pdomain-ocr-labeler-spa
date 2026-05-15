@@ -78,6 +78,70 @@ export default function HeaderBar() {
         {/* keyboard glyph placeholder */}
         &#9000;
       </button>
+
+      {/*
+       * Spec 22 §10 — driver-contract preservation.
+       *
+       * Source-folder dialog stubs and nav-control stubs live here so the
+       * testids are reachable on every route (including the root route).
+       * Both blocks remain `display:none` and carry `data-testid-stub="true"`
+       * so the driver pre-pass can distinguish them from the real
+       * controls. The real ProjectNavigationControls is rendered inside
+       * ProjectPage and does NOT carry `data-testid-stub` — drivers
+       * select it via `[data-testid="nav-prev-button"]:not([data-testid-stub])`.
+       * Source-folder picker becomes a real dialog in a follow-up (#294);
+       * until then, only the stubs exist.
+       */}
+      <div style={{ display: "none" }}>
+        <span data-testid="source-folder-current-path-label" data-testid-stub="true" />
+        <input data-testid="source-folder-path-input" data-testid-stub="true" />
+        <button data-testid="source-folder-home-button" data-testid-stub="true">
+          Home
+        </button>
+        <button data-testid="source-folder-up-button" data-testid-stub="true">
+          Up
+        </button>
+        <button data-testid="source-folder-open-typed-button" data-testid-stub="true">
+          Open
+        </button>
+        <button data-testid="source-folder-use-current-button" data-testid-stub="true">
+          Use Current
+        </button>
+        <button data-testid="source-folder-cancel-button" data-testid-stub="true">
+          Cancel
+        </button>
+        <button data-testid="source-folder-apply-button" data-testid-stub="true">
+          Apply
+        </button>
+      </div>
+
+      <div style={{ display: "none" }}>
+        <button
+          data-testid="nav-prev-button"
+          data-testid-stub="true"
+          aria-label="Previous page (stub)"
+        >
+          Prev
+        </button>
+        <button data-testid="nav-next-button" data-testid-stub="true" aria-label="Next page (stub)">
+          Next
+        </button>
+        <button
+          data-testid="nav-goto-button"
+          data-testid-stub="true"
+          aria-label="Go to page (stub)"
+        >
+          Go
+        </button>
+        <input
+          data-testid="nav-page-input"
+          data-testid-stub="true"
+          aria-label="Page number (stub)"
+        />
+        <span data-testid="nav-page-total-label" data-testid-stub="true">
+          / 0
+        </span>
+      </div>
     </header>
   );
 }

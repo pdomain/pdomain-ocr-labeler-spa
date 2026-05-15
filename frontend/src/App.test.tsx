@@ -1,10 +1,41 @@
 // App.test.tsx — Vitest tests for App shell routing.
 // Issue #240: React Router routes, QueryClient provider wiring.
 // Spec: docs/specs/2026-05-12-frontend-shell-design.md §Routing
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { server } from "./test/server";
+
+// App.tsx statically imports ProjectPage, which transitively imports
+// react-konva (via PageImageCanvas). jsdom can't construct an
+// HTMLCanvasElement so Konva's node entry tries to `require('canvas')`
+// and fails at module-load. Mock react-konva module-wide so the import
+// resolves to plain divs.
+vi.mock("react-konva", () => ({
+  Stage: ({
+    children,
+    width,
+    height,
+    "data-testid": tid,
+  }: {
+    children?: React.ReactNode;
+    width?: number;
+    height?: number;
+    "data-testid"?: string;
+  }) => (
+    <div data-testid={tid ?? "konva-stage"} data-width={width} data-height={height}>
+      {children}
+    </div>
+  ),
+  Layer: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  Rect: () => <div data-testid="konva-rect" />,
+  Image: () => <div data-testid="konva-image" />,
+}));
+vi.mock("use-image", () => ({
+  __esModule: true,
+  default: () => [null, "loaded"],
+}));
+
 import App from "./App";
 
 // Helper: setup session-state mock (null = no project loaded)
