@@ -39,17 +39,21 @@ interface RenderOpts {
 
 function mockProject(projectId: string, totalPages: number) {
   const image_paths = Array.from({ length: totalPages }, (_, i) => `page_${i + 1}.png`);
+  // GET /api/projects/{id} returns a flat Project — not the LoadProjectResponse wrapper.
   server.use(
     http.get(`/api/projects/${projectId}`, () =>
       HttpResponse.json({
-        project: {
-          project_id: projectId,
-          project_root: `/data/${projectId}`,
-          image_paths,
-          ground_truth_map: {},
-        },
+        project_id: projectId,
+        project_root: `/data/${projectId}`,
+        image_paths,
+        ground_truth_map: {},
+        version: "1.0",
+        source_lib: "doctr-pd-labeled",
+        total_pages: totalPages,
+        saved_pages: 0,
         current_page_index: 0,
-        generation: 1,
+        include_images: true,
+        copied_images: false,
       }),
     ),
   );

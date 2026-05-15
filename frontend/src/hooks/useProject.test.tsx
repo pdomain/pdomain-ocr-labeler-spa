@@ -1,6 +1,11 @@
 // useProject.test.tsx — unit tests for the useProject TanStack Query hook.
 // Spec: docs/specs/2026-05-12-frontend-shell-design.md §Hooks
 // Issue #192
+//
+// GET /api/projects/{id} returns a flat Project model — NOT the
+// LoadProjectResponse wrapper (which is only returned by POST /load).
+// The mock here matches the real backend: api/projects.py:get_project_by_id
+// returns `project.model_dump(mode="json")` directly.
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
@@ -19,15 +24,19 @@ function makeWrapper() {
   };
 }
 
+/** Flat Project shape — matches Python Project.model_dump(mode="json"). */
 const MOCK_PROJECT: ProjectResponse = {
-  project: {
-    project_id: "proj-001",
-    project_root: "/data/proj-001",
-    image_paths: ["page_001.png", "page_002.png"],
-    ground_truth_map: {},
-  },
+  project_id: "proj-001",
+  project_root: "/data/proj-001",
+  image_paths: ["page_001.png", "page_002.png"],
+  ground_truth_map: {},
+  version: "1.0",
+  source_lib: "doctr-pd-labeled",
+  total_pages: 2,
+  saved_pages: 0,
   current_page_index: 0,
-  generation: 1,
+  include_images: true,
+  copied_images: false,
 };
 
 beforeEach(() => {
@@ -51,9 +60,23 @@ describe("useProject", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.project.project_id).toBe("proj-001");
+    // The hook returns the flat Project — top-level project_id, not data.project.project_id
+    expect(result.current.data?.project_id).toBe("proj-001");
+    expect(result.current.data?.image_paths).toHaveLength(2);
+    expect(result.current.data?.total_pages).toBe(2);
     expect(result.current.data?.current_page_index).toBe(0);
-    expect(result.current.data?.generation).toBe(1);
+  });
+
+  it("data shape matches flat Project (no nested .project wrapper)", async () => {
+    const { result } = renderHook(() => useProject("proj-001"), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // Confirm no nested wrapper — GET /api/projects/{id} is flat
+    const data = result.current.data;
+    expect(data).toBeDefined();
+    expect((data as Record<string, unknown>)["project"]).toBeUndefined();
+    expect(data?.project_id).toBe("proj-001");
   });
 
   it("is disabled when projectId is undefined", () => {
@@ -91,6 +114,6 @@ describe("useProject", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     const cached = qc.getQueryData<ProjectResponse>(["project", "proj-001"]);
-    expect(cached?.project.project_id).toBe("proj-001");
+    expect(cached?.project_id).toBe("proj-001");
   });
 });

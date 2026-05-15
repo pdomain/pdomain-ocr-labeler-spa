@@ -33,14 +33,11 @@ export default function ProjectNavigationControls() {
   const { data } = useProject(projectId);
 
   const currentPageNo = parsePositiveInt(pageNo) ?? 1;
-  // Defensive optional chaining: the live backend's GET /api/projects/{id}
-  // returns the flat `Project` (not the `{project, current_page_index}`
-  // wrapper that `useProject.ProjectResponse` types). Both shapes are
-  // tolerated here so this component doesn't crash whichever the hook
-  // observes; downstream the hook's typing is corrected in a follow-up.
-  const project = (data as { project?: { image_paths?: string[] } } | undefined)?.project;
-  const flatImagePaths = (data as { image_paths?: string[] } | undefined)?.image_paths;
-  const totalPages = project?.image_paths?.length ?? flatImagePaths?.length ?? 0;
+  // data is the flat Project returned by GET /api/projects/{id}.
+  // image_paths.length is the source of truth for page count
+  // (spec 23 §2; Project also has a total_pages field but image_paths
+  // is what the legacy labeler uses for nav bounds).
+  const totalPages = data?.image_paths?.length ?? 0;
 
   const [gotoValue, setGotoValue] = useState<string>("");
 

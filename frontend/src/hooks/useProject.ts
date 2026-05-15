@@ -3,26 +3,42 @@
 // Spec: docs/specs/2026-05-12-frontend-shell-design.md §Hooks
 // Issue #192
 //
-// Returns the LoadProjectResponse for the currently-loaded project.
+// Returns the flat Project object for the currently-loaded project.
 // The endpoint returns 404 when no project is open or the requested id
 // doesn't match the loaded one — in that case `data` is undefined and
 // `error` carries an ApiError with status 404.
+//
+// Shape note: GET /api/projects/{id} returns the flat Project model —
+// NOT the LoadProjectResponse wrapper (which is only returned by
+// POST /api/projects/load). See api/projects.py:get_project_by_id
+// which does `project.model_dump(mode="json")` directly.
 
 import { useQuery } from "@tanstack/react-query";
+import type { components } from "../api/types";
 
-// Interim type matching the slice-5 LoadProjectResponse (M3 will swap
-// current_page_index → current_page: PagePayload).
+/**
+ * The flat Project type returned by GET /api/projects/{project_id}.
+ * Identical to components["schemas"]["Project"] but that schema is
+ * typed as `unknown` in the generated types.ts (the FastAPI handler
+ * returns a raw JSONResponse rather than a typed response_model).
+ * This interface is hand-written to match the Python Project model.
+ */
 export interface ProjectResponse {
-  project: {
-    project_id: string;
-    project_root: string;
-    image_paths: string[];
-    ground_truth_map: Record<string, unknown>;
-    [key: string]: unknown;
-  };
+  project_id: string;
+  project_root: string;
+  image_paths: string[];
+  ground_truth_map: Record<string, string>;
+  version: string;
+  source_lib: string;
+  total_pages: number;
+  saved_pages: number;
   current_page_index: number;
-  generation: number;
+  include_images: boolean;
+  copied_images: boolean;
 }
+
+// Re-export for consumers that just need the schema type alias.
+export type { components };
 
 /** Throw on non-2xx; return parsed JSON on success. */
 async function apiFetch<T>(path: string): Promise<T> {
@@ -48,6 +64,9 @@ async function apiFetch<T>(path: string): Promise<T> {
  * Returns `undefined` data when no project is open (404). Components that
  * need to react to the missing-project case should check `isError` with a
  * guard on `(error as { status: number }).status === 404`.
+ *
+ * The returned `data` is the flat Project model (NOT the LoadProjectResponse
+ * wrapper — that's only returned by POST /api/projects/load).
  */
 export function useProject(projectId: string | undefined) {
   return useQuery<ProjectResponse>({

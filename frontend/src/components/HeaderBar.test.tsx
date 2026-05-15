@@ -175,17 +175,21 @@ describe("HeaderBar: dialog triggers (spec 22 §6)", () => {
   it("clicking ocr-config-trigger-button opens ocrConfig in the store", async () => {
     withEmptyProjects();
     // Route includes projectId so the buttons are enabled.
+    // GET /api/projects/{id} returns flat Project (not LoadProjectResponse wrapper).
     server.use(
       http.get("/api/projects/proj-1", () =>
         HttpResponse.json({
-          project: {
-            project_id: "proj-1",
-            project_root: "/data/proj1",
-            image_paths: [],
-            ground_truth_map: {},
-          },
+          project_id: "proj-1",
+          project_root: "/data/proj1",
+          image_paths: [],
+          ground_truth_map: {},
+          version: "1.0",
+          source_lib: "doctr-pd-labeled",
+          total_pages: 0,
+          saved_pages: 0,
           current_page_index: 0,
-          generation: 1,
+          include_images: true,
+          copied_images: false,
         }),
       ),
     );
@@ -204,14 +208,17 @@ describe("HeaderBar: dialog triggers (spec 22 §6)", () => {
     server.use(
       http.get("/api/projects/proj-1", () =>
         HttpResponse.json({
-          project: {
-            project_id: "proj-1",
-            project_root: "/data/proj1",
-            image_paths: [],
-            ground_truth_map: {},
-          },
+          project_id: "proj-1",
+          project_root: "/data/proj1",
+          image_paths: [],
+          ground_truth_map: {},
+          version: "1.0",
+          source_lib: "doctr-pd-labeled",
+          total_pages: 0,
+          saved_pages: 0,
           current_page_index: 0,
-          generation: 1,
+          include_images: true,
+          copied_images: false,
         }),
       ),
     );
