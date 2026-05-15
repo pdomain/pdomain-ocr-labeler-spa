@@ -11,7 +11,7 @@ describe("ui-prefs store", () => {
         word: true,
       },
       splitterPosition: 0.5,
-      selectionMode: "box",
+      selectionMode: "paragraph",
     });
   });
 
@@ -25,7 +25,7 @@ describe("ui-prefs store", () => {
         word: true,
       });
       expect(store.splitterPosition).toBe(0.5);
-      expect(store.selectionMode).toBe("box");
+      expect(store.selectionMode).toBe("paragraph");
     });
   });
 
@@ -116,8 +116,8 @@ describe("ui-prefs store", () => {
       expect(useUiPrefs.getState().selectionMode).toBe("word");
     });
 
-    it("defaults to box mode", () => {
-      expect(useUiPrefs.getState().selectionMode).toBe("box");
+    it("defaults to paragraph mode", () => {
+      expect(useUiPrefs.getState().selectionMode).toBe("paragraph");
     });
   });
 

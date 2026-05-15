@@ -25,7 +25,7 @@ describe("ImageTabsHeader (#196)", () => {
     render(
       <ImageTabsHeader
         layerVisibility={defaultVisibility}
-        selectionMode="box"
+        selectionMode="paragraph"
         eraseActive={false}
         onLayerToggle={vi.fn()}
         onSelectionModeChange={vi.fn()}
@@ -41,7 +41,7 @@ describe("ImageTabsHeader (#196)", () => {
     render(
       <ImageTabsHeader
         layerVisibility={defaultVisibility}
-        selectionMode="box"
+        selectionMode="paragraph"
         eraseActive={false}
         onLayerToggle={vi.fn()}
         onSelectionModeChange={vi.fn()}
@@ -57,7 +57,7 @@ describe("ImageTabsHeader (#196)", () => {
     render(
       <ImageTabsHeader
         layerVisibility={defaultVisibility}
-        selectionMode="box"
+        selectionMode="paragraph"
         eraseActive={false}
         onLayerToggle={vi.fn()}
         onSelectionModeChange={vi.fn()}
@@ -71,7 +71,7 @@ describe("ImageTabsHeader (#196)", () => {
     render(
       <ImageTabsHeader
         layerVisibility={{ paragraph: true, line: false, word: true }}
-        selectionMode="box"
+        selectionMode="paragraph"
         eraseActive={false}
         onLayerToggle={vi.fn()}
         onSelectionModeChange={vi.fn()}
@@ -88,7 +88,7 @@ describe("ImageTabsHeader (#196)", () => {
     render(
       <ImageTabsHeader
         layerVisibility={defaultVisibility}
-        selectionMode="box"
+        selectionMode="paragraph"
         eraseActive={false}
         onLayerToggle={onLayerToggle}
         onSelectionModeChange={vi.fn()}
@@ -104,7 +104,7 @@ describe("ImageTabsHeader (#196)", () => {
     render(
       <ImageTabsHeader
         layerVisibility={defaultVisibility}
-        selectionMode="box"
+        selectionMode="paragraph"
         eraseActive={false}
         onLayerToggle={onLayerToggle}
         onSelectionModeChange={vi.fn()}
@@ -115,7 +115,7 @@ describe("ImageTabsHeader (#196)", () => {
     expect(onLayerToggle).toHaveBeenCalledWith("line");
   });
 
-  it("onSelectionModeChange fires with 'box' when word radio clicked", () => {
+  it("onSelectionModeChange fires with 'word' when word radio clicked", () => {
     const onSelectionModeChange = vi.fn();
     render(
       <ImageTabsHeader
@@ -128,7 +128,7 @@ describe("ImageTabsHeader (#196)", () => {
       />,
     );
     fireEvent.click(screen.getByTestId("selection-mode-word"));
-    expect(onSelectionModeChange).toHaveBeenCalledWith("box");
+    expect(onSelectionModeChange).toHaveBeenCalledWith("word");
   });
 
   it("onEraseToggle fires when erase button clicked", () => {
@@ -136,7 +136,7 @@ describe("ImageTabsHeader (#196)", () => {
     render(
       <ImageTabsHeader
         layerVisibility={defaultVisibility}
-        selectionMode="box"
+        selectionMode="paragraph"
         eraseActive={false}
         onLayerToggle={vi.fn()}
         onSelectionModeChange={vi.fn()}
@@ -151,7 +151,7 @@ describe("ImageTabsHeader (#196)", () => {
     render(
       <ImageTabsHeader
         layerVisibility={defaultVisibility}
-        selectionMode="box"
+        selectionMode="paragraph"
         eraseActive={true}
         onLayerToggle={vi.fn()}
         onSelectionModeChange={vi.fn()}

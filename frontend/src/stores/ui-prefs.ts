@@ -8,7 +8,7 @@ export interface UiPrefsState {
   lineFilter: string | null;
   layerVisibility: LayerVisibility;
   splitterPosition: number;
-  selectionMode: "box" | "line" | "word";
+  selectionMode: "paragraph" | "line" | "word";
 }
 
 type SetStateArg<T> = T | ((state: T) => T);
@@ -38,5 +38,5 @@ export const useUiPrefs = createStore<UiPrefsState>({
     word: true,
   },
   splitterPosition: 0.5,
-  selectionMode: "box",
+  selectionMode: "paragraph",
 });

@@ -13,8 +13,9 @@ export interface LayerVisibility {
   word: boolean;
 }
 
-/** Selection mode values (matches ui-prefs store). */
-export type SelectionMode = "box" | "line" | "word";
+/** Selection mode values (matches ui-prefs store). Aligned with legacy
+ * labeler — see specs/21-konva-renderer.md §8. */
+export type SelectionMode = "paragraph" | "line" | "word";
 
 interface ImageTabsHeaderProps {
   layerVisibility: LayerVisibility;
@@ -26,8 +27,7 @@ interface ImageTabsHeaderProps {
   onLayerToggle: (layer: keyof LayerVisibility) => void;
   /**
    * Called with the new selection mode when a radio is clicked.
-   * Maps: paragraph→"box", line→"line", word→"box" (word is the default box unit).
-   * Callers can use this to set their own granularity state.
+   * Values are the selection-unit names: "paragraph" | "line" | "word".
    */
   onSelectionModeChange: (mode: SelectionMode) => void;
   /** Called when the Erase Pixels button is clicked (toggle). */
@@ -105,8 +105,8 @@ export function ImageTabsHeader({
             type="radio"
             name="selection-mode"
             data-testid="selection-mode-paragraph"
-            checked={selectionMode === "box" && false /* paragraph mode not yet mapped */}
-            onChange={() => onSelectionModeChange("box")}
+            checked={selectionMode === "paragraph"}
+            onChange={() => onSelectionModeChange("paragraph")}
             aria-label="Select by paragraph"
           />
           <span>Para</span>
@@ -129,8 +129,8 @@ export function ImageTabsHeader({
             type="radio"
             name="selection-mode"
             data-testid="selection-mode-word"
-            checked={selectionMode === "box" || selectionMode === "word"}
-            onChange={() => onSelectionModeChange("box")}
+            checked={selectionMode === "word"}
+            onChange={() => onSelectionModeChange("word")}
             aria-label="Select by word"
           />
           <span>Word</span>
