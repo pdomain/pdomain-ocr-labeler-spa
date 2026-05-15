@@ -160,12 +160,13 @@ describe("CharRangesSection (Slice 19)", () => {
     expect(screen.queryByTestId("char-ranges-row-0")).not.toBeInTheDocument();
   });
 
-  it("Add range fires word PATCH (apply-style) for each enabled style", async () => {
+  it("Add range posts full positioned ranges to /char-ranges endpoint (FO-2)", async () => {
+    let capturedBody: unknown = null;
     const handler = vi.fn(async (info: { request: Request }) => {
-      await info.request.json();
+      capturedBody = await info.request.json();
       return HttpResponse.json(makePageResponse("Hello"));
     });
-    server.use(http.post("/api/projects/p1/pages/0/words/0/0/style", handler));
+    server.use(http.post("/api/projects/p1/pages/0/words/0/0/char-ranges", handler));
 
     const user = userEvent.setup();
     renderSection(makeWord("Hello"));
@@ -176,5 +177,36 @@ describe("CharRangesSection (Slice 19)", () => {
     await user.click(screen.getByTestId("char-ranges-add-button"));
 
     await waitFor(() => expect(handler).toHaveBeenCalled());
+
+    // The body should carry the full (start, end, styles[]) shape.
+    expect(capturedBody).toMatchObject({
+      ranges: [{ start: 0, end: 2, styles: ["italic"] }],
+    });
+  });
+
+  it("Delete range fires /char-ranges with updated list (FO-2)", async () => {
+    let lastBody: unknown = null;
+    const handler = vi.fn(async (info: { request: Request }) => {
+      lastBody = await info.request.json();
+      return HttpResponse.json(makePageResponse("Hello"));
+    });
+    server.use(http.post("/api/projects/p1/pages/0/words/0/0/char-ranges", handler));
+
+    const user = userEvent.setup();
+    renderSection(makeWord("Hello"));
+
+    // Add a range
+    await user.click(screen.getByTestId("char-cell-0"));
+    await user.click(screen.getByTestId("char-cell-2"));
+    await user.click(screen.getByTestId("char-ranges-chip-bold"));
+    await user.click(screen.getByTestId("char-ranges-add-button"));
+    await waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+
+    // Delete it
+    await user.click(screen.getByTestId("char-ranges-delete-0"));
+    await waitFor(() => expect(handler).toHaveBeenCalledTimes(2));
+
+    // Second POST should carry an empty ranges list.
+    expect(lastBody).toMatchObject({ ranges: [] });
   });
 });

@@ -10,7 +10,14 @@ import { describe, it, expect } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
-import { useValidateLine, useCopyLineGt, useDeleteLine, useUpdateWordGt } from "./useLineMutations";
+import {
+  useValidateLine,
+  useCopyLineGt,
+  useDeleteLine,
+  useUpdateWordGt,
+  useMergeLines,
+  usePatchParagraph,
+} from "./useLineMutations";
 
 function makeWrapper() {
   const qc = new QueryClient({
@@ -69,6 +76,32 @@ describe("useUpdateWordGt", () => {
   it("returns a mutation object with mutate and mutateAsync", () => {
     const Wrapper = makeWrapper();
     const { result } = renderHook(() => useUpdateWordGt("proj1", 0), { wrapper: Wrapper });
+    expect(typeof result.current.mutate).toBe("function");
+    expect(typeof result.current.mutateAsync).toBe("function");
+  });
+});
+
+describe("useMergeLines (FO-3)", () => {
+  it("is a function", () => {
+    expect(typeof useMergeLines).toBe("function");
+  });
+
+  it("returns a mutation object with mutate and mutateAsync", () => {
+    const Wrapper = makeWrapper();
+    const { result } = renderHook(() => useMergeLines("proj1", 0), { wrapper: Wrapper });
+    expect(typeof result.current.mutate).toBe("function");
+    expect(typeof result.current.mutateAsync).toBe("function");
+  });
+});
+
+describe("usePatchParagraph (FO-1)", () => {
+  it("is a function", () => {
+    expect(typeof usePatchParagraph).toBe("function");
+  });
+
+  it("returns a mutation object with mutate and mutateAsync", () => {
+    const Wrapper = makeWrapper();
+    const { result } = renderHook(() => usePatchParagraph("proj1", 0), { wrapper: Wrapper });
     expect(typeof result.current.mutate).toBe("function");
     expect(typeof result.current.mutateAsync).toBe("function");
   });

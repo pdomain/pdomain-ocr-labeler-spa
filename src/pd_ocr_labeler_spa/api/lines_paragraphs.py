@@ -93,7 +93,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from ..core.jobs import JobRunner
 from ..core.project_state import ProjectState
@@ -239,6 +239,33 @@ class MergeParagraphsRequest(BaseModel):
     """
 
     paragraph_indices: list[int]
+
+
+_VALID_LAYOUT_TYPES = frozenset(["Body", "Heading", "Caption", "Footnote", "Quote", "Other"])
+
+
+class PatchParagraphRequest(BaseModel):
+    """``PATCH .../paragraphs/{pi}`` body — FO-1 (layout-type save).
+
+    ``layout_type`` is one of the six documented types from the hi-fi
+    redesign spec (Slice 22 — BlockDetail).  Unknown values are rejected
+    with 422 so the frontend gets a clear error on client-side bugs.
+
+    The field is stored as a Python attribute on the paragraph object
+    (``paragraph.layout_type``).  pd-book-tools' ``Block`` does not
+    expose a ``set_layout_type`` method today; the attribute is lost on
+    ``Block.to_dict`` → ``from_dict`` round-trip (same documented
+    limitation as ``is_validated``).
+    """
+
+    layout_type: str
+
+    @field_validator("layout_type")
+    @classmethod
+    def _validate_layout_type(cls, v: str) -> str:
+        if v not in _VALID_LAYOUT_TYPES:
+            raise ValueError(f"layout_type must be one of {sorted(_VALID_LAYOUT_TYPES)!r}; got {v!r}")
+        return v
 
 
 class RefineBatchRequest(BaseModel):
@@ -1011,6 +1038,64 @@ def merge_paragraphs(
     )
 
 
+@router.patch(
+    "/{project_id}/pages/{page_index}/paragraphs/{paragraph_index}",
+    response_model=PagePayload,
+)
+def patch_paragraph(
+    project_id: str,
+    page_index: int,
+    paragraph_index: int,
+    body: PatchParagraphRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+) -> JSONResponse:
+    """``PATCH .../paragraphs/{pi}`` — update paragraph-level attributes (FO-1).
+
+    Currently handles ``layout_type`` only.  The value is stored as a
+    Python attribute on the paragraph object (``paragraph.layout_type``);
+    it is lost on envelope round-trip until pd-book-tools' ``Block``
+    grows a ``layout_type`` property (tracked as ConcaveTrillion/pd-book-tools#52
+    family).
+
+    When no PageState is seeded (project freshly loaded, page not yet
+    OCR'd) the route falls through to a stub PagePayload so the pre-
+    seeded integration tests and the frontend "save immediately on load"
+    flow stay green.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        # Stub — no in-memory page to mutate yet.
+        return _stub_page_payload(project_id, page_index)
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        paragraph = _resolve_paragraph(page, paragraph_index)
+        if paragraph is None:
+            return _paragraph_not_found(paragraph_index)
+        # Store as a plain Python attribute (lost on round-trip — documented).
+        paragraph.layout_type = body.layout_type
+        pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+    )
+
+
 # ── Legacy routes (kept for frontend client + integration tests) ───────
 
 
@@ -1249,6 +1334,7 @@ __all__ = [
     "MergeLinesRequest",
     "MergeParagraphsRequest",
     "MergeScopeRequest",
+    "PatchParagraphRequest",
     "RefineBatchRequest",
     "SplitAfterWordRequest",
     "SplitByWordsRequest",

@@ -1,10 +1,12 @@
 // useWordMutations.ts — TanStack Query mutations for word-level actions.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 16 (BBoxSection).
+// FO-2: useSetCharRanges — positioned char-range styles endpoint.
 //
 // Endpoints:
-//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/rebox → PagePayload
-//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/merge → PagePayload
-//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/split → PagePayload
+//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/rebox         → PagePayload
+//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/merge         → PagePayload
+//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/split         → PagePayload
+//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/char-ranges   → PagePayload (FO-2)
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { components } from "../api/types";
@@ -16,6 +18,8 @@ type MergeWordsRequest = components["schemas"]["MergeWordsRequest"];
 type SplitWordRequest = components["schemas"]["SplitWordRequest"];
 type ApplyStyleRequest = components["schemas"]["ApplyStyleRequest"];
 type UpdateWordGroundTruthRequest = components["schemas"]["UpdateWordGroundTruthRequest"];
+type SetCharRangesRequest = components["schemas"]["SetCharRangesRequest"];
+type CharRange = components["schemas"]["CharRange"];
 
 // ─── internal helpers ──────────────────────────────────────────────────────
 
@@ -178,6 +182,36 @@ export function useUpdateWordGroundTruth(projectId: string, pageIndex: number) {
       const body: UpdateWordGroundTruthRequest = { text };
       return apiPost<PagePayload>(
         `${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/gt`,
+        body,
+      );
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+// ─── useSetCharRanges (FO-2) ──────────────────────────────────────────────
+
+/**
+ * Set positioned character-range styles for a word (FO-2).
+ *
+ * Replaces all char-range annotations for the word in a single atomic
+ * operation.  An empty ``ranges`` list clears all existing ranges.
+ *
+ * Endpoint: ``POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/char-ranges``
+ */
+export function useSetCharRanges(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<
+    PagePayload,
+    Error,
+    { lineIndex: number; wordIndex: number; ranges: CharRange[] }
+  >({
+    mutationFn: ({ lineIndex, wordIndex, ranges }) => {
+      const body: SetCharRangesRequest = { ranges };
+      return apiPost<PagePayload>(
+        `${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/char-ranges`,
         body,
       );
     },

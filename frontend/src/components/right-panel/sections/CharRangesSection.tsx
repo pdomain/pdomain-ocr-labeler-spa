@@ -1,5 +1,7 @@
 // CharRangesSection.tsx — Char Ranges accordion section for word detail.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 19.
+// FO-2: switched from apply-style (scope:"part") to useSetCharRanges which
+//        carries full (start, end, styles[]) position data to the backend.
 //
 // UI:
 //   - One clickable cell per char in word.ocr_text.
@@ -8,14 +10,9 @@
 //   - When a range is pending, five tri-state Chip selectors (italic,
 //     bold, sub, super, drop-cap) appear; click cycles off→on→mixed→off.
 //   - "Add range" button is enabled when at least one style chip is "on";
-//     it appends a row to the ranges list and POSTs each enabled style
-//     via apply-style (scope="part") so the word picks up the label.
+//     it appends a row to the ranges list and POSTs the full ranges array
+//     via POST .../char-ranges.
 //   - Existing ranges are listed below as compact rows with a delete button.
-//
-// Backend caveat: the apply-style endpoint takes only ``scope: "whole"|"part"``
-// — no positions. We store the (start, end) positions locally so the UI
-// can render them; the backend only learns the style label.  When the
-// backend grows positioned ranges, switch the POST to a new endpoint.
 //
 // data-testids:
 //   char-ranges-section          — outer container
@@ -29,7 +26,7 @@
 import { useState } from "react";
 import { Chip, type TristateValue } from "../../ui/Chip";
 import { Button } from "../../ui/button";
-import { useApplyStyle } from "../../../hooks/useWordMutations";
+import { useSetCharRanges } from "../../../hooks/useWordMutations";
 import type { components } from "../../../api/types";
 
 type WordMatch = components["schemas"]["WordMatch"];
@@ -73,7 +70,7 @@ export interface CharRangesSectionProps {
 }
 
 export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSectionProps) {
-  const applyStyle = useApplyStyle(projectId, pageIndex);
+  const setCharRanges = useSetCharRanges(projectId, pageIndex);
 
   const text = word.ocr_text ?? "";
   const chars = Array.from(text);
@@ -118,16 +115,21 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
       end: pendingEnd,
       styles: { ...styles },
     };
-    setRanges((prev) => [...prev, row]);
+    const nextRanges = [...ranges, row];
+    setRanges(nextRanges);
 
-    // Persist each enabled style (best-effort — see file header for caveats).
+    // Persist the full range list with positions (FO-2).
     const lineIndex = word.line_index;
     const wordIndex = word.word_index ?? 0;
-    for (const s of STYLE_KEYS) {
-      if (row.styles[s] === "on") {
-        applyStyle.mutate({ lineIndex, wordIndex, style: s, scope: "part" });
-      }
-    }
+    setCharRanges.mutate({
+      lineIndex,
+      wordIndex,
+      ranges: nextRanges.map((r) => ({
+        start: r.start,
+        end: r.end,
+        styles: STYLE_KEYS.filter((s) => r.styles[s] === "on"),
+      })),
+    });
 
     // Reset pending state.
     setAnchor(null);
@@ -136,7 +138,21 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
   }
 
   function handleDelete(index: number) {
-    setRanges((prev) => prev.filter((_, i) => i !== index));
+    const nextRanges = ranges.filter((_, i) => i !== index);
+    setRanges(nextRanges);
+
+    // Persist the updated range list with the deleted entry removed.
+    const lineIndex = word.line_index;
+    const wordIndex = word.word_index ?? 0;
+    setCharRanges.mutate({
+      lineIndex,
+      wordIndex,
+      ranges: nextRanges.map((r) => ({
+        start: r.start,
+        end: r.end,
+        styles: STYLE_KEYS.filter((s) => r.styles[s] === "on"),
+      })),
+    });
   }
 
   return (
@@ -196,7 +212,7 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
             data-testid="char-ranges-add-button"
             variant="secondary"
             size="sm"
-            disabled={!hasPendingRange || applyStyle.isPending}
+            disabled={!hasPendingRange || setCharRanges.isPending}
             onClick={handleAdd}
           >
             Add range

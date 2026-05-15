@@ -1060,6 +1060,101 @@ def erase_pixels(
     )
 
 
+# ── FO-2: Char-ranges endpoint ─────────────────────────────────────────
+
+
+class CharRange(BaseModel):
+    """A single positioned character range — FO-2.
+
+    ``start`` and ``end`` are character indices into the word's OCR text
+    (0-based, inclusive on both ends).  ``styles`` is the list of style
+    labels that apply to this range (e.g. ``["italic", "bold"]``).
+
+    Pydantic validates that ``start`` and ``end`` are non-negative; the
+    route does not validate that they fall within the word's actual text
+    length (the word text may change between client render and server
+    receipt, and the old positions are still meaningful as metadata).
+    """
+
+    start: int
+    end: int
+    styles: list[str]
+
+
+class SetCharRangesRequest(BaseModel):
+    """``POST .../words/{li}/{wi}/char-ranges`` body — FO-2.
+
+    Replaces all character-range annotations for the given word.  An
+    empty ``ranges`` list clears all existing ranges.
+
+    The backend stores the ranges as a Python attribute on the word
+    object (``word.char_ranges``).  pd-book-tools does not have a
+    first-class ``char_ranges`` concept today; the data is lost on
+    ``Word.to_dict`` → ``from_dict`` round-trip (same documented
+    limitation as ``is_validated``).  When pd-book-tools grows a
+    ``char_ranges`` field, the route can be updated to call the
+    appropriate setter.
+    """
+
+    ranges: list[CharRange]
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/words/{line_index}/{word_index}/char-ranges",
+    response_model=PagePayload,
+)
+def set_char_ranges(
+    project_id: str,
+    page_index: int,
+    line_index: int,
+    word_index: int,
+    body: SetCharRangesRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+) -> JSONResponse:
+    """``POST .../words/{li}/{wi}/char-ranges`` — set positioned char-range styles (FO-2).
+
+    Replaces all char-range annotations for the word in one atomic
+    operation.  The ranges are stored as ``word.char_ranges`` (a plain
+    Python attribute — lost on envelope round-trip).
+
+    When no PageState is seeded the route falls through to a stub
+    PagePayload (same pattern as other mutation endpoints).
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        word = _resolve_word(page, line_index, word_index)
+        if word is None:
+            return _word_not_found(line_index, word_index)
+
+        # Store as a plain Python attribute — no pd-book-tools API yet.
+        word.char_ranges = [r.model_dump() for r in body.ranges]
+
+        pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+    )
+
+
 def install_words_router(app) -> None:  # type: ignore[no-untyped-def]
     """Register the words router. Called from ``bootstrap.build_app``."""
     app.include_router(router)
@@ -1069,10 +1164,12 @@ __all__ = [
     "AddWordRequest",
     "ApplyComponentRequest",
     "ApplyStyleRequest",
+    "CharRange",
     "ErasePixelsRequest",
     "MergeWordsRequest",
     "NudgeBboxRequest",
     "ReboxWordRequest",
+    "SetCharRangesRequest",
     "SplitWordRequest",
     "ToggleValidatedRequest",
     "UpdateWordGroundTruthRequest",

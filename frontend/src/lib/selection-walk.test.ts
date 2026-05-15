@@ -226,6 +226,116 @@ describe("walkDown", () => {
   });
 });
 
+// Helper: page where LineMatch objects carry numeric block_index values.
+// Block 0: lines 0, 1 (para 0). Block 1: line 2 (para 1).
+function makePageWithBlocks(): PagePayload {
+  return {
+    project_id: "p1",
+    page_index: 0,
+    line_filter: "all",
+    generation: 0,
+    line_matches: [
+      {
+        line_index: 0,
+        paragraph_index: 0,
+        block_index: 0,
+        ocr_line_text: "alpha",
+        ground_truth_line_text: "alpha",
+        word_matches: [w(0, 0, "alpha")],
+        overall_match_status: "exact",
+        exact_count: 1,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+        validated_word_count: 0,
+        total_word_count: 1,
+        is_fully_validated: false,
+      },
+      {
+        line_index: 1,
+        paragraph_index: 0,
+        block_index: 0,
+        ocr_line_text: "beta",
+        ground_truth_line_text: "beta",
+        word_matches: [w(1, 0, "beta")],
+        overall_match_status: "exact",
+        exact_count: 1,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+        validated_word_count: 0,
+        total_word_count: 1,
+        is_fully_validated: false,
+      },
+      {
+        line_index: 2,
+        paragraph_index: 1,
+        block_index: 1,
+        ocr_line_text: "gamma",
+        ground_truth_line_text: "gamma",
+        word_matches: [w(2, 0, "gamma")],
+        overall_match_status: "exact",
+        exact_count: 1,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+        validated_word_count: 0,
+        total_word_count: 1,
+        is_fully_validated: false,
+      },
+    ],
+  };
+}
+
+describe("nextSibling — block level (FO-7)", () => {
+  const page = makePageWithBlocks();
+
+  it("walks forward to next block", () => {
+    const out = nextSibling({ blockId: "0" }, page, "next");
+    expect(out.blockId).toBe("1");
+  });
+
+  it("walks backward to prev block", () => {
+    const out = nextSibling({ blockId: "1" }, page, "prev");
+    expect(out.blockId).toBe("0");
+  });
+
+  it("stops at last block (next)", () => {
+    const path = { blockId: "1" };
+    expect(nextSibling(path, page, "next")).toEqual(path);
+  });
+
+  it("stops at first block (prev)", () => {
+    const path = { blockId: "0" };
+    expect(nextSibling(path, page, "prev")).toEqual(path);
+  });
+
+  it("no-op when all lines have null block_index", () => {
+    // Page with no block_index set → blockIds() returns [] → falls through.
+    const flatPage = makePage(); // makePage() has no block_index fields
+    const path = { blockId: "synthetic-b1" };
+    expect(nextSibling(path, flatPage, "next")).toEqual(path);
+  });
+
+  it("no-op when blockId is a non-numeric string", () => {
+    const path = { blockId: "synthetic-b1" };
+    expect(nextSibling(path, page, "next")).toEqual(path);
+  });
+
+  it("walkUp from block drops blockId", () => {
+    const out = walkUp({ blockId: "0" }, page);
+    expect(out).toEqual({});
+  });
+
+  it("walkDown from block descends to first paragraph", () => {
+    const out = walkDown({ blockId: "0" }, page);
+    expect(out.paraId).toBe(0);
+  });
+});
+
 describe("paragraph_index null bucket", () => {
   const page: PagePayload = {
     project_id: "p1",

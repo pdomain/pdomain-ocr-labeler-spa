@@ -18,7 +18,7 @@ import { LineCard } from "../LineCard";
 import { StatusPip } from "../ui/StatusPip";
 import { selectionStore } from "../../stores/selection-store";
 import { useUiPrefs } from "../../stores/ui-prefs";
-import { useValidateLine } from "../../hooks/useLineMutations";
+import { useMergeLines, useValidateLine } from "../../hooks/useLineMutations";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -101,6 +101,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
   );
 
   const validateLine = useValidateLine(projectId, pageIndex);
+  const mergeLines = useMergeLines(projectId, pageIndex);
 
   function toggleDensity() {
     const next: WordDensity = densityPref === "cards" ? "rows" : "cards";
@@ -129,14 +130,15 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
               validateLine.mutate({ lineIndex: li, validated });
             }}
           />
-          {/* Merge-with-adjacent-line affordance */}
+          {/* Merge-with-adjacent-line affordance (FO-3) */}
           <div className="px-3 py-2 flex gap-2 border-t border-border-1">
             <button
               type="button"
               data-testid="line-detail-merge-prev"
               className="text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
-              disabled
-              title="Merge with previous line (not yet wired)"
+              disabled={line.line_index === 0 || mergeLines.isPending}
+              title={line.line_index === 0 ? "No previous line" : "Merge with previous line"}
+              onClick={() => mergeLines.mutate({ lineIndex: line.line_index, direction: "prev" })}
             >
               ↑ Merge prev
             </button>
@@ -144,8 +146,9 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
               type="button"
               data-testid="line-detail-merge-next"
               className="text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
-              disabled
-              title="Merge with next line (not yet wired)"
+              disabled={mergeLines.isPending}
+              title="Merge with next line"
+              onClick={() => mergeLines.mutate({ lineIndex: line.line_index, direction: "next" })}
             >
               ↓ Merge next
             </button>

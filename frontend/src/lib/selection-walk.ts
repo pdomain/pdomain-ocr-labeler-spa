@@ -1,14 +1,17 @@
 // selection-walk.ts — pure hierarchy navigation helpers.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 15.
+// FO-7: block sibling walk now uses LineMatch.block_index when present.
+//        When block_index is null on all lines, block walk remains a no-op
+//        (backward-compatible with pre-FO-7 behavior).
 //
 // Given a PagePayload and a SelectionPath (block/para/line/word ids), compute
 // the next sibling at the deepest level (Alt+Left/Right) or the parent /
 // first-child path one level up or down (Alt+Up/Down).
 //
 // IDs:
-//   blockId  — opaque string (PagePayload has no explicit block layer yet, so
-//              callers pass synthetic ids; navigation is a no-op when no
-//              siblings exist).
+//   blockId  — block_index from LineMatch as a string (e.g. "0", "1").
+//              When block_index is null, blockId is the opaque synthetic id
+//              from the caller; navigation falls back to the old no-op.
 //   paraId   — `paragraph_index` from LineMatch (can be null → "Unsorted"
 //              bucket, represented here as the literal string "null").
 //   lineId   — `line_index` from LineMatch (number).
@@ -34,6 +37,23 @@ export interface SelectionPath {
 export type WalkDirection = "next" | "prev";
 
 // ─── Index helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Sorted list of distinct block indices from LineMatch.block_index.
+ *
+ * Returns an empty array when no line carries a block_index — callers
+ * must treat that as "block layer not available" and fall through to the
+ * no-op path (same as pre-FO-7 behavior).
+ */
+function blockIds(page: PagePayload): number[] {
+  const ids = new Set<number>();
+  for (const lm of page.line_matches ?? []) {
+    if (typeof lm.block_index === "number") {
+      ids.add(lm.block_index);
+    }
+  }
+  return Array.from(ids).sort((a, b) => a - b);
+}
 
 /** Sorted list of distinct paragraph indices (nulls bucketed together at end). */
 function paraIds(page: PagePayload): Array<number | null> {
@@ -127,7 +147,24 @@ export function nextSibling(
     if (next === undefined) return path;
     return { ...path, paraId: next };
   }
-  // block-level or none — no siblings to compute from the page payload.
+  // Block-level sibling walk (FO-7):
+  // blockId is stored as a string representation of block_index. Parse it
+  // back to a number and look up siblings in blockIds(page). Falls back
+  // to no-op when block_index is absent (all nulls → blockIds returns []).
+  if (path.blockId !== undefined) {
+    const numericBlockId = parseInt(path.blockId, 10);
+    if (!isNaN(numericBlockId)) {
+      const ids = blockIds(page);
+      const idx = ids.indexOf(numericBlockId);
+      if (idx >= 0) {
+        const next = step(ids, idx, dir);
+        if (next !== undefined) {
+          return { ...path, blockId: String(next) };
+        }
+      }
+    }
+    return path;
+  }
   return path;
 }
 

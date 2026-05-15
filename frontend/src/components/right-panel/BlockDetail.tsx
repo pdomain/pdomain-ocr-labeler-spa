@@ -29,6 +29,7 @@ import {
   type SelectionLevel,
 } from "../../stores/selection-store";
 import { useUiPrefs } from "../../stores/ui-prefs";
+import { usePatchParagraph } from "../../hooks/useLineMutations";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -81,12 +82,7 @@ export interface BlockDetailProps {
   level: Extract<SelectionLevel, "block" | "para">;
 }
 
-export function BlockDetail({
-  page,
-  projectId: _projectId,
-  pageIndex: _pageIndex,
-  level,
-}: BlockDetailProps) {
+export function BlockDetail({ page, projectId, pageIndex, level }: BlockDetailProps) {
   const state = useSyncExternalStore(
     subscribeSelection,
     getSelectionSnapshot,
@@ -110,7 +106,15 @@ export function BlockDetail({
     );
   }
 
-  return <BlockDetailInner page={page} level={level} paraId={path.paraId ?? null} />;
+  return (
+    <BlockDetailInner
+      page={page}
+      level={level}
+      paraId={path.paraId ?? null}
+      projectId={projectId}
+      pageIndex={pageIndex}
+    />
+  );
 }
 
 // ─── Inner ─────────────────────────────────────────────────────────────────
@@ -119,11 +123,15 @@ interface BlockDetailInnerProps {
   page: PagePayload;
   level: Extract<SelectionLevel, "block" | "para">;
   paraId: number | null;
+  projectId: string;
+  pageIndex: number;
 }
 
-function BlockDetailInner({ page, level, paraId }: BlockDetailInnerProps) {
+function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDetailInnerProps) {
   const [selectedLayout, setSelectedLayout] = useState<LayoutType>("Body");
   const [suggestedLayout] = useState<LayoutType | null>(null); // backend not wired yet
+
+  const patchParagraph = usePatchParagraph(projectId, pageIndex);
 
   // Density pref — stored in ui-prefs as "blockItemsDensity".
   // Local state initialized from the store so the component is reactive.
@@ -177,7 +185,15 @@ function BlockDetailInner({ page, level, paraId }: BlockDetailInnerProps) {
                     type="button"
                     data-testid={`block-detail-layout-chip-${lt.toLowerCase()}`}
                     data-active={selectedLayout === lt ? "true" : undefined}
-                    onClick={() => setSelectedLayout(lt)}
+                    onClick={() => {
+                      setSelectedLayout(lt);
+                      if (paraId !== null) {
+                        patchParagraph.mutate({
+                          paragraphIndex: paraId,
+                          layoutType: lt,
+                        });
+                      }
+                    }}
                     className={
                       selectedLayout === lt
                         ? "text-[11px] px-2 py-0.5 rounded-full border bg-accent text-accent-ink border-accent"
@@ -200,7 +216,15 @@ function BlockDetailInner({ page, level, paraId }: BlockDetailInnerProps) {
                 <button
                   type="button"
                   data-testid="block-detail-layout-accept"
-                  onClick={() => setSelectedLayout(suggestedLayout)}
+                  onClick={() => {
+                    setSelectedLayout(suggestedLayout);
+                    if (paraId !== null) {
+                      patchParagraph.mutate({
+                        paragraphIndex: paraId,
+                        layoutType: suggestedLayout,
+                      });
+                    }
+                  }}
                   className="text-[11px] px-2 py-0.5 rounded bg-accent text-accent-ink"
                 >
                   Accept
@@ -212,10 +236,12 @@ function BlockDetailInner({ page, level, paraId }: BlockDetailInnerProps) {
               </div>
             )}
 
-            {/* Save note — endpoint not yet wired */}
-            <p className="mt-3 text-[10px] text-ink-4 italic">
-              Layout type save (PATCH lines_paragraphs) is not yet wired to the backend.
-            </p>
+            {/* Save feedback */}
+            {patchParagraph.isError && (
+              <p className="mt-3 text-[10px] text-red-500 italic">
+                Failed to save layout type. Try again.
+              </p>
+            )}
           </TabsContent>
         )}
 

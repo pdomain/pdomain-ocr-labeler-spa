@@ -1,16 +1,26 @@
 """``/api/projects/{project_id}/pages/{page_index}/refine`` router (§5.6).
 
+Also exposes ``GET /api/refine/available`` — a capability probe used by
+``ErasePixelsSection`` to decide whether to enable the Apply button (FO-9).
+
 Spec authority:
 - ``docs/architecture/01-data-models.md §2`` — ``RefineScopeRequest`` shape.
 - ``docs/architecture/02-backend.md §5.6`` — endpoint contract: 202 Accepted + job_id.
 - ``docs/specs/2026-05-12-backend-design.md`` — long-running operations
   return 202 Accepted with {job_id}; callers open EventSource on the job.
+- ``docs/hifi-followons.md #FO-9`` — ErasePixelsSection backendAvailable probe.
 
 ``POST .../refine`` is a long-running operation (OCR bounding-box
 refinement may take seconds per scope). It follows the same 202+job_id
-pattern as ``POST .../reload-ocr`` (spec §5.3). The stub handler in the
-job runner immediately completes — full OCR refinement logic lands in
-M3-proper when the OCR adapter is wired.
+pattern as ``POST .../reload-ocr`` (spec §5.3). The stub runner immediately
+completes — full OCR refinement logic lands in M3-proper when the OCR
+adapter is wired.
+
+``GET /api/refine/available`` is a lightweight synchronous probe:
+- ``available: true`` — the server has an OCR engine wired that supports
+  bbox refinement (currently always ``false`` until M3-proper).
+- ``available: false`` — the feature is not wired; clients should disable
+  the Apply button and show an explanatory tooltip.
 """
 
 from __future__ import annotations
@@ -26,7 +36,24 @@ from ..core.project_state import ProjectState
 from .dependencies import get_job_runner, get_project_state
 from .middleware.error_handler import ApiError
 
+# Two routers: the per-project refine route keeps its prefix; the capability
+# probe lives at /api/refine/* (no project_id in path) so it can be called
+# before any project is loaded.
 router = APIRouter(prefix="/api/projects", tags=["refine"])
+probe_router = APIRouter(prefix="/api/refine", tags=["refine"])
+
+
+class RefineAvailableResponse(BaseModel):
+    """Response for ``GET /api/refine/available`` — FO-9 capability probe.
+
+    ``available`` is ``True`` when a wired OCR engine supports bbox refinement.
+    Currently always ``False`` (M3-proper OCR adapter not yet wired).
+    ``reason`` is empty when ``available=True``; otherwise a human-readable
+    explanation of why the feature is not available.
+    """
+
+    available: bool = False
+    reason: str = "OCR engine not wired (pending M3-proper)"
 
 
 class RefineScopeRequest(BaseModel):
@@ -116,14 +143,33 @@ def refine_scope(
     return JSONResponse(status_code=202, content={"job_id": job_id})
 
 
+@probe_router.get("/available", response_model=RefineAvailableResponse)
+def refine_available() -> RefineAvailableResponse:
+    """``GET /api/refine/available`` — capability probe (FO-9).
+
+    Returns immediately without requiring a project to be loaded.
+    Currently always returns ``available=False`` because the full OCR bbox
+    refinement engine (M3-proper) is not yet wired. When the OCR adapter
+    is connected, this probe will check ``IOCREngine.supports_refine()``
+    and return ``available=True`` with ``reason=""``.
+
+    The ``ErasePixelsSection`` frontend component calls this on mount
+    and uses the result to decide whether to enable the Apply button.
+    """
+    return RefineAvailableResponse()
+
+
 def install_refine_router(app) -> None:  # type: ignore[no-untyped-def]
-    """Register the refine router. Called from ``bootstrap.build_app``."""
+    """Register the refine routers. Called from ``bootstrap.build_app``."""
     app.include_router(router)
+    app.include_router(probe_router)
 
 
 __all__ = [
+    "RefineAvailableResponse",
     "RefineJobResponse",
     "RefineScopeRequest",
     "install_refine_router",
+    "probe_router",
     "router",
 ]

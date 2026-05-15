@@ -183,6 +183,13 @@ class LineMatch(BaseModel):
 
     line_index: int
     paragraph_index: int | None
+    # FO-7: block_index groups lines into top-level layout blocks.
+    # Populated when the OCR engine exposes a block layer (e.g. via
+    # ``Page.items[block_idx]``).  ``None`` until M3-proper wires a real
+    # ``LocalDoctrPageLoader`` that maps lines → parent block indices.
+    # The frontend ``selection-walk.ts`` uses this to enable block-level
+    # sibling navigation; when ``None`` on all lines, block walk is a no-op.
+    block_index: int | None = None
     ocr_line_text: str
     ground_truth_line_text: str
     word_matches: list[WordMatch]
