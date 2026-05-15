@@ -1,21 +1,29 @@
-// HeaderBar.tsx — persistent top-chrome, present on every route.
-// Spec: specs/22-page-surface-wireup.md §3 (Layout), §6 (Header trigger buttons)
-// Issues: #272 (initial), #309 (spec-22-A — trigger buttons)
+// HeaderBar.tsx — 40px top chrome, present on every route.
+// Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 9.
+//       specs/22-page-surface-wireup.md §3, §6 (issue #309)
 //
-// Contains ProjectLoadControls + three dialog-trigger icon buttons.
-// No app title or logo — controls-only, matching the legacy pd-ocr-labeler.
+// Layout:
+//   Left:   logo glyph + (project name when on a project route)
+//   Center: ProjectLoadControls + dialog trigger buttons
+//   Right:  UserMenu (avatar + caret) — Theme stub + Sign out
 //
-// `isControlsDisabled` mirrors legacy `ProjectStateViewModel.is_controls_disabled`
-// (no project loaded / mid-load). At header-bar level we don't know the
-// current project from a React context, so we read it from the URL via
-// react-router's `useMatch` and feed it to `useProject(projectId)`. When no
-// projectId is on the URL or the query is still loading / errored, treat
-// the project as "not loaded" — controls disabled.
+// 40px height (`h-10`), `bg-bg-page`, `border-b border-border-1`.
 
-import { useMatch } from "react-router-dom";
+import { Link, useMatch } from "react-router-dom";
+import { ChevronDown } from "lucide-react";
+
 import ProjectLoadControls from "./ProjectLoadControls";
 import { useProject } from "../hooks/useProject";
 import { dialogStore } from "../stores/dialog-store";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "./ui/dropdown-menu";
+
+// ─── disabled-state hook ─────────────────────────────────────────────────────
 
 function useIsControlsDisabled(): boolean {
   // Match either page-no or page-idx variants and the project root.
@@ -29,55 +37,123 @@ function useIsControlsDisabled(): boolean {
 
   const { data, isLoading, isError } = useProject(projectId);
 
-  // Disabled when no projectId on URL, query still loading, errored, or
-  // returned no project.
   if (!projectId) return true;
   if (isLoading || isError) return true;
   if (!data) return true;
   return false;
 }
 
+// ─── UserMenu ────────────────────────────────────────────────────────────────
+
+function UserMenu() {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          data-testid="user-menu-trigger"
+          aria-label="User menu"
+          className="flex items-center gap-1 h-7 px-2 rounded-md bg-bg-raised border border-border-2 text-ink-2 text-body hover:bg-bg-surface transition-colors"
+        >
+          {/* Avatar circle placeholder */}
+          <span
+            aria-hidden
+            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent text-accent-ink text-[9px] font-bold select-none"
+          >
+            U
+          </span>
+          <ChevronDown className="w-3 h-3 shrink-0" aria-hidden />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="bg-bg-surface border-border-2 text-ink-1">
+        {/* Theme row — stubbed; wired by Slice 24 */}
+        <DropdownMenuItem
+          data-testid="user-menu-theme-item"
+          className="text-body text-ink-1 focus:bg-bg-raised focus:text-ink-1"
+          onSelect={(e) => e.preventDefault()}
+        >
+          Theme (stub)
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="bg-border-1" />
+        <DropdownMenuItem
+          data-testid="user-menu-signout-item"
+          className="text-body text-ink-1 focus:bg-bg-raised focus:text-ink-1"
+        >
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// ─── HeaderBar ───────────────────────────────────────────────────────────────
+
 export default function HeaderBar() {
   const isControlsDisabled = useIsControlsDisabled();
 
   return (
-    <header data-testid="header-bar" className="flex items-center gap-2 px-4 py-2 border-b">
-      <ProjectLoadControls />
-
-      <button
-        type="button"
-        data-testid="ocr-config-trigger-button"
-        aria-label="OCR configuration"
-        disabled={isControlsDisabled}
-        onClick={() => dialogStore.open("ocrConfig")}
-        className="px-2 py-1 text-sm border rounded disabled:opacity-50"
+    <header
+      data-testid="header-bar"
+      className="h-10 flex items-center gap-2 px-3 bg-bg-page border-b border-border-1"
+    >
+      {/* Left: logo */}
+      <Link
+        to="/"
+        data-testid="header-logo"
+        aria-label="OCR Labeler home"
+        className="flex items-center gap-1.5 text-ink-1 no-underline shrink-0"
       >
-        {/* SlidersIcon placeholder — icon library added in a later milestone */}
-        &#9881;
-      </button>
+        {/* Glyph placeholder — real asset in a later slice */}
+        <span aria-hidden className="text-accent font-bold text-heading select-none">
+          &#9673;
+        </span>
+        <span className="text-heading font-semibold text-ink-1 hidden sm:inline">OCR Labeler</span>
+      </Link>
 
-      <button
-        type="button"
-        data-testid="export-trigger-button"
-        aria-label="Export"
-        disabled={isControlsDisabled}
-        onClick={() => dialogStore.open("export")}
-        className="px-2 py-1 text-sm border rounded disabled:opacity-50"
-      >
-        {/* file_download glyph placeholder */}
-        &#11015;
-      </button>
+      {/* Center: load controls + dialog triggers */}
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        <ProjectLoadControls />
 
-      <button
-        type="button"
-        data-testid="hotkey-help-trigger-button"
-        aria-label="Hotkey help (?)"
-        onClick={() => dialogStore.open("hotkeyHelp")}
-        className="px-2 py-1 text-sm border rounded"
-      >
-        {/* keyboard glyph placeholder */}
-        &#9000;
-      </button>
+        <button
+          type="button"
+          data-testid="ocr-config-trigger-button"
+          aria-label="OCR configuration"
+          disabled={isControlsDisabled}
+          onClick={() => dialogStore.open("ocrConfig")}
+          className="px-2 py-1 text-sm border rounded disabled:opacity-50"
+        >
+          {/* SlidersIcon placeholder */}
+          &#9881;
+        </button>
+
+        <button
+          type="button"
+          data-testid="export-trigger-button"
+          aria-label="Export"
+          disabled={isControlsDisabled}
+          onClick={() => dialogStore.open("export")}
+          className="px-2 py-1 text-sm border rounded disabled:opacity-50"
+        >
+          {/* file_download glyph placeholder */}
+          &#11015;
+        </button>
+
+        <button
+          type="button"
+          data-testid="hotkey-help-trigger-button"
+          aria-label="Hotkey help (?)"
+          onClick={() => dialogStore.open("hotkeyHelp")}
+          className="px-2 py-1 text-sm border rounded"
+        >
+          {/* keyboard glyph placeholder */}
+          &#9000;
+        </button>
+      </div>
+
+      {/* Right: UserMenu */}
+      <div className="shrink-0">
+        <UserMenu />
+      </div>
 
       {/*
        * Spec 22 §10 — driver-contract preservation.

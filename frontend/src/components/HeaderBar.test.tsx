@@ -12,6 +12,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
@@ -271,5 +272,63 @@ describe("HeaderBar: dialog triggers (spec 22 §6)", () => {
 
     const ocrConfig = await screen.findByTestId("ocr-config-trigger-button");
     expect(ocrConfig).toBeDisabled();
+  });
+});
+
+// --- Slice 9: 40px top chrome ------------------------------------------------
+
+describe("HeaderBar: Slice 9 — 40px chrome evolution", () => {
+  function withEmptyProjects() {
+    server.use(
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [],
+          selected: null,
+          projects_root: "",
+          config_source: "default",
+        }),
+      ),
+    );
+  }
+
+  it("header root has h-10 height class (40px)", async () => {
+    withEmptyProjects();
+    renderHeaderBar();
+    const header = await screen.findByTestId("header-bar");
+    expect(header.className).toMatch(/h-10/);
+  });
+
+  it("renders logo testid", async () => {
+    withEmptyProjects();
+    renderHeaderBar();
+    await screen.findByTestId("header-bar");
+    expect(screen.getByTestId("header-logo")).toBeInTheDocument();
+  });
+
+  it("logo click navigates to root route", async () => {
+    withEmptyProjects();
+    renderHeaderBar({ route: "/projects/p1/pages/pageno/1" });
+    const logo = await screen.findByTestId("header-logo");
+    expect(logo.tagName.toLowerCase()).toBe("a");
+    expect(logo).toHaveAttribute("href", "/");
+  });
+
+  it("renders user-menu trigger button", async () => {
+    withEmptyProjects();
+    renderHeaderBar();
+    await screen.findByTestId("header-bar");
+    expect(screen.getByTestId("user-menu-trigger")).toBeInTheDocument();
+  });
+
+  it("user menu opens on click and shows theme + sign-out items", async () => {
+    withEmptyProjects();
+    renderHeaderBar();
+    const trigger = await screen.findByTestId("user-menu-trigger");
+    // Radix DropdownMenu requires userEvent (pointer events) to open
+    await userEvent.click(trigger);
+    await waitFor(() => {
+      expect(screen.getByTestId("user-menu-theme-item")).toBeInTheDocument();
+      expect(screen.getByTestId("user-menu-signout-item")).toBeInTheDocument();
+    });
   });
 });
