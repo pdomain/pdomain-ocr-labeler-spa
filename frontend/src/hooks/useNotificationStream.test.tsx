@@ -61,15 +61,20 @@ afterEach(() => {
 
 // We mock the 'sonner' module so we can track toast.* calls.
 vi.mock("sonner", () => ({
+  toast: vi.fn(),
+}));
+
+// We mock our toast wrapper to track calls (internally uses mocked sonner).
+vi.mock("../lib/toast", () => ({
   toast: {
     success: vi.fn(),
     error: vi.fn(),
-    warning: vi.fn(),
+    warn: vi.fn(),
     info: vi.fn(),
   },
 }));
 
-import { toast } from "sonner";
+import { toast } from "../lib/toast";
 
 /** Extract the `message` prop from the JSX element passed as the first toast arg. */
 function lastCallMessage(mockFn: ReturnType<typeof vi.fn>): string {
@@ -122,7 +127,7 @@ describe("useNotificationStream", () => {
     expect(lastCallMessage(vi.mocked(toast.error))).toBe("OCR failed");
   });
 
-  it("calls toast.warning for warning kind", async () => {
+  it("calls toast.warn for warning kind", async () => {
     renderHook(() => useNotificationStream());
     act(() => {
       lastSource!._emit(
@@ -135,8 +140,8 @@ describe("useNotificationStream", () => {
         }),
       );
     });
-    await waitFor(() => expect(toast.warning).toHaveBeenCalled());
-    expect(lastCallMessage(vi.mocked(toast.warning))).toBe("Low memory");
+    await waitFor(() => expect(toast.warn).toHaveBeenCalled());
+    expect(lastCallMessage(vi.mocked(toast.warn))).toBe("Low memory");
   });
 
   it("calls toast.info for info kind", async () => {

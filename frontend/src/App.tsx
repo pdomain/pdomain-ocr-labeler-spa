@@ -18,6 +18,7 @@ import HeaderBar from "./components/HeaderBar";
 import RootPage from "./pages/RootPage";
 import ProjectPage from "./pages/ProjectPage";
 import { ROUTES } from "./lib/routes";
+import { useThemePreference } from "./stores/ui-prefs";
 
 // Lazy-load the perf-bench page so the heavy react-konva module graph
 // (and its Node-canvas dependency in jsdom test environments) is only
@@ -174,13 +175,38 @@ function AppShell() {
   );
 }
 
+/**
+ * Toaster wrapper that respects the theme preference.
+ * Spec: Slice 26 — position bottom-right, theme from data-theme.
+ */
+function ThemedToaster() {
+  const theme = useThemePreference();
+  // Resolve "system" to actual dark/light for Sonner theme prop.
+  let effectiveTheme: "light" | "dark" = "dark";
+  if (theme === "system") {
+    try {
+      effectiveTheme = window.matchMedia("(prefers-color-scheme: light)").matches
+        ? "light"
+        : "dark";
+    } catch {
+      // Test environments may not have matchMedia; default to dark.
+    }
+  } else {
+    effectiveTheme = theme;
+  }
+
+  return <Toaster richColors position="bottom-right" theme={effectiveTheme} />;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AppShell />
-        {/* Single Toaster instance — all toasts routed through sonner */}
-        <Toaster richColors position="top-right" />
+        {/* Single Toaster instance — all toasts routed through sonner.
+            Position: bottom-right (Slice 26).
+            Theme matches data-theme preference. */}
+        <ThemedToaster />
       </BrowserRouter>
     </QueryClientProvider>
   );

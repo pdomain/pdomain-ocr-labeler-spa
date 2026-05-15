@@ -4,11 +4,11 @@
 // Spec: docs/specs/2026-05-12-notifications-design.md §useNotificationStream hook
 // Issue #231
 //
-// NotificationKind → sonner mapping:
-//   positive → toast.success
-//   negative → toast.error
-//   warning  → toast.warning
-//   info     → toast.info
+// NotificationKind → toast mapping (Slice 26):
+//   positive → toast.success (status-exact)
+//   negative → toast.error (status-mismatch)
+//   warning  → toast.warn (status-fuzzy)
+//   info     → toast.info (status-ocr)
 //
 // Auto-save success notifications are filtered client-side: messages whose
 // text starts with "auto-save: " and kind is "positive" are suppressed.
@@ -19,7 +19,7 @@
 // `[data-testid^="notification-negative-"]` to find error toasts.
 
 import { useEffect } from "react";
-import { toast } from "sonner";
+import { toast } from "../lib/toast";
 
 /** Matches the backend Notification shape from core/notifications.py. */
 interface NotificationEvent {
@@ -70,7 +70,7 @@ export function useNotificationStream(): void {
           toast.error(msg, { id: notif.id });
           break;
         case "warning":
-          toast.warning(msg, { id: notif.id });
+          toast.warn(msg, { id: notif.id });
           break;
         case "info":
           toast.info(msg, { id: notif.id });
