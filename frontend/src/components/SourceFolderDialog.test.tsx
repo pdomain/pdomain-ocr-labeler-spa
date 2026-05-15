@@ -1,12 +1,16 @@
-// SourceFolderDialog.test.tsx — unit tests for the source-folder picker dialog.
-// Issue #294 (spec 22 §10 — real source-folder picker).
+// SourceFolderDialog.test.tsx — unit tests for the file-browser-style source-folder dialog.
+// Issue #294 (spec 22 §10 / driver-contract 13 §2.2).
 //
 // Tests:
 //   - Renders when open, not rendered when closed.
-//   - Shows required driver-contract testids.
-//   - Typing + clicking Confirm → POST /api/projects/source-root (via MSW).
-//   - Cancel closes without making an API call.
-//   - Loading state shown while POST is in flight.
+//   - All 9 driver-contract testids present when open.
+//   - Home button resets both currentPath and inputPath to "~".
+//   - Up button navigates to parent directory.
+//   - Open-typed button sets currentPath to inputPath value.
+//   - Use-current button copies currentPath into inputPath.
+//   - Apply button POSTs currentPath to /api/projects/source-root and closes.
+//   - Cancel closes without API call.
+//   - Enter key in path-input triggers open-typed (not apply).
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
@@ -20,7 +24,7 @@ function renderDialog(open: boolean, onClose = vi.fn()) {
   return render(<SourceFolderDialog open={open} onClose={onClose} />);
 }
 
-// --- tests -------------------------------------------------------------------
+// --- render gating -----------------------------------------------------------
 
 describe("SourceFolderDialog: render gating", () => {
   it("renders nothing when open=false", () => {
@@ -34,18 +38,164 @@ describe("SourceFolderDialog: render gating", () => {
   });
 });
 
-describe("SourceFolderDialog: required testids", () => {
-  it("shows all four driver-contract testids when open", () => {
+// --- required testids --------------------------------------------------------
+
+describe("SourceFolderDialog: driver-contract testids", () => {
+  it("shows all 9 driver-contract testids when open", () => {
     renderDialog(true);
-    expect(screen.getByTestId("source-folder-dialog")).toBeInTheDocument();
-    expect(screen.getByTestId("source-folder-input")).toBeInTheDocument();
-    expect(screen.getByTestId("source-folder-confirm-button")).toBeInTheDocument();
-    expect(screen.getByTestId("source-folder-cancel-button")).toBeInTheDocument();
+    const ids = [
+      "source-folder-dialog",
+      "source-folder-current-path-label",
+      "source-folder-path-input",
+      "source-folder-home-button",
+      "source-folder-up-button",
+      "source-folder-open-typed-button",
+      "source-folder-use-current-button",
+      "source-folder-apply-button",
+      "source-folder-cancel-button",
+    ];
+    for (const id of ids) {
+      expect(screen.getByTestId(id), `testid ${id} should be present`).toBeInTheDocument();
+    }
+  });
+
+  it("shows initial currentPath as ~ in current-path-label", () => {
+    renderDialog(true);
+    expect(screen.getByTestId("source-folder-current-path-label")).toHaveTextContent("~");
+  });
+
+  it("shows initial inputPath as ~ in path-input", () => {
+    renderDialog(true);
+    expect(screen.getByTestId("source-folder-path-input")).toHaveValue("~");
   });
 });
 
-describe("SourceFolderDialog: confirm calls POST /api/projects/source-root", () => {
-  it("typing a path and clicking Confirm calls source-root API", async () => {
+// --- Home button -------------------------------------------------------------
+
+describe("SourceFolderDialog: Home button", () => {
+  it("resets currentPath to ~ in the label", () => {
+    renderDialog(true);
+
+    // First navigate away by typing and opening a typed path.
+    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "/some/deep/path" } });
+    fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
+    expect(screen.getByTestId("source-folder-current-path-label")).toHaveTextContent(
+      "/some/deep/path",
+    );
+
+    // Now click Home.
+    fireEvent.click(screen.getByTestId("source-folder-home-button"));
+    expect(screen.getByTestId("source-folder-current-path-label")).toHaveTextContent("~");
+  });
+
+  it("resets inputPath to ~ in the text input", () => {
+    renderDialog(true);
+
+    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "/some/deep/path" } });
+    fireEvent.click(screen.getByTestId("source-folder-home-button"));
+    expect(input.value).toBe("~");
+  });
+});
+
+// --- Up button ---------------------------------------------------------------
+
+describe("SourceFolderDialog: Up button", () => {
+  it("navigates to the parent directory", () => {
+    renderDialog(true);
+
+    // Set a path to navigate up from.
+    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "/data/projects/mybook" } });
+    fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
+    expect(screen.getByTestId("source-folder-current-path-label")).toHaveTextContent(
+      "/data/projects/mybook",
+    );
+
+    // Click Up.
+    fireEvent.click(screen.getByTestId("source-folder-up-button"));
+    expect(screen.getByTestId("source-folder-current-path-label")).toHaveTextContent(
+      "/data/projects",
+    );
+    expect(screen.getByTestId("source-folder-path-input")).toHaveValue("/data/projects");
+  });
+
+  it("navigates to / when already at a top-level directory", () => {
+    renderDialog(true);
+
+    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "/data" } });
+    fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
+
+    fireEvent.click(screen.getByTestId("source-folder-up-button"));
+    expect(screen.getByTestId("source-folder-current-path-label")).toHaveTextContent("/");
+    expect(input.value).toBe("/");
+  });
+
+  it("navigates up from ~ (treated as /home/user)", () => {
+    renderDialog(true);
+    // Initial state is "~".
+    fireEvent.click(screen.getByTestId("source-folder-up-button"));
+    // "~" expands to "/home/user"; parent is "/home".
+    expect(screen.getByTestId("source-folder-current-path-label")).toHaveTextContent("/home");
+  });
+});
+
+// --- Open-typed button -------------------------------------------------------
+
+describe("SourceFolderDialog: Open-typed button", () => {
+  it("sets currentPath to the value in path-input", () => {
+    renderDialog(true);
+
+    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "/custom/path" } });
+    fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
+
+    expect(screen.getByTestId("source-folder-current-path-label")).toHaveTextContent(
+      "/custom/path",
+    );
+  });
+
+  it("Enter key in path-input triggers open-typed (not apply)", () => {
+    renderDialog(true);
+
+    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "/typed/path" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // currentPath label should update (open-typed fired)...
+    expect(screen.getByTestId("source-folder-current-path-label")).toHaveTextContent("/typed/path");
+    // ...and the dialog should still be open (no API call, no close).
+    expect(screen.getByTestId("source-folder-dialog")).toBeInTheDocument();
+  });
+});
+
+// --- Use-current button ------------------------------------------------------
+
+describe("SourceFolderDialog: Use-current button", () => {
+  it("copies currentPath into path-input", () => {
+    renderDialog(true);
+
+    // Navigate to a path first.
+    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "/nav/path" } });
+    fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
+
+    // Modify the input to something else.
+    fireEvent.change(input, { target: { value: "/different" } });
+    expect(input.value).toBe("/different");
+
+    // Click Use-current — should restore input to currentPath.
+    fireEvent.click(screen.getByTestId("source-folder-use-current-button"));
+    expect(input.value).toBe("/nav/path");
+  });
+});
+
+// --- Apply button ------------------------------------------------------------
+
+describe("SourceFolderDialog: Apply POSTs currentPath and closes", () => {
+  it("POSTs the currentPath (not inputPath) to source-root and calls onClose", async () => {
     const capturedBodies: unknown[] = [];
 
     server.use(
@@ -53,10 +203,7 @@ describe("SourceFolderDialog: confirm calls POST /api/projects/source-root", () 
         const body: unknown = await request.json();
         capturedBodies.push(body);
         return HttpResponse.json(
-          {
-            projects_root: "/data/projects",
-            projects: [],
-          },
+          { projects_root: "/data/projects", projects: [] },
           { status: 200 },
         );
       }),
@@ -65,50 +212,23 @@ describe("SourceFolderDialog: confirm calls POST /api/projects/source-root", () 
     const onClose = vi.fn();
     renderDialog(true, onClose);
 
-    const input = screen.getByTestId("source-folder-input") as HTMLInputElement;
+    // Navigate to a path via open-typed.
+    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "/data/projects" } });
+    fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
 
-    const confirmBtn = screen.getByTestId("source-folder-confirm-button");
-    expect(confirmBtn).not.toBeDisabled();
-    fireEvent.click(confirmBtn);
+    // currentPath is now /data/projects; modify input to something different.
+    fireEvent.change(input, { target: { value: "/something/else" } });
+
+    // Click Apply — should POST currentPath (/data/projects), not inputPath.
+    fireEvent.click(screen.getByTestId("source-folder-apply-button"));
 
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(capturedBodies).toHaveLength(1);
     expect(capturedBodies[0]).toMatchObject({ path: "/data/projects" });
   });
 
-  it("confirm button is disabled when input is empty", () => {
-    renderDialog(true);
-    const confirmBtn = screen.getByTestId("source-folder-confirm-button");
-    expect(confirmBtn).toBeDisabled();
-  });
-});
-
-describe("SourceFolderDialog: cancel", () => {
-  it("clicking Cancel calls onClose without making an API call", async () => {
-    let postCalled = false;
-    server.use(
-      http.post("/api/projects/source-root", () => {
-        postCalled = true;
-        return HttpResponse.json({});
-      }),
-    );
-
-    const onClose = vi.fn();
-    renderDialog(true, onClose);
-
-    const cancelBtn = screen.getByTestId("source-folder-cancel-button");
-    fireEvent.click(cancelBtn);
-
-    expect(onClose).toHaveBeenCalledTimes(1);
-    // Give any accidental async POST a tick to land.
-    await new Promise((r) => setTimeout(r, 20));
-    expect(postCalled).toBe(false);
-  });
-});
-
-describe("SourceFolderDialog: loading state", () => {
-  it("shows loading text on confirm button while POST is in flight", async () => {
+  it("shows loading state while POST is in flight", async () => {
     let resolvePost!: () => void;
     server.use(
       http.post("/api/projects/source-root", () => {
@@ -124,28 +244,21 @@ describe("SourceFolderDialog: loading state", () => {
     const onClose = vi.fn();
     renderDialog(true, onClose);
 
-    const input = screen.getByTestId("source-folder-input") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "/data/projects" } });
+    fireEvent.click(screen.getByTestId("source-folder-apply-button"));
 
-    fireEvent.click(screen.getByTestId("source-folder-confirm-button"));
-
-    // After click the button should show loading text and be disabled.
     await waitFor(() => {
-      expect(screen.getByTestId("source-folder-confirm-button")).toHaveTextContent(/Setting/i);
+      expect(screen.getByTestId("source-folder-apply-button")).toHaveTextContent(/Setting/i);
     });
-    expect(screen.getByTestId("source-folder-confirm-button")).toBeDisabled();
+    expect(screen.getByTestId("source-folder-apply-button")).toBeDisabled();
     expect(screen.getByTestId("source-folder-cancel-button")).toBeDisabled();
 
-    // Release the pending POST.
     act(() => {
       resolvePost();
     });
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
-});
 
-describe("SourceFolderDialog: error state", () => {
-  it("shows error message on API failure", async () => {
+  it("shows error message on API failure and does NOT close", async () => {
     server.use(
       http.post("/api/projects/source-root", () =>
         HttpResponse.json(
@@ -158,14 +271,45 @@ describe("SourceFolderDialog: error state", () => {
     const onClose = vi.fn();
     renderDialog(true, onClose);
 
-    const input = screen.getByTestId("source-folder-input") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "/no/such/dir" } });
-    fireEvent.click(screen.getByTestId("source-folder-confirm-button"));
+    fireEvent.click(screen.getByTestId("source-folder-apply-button"));
 
     await waitFor(() => {
       expect(screen.getByText(/Path does not exist/i)).toBeInTheDocument();
     });
-    // Dialog should NOT close on failure.
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+// --- Cancel button -----------------------------------------------------------
+
+describe("SourceFolderDialog: Cancel closes without API call", () => {
+  it("clicking Cancel calls onClose without making an API call", async () => {
+    let postCalled = false;
+    server.use(
+      http.post("/api/projects/source-root", () => {
+        postCalled = true;
+        return HttpResponse.json({});
+      }),
+    );
+
+    const onClose = vi.fn();
+    renderDialog(true, onClose);
+
+    fireEvent.click(screen.getByTestId("source-folder-cancel-button"));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    // Give any accidental async POST a tick to land.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(postCalled).toBe(false);
+  });
+
+  it("Escape key in path-input calls onClose", () => {
+    const onClose = vi.fn();
+    renderDialog(true, onClose);
+
+    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

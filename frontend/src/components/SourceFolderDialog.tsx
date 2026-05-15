@@ -1,39 +1,83 @@
-// SourceFolderDialog.tsx — dialog for setting the projects source folder.
+// SourceFolderDialog.tsx — file-browser-style dialog for setting the projects source folder.
 // Issue #294 (spec 22 §10 — real source-folder picker).
 //
-// Replaces the `display:none` stub block in HeaderBar.tsx. Calls
-// POST /api/projects/source-root on confirm.
+// driver-contract testids (docs/architecture/13-driver-contract.md §2.2):
+//   source-folder-dialog              — dialog root
+//   source-folder-current-path-label  — read-only display of the currently browsed path
+//   source-folder-path-input          — text input for typing a path directly
+//   source-folder-home-button         — resets current path to "~"
+//   source-folder-up-button           — navigates up one directory level
+//   source-folder-open-typed-button   — sets current path to whatever is in path-input
+//   source-folder-use-current-button  — copies current-path-label into path-input
+//   source-folder-apply-button        — POSTs current path and closes
+//   source-folder-cancel-button       — closes without API call
 //
-// driver-contract testids (docs/architecture/13-driver-contract.md):
-//   source-folder-dialog          — outer wrapper (the dialog root)
-//   source-folder-input           — text input for the folder path
-//   source-folder-confirm-button  — confirm / apply button
-//   source-folder-cancel-button   — cancel button
+// Navigation is client-side string manipulation only (no filesystem listing API).
+// The driver workflow: open dialog → type path in path-input → click open-typed → click apply.
 
 import { useState } from "react";
 
 interface SourceFolderDialogProps {
   /** Whether the dialog is visible. */
   open: boolean;
-  /** Called when the dialog should close (cancel or after successful confirm). */
+  /** Called when the dialog should close (cancel or after successful apply). */
   onClose: () => void;
 }
 
+/** Compute the parent path of `p` using string manipulation (no filesystem call). */
+function parentPath(p: string): string {
+  // Expand leading "~" to a placeholder so split works uniformly.
+  const expanded = p.startsWith("~") ? "/home/user" + p.slice(1) : p;
+  const parts = expanded.split("/").filter(Boolean);
+  if (parts.length > 1) {
+    return "/" + parts.slice(0, -1).join("/");
+  }
+  return "/";
+}
+
 /**
- * Simple modal dialog for setting the projects source root.
+ * File-browser-style modal dialog for setting the projects source root.
  *
- * On confirm, calls POST /api/projects/source-root with the typed path.
- * Shows a loading state while the request is in flight.
+ * Maintains two pieces of state:
+ *   currentPath — the "browsed" path shown in the current-path-label.
+ *   inputPath   — the text typed in the path-input.
+ *
+ * On apply, POSTs { path: currentPath } to POST /api/projects/source-root.
+ * All directory navigation is client-side string manipulation.
  * Renders nothing when `open` is false.
  */
 export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
-  const [path, setPath] = useState<string>("");
+  const [currentPath, setCurrentPath] = useState<string>("~");
+  const [inputPath, setInputPath] = useState<string>("~");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!open) return null;
 
-  async function handleConfirm() {
+  // --- navigation handlers (client-side only) ----------------------------------
+
+  function handleHome() {
+    setCurrentPath("~");
+    setInputPath("~");
+  }
+
+  function handleUp() {
+    const parent = parentPath(currentPath);
+    setCurrentPath(parent);
+    setInputPath(parent);
+  }
+
+  function handleOpenTyped() {
+    setCurrentPath(inputPath);
+  }
+
+  function handleUseCurrent() {
+    setInputPath(currentPath);
+  }
+
+  // --- apply / cancel ----------------------------------------------------------
+
+  async function handleApply() {
     if (loading) return;
     setError(null);
     setLoading(true);
@@ -41,7 +85,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
       const resp = await fetch("/api/projects/source-root", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path }),
+        body: JSON.stringify({ path: currentPath }),
       });
       if (!resp.ok) {
         const text = await resp.text();
@@ -56,8 +100,9 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
         setLoading(false);
         return;
       }
-      // Success — close the dialog and reset state.
-      setPath("");
+      // Success — reset and close.
+      setCurrentPath("~");
+      setInputPath("~");
       setError(null);
       onClose();
     } catch (e) {
@@ -69,15 +114,17 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
 
   function handleCancel() {
     if (loading) return;
-    setPath("");
+    setCurrentPath("~");
+    setInputPath("~");
     setError(null);
     onClose();
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
+      // Enter in path-input triggers open-typed (spec §2.2 hotkey note).
       e.preventDefault();
-      void handleConfirm();
+      handleOpenTyped();
     } else if (e.key === "Escape") {
       handleCancel();
     }
@@ -95,26 +142,90 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
       }}
     >
       <div
-        className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4 p-5 space-y-4"
+        className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-5 space-y-4"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-base font-semibold">Set Source Folder</h2>
-        <p className="text-sm text-gray-600">
-          Enter the absolute path to the folder containing your projects.
-        </p>
 
-        <input
-          type="text"
-          data-testid="source-folder-input"
-          aria-label="Source folder path"
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={loading}
-          placeholder="/path/to/projects"
-          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-          autoFocus
-        />
+        {/* Current path display */}
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+            Current path
+          </label>
+          <div
+            data-testid="source-folder-current-path-label"
+            className="px-3 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded font-mono break-all"
+          >
+            {currentPath}
+          </div>
+        </div>
+
+        {/* Navigation buttons row */}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            data-testid="source-folder-home-button"
+            onClick={handleHome}
+            disabled={loading}
+            title="Go to home (~)"
+            className="flex-1 px-2 py-1.5 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+          >
+            Home
+          </button>
+          <button
+            type="button"
+            data-testid="source-folder-up-button"
+            onClick={handleUp}
+            disabled={loading}
+            title="Go up one directory"
+            className="flex-1 px-2 py-1.5 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+          >
+            Up
+          </button>
+        </div>
+
+        {/* Path input */}
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+            Type a path
+          </label>
+          <input
+            type="text"
+            data-testid="source-folder-path-input"
+            aria-label="Source folder path"
+            value={inputPath}
+            onChange={(e) => setInputPath(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={loading}
+            placeholder="/path/to/projects"
+            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            autoFocus
+          />
+        </div>
+
+        {/* Open-typed / Use-current row */}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            data-testid="source-folder-open-typed-button"
+            onClick={handleOpenTyped}
+            disabled={loading}
+            title="Navigate to the typed path"
+            className="flex-1 px-2 py-1.5 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+          >
+            Open Typed Path
+          </button>
+          <button
+            type="button"
+            data-testid="source-folder-use-current-button"
+            onClick={handleUseCurrent}
+            disabled={loading}
+            title="Copy current path into input"
+            className="flex-1 px-2 py-1.5 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+          >
+            Use Current
+          </button>
+        </div>
 
         {error && (
           <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
@@ -122,7 +233,8 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
           </div>
         )}
 
-        <div className="flex justify-end gap-2">
+        {/* Cancel / Apply */}
+        <div className="flex justify-end gap-2 pt-1">
           <button
             type="button"
             data-testid="source-folder-cancel-button"
@@ -134,12 +246,12 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
           </button>
           <button
             type="button"
-            data-testid="source-folder-confirm-button"
-            onClick={() => void handleConfirm()}
-            disabled={loading || path.trim() === ""}
+            data-testid="source-folder-apply-button"
+            onClick={() => void handleApply()}
+            disabled={loading}
             className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {loading ? "Setting…" : "Set Folder"}
+            {loading ? "Setting…" : "Apply"}
           </button>
         </div>
       </div>
