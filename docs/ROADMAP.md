@@ -50,6 +50,8 @@ every iteration.
 | M9.5 Full keyboard-driven editing audit | 🟡 partial — global/viewport/matches/dialog hotkeys shipped (#235, #236, #237) and a11y audit landed (#238); a dedicated keyboard-only end-to-end editing audit has not been performed. | |
 | M10 Text normalization | ✅ done — OCRConfig normalize fields + GT codepoint validation (#259), normalize plaintext tabs + export labels (#260), OCRConfigModal normalize section (#261). Spec landed at `docs/architecture/18-text-normalization.md`. | |
 | M11 Glyph-level annotations | ⬜ blocked — open issues #267, #268, #269, #270; spec at `specs/20-glyph-annotations.md` | Pre: `pd-book-tools` `glyph_annotations` module, `pd-ocr-trainer` glyph classifier, Q-A5/A6/A7. |
+| Hi-fi design system — Phase 0 (Slice 0) | ✅ done — shadcn/ui components (`cn` utility, Button, Input), Lucide icons, CVA (class-variance-authority), tailwind-merge. Commits: f7af350. | 2026-05-15 |
+| Hi-fi design system — Phase 1 (Slices 1–7) | ✅ done — CSS custom-property token layer (dual-theme, 32 tokens), Tailwind theme.extend wired to CSS vars, Inter + JetBrains Mono fonts, Button primitive (3 sizes × 4 variants), StatusPip + KeyCap + Input primitives, Chip (tri-state) + Tab (underline) primitives, Accordion with accent-tagged variants. Commits: e1faa1c, eeeffd4, 7d09669, b2df737, f81f3d7, c56c62e, eabc384, 3e586b3, 2e00f6e, 6e99380, 43b58d5. | 2026-05-15 |
 
 > **BLOCKED** — upstream dependencies not yet shipped:
 >
@@ -433,6 +435,34 @@ ambiguous as an OPEN_QUESTIONS.md entry first.
   → 202+job (503 when detect_best_rotation unavailable); `auto_rotate_all` job handler iterates
   pages with progress; OCRConfigModal adds `auto-rotate-checkbox` + `auto-rotate-method-select`
   section; openapi-export regenerated.
+
+## Hi-fi design system — shipped slices (Phase 0 + Phase 1)
+
+Design spec: `docs/specs/2026-05-15-hifi-redesign-plan.md`.
+
+- [x] **Slice 0 (f7af350, 2026-05-15)** — Add shadcn/ui `cn` utility, Lucide icon
+  library, CVA (class-variance-authority), tailwind-merge. Path-alias `@/` wired.
+  `forceConsistentCasingInFileNames: true` prevents capital-B re-exports alongside
+  lowercase shadcn files — use in-file compound exports instead.
+- [x] **Slice 1 (e1faa1c + eeeffd4, 2026-05-15)** — CSS custom-property token layer.
+  Dual-theme (dark default / light `.light` override). 32 tokens across 6 categories:
+  `--bg-*`, `--text-*`, `--border-*`, `--accent-*`, `--status-*`, `--font-*`.
+- [x] **Slice 2 (7d09669 + b2df737, 2026-05-15)** — Wire Tailwind `theme.extend` to
+  CSS variables. Semantic color utilities (`bg-page`, `text-primary`, etc.), `fontFamily`,
+  `fontSize` all read from CSS vars. Static `Record<variant, className>` lookup maps used
+  for all variant-dependent class names (string interpolation causes Tailwind purge misses).
+- [x] **Slice 3 (f81f3d7, 2026-05-15)** — Load Inter (sans) + JetBrains Mono (mono) via
+  `@fontsource/*` packages. Body font defaults set on `<html>` in `index.css`.
+- [x] **Slice 4 (c56c62e + eabc384, 2026-05-15)** — Primitive: `Button`. Three sizes
+  (`sm`/`md`/`lg`) × four variants (`primary`/`secondary`/`ghost`/`danger`). CVA-driven.
+- [x] **Slice 5 (3e586b3 + 2e00f6e, 2026-05-15)** — Primitives: `StatusPip`, `KeyCap`,
+  `Input`. 16 Vitest tests passing.
+- [x] **Slice 6 (6e99380, 2026-05-15)** — Primitives: `Chip` (tri-state, `data-tristate` +
+  `role=button`) and `Tab` (underline style). Radix Tabs requires `userEvent` (not `fireEvent`)
+  for click interactions in tests.
+- [x] **Slice 7 (43b58d5, 2026-05-15)** — Primitive: `Accordion` with accent-tagged variants.
+  Compound export pattern: `Object.assign(AccordionRoot, { Item, Trigger, Content })` in the
+  same file — avoids `forceConsistentCasingInFileNames` collision risk from separate re-export.
 
 ## Iteration index (this repo)
 
