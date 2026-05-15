@@ -1,5 +1,5 @@
-// Hierarchy.test.tsx — Tests for the Hierarchy drawer tab (Slice 12).
-// Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 12.
+// Hierarchy.test.tsx — Tests for the Hierarchy drawer tab (Slice 12, P5.c).
+// Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 12, Gaps 21, 22.
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
@@ -88,7 +88,7 @@ function makePage(): PagePayload {
   };
 }
 
-describe("Hierarchy (Slice 12)", () => {
+describe("Hierarchy (Slice 12 + P5.c)", () => {
   beforeEach(() => {
     selectionStore.setState({
       selectedParagraphs: [],
@@ -193,5 +193,58 @@ describe("Hierarchy (Slice 12)", () => {
     fireEvent.keyDown(paraNode, { key: "ArrowRight" });
     fireEvent.keyDown(screen.getByTestId("hierarchy-node-line-0"), { key: "ArrowRight" });
     expect(screen.getByTestId("hierarchy-color-word-0-0")).toBeInTheDocument();
+  });
+
+  // ── P5.c (Gaps 21, 22): kind chips + filter pills + node count ────────────
+
+  it("P5.c: filter pill row renders with all kind filters", () => {
+    render(<Hierarchy page={makePage()} />);
+    expect(screen.getByTestId("hierarchy-filter-all")).toBeInTheDocument();
+    expect(screen.getByTestId("hierarchy-filter-para")).toBeInTheDocument();
+    expect(screen.getByTestId("hierarchy-filter-line")).toBeInTheDocument();
+    expect(screen.getByTestId("hierarchy-filter-word")).toBeInTheDocument();
+  });
+
+  it("P5.c: All filter is active by default", () => {
+    render(<Hierarchy page={makePage()} />);
+    expect(screen.getByTestId("hierarchy-filter-all")).toHaveAttribute("data-active", "true");
+  });
+
+  it("P5.c: node count badge shows total visible node count", () => {
+    render(<Hierarchy page={makePage()} />);
+    // Without expanding, only 2 para nodes are visible
+    expect(screen.getByTestId("hierarchy-node-count")).toHaveTextContent("2");
+  });
+
+  it("P5.c: para filter shows only para nodes", async () => {
+    const user = userEvent.setup();
+    // First expand para-0 to have line nodes visible
+    render(<Hierarchy page={makePage()} />);
+    const paraNode = screen.getByTestId("hierarchy-node-para-0");
+    await user.click(paraNode);
+    fireEvent.keyDown(paraNode, { key: "ArrowRight" });
+    // Now switch filter to para
+    await user.click(screen.getByTestId("hierarchy-filter-para"));
+    // Only para nodes visible
+    expect(screen.getByTestId("hierarchy-node-para-0")).toBeInTheDocument();
+    expect(screen.queryByTestId("hierarchy-node-line-0")).not.toBeInTheDocument();
+  });
+
+  it("P5.c: line filter shows only line nodes (when expanded)", async () => {
+    const user = userEvent.setup();
+    render(<Hierarchy page={makePage()} />);
+    // Expand para-0 so lines are in the flat list
+    const paraNode = screen.getByTestId("hierarchy-node-para-0");
+    await user.click(paraNode);
+    fireEvent.keyDown(paraNode, { key: "ArrowRight" });
+    // Switch to line filter
+    await user.click(screen.getByTestId("hierarchy-filter-line"));
+    expect(screen.getByTestId("hierarchy-node-line-0")).toBeInTheDocument();
+    expect(screen.queryByTestId("hierarchy-node-para-0")).not.toBeInTheDocument();
+  });
+
+  it("P5.c: each node shows a kind chip with data-kind attribute", () => {
+    render(<Hierarchy page={makePage()} />);
+    expect(screen.getByTestId("hierarchy-node-para-0")).toHaveAttribute("data-kind", "para");
   });
 });

@@ -1,5 +1,9 @@
 // Hierarchy.tsx — Drawer Hierarchy tab: block/para/line/word tree view.
-// Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 12.
+// Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 12, P5.c.
+//
+// P5.c (Gaps 21, 22): each tree node shows a kind chip + mono ID stamp.
+// Filter pills above the tree (Block / Para / Line / Word) show only that
+// kind. A node-count badge shows total visible nodes.
 //
 // Builds a tree from PagePayload.line_matches:
 //   paragraph groups → lines → words
@@ -28,6 +32,33 @@ const LAYER_DOT_CLASS: Record<"para" | "line" | "word", string> = {
   line: "bg-layer-line",
   word: "bg-layer-word",
 };
+
+// ─── Kind chip (P5.c) ─────────────────────────────────────────────────────────
+
+const KIND_CHIP_CLASS: Record<"para" | "line" | "word", string> = {
+  para: "bg-layer-para/20 text-layer-para border-layer-para/40",
+  line: "bg-layer-line/20 text-layer-line border-layer-line/40",
+  word: "bg-layer-word/20 text-layer-word border-layer-word/40",
+};
+
+const KIND_LABELS: Record<"para" | "line" | "word", string> = {
+  para: "¶",
+  line: "L",
+  word: "W",
+};
+
+function KindChip({ kind }: { kind: "para" | "line" | "word" }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center px-1 py-0 rounded border text-[9px] font-mono font-semibold flex-shrink-0",
+        KIND_CHIP_CLASS[kind],
+      )}
+    >
+      {KIND_LABELS[kind]}
+    </span>
+  );
+}
 
 // ─── Tree data model ──────────────────────────────────────────────────────────
 
@@ -156,6 +187,57 @@ function flattenTree(paras: ParaNode[], expanded: Set<string>): FlatNode[] {
   return result;
 }
 
+// ─── Kind filter (P5.c) ───────────────────────────────────────────────────────
+
+type KindFilter = "all" | "para" | "line" | "word";
+
+interface KindFilterPillProps {
+  label: string;
+  kind: KindFilter;
+  active: boolean;
+  onClick: () => void;
+  testid: string;
+}
+
+function KindFilterPill({ label, kind, active, onClick, testid }: KindFilterPillProps) {
+  const colorClass =
+    kind === "all"
+      ? active
+        ? "bg-accent text-accent-ink border-accent"
+        : "bg-bg-raised text-ink-2 border-border-2"
+      : active
+        ? cn(
+            "border",
+            kind === "para"
+              ? "bg-layer-para/30 text-layer-para border-layer-para/60"
+              : kind === "line"
+                ? "bg-layer-line/30 text-layer-line border-layer-line/60"
+                : "bg-layer-word/30 text-layer-word border-layer-word/60",
+          )
+        : "bg-bg-raised text-ink-2 border-border-2";
+
+  return (
+    <button
+      type="button"
+      data-testid={testid}
+      data-active={active ? "true" : undefined}
+      onClick={onClick}
+      className={cn(
+        "text-[10px] px-1.5 py-0.5 rounded-full border transition-colors select-none",
+        colorClass,
+        !active && "hover:border-accent hover:text-ink-1",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+function filterByKind(flat: FlatNode[], kind: KindFilter): FlatNode[] {
+  if (kind === "all") return flat;
+  return flat.filter((fn) => fn.node.kind === kind);
+}
+
 // ─── Node row ─────────────────────────────────────────────────────────────────
 
 interface NodeRowProps {
@@ -171,9 +253,17 @@ function NodeRow({ flatNode, isSelected, isExpanded, onSelect, onToggle }: NodeR
   const layerKey = node.kind === "para" ? "para" : node.kind === "line" ? "line" : "word";
 
   let label = "";
-  if (node.kind === "para") label = node.label;
-  else if (node.kind === "line") label = node.text;
-  else label = node.text;
+  let monoId = "";
+  if (node.kind === "para") {
+    label = node.label;
+    monoId = node.paraIndex !== null ? `P-${node.paraIndex + 1}` : "P-?";
+  } else if (node.kind === "line") {
+    label = node.text;
+    monoId = `L-${node.lineIndex + 1}`;
+  } else {
+    label = node.text;
+    monoId = `W-${String(node.wordIndex + 1).padStart(3, "0")}`;
+  }
 
   return (
     <div
@@ -214,8 +304,14 @@ function NodeRow({ flatNode, isSelected, isExpanded, onSelect, onToggle }: NodeR
         className={cn("w-[6px] h-[6px] rounded-sm flex-shrink-0", LAYER_DOT_CLASS[layerKey])}
       />
 
+      {/* Kind chip (P5.c) */}
+      <KindChip kind={layerKey} />
+
+      {/* Mono ID stamp (P5.c) */}
+      <span className="font-mono text-[10px] text-ink-3 flex-shrink-0">{monoId}</span>
+
       {/* Label */}
-      <span className="truncate font-mono">{label}</span>
+      <span className="truncate">{label}</span>
     </div>
   );
 }
@@ -229,10 +325,15 @@ export interface HierarchyProps {
 export function Hierarchy({ page }: HierarchyProps) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const containerRef = useRef<HTMLDivElement>(null);
 
   const paras = page ? buildTree(page) : [];
-  const flat = flattenTree(paras, expanded);
+  const flatAll = flattenTree(paras, expanded);
+  const flat = filterByKind(flatAll, kindFilter);
+
+  // Total visible node count (P5.c)
+  const nodeCount = flat.length;
 
   const toggleExpand = useCallback((id: string) => {
     setExpanded((prev) => {
@@ -289,28 +390,72 @@ export function Hierarchy({ page }: HierarchyProps) {
   }
 
   return (
-    <div
-      ref={containerRef}
-      data-testid="hierarchy"
-      role="tree"
-      aria-label="Page structure hierarchy"
-      className="flex flex-col h-full overflow-y-auto py-1"
-      onKeyDown={handleKeyDown}
-    >
-      {paras.length === 0 ? (
-        <div className="text-ink-3 text-[11px] p-3 text-center">No page data</div>
-      ) : (
-        flat.map((fn) => (
-          <NodeRow
-            key={fn.id}
-            flatNode={fn}
-            isSelected={selectedId === fn.id}
-            isExpanded={expanded.has(fn.id)}
-            onSelect={handleSelect}
-            onToggle={toggleExpand}
-          />
-        ))
-      )}
+    <div className="flex flex-col h-full">
+      {/* Filter pills + node count (P5.c) */}
+      <div
+        data-testid="hierarchy-filter-row"
+        className="flex items-center gap-1 px-2 py-1.5 border-b border-border-1 flex-shrink-0 flex-wrap"
+      >
+        <KindFilterPill
+          testid="hierarchy-filter-all"
+          label="All"
+          kind="all"
+          active={kindFilter === "all"}
+          onClick={() => setKindFilter("all")}
+        />
+        <KindFilterPill
+          testid="hierarchy-filter-para"
+          label="¶ Para"
+          kind="para"
+          active={kindFilter === "para"}
+          onClick={() => setKindFilter("para")}
+        />
+        <KindFilterPill
+          testid="hierarchy-filter-line"
+          label="Line"
+          kind="line"
+          active={kindFilter === "line"}
+          onClick={() => setKindFilter("line")}
+        />
+        <KindFilterPill
+          testid="hierarchy-filter-word"
+          label="Word"
+          kind="word"
+          active={kindFilter === "word"}
+          onClick={() => setKindFilter("word")}
+        />
+        <span
+          data-testid="hierarchy-node-count"
+          className="ml-auto text-[10px] font-mono text-ink-3 tabular-nums flex-shrink-0"
+        >
+          {nodeCount}
+        </span>
+      </div>
+
+      {/* Tree */}
+      <div
+        ref={containerRef}
+        data-testid="hierarchy"
+        role="tree"
+        aria-label="Page structure hierarchy"
+        className="flex-1 overflow-y-auto py-1"
+        onKeyDown={handleKeyDown}
+      >
+        {paras.length === 0 ? (
+          <div className="text-ink-3 text-[11px] p-3 text-center">No page data</div>
+        ) : (
+          flat.map((fn) => (
+            <NodeRow
+              key={fn.id}
+              flatNode={fn}
+              isSelected={selectedId === fn.id}
+              isExpanded={expanded.has(fn.id)}
+              onSelect={handleSelect}
+              onToggle={toggleExpand}
+            />
+          ))
+        )}
+      </div>
     </div>
   );
 }
