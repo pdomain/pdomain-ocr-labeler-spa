@@ -25,7 +25,8 @@ import { ErasePixelsSection } from "./sections/ErasePixelsSection";
 import { StructureSection } from "./sections/StructureSection";
 import { CharRangesSection } from "./sections/CharRangesSection";
 import { CharFixerSection } from "./sections/CharFixerSection";
-import { selectionStore } from "../../stores/selection-store";
+import { WordHeader } from "./WordHeader";
+import { selectionStore, walkSibling } from "../../stores/selection-store";
 import { useRefineAvailable } from "../../hooks/useRefineAvailable";
 import type { components } from "../../api/types";
 
@@ -101,10 +102,14 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
 
   return (
     <div data-testid="word-detail" className="flex flex-col gap-1">
-      {/* Word identity header */}
-      <div className="px-1 py-1 text-[11px] text-ink-2 font-mono truncate" title={word.ocr_text}>
-        {word.ocr_text || <span className="text-ink-4 italic">∅</span>}
-      </div>
+      {/* P2.a: Word identity header with status pip + pager */}
+      <WordHeader
+        word={word}
+        hasPrev={wordIdx > 0}
+        hasNext={hasNextWord}
+        onPrev={() => walkSibling("prev", page)}
+        onNext={() => walkSibling("next", page)}
+      />
 
       <Accordion
         data-testid="word-detail-accordion"

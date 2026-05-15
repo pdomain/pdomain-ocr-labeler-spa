@@ -88,9 +88,10 @@ describe("WordDetail (Slice 16)", () => {
     );
   });
 
-  it("shows word OCR text in the header", () => {
+  it("shows word identity label in the header (P2.a)", () => {
     selectWord(0, 0);
     renderWithQuery(<WordDetail page={makePage()} projectId="p1" pageIndex={0} />);
-    expect(screen.getByTestId("word-detail")).toHaveTextContent("hello");
+    // P2.a: header now shows "Line N · Word N", not the raw OCR text
+    expect(screen.getByTestId("word-header-id")).toHaveTextContent("Line 1 · Word 1");
   });
 });
