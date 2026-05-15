@@ -45,9 +45,10 @@
 // Hook-order discipline: ALL hooks are called unconditionally at the top
 // before any early return, matching the Rules of Hooks.
 
-import { useMemo, useState, useSyncExternalStore } from "react";
-import { useParams } from "react-router-dom";
+import { useMemo, useState, useSyncExternalStore, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "../lib/toast";
 
 import { useProject } from "../hooks/useProject";
 import { usePage } from "../hooks/usePage";
@@ -71,11 +72,7 @@ import { Splitter } from "../components/Splitter";
 import { ImageTabsHeader } from "../components/ImageTabsHeader";
 import { BusyOverlay, ProjectLoadingOverlay } from "../components/BusyOverlay";
 import PageImageCanvas from "../components/PageImageCanvas";
-import {
-  OcrFailedBanner,
-  ProjectNotFoundBanner,
-  ImageDriftBanner,
-} from "../components/InlineBanners";
+import { OcrFailedBanner, ImageDriftBanner } from "../components/InlineBanners";
 import { TextTabs } from "../components/TextTabs";
 import { WordMatchView } from "../components/WordMatchView";
 import { PlaintextEditor } from "../components/PlaintextEditor";
@@ -176,6 +173,7 @@ function toToolbarPageData(payload: PagePayload | undefined | null): PageData {
 export default function ProjectPage() {
   // ── URL params (1-based pageNo → 0-based idx0) ──────────────────────────
   const { projectId, pageNo } = useParams<{ projectId: string; pageNo: string }>();
+  const navigate = useNavigate();
   const idx0 = useMemo(() => {
     const n = parseInt(pageNo ?? "1", 10);
     return Number.isFinite(n) && n > 0 ? n - 1 : 0;
@@ -222,9 +220,17 @@ export default function ProjectPage() {
   // Registered at the page level so they work anywhere on the project page.
   useBreadcrumbHotkeys({ page: pagePayload ?? undefined });
 
-  // Project not found vs other errors — only the 404 case triggers the banner.
+  // Project not found vs other errors — only the 404 case triggers the redirect.
   const projectStatus = (projectQ.error as { status?: number } | null)?.status;
   const projectNotFound = projectQ.isError && projectStatus === 404;
+
+  // IS-1: Auto-redirect to / when the project is not found.
+  useEffect(() => {
+    if (projectNotFound) {
+      toast.warn("Project not found — returning to project list.");
+      navigate("/", { replace: true });
+    }
+  }, [projectNotFound, navigate]);
 
   // Show ProjectLoadingOverlay during the initial page fetch.
   const isPageLoading = pageQ.isLoading;
@@ -428,7 +434,6 @@ export default function ProjectPage() {
               </div>
               <div data-testid="inline-banners" className="flex flex-col gap-1 p-1">
                 <OcrFailedBanner ocrFailed={pageRecord?.ocr_failed === true} />
-                <ProjectNotFoundBanner projectId={projectId} notFound={projectNotFound} />
                 <ImageDriftBanner imageDrift={false} />
               </div>
             </div>

@@ -27,6 +27,16 @@ import { server } from "../test/server";
 import { ROUTES } from "../lib/routes";
 import { dialogStore } from "../stores/dialog-store";
 
+// ─── IS-1: mock useNavigate ──────────────────────────────────────────────────
+const mockNavigate = vi.fn();
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>();
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
+
 // ─── Mocks ──────────────────────────────────────────────────────────────────
 // Mock react-konva so the PageImageCanvas subtree renders as simple divs.
 vi.mock("react-konva", () => ({
@@ -131,6 +141,7 @@ function pageFixture() {
 describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
   beforeEach(() => {
     dialogStore.reset();
+    mockNavigate.mockReset();
     // Default success handlers for project + page.
     server.use(
       http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
@@ -299,7 +310,7 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     expect(await screen.findByTestId("banner-ocr-failed")).toBeInTheDocument();
   });
 
-  it("renders the ProjectNotFoundBanner when the project query 404s", async () => {
+  it("IS-1: auto-redirects to / and does NOT render ProjectNotFoundBanner when project 404s", async () => {
     server.use(
       http.get("/api/projects/:pid", () =>
         HttpResponse.json({ message: "Not found" }, { status: 404 }),
@@ -307,7 +318,12 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       http.get("/api/projects/:pid/pages/:idx", () => HttpResponse.json(pageFixture())),
     );
     renderProjectPage();
-    expect(await screen.findByTestId("banner-project-not-found")).toBeInTheDocument();
+    // Wait for the redirect effect to fire.
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/", { replace: true });
+    });
+    // Banner is no longer rendered (navigate replaces it).
+    expect(screen.queryByTestId("banner-project-not-found")).toBeNull();
   });
 
   it("mounts BusyOverlay inside image-pane and shows it while a save mutation is in-flight (#293)", async () => {
