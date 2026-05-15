@@ -223,44 +223,49 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     expect(screen.getByTestId("save-project-button")).toBeInTheDocument();
   });
 
-  it("mounts the ToolbarActionGrid", async () => {
+  it("IS-4: ToolbarActionGrid is in hidden stubs (not visible canvas)", async () => {
     renderProjectPage();
+    // ToolbarActionGrid is kept in a hidden stub div for driver-contract §2.9.
     expect(await screen.findByTestId("toolbar-action-grid")).toBeInTheDocument();
+    // Confirm it is inside the hidden stubs container.
+    const stub = screen.getByTestId("toolbar-action-grid");
+    const stubContainer = stub.closest("[data-testid-stub='canvas-hidden-stubs']");
+    expect(stubContainer).not.toBeNull();
   });
 
-  it("mounts the Splitter with left (image) and right (text) panes", async () => {
+  it("IS-4: Splitter is removed from visible canvas", async () => {
     renderProjectPage();
-    expect(await screen.findByTestId("splitter")).toBeInTheDocument();
-    expect(screen.getByTestId("splitter-left")).toBeInTheDocument();
-    expect(screen.getByTestId("splitter-right")).toBeInTheDocument();
-    expect(screen.getByTestId("image-pane")).toBeInTheDocument();
-    expect(screen.getByTestId("text-pane")).toBeInTheDocument();
+    await screen.findByTestId("project-page");
+    // The splitter is gone from the canvas — image-pane is now direct child of canvas.
+    expect(screen.queryByTestId("splitter")).toBeNull();
   });
 
-  it("mounts the ImageTabsHeader inside the image pane", async () => {
+  it("IS-4: canvas slot has ImageTabsHeader and image-pane directly (no splitter)", async () => {
     renderProjectPage();
     expect(await screen.findByTestId("layer-paragraphs-checkbox")).toBeInTheDocument();
     expect(screen.getByTestId("layer-lines-checkbox")).toBeInTheDocument();
     expect(screen.getByTestId("layer-words-checkbox")).toBeInTheDocument();
     expect(screen.getByTestId("selection-mode-paragraph")).toBeInTheDocument();
     expect(screen.getByTestId("erase-pixels-button")).toBeInTheDocument();
+    expect(screen.getByTestId("image-pane")).toBeInTheDocument();
   });
 
-  it("mounts the PageImageCanvas viewport inside the image pane", async () => {
+  it("IS-4: PageImageCanvas viewport is inside image-pane in the canvas", async () => {
     renderProjectPage();
     expect(await screen.findByTestId("image-viewport")).toBeInTheDocument();
+    const imagePaneEl = screen.getByTestId("image-pane");
+    expect(imagePaneEl.contains(screen.getByTestId("image-viewport"))).toBe(true);
   });
 
-  it("mounts the TextTabs (matches / ground-truth / ocr) inside the text pane", async () => {
+  it("IS-4: TextTabs testids are reachable in hidden stubs (driver-contract §2.7)", async () => {
+    // TextTabs kept hidden for driver testid preservation.
     renderProjectPage();
     expect(await screen.findByTestId("text-tab-matches")).toBeInTheDocument();
     expect(screen.getByTestId("text-tab-ground-truth")).toBeInTheDocument();
     expect(screen.getByTestId("text-tab-ocr")).toBeInTheDocument();
   });
 
-  it("mounts the match filter UI (testids match-filter-toggle + 3 sub-buttons)", async () => {
-    // TextTabs (shipped #200) already renders the spec 22 §8 match-filter
-    // testids; ProjectPage wires its value to `useUiPrefs.matchFilter`.
+  it("IS-4: match filter testids reachable in hidden stubs (driver-contract §2.7)", async () => {
     renderProjectPage();
     expect(await screen.findByTestId("match-filter-toggle")).toBeInTheDocument();
     expect(screen.getByTestId("match-filter-unvalidated")).toBeInTheDocument();
@@ -268,7 +273,7 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     expect(screen.getByTestId("match-filter-all")).toBeInTheDocument();
   });
 
-  it("mounts the WordMatchView container (empty list with provided payload)", async () => {
+  it("IS-4: WordMatchView reachable in hidden stubs (driver-contract §2.8)", async () => {
     renderProjectPage();
     // line_matches is [] in the fixture → the empty-state span is shown.
     expect(await screen.findByTestId("word-match-view")).toBeInTheDocument();
@@ -344,20 +349,22 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     // userEvent.click which checks visibility) to trigger the mutation.
     fireEvent.click(saveBtnEl);
     // BusyOverlay renders inside the image-pane while the mutation is pending.
+    // IS-4: image-pane is now a direct flex child of the canvas column (no splitter).
     expect(await screen.findByTestId("busy-overlay")).toBeInTheDocument();
-    // Confirm it is inside the image-pane (not a sibling of the page root).
     const imagePaneEl = screen.getByTestId("image-pane");
     expect(imagePaneEl.contains(screen.getByTestId("busy-overlay"))).toBe(true);
   });
 
-  it("mounts the inline-banners region inside image-pane and InlineBanners components are wired (#293)", async () => {
+  it("IS-4: inline-banners is in the canvas zone (sibling of image-pane after IS-4 strip)", async () => {
     renderProjectPage();
     // inline-banners container is always present (even with no active banners).
     const bannersEl = await screen.findByTestId("inline-banners");
     expect(bannersEl).toBeInTheDocument();
-    // It must be inside the image-pane per spec 22 §3.
-    const imagePaneEl = screen.getByTestId("image-pane");
-    expect(imagePaneEl.contains(bannersEl)).toBe(true);
+    // IS-4: inline-banners is now a sibling of image-pane (not inside it),
+    // both children of the canvas flex column. The studio-shell-canvas zone
+    // contains both.
+    const canvasZone = screen.getByTestId("studio-shell-canvas");
+    expect(canvasZone.contains(bannersEl)).toBe(true);
   });
 
   it("IS-3: Drawer renders with data-testid='drawer' (wired into ProjectPage)", async () => {

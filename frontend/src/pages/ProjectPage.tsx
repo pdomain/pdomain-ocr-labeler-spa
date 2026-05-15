@@ -68,7 +68,6 @@ import { selectionStore, type SelectionState } from "../stores/selection-store";
 import { PageActions } from "../components/PageActions";
 import { Drawer } from "../components/shell/Drawer";
 import { ToolbarActionGrid } from "../components/ToolbarActionGrid";
-import { Splitter } from "../components/Splitter";
 import { ImageTabsHeader } from "../components/ImageTabsHeader";
 import { BusyOverlay, ProjectLoadingOverlay } from "../components/BusyOverlay";
 import PageImageCanvas from "../components/PageImageCanvas";
@@ -437,80 +436,69 @@ export default function ProjectPage() {
   // lineMatches is already computed above; page is pagePayload.
   const drawerSlot = <Drawer lineMatches={lines} page={pagePayload ?? undefined} />;
 
+  // IS-4: Canvas slot stripped to image-only layout.
+  // ToolbarActionGrid, Splitter, TextTabs, WordMatchView removed from visible
+  // canvas. TextTabs/WordMatchView and ToolbarActionGrid kept as hidden stubs
+  // to preserve driver-contract testids (§2.7, §2.8, §2.9, §2.10).
   const canvasSlot = (
     <div className="flex flex-col h-full min-h-0">
-      <ToolbarActionGrid
-        selection={toolbarSelection}
-        pageData={toolbarPageData}
-        onAction={handleToolbarAction}
-        onApplyStyle={handleApplyStyle}
-        onClearStyle={handleClearStyle}
-        addWordActive={addWordActive}
-        onAddWordToggle={handleAddWordToggle}
+      <ImageTabsHeader
+        layerVisibility={uiPrefs.layerVisibility}
+        selectionMode={uiPrefs.selectionMode}
+        eraseActive={false}
+        onLayerToggle={(layer) => setLayerVisibility(layer, !uiPrefs.layerVisibility[layer])}
+        onSelectionModeChange={(mode) => setSelectionMode(mode)}
+        onEraseToggle={() => {
+          /* erase toggle wired by PageImageCanvas modes; no-op here */
+        }}
       />
-      <div className="flex-1 min-h-0">
-        <Splitter
-          direction="horizontal"
-          left={
-            <div data-testid="image-pane" className="relative flex flex-col h-full">
-              <ImageTabsHeader
-                layerVisibility={uiPrefs.layerVisibility}
-                selectionMode={uiPrefs.selectionMode}
-                eraseActive={false}
-                onLayerToggle={(layer) =>
-                  setLayerVisibility(layer, !uiPrefs.layerVisibility[layer])
-                }
-                onSelectionModeChange={(mode) => setSelectionMode(mode)}
-                onEraseToggle={() => {
-                  /* erase toggle wired by PageImageCanvas modes; no-op here */
-                }}
-              />
-              <div className="relative flex-1 min-h-0">
-                <BusyOverlay activeJob={activeJob} isMutating={isMutating} />
-                <PageImageCanvas
-                  imageUrl={pagePayload?.image_url ?? ""}
-                  encoded={pagePayload?.encoded_dims ?? null}
-                  page={pagePayload}
-                  projectId={projectId}
-                  pageIndex={idx0}
-                />
-              </div>
-              <div data-testid="inline-banners" className="flex flex-col gap-1 p-1">
-                <OcrFailedBanner ocrFailed={pageRecord?.ocr_failed === true} />
-                <ImageDriftBanner imageDrift={false} />
-              </div>
-            </div>
-          }
-          right={
-            <div data-testid="text-pane" className="flex flex-col h-full">
-              {/*
-               * TextTabs (shipped #200) already renders the spec 22 §8
-               * `match-filter-toggle` container plus the three sub-button
-               * testids (`match-filter-unvalidated/-mismatched/-all`).
-               * The standalone FilterToggle component (#312) would
-               * duplicate the testid, so we wire the existing TextTabs
-               * filter to `useUiPrefs.matchFilter` instead and feed the
-               * same value through WordMatchView's `filter` prop.
-               */}
-              <TextTabs
-                pageTextGt={pagePayload?.page_text_gt}
-                pageTextOcr={pagePayload?.page_text_ocr}
-                lineFilter={uiPrefs.matchFilter}
-                onLineFilterChange={(f) => setMatchFilter(f as MatchFilter)}
-              >
-                <WordMatchView lines={lines} filter={uiPrefs.matchFilter} />
-              </TextTabs>
-              {/* PlaintextEditor instances are routed by TextTabs internally
-                  in a future slice; for now we mount them as hidden siblings
-                  so the testids (plaintext-editor-gt / -ocr) are reachable
-                  by the driver pre-pass without changing TextTabs' shape. */}
-              <div style={{ display: "none" }}>
-                <PlaintextEditor source="gt" page={pagePayload} />
-                <PlaintextEditor source="ocr" page={pagePayload} />
-              </div>
-            </div>
-          }
+      <div data-testid="image-pane" className="relative flex-1 min-h-0">
+        <BusyOverlay activeJob={activeJob} isMutating={isMutating} />
+        <PageImageCanvas
+          imageUrl={pagePayload?.image_url ?? ""}
+          encoded={pagePayload?.encoded_dims ?? null}
+          page={pagePayload}
+          projectId={projectId}
+          pageIndex={idx0}
         />
+      </div>
+      <div data-testid="inline-banners" className="flex flex-col gap-1 p-1">
+        <OcrFailedBanner ocrFailed={pageRecord?.ocr_failed === true} />
+        <ImageDriftBanner imageDrift={false} />
+      </div>
+
+      {/*
+       * IS-4: Driver-contract testid preservation stubs.
+       *
+       * §2.9/§2.10: ToolbarActionGrid testids (toolbar-{scope}-{action},
+       *   apply-style-select, etc.) must remain in DOM.
+       * §2.7: TextTabs testids (text-tab-*, match-filter-*) must remain.
+       * §2.8: WordMatchView per-line/per-word testids must remain.
+       *
+       * All kept hidden; drivers select by data-testid not visibility.
+       */}
+      <div style={{ display: "none" }} data-testid-stub="canvas-hidden-stubs">
+        <ToolbarActionGrid
+          selection={toolbarSelection}
+          pageData={toolbarPageData}
+          onAction={handleToolbarAction}
+          onApplyStyle={handleApplyStyle}
+          onClearStyle={handleClearStyle}
+          addWordActive={addWordActive}
+          onAddWordToggle={handleAddWordToggle}
+        />
+        <div data-testid="text-pane">
+          <TextTabs
+            pageTextGt={pagePayload?.page_text_gt}
+            pageTextOcr={pagePayload?.page_text_ocr}
+            lineFilter={uiPrefs.matchFilter}
+            onLineFilterChange={(f) => setMatchFilter(f as MatchFilter)}
+          >
+            <WordMatchView lines={lines} filter={uiPrefs.matchFilter} />
+          </TextTabs>
+          <PlaintextEditor source="gt" page={pagePayload} />
+          <PlaintextEditor source="ocr" page={pagePayload} />
+        </div>
       </div>
     </div>
   );
