@@ -55,13 +55,14 @@
 @tailwind utilities;
 
 body {
-  font-family:
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    Roboto,
-    "Helvetica Neue",
-    Arial,
-    sans-serif;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--ink-1);
+  background: var(--bg-page);
+}
+
+@layer utilities {
+  .font-pgdp {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
 }
