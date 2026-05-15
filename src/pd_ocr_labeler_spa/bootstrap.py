@@ -344,6 +344,16 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     notification_queue = NotificationQueue()
     app.state.notification_queue = notification_queue
 
+    # Spec-23-B1 (issue #307): the ``reload_ocr`` job handler reads
+    # ``project_state`` / ``notification_queue`` (and an optional
+    # ``page_loader``) from ``runner.context`` to mutate state + queue
+    # notifications without a request-time DI graph.  Wire them now
+    # that both carriers exist — the runner instance was built earlier
+    # so the lifespan closure could capture it; ``context`` is a
+    # mutable dict so post-hoc population is safe.
+    runner.context["project_state"] = app.state.project_state
+    runner.context["notification_queue"] = notification_queue
+
     # Spec §2 step 10: install error handlers AFTER middleware (CORS +
     # RequestId) so a 500 still passes back through both on the way
     # out — the response keeps its CORS headers AND its X-Request-ID

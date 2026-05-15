@@ -1,0 +1,184 @@
+"""Reload-OCR job handler — spec-23-B1 / issue #307.
+
+Spec authority:
+- ``specs/23-page-payload-backend.md §6`` — fraction-based progress,
+  ``LocalDoctrPageLoader.run_ocr`` dispatched via ``asyncio.to_thread``,
+  outcome stored on ``ProjectState.page_states[idx].page_record``,
+  ``ocr_failed`` notification on exception.
+- ``docs/architecture/11-notifications.md §5.1`` — sequence diagram for
+  the reload-OCR + SSE flow.
+
+Handler entry-point: ``handle_reload_ocr(runner, job)`` — registered in
+``core/jobs/runner._HANDLERS["reload_ocr"]``.
+
+Job payload keys
+----------------
+``project_id``  str  — project identifier (also on ``job.project_id``).
+``page_index``  int  — 0-based page index to (re-)run OCR for.
+``force``       bool — when True, bypass cache/labeled lanes; the
+                       handler only ever drives the OCR lane, so this
+                       flag is forwarded informationally only (kept for
+                       wire-shape stability with spec §6).
+
+Runner context keys (read-only)
+-------------------------------
+``project_state``     ``ProjectState``     — required.
+``notification_queue`` ``NotificationQueue`` — required.
+``page_loader``       ``PageLoader``       — optional; injected by
+                                              tests or by the route
+                                              layer (M3 wiring). When
+                                              absent the handler raises
+                                              ``RuntimeError`` and the
+                                              runner converts to ``error``.
+
+Progress reporting
+------------------
+Four ``update_progress`` calls per spec §6 (fractions 0.0 / 0.1 / 0.9 /
+1.0). ``JobRunner.update_progress`` accepts integer ``current/total``
+counters; we encode the four spec fractions as ``(0,10) (1,10) (9,10)
+(10,10)`` so the wire ``current/total`` ratio reproduces the spec
+fractions exactly.
+
+Failure semantics
+-----------------
+The handler raises on loader exceptions; ``JobRunner._run_one`` catches
+and transitions the job to ``ERROR`` with the exception text on
+``error_message``. Before re-raising, we queue a ``NotificationKind.NEGATIVE``
+notification with key ``ocr_failed`` so SPA clients see a banner +
+toast independently of the SSE job stream.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import TYPE_CHECKING, Any
+
+from ...notifications import NotificationKind, NotificationQueue
+from ...page_state import PageLoader, PageLoadOutcome
+from ...project_state import PageState, ProjectState
+
+if TYPE_CHECKING:
+    from ..runner import Job, JobRunner
+
+log = logging.getLogger(__name__)
+
+# Spec §6 progress fractions, encoded as (current, total) pairs so the
+# integer-counter ``update_progress`` API reproduces the fractions.
+_PROGRESS_TOTAL = 10
+_PROGRESS_STAGES: tuple[tuple[int, str], ...] = (
+    (0, "Loading OCR model"),
+    (1, "Running OCR"),
+    (9, "Persisting cached envelope"),
+    (10, "Done"),
+)
+
+
+def _get_required_context(runner: JobRunner) -> tuple[ProjectState, NotificationQueue]:
+    """Pull the required carriers off ``runner.context``; raise if absent."""
+    ctx: dict[str, Any] = runner.context
+    project_state = ctx.get("project_state")
+    notification_queue = ctx.get("notification_queue")
+    if not isinstance(project_state, ProjectState):
+        raise RuntimeError("reload_ocr: runner.context['project_state'] is not wired")
+    if not isinstance(notification_queue, NotificationQueue):
+        raise RuntimeError("reload_ocr: runner.context['notification_queue'] is not wired")
+    return project_state, notification_queue
+
+
+def _get_page_loader(runner: JobRunner) -> PageLoader:
+    """Pull the ``PageLoader`` off ``runner.context``; raise if absent.
+
+    M3 wiring (issue tracked separately) will populate this from
+    ``LocalDoctrPageLoader(project=..., predictor_cache=...)`` once
+    DocTR is in scope. Tests inject a stub loader directly onto
+    ``runner.context["page_loader"]``.
+    """
+    loader = runner.context.get("page_loader")
+    if loader is None:
+        raise RuntimeError(
+            "reload_ocr: runner.context['page_loader'] is not wired; "
+            "the route layer must inject a PageLoader before submission"
+        )
+    return loader  # type: ignore[no-any-return]
+
+
+async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
+    """Run OCR for a single page and store the outcome on ``ProjectState``.
+
+    Spec §6 contract. Raises on loader failure; the runner converts to
+    a terminal ``error`` state. Notifications are queued via
+    ``NotificationQueue`` per spec 11.
+    """
+    payload: dict[str, Any] = job.payload
+    page_index: int = int(payload.get("page_index", 0))
+    project_id: str = job.project_id or str(payload.get("project_id", ""))
+
+    project_state, notification_queue = _get_required_context(runner)
+
+    log.info(
+        "reload_ocr: project=%s page=%d job=%s",
+        project_id,
+        page_index,
+        job.job_id,
+    )
+
+    # Stage 1 — 0.0 / "Loading OCR model".
+    current, message = _PROGRESS_STAGES[0]
+    await runner.update_progress(job.job_id, current=current, total=_PROGRESS_TOTAL, message=message)
+
+    loader = _get_page_loader(runner)
+
+    # Stage 2 — 0.1 / "Running OCR".
+    current, message = _PROGRESS_STAGES[1]
+    await runner.update_progress(job.job_id, current=current, total=_PROGRESS_TOTAL, message=message)
+
+    try:
+        outcome: PageLoadOutcome = await asyncio.to_thread(loader.run_ocr, page_index)
+    except Exception as exc:
+        # Spec §6: ``ocr_failed`` notification on exception. Queue first,
+        # then re-raise so the runner records the error on the job.
+        notification_queue.queue(
+            NotificationKind.NEGATIVE,
+            f"OCR failed for page {page_index + 1}: {exc}",
+        )
+        log.exception("reload_ocr: OCR failed project=%s page=%d", project_id, page_index)
+        raise
+
+    # Stage 3 — 0.9 / "Persisting cached envelope".
+    current, message = _PROGRESS_STAGES[2]
+    await runner.update_progress(job.job_id, current=current, total=_PROGRESS_TOTAL, message=message)
+
+    # Store on ProjectState. Mirrors ``core/page_state.ensure_page_model``'s
+    # post-load write: get-or-create the PageState row and stash the
+    # outcome on ``.page_record``. Holds the project lock for the
+    # mutation only (the OCR itself ran outside the lock on the worker
+    # thread — by design, OCR is the slow path and we don't want to
+    # serialize the whole runner on it).
+    with project_state._lock:
+        existing = project_state._page_states.get(page_index)
+        if existing is None:
+            existing = PageState(page_index=page_index)
+            project_state._page_states[page_index] = existing
+        existing.page_record = outcome
+        project_state._generation += 1
+
+    # Stage 4 — 1.0 / "Done".
+    current, message = _PROGRESS_STAGES[3]
+    await runner.update_progress(job.job_id, current=current, total=_PROGRESS_TOTAL, message=message)
+
+    # Success notification (spec 11 §2.2 — kind=positive).
+    notification_queue.queue(
+        NotificationKind.POSITIVE,
+        f"OCR complete for page {page_index + 1}",
+    )
+
+    log.info(
+        "reload_ocr: complete project=%s page=%d job=%s",
+        project_id,
+        page_index,
+        job.job_id,
+    )
+
+
+__all__ = ["handle_reload_ocr"]

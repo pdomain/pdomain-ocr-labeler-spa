@@ -237,8 +237,15 @@ class JobRunner:
 
 
 async def _handle_reload_ocr(runner: JobRunner, job: Job) -> None:
-    """Stub reload-OCR handler. M3 will wire the real doctr pipeline."""
-    await asyncio.sleep(0)
+    """Reload-OCR handler — delegates to ``core/jobs/handlers/reload_ocr``.
+
+    Issue #307 (spec-23-B1): real OCR via ``LocalDoctrPageLoader.run_ocr``
+    with four-stage progress reporting and ``ocr_failed`` notification
+    on failure.
+    """
+    from .handlers.reload_ocr import handle_reload_ocr  # lazy import
+
+    await handle_reload_ocr(runner, job)
 
 
 async def _handle_save_project(runner: JobRunner, job: Job) -> None:
