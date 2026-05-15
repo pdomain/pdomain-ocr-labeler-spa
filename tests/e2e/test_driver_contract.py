@@ -120,7 +120,7 @@ def test_app_shell_renders(live_server: LiveServer, page: Page) -> None:
     # No console errors that indicate a fatal crash.
     errors: list[str] = []
     page.on("console", lambda msg: errors.append(msg.text) if msg.type == "error" else None)
-    assert "#root" in page.content(), "React root not found"
+    assert 'id="root"' in page.content(), "React root not found"
 
 
 @pytest.mark.e2e
