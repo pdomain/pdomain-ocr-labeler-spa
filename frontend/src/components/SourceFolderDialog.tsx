@@ -122,7 +122,11 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      // Mod+Enter in path-input triggers apply (spec §8 — Apply source folder).
+      e.preventDefault();
+      void handleApply();
+    } else if (e.key === "Enter") {
       // Enter in path-input triggers open-typed (spec §2.2 hotkey note).
       e.preventDefault();
       handleOpenTyped();

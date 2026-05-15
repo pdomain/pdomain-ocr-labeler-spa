@@ -93,7 +93,7 @@ navigating; falls through to project list on failure.
 
 | Milestone | Status | What's left |
 |-----------|--------|-------------|
-| M9.5 | 🟡 partial | Keyboard-only end-to-end editing audit (#286) — verify every labeling action is reachable without a mouse |
+| M9.5 | ✅ done | Keyboard audit complete — added 6 missing nudge hotkey entries, Mod+Enter for SourceFolderDialog, keyboard-only E2E tests (#286) |
 | M11 | ⬜ blocked | Glyph-level annotations (#267–#270) — 4 issues, all `status:blocked`; needs design decision before implementation |
 
 M2–M10, M9.1, M9.2 are all ✅ done.

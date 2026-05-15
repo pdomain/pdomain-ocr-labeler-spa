@@ -67,6 +67,12 @@ export const HOTKEY_MAP: HotkeyEntry[] = [
   { combo: "arrowright", scope: "dialog", description: "Next word" },
   { combo: "shift+arrowleft", scope: "dialog", description: "Nudge left edge" },
   { combo: "shift+arrowright", scope: "dialog", description: "Nudge right edge" },
+  { combo: "shift+arrowup", scope: "dialog", description: "Nudge top edge (expand)" },
+  { combo: "shift+arrowdown", scope: "dialog", description: "Nudge top edge (shrink)" },
+  { combo: "ctrl+arrowleft", scope: "dialog", description: "Nudge right edge (shrink)" },
+  { combo: "ctrl+arrowright", scope: "dialog", description: "Nudge right edge (expand)" },
+  { combo: "ctrl+arrowup", scope: "dialog", description: "Nudge bottom edge (shrink)" },
+  { combo: "ctrl+arrowdown", scope: "dialog", description: "Nudge bottom edge (expand)" },
   { combo: "r", scope: "dialog", description: "Refine" },
   { combo: "shift+r", scope: "dialog", description: "Expand+Refine" },
   { combo: "m", scope: "dialog", description: "Apply style" },
@@ -75,6 +81,7 @@ export const HOTKEY_MAP: HotkeyEntry[] = [
 
   // ── Source-folder dialog ─────────────────────────────────────────────────
   { combo: "enter", scope: "source-folder", description: "Open typed path" },
+  { combo: "mod+enter", scope: "source-folder", description: "Apply source folder" },
   { combo: "escape", scope: "source-folder", description: "Cancel" },
 
   // ── GT Input ────────────────────────────────────────────────────────────
