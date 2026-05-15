@@ -82,6 +82,7 @@ import { PlaintextEditor } from "../components/PlaintextEditor";
 import { WordEditDialog, type DialogTarget } from "../components/WordEditDialog";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { StudioShell } from "../components/shell/StudioShell";
+import { Rail } from "../components/shell/Rail";
 
 import type {
   Selection as ToolbarSelection,
@@ -374,8 +375,8 @@ export default function ProjectPage() {
     </div>
   );
 
-  // Rail slot — empty stub; Rail component wired in Slice 10.
-  const railSlot = <div data-testid="rail-placeholder" className="h-full bg-bg-surface" />;
+  // Rail slot — wired in Slice 10.
+  const railSlot = <Rail />;
 
   // Drawer slot — empty stub; Drawer component wired in Slice 11.
   const drawerSlot = <div data-testid="drawer-placeholder" className="h-full" />;
