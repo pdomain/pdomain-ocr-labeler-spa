@@ -474,7 +474,14 @@ export default function ProjectPage() {
     pagePayload && projectId ? (
       <WordDetail page={pagePayload} projectId={projectId} pageIndex={idx0} />
     ) : undefined;
-  const rightSlot = <RightPanel page={pagePayload ?? undefined} wordSlot={wordDetailSlot} />;
+  const rightSlot = (
+    <RightPanel
+      page={pagePayload ?? undefined}
+      projectId={projectId ?? undefined}
+      pageIndex={idx0}
+      wordSlot={wordDetailSlot}
+    />
+  );
 
   return (
     <div data-testid="project-page" className="h-full">

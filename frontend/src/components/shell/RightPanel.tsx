@@ -1,5 +1,5 @@
 // RightPanel.tsx — 320px right-side context panel.
-// Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 14.
+// Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 14, Slice 21 (line), Slice 22 (block/para).
 //
 // Header: <Breadcrumb /> + collapse button.
 // Body  : routes on `selection-store.level`:
@@ -7,8 +7,9 @@
 //           "word"  → caller-provided `wordSlot` (e.g. WordMatchView for
 //                     Slice 14; WordDetail in Slice 16). When no slot is
 //                     supplied, falls back to a "Word: …" placeholder.
-//           others  → "Coming soon" placeholder per level. Slices 18/21/22
-//                     will populate these.
+//           "line"  → <LineDetail> (Slice 21).
+//           "block" → <BlockDetail> (Slice 22).
+//           "para"  → thin para view reusing BlockDetail items (Slice 22).
 //
 // Slice 14 deliberately does NOT mount WordMatchView itself — the consumer
 // (ProjectPage) provides word content via `wordSlot` so the panel stays free
@@ -19,6 +20,8 @@ import { PanelRightClose } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Breadcrumb } from "./Breadcrumb";
 import { selectionStore, type SelectionLevel } from "../../stores/selection-store";
+import { LineDetail } from "../right-panel/LineDetail";
+import { BlockDetail } from "../right-panel/BlockDetail";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -45,15 +48,19 @@ const LEVEL_PLACEHOLDER: Record<SelectionLevel, string> = {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export interface RightPanelProps {
-  /** Current page (used by Breadcrumb for label resolution). */
+  /** Current page (used by Breadcrumb for label resolution and detail panels). */
   page?: PagePayload;
+  /** Project id — forwarded to detail panels for mutations. */
+  projectId?: string;
+  /** Page index — forwarded to detail panels for mutations. */
+  pageIndex?: number;
   /** Rendered when `selection-store.level === "word"`. */
   wordSlot?: React.ReactNode;
   /** Invoked when the collapse button is clicked. */
   onCollapse?: () => void;
 }
 
-export function RightPanel({ page, wordSlot, onCollapse }: RightPanelProps) {
+export function RightPanel({ page, projectId, pageIndex, wordSlot, onCollapse }: RightPanelProps) {
   const state = useSyncExternalStore(
     subscribeSelection,
     getSelectionSnapshot,
@@ -90,9 +97,21 @@ export function RightPanel({ page, wordSlot, onCollapse }: RightPanelProps) {
       <div
         data-testid="right-panel-body"
         data-level={level}
-        className="flex-1 min-h-0 overflow-auto p-3 text-sm text-ink-2"
+        className="flex-1 min-h-0 overflow-auto text-sm text-ink-2"
       >
-        {level === "word" && wordSlot ? wordSlot : <Placeholder level={level} />}
+        {level === "word" && wordSlot ? (
+          <div className="p-3">{wordSlot}</div>
+        ) : level === "line" && page && projectId !== undefined && pageIndex !== undefined ? (
+          <LineDetail page={page} projectId={projectId} pageIndex={pageIndex} />
+        ) : level === "block" && page && projectId !== undefined && pageIndex !== undefined ? (
+          <BlockDetail page={page} projectId={projectId} pageIndex={pageIndex} level="block" />
+        ) : level === "para" && page && projectId !== undefined && pageIndex !== undefined ? (
+          <BlockDetail page={page} projectId={projectId} pageIndex={pageIndex} level="para" />
+        ) : (
+          <div className="p-3">
+            <Placeholder level={level} />
+          </div>
+        )}
       </div>
     </div>
   );
