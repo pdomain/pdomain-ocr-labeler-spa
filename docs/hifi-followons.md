@@ -48,13 +48,9 @@ tests that assert on the hardcoded hex values.
 `useLayerColors()`. Update `BBoxOverlay.test.tsx` to assert on CSS-var names or
 computed values rather than hardcoded hex strings.
 
-### FO-5 — `Chip` primitive does not forward `data-testid`
-**Surfaced in:** Slice 19 (CharRangesSection)
-**State:** `CharRangesSection` rolls its own tristate button using the same
-static class maps as `Chip`, because extending `Chip` to forward `data-testid`
-was out of scope for the slice.
-**To fix:** Add `data-testid` forwarding to the `Chip` primitive (Slice 6 file),
-then replace the inline tristate buttons in `CharRangesSection` with `<Chip>`.
+### FO-5 — `Chip` primitive does not forward `data-testid` ✅ DONE
+**Shipped:** #325 (2026-05-15). Chip forwards `data-testid` on both variants;
+CharRangesSection uses `<Chip variant="tristate">` instead of duplicate inline impl.
 
 ### FO-6 — Legacy `hotkeyMap.ts` entries not bridged into hotkey registry
 **Surfaced in:** Slice 25 (HotkeyHelpModal refresh)
@@ -80,15 +76,10 @@ update `selection-walk.ts` to walk blocks when the field exists.
 
 ## Design decisions to revisit
 
-### FO-8 — `Drawer` subscriber bridge is hand-rolled
-**Surfaced in:** Slice 11 (Drawer)
-**State:** `Drawer.tsx` contains a manually-maintained subscriber bridge (a local
-`Set<() => void>`) to adapt `useUiPrefs` (a Zustand-style store without a native
-`useSyncExternalStore`-compatible `subscribe`) for React 18. Other files that
-consume `useUiPrefs` use `useSyncExternalStore` directly via the store's
-`subscribe` method.
-**To fix:** Add a `subscribe(listener)` method directly to `useUiPrefs` (parallel
-to `railStore.subscribe`) and remove the local bridge in `Drawer.tsx`.
+### FO-8 — `Drawer` subscriber bridge is hand-rolled ✅ DONE
+**Shipped:** #324 (2026-05-15). Local `uiPrefsSubscribers` Set removed; Drawer
+now uses `useSyncExternalStore(useUiPrefs.subscribe, ...)` directly. `useUiPrefs`
+already had `subscribe` — the bridge was redundant.
 
 ### FO-9 — `ErasePixelsSection` Apply button permanently disabled
 **Surfaced in:** Slice 17 (ErasePixelsSection)

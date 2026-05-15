@@ -113,10 +113,9 @@ or context menu triggered from HeaderBar.
 
 ### P2 — Follow-on quality issues (do after P0/P1 are resolved)
 
-**I-8: `ProjectLoadControls` input/LOAD in HeaderBar is oversized**
-The white text input + LOAD button look like legacy chrome. In the hi-fi design,
-"Open source folder" uses `Button variant="primary"` from RootPage/dialogs; the
-HeaderBar just shows the project name as breadcrumb text.
+**I-8: `ProjectLoadControls` input/LOAD in HeaderBar is oversized** ✅ DONE (#326)
+Replaced with breadcrumb text + compact FolderOpen icon button on project routes.
+Driver-contract testids preserved via sr-only hidden elements.
 
 **I-9: Right panel 320px column always visible — no collapse wired**
 `RightPanel` has an `onCollapse` prop but nothing calls it. The collapse button

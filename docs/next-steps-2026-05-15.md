@@ -12,6 +12,11 @@ State as of end of day. Everything in this file is open work; anything not liste
 - **Integration session IS-1–6**: wired the components into the running app — double header fixed,
   nav controls visible, Drawer live, canvas stripped to image-only, project-not-found redirects.
 - **Follow-on catalogue**: `docs/hifi-followons.md` (FO-1–9).
+- **Loop fix session (2026-05-15 evening)**: three commits fixing RootPage→ProjectPage→RootPage
+  infinite redirect loop (`655bbf2`, `516d3cb`). Root cause: `GET /api/projects/{id}` returns 404
+  after a restart (project not in memory); `GET /api/projects` lists from disk unconditionally. Fix:
+  RootPage now validates project ID against the disk list before navigating; ProjectPage passes
+  `state: { skipSessionRedirect: true }` on 404 redirect so RootPage falls through to project list.
 
 ---
 
@@ -38,7 +43,6 @@ open http://localhost:5173
 
 **Known remaining rough edges (don't file bugs yet):**
 
-- `ProjectLoadControls` in the header has an oversized white text input (I-8).
 - Block-level selection in RightPanel shows placeholder (no block layer in PagePayload yet, FO-7).
 - Erase Pixels "Apply" button is permanently disabled (FO-9).
 - Merge-with-line buttons in LineDetail are disabled (FO-3).
@@ -47,12 +51,13 @@ open http://localhost:5173
 
 ## 2 — Quick fixes (1–2 hours, can do same day)
 
-| ID | What | File |
-|----|------|------|
-| I-8 | `ProjectLoadControls` white input is legacy chrome; replace with project-name breadcrumb text + a small "change folder" icon button | `HeaderBar.tsx`, `ProjectLoadControls.tsx` |
-| FO-5 | `Chip` primitive doesn't forward `data-testid`; `CharRangesSection` rolls its own tristate | `frontend/src/components/ui/Chip.tsx` |
-| FO-8 | `Drawer.tsx` has a hand-rolled subscriber bridge; add `subscribe()` to `useUiPrefs` and remove the bridge | `frontend/src/stores/ui-prefs.ts`, `Drawer.tsx` |
-| CLAUDE.md | Still says "M2 in progress"; M2–M10 are all done | `CLAUDE.md` |
+All immediate quick fixes shipped (2026-05-15 evening):
+
+- ✅ I-8 — breadcrumb + icon replaces legacy select in HeaderBar (#326)
+- ✅ FO-5 — Chip forwards data-testid; CharRangesSection uses Chip (#325)
+- ✅ FO-8 — Drawer subscriber bridge removed; uses useUiPrefs.subscribe directly (#324)
+- ✅ CLAUDE.md — milestone section updated
+- ✅ auto-resume after restart — RootPage POSTs /api/projects/load (#327)
 
 ---
 
@@ -66,6 +71,11 @@ These require new FastAPI endpoints before the frontend stubs can be wired:
 | FO-2 | Char-range positions | New endpoint accepting `{line_idx, word_idx, ranges: [{start,end,styles}]}` |
 | FO-3 | Merge-with-line | `POST /api/projects/{id}/pages/{idx}/merge-lines` |
 | FO-9 | Erase pixels availability | Either a capability flag in `/api/session-state` or a `/api/refine/available` probe |
+
+### Auto-resume after restart
+
+✅ Shipped in #327 (2026-05-15). RootPage now fires `POST /api/projects/load` before
+navigating; falls through to project list on failure.
 
 ---
 
