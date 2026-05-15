@@ -2,9 +2,7 @@
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 22.
 //
 // "Layout" tab: layout-type radio chips + model suggestion callout.
-//   NOTE: The `lines_paragraphs` PATCH endpoint is not yet in the
-//   OpenAPI schema; the layout-type mutation is stubbed as a no-op
-//   until the backend route is added.
+//   Layout-type saves via PATCH .../paragraphs/{pi} (FO-1).
 // "Items" tab: tree of paras + lines, density toggle; click sets selection.
 //
 // Para mode: `level === "para"` — same Items rendering, no Layout tab header.
