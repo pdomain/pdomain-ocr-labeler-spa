@@ -523,9 +523,10 @@ exactly the same.
 - **Q-A6** (predictions-overlay color). What color is the ghost outline
   on the canvas? Recommend amber-50 to match the corner-badge palette.
   Listed in [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md).
-- **Q-A7** (per-mark provenance). v1 puts `source` at the
-  `GlyphAnnotations` level, not per-`LigatureMark`. Is this granular
-  enough? Listed in [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md).
+- **Q-A7** (per-mark provenance). **Resolved — D-044.** The `source` field
+  is a single string per word (`GlyphAnnotations`-level); character-level
+  provenance is deferred to v2.3 per D-044. See
+  [`specs/17-decisions.md`](17-decisions.md) §D-044.
 - **Profile registry overlap** with [`18-text-normalization.md`](../docs/architecture/18-text-normalization.md).
   Both specs reference future "fraktur"/"gaelic" profiles. The glyph
   classifier and the normalization map should share a profile name

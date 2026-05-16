@@ -1546,6 +1546,59 @@ D-020 (superseded).
 
 ---
 
+## D-044 — Provenance granularity: object-level is sufficient for v1
+
+**Date.** 2026-05-16. Closes Q-A7 (`OPEN_QUESTIONS.md`).
+
+**Status.** Accepted.
+
+**Decision.** Adopt **Option (A) — object-level provenance**: one `source`
+string per word's `GlyphAnnotations` dict. If annotations for a single word
+originate from multiple sources, record the highest-confidence or most-recent
+source. Per-character provenance is deferred to v2.3 per the escape hatch
+below.
+
+**Why.**
+
+- Real annotation traffic has not yet revealed mixed-source granularity at
+  the character level within a single word. Character-level provenance would
+  impose schema complexity before any observed need.
+- The v2.2 schema reader (CU-1.2) and the `IGlyphPredictor` Protocol
+  (CU-1.3) can be shipped with object-level source without a v2.3 bump.
+- This mirrors D-032 (rotation provenance), which used the same
+  single-string approach for per-page auto-rotation metadata.
+
+**Escape hatch.** If mixed-source granularity is observed in production
+traffic, a v2.3 schema bump can introduce `source_per_char: list[str] | None`
+as an additive optional field. That bump does not require any change to
+object-level consumers.
+
+**Consequences.**
+
+- `specs/20-glyph-annotations.md` §11 is updated to specify that `source`
+  is always a single string (object-level).
+- v2.2 envelope reader (CU-1.2) does not need to handle `source` arrays.
+- M11 frontend can ship chips + accept/reject without surfacing
+  per-character provenance.
+
+**Alternatives considered.**
+
+- **(B) Per-mark provenance now.** Add `source` to `LigatureMark`, add
+  `long_s_sources: list[Literal[...]]` parallel to `long_s_positions`, and
+  add `swash_source`. More complex model, but avoids a future schema bump.
+  Rejected: complexity before observed need; a v2.3 bump is cheaper than
+  over-engineering v2.2.
+- **(C) Hybrid.** Keep `GlyphAnnotations.source` as the "dominant" signal
+  plus an optional `mark_sources: dict[int, Literal[...]]` escape hatch.
+  Rejected: hybrid adds parser complexity without removing the eventual
+  v2.3 bump if full per-mark granularity is required.
+
+**Refs.** [`OPEN_QUESTIONS.md Q-A7`](../OPEN_QUESTIONS.md),
+[`specs/20-glyph-annotations.md`](20-glyph-annotations.md) §3 and §11,
+D-032 (rotation provenance precedent).
+
+---
+
 ## Pending decisions
 
 See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for any sub-questions

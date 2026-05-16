@@ -195,6 +195,46 @@ implementation spec; D-020 is superseded.
 
 ---
 
+## Q-A7 — Per-mark provenance: is object-level `source` granular enough?
+> GitHub: ConcaveTrillion/pd-ocr-labeler-spa#58
+
+**Q.** In v1, `GlyphAnnotations.source` is a single `Literal["human",
+"predicted", "human_confirmed"]` field on the whole `GlyphAnnotations` object —
+not per `LigatureMark`, not per `long_s_positions` entry. Is that granularity
+sufficient, or do we need provenance at the individual mark level?
+
+**Context.** `specs/20-glyph-annotations.md` §3 states: "Provenance is
+per-`GlyphAnnotations` object in v1 (not per-mark). This keeps the model
+simple; if mixed-source granularity is needed later, we bump again." A typical
+mixed-source scenario: the classifier predicted 2 ligature marks correctly; the
+human then manually added a third ligature mark and corrected a long-s position.
+With object-level provenance, the whole `GlyphAnnotations` becomes `"human"`,
+losing the fact that 2 marks were originally predicted. This is a schema design
+decision that is hard to change post-M11 without a v2.3 envelope bump.
+
+**Options.**
+
+- **(A) Keep object-level provenance.** Accept the simplification for v1; spec
+  explicitly plans "bump if needed."
+- **(B) Per-mark provenance now.** Add `source` to `LigatureMark`, add
+  `long_s_sources: list[Literal[...]]` parallel to `long_s_positions`, and add
+  `swash_source`. More complex model, but avoids a future schema bump.
+- **(C) Hybrid.** Keep `GlyphAnnotations.source` as the "dominant" signal, plus
+  an optional `mark_sources: dict[int, Literal[...]]` escape hatch.
+
+**Recommendation.** **(A)** — object-level is consistent with D-032 (rotation
+provenance); the spec explicitly names the trade-off; a v2.3 bump is low-cost if
+the need materializes.
+
+**Blocks.** M11 data-model lock-in (`specs/16-milestones.md` §M11 pre-conditions).
+
+**Owner.** CT.
+
+**Resolution:** D-044 — object-level provenance adopted. See `specs/17-decisions.md`.
+**Closed:** 2026-05-16
+
+---
+
 ## Resolution log
 
 All initial questions resolved by user on 2026-05-06; sub-questions
@@ -236,6 +276,7 @@ Decisions live in [`../specs/17-decisions.md`](../specs/17-decisions.md).
 | Q-A14 | M4 renderer Konva spike requirement | (B) commit to Konva without spike; `WordImageCanvas` proves the toolchain works; D-020 superseded; spec 21 is implementation spec (resolved 2026-05-14) | [D-043](../specs/17-decisions.md) |
 | Q-A5 | Legacy `UserPageEnvelope` v2.2 tolerance | (A) SPA writes v2.2 freely — legacy `from_dict` silently ignores extras (resolved 2026-05-11) | gh#56 |
 | Q-A6 | Predictions-overlay ghost color | Tailwind `blue-500` at 40% opacity, exposed as `--predictions-ghost-color` CSS var (resolved 2026-05-11) | gh#57 + spec 20 §5.6 |
+| Q-A7 | Per-mark provenance granularity | (A) object-level — one `source` string per `GlyphAnnotations` dict; per-char deferred to v2.3 (resolved 2026-05-16) | [D-044](../specs/17-decisions.md) |
 
 ### Delegations to peer-repo agents (2026-05-06)
 
