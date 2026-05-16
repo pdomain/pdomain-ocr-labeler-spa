@@ -47,8 +47,11 @@ output for debugging.
 
 ## Current milestone
 
-M0–M10, M9.1, M9.2, M9.5, and hi-fi follow-ons FO-1–FO-9 are all ✅
-done. Milestone history lives in GitHub milestones and `specs/16-milestones.md`;
+M0–M10, M9.5, and hi-fi follow-ons FO-1–FO-9 are all ✅ done.
+M9.1 (manual rotate) and M9.2 (auto-rotate-all) ship the job/SSE
+plumbing only — the actual image rotation, re-OCR, and PageRecord
+update are stubbed. See `docs/BUGS_FOUND.md`.
+Milestone history lives in GitHub milestones and `specs/16-milestones.md`;
 parity tracking moved to GitHub issues (`label:hifi:P1..P5`).
 
 **Path to usable** — see `docs/plan-to-usable.md` for the gap analysis
