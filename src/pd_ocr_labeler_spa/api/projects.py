@@ -393,7 +393,7 @@ def load_project(
     intentionally bundles session-state with the page-payload step.
     M3 will land both.
     """
-    target = body.project_root
+    target = body.project_root.expanduser()
     # Use the runtime-effective root (may have been updated by POST /source-root).
     effective_root = src_carrier.get()
 
@@ -646,7 +646,7 @@ def set_source_root(
     """
     new_root = body.path
     try:
-        resolved = new_root.resolve()
+        resolved = new_root.expanduser().resolve()
     except (OSError, RuntimeError):
         resolved = None
 

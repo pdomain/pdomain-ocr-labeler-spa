@@ -307,6 +307,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fs/ls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Directory
+         * @description ``GET /api/fs/ls?path=<path>`` — list subdirectories at *path*.
+         *
+         *     - ``path`` defaults to ``~`` (user home) if not provided.
+         *     - Calls ``.expanduser().resolve()`` on the input.
+         *     - Returns only directories, excluding hidden names (leading ``'.'``),
+         *       sorted alphabetically.
+         *     - If ``path`` doesn't exist or isn't a directory → returns an empty
+         *       ``entries`` list rather than a 404, so the dialog degrades
+         *       gracefully.
+         *
+         *     Response shape::
+         *
+         *         {
+         *             "path": "/resolved/absolute/path",
+         *             "entries": [
+         *                 {"name": "subdir1", "is_dir": true},
+         *                 ...
+         *             ]
+         *         }
+         */
+        get: operations["list_directory_api_fs_ls_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/pages/{page_index}": {
         parameters: {
             query?: never;
@@ -3405,6 +3443,38 @@ export interface operations {
                 "application/json": components["schemas"]["AutoRotateAllRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_directory_api_fs_ls_get: {
+        parameters: {
+            query?: {
+                /** @description Absolute or ~ path to list */
+                path?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

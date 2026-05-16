@@ -791,3 +791,35 @@ def test_post_source_root_updates_get_projects_response(tmp_path: Path) -> None:
         after = c.get("/api/projects").json()
     project_ids = {p["project_id"] for p in after["projects"]}
     assert "my_book" in project_ids
+
+
+def test_post_source_root_expands_tilde(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """POST /source-root with a tilde path expands ``~`` to the real home.
+
+    Root cause: ``Path("~/foo").resolve()`` does NOT expand tilde — it
+    resolves relative to cwd.  The fix calls ``.expanduser()`` before
+    ``.resolve()`` so ``~/projects`` works even when cwd != home.
+
+    We monkeypatch ``Path.home`` to point at ``tmp_path`` so the test is
+    hermetic (no real home-dir writes).
+    """
+    # Create a directory that will be "~/<subdir>" in the monkeypatched world.
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    projects_dir = fake_home / "myprojects"
+    projects_dir.mkdir()
+    (projects_dir / "book1").mkdir()
+
+    # Redirect ~ → fake_home for this test.
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    settings = _make_settings(tmp_path)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        resp = c.post("/api/projects/source-root", json={"path": "~/myprojects"})
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["projects_root"] == str(projects_dir)
+    project_ids = {p["project_id"] for p in body["projects"]}
+    assert "book1" in project_ids

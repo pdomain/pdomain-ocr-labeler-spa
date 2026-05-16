@@ -12,10 +12,15 @@
 //   source-folder-apply-button        — POSTs current path and closes
 //   source-folder-cancel-button       — closes without API call
 //
-// Navigation is client-side string manipulation only (no filesystem listing API).
-// The driver workflow: open dialog → type path in path-input → click open-typed → click apply.
+// Directory listing: GET /api/fs/ls?path=<currentPath>
+//   Each entry row testid: data-testid="fs-ls-entry-{name}"
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+interface FsEntry {
+  name: string;
+  is_dir: boolean;
+}
 
 interface SourceFolderDialogProps {
   /** Whether the dialog is visible. */
@@ -43,7 +48,7 @@ function parentPath(p: string): string {
  *   inputPath   — the text typed in the path-input.
  *
  * On apply, POSTs { path: currentPath } to POST /api/projects/source-root.
- * All directory navigation is client-side string manipulation.
+ * Directory listing is fetched from GET /api/fs/ls?path=<currentPath>.
  * Renders nothing when `open` is false.
  */
 export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
@@ -51,6 +56,25 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
   const [inputPath, setInputPath] = useState<string>("~");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [entries, setEntries] = useState<FsEntry[]>([]);
+  const [listLoading, setListLoading] = useState(false);
+
+  // Fetch directory listing whenever currentPath changes (and dialog is open).
+  useEffect(() => {
+    if (!open) return;
+    setListLoading(true);
+    const params = new URLSearchParams({ path: currentPath });
+    fetch(`/api/fs/ls?${params.toString()}`)
+      .then((r) => r.json())
+      .then((data: { entries?: FsEntry[] }) => {
+        setEntries(data.entries ?? []);
+        setListLoading(false);
+      })
+      .catch(() => {
+        setEntries([]);
+        setListLoading(false);
+      });
+  }, [currentPath, open]);
 
   if (!open) return null;
 
@@ -73,6 +97,13 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
 
   function handleUseCurrent() {
     setInputPath(currentPath);
+  }
+
+  function handleEntryClick(name: string) {
+    const sep = currentPath.endsWith("/") ? "" : "/";
+    const next = currentPath + sep + name;
+    setCurrentPath(next);
+    setInputPath(next);
   }
 
   // --- apply / cancel ----------------------------------------------------------
@@ -187,6 +218,35 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
           >
             Up
           </button>
+        </div>
+
+        {/* Directory listing */}
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+            Subdirectories
+          </label>
+          <div className="border border-gray-200 rounded max-h-40 overflow-y-auto bg-gray-50">
+            {listLoading ? (
+              <div data-testid="fs-ls-loading" className="px-3 py-2 text-xs text-gray-400 italic">
+                Loading…
+              </div>
+            ) : entries.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-gray-400 italic">No subdirectories</div>
+            ) : (
+              entries.map((e) => (
+                <button
+                  key={e.name}
+                  type="button"
+                  data-testid={`fs-ls-entry-${e.name}`}
+                  onClick={() => handleEntryClick(e.name)}
+                  disabled={loading}
+                  className="w-full text-left px-3 py-1.5 text-sm font-mono hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
+                >
+                  {e.name}/
+                </button>
+              ))
+            )}
+          </div>
         </div>
 
         {/* Path input */}

@@ -280,6 +280,66 @@ describe("SourceFolderDialog: Apply POSTs currentPath and closes", () => {
   });
 });
 
+// --- Directory listing -------------------------------------------------------
+
+describe("SourceFolderDialog: directory listing", () => {
+  it("renders subdirectory entries fetched from GET /api/fs/ls", async () => {
+    server.use(
+      http.get("/api/fs/ls", () =>
+        HttpResponse.json({
+          path: "/home/user",
+          entries: [
+            { name: "projects", is_dir: true },
+            { name: "books", is_dir: true },
+          ],
+        }),
+      ),
+    );
+
+    renderDialog(true);
+
+    // Entries should appear after the async fetch resolves.
+    await waitFor(() => {
+      expect(screen.getByTestId("fs-ls-entry-projects")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("fs-ls-entry-books")).toBeInTheDocument();
+  });
+
+  it("clicking a directory entry updates currentPath and inputPath", async () => {
+    server.use(
+      http.get("/api/fs/ls", () =>
+        HttpResponse.json({
+          path: "/home/user",
+          entries: [{ name: "mybooks", is_dir: true }],
+        }),
+      ),
+    );
+
+    renderDialog(true);
+
+    // Wait for entry to render.
+    await waitFor(() => {
+      expect(screen.getByTestId("fs-ls-entry-mybooks")).toBeInTheDocument();
+    });
+
+    // Click the entry.
+    fireEvent.click(screen.getByTestId("fs-ls-entry-mybooks"));
+
+    // currentPath label should now include the directory name.
+    expect(screen.getByTestId("source-folder-current-path-label")).toHaveTextContent("~/mybooks");
+    expect(screen.getByTestId("source-folder-path-input")).toHaveValue("~/mybooks");
+  });
+
+  it("shows empty state when no entries returned", async () => {
+    // Default handler already returns empty entries; just verify the message.
+    renderDialog(true);
+
+    await waitFor(() => {
+      expect(screen.getByText(/No subdirectories/i)).toBeInTheDocument();
+    });
+  });
+});
+
 // --- Cancel button -----------------------------------------------------------
 
 describe("SourceFolderDialog: Cancel closes without API call", () => {

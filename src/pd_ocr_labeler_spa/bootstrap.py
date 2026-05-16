@@ -41,6 +41,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api.env_js import install_env_js
 from .api.export import install_export_router
+from .api.fs import install_fs_router
 from .api.healthz import install_healthz
 from .api.jobs import install_jobs_router
 from .api.lines_paragraphs import install_lines_paragraphs_router
@@ -381,6 +382,10 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # /healthz for symmetry. M2-proper will add /api/pages, /api/words,
     # etc.
     install_projects_router(app)
+
+    # /api/fs/ls — directory-listing helper for the source-folder picker.
+    # Issue #294 (spec 22 §10).
+    install_fs_router(app)
 
     # /api/projects/{id}/pages/* router — issue #185.
     install_pages_router(app)
