@@ -249,3 +249,26 @@ export function useSetCharRanges(projectId: string, pageIndex: number) {
     },
   });
 }
+
+// ─── useAdjustWordGap (P3.d stub) ─────────────────────────────────────────────
+
+/**
+ * Adjust the inter-word gap for a word (P3.d).
+ *
+ * TODO: Backend endpoint not yet defined. This stub logs the action locally
+ * and resolves immediately so the UI behaves as if the mutation succeeded.
+ * Wire to ``POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/gap``
+ * (or equivalent) when the backend endpoint lands.
+ */
+export function useAdjustWordGap(_projectId: string, _pageIndex: number) {
+  return useMutation<void, Error, { lineIndex: number; wordIndex: number; gapPx: number }>({
+    mutationFn: ({ lineIndex, wordIndex, gapPx }) => {
+      // TODO: replace with real API call when backend endpoint is defined
+      // eslint-disable-next-line no-console
+      console.log(
+        `[useAdjustWordGap] TODO stub — line=${lineIndex} word=${wordIndex} gap=${gapPx}px`,
+      );
+      return Promise.resolve();
+    },
+  });
+}
