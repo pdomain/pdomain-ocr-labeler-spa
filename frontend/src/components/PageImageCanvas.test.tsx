@@ -14,11 +14,12 @@
 // rafSchedule helper this slice consumes.
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { getStageDimensions } from "../lib/canvas-utils";
 import { viewportStore } from "../stores/viewport-store";
 import { selectionStore } from "../stores/selection-store";
 import { useUiPrefs } from "../stores/ui-prefs";
+import { railStore } from "../stores/rail-store";
 
 // ── use-image mock (used by PageImage) ───────────────────────────────────────
 // Default state: image not yet loaded → PageImage renders the grey fallback Rect.
@@ -974,6 +975,33 @@ describe("PageImageCanvas — Erase mode (#198)", () => {
     );
     simulateDrag({ x: 50, y: 50 }, { x: 150, y: 120 });
 
+    expect(viewportStore.getState().mode).toBe("select");
+  });
+});
+
+// ── Rail mode → viewport interaction mode sync ──────────────────────────────
+
+describe("rail mode → viewport sync", () => {
+  afterEach(() => {
+    railStore.reset();
+  });
+
+  it("setting rail mode to erase activates viewportStore erase mode", () => {
+    render(<PageImageCanvas imageUrl="/img.png" encoded={null} />);
+    act(() => railStore.getState().setMode("erase"));
+    expect(viewportStore.getState().mode).toBe("erase");
+  });
+
+  it("setting rail mode to annotate activates add-word mode", () => {
+    render(<PageImageCanvas imageUrl="/img.png" encoded={null} />);
+    act(() => railStore.getState().setMode("annotate"));
+    expect(viewportStore.getState().mode).toBe("add-word");
+  });
+
+  it("setting rail mode back to view resets to select", () => {
+    render(<PageImageCanvas imageUrl="/img.png" encoded={null} />);
+    act(() => railStore.getState().setMode("erase"));
+    act(() => railStore.getState().setMode("view"));
     expect(viewportStore.getState().mode).toBe("select");
   });
 });

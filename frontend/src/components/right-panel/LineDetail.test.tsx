@@ -2,9 +2,11 @@
 // Spec: docs/plans/hifi-gaps-plan.md P5.e (Gaps 42, 43), P5.f (Gaps 44, 45).
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { http, HttpResponse } from "msw";
+import { server } from "../../test/server";
 import { LineDetail } from "./LineDetail";
 import { clearSelection, selectLine } from "../../stores/selection-store";
 import { useUiPrefs } from "../../stores/ui-prefs";
@@ -292,5 +294,87 @@ describe("LineDetail P5.f: word cards with checkboxes + bulk bar (Gaps 44, 45)",
     // Should say "2 words"
     const content = screen.getByTestId("line-detail").textContent ?? "";
     expect(content).toContain("2 words");
+  });
+});
+
+// ─── GTRow commit behaviour (Task 3) ────────────────────────────────────────
+
+describe("LineDetail GTRow: blur-commit and Escape revert (Task 3)", () => {
+  beforeEach(() => {
+    clearSelection();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    useUiPrefs.setState({ lineWordsDensity: "cards" } as any);
+  });
+
+  it("posts to set-gt when input is blurred with changed text", async () => {
+    const user = userEvent.setup();
+    let capturedBody: { text: string } | undefined;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/lines/:li/set-gt", async ({ request }) => {
+        capturedBody = (await request.json()) as { text: string };
+        return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
+      }),
+    );
+
+    selectLine(3);
+    renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    const input = screen.getByTestId("line-detail-gt-input") as HTMLInputElement;
+
+    await user.clear(input);
+    await user.type(input, "corrected text");
+    await user.tab(); // triggers blur → commit
+
+    await waitFor(() => expect(capturedBody?.text).toBe("corrected text"));
+  });
+
+  it("does not post when blurred with unchanged text", async () => {
+    const user = userEvent.setup();
+    let postCount = 0;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/lines/:li/set-gt", () => {
+        postCount += 1;
+        return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
+      }),
+    );
+
+    selectLine(3);
+    renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    const input = screen.getByTestId("line-detail-gt-input");
+
+    // Focus then blur without changing value
+    await user.click(input);
+    await user.tab();
+
+    // Give any async effect time to fire
+    await new Promise((r) => setTimeout(r, 50));
+    expect(postCount).toBe(0);
+  });
+
+  it("Escape reverts local text without posting", async () => {
+    const user = userEvent.setup();
+    let postCount = 0;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/lines/:li/set-gt", () => {
+        postCount += 1;
+        return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
+      }),
+    );
+
+    selectLine(3);
+    renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    const input = screen.getByTestId("line-detail-gt-input") as HTMLInputElement;
+
+    // Edit the value then press Escape
+    await user.clear(input);
+    await user.type(input, "wrong text");
+    expect(input.value).toBe("wrong text");
+
+    await user.keyboard("{Escape}");
+
+    // Input reverts to the original GT text
+    expect(input.value).toBe("hello world");
+    // No POST should have been made
+    await new Promise((r) => setTimeout(r, 50));
+    expect(postCount).toBe(0);
   });
 });

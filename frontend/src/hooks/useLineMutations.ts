@@ -9,6 +9,7 @@
 //   POST /api/projects/{pid}/pages/{idx}/delete                 → PagePayload
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/gt     → WordMatch
 //   POST /api/projects/{pid}/pages/{idx}/lines/merge            → PagePayload  (FO-3)
+//   POST /api/projects/{pid}/pages/{idx}/lines/{li}/set-gt      → PagePayload  (Task 3)
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { components } from "../api/types";
@@ -21,6 +22,7 @@ type DeleteScopeRequest = components["schemas"]["DeleteScopeRequest"];
 type UpdateWordGroundTruthRequest = components["schemas"]["UpdateWordGroundTruthRequest"];
 type MergeLinesRequest = components["schemas"]["MergeLinesRequest"];
 type PatchParagraphRequest = components["schemas"]["PatchParagraphRequest"];
+type SetLineGtRequest = components["schemas"]["SetLineGtRequest"];
 
 // ─── internal helpers ─────────────────────────────────────────────────────
 
@@ -180,6 +182,25 @@ export function useMergeLines(projectId: string, pageIndex: number) {
       const indices = direction === "prev" ? [adjacent, lineIndex] : [lineIndex, adjacent];
       const body: MergeLinesRequest = { line_indices: indices };
       return apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/lines/merge`, body);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+// ─── useSetLineGt (Task 3) ────────────────────────────────────────────────
+
+/** Set full-line ground-truth text (blur-commit from LineDetail GT input). */
+export function useSetLineGt(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { lineIndex: number; text: string }>({
+    mutationFn: ({ lineIndex, text }) => {
+      const body: SetLineGtRequest = { text };
+      return apiPost<PagePayload>(
+        `${pageBase(projectId, pageIndex)}/lines/${lineIndex}/set-gt`,
+        body,
+      );
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });

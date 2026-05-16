@@ -22,14 +22,14 @@
 //   line-detail-validate-all   — validate-all footer button (P5.e)
 //   line-detail-bulk-bar       — bulk action bar (P5.f)
 
-import { useSyncExternalStore, useState } from "react";
+import { useSyncExternalStore, useState, useEffect } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { LineCard } from "../LineCard";
 import { StatusPip } from "../ui/StatusPip";
 import { LineWordsCard } from "./LineWordsCard";
 import { selectionStore } from "../../stores/selection-store";
 import { useUiPrefs } from "../../stores/ui-prefs";
-import { useMergeLines, useValidateLine } from "../../hooks/useLineMutations";
+import { useMergeLines, useValidateLine, useSetLineGt } from "../../hooks/useLineMutations";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -133,10 +133,26 @@ function StructureBox({ line }: StructureBoxProps) {
 
 interface GTRowProps {
   line: LineMatch;
+  projectId: string;
+  pageIndex: number;
 }
 
-function GTRow({ line }: GTRowProps) {
+function GTRow({ line, projectId, pageIndex }: GTRowProps) {
   const [gtText, setGtText] = useState(line.ground_truth_line_text ?? "");
+  const setLineGt = useSetLineGt(projectId, pageIndex);
+
+  // Sync local state when the server refreshes the line (after a save).
+  useEffect(() => {
+    setGtText(line.ground_truth_line_text ?? "");
+  }, [line.ground_truth_line_text]);
+
+  function commit() {
+    const trimmed = gtText.trim();
+    const original = (line.ground_truth_line_text ?? "").trim();
+    if (trimmed !== original) {
+      setLineGt.mutate({ lineIndex: line.line_index, text: trimmed });
+    }
+  }
 
   return (
     <div className="px-3 py-2 border-b border-border-1 flex-shrink-0">
@@ -148,6 +164,15 @@ function GTRow({ line }: GTRowProps) {
         data-testid="line-detail-gt-input"
         value={gtText}
         onChange={(e) => setGtText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.currentTarget.blur();
+          }
+          if (e.key === "Escape") {
+            setGtText(line.ground_truth_line_text ?? "");
+          }
+        }}
         placeholder="Enter ground truth text…"
         className="w-full text-[11px] font-mono bg-bg-surface border border-border-2 rounded px-2 py-1 text-ink-1 focus:outline-none focus:border-accent transition-colors"
         aria-label="Line ground truth text"
@@ -221,7 +246,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
           <StructureBox line={line} />
 
           {/* P5.e: consolidated GT row */}
-          <GTRow line={line} />
+          <GTRow line={line} projectId={projectId} pageIndex={pageIndex} />
 
           {/* Existing line content */}
           <div className="flex-1 overflow-auto">

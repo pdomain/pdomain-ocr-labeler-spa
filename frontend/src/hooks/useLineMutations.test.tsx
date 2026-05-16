@@ -7,9 +7,11 @@
 //   - Each hook returns an object with a `mutate` function (TanStack Query shape)
 
 import { describe, it, expect } from "vitest";
-import { renderHook } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { http, HttpResponse } from "msw";
 import React from "react";
+import { server } from "../test/server";
 import {
   useValidateLine,
   useCopyLineGt,
@@ -17,6 +19,7 @@ import {
   useUpdateWordGt,
   useMergeLines,
   usePatchParagraph,
+  useSetLineGt,
 } from "./useLineMutations";
 
 function makeWrapper() {
@@ -104,5 +107,35 @@ describe("usePatchParagraph (FO-1)", () => {
     const { result } = renderHook(() => usePatchParagraph("proj1", 0), { wrapper: Wrapper });
     expect(typeof result.current.mutate).toBe("function");
     expect(typeof result.current.mutateAsync).toBe("function");
+  });
+});
+
+describe("useSetLineGt (Task 3)", () => {
+  it("is a function", () => {
+    expect(typeof useSetLineGt).toBe("function");
+  });
+
+  it("returns a mutation object with mutate and mutateAsync", () => {
+    const Wrapper = makeWrapper();
+    const { result } = renderHook(() => useSetLineGt("proj1", 0), { wrapper: Wrapper });
+    expect(typeof result.current.mutate).toBe("function");
+    expect(typeof result.current.mutateAsync).toBe("function");
+  });
+
+  it("posts to lines/{li}/set-gt with text body and invalidates page query", async () => {
+    let capturedBody: { text: string } | undefined;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/lines/:li/set-gt", async ({ request }) => {
+        capturedBody = (await request.json()) as { text: string };
+        return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
+      }),
+    );
+    const Wrapper = makeWrapper();
+    const { result } = renderHook(() => useSetLineGt("p1", 0), { wrapper: Wrapper });
+    act(() => {
+      result.current.mutate({ lineIndex: 2, text: "hello world" });
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(capturedBody?.text).toBe("hello world");
   });
 });

@@ -224,6 +224,26 @@ export default function PageImageCanvas({
     return unsub;
   }, []);
 
+  // Sync rail interaction mode to viewportStore so rail buttons drive canvas behavior.
+  // Use direct setState (not toggle helpers) so the result is deterministic regardless of
+  // prior mode — toggles have flip semantics that break if the guard drifts.
+  useEffect(() => {
+    const unsub = railStore.subscribe(() => {
+      const railMode = railStore.getState().mode;
+      const modeMap: Record<typeof railMode, ViewportMode> = {
+        erase: "erase",
+        annotate: "add-word",
+        view: "select",
+        region: "select",
+      };
+      const target = modeMap[railMode];
+      if (target !== undefined && viewportStore.getState().mode !== target) {
+        viewportStore.setState({ mode: target, pendingReboxTarget: null });
+      }
+    });
+    return unsub;
+  }, []);
+
   // Track selected word count for bulk-actions strip (P5.d).
   const [selectedWordCount, setSelectedWordCount] = useState(
     () => selectionStore.getState().selectedWords.length,
