@@ -430,11 +430,23 @@ class UserPagePayload:
             for key, value in raw_word_attributes.items():
                 if not isinstance(key, str) or not isinstance(value, dict):
                     continue
-                normalized[key] = {
+                coerced: dict[str, bool] = {
                     str(attr_name): bool(attr_value)
                     for attr_name, attr_value in value.items()
                     if isinstance(attr_name, str)
                 }
+                # Migrate legacy "footnote" key → "right_footnote"
+                # (pre-split files from old pd-ocr-labeler; see legacy
+                # page_operations.py:1263-1273).  When "right_footnote" is
+                # absent, promote the bare "footnote" value.  When both
+                # are present (hand-edited / partially migrated file), keep
+                # the explicit "right_footnote" and drop the bare key.
+                if "footnote" in coerced:
+                    if "right_footnote" not in coerced:
+                        coerced["right_footnote"] = coerced.pop("footnote")
+                    else:
+                        del coerced["footnote"]
+                normalized[key] = coerced
             word_attributes = normalized
         return cls(
             page=page_data,

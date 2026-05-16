@@ -121,3 +121,98 @@ def test_legacy_envelope_schema_version_preserved(fixture_path: Path) -> None:
         f"Schema version changed during round-trip for {fixture_path.name}: "
         f"{original_version!r} → {rebuilt['schema']['version']!r}"
     )
+
+
+# ── GAP-4: legacy "footnote" → "right_footnote" migration ────────────────────
+
+
+_MINIMAL_ENVELOPE: dict = {
+    "schema": {"name": "pd_ocr_labeler.user_page", "version": "2.1"},
+    "provenance": {
+        "saved_at": "2024-01-01T00:00:00Z",
+        "saved_by": "Save Page",
+        "source_lane": "labeled",
+        "app": {"name": "pd_ocr_labeler", "version": "unknown"},
+        "toolchain": {"python": "3.11.0", "pd_book_tools": "unknown"},
+        "ocr": {"engine": "unknown", "models": []},
+    },
+    "source": {
+        "project_id": "test_proj",
+        "page_index": 0,
+        "page_number": 1,
+        "image_path": "test_proj_001.png",
+    },
+    "payload": {"page": {}},
+}
+
+
+def test_load_envelope_migrates_legacy_footnote() -> None:
+    """Envelope with "footnote" key in word_attributes is migrated to
+    "right_footnote" on load.
+
+    Legacy pd-ocr-labeler stored footnote attributes under the bare
+    "footnote" key.  A later refactor split this into "left_footnote"
+    and "right_footnote".  The SPA must silently migrate old files so
+    that footnote labels are not silently dropped (GAP-4).
+
+    Parity ref: pd-ocr-labeler/pd_ocr_labeler/operations/page_operations.py:1263-1273.
+    """
+    import copy
+
+    data = copy.deepcopy(_MINIMAL_ENVELOPE)
+    data["payload"]["word_attributes"] = {
+        "word_1_2": {"italic": False, "footnote": True},
+    }
+
+    result = parse_envelope(data)
+
+    assert result.payload.word_attributes is not None
+    word_attrs = result.payload.word_attributes["word_1_2"]
+    assert "right_footnote" in word_attrs, "Legacy 'footnote' key must be migrated to 'right_footnote'"
+    assert word_attrs["right_footnote"] is True
+    assert "footnote" not in word_attrs, "Legacy 'footnote' key must be removed after migration"
+    # Other attributes must survive the migration unchanged.
+    assert "italic" in word_attrs
+    assert word_attrs["italic"] is False
+
+
+def test_load_envelope_keeps_right_footnote_when_both_present() -> None:
+    """When both "footnote" and "right_footnote" are present, the existing
+    "right_footnote" wins and "footnote" is dropped.
+
+    This guards hand-edited or partially migrated files: the explicit
+    "right_footnote" value takes precedence; we do not overwrite it.
+    """
+    import copy
+
+    data = copy.deepcopy(_MINIMAL_ENVELOPE)
+    data["payload"]["word_attributes"] = {
+        "word_3_1": {"footnote": True, "right_footnote": False},
+    }
+
+    result = parse_envelope(data)
+
+    assert result.payload.word_attributes is not None
+    word_attrs = result.payload.word_attributes["word_3_1"]
+    # right_footnote was already present — its value is preserved.
+    assert word_attrs.get("right_footnote") is False
+    assert "footnote" not in word_attrs
+
+
+def test_load_envelope_no_migration_without_footnote_key() -> None:
+    """Envelopes that never had "footnote" (i.e. modern files) are
+    unaffected by the migration — "right_footnote" must be present only
+    if it was explicitly in the file.
+    """
+    import copy
+
+    data = copy.deepcopy(_MINIMAL_ENVELOPE)
+    data["payload"]["word_attributes"] = {
+        "word_2_5": {"bold": True, "right_footnote": True},
+    }
+
+    result = parse_envelope(data)
+
+    assert result.payload.word_attributes is not None
+    word_attrs = result.payload.word_attributes["word_2_5"]
+    assert word_attrs == {"bold": True, "right_footnote": True}
