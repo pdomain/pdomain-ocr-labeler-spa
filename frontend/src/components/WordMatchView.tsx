@@ -55,6 +55,23 @@ export interface WordMatchViewProps {
   onCopyOcrToGt?: (lineIndex: number) => void;
   /** Called when Delete is clicked. */
   onDelete?: (lineIndex: number) => void;
+  /**
+   * Called when a word's GT input is blurred and the value changed.
+   * Forwarded to each LineCard → WordCell.
+   * Signature: (wordId, lineIndex, wordIndex, newText) => void
+   */
+  onCommitGt?: (wordId: string, lineIndex: number, wordIndex: number, text: string) => void;
+  /**
+   * Called when the edit-word pencil button is clicked on a word row.
+   * Forwarded to each LineCard → WordCell.
+   * Signature: (lineIndex, wordIndex) => void
+   */
+  onEditWord?: (lineIndex: number, wordIndex: number) => void;
+  /**
+   * Base URL for page image slices.
+   * Forwarded to each LineCard → WordCell for optional crop thumbnails.
+   */
+  imageBaseUrl?: string;
 }
 
 /**
@@ -73,6 +90,9 @@ export function WordMatchView({
   onCopyGtToOcr,
   onCopyOcrToGt,
   onDelete,
+  onCommitGt,
+  onEditWord,
+  imageBaseUrl,
 }: WordMatchViewProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -141,6 +161,9 @@ export function WordMatchView({
                 onCopyGtToOcr={onCopyGtToOcr}
                 onCopyOcrToGt={onCopyOcrToGt}
                 onDelete={onDelete}
+                onCommitGt={onCommitGt}
+                onEditWord={onEditWord}
+                imageBaseUrl={imageBaseUrl}
               />
             </div>
           );

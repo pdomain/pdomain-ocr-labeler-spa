@@ -1,7 +1,7 @@
 // LineCard.tsx — collapsible card showing OCR-vs-GT comparison for one line.
 //
 // Spec: docs/specs/2026-05-12-word-matches-design.md §LineCard header
-// Issues #201, #202
+// Issues #201, #202, #203
 //
 // Header background by overall_match_status:
 //   exact         → bg-green-100
@@ -13,6 +13,9 @@
 // Count chips render only for nonzero counts.
 // Validate / Unvalidate button flips based on is_fully_validated.
 //
+// Word rows: WordCell is rendered for each word_match directly under the
+// line header (no accordion). Words are always visible per driver-contract §2.8.
+//
 // data-testids (driver-contract §2.8):
 //   line-card-{n}              — full card (spec canonical)
 //   line-card-{n}-header       — header row
@@ -22,9 +25,12 @@
 //   line-delete-button-{n}     — Delete line (spec canonical)
 //   count-chip-exact / count-chip-fuzzy / count-chip-mismatch /
 //   count-chip-unmatched_gt / count-chip-unmatched_ocr
+//   (word testids are on WordCell: word-cell-{id}, gt-text-input-{l}-{w},
+//    edit-word-button-{l}-{w}, ocr-text-label-{l}-{w})
 
 import type React from "react";
 import type { components } from "../api/types";
+import { WordCell } from "./WordCell";
 
 type LineMatch = components["schemas"]["LineMatch"];
 type MatchStatus = components["schemas"]["MatchStatus"];
@@ -69,6 +75,23 @@ export interface LineCardProps {
   onCopyOcrToGt?: (lineIndex: number) => void;
   /** Called when Delete is clicked. */
   onDelete?: (lineIndex: number) => void;
+  /**
+   * Called when a word's GT input is blurred and the value changed.
+   * Forwarded to each WordCell as onCommitGt.
+   * Signature: (wordId, lineIndex, wordIndex, newText) => void
+   */
+  onCommitGt?: (wordId: string, lineIndex: number, wordIndex: number, text: string) => void;
+  /**
+   * Called when the edit-word pencil button is clicked on a word row.
+   * Should select the word in the selection store and open the right panel.
+   * Signature: (lineIndex, wordIndex) => void
+   */
+  onEditWord?: (lineIndex: number, wordIndex: number) => void;
+  /**
+   * Base URL for page image slices (e.g. /api/.../pages/0/image).
+   * Forwarded to WordCell for optional crop thumbnail display.
+   */
+  imageBaseUrl?: string;
 }
 
 /**
@@ -84,6 +107,9 @@ export function LineCard({
   onCopyGtToOcr,
   onCopyOcrToGt,
   onDelete,
+  onCommitGt,
+  onEditWord,
+  imageBaseUrl,
 }: LineCardProps) {
   const bgStyle = STATUS_BG_STYLE[line.overall_match_status] ?? { background: "var(--bg-raised)" };
   const isExact = line.overall_match_status === "exact";
@@ -189,10 +215,27 @@ export function LineCard({
         </div>
       </div>
 
-      {/* OCR text preview */}
-      <div className="px-2 py-1 text-xs font-mono text-ink-2 bg-bg-surface truncate">
-        {line.ocr_line_text || <span className="text-ink-4 italic">(empty)</span>}
-      </div>
+      {/* Word rows — always visible per driver-contract §2.8.
+           Each WordCell exposes: gt-text-input-{l}-{w}, edit-word-button-{l}-{w},
+           ocr-text-label-{l}-{w}, word-status-icon-{l}-{w}.
+           Falls back to a plain OCR text preview when the line has no word_matches. */}
+      {line.word_matches.length > 0 ? (
+        <div className="flex flex-row flex-wrap gap-1 px-2 py-1 bg-bg-surface">
+          {line.word_matches.map((word, wordIdx) => (
+            <WordCell
+              key={word.word_id ?? `${line.line_index}-${wordIdx}`}
+              word={word}
+              onCommitGt={onCommitGt}
+              onEditWord={onEditWord}
+              imageBaseUrl={imageBaseUrl}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="px-2 py-1 text-xs font-mono text-ink-2 bg-bg-surface truncate">
+          {line.ocr_line_text || <span className="text-ink-4 italic">(empty)</span>}
+        </div>
+      )}
     </div>
   );
 }
