@@ -13,7 +13,12 @@ import type { components } from "../../../api/types";
 
 type WordMatch = components["schemas"]["WordMatch"];
 
-function makeWord(text = "Hello"): WordMatch {
+function makeWord(
+  textOrOverrides: string | (Partial<WordMatch> & { text?: string }) = "Hello",
+): WordMatch {
+  const overrides =
+    typeof textOrOverrides === "string" ? { text: textOrOverrides } : textOrOverrides;
+  const { text = "Hello", ...rest } = overrides;
   return {
     line_index: 0,
     word_index: 0,
@@ -23,6 +28,7 @@ function makeWord(text = "Hello"): WordMatch {
     normalized_match: false,
     is_validated: false,
     bbox: { x: 0, y: 0, width: 10, height: 10 },
+    ...rest,
   };
 }
 
@@ -347,5 +353,50 @@ describe("CharRangesSection P4.a -- per-char glyph editor + overlap + kind switc
     expect(capturedBody).toMatchObject({
       ranges: [{ start: 0, end: 4, styles: [] }],
     });
+  });
+});
+
+// ---- R3: load saved char_ranges from word prop on mount ---------------------
+
+describe("CharRangesSection R3 — load saved char_ranges on mount", () => {
+  it("loads saved char_ranges from word prop on mount", () => {
+    const word = makeWord({ char_ranges: [{ start: 0, end: 2, styles: ["bold"] }] });
+    renderSection(word);
+    expect(screen.getByTestId("char-range-0")).toBeInTheDocument();
+  });
+
+  it("loaded range card shows correct glyph preview", () => {
+    const word = makeWord({
+      text: "Hello",
+      char_ranges: [{ start: 0, end: 2, styles: ["italic"] }],
+    });
+    renderSection(word);
+    const glyphCard = screen.getByTestId("char-range-0-glyph");
+    expect(glyphCard).toHaveTextContent("Hel");
+  });
+
+  it("updates ranges when word prop changes (navigation)", async () => {
+    // Start with no char_ranges.
+    const word1 = makeWord("Hello");
+    const { rerender } = renderSection(word1);
+    expect(screen.queryByTestId("char-range-0")).not.toBeInTheDocument();
+
+    // Navigate to a word that has saved ranges.
+    const word2 = makeWord({
+      text: "World",
+      char_ranges: [{ start: 0, end: 1, styles: ["bold"] }],
+    });
+    rerender(
+      <QueryClientProvider
+        client={
+          new QueryClient({
+            defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+          })
+        }
+      >
+        <CharRangesSection word={word2} projectId="p1" pageIndex={0} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId("char-range-0")).toBeInTheDocument();
   });
 });

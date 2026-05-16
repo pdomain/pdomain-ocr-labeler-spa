@@ -16,12 +16,16 @@ Spec authority:
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from pd_ocr_labeler_spa.bootstrap import build_app
+from pd_ocr_labeler_spa.core.page_state import PageLoadOutcome, PageSource
+from pd_ocr_labeler_spa.core.project_state import PageState
 from pd_ocr_labeler_spa.settings import Settings
 
 
@@ -310,3 +314,150 @@ def test_char_bboxes_accepts_empty_list(loaded_client: TestClient) -> None:
     # No PageState seeded → page_not_loaded (route checks page before shape)
     assert resp.status_code == 400
     assert resp.json()["error"] == "page_not_loaded"
+
+
+# ── FO-2 persistence: char_ranges survive page reload ─────────────────────────
+
+# Minimal stubs so we can seed a PageState without pulling in pd_book_tools.
+
+
+@dataclass
+class _StubBBox:
+    """Minimal bounding-box stub matching pd_book_tools geometry shape.
+
+    Field names are deliberately mixedCase to mirror the pd_book_tools
+    ``BoundingBox`` attribute names accessed by ``_word_to_word_match``.
+    """
+
+    minX: int = 0  # noqa: N815
+    minY: int = 0  # noqa: N815
+    maxX: int = 10  # noqa: N815
+    maxY: int = 10  # noqa: N815
+
+
+@dataclass
+class _StubWord:
+    text: str = "hello"
+    ground_truth_text: str = "hello"
+    text_style_labels: list[str] = field(default_factory=list)
+    word_components: list[str] = field(default_factory=list)
+    is_validated: bool = False
+    bounding_box: _StubBBox = field(default_factory=_StubBBox)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "type": "Word",
+            "text": self.text,
+            "ground_truth_text": self.ground_truth_text,
+            "text_style_labels": list(self.text_style_labels),
+            "word_components": list(self.word_components),
+            "is_validated": self.is_validated,
+        }
+
+
+@dataclass
+class _StubLine:
+    words: list[_StubWord] = field(default_factory=list)
+
+
+@dataclass
+class _StubPage:
+    lines_: list[_StubLine] = field(default_factory=list)
+    label: str = "stub"
+
+    @property
+    def lines(self) -> list[_StubLine]:
+        return self.lines_
+
+    @property
+    def paragraphs(self) -> list[_StubLine]:
+        return self.lines_
+
+    @property
+    def words(self) -> list[_StubWord]:
+        return [w for ln in self.lines_ for w in ln.words]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "lines": [{"words": [w.to_dict() for w in ln.words]} for ln in self.lines_],
+            "paragraphs": [],
+            "words": [w.to_dict() for w in self.words],
+            "source_identifier": f"{self.label}.png",
+        }
+
+
+def _seed_page_state(client: TestClient, *, page_index: int, page: _StubPage) -> PageState:
+    """Inject a populated ``PageState`` for ``page_index`` into the running app."""
+    project_state = client.app.state.project_state  # type: ignore[attr-defined]
+    outcome = PageLoadOutcome(
+        page_index=page_index,
+        source=PageSource.OCR,
+        payload=page,
+    )
+    pstate = PageState(page_index=page_index, page_record=outcome)
+    pstate.generation = 1
+    pstate.last_saved_generation = 0
+    project_state._page_states[page_index] = pstate
+    return pstate
+
+
+def test_char_ranges_persisted_to_sidecar_map(loaded_client: TestClient) -> None:
+    """POST char-ranges writes to ``pstate.char_ranges_map`` immediately.
+
+    Verifies the sidecar write so the map can be threaded to the payload
+    builder on the next GET page request (R3 persistence fix).
+    """
+    page = _StubPage(
+        lines_=[_StubLine(words=[_StubWord(text="hello"), _StubWord(text="world")])],
+        label="r3test",
+    )
+    pstate = _seed_page_state(loaded_client, page_index=0, page=page)
+
+    resp = loaded_client.post(
+        "/api/projects/book1/pages/0/words/0/0/char-ranges",
+        json={"ranges": [{"start": 0, "end": 2, "styles": ["bold"]}]},
+    )
+    assert resp.status_code == 200, resp.text
+
+    # Sidecar map updated in memory.
+    assert pstate.char_ranges_map.get("0_0") == [{"start": 0, "end": 2, "styles": ["bold"]}]
+
+
+def test_char_ranges_persisted_across_reload(loaded_client: TestClient) -> None:
+    """After POST char-ranges, the data survives a page reload (comes back in word.char_ranges).
+
+    This is the R3 acceptance test: char-range data must appear on ``WordMatch.char_ranges``
+    in the next GET /api/projects/{id}/pages/{idx} response.
+    """
+    page = _StubPage(
+        lines_=[_StubLine(words=[_StubWord(text="hello"), _StubWord(text="world")])],
+        label="r3test",
+    )
+    _seed_page_state(loaded_client, page_index=0, page=page)
+
+    # POST some char ranges.
+    resp = loaded_client.post(
+        "/api/projects/book1/pages/0/words/0/0/char-ranges",
+        json={"ranges": [{"start": 0, "end": 2, "styles": ["bold"]}]},
+    )
+    assert resp.status_code == 200, resp.text
+
+    # Re-fetch the page payload (simulates a page reload).
+    resp2 = loaded_client.get("/api/projects/book1/pages/0")
+    assert resp2.status_code == 200, resp2.text
+    payload = resp2.json()
+
+    lines = payload.get("line_matches", [])
+    line0 = next((ln for ln in lines if ln["line_index"] == 0), None)
+    assert line0 is not None, f"line_index=0 not found in line_matches: {lines}"
+
+    words = line0.get("word_matches", [])
+    word0 = next((w for w in words if w.get("word_index") == 0), None)
+    assert word0 is not None, f"word_index=0 not found in word_matches: {words}"
+
+    char_ranges = word0.get("char_ranges")
+    assert char_ranges is not None, f"char_ranges is None on word0: {word0}"
+    assert len(char_ranges) == 1
+    assert char_ranges[0]["start"] == 0
+    assert char_ranges[0]["end"] == 2
+    assert char_ranges[0]["styles"] == ["bold"]

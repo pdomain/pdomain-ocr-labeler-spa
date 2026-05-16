@@ -35,6 +35,7 @@ from typing import Any
 
 from .models import (
     BBox,
+    CharRange,
     LineMatch,
     MatchStatus,
     PageRecord,
@@ -101,6 +102,7 @@ def _word_to_word_match(
     word_obj: Any,
     fuzz_threshold: float = _FUZZ_THRESHOLD,
     char_bboxes_map: dict[str, list[dict[str, int]]] | None = None,
+    char_ranges_map: dict[str, list[dict]] | None = None,
 ) -> WordMatch | None:
     """Convert one ``pd_book_tools.ocr.word.Word`` to a ``WordMatch``.
 
@@ -113,6 +115,10 @@ def _word_to_word_match(
         Optional per-word char-bbox sidecar from ``PageState.char_bboxes_map``,
         keyed by ``"{line_index}_{word_index}"``.  When present, the matching
         entry is surfaced onto ``WordMatch.char_bboxes``.
+    char_ranges_map :
+        Optional per-word char-range sidecar from ``PageState.char_ranges_map``,
+        keyed by ``"{line_index}_{word_index}"``.  When present, the matching
+        entry is surfaced onto ``WordMatch.char_ranges``.
 
     Returns ``None`` on any attribute error so the caller can skip.
     """
@@ -146,10 +152,12 @@ def _word_to_word_match(
             ocr_text, gt_text, word_obj, fuzz_threshold=fuzz_threshold
         )
 
+        # Composite sidecar key — stable as long as the page is not re-OCR'd.
+        sidecar_key = f"{line_index}_{word_index}"
+
         # Char-bbox sidecar: look up by composite key.
         char_bboxes: list[BBox] | None = None
         if char_bboxes_map is not None:
-            sidecar_key = f"{line_index}_{word_index}"
             raw_bboxes = char_bboxes_map.get(sidecar_key)
             if raw_bboxes is not None:
                 char_bboxes = [
@@ -161,6 +169,21 @@ def _word_to_word_match(
                     )
                     for b in raw_bboxes
                     if isinstance(b, dict)
+                ]
+
+        # Char-range sidecar: look up by composite key.
+        char_ranges: list[CharRange] | None = None
+        if char_ranges_map is not None:
+            raw_ranges = char_ranges_map.get(sidecar_key)
+            if raw_ranges is not None:
+                char_ranges = [
+                    CharRange(
+                        start=int(r.get("start", 0)),
+                        end=int(r.get("end", 0)),
+                        styles=list(r.get("styles", [])),
+                    )
+                    for r in raw_ranges
+                    if isinstance(r, dict)
                 ]
 
         return WordMatch(
@@ -176,6 +199,7 @@ def _word_to_word_match(
             bbox=bb,
             word_id=None,  # pd_book_tools doesn't expose a stable word-id today
             char_bboxes=char_bboxes,
+            char_ranges=char_ranges,
         )
     except Exception:
         log.debug("_word_to_word_match: failed for line=%d word=%d", line_index, word_index, exc_info=True)
@@ -237,6 +261,7 @@ def page_to_line_matches(
     source: PageSource = PageSource.OCR,
     fuzz_threshold: float = _FUZZ_THRESHOLD,
     char_bboxes_map: dict[str, list[dict[str, int]]] | None = None,
+    char_ranges_map: dict[str, list[dict]] | None = None,
 ) -> tuple[PageRecord, list[LineMatch]]:
     """Convert a ``pd_book_tools.ocr.page.Page`` to ``(PageRecord, [LineMatch])``.
 
@@ -263,6 +288,10 @@ def page_to_line_matches(
         Optional per-word char-bbox sidecar from ``PageState.char_bboxes_map``,
         keyed by ``"{line_index}_{word_index}"``.  When provided, matching
         entries are surfaced onto each ``WordMatch.char_bboxes``.
+    char_ranges_map :
+        Optional per-word char-range sidecar from ``PageState.char_ranges_map``,
+        keyed by ``"{line_index}_{word_index}"``.  When provided, matching
+        entries are surfaced onto each ``WordMatch.char_ranges``.
 
     Returns
     -------
@@ -303,6 +332,7 @@ def page_to_line_matches(
                         word,
                         fuzz_threshold=fuzz_threshold,
                         char_bboxes_map=char_bboxes_map,
+                        char_ranges_map=char_ranges_map,
                     )
                     if wm is not None:
                         word_matches.append(wm)

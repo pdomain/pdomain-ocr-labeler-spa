@@ -2064,7 +2064,26 @@ export interface components {
          *     length (the word text may change between client render and server
          *     receipt, and the old positions are still meaningful as metadata).
          */
-        CharRange: {
+        "CharRange-Input": {
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Styles */
+            styles: string[];
+        };
+        /**
+         * CharRange
+         * @description A single positioned character range within a word — FO-2.
+         *
+         *     ``start`` and ``end`` are character indices into the word's OCR text
+         *     (0-based, inclusive on both ends).  ``styles`` is the list of style
+         *     labels that apply to this range (e.g. ``["italic", "bold"]``).
+         *
+         *     Stored in ``PageState.char_ranges_map`` and surfaced onto
+         *     ``WordMatch.char_ranges`` at payload-build time.
+         */
+        "CharRange-Output": {
             /** Start */
             start: number;
             /** End */
@@ -3028,7 +3047,7 @@ export interface components {
          */
         SetCharRangesRequest: {
             /** Ranges */
-            ranges: components["schemas"]["CharRange"][];
+            ranges: components["schemas"]["CharRange-Input"][];
         };
         /**
          * SetCurrentPageIndexRequest
@@ -3297,6 +3316,8 @@ export interface components {
             word_id?: string | null;
             /** Char Bboxes */
             char_bboxes?: components["schemas"]["BBox"][] | null;
+            /** Char Ranges */
+            char_ranges?: components["schemas"]["CharRange-Output"][] | null;
         };
     };
     responses: never;

@@ -20,7 +20,7 @@ type ApplyStyleRequest = components["schemas"]["ApplyStyleRequest"];
 type ApplyComponentRequest = components["schemas"]["ApplyComponentRequest"];
 type UpdateWordGroundTruthRequest = components["schemas"]["UpdateWordGroundTruthRequest"];
 type SetCharRangesRequest = components["schemas"]["SetCharRangesRequest"];
-type CharRange = components["schemas"]["CharRange"];
+type CharRange = components["schemas"]["CharRange-Input"];
 
 // ─── internal helpers ──────────────────────────────────────────────────────
 

@@ -13,7 +13,7 @@ $(_goals):
 else
 
 .PHONY: help setup refresh-version install uninstall reset remove-venv lint fast-check format \
-        pre-commit-check test e2e build clean ci dev run \
+        pre-commit-check test e2e exercise-real build clean ci dev run \
         frontend-install frontend-build frontend-dev frontend-test \
         openapi-export upgrade-pd-book-tools upgrade-deps upgrade-deps-local \
         mise-download mise-setup mise-doctor \
@@ -229,6 +229,37 @@ test: ## Run pytest (excludes e2e/)
 
 e2e: frontend-build ## Run Playwright E2E tests (requires `playwright install chromium`)
 	uv run --group e2e pytest tests/e2e -v
+
+# ---------------------------------------------------------------------------
+# Exercise harness — multi-page real-project workflow smoke run
+# ---------------------------------------------------------------------------
+# Exercises the major UI paths across 8 pages of the exercise-fixture project.
+# The fixture ships pre-built envelopes with real OCR block/line/word structure
+# so line cards, word edit dialogs, filter modes, etc. all have content to work with.
+#
+# Prerequisites:
+#   1. make frontend-build   (or the SPA bundle must already exist)
+#   2. playwright install chromium  (first time only)
+#   The fixture at tests/e2e/fixtures/projects/exercise-fixture/ is committed
+#   to the repo and ready to use; re-run
+#   `uv run python scripts/generate_exercise_fixture.py` to regenerate it.
+#
+# Run options:
+#   make exercise-real            — headless (default)
+#   make exercise-real HEADED=1   — headed Chromium, useful for watching it work
+
+EXERCISE_HEADED ?= $(if $(filter 1,$(HEADED)),--headed,)
+
+exercise-real: ## Run Playwright exercise against the 8-page exercise-fixture project
+	@echo "Running exercise harness (8 pages, real OCR data)..."
+	@if [ ! -f src/pd_ocr_labeler_spa/static/index.html ]; then \
+		echo "SPA bundle missing — running frontend-build first..."; \
+		$(MAKE) --no-print-directory frontend-build; \
+	fi
+	uv run --group e2e pytest tests/e2e/exercise_real_project.py -v \
+		$(if $(EXERCISE_HEADED),--headed,) \
+		-p no:timeout \
+		--tb=short
 
 dev: ## Run uvicorn with --reload against a Vite dev server on :5173
 	uv run pd-ocr-labeler-ui --reload --frontend-dev http://localhost:5173

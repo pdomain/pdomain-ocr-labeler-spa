@@ -160,6 +160,22 @@ class PageRecord(BaseModel):
     provenance_summary: str | None = None
 
 
+class CharRange(BaseModel):
+    """A single positioned character range within a word — FO-2.
+
+    ``start`` and ``end`` are character indices into the word's OCR text
+    (0-based, inclusive on both ends).  ``styles`` is the list of style
+    labels that apply to this range (e.g. ``["italic", "bold"]``).
+
+    Stored in ``PageState.char_ranges_map`` and surfaced onto
+    ``WordMatch.char_ranges`` at payload-build time.
+    """
+
+    start: int = Field(ge=0)
+    end: int = Field(ge=0)
+    styles: list[str]
+
+
 class WordMatch(BaseModel):
     """Per-word match result — spec §1 ``WordMatch``."""
 
@@ -186,6 +202,11 @@ class WordMatch(BaseModel):
     # Persisted in ``word_attributes["{li}_{wi}"]["char_bboxes"]`` in the
     # saved envelope so they survive page reloads.
     char_bboxes: list[BBox] | None = None
+    # Per-word char-range annotations set via the CharRangesSection
+    # (POST .../char-ranges).  ``None`` until the user saves ranges for this
+    # word; empty list means ranges were cleared.  Persisted in
+    # ``PageState.char_ranges_map`` sidecar so they survive page reloads.
+    char_ranges: list[CharRange] | None = None
 
 
 class LineMatch(BaseModel):

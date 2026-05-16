@@ -1186,13 +1186,18 @@ def set_char_ranges(
         return _page_not_loaded(page_index)
 
     page_lock = project_state.get_page_lock(page_index)
+    sidecar_key = f"{line_index}_{word_index}"
     with page_lock:
         word = _resolve_word(page, line_index, word_index)
         if word is None:
             return _word_not_found(line_index, word_index)
 
+        range_dicts = [r.model_dump() for r in body.ranges]
         # Store as a plain Python attribute — no pd-book-tools API yet.
-        word.char_ranges = [r.model_dump() for r in body.ranges]
+        word.char_ranges = range_dicts
+        # Write into the in-memory sidecar so the payload builder can surface
+        # the values onto WordMatch.char_ranges on the next page load.
+        pstate.char_ranges_map[sidecar_key] = range_dicts
 
         pstate.generation += 1
         _write_cached_envelope_best_effort(

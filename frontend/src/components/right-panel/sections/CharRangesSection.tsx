@@ -37,7 +37,7 @@
 //   char-range-{N}-kind-component -- COMPONENT kind segmented button
 //   char-range-add               -- bottom "+ Add range" button
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Chip, type TristateValue } from "../../ui/Chip";
 import { Button } from "../../ui/button";
 import { useSetCharRanges } from "../../../hooks/useWordMutations";
@@ -87,6 +87,24 @@ function toApiStyles(r: CharRange): string[] {
   const legacyOn = PENDING_STYLE_KEYS.filter((s) => r.styles[s] === "on");
   const styleOn = Array.from(r.activeStyles);
   return Array.from(new Set([...legacyOn, ...styleOn]));
+}
+
+type ApiCharRange = components["schemas"]["CharRange-Output"];
+
+/** Convert an API CharRange (from word.char_ranges) back to local CharRange state. */
+function fromApiCharRange(r: ApiCharRange): CharRange {
+  const styleSet = new Set(r.styles ?? []);
+  const componentKeys = new Set(COMPONENT_ITEMS.map((item) => item.key));
+  const activeStyles = new Set(r.styles?.filter((s) => !componentKeys.has(s)) ?? []);
+  const activeComponents = new Set(r.styles?.filter((s) => componentKeys.has(s)) ?? []);
+  const kind: RangeKind = activeComponents.size > 0 ? "component" : "style";
+  const styles = Object.fromEntries(
+    PENDING_STYLE_KEYS.map((k) => [
+      k,
+      styleSet.has(k) ? ("on" as TristateValue) : ("off" as TristateValue),
+    ]),
+  ) as Record<PendingStyleKey, TristateValue>;
+  return { start: r.start, end: r.end, kind, styles, activeStyles, activeComponents };
 }
 
 /** Returns true if ranges A and B overlap (inclusive endpoints). */
@@ -222,8 +240,16 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
   const [pendingStyles, setPendingStyles] =
     useState<Record<PendingStyleKey, TristateValue>>(emptyStyles);
 
-  // Persisted range cards.
-  const [ranges, setRanges] = useState<CharRange[]>([]);
+  // Persisted range cards — initialise from word.char_ranges if present.
+  const [ranges, setRanges] = useState<CharRange[]>(() =>
+    (word.char_ranges ?? []).map(fromApiCharRange),
+  );
+
+  // Sync ranges when navigating to a different word.
+  useEffect(() => {
+    setRanges((word.char_ranges ?? []).map(fromApiCharRange));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [word.char_ranges]);
 
   const pendingStart = anchor !== null && endPos !== null ? Math.min(anchor, endPos) : null;
   const pendingEnd = anchor !== null && endPos !== null ? Math.max(anchor, endPos) : null;

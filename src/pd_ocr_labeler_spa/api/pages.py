@@ -543,6 +543,34 @@ def _page_payload(
             image_path = project.image_paths[page_index]
             page_source = PageSource(str(source)) if source else PageSource.OCR
 
+            # Labeled/cached lane lifting: when the outcome came from
+            # load_labeled or load_cached, payload_obj is a UserPageEnvelope
+            # (the envelope shape, NOT yet a Page).  Lift it via
+            # ``Page.from_dict(envelope.payload.page)`` so
+            # ``page_to_line_matches`` receives a proper Page object and can
+            # populate line_matches.  Without this lift the envelope lane
+            # returns page_record but empty line_matches (the
+            # ``page_to_line_matches`` comment at line 25 describes this gap).
+            # Guard: only attempt the lift when payload_obj has a ``.payload``
+            # attribute with a ``.page`` dict (UserPageEnvelope shape);
+            # plain ``Page`` objects fall through unmodified.
+            try:
+                envelope_payload = getattr(payload_obj, "payload", None)
+                if envelope_payload is not None:
+                    page_dict = getattr(envelope_payload, "page", None)
+                    if isinstance(page_dict, dict):
+                        import importlib as _imp
+
+                        _page_mod = _imp.import_module("pd_book_tools.ocr.page")
+                        payload_obj = _page_mod.Page.from_dict(page_dict)
+            except Exception:
+                log.debug(
+                    "_page_payload: envelope→Page lift failed for %s/%d — using raw payload",
+                    project_id,
+                    page_index,
+                    exc_info=True,
+                )
+
             # Try lifting the Page object (OCR or envelope-lifted lane).
             # ``page_to_line_matches`` tolerates non-Page objects gracefully
             # (returns empty LineMatch list) so this is safe for any payload type.
@@ -551,6 +579,7 @@ def _page_payload(
             # that call ``_page_payload`` without wiring ``app_config``).
             _fuzz = app_config.fuzz_threshold if app_config is not None else 0.8
             _char_bboxes_map = pstate.char_bboxes_map if pstate is not None else None
+            _char_ranges_map = pstate.char_ranges_map if pstate is not None else None
             _rec, _lms = page_to_line_matches(
                 payload_obj,
                 page_index,
@@ -558,6 +587,7 @@ def _page_payload(
                 source=page_source,
                 fuzz_threshold=_fuzz,
                 char_bboxes_map=_char_bboxes_map if _char_bboxes_map else None,
+                char_ranges_map=_char_ranges_map if _char_ranges_map else None,
             )
             if _lms or _rec is not None:
                 page_record = _rec
