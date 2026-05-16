@@ -30,6 +30,7 @@
     "frontend/dist/**",
     "src/pd_ocr_labeler_spa/static/**",
     ".pytest_cache/**",
-    "docs/plans/2026-05-15-hifi-redesign-plan.md"
+    "docs/plans/**",
+    "docs/superpowers/plans/archive/**"
   ]
 }
