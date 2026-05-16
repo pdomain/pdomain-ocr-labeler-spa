@@ -291,10 +291,12 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # ``config.yaml`` is the persistent fallback.  The carrier holds the
     # runtime-effective value so list/discover routes always read from
     # one place. Seed order: CLI/env (Settings) > config.yaml > None.
-    _initial_root = settings.source_projects_root
-    if _initial_root is None:
-        _cfg = load_config(settings.config_root)
-        _initial_root = _cfg.source_projects_root
+    # Always load the full ``AppConfig`` so routes can read fields like
+    # ``fuzz_threshold`` (GAP-5) via the ``get_app_config`` DI provider
+    # without re-reading the file on every request.
+    _app_config = load_config(settings.config_root)
+    app.state.app_config = _app_config
+    _initial_root = settings.source_projects_root or _app_config.source_projects_root
     source_root_carrier = SourceRootCarrier(initial=_initial_root)
     app.state.source_root_carrier = source_root_carrier
 

@@ -546,11 +546,16 @@ def _page_payload(
             # Try lifting the Page object (OCR or envelope-lifted lane).
             # ``page_to_line_matches`` tolerates non-Page objects gracefully
             # (returns empty LineMatch list) so this is safe for any payload type.
+            # Pass ``fuzz_threshold`` from ``AppConfig`` (GAP-5); falls back to
+            # the module default (0.8) when no config is available (e.g. tests
+            # that call ``_page_payload`` without wiring ``app_config``).
+            _fuzz = app_config.fuzz_threshold if app_config is not None else 0.8
             _rec, _lms = page_to_line_matches(
                 payload_obj,
                 page_index,
                 image_path,
                 source=page_source,
+                fuzz_threshold=_fuzz,
             )
             if _lms or _rec is not None:
                 page_record = _rec

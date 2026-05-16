@@ -54,6 +54,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from ..core.models import BBox
+from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.lanes import LaneResolver
 from ..core.persistence.user_page_envelope import (
     USER_PAGE_SOURCE_LANE_CACHED,
@@ -62,7 +63,7 @@ from ..core.persistence.user_page_envelope import (
 )
 from ..core.project_state import PageState, ProjectState
 from ..settings import Settings
-from .dependencies import get_project_state, get_settings
+from .dependencies import get_app_config, get_project_state, get_settings
 from .middleware.error_handler import ApiError
 from .pages import PagePayload, _page_payload
 
@@ -348,6 +349,7 @@ def _refresh_payload_response(
     page_index: int,
     project_state: ProjectState,
     settings: Settings,
+    app_config: AppConfig | None = None,
 ) -> JSONResponse:
     """Build the spec-23-A populated ``PagePayload`` response."""
     payload = _page_payload(
@@ -355,6 +357,7 @@ def _refresh_payload_response(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
@@ -374,6 +377,7 @@ def update_word_ground_truth(
     body: UpdateWordGroundTruthRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/gt`` — update ground-truth text for a word.
 
@@ -410,6 +414,7 @@ def update_word_ground_truth(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
 
 
@@ -425,6 +430,7 @@ def apply_style(
     body: ApplyStyleRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/style`` — apply text style label to a word.
 
@@ -459,6 +465,7 @@ def apply_style(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
 
 
@@ -474,6 +481,7 @@ def apply_component(
     body: ApplyComponentRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/component`` — toggle a word component flag.
 
@@ -510,6 +518,7 @@ def apply_component(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
 
 
@@ -525,6 +534,7 @@ def toggle_validated(
     body: ToggleValidatedRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/validated`` — toggle the validated flag.
 
@@ -571,6 +581,7 @@ def toggle_validated(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
 
 
@@ -584,6 +595,7 @@ def validate_batch(
     body: ValidateBatchRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../words/validate-batch`` — bulk validate/unvalidate a scope.
 
@@ -631,6 +643,7 @@ def validate_batch(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
 
 
@@ -681,6 +694,7 @@ def add_word(
     body: AddWordRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../words/add`` — insert a new word bbox.
 
@@ -719,6 +733,7 @@ def add_word(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
 
 
@@ -734,6 +749,7 @@ def rebox_word(
     body: ReboxWordRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/rebox`` — replace the word's bounding box.
 
@@ -774,6 +790,7 @@ def rebox_word(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
 
 
@@ -789,6 +806,7 @@ def nudge_bbox(
     body: NudgeBboxRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/nudge`` — nudge bbox edges by pixel offsets.
 
@@ -838,6 +856,7 @@ def nudge_bbox(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
 
 
@@ -853,6 +872,7 @@ def split_word(
     body: SplitWordRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/split`` — split one word bbox into two.
 
@@ -899,6 +919,7 @@ def split_word(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
 
 
@@ -914,6 +935,7 @@ def merge_words(
     body: MergeWordsRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/merge`` — merge with adjacent word.
 
@@ -959,6 +981,7 @@ def merge_words(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
 
 
@@ -974,6 +997,7 @@ def erase_pixels(
     body: ErasePixelsRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/erase-pixels`` — erase pixels in a bbox.
 
@@ -1057,6 +1081,7 @@ def erase_pixels(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
 
 
@@ -1111,6 +1136,7 @@ def set_char_ranges(
     body: SetCharRangesRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/char-ranges`` — set positioned char-range styles (FO-2).
 
@@ -1152,6 +1178,7 @@ def set_char_ranges(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
 
 

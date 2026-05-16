@@ -264,3 +264,74 @@ def test_multiple_lines() -> None:
     assert len(lms) == 2
     assert lms[0].line_index == 0
     assert lms[1].line_index == 1
+
+
+# ── fuzz_threshold parameter ────────────────────────────────────────────
+
+
+@dataclass
+class _FuzzyWord(_StubWord):
+    """Stub word that returns a fixed fuzz score from ``fuzz_score_against``."""
+
+    _fuzz_score: float = 0.7
+
+    def fuzz_score_against(self, gt_text: str) -> float:
+        """Return a controlled fuzz score for threshold testing."""
+        return self._fuzz_score
+
+
+def test_fuzz_threshold_high_makes_fuzzy_score_mismatch() -> None:
+    """fuzz_threshold=1.0 (exact-match-only) causes score=0.7 -> MISMATCH."""
+    word = _FuzzyWord(text="e", ground_truth_text="epsilon", _fuzz_score=0.7)
+    line = _StubLine(words=[word])
+    page = _StubPage(lines_=[line])
+
+    _, lms = page_to_line_matches(page, 0, _IMAGE, fuzz_threshold=1.0)
+    assert len(lms) == 1
+    wm = lms[0].word_matches[0]
+    assert wm.match_status == MatchStatus.MISMATCH
+    assert wm.fuzz_score == 0.7
+
+
+def test_fuzz_threshold_low_makes_fuzzy_score_fuzzy() -> None:
+    """fuzz_threshold=0.5 causes score=0.7 -> FUZZY (not MISMATCH)."""
+    word = _FuzzyWord(text="e", ground_truth_text="epsilon", _fuzz_score=0.7)
+    line = _StubLine(words=[word])
+    page = _StubPage(lines_=[line])
+
+    _, lms = page_to_line_matches(page, 0, _IMAGE, fuzz_threshold=0.5)
+    assert len(lms) == 1
+    wm = lms[0].word_matches[0]
+    assert wm.match_status == MatchStatus.FUZZY
+    assert wm.fuzz_score == 0.7
+
+
+def test_fuzz_threshold_default_boundary() -> None:
+    """Default threshold 0.8: score=0.8 exactly -> FUZZY; score=0.79 -> MISMATCH."""
+    word_above = _FuzzyWord(text="abc", ground_truth_text="abcd", _fuzz_score=0.8)
+    word_below = _FuzzyWord(text="abc", ground_truth_text="abcd", _fuzz_score=0.79)
+
+    line_above = _StubLine(words=[word_above])
+    line_below = _StubLine(words=[word_below])
+    page = _StubPage(lines_=[line_above, line_below])
+
+    _, lms = page_to_line_matches(page, 0, _IMAGE)  # default threshold 0.8
+    assert lms[0].word_matches[0].match_status == MatchStatus.FUZZY
+    assert lms[1].word_matches[0].match_status == MatchStatus.MISMATCH
+
+
+def test_fuzz_threshold_app_config_field() -> None:
+    """AppConfig.fuzz_threshold field: default 0.8, configurable, round-trips."""
+    from pd_ocr_labeler_spa.core.persistence.config_yaml import AppConfig
+
+    # Default must be 0.8 (legacy parity).
+    cfg_default = AppConfig()
+    assert cfg_default.fuzz_threshold == 0.8
+
+    # Custom value.
+    cfg_custom = AppConfig(fuzz_threshold=0.5)
+    assert cfg_custom.fuzz_threshold == 0.5
+
+    # Round-trip through model_dump / dict load (simulating YAML parse).
+    cfg_from_dict = AppConfig(**{"fuzz_threshold": 0.9})
+    assert cfg_from_dict.fuzz_threshold == 0.9

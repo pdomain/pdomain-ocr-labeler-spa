@@ -44,8 +44,11 @@ from .models import (
 
 log = logging.getLogger(__name__)
 
-# Fuzzy-match threshold — mirrors legacy ``WordMatchViewModel.fuzz_threshold=0.8``
+# Default fuzzy-match threshold — mirrors legacy
+# ``WordMatchViewModel.fuzz_threshold=0.8``
 # (``pd_ocr_labeler/viewmodels/project/word_match_view_model.py:26``).
+# Callers should prefer passing ``fuzz_threshold`` explicitly (sourced from
+# ``AppConfig.fuzz_threshold``) rather than relying on this default.
 _FUZZ_THRESHOLD = 0.8
 
 
@@ -53,12 +56,20 @@ def _classify_match_status(
     ocr_text: str,
     ground_truth_text: str,
     word_obj: Any,
+    fuzz_threshold: float = _FUZZ_THRESHOLD,
 ) -> tuple[MatchStatus, float | None]:
     """Classify match status between OCR text and ground truth.
 
     Algorithm mirrors legacy
     ``pd_ocr_labeler/operations/ocr/word_operations.py:WordOperations.classify_match_status``
     (line 26).
+
+    Parameters
+    ----------
+    fuzz_threshold :
+        Words with a fuzz score >= this value are classified as ``FUZZY``
+        rather than ``MISMATCH``.  Sourced from ``AppConfig.fuzz_threshold``;
+        defaults to ``_FUZZ_THRESHOLD`` (0.8) for backwards compatibility.
 
     Returns ``(match_status, fuzz_score | None)``.
     """
@@ -78,7 +89,7 @@ def _classify_match_status(
         except Exception:  # pragma: no cover - defensive
             log.debug("fuzz_score_against raised for word %r", ocr_text, exc_info=True)
 
-    if fuzz_score is not None and fuzz_score >= _FUZZ_THRESHOLD:
+    if fuzz_score is not None and fuzz_score >= fuzz_threshold:
         return MatchStatus.FUZZY, fuzz_score
 
     return MatchStatus.MISMATCH, fuzz_score if fuzz_score is not None else 0.0
@@ -88,8 +99,15 @@ def _word_to_word_match(
     word_index: int,
     line_index: int,
     word_obj: Any,
+    fuzz_threshold: float = _FUZZ_THRESHOLD,
 ) -> WordMatch | None:
     """Convert one ``pd_book_tools.ocr.word.Word`` to a ``WordMatch``.
+
+    Parameters
+    ----------
+    fuzz_threshold :
+        Passed through to ``_classify_match_status``; sourced from
+        ``AppConfig.fuzz_threshold`` by the ``page_to_line_matches`` caller.
 
     Returns ``None`` on any attribute error so the caller can skip.
     """
@@ -119,7 +137,9 @@ def _word_to_word_match(
             height=max(0, int((getattr(bbox_obj, "maxY", 0) or 0) - (getattr(bbox_obj, "minY", 0) or 0))),
         )
 
-        match_status, fuzz_score = _classify_match_status(ocr_text, gt_text, word_obj)
+        match_status, fuzz_score = _classify_match_status(
+            ocr_text, gt_text, word_obj, fuzz_threshold=fuzz_threshold
+        )
 
         return WordMatch(
             line_index=line_index,
@@ -192,6 +212,7 @@ def page_to_line_matches(
     page_index: int,
     image_path: Path,
     source: PageSource = PageSource.OCR,
+    fuzz_threshold: float = _FUZZ_THRESHOLD,
 ) -> tuple[PageRecord, list[LineMatch]]:
     """Convert a ``pd_book_tools.ocr.page.Page`` to ``(PageRecord, [LineMatch])``.
 
@@ -208,6 +229,12 @@ def page_to_line_matches(
         Absolute path to the source image, stored in ``PageRecord``.
     source :
         ``PageSource`` to record in ``PageRecord.page_source``.
+    fuzz_threshold :
+        Fuzzy-match threshold forwarded to every ``_word_to_word_match``
+        call.  Words with a fuzz score >= this threshold are classified as
+        ``FUZZY`` rather than ``MISMATCH``.  Callers should read this from
+        ``AppConfig.fuzz_threshold`` (default ``0.8`` preserves legacy
+        behaviour when no config is available).
 
     Returns
     -------
@@ -242,7 +269,7 @@ def page_to_line_matches(
                 words = getattr(line, "words", []) or []
                 word_matches: list[WordMatch] = []
                 for word_idx, word in enumerate(words):
-                    wm = _word_to_word_match(word_idx, line_idx, word)
+                    wm = _word_to_word_match(word_idx, line_idx, word, fuzz_threshold=fuzz_threshold)
                     if wm is not None:
                         word_matches.append(wm)
 
