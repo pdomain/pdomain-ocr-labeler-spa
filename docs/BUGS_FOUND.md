@@ -78,3 +78,30 @@ close time, then the entry moves to the archive.
   legacy codebase: on Linux use `$XDG_DATA_HOME/pd-ocr-labeler` (default
   `~/.local/share/pd-ocr-labeler`); on macOS `~/Library/Application Support/…`;
   on Windows `%APPDATA%/…`.
+
+---
+
+## BUG-RELOAD-1 — GET /api/projects/{id}/pages/{n} returns zero-bbox words after Reload OCR
+
+- **Status:** open (investigation complete — root cause isolated, not a backend bug)
+- **Severity:** low (expected shape; UI must tolerate it)
+- **Where:** `src/pd_ocr_labeler_spa/core/page_to_line_matches.py:382` and frontend `BBoxOverlay`
+- **Issue:** After `POST .../reload-ocr` completes and `GET .../pages/{n}` is called, the
+  response may contain `WordMatch` entries with `{"ocr": null, "gt": null, "bbox": {"x":0,"y":0,"width":0,"height":0}}`.
+  These are intentional **UNMATCHED_GT placeholders** — words in the ground-truth that DocTR did
+  not match to any OCR word. They are synthesized with `BBox(x=0, y=0, width=0, height=0)` at
+  `page_to_line_matches.py:382` because they have no bounding box in the image.
+- **Actual concern:** If the *entire* page returns only zero-bbox words (i.e., DocTR ran but found
+  no text), the root cause may be one of: (a) image path mismatch — `LocalDoctrPageLoader` loads
+  the wrong image, (b) DocTR confidence threshold filtering out all words, or (c) a model that
+  hasn't been initialized. This is distinct from the UNMATCHED_GT case and would appear as
+  `line_matches` being empty after OCR, not as zero-bbox words.
+- **Why it matters:** If the frontend renders all UNMATCHED_GT words on the canvas with zero-size
+  boxes, the BBoxOverlay may show invisible or stacked 0x0 boxes at origin. `BBoxOverlay` should
+  skip or visually suppress words with zero-area bboxes.
+- **Suggested fix:**
+  1. In `BBoxOverlay`, add a guard: skip items where `bbox.width === 0 && bbox.height === 0`.
+  2. If DocTR genuinely returns no text, surface the `ocr_failed` notification banner rather than
+     a misleading empty-but-complete state.
+  3. To investigate empty-page OCR: check `LocalDoctrPageLoader` logs for the image path it
+     actually reads and the raw DocTR word count before `page_to_line_matches` filtering.
