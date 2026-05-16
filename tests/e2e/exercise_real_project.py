@@ -672,3 +672,667 @@ def test_navigation_continuity(exercise_server: ExerciseServer, page: Page) -> N
         assert page.locator('[data-testid="nav-next-button"]').count() > 0
         assert page.locator('[data-testid="nav-prev-button"]').count() > 0
         time.sleep(0.2)
+
+
+# ---------------------------------------------------------------------------
+# Stub stubs — full-exercise-workflow.md sub-phases not yet browser-walked
+# ---------------------------------------------------------------------------
+# Each stub below maps to a sub-phase (P<phase>.<step>) in
+# docs/full-exercise-workflow.md.  They are skipped with a TODO marker so the
+# test matrix reflects all planned coverage without false-green results.
+# Remove the skip decorator and fill in the body when walking in CU-2.2+.
+# ---------------------------------------------------------------------------
+
+
+# --- Phase 1: Page Load & Navigation ---
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_1_4_navigate_by_page_input(exercise_server: ExerciseServer, page: Page) -> None:
+    """P1.4 — type a page number into nav-page-input, press Enter, verify URL."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_1_5_navigate_out_of_range(exercise_server: ExerciseServer, page: Page) -> None:
+    """P1.5 — type page > total, verify URL clamps to last valid page."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_1_6_hotkey_next_prev_page(exercise_server: ExerciseServer, page: Page) -> None:
+    """P1.6 — Ctrl+ArrowRight / Ctrl+ArrowLeft advance/retreat a page."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_1_7_hotkey_first_last_page(exercise_server: ExerciseServer, page: Page) -> None:
+    """P1.7 — Ctrl+Home goes to page 1; Ctrl+End goes to last page."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_1_9_legacy_url_redirect(exercise_server: ExerciseServer, page: Page) -> None:
+    """P1.9 — /project/{id}/page/2 redirects to canonical /projects/.../pageno/2."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_1_12_load_different_project(exercise_server: ExerciseServer, page: Page) -> None:
+    """P1.12 — select a different project from dropdown and verify URL changes."""
+
+
+# --- Phase 2: Word Inspection ---
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_2_2_word_image_cell(exercise_server: ExerciseServer, page: Page) -> None:
+    """P2.2 — word image cells show cropped page image; unmatched_gt shows Type icon."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_2_3_ocr_text_and_tag_chips(exercise_server: ExerciseServer, page: Page) -> None:
+    """P2.3 — OCR text label and style/component chip colors match spec palettes."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_2_4_word_status_icon(exercise_server: ExerciseServer, page: Page) -> None:
+    """P2.4 — status icon per match status: exact/fuzzy/mismatch/unmatched_ocr/unmatched_gt."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_2_5_tooltip_on_ocr_label(exercise_server: ExerciseServer, page: Page) -> None:
+    """P2.5 — hover ocr-text-label for a fuzzy/mismatch word shows tooltip within 300ms."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_2_12_scroll_virtualised_list(exercise_server: ExerciseServer, page: Page) -> None:
+    """P2.12 — scrolling word-match list on a >15-line page keeps DOM count ≤ visible+6."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_2_14_zoom_toggle_in_dialog(exercise_server: ExerciseServer, page: Page) -> None:
+    """P2.14 — dialog-current-zoom-toggle at 5× scales the word image."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_2_15_prev_next_word_in_dialog(exercise_server: ExerciseServer, page: Page) -> None:
+    """P2.15 — ArrowLeft in Word Edit Dialog moves to previous word without close/reopen."""
+
+
+# --- Phase 3: Validation Flows ---
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_3_1_validate_single_word(exercise_server: ExerciseServer, page: Page) -> None:
+    """P3.1 — click word-validate-button; button goes green; POST validate fires."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_3_2_toggle_word_back_to_unvalidated(exercise_server: ExerciseServer, page: Page) -> None:
+    """P3.2 — click the same validate button again; button returns to gray."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_3_4_unvalidate_line(exercise_server: ExerciseServer, page: Page) -> None:
+    """P3.4 — click line-validate-button when fully validated to unvalidate all words."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_3_5_page_validate_all(exercise_server: ExerciseServer, page: Page) -> None:
+    """P3.5 — toolbar-page-validate validates all words; Unvalidated filter shows 0 cards."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_3_6_page_unvalidate_all(exercise_server: ExerciseServer, page: Page) -> None:
+    """P3.6 — toolbar-page-unvalidate returns all words to unvalidated state."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_3_7_validate_selected_words(exercise_server: ExerciseServer, page: Page) -> None:
+    """P3.7 — check word-checkbox-* for 2 words, click toolbar-word-validate; only those 2 flip."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_3_8_validate_selected_lines(exercise_server: ExerciseServer, page: Page) -> None:
+    """P3.8 — check line-checkbox-{n}, click toolbar-line-validate; selected lines fully validated."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_3_9_validate_by_paragraph(exercise_server: ExerciseServer, page: Page) -> None:
+    """P3.9 — check paragraph-checkbox-{p}, click toolbar-paragraph-validate."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_3_11_revert_gt_edit_with_escape(exercise_server: ExerciseServer, page: Page) -> None:
+    """P3.11 — type into gt-text-input, press Escape; value reverts; no POST fires."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_3_12_tab_navigation_gt_inputs(exercise_server: ExerciseServer, page: Page) -> None:
+    """P3.12 — Tab from gt-text-input-0-0 advances focus in reading order across lines."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_3_13_shift_tab_reverse_navigation(exercise_server: ExerciseServer, page: Page) -> None:
+    """P3.13 — Shift+Tab from gt-text-input-1-0 moves to last word of line 0."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_3_14_gt_to_ocr_for_line(exercise_server: ExerciseServer, page: Page) -> None:
+    """P3.14 — click line-gt-to-ocr-button; OCR cells update to GT values; status → exact."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_3_15_ocr_to_gt_for_line(exercise_server: ExerciseServer, page: Page) -> None:
+    """P3.15 — click line-ocr-to-gt-button; GT inputs update to OCR values."""
+
+
+# --- Phase 4: CharFixer / Char-level Editing ---
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_4_2_apply_char_fix(exercise_server: ExerciseServer, page: Page) -> None:
+    """P4.2 — click a character cell in CharFixer canvas, type replacement, confirm."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_4_4_add_char_range(exercise_server: ExerciseServer, page: Page) -> None:
+    """P4.4 — specify start/end/style in CharRangesSection; POST char-ranges fires."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_4_5_delete_char_range(exercise_server: ExerciseServer, page: Page) -> None:
+    """P4.5 — click delete on existing char range row; row gone; backend updated."""
+
+
+# --- Phase 5: Erase Tool ---
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_5_2_erase_region_on_canvas(exercise_server: ExerciseServer, page: Page) -> None:
+    """P5.2 — drag rectangle in erase mode; POST erase-pixels; canvas shows white region."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_5_3_exit_erase_mode_toggle(exercise_server: ExerciseServer, page: Page) -> None:
+    """P5.3 — click erase-pixels-button again; mode returns to select; drag does box-selection."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_5_4_erase_mode_hotkey(exercise_server: ExerciseServer, page: Page) -> None:
+    """P5.4 — Shift+E with canvas focused toggles erase mode (same as button click)."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_5_7_apply_staged_erase_rects(exercise_server: ExerciseServer, page: Page) -> None:
+    """P5.7 — stage ≥2 erase rects in dialog, click dialog-apply-button; POSTs fire."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_5_8_reset_staged_erase_rects(exercise_server: ExerciseServer, page: Page) -> None:
+    """P5.8 — click dialog-reset-button; staged rects clear; no POST fires."""
+
+
+# --- Phase 6: Word Editor ---
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_2_edit_gt_text_in_dialog(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.2 — clear dialog-gt-input, type new text, Enter; POST ground-truth; dialog stays."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_3_apply_style_in_dialog(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.3 — select style in dialog-style-select, click dialog-apply-style-button; chip appears."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_4_apply_component_in_dialog(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.4 — select component in dialog-component-select, click dialog-apply-component-button."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_5_clear_component_in_dialog(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.5 — click dialog-clear-component-button; component chip removed."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_6_merge_word_with_previous(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.6 — click dialog-merge-prev-button; word count in line decreases by 1."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_7_merge_word_with_next(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.7 — click dialog-merge-next-button; word count in line decreases by 1."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_8_place_click_marker(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.8 — click word image in dialog; blue vertical line marker appears at click x."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_9_split_word_horizontal(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.9 — place marker, click dialog-split-h-button; line gains one extra word."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_10_split_word_vertical(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.10 — place marker, click dialog-split-v-button; right portion moves to nearest line."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_11_crop_operations(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.11 — place marker, click dialog-crop-above/below/left/right-button; bbox shrinks."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_12_refine_bbox_in_dialog(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.12 — click dialog-refine-button; POST refine-bbox; bbox updates in preview."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_13_expand_refine_in_dialog(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.13 — click dialog-expand-refine-button; POST expand-and-refine-bbox; bbox updates."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_14_nudge_bbox_edges(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.14 — click dialog-nudge-left-plus-button 3×, apply; bbox shifts left by 15px."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_15_apply_refine_from_dialog(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.15 — pending nudge + click dialog-apply-refine-button; POST nudge {refine_after:true}."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_16_reset_pending_changes(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.16 — pending nudge + staged erase rects + dialog-reset-button; no POST fires."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_17_apply_and_close(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.17 — click dialog-apply-close-button; pending changes POSTed; dialog closes."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_18_discard_and_close(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.18 — make pending changes, click dialog-close-button; dialog closes; word unchanged."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_19_delete_word_from_dialog(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.19 — click dialog-delete-word-button; confirm AlertDialog; word gone from matches."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_20_hotkey_nav_in_dialog(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.20 — ArrowLeft/ArrowRight while dialog open switches words; header updates."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_21_hotkey_nudge_edges(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.21 — Shift+ArrowLeft ×2 in dialog; pending nudge shows left:10; apply → 10px shift."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_6_22_hotkey_apply_style_component(exercise_server: ExerciseServer, page: Page) -> None:
+    """P6.22 — press M in dialog (not in GT input); style applied; Shift+M applies component."""
+
+
+# --- Phase 7: Canvas & Overlay Controls ---
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_7_1_toggle_paragraph_layer(exercise_server: ExerciseServer, page: Page) -> None:
+    """P7.1 — uncheck layer-paragraphs-checkbox; paragraph rects disappear from canvas."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_7_4_layer_visibility_hotkeys(exercise_server: ExerciseServer, page: Page) -> None:
+    """P7.4 — Shift+P/L/W with canvas focused toggles paragraph/line/word layer."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_7_8_shift_drag_removes_from_selection(exercise_server: ExerciseServer, page: Page) -> None:
+    """P7.8 — drag 5 words selected, Shift+drag over 2 → those 2 removed, 3 remain."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_7_9_ctrl_drag_toggles_selection(exercise_server: ExerciseServer, page: Page) -> None:
+    """P7.9 — 3 selected + Ctrl+drag over 3+2 new → symmetric difference: 2 selected."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_7_10_clear_selection_with_escape(exercise_server: ExerciseServer, page: Page) -> None:
+    """P7.10 — with words selected press Escape; all selections cleared; toolbar disabled."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_7_11_add_word_mode_button(exercise_server: ExerciseServer, page: Page) -> None:
+    """P7.11 — click word-add-button; drag rectangle on blank canvas; new word appears."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_7_12_exit_add_word_mode(exercise_server: ExerciseServer, page: Page) -> None:
+    """P7.12 — click word-add-button again or press Escape; mode returns to select."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_7_13_add_word_hotkey(exercise_server: ExerciseServer, page: Page) -> None:
+    """P7.13 — Shift+A with canvas focused toggles add-word mode on."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_7_14_rebox_mode(exercise_server: ExerciseServer, page: Page) -> None:
+    """P7.14 — open Word Edit Dialog, click rebox button, drag new bbox on canvas."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_7_16_rail_switch_mode(exercise_server: ExerciseServer, page: Page) -> None:
+    """P7.16 — click rail-mode-region; data-active='true'; click rail-mode-view to return."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_7_18_rail_bulk_actions(exercise_server: ExerciseServer, page: Page) -> None:
+    """P7.18 — click rail-bulk-button; bulk actions panel/drawer becomes visible."""
+
+
+# --- Phase 8: Keyboard Shortcuts ---
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_8_1_global_shortcuts_extended(exercise_server: ExerciseServer, page: Page) -> None:
+    """P8.1 — Ctrl+E, Ctrl+,, Ctrl+O, Ctrl+L, Ctrl+G, Ctrl+J from project page."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_8_2_viewport_shortcuts(exercise_server: ExerciseServer, page: Page) -> None:
+    """P8.2 — Shift+1/2/3 switch selection modes; Shift+A add-word; with canvas focused."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_8_3_matches_scope_shortcuts(exercise_server: ExerciseServer, page: Page) -> None:
+    """P8.3 — J/K next/prev line; V/U validate/unvalidate; D delete; R refine; M merge; O/G copy."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_8_4_word_edit_dialog_shortcuts(exercise_server: ExerciseServer, page: Page) -> None:
+    """P8.4 — Shift+Enter apply+close; Delete delete; R refine; M apply style in dialog."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_8_5_source_folder_dialog_shortcuts(exercise_server: ExerciseServer, page: Page) -> None:
+    """P8.5 — Enter opens typed path; Ctrl+Enter applies; Escape closes; in source-folder-path-input."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_8_6_keyboard_only_full_session(exercise_server: ExerciseServer, page: Page) -> None:
+    """P8.6 — complete editing session: nav, edit GT, revert, validate line, save (keyboard only)."""
+
+
+# --- Phase 9: Error & Edge Cases ---
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_9_1_empty_page_no_words(exercise_server: ExerciseServer, page: Page) -> None:
+    """P9.1 — load a page with no detected words; matches view shows 0 cards; no crash."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_9_2_ocr_failed_fallback_page(exercise_server: ExerciseServer, page: Page) -> None:
+    """P9.2 — OCR failure results in FALLBACK badge and inline banner."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_9_3_network_error_during_mutation(exercise_server: ExerciseServer, page: Page) -> None:
+    """P9.3 — kill server mid-session; optimistic update rolls back; negative toast appears."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_9_4_validate_buttons_disabled_when_empty(exercise_server: ExerciseServer, page: Page) -> None:
+    """P9.4 — with no words selected, toolbar-word-validate/unvalidate/delete/refine are disabled."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_9_5_merge_disabled_with_one_selected(exercise_server: ExerciseServer, page: Page) -> None:
+    """P9.5 — select exactly 1 line; toolbar-line-merge is disabled (requires ≥2)."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_9_6_missing_bbox_unmatched_gt(exercise_server: ExerciseServer, page: Page) -> None:
+    """P9.6 — unmatched_gt word shows Type icon in image cell, not blank/broken image."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_9_7_page_index_out_of_range_url(exercise_server: ExerciseServer, page: Page) -> None:
+    """P9.7 — navigate to /pageno/9999; URL clamps to last valid page; no 500 error."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_9_8_image_drift_409_conflict(exercise_server: ExerciseServer, page: Page) -> None:
+    """P9.8 — modify source image mtime then Save Page; 409 → auto-reload; toast appears."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_9_9_busy_overlay_blocks_interaction(exercise_server: ExerciseServer, page: Page) -> None:
+    """P9.9 — during Save Project job, busy-overlay visible; nav-next-button click ignored."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_9_10_cancel_save_project_job(exercise_server: ExerciseServer, page: Page) -> None:
+    """P9.10 — start Save Project, click Cancel; job stops; overlay hides; partial toast."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_9_11_narrow_viewport(exercise_server: ExerciseServer, page: Page) -> None:
+    """P9.11 — resize to 400px width; narrow-viewport banner appears; no JS crash."""
+
+
+# --- Phase 10: Data Persistence ---
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_2_verify_saved_content_after_reload(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.2 — save page, then load-page-button; validated words and GT edits persist."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_3_auto_save_to_cache(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.3 — make GT edit without saving; restart server; navigate back; edit persists from cache."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_4_auto_save_notification(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.4 — make word edit; SaveStatus indicator updates within ~2s."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_5_save_project(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.5 — edit 3 pages, click save-project-button; busy-overlay with progress; all saved."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_6_save_project_partial_failures(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.6 — make output dir read-only; Save Project; warning toast with 'View details'."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_7_session_state_persistence(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.7 — navigate to page 5, close tab, reopen root; app redirects to page 5."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_9_export_with_style_filter(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.9 — open export dialog; select all scope; uncheck all-styles; check italics; run export."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_10_cancel_export_mid_flight(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.10 — start multi-page export; click Cancel; export stops; no partial output dir."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_11_rematch_gt(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.11 — edit 3 GT values, click rematch-gt-button, confirm; GT edits cleared."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_12_load_page_from_disk(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.12 — make edits, click load-page-button, confirm; edits discarded; disk state restored."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_13_reload_ocr_original_image(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.13 — click reload-ocr-button, confirm; 202 job; busy-overlay; badge → RAW OCR."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_14_reload_ocr_edited_image(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.14 — after P5.2 erase, click reload-ocr-edited-button; OCR runs on edited image."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_15_manual_rotation(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.15 — click rotate-cw-button; rotation-badge shows 90; rotate-ccw-button returns to 0."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_17_ocr_rescan_models(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.17 — in OCR Config modal, click ocr-rescan-models-button; no error toast."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_18_toolbar_refine_page_scope(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.18 — click toolbar-page-refine; 202 job; progress bar visible; bboxes tighten."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_19_toolbar_expand_refine_page(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.19 — click toolbar-page-expand-refine; 202 job; bboxes update."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_20_toolbar_delete_with_confirmation(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.20 — select 2 words, click toolbar-word-delete; AlertDialog; confirm; 2 words gone."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_21_toolbar_merge_lines(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.21 — check 2 adjacent line-checkbox-*, click toolbar-line-merge; lines merge into 1."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_22_toolbar_split_line_after_word(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.22 — select word-checkbox-{l}-{w}, click toolbar-line-split-after; line splits."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_23_ocr_config_hf_revision_pinning(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.23 — type commit hash into ocr-hf-revision-input, apply; persists across reopen."""
+
+
+@pytest.mark.e2e
+@pytest.mark.skip("TODO: walk in browser — CU-2.2")
+def test_phase_10_24_notification_stream_toasts(exercise_server: ExerciseServer, page: Page) -> None:
+    """P10.24 — SSE stream delivers notification; toast appears with notification-{kind}-{id} testid."""
