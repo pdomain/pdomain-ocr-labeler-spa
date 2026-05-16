@@ -16,9 +16,15 @@ export interface ViewportStoreState {
   mode: ViewportMode;
   /** Set when mode === "rebox": identifies which word is being reboxed. */
   pendingReboxTarget: ReboxTarget | null;
+  /**
+   * Canvas zoom level.
+   * 0 = fit-to-container (scale to fill viewport without overflow).
+   * 1.0 = 100% natural size (display_width × display_height from server).
+   */
+  canvasZoom: number;
 }
 
-type SetStateArg<T> = T | ((state: T) => T);
+type SetStateArg<T> = Partial<T> | ((state: T) => Partial<T>);
 
 interface Store<T> {
   getState: () => T;
@@ -33,8 +39,8 @@ function createReactiveStore<T>(initialState: T): Store<T> {
   return {
     getState: () => state,
     setState: (arg: SetStateArg<T>) => {
-      const newState = typeof arg === "function" ? (arg as (s: T) => T)(state) : arg;
-      state = { ...state, ...newState };
+      const patch = typeof arg === "function" ? arg(state) : arg;
+      state = { ...state, ...patch };
       listeners.forEach((l) => l(state));
     },
     subscribe: (listener) => {
@@ -47,6 +53,7 @@ function createReactiveStore<T>(initialState: T): Store<T> {
 export const viewportStore = createReactiveStore<ViewportStoreState>({
   mode: "select",
   pendingReboxTarget: null,
+  canvasZoom: 1.0,
 });
 
 /** Enter rebox mode for a specific word. */
@@ -73,4 +80,12 @@ export function toggleEraseMode(): void {
     mode: s.mode === "erase" ? "select" : "erase",
     pendingReboxTarget: null,
   }));
+}
+
+/**
+ * Set canvas zoom level.
+ * 0 = fit-to-container; 1.0 = 100% natural size.
+ */
+export function setCanvasZoom(zoom: number): void {
+  viewportStore.setState({ canvasZoom: zoom });
 }

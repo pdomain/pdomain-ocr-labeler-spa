@@ -63,6 +63,7 @@ import {
   exitToSelectMode,
   toggleAddWordMode,
   toggleEraseMode,
+  setCanvasZoom,
   type ViewportMode,
 } from "../stores/viewport-store";
 import { useUiPrefs, type LayerVisibility } from "../stores/ui-prefs";
@@ -263,6 +264,32 @@ export default function PageImageCanvas({
     });
   }, []);
 
+  // Zoom state (P5.d) — subscribe to viewportStore.canvasZoom.
+  const [canvasZoom, setCanvasZoomLocal] = useState(() => viewportStore.getState().canvasZoom);
+  useEffect(() => {
+    return viewportStore.subscribe((s) => setCanvasZoomLocal(s.canvasZoom));
+  }, []);
+
+  // Container size — measured via ResizeObserver so fitScale stays correct
+  // when the pane is resized (P5.d).
+  const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    setContainerSize({ w: el.clientWidth, h: el.clientHeight });
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setContainerSize({
+          w: entry.contentRect.width,
+          h: entry.contentRect.height,
+        });
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // Focus the wrapper on mount so keyboard hotkeys (Esc / Shift+…) work
   // immediately without an explicit click. The Stage cannot itself receive
   // focus, so the wrapping div carries tabIndex=0 + focus-visible:ring-2
@@ -353,6 +380,15 @@ export default function PageImageCanvas({
   }
 
   const dims = getStageDimensions(encoded);
+
+  // P5.d zoom: compute effective scale from canvasZoom + container size.
+  // canvasZoom === 0  → fit-to-container (scale ≤ 1.0 so it never upscales)
+  // canvasZoom === 1.0 → natural/100% (current legacy behaviour)
+  const fitScale =
+    containerSize.w > 0 && containerSize.h > 0
+      ? Math.min(containerSize.w / dims.width, containerSize.h / dims.height, 1.0)
+      : 1.0;
+  const effectiveScale = canvasZoom === 0 ? fitScale : canvasZoom;
 
   function readStagePos(e: KonvaEventObject<MouseEvent>): { x: number; y: number } | null {
     const stage = e.target?.getStage?.();
@@ -478,10 +514,10 @@ export default function PageImageCanvas({
   return (
     <div
       ref={wrapperRef}
-      className="page-image-canvas relative select-none outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="page-image-canvas relative select-none outline-none focus-visible:ring-2 focus-visible:ring-accent overflow-auto"
       style={{
-        width: dims.width,
-        height: dims.height,
+        width: "100%",
+        height: "100%",
         cursor: MODE_CURSORS[mode],
       }}
       data-width={dims.width}
@@ -509,10 +545,15 @@ export default function PageImageCanvas({
       />
 
       {/* Konva Stage + 6-layer skeleton from spec §4. Drag handlers live on
-          the Stage per spec §7; mousemove is rAF-throttled (spec §7 / #301). */}
+          the Stage per spec §7; mousemove is rAF-throttled (spec §7 / #301).
+          P5.d: scaleX/scaleY drive zoom; Stage width/height are the scaled
+          visual dimensions; data-width/data-height on the sidecar retain the
+          unscaled natural size for driver inspection. */}
       <Stage
-        width={dims.width}
-        height={dims.height}
+        width={dims.width * effectiveScale}
+        height={dims.height * effectiveScale}
+        scaleX={effectiveScale}
+        scaleY={effectiveScale}
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleStageMouseMove}
         onMouseUp={handleStageMouseUp}
@@ -602,6 +643,33 @@ export default function PageImageCanvas({
           style={{ backgroundColor: modeRectColors[mode] }}
         />
         {MODE_LABELS[mode]}
+      </div>
+
+      {/* Zoom controls (P5.d) — bottom-left overlay. */}
+      <div
+        data-testid="canvas-zoom-controls"
+        className="absolute bottom-2 left-2 flex items-center gap-1 pointer-events-auto"
+        role="group"
+        aria-label="Zoom controls"
+      >
+        <button
+          type="button"
+          data-testid="canvas-zoom-fit"
+          aria-pressed={canvasZoom === 0}
+          onClick={() => setCanvasZoom(0)}
+          className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${canvasZoom === 0 ? "border-accent/60 bg-accent/10 text-accent" : "border-border-2 bg-bg-surface/90 text-ink-2 hover:text-ink-1"}`}
+        >
+          Fit
+        </button>
+        <button
+          type="button"
+          data-testid="canvas-zoom-100"
+          aria-pressed={canvasZoom === 1.0}
+          onClick={() => setCanvasZoom(1.0)}
+          className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${canvasZoom === 1.0 ? "border-accent/60 bg-accent/10 text-accent" : "border-border-2 bg-bg-surface/90 text-ink-2 hover:text-ink-1"}`}
+        >
+          100%
+        </button>
       </div>
 
       {/* Bulk-actions strip (P5.d, Gap 24) — shown when 2+ words selected. */}

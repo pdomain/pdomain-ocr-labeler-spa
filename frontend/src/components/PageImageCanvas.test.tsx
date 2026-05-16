@@ -249,7 +249,7 @@ const encoded = {
 
 // Reset stores and use-image state after each test
 afterEach(() => {
-  viewportStore.setState({ mode: "select", pendingReboxTarget: null });
+  viewportStore.setState({ mode: "select", pendingReboxTarget: null, canvasZoom: 1.0 });
   selectionStore.setState({
     selectedParagraphs: [],
     selectedLines: [],
@@ -1003,5 +1003,46 @@ describe("rail mode → viewport sync", () => {
     act(() => railStore.getState().setMode("erase"));
     act(() => railStore.getState().setMode("view"));
     expect(viewportStore.getState().mode).toBe("select");
+  });
+});
+
+// ── Zoom controls (P5.d) ────────────────────────────────────────────────────
+
+describe("PageImageCanvas — zoom controls (P5.d)", () => {
+  it("renders canvas-zoom-controls, canvas-zoom-fit and canvas-zoom-100 buttons", () => {
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
+    expect(screen.getByTestId("canvas-zoom-controls")).toBeInTheDocument();
+    expect(screen.getByTestId("canvas-zoom-fit")).toBeInTheDocument();
+    expect(screen.getByTestId("canvas-zoom-100")).toBeInTheDocument();
+  });
+
+  it("100% button is initially active (aria-pressed=true) and Fit is inactive", () => {
+    viewportStore.setState({ canvasZoom: 1.0 });
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
+    expect(screen.getByTestId("canvas-zoom-100").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("canvas-zoom-fit").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("clicking Fit sets canvasZoom to 0 in viewportStore and marks Fit as active", () => {
+    viewportStore.setState({ canvasZoom: 1.0 });
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
+    fireEvent.click(screen.getByTestId("canvas-zoom-fit"));
+    expect(viewportStore.getState().canvasZoom).toBe(0);
+    expect(screen.getByTestId("canvas-zoom-fit").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("canvas-zoom-100").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("clicking 100% sets canvasZoom to 1.0 in viewportStore and marks 100% as active", () => {
+    viewportStore.setState({ canvasZoom: 0 });
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
+    fireEvent.click(screen.getByTestId("canvas-zoom-100"));
+    expect(viewportStore.getState().canvasZoom).toBe(1.0);
+    expect(screen.getByTestId("canvas-zoom-100").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("canvas-zoom-fit").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("zoom controls are not rendered in empty-state viewport", () => {
+    render(<PageImageCanvas imageUrl="" encoded={null} />);
+    expect(screen.queryByTestId("canvas-zoom-controls")).toBeNull();
   });
 });
