@@ -477,6 +477,21 @@ class UserPageEnvelope:
     payload: UserPagePayload = field(default_factory=UserPagePayload)
     cached_images: dict[str, str] = field(default_factory=dict)
 
+    @property
+    def schema_minor(self) -> int:
+        """The minor part of ``schema.version`` as an integer.
+
+        ``"2.1"`` → ``1``, ``"2.2"`` → ``2``.  Returns ``0`` for any
+        version string that cannot be split on ``"."``.
+        """
+        version_str = self.schema.version
+        if "." in version_str:
+            try:
+                return int(version_str.split(".")[1])
+            except (ValueError, IndexError):
+                return 0
+        return 0
+
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {
             "schema": self.schema.to_dict(),
@@ -532,12 +547,47 @@ def is_user_page_envelope(data: dict[str, Any]) -> bool:
     return str(schema.get("name")) == USER_PAGE_SCHEMA_NAME
 
 
-def parse_envelope(data: dict[str, Any]) -> UserPageEnvelope:
+def _inject_glyph_annotations_none(page: dict[str, Any]) -> dict[str, Any]:
+    """Inject ``glyph_annotations: None`` into every word dict in a page dict.
+
+    Called on v2.1 envelopes during parse so callers can uniformly read
+    ``word.get("glyph_annotations")`` without checking for key absence.
+    Only injects when the key is absent — existing values (v2.2+) are
+    preserved verbatim.
+
+    Operates on the ``"lines"`` key (flattened SPA page dict shape).
+    Silently no-ops when ``page`` does not have a ``"lines"`` key.
+    """
+    lines = page.get("lines")
+    if not isinstance(lines, list):
+        return page
+    # Shallow-copy page so we don't mutate the parsed dict in place.
+    new_lines = []
+    for line in lines:
+        if not isinstance(line, dict):
+            new_lines.append(line)
+            continue
+        words = line.get("words")
+        if not isinstance(words, list):
+            new_lines.append(line)
+            continue
+        new_words = []
+        for word in words:
+            if isinstance(word, dict) and "glyph_annotations" not in word:
+                word = dict(word)
+                word["glyph_annotations"] = None
+            new_words.append(word)
+        new_lines.append({**line, "words": new_words})
+    return {**page, "lines": new_lines}
+
+
+def parse_envelope(raw: str | dict[str, Any]) -> UserPageEnvelope:
     """Permissive reader with schema-version guard.
 
-    Missing keys fall back to defaults (same failure-mode contract as
-    legacy ``UserPageEnvelope.from_dict``). Coerces or substitutes
-    defaults silently for all shape mismatches.
+    Accepts either a JSON string or a pre-parsed dict.  Missing keys
+    fall back to defaults (same failure-mode contract as legacy
+    ``UserPageEnvelope.from_dict``). Coerces or substitutes defaults
+    silently for all shape mismatches.
 
     Version check (spec §11, ``docs/architecture/09-persistence.md``):
     ``schema.version`` must start with major ``"2"`` (i.e. "2.1",
@@ -545,6 +595,11 @@ def parse_envelope(data: dict[str, Any]) -> UserPageEnvelope:
     different major (e.g. "3.0", "1.0", …) raises
     ``IncompatibleEnvelopeError``.  Callers at the API layer translate
     this to ``422 incompatible_envelope``.
+
+    v2.1 back-compat: when ``schema.version == "2.1"``, every word dict
+    inside ``payload.page["lines"][*]["words"][*]`` gets
+    ``glyph_annotations = None`` injected (if absent) so callers can
+    uniformly read the field without ``KeyError``.
 
     Callers that want the name type-guard check before parsing should
     call ``is_user_page_envelope(data)`` first.
@@ -555,7 +610,10 @@ def parse_envelope(data: dict[str, Any]) -> UserPageEnvelope:
         When the ``schema.version`` major is not ``"2"`` (e.g. ``"3.0"``
         written by a future binary this SPA cannot read).
     """
+    # Normalise to dict — json.loads returns Any; we then treat as dict.
+    data: dict[str, Any] = json.loads(raw) if isinstance(raw, str) else raw
     schema_block = data.get("schema")
+    version_str = USER_PAGE_SCHEMA_VERSION
     if isinstance(schema_block, dict):
         version_str = str(schema_block.get("version", USER_PAGE_SCHEMA_VERSION))
         # Reject any version whose major is not "2".  Accept all 2.x
@@ -567,7 +625,44 @@ def parse_envelope(data: dict[str, Any]) -> UserPageEnvelope:
                 version=version_str,
                 supported=_KNOWN_VERSIONS,
             )
+    # v2.1 back-compat: inject glyph_annotations=None into word dicts.
+    if version_str == USER_PAGE_SCHEMA_VERSION:  # "2.1"
+        payload_block = data.get("payload")
+        if isinstance(payload_block, dict):
+            page_block = payload_block.get("page")
+            if isinstance(page_block, dict):
+                new_page = _inject_glyph_annotations_none(page_block)
+                if new_page is not page_block:
+                    # Re-assemble data with the patched page so from_dict
+                    # receives the injected version.
+                    data = {
+                        **data,
+                        "payload": {**payload_block, "page": new_page},
+                    }
     return UserPageEnvelope.from_dict(data)
+
+
+def serialize_envelope(envelope: UserPageEnvelope) -> str:
+    """Serialise a ``UserPageEnvelope`` to a JSON string (v2.2 always).
+
+    Always emits ``schema.version = "2.2"`` regardless of the original
+    version so that ``glyph_annotations`` fields (present or ``null``)
+    are understood by any reader that has the v2.2 reader landed.
+
+    ``glyph_annotations`` values inside ``payload.page["lines"][*]["words"][*]``
+    are written verbatim — ``null`` values are preserved as JSON ``null``.
+
+    This is the counterpart to the ``str``-accepting overload of
+    ``parse_envelope``; together they form the round-trip API for the
+    v2.2 glyph-annotations format.
+    """
+    result = envelope_to_dict(envelope)
+    # Always promote to "2.2" on serialization so readers know to expect
+    # glyph_annotations in the word dicts.
+    schema_block = dict(result.get("schema", {}))
+    schema_block["version"] = USER_PAGE_SCHEMA_VERSION_ROTATION  # "2.2"
+    result = {**result, "schema": schema_block}
+    return json.dumps(result, ensure_ascii=False)
 
 
 def envelope_to_dict(envelope: UserPageEnvelope) -> dict[str, Any]:
@@ -888,4 +983,5 @@ __all__ = [
     "labeled_envelope_path",
     "parse_envelope",
     "read_envelope_file",
+    "serialize_envelope",
 ]

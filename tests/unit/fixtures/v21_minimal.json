@@ -1,0 +1,45 @@
+{
+  "schema": {
+    "name": "pd_ocr_labeler.user_page",
+    "version": "2.1"
+  },
+  "provenance": {
+    "saved_at": "2026-05-16T00:00:00.000Z",
+    "saved_by": "Save Page",
+    "source_lane": "labeled",
+    "app": {
+      "name": "pd_ocr_labeler",
+      "version": "0.3.2"
+    },
+    "toolchain": {
+      "python": "3.13.1",
+      "pd_book_tools": "0.5.1"
+    },
+    "ocr": {
+      "engine": "doctr",
+      "models": []
+    }
+  },
+  "source": {
+    "project_id": "v21-minimal",
+    "page_index": 0,
+    "page_number": 1,
+    "image_path": "001.png"
+  },
+  "payload": {
+    "page": {
+      "type": "Page",
+      "page_index": 0,
+      "width": 1240,
+      "height": 1754,
+      "lines": [
+        {
+          "words": [
+            {"ocr_text": "Hello", "confidence": 0.95},
+            {"ocr_text": "world", "confidence": 0.90}
+          ]
+        }
+      ]
+    }
+  }
+}
