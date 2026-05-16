@@ -625,6 +625,17 @@ def _page_payload(
     # ``Selection()`` for pages with no ``PageState`` yet.
     selection = pstate.selection if pstate is not None else Selection()
 
+    # BUG-SMOKE-2 fix: stamp the PAGE-level generation (``pstate.generation``),
+    # not the project-level counter (``project_state.generation``).
+    #
+    # ``save_page`` validates ``body.generation == pstate.generation``; the
+    # GET response must return the same value so the frontend can echo it back
+    # on save.  The project-level counter is bumped by project load / page-nav
+    # events and starts at 4+ after a normal load, while ``pstate.generation``
+    # starts at 0 and only increments on word/line mutations.  Stamping the
+    # project-level counter caused every first save attempt to 409.
+    page_generation = pstate.generation if pstate is not None else 0
+
     return PagePayload(
         project_id=project_id,
         page_index=page_index,
@@ -634,7 +645,7 @@ def _page_payload(
         encoded_dims=encoded_dims,
         line_filter=LineFilter.ALL,
         image_url=image_url,
-        generation=project_state.generation,
+        generation=page_generation,
         page_text_ocr=page_text_ocr,
         page_text_gt=page_text_gt,
     )
