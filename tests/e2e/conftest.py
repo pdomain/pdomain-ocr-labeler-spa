@@ -10,6 +10,10 @@ Mirrors ``pd-prep-for-pgdp/tests/e2e/conftest.py``:
 Per-test isolation comes from ``data_root`` being a tmp directory unique
 to the session; we do not reset between tests in a single session.
 
+``exercise_server`` is re-exported here so that any test module that runs
+alone (e.g. ``pytest tests/e2e/test_ui_coverage.py``) can discover it
+without needing ``exercise_real_project.py`` to be collected first.
+
 Spec: docs/specs/2026-05-12-testing-design.md §E2E conftest
 Issue #247
 """
@@ -137,3 +141,9 @@ def live_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[LiveServer
 
     server.should_exit = True
     thread.join(timeout=5)
+
+
+# Re-export so that test modules collected alone (e.g. test_ui_coverage.py)
+# can discover this module-scoped fixture without requiring
+# exercise_real_project.py to be collected in the same run.
+from tests.e2e.exercise_real_project import exercise_server as exercise_server  # noqa: E402
