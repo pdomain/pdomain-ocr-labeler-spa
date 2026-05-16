@@ -155,6 +155,41 @@ describe("PageActions", () => {
     });
   });
 
+  describe("provenance tooltip on page-source-badge (GAP-1)", () => {
+    it("page-source-badge has no title attribute when provenanceSummary is not provided", () => {
+      render(<PageActions />);
+      const badge = screen.getByTestId("page-source-badge");
+      expect(badge).not.toHaveAttribute("title");
+    });
+
+    it("page-source-badge has no title attribute when provenanceSummary is null", () => {
+      render(<PageActions provenanceSummary={null} />);
+      const badge = screen.getByTestId("page-source-badge");
+      expect(badge).not.toHaveAttribute("title");
+    });
+
+    it("page-source-badge carries title tooltip when provenanceSummary is set", () => {
+      render(<PageActions provenanceSummary="Saved: 2026-05-15T12:00:00 · Engine: doctr" />);
+      const badge = screen.getByTestId("page-source-badge");
+      expect(badge).toHaveAttribute("title", "Saved: 2026-05-15T12:00:00 · Engine: doctr");
+    });
+
+    it("page-source-badge tooltip works regardless of pageSource value", () => {
+      render(
+        <PageActions
+          pageSource="filesystem"
+          provenanceSummary="Saved: 2026-05-15T09:30:00 · pd_ocr_labeler_spa 0.1.0"
+        />,
+      );
+      const badge = screen.getByTestId("page-source-badge");
+      expect(badge).toHaveTextContent("LABELED");
+      expect(badge).toHaveAttribute(
+        "title",
+        "Saved: 2026-05-15T09:30:00 · pd_ocr_labeler_spa 0.1.0",
+      );
+    });
+  });
+
   describe("rotate buttons (M9.1 — wired in #263)", () => {
     it("rotate-ccw-button and rotate-cw-button exist and are visible", () => {
       render(<PageActions />);

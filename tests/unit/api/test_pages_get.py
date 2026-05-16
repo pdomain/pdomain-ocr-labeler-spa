@@ -24,9 +24,14 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from pd_ocr_labeler_spa.api.pages import _build_image_url, _page_payload, _render_plaintext
+from pd_ocr_labeler_spa.api.pages import (
+    _build_image_url,
+    _build_provenance_summary,  # GAP-1
+    _page_payload,
+    _render_plaintext,
+)
 from pd_ocr_labeler_spa.bootstrap import build_app
-from pd_ocr_labeler_spa.core.models import EncodedDims
+from pd_ocr_labeler_spa.core.models import EncodedDims, PageRecord, PageSource
 from pd_ocr_labeler_spa.settings import Settings
 
 # Path to the tiny-fixture project shipped under tests/e2e/fixtures —
@@ -241,3 +246,106 @@ def test_page_payload_helper_returns_payload_for_loaded_project(
     assert payload.image_url == "/api/projects/tiny-fixture/pages/0/image?w=1"
     assert payload.encoded_dims is not None
     assert payload.encoded_dims.src_width == 1
+
+
+# ── _build_provenance_summary (GAP-1) ────────────────────────────────
+
+
+def _make_page_record(**overrides: object) -> PageRecord:
+    """Minimal PageRecord for provenance-summary tests."""
+    defaults: dict = {
+        "page_index": 0,
+        "page_number": 1,
+        "image_path": Path("/fake/001.png"),
+        "page_source": PageSource.OCR,
+    }
+    defaults.update(overrides)
+    return PageRecord(**defaults)  # type: ignore[arg-type]
+
+
+def test_provenance_summary_none_when_no_provenance() -> None:
+    """Returns None when ocr_provenance and saved_provenance are both absent."""
+    rec = _make_page_record()
+    assert _build_provenance_summary(rec) is None
+
+
+def test_provenance_summary_from_saved_provenance_saved_at() -> None:
+    """saved_at in saved_provenance appears as 'Saved: ...' prefix."""
+    rec = _make_page_record(
+        saved_provenance={"saved_at": "2026-05-15T12:34:56.789"},
+    )
+    summary = _build_provenance_summary(rec)
+    assert summary is not None
+    assert summary.startswith("Saved: 2026-05-15T12:34:56")
+
+
+def test_provenance_summary_from_saved_provenance_engine_and_models() -> None:
+    """Engine + model names from saved_provenance.ocr are included."""
+    rec = _make_page_record(
+        saved_provenance={
+            "saved_at": "2026-05-15T10:00:00",
+            "ocr": {
+                "engine": "doctr",
+                "models": [{"name": "db_resnet50"}, {"name": "crnn_vgg16_bn"}],
+            },
+        },
+    )
+    summary = _build_provenance_summary(rec)
+    assert summary is not None
+    assert "Engine: doctr" in summary
+    assert "db_resnet50" in summary
+    assert "crnn_vgg16_bn" in summary
+
+
+def test_provenance_summary_unknown_engine_omitted() -> None:
+    """'unknown' engine sentinel is excluded from the summary."""
+    rec = _make_page_record(
+        saved_provenance={
+            "ocr": {"engine": "unknown"},
+        },
+    )
+    assert _build_provenance_summary(rec) is None
+
+
+def test_provenance_summary_from_ocr_provenance_fallback() -> None:
+    """Falls back to ocr_provenance when saved_provenance is absent."""
+    from pd_ocr_labeler_spa.core.persistence.user_page_envelope import (
+        OCRModelProvenance,
+        OCRProvenance,
+    )
+
+    prov = OCRProvenance(
+        engine="doctr",
+        models=[OCRModelProvenance(name="db_resnet50")],
+    )
+    rec = _make_page_record(ocr_provenance=prov)
+    summary = _build_provenance_summary(rec)
+    assert summary is not None
+    assert "Engine: doctr" in summary
+    assert "db_resnet50" in summary
+
+
+def test_provenance_summary_app_version_included() -> None:
+    """App name + version from saved_provenance.app appear in the summary."""
+    rec = _make_page_record(
+        saved_provenance={
+            "app": {"name": "pd_ocr_labeler_spa", "version": "0.1.0"},
+        },
+    )
+    summary = _build_provenance_summary(rec)
+    assert summary is not None
+    assert "pd_ocr_labeler_spa" in summary
+    assert "0.1.0" in summary
+
+
+def test_provenance_summary_separator_dot_dot_dot() -> None:
+    """Multiple parts are joined with ' . '."""
+    rec = _make_page_record(
+        saved_provenance={
+            "saved_at": "2026-05-15T09:00:00",
+            "ocr": {"engine": "doctr"},
+        },
+    )
+    summary = _build_provenance_summary(rec)
+    assert summary is not None
+    assert " · " in summary

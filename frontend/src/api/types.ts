@@ -2613,6 +2613,8 @@ export interface components {
             rotation_degrees: number;
             /** @default none */
             rotation_source: components["schemas"]["RotationSource"];
+            /** Provenance Summary */
+            provenance_summary?: string | null;
         };
         /**
          * PageSource

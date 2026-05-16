@@ -56,6 +56,10 @@ interface PageActionsProps {
   hasEditedImage?: boolean;
   /** Source lane for the current page data. */
   pageSource?: PageSource | null;
+  /** Human-readable provenance one-liner shown as the source badge tooltip.
+   *  Assembled by the backend from saved_at + OCR engine + model names.
+   *  When absent, the badge has no tooltip. */
+  provenanceSummary?: string | null;
   /** Display name for the current page (e.g. "page_001.png"). */
   pageName?: string | null;
   /** Cumulative rotation applied to the current page (0 = original). */
@@ -96,6 +100,7 @@ export function PageActions({
   isBusy = false,
   hasEditedImage = false,
   pageSource,
+  provenanceSummary,
   pageName,
   rotationDegrees = 0,
   rotationSource = null,
@@ -233,6 +238,7 @@ export function PageActions({
 
         <span
           data-testid="page-source-badge"
+          title={provenanceSummary ?? undefined}
           className={[
             "px-2 py-0.5 text-xs font-semibold rounded bg-bg-raised",
             PAGE_SOURCE_COLORS[source],

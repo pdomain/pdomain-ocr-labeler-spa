@@ -154,6 +154,10 @@ class PageRecord(BaseModel):
     # M9.1 rotation fields (issue #263 / spec §19)
     rotation_degrees: int = 0
     rotation_source: RotationSource = RotationSource.NONE
+    # GAP-1: human-readable provenance one-liner for the source badge tooltip.
+    # Assembled by api/pages.py::_build_provenance_summary at payload-build time.
+    # None when no meaningful provenance data is available.
+    provenance_summary: str | None = None
 
 
 class WordMatch(BaseModel):
