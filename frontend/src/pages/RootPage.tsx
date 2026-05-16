@@ -81,7 +81,7 @@ export function EmptyProjectState() {
   return (
     <div
       data-testid="empty-project-state"
-      className="flex flex-col items-center justify-center h-full text-gray-500 text-sm"
+      className="flex flex-col items-center justify-center h-full text-ink-3 text-sm"
     >
       <p>No project loaded. Select a project from the dropdown above to get started.</p>
     </div>
@@ -147,9 +147,15 @@ function ProjectCard({ project }: { project: ProjectKey }) {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const handleOpen = () => {
-    navigate(`/projects/${project.project_id}/pages/pageno/1`);
-  };
+  const openMutation = useMutation({
+    mutationFn: () => postLoadProject(String(project.project_root)),
+    onSettled: () => {
+      // Navigate regardless of load success — project page handles missing state.
+      navigate(`/projects/${project.project_id}/pages/pageno/1`);
+    },
+  });
+
+  const handleOpen = () => openMutation.mutate();
 
   // Placeholder values — these will be populated when the backend exposes them.
   // For now we display meaningful placeholders so the card structure is visible.
@@ -212,9 +218,10 @@ function ProjectCard({ project }: { project: ProjectKey }) {
             type="button"
             data-testid={`project-card-open-${project.project_id}`}
             onClick={handleOpen}
-            className="flex-1 text-[11px] font-medium px-2 py-1.5 rounded bg-accent text-accent-ink hover:opacity-90 transition-opacity"
+            disabled={openMutation.isPending}
+            className="flex-1 text-[11px] font-medium px-2 py-1.5 rounded bg-accent text-accent-ink hover:opacity-90 transition-opacity disabled:opacity-60"
           >
-            Open
+            {openMutation.isPending ? "Loading…" : "Open"}
           </button>
 
           {/* Action menu ▾ */}
@@ -326,10 +333,15 @@ function ProjectListView({ projects }: { projects: ProjectKey[] }) {
               data-testid={`root-filter-chip-${f}`}
               data-active={activeFilter === f ? "true" : undefined}
               onClick={() => setActiveFilter(f)}
+              style={
+                activeFilter === f
+                  ? { background: "color-mix(in srgb, var(--accent) 10%, transparent)" }
+                  : undefined
+              }
               className={[
                 "text-[11px] px-2.5 py-1 rounded-full border transition-colors",
                 activeFilter === f
-                  ? "border-accent bg-accent/10 text-ink-1 font-medium"
+                  ? "border-accent text-ink-1 font-medium"
                   : "border-border-2 bg-bg-raised text-ink-3 hover:border-border-1 hover:text-ink-2",
               ].join(" ")}
             >

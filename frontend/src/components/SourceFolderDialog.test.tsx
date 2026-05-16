@@ -8,12 +8,16 @@
 //   - Up button navigates to parent directory.
 //   - Open-typed button sets currentPath to inputPath value.
 //   - Use-current button copies currentPath into inputPath.
-//   - Apply button POSTs currentPath to /api/projects/source-root and closes.
+//   - Apply button POSTs inputPath to /api/projects/source-root and closes.
+//   - Apply posts typed path directly (no "Open Typed Path" needed) — regression for the
+//     bug where typing a path and clicking Apply submitted currentPath ("~") instead.
+//   - Dialog initializes currentPath/inputPath from projects_root API response on open.
 //   - Cancel closes without API call.
 //   - Enter key in path-input triggers open-typed (not apply).
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import { server } from "../test/server";
 import { SourceFolderDialog } from "./SourceFolderDialog";
@@ -21,7 +25,12 @@ import { SourceFolderDialog } from "./SourceFolderDialog";
 // --- helpers -----------------------------------------------------------------
 
 function renderDialog(open: boolean, onClose = vi.fn()) {
-  return render(<SourceFolderDialog open={open} onClose={onClose} />);
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <SourceFolderDialog open={open} onClose={onClose} />
+    </QueryClientProvider>,
+  );
 }
 
 // --- render gating -----------------------------------------------------------
@@ -66,6 +75,43 @@ describe("SourceFolderDialog: driver-contract testids", () => {
 
   it("shows initial inputPath as ~ in path-input", () => {
     renderDialog(true);
+    expect(screen.getByTestId("source-folder-path-input")).toHaveValue("~");
+  });
+});
+
+// --- Initialization from API -------------------------------------------------
+
+describe("SourceFolderDialog: initialization from current source root", () => {
+  it("pre-populates paths from projects_root when the API returns one", async () => {
+    server.use(
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [],
+          projects_root: "/data/projects",
+          selected: null,
+          config_source: "yaml",
+        }),
+      ),
+    );
+
+    renderDialog(true);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("source-folder-current-path-label")).toHaveTextContent(
+        "/data/projects",
+      );
+    });
+    expect(screen.getByTestId("source-folder-path-input")).toHaveValue("/data/projects");
+  });
+
+  it("falls back to ~ when projects_root is empty", async () => {
+    // Default handler returns projects_root: "" — paths should stay at ~.
+    renderDialog(true);
+
+    // Give the async fetch a moment to settle.
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(screen.getByTestId("source-folder-current-path-label")).toHaveTextContent("~");
     expect(screen.getByTestId("source-folder-path-input")).toHaveValue("~");
   });
 });
@@ -194,8 +240,8 @@ describe("SourceFolderDialog: Use-current button", () => {
 
 // --- Apply button ------------------------------------------------------------
 
-describe("SourceFolderDialog: Apply POSTs currentPath and closes", () => {
-  it("POSTs the currentPath (not inputPath) to source-root and calls onClose", async () => {
+describe("SourceFolderDialog: Apply POSTs inputPath and closes", () => {
+  it("POSTs the inputPath to source-root and calls onClose", async () => {
     const capturedBodies: unknown[] = [];
 
     server.use(
@@ -212,20 +258,81 @@ describe("SourceFolderDialog: Apply POSTs currentPath and closes", () => {
     const onClose = vi.fn();
     renderDialog(true, onClose);
 
-    // Navigate to a path via open-typed.
     const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "/data/projects" } });
-    fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
 
-    // currentPath is now /data/projects; modify input to something different.
-    fireEvent.change(input, { target: { value: "/something/else" } });
-
-    // Click Apply — should POST currentPath (/data/projects), not inputPath.
     fireEvent.click(screen.getByTestId("source-folder-apply-button"));
 
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(capturedBodies).toHaveLength(1);
     expect(capturedBodies[0]).toMatchObject({ path: "/data/projects" });
+  });
+
+  it("regression: typing path and clicking Apply directly submits typed path (no Open-Typed needed)", async () => {
+    // This was the original failure: user types a path and clicks Apply without
+    // clicking "Open Typed Path" first. The old code submitted currentPath ("~"),
+    // not inputPath. The fix: Apply always submits inputPath.
+    const capturedBodies: unknown[] = [];
+
+    server.use(
+      http.post("/api/projects/source-root", async ({ request }) => {
+        const body: unknown = await request.json();
+        capturedBodies.push(body);
+        return HttpResponse.json(
+          { projects_root: "/workspaces/ocr-container/source-pgdp-data/output", projects: [] },
+          { status: 200 },
+        );
+      }),
+    );
+
+    const onClose = vi.fn();
+    renderDialog(true, onClose);
+
+    // Type the path — do NOT click "Open Typed Path".
+    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { value: "/workspaces/ocr-container/source-pgdp-data/output" },
+    });
+
+    // currentPath label still shows "~" — only inputPath changed.
+    expect(screen.getByTestId("source-folder-current-path-label")).toHaveTextContent("~");
+
+    // Click Apply directly.
+    fireEvent.click(screen.getByTestId("source-folder-apply-button"));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    // Must have posted the typed path, NOT "~".
+    expect(capturedBodies[0]).toMatchObject({
+      path: "/workspaces/ocr-container/source-pgdp-data/output",
+    });
+  });
+
+  it("Apply posts inputPath even when currentPath and inputPath differ", async () => {
+    const capturedBodies: unknown[] = [];
+
+    server.use(
+      http.post("/api/projects/source-root", async ({ request }) => {
+        const body: unknown = await request.json();
+        capturedBodies.push(body);
+        return HttpResponse.json({ projects_root: "/typed/path", projects: [] }, { status: 200 });
+      }),
+    );
+
+    const onClose = vi.fn();
+    renderDialog(true, onClose);
+
+    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    // Navigate currentPath to /nav/path.
+    fireEvent.change(input, { target: { value: "/nav/path" } });
+    fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
+    // Now type a different path into input without navigating.
+    fireEvent.change(input, { target: { value: "/typed/path" } });
+
+    fireEvent.click(screen.getByTestId("source-folder-apply-button"));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    // Should have posted the input value, not the navigated path.
+    expect(capturedBodies[0]).toMatchObject({ path: "/typed/path" });
   });
 
   it("shows loading state while POST is in flight", async () => {

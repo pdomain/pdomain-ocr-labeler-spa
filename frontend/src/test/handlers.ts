@@ -11,4 +11,15 @@ export const handlers: RequestHandler[] = [
   // every mount.  Default returns an empty directory so existing tests that
   // don't care about the listing don't receive MSW "unhandled request" errors.
   http.get("/api/fs/ls", () => HttpResponse.json({ path: "/", entries: [] })),
+
+  // GET /api/projects — project list. Default returns no source root and no
+  // projects; SourceFolderDialog fetches this on open to pre-populate its path.
+  http.get("/api/projects", () =>
+    HttpResponse.json({
+      projects: [],
+      projects_root: "",
+      selected: null,
+      config_source: "default",
+    }),
+  ),
 ];

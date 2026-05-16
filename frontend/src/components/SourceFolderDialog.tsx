@@ -16,6 +16,7 @@
 //   Each entry row testid: data-testid="fs-ls-entry-{name}"
 
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface FsEntry {
   name: string;
@@ -47,17 +48,31 @@ function parentPath(p: string): string {
  *   currentPath — the "browsed" path shown in the current-path-label.
  *   inputPath   — the text typed in the path-input.
  *
- * On apply, POSTs { path: currentPath } to POST /api/projects/source-root.
+ * On apply, POSTs { path: inputPath } to POST /api/projects/source-root.
  * Directory listing is fetched from GET /api/fs/ls?path=<currentPath>.
  * Renders nothing when `open` is false.
  */
 export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
+  const queryClient = useQueryClient();
   const [currentPath, setCurrentPath] = useState<string>("~");
   const [inputPath, setInputPath] = useState<string>("~");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [entries, setEntries] = useState<FsEntry[]>([]);
   const [listLoading, setListLoading] = useState(false);
+
+  // Initialize paths from current source root when dialog opens.
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/projects")
+      .then((r) => r.json())
+      .then((data: { projects_root?: string }) => {
+        const root = data.projects_root && data.projects_root !== "" ? data.projects_root : "~";
+        setCurrentPath(root);
+        setInputPath(root);
+      })
+      .catch(() => {});
+  }, [open]);
 
   // Fetch directory listing whenever currentPath changes (and dialog is open).
   useEffect(() => {
@@ -111,12 +126,15 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
   async function handleApply() {
     if (loading) return;
     setError(null);
+    // Always submit what's in the input field — the user's typed path is
+    // the intent, whether they arrived here by navigation or direct typing.
+    const pathToApply = inputPath;
     try {
       setLoading(true);
       const resp = await fetch("/api/projects/source-root", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: currentPath }),
+        body: JSON.stringify({ path: pathToApply }),
       });
       if (!resp.ok) {
         const text = await resp.text();
@@ -131,12 +149,10 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
         setError(msg);
         return;
       }
-      // Success — clear loading before onClose so state update lands while
-      // the component is still mounted (onClose unmounts the dialog).
+      // Success — invalidate projects list then close.
       setLoading(false);
-      setCurrentPath("~");
-      setInputPath("~");
       setError(null);
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
       onClose();
     } catch (e) {
       setLoading(false);
@@ -178,19 +194,19 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
       }}
     >
       <div
-        className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-5 space-y-4"
+        className="bg-bg-surface rounded-lg border border-border-2 max-w-md w-full mx-4 p-5 space-y-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-base font-semibold">Set Source Folder</h2>
+        <h2 className="text-base font-semibold text-ink-1">Set Source Folder</h2>
 
         {/* Current path display */}
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+          <label className="text-xs font-medium text-ink-3 uppercase tracking-wide">
             Current path
           </label>
           <div
             data-testid="source-folder-current-path-label"
-            className="px-3 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded font-mono break-all"
+            className="px-3 py-1.5 text-sm bg-bg-raised border border-border-1 rounded font-mono break-all"
           >
             {currentPath}
           </div>
@@ -204,7 +220,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             onClick={handleHome}
             disabled={loading}
             title="Go to home (~)"
-            className="flex-1 px-2 py-1.5 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+            className="flex-1 px-2 py-1.5 text-sm rounded border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
           >
             Home
           </button>
@@ -214,7 +230,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             onClick={handleUp}
             disabled={loading}
             title="Go up one directory"
-            className="flex-1 px-2 py-1.5 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+            className="flex-1 px-2 py-1.5 text-sm rounded border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
           >
             Up
           </button>
@@ -222,16 +238,16 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
 
         {/* Directory listing */}
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+          <label className="text-xs font-medium text-ink-3 uppercase tracking-wide">
             Subdirectories
           </label>
-          <div className="border border-gray-200 rounded max-h-40 overflow-y-auto bg-gray-50">
+          <div className="border border-border-1 rounded max-h-40 overflow-y-auto bg-bg-raised">
             {listLoading ? (
-              <div data-testid="fs-ls-loading" className="px-3 py-2 text-xs text-gray-400 italic">
+              <div data-testid="fs-ls-loading" className="px-3 py-2 text-xs text-ink-4 italic">
                 Loading…
               </div>
             ) : entries.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-gray-400 italic">No subdirectories</div>
+              <div className="px-3 py-2 text-xs text-ink-4 italic">No subdirectories</div>
             ) : (
               entries.map((e) => (
                 <button
@@ -240,7 +256,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
                   data-testid={`fs-ls-entry-${e.name}`}
                   onClick={() => handleEntryClick(e.name)}
                   disabled={loading}
-                  className="w-full text-left px-3 py-1.5 text-sm font-mono hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
+                  className="w-full text-left px-3 py-1.5 text-sm font-mono hover:bg-bg-sunk hover:text-accent disabled:opacity-50"
                 >
                   {e.name}/
                 </button>
@@ -251,7 +267,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
 
         {/* Path input */}
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+          <label className="text-xs font-medium text-ink-3 uppercase tracking-wide">
             Type a path
           </label>
           <input
@@ -263,7 +279,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             onKeyDown={handleKeyDown}
             disabled={loading}
             placeholder="/path/to/projects"
-            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            className="w-full px-3 py-1.5 text-sm border border-border-2 bg-bg-sunk rounded font-mono focus:outline-none focus:border-accent disabled:opacity-50"
             autoFocus
           />
         </div>
@@ -276,7 +292,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             onClick={handleOpenTyped}
             disabled={loading}
             title="Navigate to the typed path"
-            className="flex-1 px-2 py-1.5 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+            className="flex-1 px-2 py-1.5 text-sm rounded border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
           >
             Open Typed Path
           </button>
@@ -286,14 +302,19 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             onClick={handleUseCurrent}
             disabled={loading}
             title="Copy current path into input"
-            className="flex-1 px-2 py-1.5 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+            className="flex-1 px-2 py-1.5 text-sm rounded border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
           >
             Use Current
           </button>
         </div>
 
         {error && (
-          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+          <div
+            className="text-sm text-status-mismatch border border-status-mismatch/40 rounded px-3 py-2"
+            style={{
+              background: "color-mix(in srgb, var(--status-mismatch) 12%, var(--bg-surface))",
+            }}
+          >
             {error}
           </div>
         )}
@@ -305,7 +326,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             data-testid="source-folder-cancel-button"
             onClick={handleCancel}
             disabled={loading}
-            className="px-3 py-1.5 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+            className="px-3 py-1.5 text-sm rounded border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
           >
             Cancel
           </button>
@@ -314,7 +335,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             data-testid="source-folder-apply-button"
             onClick={() => void handleApply()}
             disabled={loading}
-            className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            className="px-3 py-1.5 text-sm rounded bg-accent text-accent-ink hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {loading ? "Setting…" : "Apply"}
           </button>
