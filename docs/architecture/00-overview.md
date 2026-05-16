@@ -40,8 +40,7 @@ then jump to the per-area spec for whatever you're implementing.
 > multi-user / managed-adapter axes below are **deferred to the far
 > future**. Active milestones (M1–M9) are local-mode only. See
 > [D-042](../../specs/17-decisions.md#d-042--postgresmanaged-adapter-axes-deferred-to-far-future-2026-05-07)
-> for the explicit list and rationale; [`docs/ROADMAP.md`](../ROADMAP.md)
-> carries the same callout for the implementation tracker.
+> for the explicit list and rationale.
 
 - **No multi-user collaboration.** One user, possibly multiple browser
   tabs against the same backend, sharing in-memory state.

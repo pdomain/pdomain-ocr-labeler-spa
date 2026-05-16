@@ -13,8 +13,7 @@ authoritative design notes.
 > committed. `make build` will refuse to produce a wheel until
 > `make frontend-build` populates `src/pd_ocr_labeler_spa/static/`.
 > The SPA fallback route + `/image-cache` route are wired and
-> degrade gracefully (helpful 404) until that bundle lands. See
-> [`ROADMAP.md`](ROADMAP.md) and [`PARITY_STATUS.md`](PARITY_STATUS.md).
+> degrade gracefully (helpful 404) until that bundle lands.
 
 ## Prerequisites
 
@@ -140,8 +139,7 @@ This keeps the TypeScript surface in lock-step with the Python models.
 make ci   # setup + test + frontend-test + build
 ```
 
-Mirrors the `.github/workflows/release.yml` pipeline (forthcoming —
-tracked in [`ROADMAP.md`](ROADMAP.md)).
+Mirrors the `.github/workflows/release.yml` pipeline.
 
 ## Archive on close
 
@@ -179,7 +177,7 @@ of resolved work. The same was happening to `OPEN_QUESTIONS.md`. The
 - [`specs/16-milestones.md`](../specs/16-milestones.md) — milestone
   acceptance gates.
 - [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) — deferred decisions.
-- [`docs/ROADMAP.md`](ROADMAP.md) — implementation status by
+- [`specs/16-milestones.md`](../specs/16-milestones.md) — implementation status by
   milestone.
 - [`docs/BUGS_FOUND.md`](BUGS_FOUND.md) — open code-review findings;
   closed entries archived in

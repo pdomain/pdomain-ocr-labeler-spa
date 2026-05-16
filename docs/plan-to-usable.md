@@ -3,10 +3,10 @@
 > **Status:** Active gap analysis — 2026-05-15 (updated).
 > B1/B2/B3/F1/F2/F3/F4/F6 closed. F5 audit doc committed; browser walk TODOs
 > remain for CT to confirm before final M9.5 sign-off.
-> **Authority:** This plan is informed by `PARITY_STATUS.md` §5+§7,
-> `docs/architecture/*`, `specs/16-milestones.md`, and direct reads
-> of the implementation tree. Spec authority is unchanged: items below
-> point at specs; this plan does not invent contract.
+> **Authority:** This plan is informed by `docs/architecture/*`,
+> `specs/16-milestones.md`, and direct reads of the implementation
+> tree. Spec authority is unchanged: items below point at specs; this
+> plan does not invent contract.
 
 ## Context
 
@@ -107,8 +107,6 @@ retiring the legacy `pd-ocr-labeler`:
 
 ## References
 
-- `docs/PARITY_STATUS.md` §5 (outstanding integration gaps) and §7
-  (recommendation: next priorities).
 - `docs/architecture/00-overview.md` — entry-point map.
 - `docs/architecture/02-backend.md`, `09-persistence.md`,
   `04-image-viewport.md` — the three specs the blockers touch.

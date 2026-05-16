@@ -1,7 +1,6 @@
 # M0 Acceptance Gate
 
 Authoritative milestone definition: [`../specs/16-milestones.md`](../specs/16-milestones.md) §M0.
-Implementation tracker: [`ROADMAP.md`](ROADMAP.md).
 
 This document is the single page that says "what does done mean for
 M0, and what's still in the way?" Update it whenever an M0 criterion

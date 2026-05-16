@@ -48,8 +48,8 @@ output for debugging.
 ## Current milestone
 
 M0–M10, M9.1, M9.2, M9.5, and hi-fi follow-ons FO-1–FO-9 are all ✅
-done. See `docs/ROADMAP.md` for full per-milestone detail and
-`docs/PARITY_STATUS.md` for the current shipped-vs-wired snapshot.
+done. Milestone history lives in GitHub milestones and `specs/16-milestones.md`;
+parity tracking moved to GitHub issues (`label:hifi:P1..P5`).
 
 **Path to usable** — see `docs/plan-to-usable.md` for the gap analysis
 between today's tree and "CT opens the SPA, loads a real scanned-book
@@ -70,7 +70,7 @@ end-to-end."
 - Path-to-usable: `docs/plan-to-usable.md` — only the smoke-run row
   and legacy-README banner are still pending.
 
-See `docs/ROADMAP.md` for per-slice history.
+Per-slice history is preserved in git log and GitHub closed milestones.
 
 ## Specs
 
@@ -83,4 +83,4 @@ Milestone acceptance gates: `specs/16-milestones.md`.
 
 - `../pd-book-tools/` — upstream dependency.
 - `../pd-prep-for-pgdp/` — structural reference (FastAPI + React single-wheel pattern).
-- `../pd-ocr-labeler/` — legacy NiceGUI UI being replaced; parity tracked in `docs/PARITY_STATUS.md`.
+- `../pd-ocr-labeler/` — legacy NiceGUI UI being replaced; parity tracked via GitHub issues (`label:hifi:P1..P5`).
