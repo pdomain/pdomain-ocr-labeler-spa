@@ -23,16 +23,12 @@ export interface PageActionsCompactProps {
 export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactProps) {
   const qc = useQueryClient();
 
-  const idx0 = pageIndex;
-
-  const pid = projectId;
-
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const jobProgress = useJobProgress(activeJobId);
 
-  const reloadOcr = useReloadOcr(pid, idx0);
-  const savePage = useSavePage(pid, idx0);
-  const rematchGt = useRematchGt(pid, idx0);
+  const reloadOcr = useReloadOcr(projectId, pageIndex);
+  const savePage = useSavePage(projectId, pageIndex);
+  const rematchGt = useRematchGt(projectId, pageIndex);
 
   const isBusy =
     reloadOcr.isPending ||
@@ -41,31 +37,28 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     (jobProgress !== null && jobProgress.status !== "complete" && jobProgress.status !== "error");
 
   function handleReloadOcr() {
-    if (!projectId) return;
     reloadOcr.mutate(undefined, {
       onSuccess: (data) => {
         if (data?.job_id) setActiveJobId(data.job_id);
       },
       onSettled: () => {
-        void qc.invalidateQueries({ queryKey: ["page", projectId, idx0] });
+        void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
       },
     });
   }
 
   function handleSavePage() {
-    if (!projectId) return;
     savePage.mutate(undefined, {
       onSettled: () => {
-        void qc.invalidateQueries({ queryKey: ["page", projectId, idx0] });
+        void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
       },
     });
   }
 
   function handleRematchGt() {
-    if (!projectId) return;
     rematchGt.mutate(undefined, {
       onSettled: () => {
-        void qc.invalidateQueries({ queryKey: ["page", projectId, idx0] });
+        void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
       },
     });
   }
@@ -129,7 +122,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
         type="button"
         data-testid="page-actions-compact-export"
         aria-label="Export"
-        disabled={!projectId}
+        disabled={disabled}
         onClick={handleExport}
         title="Export (E)"
         className={`${base} ${normal}`}

@@ -9,7 +9,7 @@
 // visually hidden (sr-only) while retaining its driver-contract testid.
 //
 // Behavior:
-//   - Reads `projectId` + `pageNo` from the URL via `useParams`.
+//   - Receives `projectId` + `pageNo` as props (passed from App.tsx AppShell).
 //   - Reads `total_pages` from `useProject(projectId).data.image_paths.length`
 //     (`ProjectResponse` includes a `total_pages` field but `image_paths.length`
 //     is used intentionally for parity with the legacy labeler page-count logic).
