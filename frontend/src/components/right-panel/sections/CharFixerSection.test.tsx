@@ -275,6 +275,11 @@ describe("CharFixerSection — P4.b bbox canvas + handles (Gap 39)", () => {
   });
 
   it("clicking Apply resets the dirty flag (button disables again)", async () => {
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/0/0/char-bboxes", async () =>
+        HttpResponse.json(makePageResponse("ab")),
+      ),
+    );
     const user = userEvent.setup();
     renderSection(makeWord("ab", "ab"));
     const x1 = screen.getByTestId("charfixer-detail-x1") as HTMLInputElement;
@@ -285,6 +290,23 @@ describe("CharFixerSection — P4.b bbox canvas + handles (Gap 39)", () => {
 
     await user.click(apply);
     expect((screen.getByTestId("charfixer-apply") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("clicking Apply POSTs char_bboxes to the backend", async () => {
+    const handler = vi.fn(async () => HttpResponse.json(makePageResponse("ab")));
+    server.use(http.post("/api/projects/p1/pages/0/words/0/0/char-bboxes", handler));
+    const user = userEvent.setup();
+    renderSection(makeWord("ab", "ab"));
+
+    // Dirty the state by editing a coordinate input.
+    const x1 = screen.getByTestId("charfixer-detail-x1") as HTMLInputElement;
+    await user.clear(x1);
+    await user.type(x1, "5");
+
+    // Click Apply — should fire the POST.
+    await user.click(screen.getByTestId("charfixer-apply"));
+
+    await waitFor(() => expect(handler).toHaveBeenCalled());
   });
 
   it("renders no canvas when the word has no OCR text", () => {

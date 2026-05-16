@@ -180,6 +180,12 @@ class WordMatch(BaseModel):
     word_components: list[str] = Field(default_factory=list)
     bbox: BBox
     word_id: str | None = None
+    # Per-character bounding boxes (image-pixel coords) set via the CharFixer
+    # Apply button (POST .../char-bboxes).  ``None`` until the user has
+    # applied char bboxes for this word; empty list means bboxes were cleared.
+    # Persisted in ``word_attributes["{li}_{wi}"]["char_bboxes"]`` in the
+    # saved envelope so they survive page reloads.
+    char_bboxes: list[BBox] | None = None
 
 
 class LineMatch(BaseModel):

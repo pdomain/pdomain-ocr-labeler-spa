@@ -254,3 +254,59 @@ def test_merge_lines_returns_400_page_not_loaded_when_no_page_state(
     # 400 page_not_loaded is the expected response when PageState is absent.
     assert resp.status_code == 400
     assert resp.json()["error"] == "page_not_loaded"
+
+
+# ── char-bboxes: POST .../words/{li}/{wi}/char-bboxes ─────────────────────────
+
+
+def test_char_bboxes_returns_404_when_no_project(bare_client: TestClient) -> None:
+    resp = bare_client.post(
+        "/api/projects/book1/pages/0/words/0/0/char-bboxes",
+        json={"char_bboxes": [{"x": 0, "y": 0, "width": 5, "height": 10}]},
+    )
+    assert resp.status_code == 404
+    assert resp.json()["error"] == "project_not_found"
+
+
+def test_char_bboxes_returns_404_for_bad_page(loaded_client: TestClient) -> None:
+    resp = loaded_client.post(
+        "/api/projects/book1/pages/99/words/0/0/char-bboxes",
+        json={"char_bboxes": [{"x": 0, "y": 0, "width": 5, "height": 10}]},
+    )
+    assert resp.status_code == 404
+    assert resp.json()["error"] == "page_not_found"
+
+
+def test_char_bboxes_returns_400_page_not_loaded_when_no_pagestate(
+    loaded_client: TestClient,
+) -> None:
+    """No PageState seeded → 400 page_not_loaded (page must be OCR'd first)."""
+    resp = loaded_client.post(
+        "/api/projects/book1/pages/0/words/0/0/char-bboxes",
+        json={"char_bboxes": [{"x": 10, "y": 20, "width": 5, "height": 10}]},
+    )
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "page_not_loaded"
+
+
+def test_char_bboxes_rejects_invalid_body_missing_char_bboxes(
+    loaded_client: TestClient,
+) -> None:
+    """Missing char_bboxes field → 400 validation_error."""
+    resp = loaded_client.post(
+        "/api/projects/book1/pages/0/words/0/0/char-bboxes",
+        json={},
+    )
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "validation_error"
+
+
+def test_char_bboxes_accepts_empty_list(loaded_client: TestClient) -> None:
+    """Empty char_bboxes list → 400 page_not_loaded (no PageState seeded, not 422)."""
+    resp = loaded_client.post(
+        "/api/projects/book1/pages/0/words/0/0/char-bboxes",
+        json={"char_bboxes": []},
+    )
+    # No PageState seeded → page_not_loaded (route checks page before shape)
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "page_not_loaded"

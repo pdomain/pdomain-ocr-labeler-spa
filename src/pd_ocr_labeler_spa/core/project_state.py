@@ -116,6 +116,12 @@ class PageState:
     # ``GET /pages/{idx}`` and the spec-23-A ``_page_payload`` helper
     # read ``pstate.selection`` and echo it onto ``PagePayload``.
     selection: Selection = field(default_factory=Selection)
+    # Per-character bbox sidecar — keyed by ``"{line_index}_{word_index}"``.
+    # Written by ``POST .../words/{li}/{wi}/char-bboxes`` and surfaced
+    # onto ``WordMatch.char_bboxes`` in ``_page_payload``.
+    # Persisted into ``word_attributes[key]["char_bboxes"]`` in the
+    # saved envelope so they survive page reloads.
+    char_bboxes_map: dict = field(default_factory=dict)
 
 
 class ProjectState:

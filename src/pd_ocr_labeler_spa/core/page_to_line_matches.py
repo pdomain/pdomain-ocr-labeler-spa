@@ -100,6 +100,7 @@ def _word_to_word_match(
     line_index: int,
     word_obj: Any,
     fuzz_threshold: float = _FUZZ_THRESHOLD,
+    char_bboxes_map: dict[str, list[dict[str, int]]] | None = None,
 ) -> WordMatch | None:
     """Convert one ``pd_book_tools.ocr.word.Word`` to a ``WordMatch``.
 
@@ -108,6 +109,10 @@ def _word_to_word_match(
     fuzz_threshold :
         Passed through to ``_classify_match_status``; sourced from
         ``AppConfig.fuzz_threshold`` by the ``page_to_line_matches`` caller.
+    char_bboxes_map :
+        Optional per-word char-bbox sidecar from ``PageState.char_bboxes_map``,
+        keyed by ``"{line_index}_{word_index}"``.  When present, the matching
+        entry is surfaced onto ``WordMatch.char_bboxes``.
 
     Returns ``None`` on any attribute error so the caller can skip.
     """
@@ -141,6 +146,23 @@ def _word_to_word_match(
             ocr_text, gt_text, word_obj, fuzz_threshold=fuzz_threshold
         )
 
+        # Char-bbox sidecar: look up by composite key.
+        char_bboxes: list[BBox] | None = None
+        if char_bboxes_map is not None:
+            sidecar_key = f"{line_index}_{word_index}"
+            raw_bboxes = char_bboxes_map.get(sidecar_key)
+            if raw_bboxes is not None:
+                char_bboxes = [
+                    BBox(
+                        x=int(b.get("x", 0)),
+                        y=int(b.get("y", 0)),
+                        width=int(b.get("width", 0)),
+                        height=int(b.get("height", 0)),
+                    )
+                    for b in raw_bboxes
+                    if isinstance(b, dict)
+                ]
+
         return WordMatch(
             line_index=line_index,
             word_index=word_index,
@@ -153,6 +175,7 @@ def _word_to_word_match(
             word_components=word_components,
             bbox=bb,
             word_id=None,  # pd_book_tools doesn't expose a stable word-id today
+            char_bboxes=char_bboxes,
         )
     except Exception:
         log.debug("_word_to_word_match: failed for line=%d word=%d", line_index, word_index, exc_info=True)
@@ -213,6 +236,7 @@ def page_to_line_matches(
     image_path: Path,
     source: PageSource = PageSource.OCR,
     fuzz_threshold: float = _FUZZ_THRESHOLD,
+    char_bboxes_map: dict[str, list[dict[str, int]]] | None = None,
 ) -> tuple[PageRecord, list[LineMatch]]:
     """Convert a ``pd_book_tools.ocr.page.Page`` to ``(PageRecord, [LineMatch])``.
 
@@ -235,6 +259,10 @@ def page_to_line_matches(
         ``FUZZY`` rather than ``MISMATCH``.  Callers should read this from
         ``AppConfig.fuzz_threshold`` (default ``0.8`` preserves legacy
         behaviour when no config is available).
+    char_bboxes_map :
+        Optional per-word char-bbox sidecar from ``PageState.char_bboxes_map``,
+        keyed by ``"{line_index}_{word_index}"``.  When provided, matching
+        entries are surfaced onto each ``WordMatch.char_bboxes``.
 
     Returns
     -------
@@ -269,7 +297,13 @@ def page_to_line_matches(
                 words = getattr(line, "words", []) or []
                 word_matches: list[WordMatch] = []
                 for word_idx, word in enumerate(words):
-                    wm = _word_to_word_match(word_idx, line_idx, word, fuzz_threshold=fuzz_threshold)
+                    wm = _word_to_word_match(
+                        word_idx,
+                        line_idx,
+                        word,
+                        fuzz_threshold=fuzz_threshold,
+                        char_bboxes_map=char_bboxes_map,
+                    )
                     if wm is not None:
                         word_matches.append(wm)
 

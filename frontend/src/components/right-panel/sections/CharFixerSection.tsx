@@ -48,7 +48,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/Input";
 import { UnicodePicker } from "../UnicodePicker";
-import { useUpdateWordGroundTruth } from "../../../hooks/useWordMutations";
+import { useUpdateWordGroundTruth, useSetCharBboxes } from "../../../hooks/useWordMutations";
 import type { components } from "../../../api/types";
 import { CharFixerCanvas, initialCharBboxes, type CharRangeBBox } from "./CharFixerCanvas";
 
@@ -108,6 +108,7 @@ function CoordInput({
 
 export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharFixerSectionProps) {
   const updateGt = useUpdateWordGroundTruth(projectId, pageIndex);
+  const charBboxesMutation = useSetCharBboxes(projectId, pageIndex);
 
   const ocrChars = useMemo(() => Array.from(word.ocr_text ?? ""), [word.ocr_text]);
   const gtChars = useMemo(() => Array.from(word.ground_truth_text ?? ""), [word.ground_truth_text]);
@@ -247,9 +248,13 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
   );
 
   function handleApply() {
-    // P4.b is a visual + local-state slice. Persistence of per-char bboxes is
-    // deferred to a future slice (CharRange schema only carries start/end/
-    // styles today). Clearing dirty disables the button again.
+    // POST the current per-char bboxes to the backend so they survive
+    // page reloads (stored in word_attributes sidecar via char-bboxes endpoint).
+    charBboxesMutation.mutate({
+      lineIndex: word.line_index,
+      wordIndex: word.word_index ?? 0,
+      charBboxes: charBboxes.map((r) => r.bbox),
+    });
     setDirty(false);
   }
 

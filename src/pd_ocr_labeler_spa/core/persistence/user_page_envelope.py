@@ -405,7 +405,11 @@ class UserPagePayload:
 
     page: dict[str, Any] = field(default_factory=dict)
     original_page: dict[str, Any] | None = None
-    word_attributes: dict[str, dict[str, bool]] | None = None
+    # Widened from ``dict[str, dict[str, bool]]`` to ``dict[str, dict[str, Any]]``
+    # to accommodate non-bool per-word sidecar data (e.g. ``char_bboxes`` lists).
+    # The legacy attributes (role flags) remain bool-coerced on ``from_dict``;
+    # the ``char_bboxes`` key is preserved verbatim.
+    word_attributes: dict[str, dict[str, Any]] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {"page": self.page}
@@ -424,17 +428,22 @@ class UserPagePayload:
         if original_page_data is not None and not isinstance(original_page_data, dict):
             original_page_data = None
         raw_word_attributes = data.get("word_attributes")
-        word_attributes: dict[str, dict[str, bool]] | None = None
+        word_attributes: dict[str, dict[str, Any]] | None = None
         if isinstance(raw_word_attributes, dict):
-            normalized: dict[str, dict[str, bool]] = {}
+            normalized: dict[str, dict[str, Any]] = {}
             for key, value in raw_word_attributes.items():
                 if not isinstance(key, str) or not isinstance(value, dict):
                     continue
-                coerced: dict[str, bool] = {
-                    str(attr_name): bool(attr_value)
-                    for attr_name, attr_value in value.items()
-                    if isinstance(attr_name, str)
-                }
+                coerced: dict[str, Any] = {}
+                for attr_name, attr_value in value.items():
+                    if not isinstance(attr_name, str):
+                        continue
+                    # ``char_bboxes`` is a list of bbox dicts — preserve verbatim.
+                    # All other per-word attributes are legacy bool flags; coerce.
+                    if attr_name == "char_bboxes":
+                        coerced[attr_name] = attr_value
+                    else:
+                        coerced[attr_name] = bool(attr_value)
                 # Migrate legacy "footnote" key → "right_footnote"
                 # (pre-split files from old pd-ocr-labeler; see legacy
                 # page_operations.py:1263-1273).  When "right_footnote" is
@@ -742,7 +751,7 @@ def build_envelope(
     saved_at: str | None = None,
     saved_by: str = USER_PAGE_SAVED_BY_SAVE_PAGE,
     cached_images: dict[str, str] | None = None,
-    word_attributes: dict[str, dict[str, bool]] | None = None,
+    word_attributes: dict[str, dict[str, Any]] | None = None,
     original_page: dict[str, Any] | None = None,
 ) -> UserPageEnvelope:
     """High-level envelope constructor.

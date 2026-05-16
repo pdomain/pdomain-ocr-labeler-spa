@@ -1169,6 +1169,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/words/{line_index}/{word_index}/char-bboxes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Char Bboxes
+         * @description ``POST .../words/{li}/{wi}/char-bboxes`` — persist CharFixer per-char bboxes.
+         *
+         *     Stores the per-character bounding boxes from the CharFixer Apply button
+         *     into ``PageState.char_bboxes_map`` and the cached-lane envelope's
+         *     ``word_attributes`` dict.
+         *
+         *     Unlike most word mutations this does not touch the ``pd_book_tools``
+         *     ``Page`` object — pd-book-tools has no first-class char-bbox concept.
+         *     The data lives entirely in the SPA sidecar layer.
+         */
+        post: operations["set_char_bboxes_api_projects__project_id__pages__page_index__words__line_index___word_index__char_bboxes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/pages/{page_index}/lines/{line_index}/copy-gt-to-ocr": {
         parameters: {
             query?: never;
@@ -2920,6 +2948,29 @@ export interface components {
             auto_rotate_method: "gt-best-match" | "layout" | "auto";
         };
         /**
+         * SetCharBboxesRequest
+         * @description ``POST .../words/{li}/{wi}/char-bboxes`` body — CharFixer Apply.
+         *
+         *     Replaces all per-character bounding-box annotations for the given word
+         *     with *char_bboxes* (one ``BBox`` per character, in image-pixel coords).
+         *
+         *     The bboxes are stored in two places:
+         *
+         *     1. ``pstate.char_bboxes_map["{li}_{wi}"]`` — the in-memory sidecar on
+         *        ``PageState``, keyed by the composite ``line_index_word_index`` string.
+         *        This is surfaced onto ``WordMatch.char_bboxes`` at payload-build time
+         *        so the frontend sees the stored bboxes immediately.
+         *
+         *     2. ``pstate``'s envelope ``word_attributes["{li}_{wi}"]["char_bboxes"]`` —
+         *        written to the cached-lane envelope via the standard best-effort write,
+         *        so the values survive a page reload.  On reload, ``from_dict`` deserialises
+         *        the list verbatim (the ``char_bboxes`` key is exempted from bool coercion).
+         */
+        SetCharBboxesRequest: {
+            /** Char Bboxes */
+            char_bboxes: components["schemas"]["BBox"][];
+        };
+        /**
          * SetCharRangesRequest
          * @description ``POST .../words/{li}/{wi}/char-ranges`` body — FO-2.
          *
@@ -3189,6 +3240,8 @@ export interface components {
             bbox: components["schemas"]["BBox"];
             /** Word Id */
             word_id?: string | null;
+            /** Char Bboxes */
+            char_bboxes?: components["schemas"]["BBox"][] | null;
         };
     };
     responses: never;
@@ -4469,6 +4522,44 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SetCharRangesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_char_bboxes_api_projects__project_id__pages__page_index__words__line_index___word_index__char_bboxes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                line_index: number;
+                word_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetCharBboxesRequest"];
             };
         };
         responses: {

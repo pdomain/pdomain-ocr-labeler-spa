@@ -309,6 +309,34 @@ export function useErasePixels(projectId: string, pageIndex: number) {
   });
 }
 
+// ─── useSetCharBboxes ─────────────────────────────────────────────────────────
+
+/**
+ * Persist per-character bounding boxes for a word (CharFixer Apply button).
+ *
+ * Stores the bboxes in the SPA's word-attributes sidecar so they survive
+ * page reloads.  The response is a full ``PagePayload`` that includes the
+ * updated ``WordMatch.char_bboxes`` for the affected word.
+ *
+ * Endpoint: ``POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/char-bboxes``
+ */
+export function useSetCharBboxes(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<
+    PagePayload,
+    Error,
+    { lineIndex: number; wordIndex: number; charBboxes: BBox[] }
+  >({
+    mutationFn: ({ lineIndex, wordIndex, charBboxes }) =>
+      apiPost<PagePayload>(`${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/char-bboxes`, {
+        char_bboxes: charBboxes,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
 // ─── useAdjustWordGap (P3.d stub) ─────────────────────────────────────────────
 
 /**

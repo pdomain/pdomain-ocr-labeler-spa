@@ -1182,6 +1182,90 @@ def set_char_ranges(
     )
 
 
+# ── Char-bboxes endpoint ──────────────────────────────────────────────
+
+
+class SetCharBboxesRequest(BaseModel):
+    """``POST .../words/{li}/{wi}/char-bboxes`` body — CharFixer Apply.
+
+    Replaces all per-character bounding-box annotations for the given word
+    with *char_bboxes* (one ``BBox`` per character, in image-pixel coords).
+
+    The bboxes are stored in two places:
+
+    1. ``pstate.char_bboxes_map["{li}_{wi}"]`` — the in-memory sidecar on
+       ``PageState``, keyed by the composite ``line_index_word_index`` string.
+       This is surfaced onto ``WordMatch.char_bboxes`` at payload-build time
+       so the frontend sees the stored bboxes immediately.
+
+    2. ``pstate``'s envelope ``word_attributes["{li}_{wi}"]["char_bboxes"]`` —
+       written to the cached-lane envelope via the standard best-effort write,
+       so the values survive a page reload.  On reload, ``from_dict`` deserialises
+       the list verbatim (the ``char_bboxes`` key is exempted from bool coercion).
+    """
+
+    char_bboxes: list[BBox]
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/words/{line_index}/{word_index}/char-bboxes",
+    response_model=PagePayload,
+)
+def set_char_bboxes(
+    project_id: str,
+    page_index: int,
+    line_index: int,
+    word_index: int,
+    body: SetCharBboxesRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+) -> JSONResponse:
+    """``POST .../words/{li}/{wi}/char-bboxes`` — persist CharFixer per-char bboxes.
+
+    Stores the per-character bounding boxes from the CharFixer Apply button
+    into ``PageState.char_bboxes_map`` and the cached-lane envelope's
+    ``word_attributes`` dict.
+
+    Unlike most word mutations this does not touch the ``pd_book_tools``
+    ``Page`` object — pd-book-tools has no first-class char-bbox concept.
+    The data lives entirely in the SPA sidecar layer.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    # Composite sidecar key — stable as long as the page is not re-OCR'd.
+    sidecar_key = f"{line_index}_{word_index}"
+    bbox_dicts = [{"x": b.x, "y": b.y, "width": b.width, "height": b.height} for b in body.char_bboxes]
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        # Write into the in-memory sidecar on PageState.
+        pstate.char_bboxes_map[sidecar_key] = bbox_dicts
+
+        pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+    )
+
+
 def install_words_router(app) -> None:  # type: ignore[no-untyped-def]
     """Register the words router. Called from ``bootstrap.build_app``."""
     app.include_router(router)
@@ -1196,6 +1280,7 @@ __all__ = [
     "MergeWordsRequest",
     "NudgeBboxRequest",
     "ReboxWordRequest",
+    "SetCharBboxesRequest",
     "SetCharRangesRequest",
     "SplitWordRequest",
     "ToggleValidatedRequest",
