@@ -57,11 +57,14 @@ function buildCanvasColors() {
   const accent = readCssToken("--accent", "#d6925a");
   const bgSunk = readCssToken("--bg-sunk", "#08080c");
   const ink1 = readCssToken("--ink-1", "#f0f0f2");
+  const ocr = readCssToken("--status-ocr", "#5d9fdf");
   return {
     bboxStroke: accent,
     bboxFill: hexToRgba(accent, 0.12),
     handleFill: bgSunk,
     handleStroke: ink1,
+    ghostFill: hexToRgba(ocr, 0.15),
+    ghostStroke: hexToRgba(ocr, 0.5),
   };
 }
 
@@ -259,6 +262,18 @@ export function ReboxCanvas({
     [bbox, onChange, toImage],
   );
 
+  // ── Ghost bbox — shown when draft differs from original ──────────────────
+  const showGhost =
+    bbox.x !== originalBbox.x ||
+    bbox.y !== originalBbox.y ||
+    bbox.width !== originalBbox.width ||
+    bbox.height !== originalBbox.height;
+  const ghostTL = toCanvas(originalBbox.x, originalBbox.y);
+  const ghostBR = toCanvas(
+    originalBbox.x + originalBbox.width,
+    originalBbox.y + originalBbox.height,
+  );
+
   // ── Render ──────────────────────────────────────────────────────────────
   const renderBbox = drawing ?? bbox;
   const tl = toCanvas(renderBbox.x, renderBbox.y);
@@ -295,6 +310,23 @@ export function ReboxCanvas({
           />
         </Layer>
         <Layer>
+          {/* Ghost bbox — original position shown faintly when draft differs. */}
+          {showGhost && (
+            <Rect
+              data-testid="rebox-ghost"
+              x={ghostTL.x}
+              y={ghostTL.y}
+              width={Math.abs(ghostBR.x - ghostTL.x)}
+              height={Math.abs(ghostBR.y - ghostTL.y)}
+              fill={canvasColors.ghostFill}
+              stroke={canvasColors.ghostStroke}
+              strokeWidth={1}
+              dash={[4, 3]}
+              listening={false}
+            />
+          )}
+        </Layer>
+        <Layer>
           {/* Active bbox overlay. */}
           <Rect
             data-testid="rebox-bbox"
@@ -307,8 +339,9 @@ export function ReboxCanvas({
             fill={canvasColors.bboxFill}
             dash={drawing ? [4, 2] : undefined}
           />
-          {/* Drag handles — only when not in the middle of drawing. */}
-          {!drawing &&
+          {/* Drag handles — only in snap mode and not mid-draw. */}
+          {tool === "snap" &&
+            !drawing &&
             HANDLES.map((h) => {
               const c = h.centre(bbox);
               const can = toCanvas(c.x, c.y);
