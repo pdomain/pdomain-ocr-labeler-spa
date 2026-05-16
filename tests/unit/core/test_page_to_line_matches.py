@@ -78,9 +78,15 @@ class _StubParagraph:
 
 
 @dataclass
+class _StubBlock:
+    paragraphs: list[_StubParagraph] = field(default_factory=list)
+
+
+@dataclass
 class _StubPage:
     lines_: list[_StubLine] = field(default_factory=list)
     paragraphs_: list[_StubParagraph] = field(default_factory=list)
+    items_: list[_StubBlock] = field(default_factory=list)
 
     @property
     def lines(self) -> list[_StubLine]:
@@ -89,6 +95,10 @@ class _StubPage:
     @property
     def paragraphs(self) -> list[_StubParagraph]:
         return self.paragraphs_
+
+    @property
+    def items(self) -> list[_StubBlock]:
+        return self.items_
 
 
 _IMAGE = Path("/tmp/test.png")
@@ -335,3 +345,55 @@ def test_fuzz_threshold_app_config_field() -> None:
     # Round-trip through model_dump / dict load (simulating YAML parse).
     cfg_from_dict = AppConfig(**{"fuzz_threshold": 0.9})
     assert cfg_from_dict.fuzz_threshold == 0.9
+
+
+# ── block_index round-trip (FO-7 / CU-4.1) ─────────────────────────────
+
+
+def test_line_match_carries_block_index() -> None:
+    """Each LineMatch must carry the block_index of its parent layout block.
+
+    FO-7: ``page.items`` exposes the block layer (list of blocks, each with
+    ``.paragraphs`` → ``.lines``).  ``page_to_line_matches`` must tag each
+    produced ``LineMatch`` with the 0-based index of the block that contains
+    the underlying line object.
+    """
+    word_a = _StubWord(text="a", ground_truth_text="a")
+    word_b = _StubWord(text="b", ground_truth_text="b")
+    word_c = _StubWord(text="c", ground_truth_text="c")
+
+    line_a = _StubLine(words=[word_a])
+    line_b = _StubLine(words=[word_b])
+    line_c = _StubLine(words=[word_c])
+
+    para0 = _StubParagraph(lines=[line_a])
+    para1 = _StubParagraph(lines=[line_b, line_c])
+
+    # Block 0 → para0 → line_a
+    # Block 1 → para1 → line_b, line_c
+    block0 = _StubBlock(paragraphs=[para0])
+    block1 = _StubBlock(paragraphs=[para1])
+
+    page = _StubPage(
+        lines_=[line_a, line_b, line_c],
+        paragraphs_=[para0, para1],
+        items_=[block0, block1],
+    )
+
+    _, lms = page_to_line_matches(page, 0, _IMAGE)
+
+    assert len(lms) == 3
+    assert [lm.block_index for lm in lms] == [0, 1, 1]
+
+
+def test_line_match_block_index_none_when_no_items() -> None:
+    """When page has no ``.items`` attribute, block_index stays None on all LineMatches."""
+    word = _StubWord(text="x", ground_truth_text="x")
+    line = _StubLine(words=[word])
+    # _StubPage with no items_ (empty) — items property returns []
+    page = _StubPage(lines_=[line])
+
+    _, lms = page_to_line_matches(page, 0, _IMAGE)
+
+    assert len(lms) == 1
+    assert lms[0].block_index is None

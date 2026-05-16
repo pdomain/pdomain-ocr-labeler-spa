@@ -254,6 +254,30 @@ def _build_line_to_paragraph_lookup(page: Any) -> dict[int, int]:
     return result
 
 
+def _build_line_to_block_lookup(page: Any) -> dict[int, int]:
+    """Return ``{id(line_obj): block_index}`` for all lines in *page*.
+
+    FO-7: ``pd_book_tools`` exposes blocks via ``page.items`` (list of
+    ``Block`` objects, each with ``.paragraphs`` → ``.lines``).  The SPA
+    surfaces block_index onto each ``LineMatch`` so the frontend can group
+    lines by their top-level layout block for navigation.
+
+    Falls back gracefully when the page object does not expose an ``items``
+    attribute — returns an empty dict, leaving ``block_index`` as ``None``
+    on every ``LineMatch`` (pre-FO-7 no-op behaviour).
+    """
+    result: dict[int, int] = {}
+    try:
+        blocks = getattr(page, "items", None) or []
+        for block_idx, block in enumerate(blocks):
+            for para in getattr(block, "paragraphs", []) or []:
+                for line in getattr(para, "lines", []) or []:
+                    result[id(line)] = block_idx
+    except Exception:  # pragma: no cover - defensive
+        log.debug("_build_line_to_block_lookup: failed", exc_info=True)
+    return result
+
+
 def page_to_line_matches(
     page: Any,
     page_index: int,
@@ -320,6 +344,7 @@ def page_to_line_matches(
             return record, []
 
         para_lookup = _build_line_to_paragraph_lookup(page)
+        block_lookup = _build_line_to_block_lookup(page)
 
         for line_idx, line in enumerate(lines):
             try:
@@ -369,6 +394,7 @@ def page_to_line_matches(
                 lm = LineMatch(
                     line_index=line_idx,
                     paragraph_index=para_lookup.get(id(line)),
+                    block_index=block_lookup.get(id(line)),
                     ocr_line_text=getattr(line, "text", "") or "",
                     ground_truth_line_text=getattr(line, "ground_truth_text", "") or "",
                     word_matches=word_matches,

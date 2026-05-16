@@ -283,3 +283,137 @@ describe("Hierarchy (Slice 12 + P5.c)", () => {
     expect(selectionStore.getState().level).toBe("word");
   });
 });
+
+// ── FO-7 / CU-4.3: block-layer rendering ─────────────────────────────────────
+
+function makePageWithBlocks(): PagePayload {
+  return {
+    project_id: "p1",
+    page_index: 0,
+    line_filter: "all",
+    generation: 0,
+    line_matches: [
+      // Block 0: para 0, line 0
+      {
+        line_index: 0,
+        paragraph_index: 0,
+        block_index: 0,
+        ocr_line_text: "alpha",
+        ground_truth_line_text: "alpha",
+        word_matches: [],
+        overall_match_status: "exact",
+        exact_count: 0,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+        validated_word_count: 0,
+        total_word_count: 0,
+        is_fully_validated: true,
+      },
+      // Block 1: para 1, lines 1 + 2
+      {
+        line_index: 1,
+        paragraph_index: 1,
+        block_index: 1,
+        ocr_line_text: "beta",
+        ground_truth_line_text: "beta",
+        word_matches: [],
+        overall_match_status: "exact",
+        exact_count: 0,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+        validated_word_count: 0,
+        total_word_count: 0,
+        is_fully_validated: true,
+      },
+      {
+        line_index: 2,
+        paragraph_index: 1,
+        block_index: 1,
+        ocr_line_text: "gamma",
+        ground_truth_line_text: "gamma",
+        word_matches: [],
+        overall_match_status: "exact",
+        exact_count: 0,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+        validated_word_count: 0,
+        total_word_count: 0,
+        is_fully_validated: true,
+      },
+    ],
+  };
+}
+
+describe("Hierarchy — block layer (FO-7 / CU-4.3)", () => {
+  beforeEach(() => {
+    selectionStore.setState({
+      selectedParagraphs: [],
+      selectedLines: [],
+      selectedWords: [],
+      dragRect: null,
+    });
+  });
+
+  it("renders block nodes when block_index is present", () => {
+    render(<Hierarchy page={makePageWithBlocks()} />);
+    expect(screen.getByTestId("hierarchy-node-block-0")).toBeInTheDocument();
+    expect(screen.getByTestId("hierarchy-node-block-1")).toBeInTheDocument();
+  });
+
+  it("block nodes have data-kind=block", () => {
+    render(<Hierarchy page={makePageWithBlocks()} />);
+    expect(screen.getByTestId("hierarchy-node-block-0")).toHaveAttribute("data-kind", "block");
+  });
+
+  it("block nodes have a layer-color square", () => {
+    render(<Hierarchy page={makePageWithBlocks()} />);
+    expect(screen.getByTestId("hierarchy-color-block-0")).toBeInTheDocument();
+    expect(screen.getByTestId("hierarchy-color-block-1")).toBeInTheDocument();
+  });
+
+  it("does not render block nodes when no block_index on page", () => {
+    render(<Hierarchy page={makePage()} />);
+    expect(screen.queryByTestId("hierarchy-node-block-0")).not.toBeInTheDocument();
+  });
+
+  it("expanding a block node reveals its paragraph children", async () => {
+    const user = userEvent.setup();
+    render(<Hierarchy page={makePageWithBlocks()} />);
+    // Para nodes should not be visible until block is expanded
+    expect(screen.queryByTestId("hierarchy-node-para-0")).not.toBeInTheDocument();
+    // Expand block-0 via ArrowRight
+    const blockNode = screen.getByTestId("hierarchy-node-block-0");
+    await user.click(blockNode);
+    fireEvent.keyDown(blockNode, { key: "ArrowRight" });
+    expect(screen.getByTestId("hierarchy-node-para-0")).toBeInTheDocument();
+  });
+
+  it("clicking a block node sets level=block on selectionStore", async () => {
+    const user = userEvent.setup();
+    render(<Hierarchy page={makePageWithBlocks()} />);
+    await user.click(screen.getByTestId("hierarchy-node-block-0"));
+    expect(selectionStore.getState().level).toBe("block");
+    expect(selectionStore.getState().path.blockId).toBe("0");
+  });
+
+  it("block filter pill is visible when block layer is active", () => {
+    render(<Hierarchy page={makePageWithBlocks()} />);
+    expect(screen.getByTestId("hierarchy-filter-block")).toBeInTheDocument();
+  });
+
+  it("block filter pill is absent when no block layer", () => {
+    render(<Hierarchy page={makePage()} />);
+    expect(screen.queryByTestId("hierarchy-filter-block")).not.toBeInTheDocument();
+  });
+
+  it("node count shows 2 blocks without expanding", () => {
+    render(<Hierarchy page={makePageWithBlocks()} />);
+    expect(screen.getByTestId("hierarchy-node-count")).toHaveTextContent("2");
+  });
+});

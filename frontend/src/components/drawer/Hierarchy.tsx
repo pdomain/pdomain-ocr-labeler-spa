@@ -6,19 +6,21 @@
 // kind. A node-count badge shows total visible nodes.
 //
 // Builds a tree from PagePayload.line_matches:
-//   paragraph groups → lines → words
+//   blocks (when block_index is present) → paragraphs → lines → words
+//   paragraphs (fallback when no block_index) → lines → words
 //
 // Each node has a 6px layer-color square + text label.
 // Click → updates selection-store.
 // Keyboard: Up/Down navigate; Left/Right collapse/expand branch nodes.
 //
-// Note: the PagePayload has no explicit block layer; we render paragraphs as
-// top-level tree nodes (with lines as children and words as leaf nodes).
-// A future PagePayload expansion may add block_index to expose true blocks.
+// FO-7 / CU-4.3: when any LineMatch carries a numeric block_index, block nodes
+// are rendered as the top level of the tree. When no LineMatch carries a
+// block_index (pre-FO-7 payload), paragraphs remain the top level (backward
+// compatible).
 
 import { useCallback, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { selectLine, selectPara, selectWord } from "../../stores/selection-store";
+import { selectBlock, selectLine, selectPara, selectWord } from "../../stores/selection-store";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -27,7 +29,8 @@ type WordMatch = components["schemas"]["WordMatch"];
 
 // ─── Layer color squares (6px, matches CSS token names) ──────────────────────
 
-const LAYER_DOT_CLASS: Record<"para" | "line" | "word", string> = {
+const LAYER_DOT_CLASS: Record<"block" | "para" | "line" | "word", string> = {
+  block: "bg-layer-block",
   para: "bg-layer-para",
   line: "bg-layer-line",
   word: "bg-layer-word",
@@ -35,19 +38,21 @@ const LAYER_DOT_CLASS: Record<"para" | "line" | "word", string> = {
 
 // ─── Kind chip (P5.c) ─────────────────────────────────────────────────────────
 
-const KIND_CHIP_CLASS: Record<"para" | "line" | "word", string> = {
+const KIND_CHIP_CLASS: Record<"block" | "para" | "line" | "word", string> = {
+  block: "bg-layer-block/20 text-layer-block border-layer-block/40",
   para: "bg-layer-para/20 text-layer-para border-layer-para/40",
   line: "bg-layer-line/20 text-layer-line border-layer-line/40",
   word: "bg-layer-word/20 text-layer-word border-layer-word/40",
 };
 
-const KIND_LABELS: Record<"para" | "line" | "word", string> = {
+const KIND_LABELS: Record<"block" | "para" | "line" | "word", string> = {
+  block: "B",
   para: "¶",
   line: "L",
   word: "W",
 };
 
-function KindChip({ kind }: { kind: "para" | "line" | "word" }) {
+function KindChip({ kind }: { kind: "block" | "para" | "line" | "word" }) {
   return (
     <span
       className={cn(
@@ -83,15 +88,32 @@ interface ParaNode {
   children: LineNode[];
 }
 
-type TreeNode = ParaNode | LineNode | WordNode;
+/** FO-7 / CU-4.3: top-level block node, rendered when block_index is present. */
+interface BlockNode {
+  kind: "block";
+  blockIndex: number;
+  label: string;
+  children: ParaNode[];
+}
+
+type TreeNode = BlockNode | ParaNode | LineNode | WordNode;
 
 // ─── Build tree from PagePayload ─────────────────────────────────────────────
 
-function buildTree(page: PagePayload): ParaNode[] {
+/**
+ * True when at least one LineMatch carries a numeric block_index.
+ * Used to decide whether to render the block layer.
+ */
+function hasBlockLayer(page: PagePayload): boolean {
+  return (page.line_matches ?? []).some((lm) => typeof lm.block_index === "number");
+}
+
+/** Build para nodes from a flat list of LineMatches (para → line → word). */
+function buildParaNodes(lines: LineMatch[]): ParaNode[] {
   const paraMap = new Map<number, LineMatch[]>();
   const nullParaLines: LineMatch[] = [];
 
-  for (const lm of page.line_matches ?? []) {
+  for (const lm of lines) {
     if (lm.paragraph_index === null || lm.paragraph_index === undefined) {
       nullParaLines.push(lm);
     } else {
@@ -102,19 +124,16 @@ function buildTree(page: PagePayload): ParaNode[] {
   }
 
   const paras: ParaNode[] = [];
-
-  // Sorted paragraph indices
   const sortedKeys = Array.from(paraMap.keys()).sort((a, b) => a - b);
   for (const paraIdx of sortedKeys) {
-    const lines = paraMap.get(paraIdx)!;
+    const paraLines = paraMap.get(paraIdx)!;
     paras.push({
       kind: "para",
       paraIndex: paraIdx,
       label: `Para ${paraIdx + 1}`,
-      children: buildLineNodes(lines),
+      children: buildLineNodes(paraLines),
     });
   }
-
   if (nullParaLines.length > 0) {
     paras.push({
       kind: "para",
@@ -123,8 +142,57 @@ function buildTree(page: PagePayload): ParaNode[] {
       children: buildLineNodes(nullParaLines),
     });
   }
-
   return paras;
+}
+
+/**
+ * Build the top-level block tree (FO-7 / CU-4.3).
+ *
+ * Groups LineMatches by their block_index, then builds para → line → word
+ * subtrees within each block. Lines with a null block_index are placed in
+ * a synthetic "Unsorted" block at the end.
+ */
+function buildBlockTree(page: PagePayload): BlockNode[] {
+  const blockMap = new Map<number, LineMatch[]>();
+  const nullBlockLines: LineMatch[] = [];
+
+  for (const lm of page.line_matches ?? []) {
+    if (typeof lm.block_index === "number") {
+      const existing = blockMap.get(lm.block_index) ?? [];
+      existing.push(lm);
+      blockMap.set(lm.block_index, existing);
+    } else {
+      nullBlockLines.push(lm);
+    }
+  }
+
+  const blocks: BlockNode[] = [];
+  const sortedKeys = Array.from(blockMap.keys()).sort((a, b) => a - b);
+  for (const blockIdx of sortedKeys) {
+    const blockLines = blockMap.get(blockIdx)!;
+    blocks.push({
+      kind: "block",
+      blockIndex: blockIdx,
+      label: `Block ${blockIdx + 1}`,
+      children: buildParaNodes(blockLines),
+    });
+  }
+  if (nullBlockLines.length > 0) {
+    // Synthesize a block index beyond the last real one for unsorted lines.
+    const syntheticIdx = sortedKeys.length > 0 ? sortedKeys[sortedKeys.length - 1] + 1 : 0;
+    blocks.push({
+      kind: "block",
+      blockIndex: syntheticIdx,
+      label: "Unsorted",
+      children: buildParaNodes(nullBlockLines),
+    });
+  }
+  return blocks;
+}
+
+/** Build the para-rooted tree (legacy / no-block-layer path). */
+function buildTree(page: PagePayload): ParaNode[] {
+  return buildParaNodes(page.line_matches ?? []);
 }
 
 function buildLineNodes(lines: LineMatch[]): LineNode[] {
@@ -160,36 +228,64 @@ interface FlatNode {
   hasChildren: boolean;
 }
 
-function flattenTree(paras: ParaNode[], expanded: Set<string>): FlatNode[] {
+function flattenParas(paras: ParaNode[], expanded: Set<string>, baseDepth: number): FlatNode[] {
   const result: FlatNode[] = [];
-
   for (const para of paras) {
     const paraId = `para-${para.paraIndex ?? "null"}`;
     const paraExpanded = expanded.has(paraId);
-    result.push({ id: paraId, depth: 0, node: para, hasChildren: para.children.length > 0 });
+    result.push({
+      id: paraId,
+      depth: baseDepth,
+      node: para,
+      hasChildren: para.children.length > 0,
+    });
 
     if (paraExpanded) {
       for (const line of para.children) {
         const lineId = `line-${line.lineIndex}`;
         const lineExpanded = expanded.has(lineId);
-        result.push({ id: lineId, depth: 1, node: line, hasChildren: line.children.length > 0 });
+        result.push({
+          id: lineId,
+          depth: baseDepth + 1,
+          node: line,
+          hasChildren: line.children.length > 0,
+        });
 
         if (lineExpanded) {
           for (const word of line.children) {
             const wordId = `word-${word.lineIndex}-${word.wordIndex}`;
-            result.push({ id: wordId, depth: 2, node: word, hasChildren: false });
+            result.push({ id: wordId, depth: baseDepth + 2, node: word, hasChildren: false });
           }
         }
       }
     }
   }
-
   return result;
+}
+
+/** Flatten a block-rooted tree (block → para → line → word). */
+function flattenBlocks(blocks: BlockNode[], expanded: Set<string>): FlatNode[] {
+  const result: FlatNode[] = [];
+  for (const block of blocks) {
+    const blockId = `block-${block.blockIndex}`;
+    const blockExpanded = expanded.has(blockId);
+    result.push({ id: blockId, depth: 0, node: block, hasChildren: block.children.length > 0 });
+
+    if (blockExpanded) {
+      result.push(...flattenParas(block.children, expanded, 1));
+    }
+  }
+  return result;
+}
+
+/** Flatten a para-rooted tree (legacy / no-block-layer path). */
+function flattenTree(paras: ParaNode[], expanded: Set<string>): FlatNode[] {
+  return flattenParas(paras, expanded, 0);
 }
 
 // ─── Kind filter (P5.c) ───────────────────────────────────────────────────────
 
-type KindFilter = "all" | "para" | "line" | "word";
+type KindFilter = "all" | "block" | "para" | "line" | "word";
 
 interface KindFilterPillProps {
   label: string;
@@ -208,11 +304,13 @@ function KindFilterPill({ label, kind, active, onClick, testid }: KindFilterPill
       : active
         ? cn(
             "border",
-            kind === "para"
-              ? "bg-layer-para/30 text-layer-para border-layer-para/60"
-              : kind === "line"
-                ? "bg-layer-line/30 text-layer-line border-layer-line/60"
-                : "bg-layer-word/30 text-layer-word border-layer-word/60",
+            kind === "block"
+              ? "bg-layer-block/30 text-layer-block border-layer-block/60"
+              : kind === "para"
+                ? "bg-layer-para/30 text-layer-para border-layer-para/60"
+                : kind === "line"
+                  ? "bg-layer-line/30 text-layer-line border-layer-line/60"
+                  : "bg-layer-word/30 text-layer-word border-layer-word/60",
           )
         : "bg-bg-raised text-ink-2 border-border-2";
 
@@ -250,11 +348,21 @@ interface NodeRowProps {
 
 function NodeRow({ flatNode, isSelected, isExpanded, onSelect, onToggle }: NodeRowProps) {
   const { id, depth, node, hasChildren } = flatNode;
-  const layerKey = node.kind === "para" ? "para" : node.kind === "line" ? "line" : "word";
+  const layerKey: "block" | "para" | "line" | "word" =
+    node.kind === "block"
+      ? "block"
+      : node.kind === "para"
+        ? "para"
+        : node.kind === "line"
+          ? "line"
+          : "word";
 
   let label = "";
   let monoId = "";
-  if (node.kind === "para") {
+  if (node.kind === "block") {
+    label = node.label;
+    monoId = `B-${node.blockIndex + 1}`;
+  } else if (node.kind === "para") {
     label = node.label;
     monoId = node.paraIndex !== null ? `P-${node.paraIndex + 1}` : "P-?";
   } else if (node.kind === "line") {
@@ -328,8 +436,14 @@ export function Hierarchy({ page }: HierarchyProps) {
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const paras = page ? buildTree(page) : [];
-  const flatAll = flattenTree(paras, expanded);
+  // FO-7 / CU-4.3: use block tree when block_index is populated, else fall
+  // back to para-rooted tree for backward compatibility.
+  const useBlocks = page ? hasBlockLayer(page) : false;
+  const flatAll = page
+    ? useBlocks
+      ? flattenBlocks(buildBlockTree(page), expanded)
+      : flattenTree(buildTree(page), expanded)
+    : [];
   const flat = filterByKind(flatAll, kindFilter);
 
   // Total visible node count (P5.c)
@@ -350,7 +464,9 @@ export function Hierarchy({ page }: HierarchyProps) {
   const handleSelect = useCallback((id: string, node: TreeNode) => {
     setSelectedId(id);
     // Update selection-store using canonical helpers so level+path are set atomically.
-    if (node.kind === "line") {
+    if (node.kind === "block") {
+      selectBlock(String(node.blockIndex));
+    } else if (node.kind === "line") {
       selectLine(node.lineIndex);
     } else if (node.kind === "word") {
       selectWord(node.lineIndex, node.wordIndex);
@@ -388,6 +504,15 @@ export function Hierarchy({ page }: HierarchyProps) {
           active={kindFilter === "all"}
           onClick={() => setKindFilter("all")}
         />
+        {useBlocks && (
+          <KindFilterPill
+            testid="hierarchy-filter-block"
+            label="B Block"
+            kind="block"
+            active={kindFilter === "block"}
+            onClick={() => setKindFilter("block")}
+          />
+        )}
         <KindFilterPill
           testid="hierarchy-filter-para"
           label="¶ Para"
@@ -426,7 +551,7 @@ export function Hierarchy({ page }: HierarchyProps) {
         className="flex-1 overflow-y-auto py-1"
         onKeyDown={handleKeyDown}
       >
-        {paras.length === 0 ? (
+        {flatAll.length === 0 ? (
           <div className="text-ink-3 text-[11px] p-3 text-center">No page data</div>
         ) : (
           flat.map((fn) => (
