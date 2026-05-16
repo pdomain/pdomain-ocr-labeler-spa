@@ -1321,6 +1321,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/lines/{line_index}/set-gt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Line Gt
+         * @description ``POST .../lines/{li}/set-gt`` — set line GT by distributing tokens.
+         *
+         *     Splits ``body.text`` on whitespace; assigns each token to the
+         *     corresponding word in the line left-to-right. Excess tokens
+         *     (more tokens than words) are concatenated with a space onto the
+         *     last word. Words with no corresponding token receive empty-string GT.
+         */
+        post: operations["set_line_gt_api_projects__project_id__pages__page_index__lines__line_index__set_gt_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/pages/{page_index}/lines/merge": {
         parameters: {
             query?: never;
@@ -2115,6 +2140,16 @@ export interface components {
         /**
          * ErasePixelsRequest
          * @description Spec §2 lines 330-332.
+         *
+         *     ``shape`` controls how the fill is applied within the bbox:
+         *
+         *     - ``"rect"`` (default): solid rectangle fill, matching the original
+         *       legacy-labeler behaviour
+         *       (``pd_ocr_labeler/state/page_state.py:1802``).
+         *     - ``"circle"``: filled ellipse inscribed within the bbox, drawn via
+         *       ``cv2.ellipse`` with a numpy mask.  Use this for brush ops so that
+         *       the corners of the bounding square are **not** erased — only the
+         *       circular region the user actually painted.
          */
         ErasePixelsRequest: {
             bbox: components["schemas"]["BBox"];
@@ -2125,12 +2160,10 @@ export interface components {
             fill_value: number;
             /**
              * Shape
-             * Controls fill shape: "rect" = solid rectangle (default); "circle" = filled
-             * ellipse inscribed within the bbox, used for brush ops so that corners are
-             * not erased.
-             * @default "rect"
+             * @default rect
+             * @enum {string}
              */
-            shape?: "rect" | "circle";
+            shape: "rect" | "circle";
         };
         /**
          * ExportRequest
@@ -3004,6 +3037,20 @@ export interface components {
         SetCurrentPageIndexRequest: {
             /** Page Index */
             page_index: number;
+        };
+        /**
+         * SetLineGtRequest
+         * @description ``POST .../lines/{li}/set-gt`` body.
+         *
+         *     Splits ``text`` by whitespace and distributes tokens to the line's
+         *     words left-to-right. Excess tokens are concatenated onto the last
+         *     word with a space separator; words with no corresponding token
+         *     receive empty-string GT. Forbidden codepoints (ligatures, long-s)
+         *     are rejected with 422.
+         */
+        SetLineGtRequest: {
+            /** Text */
+            text: string;
         };
         /**
          * SetOCRModelsRequest
@@ -4753,6 +4800,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SplitLineAfterWordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_line_gt_api_projects__project_id__pages__page_index__lines__line_index__set_gt_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                line_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetLineGtRequest"];
             };
         };
         responses: {

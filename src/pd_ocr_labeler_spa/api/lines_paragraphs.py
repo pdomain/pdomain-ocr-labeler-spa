@@ -102,6 +102,7 @@ from .dependencies import get_job_runner, get_project_state, get_settings
 from .middleware.error_handler import ApiError
 from .pages import PagePayload
 from .words import (
+    _GT_FORBIDDEN_CODEPOINTS,
     _page_not_loaded,
     _refresh_payload_response,
     _resolve_page_object,
@@ -279,6 +280,30 @@ class RefineBatchRequest(BaseModel):
     line_indices: list[int] = []
     mode: Literal["refine", "expand_then_refine", "expand_only"] = "refine"
     padding_px: int = 2
+
+
+class SetLineGtRequest(BaseModel):
+    """``POST .../lines/{li}/set-gt`` body.
+
+    Splits ``text`` by whitespace and distributes tokens to the line's
+    words left-to-right. Excess tokens are concatenated onto the last
+    word with a space separator; words with no corresponding token
+    receive empty-string GT. Forbidden codepoints (ligatures, long-s)
+    are rejected with 422.
+    """
+
+    text: str
+
+    @field_validator("text")
+    @classmethod
+    def _reject_forbidden_codepoints(cls, v: str) -> str:
+        bad = [hex(ord(ch)) for ch in v if ord(ch) in _GT_FORBIDDEN_CODEPOINTS]
+        if bad:
+            raise ValueError(
+                f"GT text contains forbidden codepoints: {', '.join(bad)}. "
+                "Normalize ligatures and long-s to ASCII before saving GT."
+            )
+        return v
 
 
 # ── Error envelopes ────────────────────────────────────────────────────
@@ -636,6 +661,52 @@ def split_line_after_word_d1(
         settings=settings,
         mutate=_mutate,
         mutation_label="split_line_after_word",
+    )
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/lines/{line_index}/set-gt",
+    response_model=PagePayload,
+)
+def set_line_gt(
+    project_id: str,
+    page_index: int,
+    line_index: int,
+    body: SetLineGtRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+) -> JSONResponse:
+    """``POST .../lines/{li}/set-gt`` — set line GT by distributing tokens.
+
+    Splits ``body.text`` on whitespace; assigns each token to the
+    corresponding word in the line left-to-right. Excess tokens
+    (more tokens than words) are concatenated with a space onto the
+    last word. Words with no corresponding token receive empty-string GT.
+    """
+
+    def _mutate(_page: Any, line: Any) -> bool:
+        words = list(getattr(line, "words", []) or [])
+        if not words:
+            return True
+        tokens = body.text.split()
+        for i, word in enumerate(words):
+            if i < len(tokens):
+                if i == len(words) - 1:
+                    word.ground_truth_text = " ".join(tokens[i:])
+                else:
+                    word.ground_truth_text = tokens[i]
+            else:
+                word.ground_truth_text = ""
+        return True
+
+    return _line_mutation_handler(
+        project_id=project_id,
+        page_index=page_index,
+        line_index=line_index,
+        project_state=project_state,
+        settings=settings,
+        mutate=_mutate,
+        mutation_label="set_line_gt",
     )
 
 
@@ -1336,6 +1407,7 @@ __all__ = [
     "MergeScopeRequest",
     "PatchParagraphRequest",
     "RefineBatchRequest",
+    "SetLineGtRequest",
     "SplitAfterWordRequest",
     "SplitByWordsRequest",
     "SplitLineAfterWordRequest",

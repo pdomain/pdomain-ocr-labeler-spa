@@ -10,12 +10,16 @@ Spec authority:
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from pd_ocr_labeler_spa.bootstrap import build_app
+from pd_ocr_labeler_spa.core.page_state import PageLoadOutcome, PageSource
+from pd_ocr_labeler_spa.core.project_state import PageState
 from pd_ocr_labeler_spa.settings import Settings
 
 
@@ -300,3 +304,114 @@ def test_group_into_paragraph_returns_200_for_valid_page(
     assert resp.status_code == 200
     body = resp.json()
     assert body["project_id"] == "book1"
+
+
+# ── set-line-gt helpers ───────────────────────────────────────────────────
+
+
+@dataclass
+class _StubWord:
+    text: str = "ocr"
+    ground_truth_text: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": "Word", "text": self.text, "ground_truth_text": self.ground_truth_text}
+
+
+@dataclass
+class _StubLine:
+    words: list[_StubWord] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"words": [w.to_dict() for w in self.words]}
+
+
+@dataclass
+class _StubPage:
+    lines_: list[_StubLine] = field(default_factory=list)
+    label: str = "stub"
+
+    @property
+    def lines(self) -> list[_StubLine]:
+        return self.lines_
+
+    @property
+    def paragraphs(self) -> list[_StubLine]:
+        return self.lines_
+
+    @property
+    def words(self) -> list[_StubWord]:
+        return [w for ln in self.lines_ for w in ln.words]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "lines": [ln.to_dict() for ln in self.lines_],
+            "paragraphs": [],
+            "words": [w.to_dict() for w in self.words],
+            "source_identifier": f"{self.label}.png",
+        }
+
+
+def _seed_page_state(client: TestClient, *, page_index: int, page: _StubPage) -> PageState:
+    project_state = client.app.state.project_state  # type: ignore[attr-defined]
+    outcome = PageLoadOutcome(
+        page_index=page_index,
+        source=PageSource.OCR,
+        payload=page,
+    )
+    pstate = PageState(page_index=page_index, page_record=outcome)
+    pstate.generation = 1
+    pstate.last_saved_generation = 0
+    project_state._page_states[page_index] = pstate
+    return pstate
+
+
+def _make_two_word_line() -> _StubLine:
+    return _StubLine(words=[_StubWord(text="hello"), _StubWord(text="world")])
+
+
+# ── set-line-gt ───────────────────────────────────────────────────────────
+
+
+def test_set_line_gt_distributes_tokens(loaded_client: TestClient) -> None:
+    """POST .../lines/0/set-gt distributes space-split tokens to words."""
+    page = _StubPage(lines_=[_make_two_word_line()])
+    _seed_page_state(loaded_client, page_index=0, page=page)
+    resp = loaded_client.post(
+        "/api/projects/book1/pages/0/lines/0/set-gt",
+        json={"text": "hello world"},
+    )
+    assert resp.status_code == 200
+
+
+def test_set_line_gt_clears_excess_words(loaded_client: TestClient) -> None:
+    """Fewer tokens than words → still 200."""
+    page = _StubPage(lines_=[_make_two_word_line()])
+    _seed_page_state(loaded_client, page_index=0, page=page)
+    resp = loaded_client.post(
+        "/api/projects/book1/pages/0/lines/0/set-gt",
+        json={"text": "only"},
+    )
+    assert resp.status_code == 200
+
+
+def test_set_line_gt_rejects_ligatures(bare_client: TestClient) -> None:
+    """GT text containing ligature codepoints → 400 validation_error.
+
+    The error handler converts ``RequestValidationError`` to 400
+    (codebase convention — see ``api/middleware/error_handler.py:100``).
+    """
+    resp = bare_client.post(
+        "/api/projects/book1/pages/0/lines/0/set-gt",
+        json={"text": "ﬀoo"},  # U+FB00 ff-ligature
+    )
+    assert resp.status_code in (400, 422)
+    assert resp.json()["error"] == "validation_error"
+
+
+def test_set_line_gt_404_unknown_project(bare_client: TestClient) -> None:
+    resp = bare_client.post(
+        "/api/projects/no-such-project/pages/0/lines/0/set-gt",
+        json={"text": "x"},
+    )
+    assert resp.status_code == 404
