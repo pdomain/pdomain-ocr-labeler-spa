@@ -2,7 +2,7 @@
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 11, Gap 19, Gap 20.
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Worklist } from "./Worklist";
 import { worklistStore } from "../../stores/worklist-store";
@@ -224,6 +224,60 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
     expect(screen.getByTestId("worklist-filter-unvalidated")).toHaveTextContent("1");
     // Error chip shows count of mismatch status lines
     expect(screen.getByTestId("worklist-filter-mismatched")).toHaveTextContent("1");
+  });
+});
+
+// ── Task 5: searchQuery filter ────────────────────────────────────────────────
+
+describe("Worklist search filter (Task 5)", () => {
+  beforeEach(() => {
+    worklistStore.reset();
+    vi.clearAllMocks();
+  });
+
+  it("filters rows by searchQuery in worklistStore", async () => {
+    const lineMatches: components["schemas"]["LineMatch"][] = [
+      {
+        line_index: 0,
+        ocr_line_text: "hello world",
+        ground_truth_line_text: "hello world",
+        overall_match_status: "exact",
+        is_fully_validated: false,
+        validated_word_count: 0,
+        total_word_count: 1,
+        word_matches: [],
+        paragraph_index: 0,
+        exact_count: 1,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+      },
+      {
+        line_index: 1,
+        ocr_line_text: "foo bar",
+        ground_truth_line_text: "foo bar",
+        overall_match_status: "exact",
+        is_fully_validated: false,
+        validated_word_count: 0,
+        total_word_count: 1,
+        word_matches: [],
+        paragraph_index: 0,
+        exact_count: 1,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+      },
+    ];
+    worklistStore.setActiveFilter("all");
+    render(<Worklist lineMatches={lineMatches} />);
+    expect(screen.getByTestId("worklist-row-0")).toBeInTheDocument();
+    expect(screen.getByTestId("worklist-row-1")).toBeInTheDocument();
+
+    act(() => worklistStore.setSearchQuery("foo"));
+    expect(screen.queryByTestId("worklist-row-0")).not.toBeInTheDocument();
+    expect(screen.getByTestId("worklist-row-1")).toBeInTheDocument();
   });
 });
 

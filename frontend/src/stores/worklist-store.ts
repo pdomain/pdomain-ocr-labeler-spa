@@ -23,6 +23,8 @@ export interface WorklistState {
   selectedLineIndex: number | null;
   /** Bulk-selected line indices (Slice 23). */
   selectedIds: number[];
+  /** Text filter applied to OCR/GT line text in the worklist. Empty string = no filter. */
+  searchQuery: string;
 }
 
 type Listener = () => void;
@@ -33,6 +35,7 @@ function createWorklistStore() {
     sort: "index",
     selectedLineIndex: null,
     selectedIds: [],
+    searchQuery: "",
   };
   const listeners = new Set<Listener>();
 
@@ -55,12 +58,18 @@ function createWorklistStore() {
     notify();
   }
 
+  function setSearchQuery(query: string) {
+    state = { ...state, searchQuery: query };
+    notify();
+  }
+
   function reset() {
     state = {
       activeFilter: "unvalidated",
       sort: "index",
       selectedLineIndex: null,
       selectedIds: [],
+      searchQuery: "",
     };
     notify();
   }
@@ -94,6 +103,7 @@ function createWorklistStore() {
     setActiveFilter,
     setSort,
     setSelectedLineIndex,
+    setSearchQuery,
     reset,
     selectAll,
     clearBulk,

@@ -282,6 +282,18 @@ function WorklistRow({ line, isSelected, isChecked, onClick }: WorklistRowProps)
   );
 }
 
+// ─── Search filter (Task 5) ───────────────────────────────────────────────────
+
+function filterBySearch(lines: LineMatch[], query: string): LineMatch[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return lines;
+  return lines.filter(
+    (l) =>
+      (l.ocr_line_text ?? "").toLowerCase().includes(q) ||
+      (l.ground_truth_line_text ?? "").toLowerCase().includes(q),
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export interface WorklistProps {
@@ -297,10 +309,13 @@ export function Worklist({ lineMatches = [] }: WorklistProps) {
     worklistStore.getState,
   );
 
-  const { activeFilter, selectedLineIndex, sort } = state;
+  const { activeFilter, selectedLineIndex, sort, searchQuery } = state;
 
-  // Apply filter then sort.
-  const filtered = sortLines(filterLines(lineMatches, activeFilter), sort);
+  // Apply filter, then search, then sort.
+  const filtered = sortLines(
+    filterBySearch(filterLines(lineMatches, activeFilter), searchQuery),
+    sort,
+  );
 
   // Pre-build a Set so isChecked lookups are O(1) instead of O(n) per row.
   const checkedSet = new Set(state.selectedIds);

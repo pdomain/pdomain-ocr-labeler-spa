@@ -1,27 +1,42 @@
 // QuickSearch.tsx — centred ⌘K search field in the header.
-// P1.c (Gap 6): placeholder input + ⌘K keycap chip that opens the hotkey overlay.
-// Search submit is a follow-up; this slice wires the affordance only.
+// P1.c (Gap 6): controlled input that filters the worklist by OCR/GT text.
+// Task 5: wired to worklistStore.searchQuery.
 //
 // data-testids:
 //   quick-search           — outer wrapper div
 //   quick-search-input     — the <input> element
 //   quick-search-keycap    — the ⌘K keycap chip button
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Search } from "lucide-react";
 import { dialogStore } from "../../stores/dialog-store";
+import { worklistStore } from "../../stores/worklist-store";
 
 export function QuickSearch() {
   const openHotkeyHelp = useCallback(() => {
     dialogStore.open("hotkeyHelp");
   }, []);
+  const [query, setQuery] = useState("");
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value;
+    setQuery(val);
+    worklistStore.setSearchQuery(val);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Escape") {
+      setQuery("");
+      worklistStore.setSearchQuery("");
+      e.currentTarget.blur();
+    }
+  }
 
   return (
     <div
       data-testid="quick-search"
       className="flex items-center gap-1.5 h-7 px-2 rounded border border-border-2 bg-bg-sunk text-ink-3 min-w-[160px] max-w-[240px] w-full cursor-text"
       onClick={(e) => {
-        // Focus the input when clicking anywhere in the widget
         const input = (e.currentTarget as HTMLElement).querySelector("input");
         input?.focus();
       }}
@@ -31,10 +46,11 @@ export function QuickSearch() {
       <input
         type="text"
         data-testid="quick-search-input"
+        value={query}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
         placeholder="Search…"
         aria-label="Quick search"
-        // Non-functional in this slice; submit is a follow-up.
-        readOnly
         className="flex-1 bg-transparent text-[11px] text-ink-2 placeholder:text-ink-3 focus:outline-none cursor-text"
       />
 

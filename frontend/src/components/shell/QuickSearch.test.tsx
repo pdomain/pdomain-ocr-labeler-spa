@@ -13,9 +13,11 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QuickSearch } from "./QuickSearch";
 import { dialogStore } from "../../stores/dialog-store";
+import { worklistStore } from "../../stores/worklist-store";
 
 beforeEach(() => {
   dialogStore.reset();
+  worklistStore.reset();
 });
 
 describe("QuickSearch: testids (P1.c)", () => {
@@ -49,5 +51,29 @@ describe("QuickSearch: keycap opens hotkey overlay (P1.c)", () => {
     expect(dialogStore.getState().hotkeyHelp.open).toBe(false);
     await user.click(screen.getByTestId("quick-search-keycap"));
     expect(dialogStore.getState().hotkeyHelp.open).toBe(true);
+  });
+});
+
+describe("QuickSearch: search wiring (Task 5)", () => {
+  it("typing in the input updates worklistStore.searchQuery", async () => {
+    render(<QuickSearch />);
+    const input = screen.getByTestId("quick-search-input");
+    await userEvent.type(input, "foo");
+    expect(worklistStore.getState().searchQuery).toBe("foo");
+  });
+
+  it("pressing Escape clears the query and worklistStore", async () => {
+    render(<QuickSearch />);
+    const input = screen.getByTestId("quick-search-input");
+    await userEvent.type(input, "bar");
+    await userEvent.keyboard("{Escape}");
+    expect(input).toHaveValue("");
+    expect(worklistStore.getState().searchQuery).toBe("");
+  });
+
+  it("input is no longer readOnly", () => {
+    render(<QuickSearch />);
+    const input = screen.getByTestId("quick-search-input");
+    expect(input).not.toHaveAttribute("readOnly");
   });
 });
