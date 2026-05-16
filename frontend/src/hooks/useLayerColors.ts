@@ -1,15 +1,20 @@
 // useLayerColors.ts — Read layer color CSS custom properties from the document.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 13.
 // Issue #328 (FO-4): expose LayerColorSpec variants for BBoxOverlay.
+// Task R1: MutationObserver subscription so theme switches update Konva canvases.
 //
 // Returns the resolved hex/rgb strings for each layer token so Konva rects
 // can use theme-accurate stroke/fill colors rather than hardcoded constants.
 //
 // Reading is done via getComputedStyle(document.documentElement) so dark/light
-// theme switches are reflected without a remount.
+// theme switches are reflected without a remount. A MutationObserver on the
+// document.documentElement's data-theme attribute triggers a re-read when the
+// user switches theme mid-session.
 //
 // Note: LayerColorSpec is defined here (not in BBoxOverlay) to avoid a circular
 // import. BBoxOverlay re-exports it for backwards compatibility.
+
+import { useState, useEffect, useMemo } from "react";
 
 /** Fill + stroke RGBA string pair per layer. */
 export interface LayerColorSpec {
@@ -51,14 +56,28 @@ export function readLayerColors(): LayerColors {
   }
 }
 
-/** Static layer colors hook — reads once from the document on call.
+/**
+ * Reactive layer colors hook — reads from the document and re-reads whenever
+ * the `data-theme` attribute on `document.documentElement` changes.
  *
- * If you need live theme-switch reactivity, subscribe to a matchMedia or
- * data-theme attribute mutation and call readLayerColors() again. For the
- * current slice (Slice 13), a static read on render is sufficient.
+ * A MutationObserver watches the attribute so Konva canvases automatically
+ * pick up theme switches without needing a page reload or remount.
  */
 export function useLayerColors(): LayerColors {
-  return readLayerColors();
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setVersion((v) => v + 1);
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  return useMemo(() => readLayerColors(), [version]);
 }
 
 // ─── Hex → RGBA utility ───────────────────────────────────────────────────────
