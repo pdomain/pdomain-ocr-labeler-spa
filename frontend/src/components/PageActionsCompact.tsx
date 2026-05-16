@@ -9,11 +9,12 @@
 // The full PageActions bar (with all driver-contract testids) remains
 // mounted hidden inside ProjectPage for driver compatibility.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useReloadOcr, useSavePage, useRematchGt } from "../hooks/usePageMutations";
 import { useJobProgress } from "../hooks/useJobProgress";
 import { dialogStore } from "../stores/dialog-store";
+import { toast } from "../lib/toast";
 
 export interface PageActionsCompactProps {
   projectId: string;
@@ -25,6 +26,28 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
 
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const jobProgress = useJobProgress(activeJobId);
+
+  // Toast lifecycle: react to OCR job progress transitions.
+  // Rematch GT is synchronous (no SSE job) so it uses onSuccess/onError directly.
+  useEffect(() => {
+    if (!activeJobId || jobProgress === null) return;
+
+    if (jobProgress.status === "complete") {
+      toast.success("OCR complete", { id: activeJobId });
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      setActiveJobId(null);
+    } else if (jobProgress.status === "error") {
+      toast.error("OCR failed", { id: activeJobId });
+      setActiveJobId(null);
+    } else {
+      // Running — update loading toast with current progress message.
+      const msg = jobProgress.progress?.message ?? "Running OCR…";
+      import("sonner").then(({ toast: sonnerToast }) => {
+        sonnerToast.loading(msg, { id: activeJobId });
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobProgress?.status, activeJobId]);
 
   const reloadOcr = useReloadOcr(projectId, pageIndex);
   const savePage = useSavePage(projectId, pageIndex);
@@ -39,16 +62,28 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   function handleReloadOcr() {
     reloadOcr.mutate(undefined, {
       onSuccess: (data) => {
-        if (data?.job_id) setActiveJobId(data.job_id);
+        if (data?.job_id) {
+          setActiveJobId(data.job_id);
+          // Show initial loading toast immediately while SSE stream opens.
+          import("sonner").then(({ toast: sonnerToast }) => {
+            sonnerToast.loading("Running OCR…", { id: data.job_id });
+          });
+        }
       },
-      onSettled: () => {
-        void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      onError: () => {
+        toast.error("Failed to start OCR");
       },
     });
   }
 
   function handleSavePage() {
     savePage.mutate(undefined, {
+      onSuccess: () => {
+        toast.success("Page saved");
+      },
+      onError: () => {
+        toast.error("Save failed");
+      },
       onSettled: () => {
         void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
       },
@@ -57,8 +92,13 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
 
   function handleRematchGt() {
     rematchGt.mutate(undefined, {
-      onSettled: () => {
+      onSuccess: () => {
+        // Rematch GT is synchronous — no job_id, just a direct page payload.
+        toast.success("Rematch GT complete");
         void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      },
+      onError: () => {
+        toast.error("Rematch GT failed");
       },
     });
   }
@@ -75,6 +115,29 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
 
   const disabled = isBusy || !projectId;
 
+  /** Inline spinner — shown while this button's job is running. */
+  const Spinner = () => (
+    <svg
+      className="animate-spin h-3 w-3 shrink-0"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+      />
+    </svg>
+  );
+
+  // Spinner is shown on the Reload OCR button while the SSE job is in flight.
+  const ocrRunning = activeJobId !== null && isBusy;
+  // Rematch is synchronous — show spinner while the mutation is pending.
+  const rematchRunning = rematchGt.isPending;
+
   return (
     <div
       data-testid="page-actions-compact"
@@ -90,6 +153,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
         title="Reload OCR (Ctrl+R)"
         className={`${base} ${normal}`}
       >
+        {ocrRunning && <Spinner />}
         Reload OCR
       </button>
 
@@ -102,6 +166,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
         title="Rematch GT (Ctrl+G)"
         className={`${base} ${normal}`}
       >
+        {rematchRunning && <Spinner />}
         Rematch
       </button>
 

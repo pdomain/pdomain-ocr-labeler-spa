@@ -6,9 +6,10 @@
 //   - Buttons are disabled when projectId is absent (no route param).
 //   - Export button opens the export dialog.
 //   - Reload OCR, Rematch GT, Save Page trigger their mutations (smoke).
+//   - Toast lifecycle: loading toast on job start, success toast on complete.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -16,6 +17,29 @@ import { http, HttpResponse } from "msw";
 import { server } from "../test/server";
 import { PageActionsCompact } from "./PageActionsCompact";
 import { dialogStore } from "../stores/dialog-store";
+
+// ─── sonner mock ──────────────────────────────────────────────────────────────
+// We mock "sonner" at the module level so both the direct import in toast.ts
+// (via ../lib/toast) and the dynamic import("sonner") in PageActionsCompact
+// resolve to the same mock object.
+// Use vi.hoisted so toastMock is available inside the vi.mock factory (which
+// is hoisted to the top of the file by Vitest).
+//
+// Sonner's `toast` is a function with .loading/.success/.error methods attached.
+// We need to replicate that shape so toast.ts (which calls sonnerToast(msg, opts)
+// as a plain function) does not throw "toast is not a function".
+
+const toastMock = vi.hoisted(() => {
+  const fn = Object.assign(vi.fn(), {
+    loading: vi.fn(),
+    success: vi.fn(),
+    error: vi.fn(),
+  });
+  return fn;
+});
+vi.mock("sonner", () => ({
+  toast: toastMock,
+}));
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -47,6 +71,7 @@ function stubJobNoop() {
 beforeEach(() => {
   dialogStore.reset();
   stubJobNoop();
+  vi.clearAllMocks();
 });
 
 // ─── testids ──────────────────────────────────────────────────────────────────
@@ -127,5 +152,107 @@ describe("PageActionsCompact: mutation wiring (P1.b smoke)", () => {
 
     await user.click(screen.getByTestId("page-actions-compact-save-page"));
     await waitFor(() => expect(saveSpy).toHaveBeenCalled());
+  });
+});
+
+// ─── toast lifecycle tests ────────────────────────────────────────────────────
+
+describe("PageActionsCompact: toast lifecycle for reload-ocr", () => {
+  it("shows a loading toast when Reload OCR starts, then success toast on complete", async () => {
+    // Stub the reload-ocr POST to return a job_id.
+    server.use(
+      http.post("/api/projects/proj-1/pages/0/reload-ocr", () =>
+        HttpResponse.json({ job_id: "j1" }, { status: 202 }),
+      ),
+    );
+
+    // Stub the SSE endpoint. We deliver a "complete" event synchronously by
+    // capturing the EventSource listener and dispatching it in the test.
+    let progressListener: ((e: MessageEvent) => void) | null = null;
+    const mockES = {
+      addEventListener: vi.fn((type: string, fn: unknown) => {
+        if (type === "progress") progressListener = fn as (e: MessageEvent) => void;
+      }),
+      removeEventListener: vi.fn(),
+      close: vi.fn(),
+      readyState: 1 as number,
+    };
+    vi.stubGlobal(
+      "EventSource",
+      vi.fn(() => mockES),
+    );
+
+    const user = userEvent.setup();
+    renderCompact();
+
+    await user.click(screen.getByTestId("page-actions-compact-reload-ocr"));
+
+    // Wait for the mutation to complete and loading toast to be called.
+    // The dynamic import("sonner") call in handleReloadOcr fires sonnerToast.loading().
+    await waitFor(() =>
+      expect(toastMock.loading).toHaveBeenCalledWith(
+        "Running OCR…",
+        expect.objectContaining({ id: "j1" }),
+      ),
+    );
+
+    // Simulate SSE "complete" event.
+    const completeEvent = {
+      data: JSON.stringify({ job_id: "j1", status: "complete", progress: { message: "Done" } }),
+    } as MessageEvent;
+    act(() => {
+      progressListener?.(completeEvent);
+    });
+
+    // Success toast: useEffect calls toast.success (from ../lib/toast) which
+    // calls sonnerToast(message, opts) — i.e. the base toastMock fn, not .success.
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith("OCR complete", expect.objectContaining({ id: "j1" })),
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  it("shows an error toast when Reload OCR job fails via SSE", async () => {
+    server.use(
+      http.post("/api/projects/proj-1/pages/0/reload-ocr", () =>
+        HttpResponse.json({ job_id: "j2" }, { status: 202 }),
+      ),
+    );
+
+    let progressListener: ((e: MessageEvent) => void) | null = null;
+    const mockES = {
+      addEventListener: vi.fn((type: string, fn: unknown) => {
+        if (type === "progress") progressListener = fn as (e: MessageEvent) => void;
+      }),
+      removeEventListener: vi.fn(),
+      close: vi.fn(),
+      readyState: 1 as number,
+    };
+    vi.stubGlobal(
+      "EventSource",
+      vi.fn(() => mockES),
+    );
+
+    const user = userEvent.setup();
+    renderCompact();
+
+    await user.click(screen.getByTestId("page-actions-compact-reload-ocr"));
+    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
+
+    const errorEvent = {
+      data: JSON.stringify({ job_id: "j2", status: "error", progress: { message: "OCR failed" } }),
+    } as MessageEvent;
+    act(() => {
+      progressListener?.(errorEvent);
+    });
+
+    // Error toast: useEffect calls toast.error (from ../lib/toast) which
+    // calls sonnerToast(message, opts) — i.e. the base toastMock fn, not .error.
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith("OCR failed", expect.objectContaining({ id: "j2" })),
+    );
+
+    vi.unstubAllGlobals();
   });
 });
