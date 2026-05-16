@@ -388,3 +388,52 @@ def test_get_page_stamps_payload_error_on_corrupt_envelope(
             "Expected payload_error to be stamped when lift fails, got None. "
             f"page_record keys: {list(pr.keys())}"
         )
+
+
+def test_get_page_image_missing_returns_404(
+    tmp_path: Path,
+    projects_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A genuinely missing image file returns 404 image_not_found."""
+    import PIL.Image
+
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        c.post("/api/projects/load", json={"project_root": str(projects_root / "book1")})
+        # Monkeypatch PIL.Image.open to raise FileNotFoundError.
+        monkeypatch.setattr(
+            PIL.Image,
+            "open",
+            lambda p: (_ for _ in ()).throw(FileNotFoundError(f"No such file: {p}")),
+        )
+        resp = c.get("/api/projects/book1/pages/0/image")
+
+    assert resp.status_code == 404, f"Expected 404, got {resp.status_code}: {resp.text}"
+    assert resp.json()["error"] == "image_not_found"
+
+
+def test_get_page_image_corrupt_returns_422(
+    tmp_path: Path,
+    projects_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A present-but-unreadable image file returns 422 image_corrupt (not 404)."""
+    import PIL.Image
+    from PIL import UnidentifiedImageError
+
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        c.post("/api/projects/load", json={"project_root": str(projects_root / "book1")})
+        # Monkeypatch PIL.Image.open to raise UnidentifiedImageError.
+        monkeypatch.setattr(
+            PIL.Image,
+            "open",
+            lambda p: (_ for _ in ()).throw(UnidentifiedImageError("cannot identify image file")),
+        )
+        resp = c.get("/api/projects/book1/pages/0/image")
+
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+    assert resp.json()["error"] == "image_corrupt"

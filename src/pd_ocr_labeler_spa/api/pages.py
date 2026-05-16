@@ -1136,8 +1136,10 @@ def get_page_image(
     Error paths:
     - 404 ``project_not_found`` / ``page_not_found`` (via
       ``_check_project_and_page``).
-    - 404 ``image_not_found`` on PIL open failure (missing file, corrupt
-      bytes).
+    - 404 ``image_not_found`` when the image file is missing
+      (``FileNotFoundError``).
+    - 422 ``image_corrupt`` when the file is present but unreadable
+      (corrupt bytes, OOM, permission error, etc.).
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -1161,11 +1163,22 @@ def get_page_image(
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=85)
         content = buf.getvalue()
-    except Exception as exc:
-        log.debug("get_page_image: failed to open %s: %s", image_path, exc)
+    except FileNotFoundError as exc:
+        log.debug("get_page_image: file not found %s: %s", image_path, exc)
         return JSONResponse(  # type: ignore[return-value]
             status_code=404,
             content=ApiError(error="image_not_found", message=str(exc)).model_dump(),
+        )
+    except Exception as exc:
+        log.warning(
+            "get_page_image: failed to read/convert %s: %s",
+            image_path,
+            exc,
+            exc_info=True,
+        )
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=422,
+            content=ApiError(error="image_corrupt", message=str(exc)).model_dump(),
         )
 
     return Response(
