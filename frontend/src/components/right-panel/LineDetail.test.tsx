@@ -297,6 +297,91 @@ describe("LineDetail P5.f: word cards with checkboxes + bulk bar (Gaps 44, 45)",
   });
 });
 
+// ─── Q5: bulk validate/skip wiring ──────────────────────────────────────────
+
+describe("LineDetail Q5: bulk bar validate/skip calls validate-batch (scope=word)", () => {
+  beforeEach(() => {
+    clearSelection();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    useUiPrefs.setState({ lineWordsDensity: "cards" } as any);
+  });
+
+  it("Validate selected posts validate-batch with validated=true and scope=word", async () => {
+    const user = userEvent.setup();
+    let capturedBody: Record<string, unknown> | undefined;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/words/validate-batch", async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
+      }),
+    );
+
+    selectLine(3);
+    renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
+
+    // Switch to Words tab and check the first word
+    await user.click(screen.getByTestId("line-detail-tab-words"));
+    await user.click(screen.getByTestId("line-words-card-checkbox-0"));
+
+    // Click Validate selected
+    await user.click(screen.getByTestId("line-detail-bulk-validate"));
+
+    await waitFor(() => expect(capturedBody).toBeDefined());
+    expect(capturedBody?.scope).toBe("word");
+    expect(capturedBody?.validated).toBe(true);
+    // word_index 0 in line_index 3 → tuple [3, 0]
+    expect(capturedBody?.word_indices).toEqual([[3, 0]]);
+  });
+
+  it("Skip selected posts validate-batch with validated=false and scope=word", async () => {
+    const user = userEvent.setup();
+    let capturedBody: Record<string, unknown> | undefined;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/words/validate-batch", async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
+      }),
+    );
+
+    selectLine(3);
+    renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
+
+    // Switch to Words tab and check both words
+    await user.click(screen.getByTestId("line-detail-tab-words"));
+    await user.click(screen.getByTestId("line-words-card-checkbox-0"));
+    await user.click(screen.getByTestId("line-words-card-checkbox-1"));
+
+    // Click Skip selected
+    await user.click(screen.getByTestId("line-detail-bulk-skip"));
+
+    await waitFor(() => expect(capturedBody).toBeDefined());
+    expect(capturedBody?.scope).toBe("word");
+    expect(capturedBody?.validated).toBe(false);
+    // Both words checked: [3,0] and [3,1]
+    expect((capturedBody?.word_indices as [number, number][]).length).toBe(2);
+  });
+
+  it("bulk bar clears after validate", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/words/validate-batch", () =>
+        HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] }),
+      ),
+    );
+
+    selectLine(3);
+    renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
+
+    await user.click(screen.getByTestId("line-detail-tab-words"));
+    await user.click(screen.getByTestId("line-words-card-checkbox-0"));
+    expect(screen.getByTestId("line-detail-bulk-bar")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("line-detail-bulk-validate"));
+    // clearChecked fires synchronously so bar disappears immediately
+    expect(screen.queryByTestId("line-detail-bulk-bar")).not.toBeInTheDocument();
+  });
+});
+
 // ─── GTRow commit behaviour (Task 3) ────────────────────────────────────────
 
 describe("LineDetail GTRow: blur-commit and Escape revert (Task 3)", () => {

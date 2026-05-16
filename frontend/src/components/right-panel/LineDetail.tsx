@@ -29,7 +29,12 @@ import { StatusPip } from "../ui/StatusPip";
 import { LineWordsCard } from "./LineWordsCard";
 import { selectionStore } from "../../stores/selection-store";
 import { useUiPrefs } from "../../stores/ui-prefs";
-import { useMergeLines, useValidateLine, useSetLineGt } from "../../hooks/useLineMutations";
+import {
+  useMergeLines,
+  useValidateLine,
+  useSetLineGt,
+  useValidateWords,
+} from "../../hooks/useLineMutations";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -207,6 +212,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
 
   const validateLine = useValidateLine(projectId, pageIndex);
   const mergeLines = useMergeLines(projectId, pageIndex);
+  const validateWords = useValidateWords(projectId, pageIndex);
 
   function toggleDensity() {
     const next: WordDensity = densityPref === "cards" ? "rows" : "cards";
@@ -321,7 +327,10 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
                 data-testid="line-detail-bulk-validate"
                 className="text-[10px] px-1.5 py-0.5 rounded border border-status-exact/60 text-status-exact hover:bg-status-exact/10 transition-colors"
                 onClick={() => {
-                  /* bulk validate selected words */
+                  const pairs: [number, number][] = Array.from(checkedWords).map(
+                    (wi) => [line.line_index, wi] as [number, number],
+                  );
+                  validateWords.mutate({ wordPairs: pairs, validated: true });
                   clearChecked();
                 }}
               >
@@ -332,7 +341,10 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
                 data-testid="line-detail-bulk-skip"
                 className="text-[10px] px-1.5 py-0.5 rounded border border-status-fuzzy/60 text-status-fuzzy hover:bg-status-fuzzy/10 transition-colors"
                 onClick={() => {
-                  /* bulk skip selected words */
+                  const pairs: [number, number][] = Array.from(checkedWords).map(
+                    (wi) => [line.line_index, wi] as [number, number],
+                  );
+                  validateWords.mutate({ wordPairs: pairs, validated: false });
                   clearChecked();
                 }}
               >

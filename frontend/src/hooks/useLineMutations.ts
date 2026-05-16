@@ -207,3 +207,30 @@ export function useSetLineGt(projectId: string, pageIndex: number) {
     },
   });
 }
+
+// ─── useValidateWords (Q5) ────────────────────────────────────────────────
+
+/**
+ * Bulk validate/skip a set of words selected via the LineDetail bulk bar.
+ *
+ * wordPairs: array of [lineIndex, wordIndex] tuples corresponding to the
+ * checked words. Sent as scope="word" to validate-batch.
+ */
+export function useValidateWords(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, { wordPairs: [number, number][]; validated: boolean }>({
+    mutationFn: ({ wordPairs, validated }) => {
+      const body: ValidateBatchRequest = {
+        scope: "word",
+        line_indices: [],
+        paragraph_indices: [],
+        word_indices: wordPairs,
+        validated,
+      };
+      return apiPost<unknown>(`${pageBase(projectId, pageIndex)}/words/validate-batch`, body);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
