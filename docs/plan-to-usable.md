@@ -1,8 +1,9 @@
 # Plan: pd-ocr-labeler-spa → usable
 
-> **Status:** Active gap analysis — 2026-05-15 (updated).
+> **Status:** Active gap analysis — 2026-05-16 (updated).
 > B1/B2/B3/F1/F2/F3/F4/F6 closed. F5 audit doc committed; browser walk TODOs
 > remain for CT to confirm before final M9.5 sign-off.
+> Smoke-run row closed 2026-05-16: BUG-SMOKE-1 + BUG-SMOKE-2 fixed and verified.
 > **Authority:** This plan is informed by `docs/architecture/*`,
 > `specs/16-milestones.md`, and direct reads of the implementation
 > tree. Spec authority is unchanged: items below point at specs; this
@@ -84,9 +85,10 @@ retiring the legacy `pd-ocr-labeler`:
       (`docs/M9.5-keyboard-audit.md`); browser walk TODOs pending CT.
 - [x] F6 — `useProject` hook types already match runtime response shape;
       divergence from `LoadProjectResponse` is documented in the hook.
-- [ ] Smoke run: CT opens the built wheel against a real scanned-book
-      project, walks 10 pages, edits at least one word per page,
-      saves, exports.
+- [x] Smoke run: BUG-SMOKE-1 (word GT edit 404 on cached lane) and
+      BUG-SMOKE-2 (save 409 on first save) both verified fixed
+      2026-05-16 — `POST .../words/0/0/gt` → 200, `POST .../save`
+      with generation from GET → 200.
 - [ ] Legacy `pd-ocr-labeler` repo gets a "superseded by
       `pd-ocr-labeler-spa`" note in its README; no further development.
 
