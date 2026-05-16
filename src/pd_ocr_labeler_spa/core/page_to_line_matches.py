@@ -31,7 +31,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from pd_book_tools.ocr.page import Page as _Page
 
 from .models import (
     BBox,
@@ -45,6 +48,17 @@ from .models import (
 
 log = logging.getLogger(__name__)
 
+
+@runtime_checkable
+class _HasLines(Protocol):
+    """Minimal structural type for objects with a .lines attribute.
+
+    Used in tests that pass duck-typed stubs instead of real Page objects.
+    """
+
+    lines: list
+
+
 # Default fuzzy-match threshold — mirrors legacy
 # ``WordMatchViewModel.fuzz_threshold=0.8``
 # (``pd_ocr_labeler/viewmodels/project/word_match_view_model.py:26``).
@@ -56,7 +70,7 @@ _FUZZ_THRESHOLD = 0.8
 def _classify_match_status(
     ocr_text: str,
     ground_truth_text: str,
-    word_obj: Any,
+    word_obj: object,
     fuzz_threshold: float = _FUZZ_THRESHOLD,
 ) -> tuple[MatchStatus, float | None]:
     """Classify match status between OCR text and ground truth.
@@ -103,7 +117,7 @@ def _classify_match_status(
 def _word_to_word_match(
     word_index: int,
     line_index: int,
-    word_obj: Any,
+    word_obj: object,
     fuzz_threshold: float = _FUZZ_THRESHOLD,
     char_bboxes_map: dict[str, list[dict[str, int]]] | None = None,
     char_ranges_map: dict[str, list[dict]] | None = None,
@@ -245,7 +259,7 @@ def _overall_match_status(word_matches: list[WordMatch]) -> MatchStatus:
     return MatchStatus.EXACT
 
 
-def _build_line_to_paragraph_lookup(page: Any) -> dict[int, int]:
+def _build_line_to_paragraph_lookup(page: object) -> dict[int, int]:
     """Return ``{id(line_obj): paragraph_index}`` for all lines in *page*.
 
     Mirrors legacy
@@ -266,7 +280,7 @@ def _build_line_to_paragraph_lookup(page: Any) -> dict[int, int]:
     return result
 
 
-def _build_line_to_block_lookup(page: Any) -> dict[int, int]:
+def _build_line_to_block_lookup(page: object) -> dict[int, int]:
     """Return ``{id(line_obj): block_index}`` for all lines in *page*.
 
     FO-7: ``pd_book_tools`` exposes blocks via ``page.items`` (list of
@@ -294,7 +308,7 @@ def _build_line_to_block_lookup(page: Any) -> dict[int, int]:
 
 
 def page_to_line_matches(
-    page: Any,
+    page: _Page | _HasLines | object | None,
     page_index: int,
     image_path: Path,
     source: PageSource = PageSource.OCR,
