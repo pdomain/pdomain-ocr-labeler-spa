@@ -492,6 +492,77 @@ def test_erase_pixels_returns_400_when_no_image(loaded_client: TestClient) -> No
     assert resp.json()["error"] == "mutation_failed"
 
 
+def test_erase_pixels_circle_shape_spares_corners(loaded_client: TestClient) -> None:
+    """``shape="circle"`` erases the inscribed ellipse but NOT the bbox corners.
+
+    Verifies that brush ops (which send ``shape="circle"``) do not erase the
+    corners of their bounding square — only the circular region the user
+    actually painted.
+
+    Setup: 20x20 white image (all 128).  Erase a 10x10 bbox centred at
+    (5, 5) with ``fill_value=0`` and ``shape="circle"``.  The inscribed
+    circle has centre (5, 5) radius 5.
+
+    Assertions:
+    - Centre pixel (5, 5) is erased (== 0).
+    - Corners of the bbox (0,0), (9,0), (0,9), (9,9) are NOT erased (== 128).
+    - A pixel just outside the circle but inside the bbox is NOT erased.
+    """
+    # Use a larger image so there's room for the 10x10 bbox.
+    page = _make_seeded_page(with_image=False)
+    page.cv2_numpy_page_image = np.full((20, 20), 128, dtype=np.uint8)
+    _seed_page_state(loaded_client, page_index=0, page=page)
+
+    resp = loaded_client.post(
+        "/api/projects/book1/pages/0/words/0/0/erase-pixels",
+        json={
+            "bbox": {"x": 0, "y": 0, "width": 10, "height": 10},
+            "fill_value": 0,
+            "shape": "circle",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    img = page.cv2_numpy_page_image
+    # Centre of the circle (cx=5, cy=5 after // 2 → (0+10)//2=5) must be erased.
+    assert int(img[5, 5]) == 0, "centre pixel must be erased"
+    # Corners of the 10x10 bbox should NOT be erased — they are outside the
+    # inscribed ellipse (radius ~5 from centre at [5,5]).
+    # Corner (0,0): distance from centre is sqrt(25+25) ≈ 7.07 > 5 → not erased.
+    assert int(img[0, 0]) == 128, "top-left corner must NOT be erased"
+    assert int(img[0, 9]) == 128, "top-right corner must NOT be erased"
+    assert int(img[9, 0]) == 128, "bottom-left corner must NOT be erased"
+    assert int(img[9, 9]) == 128, "bottom-right corner must NOT be erased"
+    # Pixels far outside the bbox must be untouched.
+    assert int(img[15, 15]) == 128, "pixel outside bbox must be untouched"
+
+
+def test_erase_pixels_rect_shape_fills_full_bbox(loaded_client: TestClient) -> None:
+    """``shape="rect"`` (default) erases the full rectangle including corners."""
+    page = _make_seeded_page(with_image=False)
+    page.cv2_numpy_page_image = np.full((20, 20), 128, dtype=np.uint8)
+    _seed_page_state(loaded_client, page_index=0, page=page)
+
+    resp = loaded_client.post(
+        "/api/projects/book1/pages/0/words/0/0/erase-pixels",
+        json={
+            "bbox": {"x": 0, "y": 0, "width": 10, "height": 10},
+            "fill_value": 0,
+            "shape": "rect",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    img = page.cv2_numpy_page_image
+    # Every pixel within the 10x10 bbox must be erased.
+    assert int(img[0, 0]) == 0, "top-left corner must be erased (rect shape)"
+    assert int(img[0, 9]) == 0, "top-right corner must be erased (rect shape)"
+    assert int(img[9, 0]) == 0, "bottom-left corner must be erased (rect shape)"
+    assert int(img[5, 5]) == 0, "centre must be erased (rect shape)"
+    # Pixel just outside must be untouched.
+    assert int(img[10, 10]) == 128, "pixel outside bbox must be untouched"
+
+
 # ── ADD ──────────────────────────────────────────────────────────────
 
 

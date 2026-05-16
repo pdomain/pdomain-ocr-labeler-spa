@@ -20,13 +20,14 @@
 //   structure-gap-slider              — word-gap range input
 //   structure-split-button            — Split at position N button
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "../../ui/button";
 import { ConfirmDialog } from "../../ConfirmDialog";
 import { useMergeWord, useSplitWord, useAdjustWordGap } from "../../../hooks/useWordMutations";
 import type { components } from "../../../api/types";
 
 type WordMatch = components["schemas"]["WordMatch"];
+type BBox = components["schemas"]["BBox"];
 type PagePayload = components["schemas"]["PagePayload"];
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -46,6 +47,15 @@ function getNeighborWords(
 
 function wordText(w: WordMatch | null): string {
   return w?.ocr_text ?? w?.ground_truth_text ?? "";
+}
+
+/**
+ * Compute the pixel gap between word ``wi`` and word ``wi+1``.
+ * Returns 0 when either bbox is missing.
+ */
+function computeGap(current: BBox | undefined, next: BBox | undefined): number {
+  if (!current || !next) return 0;
+  return Math.max(0, next.x - (current.x + current.width));
 }
 
 // ─── NeighborCard ─────────────────────────────────────────────────────────────
@@ -140,13 +150,6 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
   const splitWord = useSplitWord(projectId, pageIndex);
   const adjustGap = useAdjustWordGap(projectId, pageIndex);
 
-  const [confirm, setConfirm] = useState<MergeConfirmState>({ open: false, direction: null });
-  const [gapPx, setGapPx] = useState(0);
-  const [splitPos, setSplitPos] = useState<number | null>(null);
-  const [hoveredMerge, setHoveredMerge] = useState<MergeDirection | null>(null);
-
-  const gapDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const lineIndex = word.line_index;
   const wordIndex = word.word_index ?? 0;
 
@@ -154,11 +157,32 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
   const hasPrev = prev !== null;
   const hasNext = next !== null;
 
+  // Current pixel gap between this word and the next word (0 when no next word).
+  const currentGap = computeGap(word.bbox, next?.bbox);
+
+  const [confirm, setConfirm] = useState<MergeConfirmState>({ open: false, direction: null });
+  // gapDraft tracks the slider position during drag (absolute gap value in px).
+  const [gapDraft, setGapDraft] = useState(currentGap);
+  const [splitPos, setSplitPos] = useState<number | null>(null);
+  const [hoveredMerge, setHoveredMerge] = useState<MergeDirection | null>(null);
+
+  // Sync draft when the selected word changes (currentGap is re-derived).
+  const prevCurrentGapRef = useRef(currentGap);
+  useEffect(() => {
+    if (prevCurrentGapRef.current !== currentGap) {
+      prevCurrentGapRef.current = currentGap;
+      setGapDraft(currentGap);
+    }
+  }, [currentGap]);
+
   const currentText = wordText(word);
   const prevText = wordText(prev);
   const nextText = wordText(next);
 
   const busy = mergeWord.isPending || splitWord.isPending || adjustGap.isPending;
+
+  // Slider display delta relative to committed gap (for label).
+  const gapDelta = gapDraft - currentGap;
 
   // ── Merge preview ─────────────────────────────────────────────────────────
 
@@ -185,15 +209,23 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
 
   // ── Gap picker ────────────────────────────────────────────────────────────
 
-  const handleGapChange = useCallback(
-    (value: number) => {
-      setGapPx(value);
-      if (gapDebounceRef.current) clearTimeout(gapDebounceRef.current);
-      gapDebounceRef.current = setTimeout(() => {
-        adjustGap.mutate({ lineIndex, wordIndex, gapPx: value });
-      }, 300);
+  /**
+   * Commit the gap slider value on mouseup/blur.
+   * Computes deltaX = newGap - currentGap, then calls rebox on wi+1.
+   * Clamps so the resulting gap stays >= 0 and the next word's x stays >= 0.
+   */
+  const handleGapCommit = useCallback(
+    (newGap: number) => {
+      if (!hasNext || !next?.bbox) return;
+      const nextBbox = next.bbox;
+      // Clamp: gap >= 0 and next word x must stay >= 0.
+      const desiredDelta = newGap - currentGap;
+      const maxNegativeDelta = Math.min(0, -nextBbox.x); // can't push x below 0
+      const clampedDelta = Math.max(desiredDelta, maxNegativeDelta, -currentGap); // gap >= 0
+      if (Math.round(clampedDelta) === 0) return;
+      adjustGap.mutate({ lineIndex, wordIndex, nextWordBbox: nextBbox, deltaX: clampedDelta });
     },
-    [adjustGap, lineIndex, wordIndex],
+    [adjustGap, currentGap, hasNext, lineIndex, next?.bbox, wordIndex],
   );
 
   // ── Split ─────────────────────────────────────────────────────────────────
@@ -260,7 +292,7 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
       <div className="flex flex-col gap-1">
         <p className="text-[10px] text-ink-3 uppercase tracking-wide">
           Word gap:{" "}
-          <span className="font-mono text-ink-2">{gapPx > 0 ? `+${gapPx}` : gapPx}px</span>
+          <span className="font-mono text-ink-2">{gapDelta > 0 ? `+${gapDelta}` : gapDelta}px</span>
         </p>
         <input
           data-testid="structure-gap-slider"
@@ -268,11 +300,15 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
           min={-10}
           max={10}
           step={1}
-          value={gapPx}
-          disabled={busy}
-          onChange={(e) => handleGapChange(Number(e.target.value))}
+          value={gapDraft - currentGap}
+          disabled={!hasNext || busy}
+          onChange={(e) => setGapDraft(currentGap + Number(e.target.value))}
+          onMouseUp={(e) =>
+            handleGapCommit(currentGap + Number((e.target as HTMLInputElement).value))
+          }
+          onBlur={(e) => handleGapCommit(currentGap + Number(e.target.value))}
           className="w-full accent-accent cursor-pointer disabled:opacity-50"
-          aria-label={`Word gap: ${gapPx}px`}
+          aria-label={`Word gap: ${gapDelta > 0 ? `+${gapDelta}` : gapDelta}px`}
         />
         <div className="flex justify-between text-[9px] text-ink-4">
           <span>−10px</span>

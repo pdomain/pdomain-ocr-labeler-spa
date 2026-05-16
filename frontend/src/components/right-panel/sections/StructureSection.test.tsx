@@ -87,6 +87,9 @@ describe("StructureSection (Slice 18 + P3.d / Gap 37)", () => {
       http.post("/api/projects/p1/pages/0/words/:li/:wi/split", () =>
         HttpResponse.json(PAGE_RESPONSE),
       ),
+      http.post("/api/projects/p1/pages/0/words/:li/:wi/rebox", () =>
+        HttpResponse.json(PAGE_RESPONSE),
+      ),
     );
   });
 
@@ -234,6 +237,41 @@ describe("StructureSection (Slice 18 + P3.d / Gap 37)", () => {
     const { fireEvent } = await import("@testing-library/react");
     fireEvent.change(slider, { target: { value: "5" } });
     expect(screen.getByText(/\+5px/)).toBeInTheDocument();
+  });
+
+  it("gap slider is disabled when word is the last in the line", () => {
+    renderSection(makeWord(0, 2)); // last word in 3-word line — no wi+1
+    const slider = screen.getByTestId("structure-gap-slider") as HTMLInputElement;
+    expect(slider).toBeDisabled();
+  });
+
+  it("gap slider is enabled for a non-last word", () => {
+    renderSection(makeWord(0, 1)); // middle word — wi+1 exists
+    const slider = screen.getByTestId("structure-gap-slider") as HTMLInputElement;
+    expect(slider).not.toBeDisabled();
+  });
+
+  it("committing the gap slider calls rebox on the next word (wi+1) with shifted bbox", async () => {
+    // words: hello(wi=0, x=0,w=10), world(wi=1, x=0,w=10), foo(wi=2, x=0,w=10)
+    // Selecting wi=1 → next = wi=2, bbox={x:0,y:0,w:10,h:10}, currentGap=0
+    // Moving slider to +5 → deltaX=5 → rebox wi=2 at x=5
+    const reboxHandler = vi.fn(async ({ request }: { request: Request }) => {
+      const body = (await request.json()) as {
+        bbox: { x: number; y: number; width: number; height: number };
+      };
+      expect(body.bbox.x).toBe(5); // shifted by +5
+      expect(body.bbox.width).toBe(10); // width unchanged
+      return HttpResponse.json(PAGE_RESPONSE);
+    });
+    server.use(http.post("/api/projects/p1/pages/0/words/0/2/rebox", reboxHandler));
+
+    const { fireEvent } = await import("@testing-library/react");
+    renderSection(makeWord(0, 1));
+    const slider = screen.getByTestId("structure-gap-slider");
+    fireEvent.change(slider, { target: { value: "5" } });
+    fireEvent.mouseUp(slider, { target: { value: "5" } });
+
+    await waitFor(() => expect(reboxHandler).toHaveBeenCalledOnce());
   });
 
   // ── Vertical-split affordance ──────────────────────────────────────────────

@@ -2123,6 +2123,14 @@ export interface components {
              * @default 255
              */
             fill_value: number;
+            /**
+             * Shape
+             * Controls fill shape: "rect" = solid rectangle (default); "circle" = filled
+             * ellipse inscribed within the bbox, used for brush ops so that corners are
+             * not erased.
+             * @default "rect"
+             */
+            shape?: "rect" | "circle";
         };
         /**
          * ExportRequest

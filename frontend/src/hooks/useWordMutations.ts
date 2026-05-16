@@ -252,13 +252,22 @@ export function useSetCharRanges(projectId: string, pageIndex: number) {
 
 // ─── useErasePixels ───────────────────────────────────────────────────────────
 
+/** Shape sent to the backend for each erase op. */
+type EraseShape = "rect" | "circle";
+
 /**
- * Erase pixels in a rectangular region of a word's image slice.
+ * Erase pixels in a region of a word's image slice.
  *
- * The API takes one `ErasePixelsRequest = { bbox, fill_value }` per call.
+ * The API takes one `ErasePixelsRequest = { bbox, fill_value, shape }` per call.
  * The caller passes a list of erase operations (from ErasePixelsSection);
- * this hook maps each op to a bounding bbox and fires one POST per op,
- * sequentially.  Brush/lasso ops degrade to their axis-aligned bounding box.
+ * this hook maps each op to a bounding bbox + shape and fires one POST per op,
+ * sequentially.
+ *
+ * - Brush ops send `shape: "circle"` so the backend uses a cv2 ellipse mask
+ *   inscribed within the AABB — corners of the bounding square are NOT erased.
+ * - Rect ops send `shape: "rect"` (solid rectangle fill).
+ * - Lasso ops also send `shape: "rect"` (AABB approximation; polygon fill not
+ *   yet implemented on the backend).
  *
  * Endpoint: `POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/erase-pixels`
  */
@@ -281,15 +290,21 @@ export function useErasePixels(projectId: string, pageIndex: number) {
       const base = `${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/erase-pixels`;
       for (const op of ops) {
         let bbox: BBox;
+        let shape: EraseShape;
         if (op.tool === "rect") {
           bbox = { x: op.x, y: op.y, width: op.width, height: op.height };
+          shape = "rect";
         } else if (op.tool === "brush") {
+          const r = Math.round(op.radius);
           bbox = {
-            x: op.x - op.radius,
-            y: op.y - op.radius,
-            width: op.radius * 2,
-            height: op.radius * 2,
+            x: Math.round(op.x - r),
+            y: Math.round(op.y - r),
+            width: r * 2,
+            height: r * 2,
           };
+          // Tell the backend to use a circular (ellipse) mask so the corners
+          // of the AABB are not erased — only the circle the user painted.
+          shape = "circle";
         } else {
           // lasso — compute axis-aligned bounding box from points
           const xs = op.points.map(([x]) => x);
@@ -299,8 +314,10 @@ export function useErasePixels(projectId: string, pageIndex: number) {
           const maxX = Math.max(...xs);
           const maxY = Math.max(...ys);
           bbox = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+          // Lasso uses AABB approximation; polygon fill not yet implemented.
+          shape = "rect";
         }
-        await apiPost<void>(base, { bbox, fill_value: 255 });
+        await apiPost<void>(base, { bbox, fill_value: 255, shape });
       }
     },
     onSuccess: () => {
@@ -337,25 +354,49 @@ export function useSetCharBboxes(projectId: string, pageIndex: number) {
   });
 }
 
-// ─── useAdjustWordGap (P3.d stub) ─────────────────────────────────────────────
+// ─── useAdjustWordGap (P3.d) ──────────────────────────────────────────────────
 
 /**
- * Adjust the inter-word gap for a word (P3.d).
+ * Adjust the inter-word gap by shifting the next word's bbox via rebox.
  *
- * TODO: Backend endpoint not yet defined. This stub logs the action locally
- * and resolves immediately so the UI behaves as if the mutation succeeded.
- * Wire to ``POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/gap``
- * (or equivalent) when the backend endpoint lands.
+ * The gap between word `wi` and word `wi+1` is:
+ *   gap = word[wi+1].bbox.x − (word[wi].bbox.x + word[wi].bbox.width)
+ *
+ * Adjusting by `deltaX` pixels shifts word `wi+1` left (negative) or right
+ * (positive), widening or narrowing the gap.  The caller is responsible for
+ * clamping `deltaX` so the resulting gap stays non-negative.
+ *
+ * Delegates to ``useReboxWord`` on word ``wi+1``.
  */
-export function useAdjustWordGap(_projectId: string, _pageIndex: number) {
-  return useMutation<void, Error, { lineIndex: number; wordIndex: number; gapPx: number }>({
-    mutationFn: ({ lineIndex, wordIndex, gapPx }) => {
-      // TODO: replace with real API call when backend endpoint is defined
-      // eslint-disable-next-line no-console
-      console.log(
-        `[useAdjustWordGap] TODO stub — line=${lineIndex} word=${wordIndex} gap=${gapPx}px`,
-      );
-      return Promise.resolve();
+export function useAdjustWordGap(projectId: string, pageIndex: number) {
+  const reboxMutation = useReboxWord(projectId, pageIndex);
+
+  return {
+    mutate: ({
+      lineIndex,
+      wordIndex,
+      nextWordBbox,
+      deltaX,
+    }: {
+      lineIndex: number;
+      wordIndex: number;
+      /** The next word's (wi+1) current bounding box. */
+      nextWordBbox: BBox;
+      /** Pixels to shift the next word. Positive = increase gap, negative = decrease. */
+      deltaX: number;
+    }) => {
+      if (Math.round(deltaX) === 0) return;
+      reboxMutation.mutate({
+        lineIndex,
+        wordIndex: wordIndex + 1, // rebox the NEXT word
+        bbox: {
+          x: nextWordBbox.x + deltaX,
+          y: nextWordBbox.y,
+          width: nextWordBbox.width,
+          height: nextWordBbox.height,
+        },
+      });
     },
-  });
+    isPending: reboxMutation.isPending,
+  };
 }

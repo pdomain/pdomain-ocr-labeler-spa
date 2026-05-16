@@ -177,10 +177,22 @@ class MergeWordsRequest(BaseModel):
 
 
 class ErasePixelsRequest(BaseModel):
-    """Spec §2 lines 330-332."""
+    """Spec §2 lines 330-332.
+
+    ``shape`` controls how the fill is applied within the bbox:
+
+    - ``"rect"`` (default): solid rectangle fill, matching the original
+      legacy-labeler behaviour
+      (``pd_ocr_labeler/state/page_state.py:1802``).
+    - ``"circle"``: filled ellipse inscribed within the bbox, drawn via
+      ``cv2.ellipse`` with a numpy mask.  Use this for brush ops so that
+      the corners of the bounding square are **not** erased — only the
+      circular region the user actually painted.
+    """
 
     bbox: BBox
     fill_value: int = 255
+    shape: Literal["rect", "circle"] = "rect"
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -1059,7 +1071,24 @@ def erase_pixels(
 
         clamped_fill = max(0, min(255, int(body.fill_value)))
         try:
-            image[top:bottom, left:right] = clamped_fill
+            if body.shape == "circle":
+                import cv2
+                import numpy as _np
+
+                cx = (left + right) // 2
+                cy = (top + bottom) // 2
+                rx = max(1, (right - left) // 2)
+                ry = max(1, (bottom - top) // 2)
+                # Build a 2-D boolean mask the same height x width as the image.
+                # We draw with a fixed sentinel value (255) so the mask is
+                # independent of ``clamped_fill`` — avoids false-positive
+                # matches when ``clamped_fill == 0`` would collide with the
+                # zero-initialised mask background.
+                ellipse_mask = _np.zeros(image.shape[:2], dtype=_np.uint8)
+                cv2.ellipse(ellipse_mask, (cx, cy), (rx, ry), 0, 0, 360, 255, -1)
+                image[ellipse_mask != 0] = clamped_fill
+            else:
+                image[top:bottom, left:right] = clamped_fill
         except Exception as exc:
             log.exception("erase_pixels: in-place assignment failed: %s", exc)
             return _mutation_failed(f"erase_pixels: in-place assignment failed: {exc}")
