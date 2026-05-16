@@ -4,8 +4,10 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Rail } from "./Rail";
 import { railStore } from "../../stores/rail-store";
+import { useUiPrefs } from "../../stores/ui-prefs";
 
 // Silence dialogStore open call (not wired in jsdom tests).
 vi.mock("../../stores/dialog-store", () => ({
@@ -187,5 +189,15 @@ describe("Rail — target + mode selectors (Slice 10 / P1.d,e,f)", () => {
     render(<Rail />);
     fireEvent.click(screen.getByTestId("rail-hotkeys-button"));
     expect(dialogStore.open).toHaveBeenCalledWith("hotkeyHelp");
+  });
+
+  // ── Bulk button opens drawer to worklist tab ───────────────────────────────
+
+  it("bulk button opens drawer to worklist tab", async () => {
+    useUiPrefs.setState({ drawerOpen: false, drawerTab: "hierarchy" });
+    render(<Rail />);
+    await userEvent.setup().click(screen.getByTestId("rail-bulk-button"));
+    expect(useUiPrefs.getState().drawerOpen).toBe(true);
+    expect(useUiPrefs.getState().drawerTab).toBe("worklist");
   });
 });

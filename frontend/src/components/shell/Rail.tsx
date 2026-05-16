@@ -18,6 +18,7 @@ import { railStore, type RailTarget, type RailMode } from "../../stores/rail-sto
 import { useRailHotkeys } from "../../hooks/useRailHotkeys";
 import { useLayerColors } from "../../hooks/useLayerColors";
 import { dialogStore } from "../../stores/dialog-store";
+import { useUiPrefs } from "../../stores/ui-prefs";
 import { cn } from "@/lib/utils";
 
 // ─── Mode icon + label lookup ─────────────────────────────────────────────────
@@ -244,6 +245,12 @@ export function Rail() {
           data-testid="rail-bulk-button"
           title="Bulk actions"
           aria-label="Bulk actions"
+          onClick={() => {
+            // Open drawer to the worklist tab so the BulkActions bar is visible.
+            // TODO: add a dedicated "enter bulk mode" flag to worklistStore when
+            //       the multi-select UI needs to be activated programmatically.
+            useUiPrefs.setState({ drawerOpen: true, drawerTab: "worklist" });
+          }}
           className="w-full flex flex-col items-center justify-center gap-0.5 py-1.5 rounded text-[9px] font-medium text-ink-3 hover:text-ink-2 hover:bg-bg-raised/50 transition-colors select-none"
         >
           <LayoutList size={14} aria-hidden="true" />
