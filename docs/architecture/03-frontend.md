@@ -174,7 +174,7 @@ URL invariants — see [`13-driver-contract.md`](13-driver-contract.md) §1
 for the full rule set.
 
 - `/` — placeholder when no project; otherwise redirects to the
-  last-loaded project's first page via `pageno`.
+  last-loaded project's last page via `pageno`.
 - `/projects/{id}` — same as `/projects/{id}/pages/pageno/1`.
 - `/projects/{id}/pages/pageno/{n}` — canonical 1-based.
 - `/projects/{id}/pages/index/{idx0}` — alternate 0-based.

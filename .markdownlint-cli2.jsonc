@@ -25,6 +25,7 @@
     "frontend/node_modules/**",
     "frontend/dist/**",
     "src/pd_ocr_labeler_spa/static/**",
-    ".pytest_cache/**"
+    ".pytest_cache/**",
+    "docs/specs/2026-05-15-hifi-redesign-plan.md"
   ]
 }
