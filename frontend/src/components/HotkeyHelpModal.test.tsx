@@ -125,6 +125,45 @@ describe("HotkeyHelpModal: KeyCap components", () => {
   });
 });
 
+// ─── completeness invariant ───────────────────────────────────────────────────
+//
+// The modal reads directly from the registry (useSyncExternalStore), so this
+// invariant is structurally guaranteed. This test makes the guarantee explicit
+// and will catch any future divergence (e.g. filtering logic added to the modal
+// that incorrectly excludes entries).
+
+describe("HotkeyHelpModal: completeness invariant", () => {
+  it("renders every entry label present in the registry", () => {
+    renderModal();
+    const groups = getPopulatedGroups();
+    const bodyText = document.body.textContent ?? "";
+
+    for (const group of groups) {
+      for (const entry of group.entries) {
+        // Use body textContent so duplicate labels (same label in two scopes,
+        // e.g. "Refine") don't need `getAllByText` — we only need presence.
+        expect(
+          bodyText,
+          `entry "${entry.label}" (group: ${group.id}) not found in modal`,
+        ).toContain(entry.label);
+      }
+    }
+  });
+
+  it("modal entry count matches total registry entry count", () => {
+    renderModal();
+    const groups = getPopulatedGroups();
+    const totalRegistered = groups.reduce((sum, g) => sum + g.entries.length, 0);
+
+    // Each entry renders exactly one <td> with the label text.
+    // Count label cells: the second <td> in every HotkeyRow is the label cell.
+    const labelCells = document.querySelectorAll(
+      "[data-testid^='hotkey-group-table-'] tbody tr td:nth-child(2)",
+    );
+    expect(labelCells.length).toBe(totalRegistered);
+  });
+});
+
 // ─── registry: getPopulatedGroups ────────────────────────────────────────────
 
 describe("hotkey-registry: getPopulatedGroups", () => {
