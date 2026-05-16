@@ -52,7 +52,9 @@ gaps**, and **polish**, then prescribes a cut-over checklist.
 
 ## Polish (nice to have, not on cut-over critical path)
 
-- ImageTabs sub-tabs vs single-canvas decision (#295 — design Q for CT).
+- ~~ImageTabs sub-tabs vs single-canvas decision (#295)~~ — resolved per D-045
+  (2026-05-16): no image-viewport text-overlay sub-tabs; `mismatches-only-toggle`
+  is the shipped resolution; right-pane `TextTabs` covers GT/OCR views.
 - Architecture spec docs for shipped specs 21/22/23: today these specs
   live only in `specs/`. Promote the rationale parts into
   `docs/architecture/` once the implementation stabilizes; spec 21 is
@@ -103,9 +105,9 @@ retiring the legacy `pd-ocr-labeler`:
   D-018; local CPU/GPU DocTR is the only target.
 - pd-index PEP 503 self-hosted wheel publishing: separate workstream;
   the wheel-from-source install via `make build` is the cut-over path.
-- ImageTabs sub-tabs (#295): single-canvas with layer toggles is the
-  current design; legacy parity here is a UX decision pending CT
-  input, not a usability blocker.
+- ImageTabs sub-tabs (#295): resolved per D-045 (2026-05-16) — no
+  image-viewport text-overlay sub-tabs will be added; this item is
+  fully closed.
 
 ## References
 

@@ -161,11 +161,16 @@ preserved for any external script that might style it).
 
 ### 2.7 Text tabs / right pane
 
+These are right-pane `TextTabs.tsx` tab triggers, not image-viewport
+overlays. The decision not to add image-viewport text-overlay sub-tabs
+is recorded in `specs/17-decisions.md` D-045 (2026-05-16). These
+testids are live in the SPA and must be preserved per D-014.
+
 | Testid | What it is |
 |---|---|
-| `text-tab-matches` | Tabs trigger: Matches |
-| `text-tab-ground-truth` | Tabs trigger: Ground Truth |
-| `text-tab-ocr` | Tabs trigger: OCR |
+| `text-tab-matches` | Tabs trigger: Matches (right pane) |
+| `text-tab-ground-truth` | Tabs trigger: Ground Truth (right pane) |
+| `text-tab-ocr` | Tabs trigger: OCR (right pane) |
 | `match-filter-toggle` | The Unvalidated/Mismatched/All toggle |
 | `match-filter-unvalidated` | Toggle option: Unvalidated |
 | `match-filter-mismatched` | Toggle option: Mismatched |

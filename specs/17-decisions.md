@@ -1599,6 +1599,74 @@ D-032 (rotation provenance precedent).
 
 ---
 
+## D-045 — ImageTabs sub-tabs: dropped in favor of existing Drawer + RightPanel surfaces
+
+**Date:** 2026-05-16
+**Status:** Accepted
+**Closes:** GitHub issue #295; `docs/architecture/04-image-viewport.md` §3 open item
+
+### Context
+
+The task `docs/plan-to-usable.md` listed "ImageTabs sub-tabs vs single-canvas
+decision (#295 — design Q for CT)" as a pending design question. The legacy
+`pd-ocr-labeler` image pane (`image_tabs.py`) did **not** have text-overlay
+sub-tabs; text overlays lived in the right-pane `text_tabs.py` (Matches /
+Ground Truth / OCR). The confusion arose because the driver-contract
+spec (`13-driver-contract.md §2.7`) titled that section "Text tabs / right
+pane" and some planning notes described the three right-pane tabs as
+"ImageTabs sub-tabs."
+
+Issue #295 was resolved differently: `ImageTabsHeader.tsx` gained a
+`mismatches-only-toggle` that dims exact/validated word bboxes in the canvas
+overlay, giving the user a fast "show me the problem words" view without a
+separate canvas mode.
+
+The open question at `docs/plan-to-usable.md` line 55 and the "Out of scope"
+note at line 106 collectively asked: should the SPA add three text-overlay
+sub-tabs above the image (Matches canvas / GT text overlay / OCR text overlay)?
+
+### Decision
+
+**Do not add image-viewport text-overlay sub-tabs.** The `mismatches-only-toggle`
+(shipped as part of #295) is the complete resolution for the `#295` design
+question.
+
+### Rationale
+
+The three use-cases that text-overlay sub-tabs would serve are already covered:
+
+- **Matches (both bboxes):** The canvas already shows bbox overlays for every
+  active layer. Layer checkboxes let the user choose which layers are visible.
+  The `mismatches-only-toggle` lets the user dim exact/validated words so only
+  problem words are visually prominent — the primary reason to want a "Matches"
+  mode.
+- **Ground Truth text overlay:** `LineDetail` and `WordDetail` in the Right
+  Panel show GT text with OCR comparison. The Worklist row's diff line serves
+  the same scan-reading purpose as a GT text overlay on the canvas.
+- **OCR text overlay:** Similarly covered by `WordDetail`'s OCR well and the
+  Worklist row.
+
+Adding text-overlay sub-tabs would duplicate these surfaces without new
+affordances and would introduce text-positioning complexity over the Konva
+canvas (absolute positioning of overlapping text over variable-scale images
+with zoom).
+
+Cross-reference: `docs/architecture/04-image-viewport.md`,
+`docs/architecture/25-drawer-worklist.md`,
+`docs/architecture/26-right-panel-detail.md`.
+
+### Consequences
+
+- `docs/plan-to-usable.md` "Polish" item for ImageTabs sub-tabs (#295) is
+  closed. The `mismatches-only-toggle` is the shipped resolution.
+- `frontend/src/components/ImageTabsHeader.tsx` does not need changes.
+- The right-pane `TextTabs.tsx` (Matches / Ground Truth / OCR tabs) and its
+  `text-tab-matches`, `text-tab-ground-truth`, `text-tab-ocr` testids are
+  **not affected** — those are a separate component and must be preserved per
+  D-014.
+
+---
+
 ## Pending decisions
 
 See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for any sub-questions

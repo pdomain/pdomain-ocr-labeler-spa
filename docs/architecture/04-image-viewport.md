@@ -294,3 +294,13 @@ These are **new** — the legacy has no viewport hotkeys
 - **Drag throttling.** The legacy redraws on every server-side mousemove
   (websocket roundtrip!). The SPA can throttle to ~60Hz client-side
   with `requestAnimationFrame`. Implement and benchmark in M4.
+
+## 10. Closed decisions
+
+- **ImageTabs text-overlay sub-tabs (#295).** Resolved 2026-05-16 per
+  D-045: no text-overlay sub-tabs (GT / OCR / Matches overlaid on the
+  canvas) will be added. The `mismatches-only-toggle` in
+  `ImageTabsHeader` is the shipped resolution. Coverage for the GT and
+  OCR use-cases comes from the right-pane `TextTabs` (Matches / Ground
+  Truth / OCR) and the `WordDetail` / `LineDetail` panels. See
+  `specs/17-decisions.md` D-045.
