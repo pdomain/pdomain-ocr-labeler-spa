@@ -236,6 +236,11 @@ export default function ProjectPage() {
     getSelectionSnapshot,
     getSelectionSnapshot,
   );
+  const selectionLevel = useSyncExternalStore(
+    selectionStore.subscribe,
+    () => selectionStore.getState().level,
+    () => "none" as const,
+  );
   const vpMode = useSyncExternalStore(
     subscribeViewport,
     getViewportModeSnapshot,
@@ -568,6 +573,7 @@ export default function ProjectPage() {
         canvas={canvasSlot}
         right={rightSlot}
         drawerCollapsed={!drawerOpen}
+        rightWidth={selectionLevel === "line" || selectionLevel === "block" ? 640 : 520}
       />
 
       {/* IS-2: hidden PageActions for driver-contract testid preservation §2.5 */}
