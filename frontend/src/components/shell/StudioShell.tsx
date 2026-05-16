@@ -14,8 +14,14 @@
 import type * as React from "react";
 
 export interface StudioShellProps {
-  /** Content for the 56px top header zone. */
+  /** Content for the top header zone. */
   header: React.ReactNode;
+  /**
+   * Height in px for the top header row. Pass 0 when the App-level header
+   * handles the top chrome — collapses the row and hides the header div.
+   * Defaults to 56.
+   */
+  headerHeight?: number;
   /** Content for the 64px wide left rail. */
   rail: React.ReactNode;
   /** Content for the collapsible drawer panel. */
@@ -32,6 +38,7 @@ export interface StudioShellProps {
 
 export function StudioShell({
   header,
+  headerHeight = 56,
   rail,
   drawer,
   canvas,
@@ -49,7 +56,7 @@ export function StudioShell({
           display: "grid",
           gridTemplateAreas: '"header header header header" "rail drawer canvas right"',
           gridTemplateColumns: `64px ${drawerCollapsed ? "0px" : "var(--drawer-w, 320px)"} 1fr var(--right-w, 520px)`,
-          gridTemplateRows: "56px 1fr",
+          gridTemplateRows: `${headerHeight}px 1fr`,
           ...(rightWVar ? { "--right-w": rightWVar } : {}),
         } as React.CSSProperties
       }
@@ -58,7 +65,7 @@ export function StudioShell({
       <div
         data-testid="studio-shell-header"
         style={{ gridArea: "header" }}
-        className="min-w-0 overflow-hidden"
+        className={["min-w-0 overflow-hidden", headerHeight === 0 ? "hidden" : ""].join(" ").trim()}
       >
         {header}
       </div>

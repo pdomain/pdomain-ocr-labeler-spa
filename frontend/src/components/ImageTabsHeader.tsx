@@ -190,6 +190,32 @@ export function ImageTabsHeader({
         Mismatches
       </button>
 
+      {/* Layer color legend chips (spec §2 item 4) */}
+      <div
+        className="flex items-center gap-1.5 ml-1"
+        aria-label="Layer colors"
+        data-testid="layer-color-legend"
+      >
+        <span
+          data-testid="legend-chip-para"
+          className="inline-block w-3 h-3 rounded-sm"
+          style={{ background: "var(--layer-para)" }}
+          title="Paragraph layer"
+        />
+        <span
+          data-testid="legend-chip-line"
+          className="inline-block w-3 h-3 rounded-sm"
+          style={{ background: "var(--layer-line)" }}
+          title="Line layer"
+        />
+        <span
+          data-testid="legend-chip-word"
+          className="inline-block w-3 h-3 rounded-sm"
+          style={{ background: "var(--layer-word)" }}
+          title="Word layer"
+        />
+      </div>
+
       {/* Zoom buttons (P5.d, Gap 24) */}
       <div className="ml-auto flex items-center gap-1">
         <button

@@ -100,4 +100,42 @@ describe("StudioShell — 5-zone grid (Slice 8)", () => {
     // Default: column template includes var(--right-w, 520px)
     expect(shell.style.gridTemplateColumns).toContain("520px");
   });
+
+  it("headerHeight=0 collapses the header row to 0px in gridTemplateRows", () => {
+    render(
+      <StudioShell
+        headerHeight={0}
+        header={<></>}
+        rail={<div>r</div>}
+        drawer={<div>d</div>}
+        canvas={<div>c</div>}
+        right={<div>right</div>}
+      />,
+    );
+    const shell = screen.getByTestId("studio-shell") as HTMLElement;
+    expect(shell.style.gridTemplateRows).toBe("0px 1fr");
+  });
+
+  it("headerHeight=0 adds 'hidden' class to studio-shell-header", () => {
+    render(
+      <StudioShell
+        headerHeight={0}
+        header={<></>}
+        rail={<div>r</div>}
+        drawer={<div>d</div>}
+        canvas={<div>c</div>}
+        right={<div>right</div>}
+      />,
+    );
+    const header = screen.getByTestId("studio-shell-header");
+    expect(header.classList.contains("hidden")).toBe(true);
+  });
+
+  it("default headerHeight (56) does not add 'hidden' class to studio-shell-header", () => {
+    renderShell();
+    const header = screen.getByTestId("studio-shell-header");
+    expect(header.classList.contains("hidden")).toBe(false);
+    const shell = screen.getByTestId("studio-shell") as HTMLElement;
+    expect(shell.style.gridTemplateRows).toBe("56px 1fr");
+  });
 });

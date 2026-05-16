@@ -64,6 +64,7 @@ import {
 import { useUiPrefs, type MatchFilter } from "../stores/ui-prefs";
 import { dialogStore, useDialogStore } from "../stores/dialog-store";
 import { selectionStore, type SelectionState } from "../stores/selection-store";
+import { viewportStore, toggleEraseMode } from "../stores/viewport-store";
 
 import { PageActions } from "../components/PageActions";
 import { Drawer } from "../components/shell/Drawer";
@@ -161,6 +162,15 @@ function getSelectionSnapshot(): SelectionState {
   return selectionStore.getState();
 }
 
+// ─── viewport-store subscriber (erase mode) ─────────────────────────────────
+
+function subscribeViewport(cb: () => void): () => void {
+  return viewportStore.subscribe(() => cb());
+}
+function getViewportModeSnapshot(): string {
+  return viewportStore.getState().mode;
+}
+
 // ─── Derived data helpers ───────────────────────────────────────────────────
 
 /** Build the `PageData` shape needed by ToolbarActionGrid from a payload.
@@ -225,6 +235,11 @@ export default function ProjectPage() {
     subscribeSelection,
     getSelectionSnapshot,
     getSelectionSnapshot,
+  );
+  const vpMode = useSyncExternalStore(
+    subscribeViewport,
+    getViewportModeSnapshot,
+    getViewportModeSnapshot,
   );
   const wordEditState = useDialogStore((s) => s.wordEdit);
   const confirmState = useDialogStore((s) => s.confirm);
@@ -460,12 +475,10 @@ export default function ProjectPage() {
       <ImageTabsHeader
         layerVisibility={uiPrefs.layerVisibility}
         selectionMode={uiPrefs.selectionMode}
-        eraseActive={false}
+        eraseActive={vpMode === "erase"}
         onLayerToggle={(layer) => setLayerVisibility(layer, !uiPrefs.layerVisibility[layer])}
         onSelectionModeChange={(mode) => setSelectionMode(mode)}
-        onEraseToggle={() => {
-          /* erase toggle wired by PageImageCanvas modes; no-op here */
-        }}
+        onEraseToggle={toggleEraseMode}
         matchFilterMode={uiPrefs.matchFilterMode}
         onMatchFilterModeToggle={() => {
           useUiPrefs.setMatchFilterMode(
@@ -548,6 +561,7 @@ export default function ProjectPage() {
       <ProjectLoadingOverlay isLoading={isPageLoading} />
 
       <StudioShell
+        headerHeight={0}
         header={headerSlot}
         rail={railSlot}
         drawer={drawerSlot}

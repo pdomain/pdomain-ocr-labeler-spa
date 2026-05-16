@@ -447,4 +447,89 @@ describe("ImageTabsHeader (#196)", () => {
     fireEvent.click(screen.getByTestId("mismatches-only-toggle"));
     expect(onMatchFilterModeToggle).toHaveBeenCalledOnce();
   });
+
+  // ── Erase button wiring ─────────────────────────────────────────────────────
+
+  it("erase button click calls onEraseToggle", () => {
+    const onEraseToggle = vi.fn();
+    render(
+      <ImageTabsHeader
+        layerVisibility={defaultVisibility}
+        selectionMode="paragraph"
+        eraseActive={false}
+        onLayerToggle={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onEraseToggle={onEraseToggle}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("erase-pixels-button"));
+    expect(onEraseToggle).toHaveBeenCalledOnce();
+  });
+
+  it("eraseActive=true sets aria-pressed='true' on erase button", () => {
+    render(
+      <ImageTabsHeader
+        layerVisibility={defaultVisibility}
+        selectionMode="paragraph"
+        eraseActive={true}
+        onLayerToggle={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onEraseToggle={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("erase-pixels-button")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("eraseActive=false sets aria-pressed='false' on erase button", () => {
+    render(
+      <ImageTabsHeader
+        layerVisibility={defaultVisibility}
+        selectionMode="paragraph"
+        eraseActive={false}
+        onLayerToggle={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onEraseToggle={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("erase-pixels-button")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  // ── Legend chips (spec §2 item 4) ──────────────────────────────────────────
+
+  it("renders layer-color-legend with three color chips", () => {
+    render(
+      <ImageTabsHeader
+        layerVisibility={defaultVisibility}
+        selectionMode="paragraph"
+        eraseActive={false}
+        onLayerToggle={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onEraseToggle={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("layer-color-legend")).toBeInTheDocument();
+    expect(screen.getByTestId("legend-chip-para")).toBeInTheDocument();
+    expect(screen.getByTestId("legend-chip-line")).toBeInTheDocument();
+    expect(screen.getByTestId("legend-chip-word")).toBeInTheDocument();
+  });
+
+  it("legend chips use var(--layer-*) CSS variables for background", () => {
+    render(
+      <ImageTabsHeader
+        layerVisibility={defaultVisibility}
+        selectionMode="paragraph"
+        eraseActive={false}
+        onLayerToggle={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onEraseToggle={vi.fn()}
+      />,
+    );
+    // jsdom exposes inline styles as-is
+    const para = screen.getByTestId("legend-chip-para") as HTMLElement;
+    const line = screen.getByTestId("legend-chip-line") as HTMLElement;
+    const word = screen.getByTestId("legend-chip-word") as HTMLElement;
+    expect(para.style.background).toBe("var(--layer-para)");
+    expect(line.style.background).toBe("var(--layer-line)");
+    expect(word.style.background).toBe("var(--layer-word)");
+  });
 });

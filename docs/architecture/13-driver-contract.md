@@ -152,6 +152,8 @@ Hotkey: `Enter` on `nav-page-input` triggers `Go To`.
 | `selection-mode-word` | Radio: Word |
 | `erase-pixels-button` | Erase Pixels mode toggle |
 | `mismatches-only-toggle` | Toggle: dim exact/validated word bboxes (Issue #295) |
+| `zoom-fit-button` | Fit page to viewport width |
+| `zoom-100-button` | 100% zoom (1:1 pixel) |
 | `image-viewport` | The Konva `<Stage>`'s outer wrapper div |
 
 Drag rectangle CSS class: `.ocr-drag-rect` (legacy CSS class
