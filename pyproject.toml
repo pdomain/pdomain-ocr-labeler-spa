@@ -108,6 +108,10 @@ ignore = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "integration: marks tests that require a live app stack (deselect with '-m not integration')",
+    "slow: marks tests that call real OCR/DocTR and take more than a few seconds",
+]
 
 [tool.pyright]
 include = ["src"]
