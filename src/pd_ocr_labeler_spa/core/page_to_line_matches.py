@@ -87,8 +87,12 @@ def _classify_match_status(
         try:
             raw_score: Any = fuzz_scorer(ground_truth_text)
             fuzz_score = float(raw_score) if raw_score is not None else None
-        except Exception:  # pragma: no cover - defensive
-            log.debug("fuzz_score_against raised for word %r", ocr_text, exc_info=True)
+        except Exception:
+            log.warning(
+                "_classify_match_status: fuzz_score_against raised for word %r — using score 0.0",
+                ocr_text,
+                exc_info=True,
+            )
 
     if fuzz_score is not None and fuzz_score >= fuzz_threshold:
         return MatchStatus.FUZZY, fuzz_score
@@ -140,6 +144,11 @@ def _word_to_word_match(
         # BBox — from ``Word.bounding_box`` (a ``pd_book_tools.geometry.bounding_box.BoundingBox``).
         bbox_obj = getattr(word_obj, "bounding_box", None)
         if bbox_obj is None:
+            log.warning(
+                "_word_to_word_match: word at line=%d word=%d has no bounding_box — dropped",
+                line_index,
+                word_index,
+            )
             return None  # Can't build a WordMatch without a bbox.
         bb = BBox(
             x=int(getattr(bbox_obj, "minX", 0) or 0),
@@ -249,8 +258,11 @@ def _build_line_to_paragraph_lookup(page: Any) -> dict[int, int]:
         for para_idx, para in enumerate(paragraphs):
             for line in getattr(para, "lines", []) or []:
                 result[id(line)] = para_idx
-    except Exception:  # pragma: no cover - defensive
-        log.debug("_build_line_to_paragraph_lookup: failed", exc_info=True)
+    except Exception:
+        log.warning(
+            "_build_line_to_paragraph_lookup: failed — paragraph_index will be None on all lines",
+            exc_info=True,
+        )
     return result
 
 
@@ -273,8 +285,11 @@ def _build_line_to_block_lookup(page: Any) -> dict[int, int]:
             for para in getattr(block, "paragraphs", []) or []:
                 for line in getattr(para, "lines", []) or []:
                     result[id(line)] = block_idx
-    except Exception:  # pragma: no cover - defensive
-        log.debug("_build_line_to_block_lookup: failed", exc_info=True)
+    except Exception:
+        log.warning(
+            "_build_line_to_block_lookup: failed — block_index will be None on all lines",
+            exc_info=True,
+        )
     return result
 
 
@@ -333,6 +348,18 @@ def page_to_line_matches(
     if page is None:
         return record, []
 
+    # Wrong-type guard: if the object has no .lines, the caller likely passed a
+    # UserPageEnvelope instead of a Page (envelope→Page lift failed upstream).
+    # None is the documented "no OCR yet" path; a non-None object without .lines
+    # is a caller bug — log WARNING so it's visible at default log level.
+    if not hasattr(page, "lines"):
+        log.warning(
+            "page_to_line_matches: page has no 'lines' attribute (type=%s)"
+            " — envelope→Page lift likely failed; returning empty line_matches",
+            type(page).__name__,
+        )
+        return record, []
+
     line_matches: list[LineMatch] = []
 
     try:
@@ -343,8 +370,25 @@ def page_to_line_matches(
         except TypeError:
             return record, []
 
-        para_lookup = _build_line_to_paragraph_lookup(page)
-        block_lookup = _build_line_to_block_lookup(page)
+        try:
+            para_lookup = _build_line_to_paragraph_lookup(page)
+        except Exception:
+            log.warning(
+                "page_to_line_matches: _build_line_to_paragraph_lookup raised"
+                " — paragraph_index will be None on all lines",
+                exc_info=True,
+            )
+            para_lookup = {}
+
+        try:
+            block_lookup = _build_line_to_block_lookup(page)
+        except Exception:
+            log.warning(
+                "page_to_line_matches: _build_line_to_block_lookup raised"
+                " — block_index will be None on all lines",
+                exc_info=True,
+            )
+            block_lookup = {}
 
         for line_idx, line in enumerate(lines):
             try:
