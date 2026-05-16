@@ -53,6 +53,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
+from ..core.envelope_lift import EnvelopeLiftError, lift_envelope_to_page
 from ..core.models import BBox
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.lanes import LaneResolver
@@ -299,13 +300,12 @@ def _resolve_page_object(pstate: PageState | None) -> Any | None:
     ``.lines`` attribute, so ``_resolve_word`` would see ``lines=None``
     and return ``None`` for every word → 404 ``word_not_found``.
 
-    We mirror the envelope→Page lift already present in
-    ``api/pages.py:_page_payload``: if ``payload`` has a
-    ``.payload.page`` dict (the ``UserPageEnvelope`` shape), materialise
-    a ``Page`` via ``Page.from_dict`` before returning.  A plain ``Page``
-    (OCR lane) falls through unmodified.  On any import/parse failure we
-    return the raw payload and let the caller surface a 404 as before —
-    the envelope was malformed, which is a legitimate not-found condition.
+    Delegates to ``core.envelope_lift.lift_envelope_to_page``: a plain
+    ``Page`` (OCR lane) is returned unchanged; a ``UserPageEnvelope``
+    (labeled/cached lane) is lifted via ``Page.from_dict``.  On lift
+    failure an ``EnvelopeLiftError`` is returned by the helper, which we
+    map to ``None`` here so the caller produces a 400 ``page_not_loaded``
+    response (the envelope was malformed — treat it as not-loaded).
 
     NOTE: the lifted ``Page`` is **not** written back to
     ``pstate.page_record.payload`` because ``PageLoadOutcome`` is a
@@ -323,23 +323,18 @@ def _resolve_page_object(pstate: PageState | None) -> Any | None:
     if payload_obj is None:
         return None
 
-    # Lift UserPageEnvelope → Page if the payload has the envelope shape.
-    try:
-        envelope_payload = getattr(payload_obj, "payload", None)
-        if envelope_payload is not None:
-            page_dict = getattr(envelope_payload, "page", None)
-            if isinstance(page_dict, dict):
-                import importlib as _imp
-
-                _page_mod = _imp.import_module("pd_book_tools.ocr.page")
-                payload_obj = _page_mod.Page.from_dict(page_dict)
-    except Exception:
-        log.debug(
-            "_resolve_page_object: envelope→Page lift failed — returning raw payload",
-            exc_info=True,
+    # Lift UserPageEnvelope → Page (labeled/cached lanes).
+    # Returns EnvelopeLiftError (never raises) on failure.
+    lift_result = lift_envelope_to_page(payload_obj)
+    if isinstance(lift_result, EnvelopeLiftError):
+        log.warning(
+            "_resolve_page_object: envelope→Page lift failed: %s"
+            " — returning None so caller maps to page_not_loaded",
+            lift_result.message,
+            exc_info=lift_result.cause,
         )
-
-    return payload_obj
+        return None
+    return lift_result
 
 
 def _resolve_word(page: Any, line_index: int, word_index: int) -> Any | None:

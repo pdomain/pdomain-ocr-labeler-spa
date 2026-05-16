@@ -417,3 +417,37 @@ def test_erase_pixels_returns_400_when_page_not_loaded(loaded_client: TestClient
     )
     assert resp.status_code == 400
     assert resp.json()["error"] == "page_not_loaded"
+
+
+# ── envelope lift failure ─────────────────────────────────────────────
+
+
+def test_word_mutation_returns_400_on_corrupt_envelope(
+    tmp_path: Path,
+    projects_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When envelope lift fails, word mutations return 400 page_not_loaded (not 404 or 500)."""
+    from pd_ocr_labeler_spa.core.envelope_lift import EnvelopeLiftError
+
+    monkeypatch.setattr(
+        "pd_ocr_labeler_spa.api.words.lift_envelope_to_page",
+        lambda payload: EnvelopeLiftError(
+            message="injected test failure",
+            cause=ValueError("injected"),
+        ),
+    )
+
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        c.post("/api/projects/load", json={"project_root": str(projects_root / "book1")})
+        c.post("/api/projects/book1/pages/0/load", json={})
+        resp = c.post(
+            "/api/projects/book1/pages/0/words/0/0/gt",
+            json={"text": "hello"},
+        )
+
+    # Lift failure → page can't be resolved → 400 page_not_loaded
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "page_not_loaded"
