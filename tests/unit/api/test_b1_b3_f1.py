@@ -246,19 +246,26 @@ def test_b1_second_get_page_uses_cached_state(
 ) -> None:
     """B1: second GET for the same page reuses the cached page_record.
 
-    ``run_ocr`` must be called exactly once across two GETs.
+    ``run_ocr`` must be called exactly once for page 0 across two GETs.
+    Adjacent-page prefetch (GAP-2) may trigger run_ocr for pages 1/2 as a
+    background side-effect; the assertion targets only page 0 re-use.
     """
     c = loaded_client_with_loader
     loader: _FakePageLoader = c.app.state.job_runner.context["page_loader"]  # type: ignore[attr-defined]
 
     c.get("/api/projects/book1/pages/0")
-    ocr_calls_after_first = len(loader.run_ocr_calls)
+    ocr_calls_for_page0_after_first = loader.run_ocr_calls.count(0)
 
     c.get("/api/projects/book1/pages/0")
-    ocr_calls_after_second = len(loader.run_ocr_calls)
+    ocr_calls_for_page0_after_second = loader.run_ocr_calls.count(0)
 
-    assert ocr_calls_after_first == 1
-    assert ocr_calls_after_second == 1, "run_ocr called twice — caching not working"
+    assert ocr_calls_for_page0_after_first == 1, (
+        f"page 0 should have been OCR'd exactly once after the first GET; "
+        f"got {ocr_calls_for_page0_after_first}"
+    )
+    assert ocr_calls_for_page0_after_second == 1, (
+        f"page 0 should NOT be re-OCR'd on the second GET (cached); got {ocr_calls_for_page0_after_second}"
+    )
 
 
 # ── B3: POST /pages/{idx}/load uses on-demand loader ────────────────────

@@ -65,6 +65,13 @@ class AppConfig(BaseModel):
     normalize_plaintext_tabs: bool = False
     normalize_profile: str = "ascii"
 
+    # Fuzzy-match threshold — mirrors legacy ``WordMatchViewModel.fuzz_threshold=0.8``
+    # (``pd_ocr_labeler/viewmodels/project/word_match_view_model.py:26``).
+    # Words with a fuzz score >= this threshold are classified as FUZZY rather
+    # than MISMATCH.  Must be in [0.0, 1.0]; 1.0 means exact-match-only (no
+    # fuzzy classification); 0.0 means everything is fuzzy.
+    fuzz_threshold: float = 0.8
+
 
 # ──────────────────────────────────────────────────────────────────────
 # Readers
@@ -131,6 +138,7 @@ def save_config(config_root: Path, cfg: AppConfig) -> None:
         "normalize_for_gt_matching": cfg.normalize_for_gt_matching,
         "normalize_plaintext_tabs": cfg.normalize_plaintext_tabs,
         "normalize_profile": cfg.normalize_profile,
+        "fuzz_threshold": cfg.fuzz_threshold,
     }
     content = yaml.dump(data, default_flow_style=False, allow_unicode=True)
     write_bytes_atomic(path, content.encode("utf-8"))

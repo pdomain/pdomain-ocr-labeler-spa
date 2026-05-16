@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
@@ -17,6 +17,7 @@ from ..core.jobs import JobRunner
 from ..core.models import EncodedDims, LineFilter, LineMatch, PageRecord, PageSource, Selection
 from ..core.page_state import PageLoader, ensure_page_model, persist_page_to_file
 from ..core.page_to_line_matches import page_to_line_matches
+from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.ground_truth import find_ground_truth_text
 from ..core.persistence.lanes import LaneResolver
 from ..core.persistence.user_page_envelope import (
@@ -27,7 +28,7 @@ from ..core.persistence.user_page_envelope import (
 from ..core.project_state import PageState, ProjectState
 from ..core.selection import SelectionMode, apply_selection
 from ..settings import Settings
-from .dependencies import get_job_runner, get_project_state, get_settings
+from .dependencies import get_app_config, get_job_runner, get_project_state, get_settings
 from .middleware.error_handler import ApiError
 
 log = logging.getLogger(__name__)
@@ -285,6 +286,115 @@ def _write_cached_envelope_best_effort(
         )
 
 
+# ── Adjacent-page prefetch — GAP-2 ───────────────────────────────────
+
+
+def _prefetch_adjacent_pages(
+    project_state: ProjectState,
+    runner: JobRunner,
+    settings: Settings,
+    current_index: int,
+) -> None:
+    """Silently preload ``current_index+1`` and ``current_index+2``.
+
+    Fired as a ``BackgroundTasks`` task from ``GET /pages/{idx}`` when
+    ``settings.no_prefetch`` is ``False`` (the default).  Any failure
+    (project gone, page out of range, loader unavailable, OCR error) is
+    swallowed with a DEBUG log so prefetch can never propagate an
+    exception back to the main request.
+
+    Spec authority: GAP-2 (adjacent-page prefetch gate on
+    ``Settings.no_prefetch``).  The gate name ``no_prefetch`` already
+    existed in ``Settings`` for the startup model-prefetch step; this
+    reuses it so operators can suppress *both* prefetch behaviours with
+    one env var (``PDLABELER_NO_PREFETCH=true``).
+    """
+    project = project_state.loaded_project
+    if project is None:
+        return
+    total = project.total_pages
+    try:
+        loader = _build_page_loader_from_context(runner, project_state, settings)
+    except Exception as exc:
+        log.debug("prefetch: loader unavailable at index %d: %s", current_index, exc)
+        return
+    for offset in (1, 2):
+        target = current_index + offset
+        if target >= total:
+            break
+        # Skip pages already in memory to avoid re-acquiring the lock
+        # for a no-op.  The double-checked-locking inside
+        # ``ensure_page_model`` handles the TOCTOU race; this check is
+        # only a cheap fast-exit so we don't re-import the loader for
+        # already-cached pages.
+        existing = project_state.get_page_state(target)
+        if existing is not None and existing.page_record is not None:
+            log.debug("prefetch: page %d already cached, skipping", target)
+            continue
+        try:
+            ensure_page_model(project_state, target, loader=loader)
+            log.debug("prefetch: page %d loaded (offset +%d)", target, offset)
+        except Exception as exc:  # pragma: no cover - defensive
+            log.debug("prefetch: page %d failed (offset +%d): %s", target, offset, exc)
+
+
+# ── Provenance summary — GAP-1 ───────────────────────────────────────
+
+
+def _build_provenance_summary(page_record: PageRecord) -> str | None:
+    """Assemble a human-readable provenance one-liner for the source badge tooltip.
+
+    Priority order: ``saved_provenance`` (from a labeled/cached envelope)
+    takes precedence over ``ocr_provenance`` (from a live OCR run) because
+    it carries the ``saved_at`` timestamp from when the page was last
+    written to disk.
+
+    Returns ``None`` when there is no meaningful information to show (all
+    fields are the ``UNKNOWN_METADATA_VALUE`` sentinel or absent).
+    """
+    from ..core.persistence.user_page_envelope import UNKNOWN_METADATA_VALUE
+
+    parts: list[str] = []
+
+    # ``saved_provenance`` is the raw dict parsed from the envelope's
+    # ``provenance`` block — used for labeled and cached lanes.
+    sp = page_record.saved_provenance
+    if sp and isinstance(sp, dict):
+        saved_at = sp.get("saved_at", "")
+        if saved_at and str(saved_at).strip():
+            parts.append(f"Saved: {str(saved_at)[:19]}")
+        app_block = sp.get("app", {})
+        if isinstance(app_block, dict):
+            app_ver = str(app_block.get("version", ""))
+            if app_ver and app_ver != UNKNOWN_METADATA_VALUE:
+                app_name = str(app_block.get("name", ""))
+                label = app_name if app_name else "App"
+                parts.append(f"{label} {app_ver}")
+        ocr_block = sp.get("ocr", {})
+        if isinstance(ocr_block, dict):
+            engine = str(ocr_block.get("engine", ""))
+            if engine and engine != UNKNOWN_METADATA_VALUE:
+                parts.append(f"Engine: {engine}")
+            raw_models = ocr_block.get("models", [])
+            if isinstance(raw_models, list) and raw_models:
+                names = [str(m.get("name", m) if isinstance(m, dict) else m) for m in raw_models[:2]]
+                parts.append(f"Models: {', '.join(names)}")
+
+    # Fall back to ``ocr_provenance`` (live OCR run) when saved_provenance
+    # is absent or yielded nothing useful.
+    if not parts:
+        prov = page_record.ocr_provenance
+        if prov is not None:
+            engine = str(prov.engine)
+            if engine and engine != UNKNOWN_METADATA_VALUE:
+                parts.append(f"Engine: {engine}")
+            if prov.models:
+                names = [m.name for m in prov.models[:2]]
+                parts.append(f"Models: {', '.join(names)}")
+
+    return " · ".join(parts) if parts else None
+
+
 # ── Payload assembly helpers — spec-23-A (issue #306) ─────────────────
 
 
@@ -365,6 +475,7 @@ def _page_payload(
     page_index: int,
     project_state: ProjectState,
     settings: Settings,
+    app_config: AppConfig | None = None,
 ) -> PagePayload:
     """Build a ``PagePayload`` from current in-memory state — spec §3.
 
@@ -445,6 +556,15 @@ def _page_payload(
                 page_record = _rec
                 line_matches = _lms
 
+    # GAP-1: stamp provenance_summary onto the page_record so the
+    # frontend source badge can show a tooltip.  Done here (after
+    # page_record is finalised) so page_to_line_matches stays
+    # pd_book_tools-import-free.
+    if page_record is not None:
+        summary = _build_provenance_summary(page_record)
+        if summary is not None:
+            page_record = page_record.model_copy(update={"provenance_summary": summary})
+
     # Encoded dims from on-disk image.  None when PIL can't open the
     # bytes; the URL builder degrades gracefully.
     encoded_dims: EncodedDims | None = None
@@ -490,9 +610,11 @@ def _page_payload(
 def get_page(
     project_id: str,
     page_index: int,
+    background_tasks: BackgroundTasks,
     project_state: ProjectState = Depends(get_project_state),
     runner: JobRunner = Depends(get_job_runner),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``GET /api/projects/{pid}/pages/{idx}`` — populated PagePayload.
 
@@ -536,7 +658,20 @@ def get_page(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
+
+    # GAP-2: schedule adjacent-page prefetch AFTER assembling the response
+    # so the background task never blocks the current response.
+    if not settings.no_prefetch:
+        background_tasks.add_task(
+            _prefetch_adjacent_pages,
+            project_state,
+            runner,
+            settings,
+            page_index,
+        )
+
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
@@ -638,6 +773,7 @@ def load_page(
     project_state: ProjectState = Depends(get_project_state),
     runner: JobRunner = Depends(get_job_runner),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../load`` — re-read the page from disk, discard in-memory edits.
 
@@ -680,6 +816,7 @@ def load_page(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
@@ -712,6 +849,7 @@ def rematch_gt(
     body: RematchGtRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../rematch-gt`` — re-run page-level GT matching (spec §7).
 
@@ -832,6 +970,7 @@ def rematch_gt(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
@@ -888,6 +1027,7 @@ def update_selection(
     body: UpdateSelectionRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../selection`` — fold a delta into ``pstate.selection``.
 
@@ -929,6 +1069,7 @@ def update_selection(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        app_config=app_config,
     )
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
@@ -1007,7 +1148,9 @@ __all__ = [
     "SaveProjectResponse",
     "UpdateSelectionRequest",
     "_build_image_url",
+    "_build_provenance_summary",
     "_page_payload",
+    "_prefetch_adjacent_pages",
     "_render_plaintext",
     "get_page_image",
     "install_pages_router",

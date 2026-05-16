@@ -31,6 +31,7 @@ from ..core.app_state import AppState
 from ..core.jobs import JobEventBroker, JobRunner
 from ..core.notifications import NotificationQueue
 from ..core.ocr_config_state import OCRConfigCarrier
+from ..core.persistence.config_yaml import AppConfig
 from ..core.project_state import ProjectState
 from ..core.source_root_state import SourceRootCarrier
 from ..settings import Settings
@@ -59,6 +60,24 @@ def get_settings(request: Request) -> Settings:
     settings = _state_attr(request, "settings")
     assert isinstance(settings, Settings)
     return settings
+
+
+def get_app_config(request: Request) -> AppConfig:
+    """The ``AppConfig`` loaded from ``config.yaml`` at boot.
+
+    Provides access to runtime-configurable settings (e.g.
+    ``fuzz_threshold``, ``normalize_for_gt_matching``) without
+    re-reading ``config.yaml`` per request.  The instance on
+    ``app.state`` is set by ``bootstrap.build_app`` and is frozen for
+    the process lifetime; a server restart is required to pick up
+    config-file changes.
+
+    Callers that need user-adjustable config (distinct from the
+    ``PDLABELER_*``-env-var ``Settings``) should prefer this provider.
+    """
+    cfg = _state_attr(request, "app_config")
+    assert isinstance(cfg, AppConfig)
+    return cfg
 
 
 def get_app_state(request: Request) -> AppState:
@@ -196,6 +215,7 @@ def get_source_root_carrier(request: Request) -> SourceRootCarrier:
 __all__ = [
     "get_active_project",
     "get_active_project_carrier",
+    "get_app_config",
     "get_app_state",
     "get_auth",
     "get_job_events",
