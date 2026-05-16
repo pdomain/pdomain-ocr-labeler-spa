@@ -1,12 +1,20 @@
 // Worklist.test.tsx — Tests for the Worklist drawer tab (Slice 11, P5.a, P5.b).
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 11, Gap 19, Gap 20.
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Worklist } from "./Worklist";
 import { worklistStore } from "../../stores/worklist-store";
 import type { components } from "../../api/types";
+
+// Mock selectLine so we can spy on calls without full store setup
+vi.mock("../../stores/selection-store", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../stores/selection-store")>();
+  return { ...actual, selectLine: vi.fn() };
+});
+
+import { selectLine } from "../../stores/selection-store";
 
 type LineMatch = components["schemas"]["LineMatch"];
 
@@ -33,6 +41,7 @@ function makeLines(overrides: Partial<LineMatch>[] = []): LineMatch[] {
 describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
   beforeEach(() => {
     worklistStore.reset();
+    vi.clearAllMocks();
   });
 
   it("renders with data-testid=worklist", () => {
@@ -215,5 +224,93 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
     expect(screen.getByTestId("worklist-filter-unvalidated")).toHaveTextContent("1");
     // Error chip shows count of mismatch status lines
     expect(screen.getByTestId("worklist-filter-mismatched")).toHaveTextContent("1");
+  });
+});
+
+// ── WorklistRow → selectionStore bridge + bulk-select checkboxes ─────────────
+
+describe("WorklistRow bridge", () => {
+  beforeEach(() => {
+    worklistStore.reset();
+    vi.clearAllMocks();
+  });
+
+  it("calls selectLine with line_index on row click", async () => {
+    const user = userEvent.setup();
+    const lineMatches: components["schemas"]["LineMatch"][] = [
+      {
+        line_index: 3,
+        overall_match_status: "exact",
+        ocr_line_text: "hello",
+        ground_truth_line_text: "hello",
+        is_fully_validated: false,
+        validated_word_count: 0,
+        total_word_count: 1,
+        word_matches: [],
+        paragraph_index: 0,
+        exact_count: 0,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+      },
+    ];
+    worklistStore.setActiveFilter("all");
+    render(<Worklist lineMatches={lineMatches} />);
+    await user.click(screen.getByTestId("worklist-row-3"));
+    expect(selectLine).toHaveBeenCalledWith(3);
+  });
+
+  it("checkbox click calls worklistStore.toggle with line_index", async () => {
+    const user = userEvent.setup();
+    const lineMatches: components["schemas"]["LineMatch"][] = [
+      {
+        line_index: 2,
+        overall_match_status: "mismatch",
+        ocr_line_text: "foo",
+        ground_truth_line_text: "bar",
+        is_fully_validated: false,
+        validated_word_count: 0,
+        total_word_count: 1,
+        word_matches: [],
+        paragraph_index: 0,
+        exact_count: 0,
+        fuzzy_count: 0,
+        mismatch_count: 1,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+      },
+    ];
+    worklistStore.setActiveFilter("all");
+    render(<Worklist lineMatches={lineMatches} />);
+    const checkbox = screen.getByTestId("worklist-row-checkbox-2");
+    await user.click(checkbox);
+    expect(worklistStore.getState().selectedIds).toContain(2);
+  });
+
+  it("checkbox click does not trigger row navigation", async () => {
+    const user = userEvent.setup();
+    const lineMatches: components["schemas"]["LineMatch"][] = [
+      {
+        line_index: 5,
+        overall_match_status: "exact",
+        ocr_line_text: "x",
+        ground_truth_line_text: "x",
+        is_fully_validated: false,
+        validated_word_count: 0,
+        total_word_count: 1,
+        word_matches: [],
+        paragraph_index: 0,
+        exact_count: 1,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+      },
+    ];
+    worklistStore.setActiveFilter("all");
+    render(<Worklist lineMatches={lineMatches} />);
+    await user.click(screen.getByTestId("worklist-row-checkbox-5"));
+    expect(selectLine).not.toHaveBeenCalled();
   });
 });

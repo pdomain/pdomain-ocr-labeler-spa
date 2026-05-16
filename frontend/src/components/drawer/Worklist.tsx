@@ -12,6 +12,7 @@ import { useSyncExternalStore } from "react";
 import type { components } from "../../api/types";
 import { cn } from "@/lib/utils";
 import { worklistStore, type MatchFilter, type WorklistSort } from "../../stores/worklist-store";
+import { selectLine } from "../../stores/selection-store";
 import { filterLines } from "../../lib/filter-predicates";
 import { StatusPip } from "../ui/StatusPip";
 
@@ -205,10 +206,11 @@ function FilterRow({ counts, activeFilter, sort, onFilter, onSort }: FilterRowPr
 interface WorklistRowProps {
   line: LineMatch;
   isSelected: boolean;
+  isChecked: boolean;
   onClick: () => void;
 }
 
-function WorklistRow({ line, isSelected, onClick }: WorklistRowProps) {
+function WorklistRow({ line, isSelected, isChecked, onClick }: WorklistRowProps) {
   const pip = pipStatus(line.overall_match_status);
   const barClass = STATUS_BAR_CLASS[pip];
   const pct = confidencePct(line);
@@ -233,6 +235,20 @@ function WorklistRow({ line, isSelected, onClick }: WorklistRowProps) {
           : "text-ink-2 hover:bg-bg-raised/60 hover:text-ink-1",
       )}
     >
+      {/* Bulk-select checkbox */}
+      <div className="flex items-center pl-1.5 pr-0.5 flex-shrink-0">
+        <input
+          type="checkbox"
+          data-testid={`worklist-row-checkbox-${line.line_index}`}
+          checked={isChecked}
+          onChange={() => worklistStore.toggle(line.line_index)}
+          // onClick stops the row-navigation handler; onChange drives the store toggle.
+          onClick={(e) => e.stopPropagation()}
+          className="w-3 h-3 cursor-pointer accent-accent"
+          aria-label={`Select line ${line.line_index + 1} for bulk action`}
+        />
+      </div>
+
       {/* 4px status color bar */}
       <div className={cn("w-1 flex-shrink-0 rounded-sm my-0.5 ml-0.5", barClass)} />
 
@@ -286,6 +302,9 @@ export function Worklist({ lineMatches = [] }: WorklistProps) {
   // Apply filter then sort.
   const filtered = sortLines(filterLines(lineMatches, activeFilter), sort);
 
+  // Pre-build a Set so isChecked lookups are O(1) instead of O(n) per row.
+  const checkedSet = new Set(state.selectedIds);
+
   // Counts are always computed from the full unfiltered list for the chip row.
   const counts = computeCounts(lineMatches);
 
@@ -317,7 +336,11 @@ export function Worklist({ lineMatches = [] }: WorklistProps) {
               key={line.line_index}
               line={line}
               isSelected={selectedLineIndex === line.line_index}
-              onClick={() => worklistStore.setSelectedLineIndex(line.line_index)}
+              isChecked={checkedSet.has(line.line_index)}
+              onClick={() => {
+                worklistStore.setSelectedLineIndex(line.line_index);
+                selectLine(line.line_index);
+              }}
             />
           ))
         )}
