@@ -72,7 +72,7 @@ import { useMatchesHotkeys } from "../hooks/useMatchesHotkeys";
 import { useUiPrefs, type DrawerTab, type MatchFilter } from "../stores/ui-prefs";
 import { dialogStore, useDialogStore } from "../stores/dialog-store";
 import { selectionStore, type SelectionState } from "../stores/selection-store";
-import { viewportStore, toggleEraseMode } from "../stores/viewport-store";
+import { viewportStore, toggleEraseMode, setCanvasZoom } from "../stores/viewport-store";
 import { worklistStore } from "../stores/worklist-store";
 import { pageNoUrl } from "../lib/routes";
 
@@ -596,6 +596,8 @@ export default function ProjectPage() {
         onLayerToggle={(layer) => setLayerVisibility(layer, !uiPrefs.layerVisibility[layer])}
         onSelectionModeChange={(mode) => setSelectionMode(mode)}
         onEraseToggle={toggleEraseMode}
+        onZoomFit={() => setCanvasZoom(0)}
+        onZoom100={() => setCanvasZoom(1.0)}
         matchFilterMode={uiPrefs.matchFilterMode}
         onMatchFilterModeToggle={() => {
           useUiPrefs.setMatchFilterMode(
