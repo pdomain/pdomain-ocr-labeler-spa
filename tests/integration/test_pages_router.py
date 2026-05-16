@@ -116,6 +116,22 @@ def test_get_page_returns_200_for_valid_index(
     assert body["image_url"] == "/api/projects/book1/pages/0/image"
 
 
+def test_get_page_payload_has_payload_error_field(loaded_client: TestClient) -> None:
+    """PagePayload wire shape includes payload_error field (None on clean page).
+
+    The field must exist on page_record even when None — it is part of the
+    wire contract so the frontend can check it without optional-chaining hell.
+    """
+    resp = loaded_client.get("/api/projects/book1/pages/0")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    # page_record may be None when no OCR has run (stub fixture).
+    # When it exists, payload_error must be present (even if None).
+    pr = body.get("page_record")
+    if pr is not None:
+        assert "payload_error" in pr, f"payload_error field missing from page_record: {list(pr.keys())}"
+
+
 def test_post_save_page_returns_404_when_no_project(bare_client: TestClient) -> None:
     resp = bare_client.post("/api/projects/book1/pages/0/save", json={})
     assert resp.status_code == 404

@@ -158,6 +158,10 @@ class PageRecord(BaseModel):
     # Assembled by api/pages.py::_build_provenance_summary at payload-build time.
     # None when no meaningful provenance data is available.
     provenance_summary: str | None = None
+    # payload_error: set by api/pages.py when the envelope→Page lift fails.
+    # None on clean pages. Gives the frontend a machine-readable signal so it
+    # can show a "corrupt saved data" banner instead of a blank lines pane.
+    payload_error: str | None = None
 
 
 class CharRange(BaseModel):

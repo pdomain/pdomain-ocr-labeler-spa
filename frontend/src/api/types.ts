@@ -2703,6 +2703,8 @@ export interface components {
             rotation_source: components["schemas"]["RotationSource"];
             /** Provenance Summary */
             provenance_summary?: string | null;
+            /** Payload Error */
+            payload_error?: string | null;
         };
         /**
          * PageSource
