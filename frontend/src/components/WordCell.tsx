@@ -54,6 +54,12 @@ export interface WordCellProps {
   /** Base URL for page image slices (e.g. /api/.../pages/0/image). When provided
    *  and word_id is set, a crop thumbnail is shown in row 2. */
   imageBaseUrl?: string;
+  /**
+   * Called when the pencil edit button is clicked.
+   * Signature: (lineIndex, wordIndex) => void
+   * Should select the word in the selection store and open the right panel.
+   */
+  onEditWord?: (lineIndex: number, wordIndex: number) => void;
 }
 
 /**
@@ -62,7 +68,7 @@ export interface WordCellProps {
  * Uses `word_id` as the React key discriminator and testid anchor.
  * Falls back to `${line_index}-${word_index}` when `word_id` is absent.
  */
-export function WordCell({ word, onCommitGt }: WordCellProps) {
+export function WordCell({ word, onCommitGt, onEditWord }: WordCellProps) {
   const wordId = word.word_id ?? `${word.line_index}-${word.word_index}`;
   const [gtValue, setGtValue] = useState(word.ground_truth_text);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -112,12 +118,13 @@ export function WordCell({ word, onCommitGt }: WordCellProps) {
               ✔
             </span>
           )}
-          {/* Stub edit button — visible testid; onclick wired by parent in #213 */}
+          {/* Edit button — selects the word and opens the right-panel word detail view */}
           <button
             data-testid={`edit-word-button-${l}-${w}`}
             aria-label={`Edit word ${w} in line ${l}`}
             className="text-[10px] text-ink-4 hover:text-ink-1 px-0.5 leading-none"
             title="Edit word"
+            onClick={() => onEditWord?.(l, w)}
           >
             ✎
           </button>

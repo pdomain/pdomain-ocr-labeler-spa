@@ -250,6 +250,65 @@ export function useSetCharRanges(projectId: string, pageIndex: number) {
   });
 }
 
+// ─── useErasePixels ───────────────────────────────────────────────────────────
+
+/**
+ * Erase pixels in a rectangular region of a word's image slice.
+ *
+ * The API takes one `ErasePixelsRequest = { bbox, fill_value }` per call.
+ * The caller passes a list of erase operations (from ErasePixelsSection);
+ * this hook maps each op to a bounding bbox and fires one POST per op,
+ * sequentially.  Brush/lasso ops degrade to their axis-aligned bounding box.
+ *
+ * Endpoint: `POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/erase-pixels`
+ */
+export function useErasePixels(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<
+    void,
+    Error,
+    {
+      lineIndex: number;
+      wordIndex: number;
+      ops: Array<
+        | { tool: "brush"; x: number; y: number; radius: number }
+        | { tool: "lasso"; points: Array<[number, number]> }
+        | { tool: "rect"; x: number; y: number; width: number; height: number }
+      >;
+    }
+  >({
+    mutationFn: async ({ lineIndex, wordIndex, ops }) => {
+      const base = `${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/erase-pixels`;
+      for (const op of ops) {
+        let bbox: BBox;
+        if (op.tool === "rect") {
+          bbox = { x: op.x, y: op.y, width: op.width, height: op.height };
+        } else if (op.tool === "brush") {
+          bbox = {
+            x: op.x - op.radius,
+            y: op.y - op.radius,
+            width: op.radius * 2,
+            height: op.radius * 2,
+          };
+        } else {
+          // lasso — compute axis-aligned bounding box from points
+          const xs = op.points.map(([x]) => x);
+          const ys = op.points.map(([, y]) => y);
+          const minX = Math.min(...xs);
+          const minY = Math.min(...ys);
+          const maxX = Math.max(...xs);
+          const maxY = Math.max(...ys);
+          bbox = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+        }
+        await apiPost<void>(base, { bbox, fill_value: 255 });
+      }
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
 // ─── useAdjustWordGap (P3.d stub) ─────────────────────────────────────────────
 
 /**

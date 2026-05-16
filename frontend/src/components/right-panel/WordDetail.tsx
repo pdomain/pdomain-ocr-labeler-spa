@@ -38,6 +38,7 @@ import {
   useUpdateWordGroundTruth,
   useApplyStyle,
   useApplyComponent,
+  useErasePixels,
 } from "../../hooks/useWordMutations";
 import type { components } from "../../api/types";
 
@@ -91,6 +92,7 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
   const updateGt = useUpdateWordGroundTruth(projectId, pageIndex);
   const applyStyle = useApplyStyle(projectId, pageIndex);
   const applyComponent = useApplyComponent(projectId, pageIndex);
+  const erasePixels = useErasePixels(projectId, pageIndex);
 
   const state = useSyncExternalStore(
     subscribeSelection,
@@ -215,7 +217,16 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
             Erase Pixels
           </Accordion.Trigger>
           <Accordion.Content>
-            <ErasePixelsSection backendAvailable={refineAvailable} />
+            <ErasePixelsSection
+              backendAvailable={refineAvailable}
+              onApply={(ops) =>
+                erasePixels.mutateAsync({
+                  lineIndex: lineIdx,
+                  wordIndex: wordIdx,
+                  ops,
+                })
+              }
+            />
           </Accordion.Content>
         </Accordion.Item>
 

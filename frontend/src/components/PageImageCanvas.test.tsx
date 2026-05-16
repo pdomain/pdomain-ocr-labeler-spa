@@ -254,6 +254,8 @@ afterEach(() => {
     selectedLines: [],
     selectedWords: [],
     dragRect: null,
+    level: "none",
+    path: {},
   });
   useUiPrefs.setState({
     lineFilter: null,
@@ -261,6 +263,7 @@ afterEach(() => {
     splitterRatio: 0.5,
     selectionMode: "paragraph",
     matchFilter: "unvalidated",
+    rightPanelOpen: false,
   });
   mockUseImageState.image = undefined;
   mockUseImageState.status = "loading";
@@ -865,6 +868,83 @@ describe("PageImageCanvas — selection layer rendering (spec-21-A5, #300)", () 
     expect(
       screen.getByTestId("bbox-overlay-selection-paragraphs").getAttribute("data-item-count"),
     ).toBe("1");
+  });
+});
+
+// ── Word click → selectWord (canvas entry point wiring) ─────────────────────
+
+describe("PageImageCanvas — word bbox click → selectWord", () => {
+  it("clicking within a word bbox in select mode calls selectWord(lineIdx, wordIdx)", () => {
+    // Word at bbox (100,200,50,20) in display coords = line 2, word 3
+    const page = makePage([makeLine(2, 0, [{ x: 100, y: 200, width: 50, height: 20 }])]);
+    // Override the word_index to 3 to verify correct index propagation
+    page.line_matches[0].word_matches[0].word_index = 3;
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+    const stage = getStage();
+
+    // Click inside the bbox (x=125, y=210 is within 100..150, 200..220)
+    fireEvent.mouseDown(stage, { clientX: 125, clientY: 210 });
+    fireEvent.mouseUp(stage, { clientX: 125, clientY: 210 });
+
+    const sel = selectionStore.getState();
+    expect(sel.level).toBe("word");
+    expect(sel.selectedWords).toEqual([[2, 3]]);
+  });
+
+  it("clicking within a word bbox opens the right panel (rightPanelOpen=true)", () => {
+    const page = makePage([makeLine(0, 0, [{ x: 10, y: 10, width: 40, height: 15 }])]);
+    useUiPrefs.setState({ rightPanelOpen: false });
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+    const stage = getStage();
+
+    fireEvent.mouseDown(stage, { clientX: 25, clientY: 15 });
+    fireEvent.mouseUp(stage, { clientX: 25, clientY: 15 });
+
+    expect(useUiPrefs.getState().rightPanelOpen).toBe(true);
+  });
+
+  it("clicking outside all word bboxes does NOT call selectWord", () => {
+    const page = makePage([makeLine(0, 0, [{ x: 100, y: 100, width: 50, height: 20 }])]);
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+    const stage = getStage();
+
+    // Click far from any bbox
+    fireEvent.mouseDown(stage, { clientX: 400, clientY: 400 });
+    fireEvent.mouseUp(stage, { clientX: 400, clientY: 400 });
+
+    const sel = selectionStore.getState();
+    expect(sel.level).toBe("none");
+    expect(sel.selectedWords).toEqual([]);
+  });
+
+  it("a real drag (>2px) does NOT trigger word selection even if it ends inside a bbox", () => {
+    const page = makePage([makeLine(0, 0, [{ x: 50, y: 50, width: 100, height: 30 }])]);
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+
+    // Drag with width=100 → not trivial, so normal box-select fires, NOT selectWord
+    simulateDrag({ x: 50, y: 50 }, { x: 150, y: 80 });
+
+    const sel = selectionStore.getState();
+    expect(sel.level).toBe("none");
+    expect(sel.selectedWords).toEqual([]);
+  });
+
+  it("word click in rebox mode does NOT trigger word selection (only select mode responds)", () => {
+    const page = makePage([makeLine(0, 0, [{ x: 10, y: 10, width: 40, height: 15 }])]);
+    viewportStore.setState({ mode: "rebox", pendingReboxTarget: null });
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+    const stage = getStage();
+
+    fireEvent.mouseDown(stage, { clientX: 25, clientY: 15 });
+    fireEvent.mouseUp(stage, { clientX: 25, clientY: 15 });
+
+    const sel = selectionStore.getState();
+    expect(sel.level).toBe("none");
   });
 });
 

@@ -57,7 +57,7 @@ import { BBoxOverlay, type BBoxItem } from "./BBoxOverlay";
 import { PageImage } from "./PageImage";
 import { scheduleDragUpdate } from "../lib/rafSchedule";
 import { readCssToken, hexToRgba } from "../hooks/useLayerColors";
-import { setDragRect, clearSelection, selectionStore } from "../stores/selection-store";
+import { setDragRect, clearSelection, selectionStore, selectWord } from "../stores/selection-store";
 import {
   viewportStore,
   exitToSelectMode,
@@ -391,7 +391,28 @@ export default function PageImageCanvas({
     const modifier = start.modifier;
     clearDrag();
 
-    if (isTrivial) return;
+    if (isTrivial) {
+      // Treat a trivial drag (≤2px) as a point click.
+      // Hit-test word bboxes (display-pixel coords) against the click position.
+      // On a hit, select the word and open the right panel.
+      if (mode === "select") {
+        const { x: cx, y: cy } = pos;
+        const hit = wordOverlayItems.find(
+          (item) =>
+            cx >= item.bbox.x &&
+            cx <= item.bbox.x + item.bbox.width &&
+            cy >= item.bbox.y &&
+            cy <= item.bbox.y + item.bbox.height,
+        );
+        if (hit) {
+          const [lineIdx, wordIdx] = hit.id.split("-").map(Number);
+          selectWord(lineIdx, wordIdx);
+          // Open the right panel so WordDetail becomes visible
+          useUiPrefs.setState({ rightPanelOpen: true });
+        }
+      }
+      return;
+    }
 
     switch (mode) {
       case "select": {

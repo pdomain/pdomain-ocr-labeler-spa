@@ -119,6 +119,34 @@ describe("WordCell", () => {
     expect(screen.getByText("ocr-word")).toBeInTheDocument();
   });
 
+  it("clicking edit-word-button calls onEditWord with lineIndex and wordIndex", () => {
+    const onEditWord = vi.fn();
+    const word = makeWordMatch({
+      word_id: "w-edit",
+      line_index: 2,
+      word_index: 5,
+    });
+    render(<WordCell word={word} onEditWord={onEditWord} />);
+    const button = screen.getByTestId("edit-word-button-2-5");
+    fireEvent.click(button);
+    expect(onEditWord).toHaveBeenCalledOnce();
+    expect(onEditWord).toHaveBeenCalledWith(2, 5);
+  });
+
+  it("edit-word-button has correct data-testid format 'edit-word-button-{l}-{w}'", () => {
+    const word = makeWordMatch({ word_id: "w-001", line_index: 3, word_index: 7 });
+    render(<WordCell word={word} />);
+    expect(screen.getByTestId("edit-word-button-3-7")).toBeInTheDocument();
+  });
+
+  it("edit-word-button does nothing when onEditWord is not provided", () => {
+    const word = makeWordMatch({ word_id: "w-001", line_index: 0, word_index: 0 });
+    render(<WordCell word={word} />);
+    const button = screen.getByTestId("edit-word-button-0-0");
+    // Should not throw
+    expect(() => fireEvent.click(button)).not.toThrow();
+  });
+
   it("uses word_id (not line/word index) as the testid", () => {
     // Two words with same line_index=0, word_index=0 but different word_ids
     const word1 = makeWordMatch({ word_id: "unique-a", line_index: 0, word_index: 0 });
