@@ -5,18 +5,10 @@ A FastAPI + React/Vite/TypeScript replacement for the NiceGUI-based
 current labeler, structurally modelled on
 [`pd-prep-for-pgdp`](../pd-prep-for-pgdp/).
 
-> **Status (2026-05-07):** M0 scaffold + M1 backend (settings,
-> adapters, AppState, middleware, error handler, lifespan-clean,
-> CLI flags) shipped; M2 startup-discovery at slice 2/4
-> (`resolve_initial_project` + `ActiveProjectCarrier` wired,
-> lifespan hook + `POST /api/projects/load` still pending).
-> Frontend scaffold exists but the SPA bundle has not been built or
-> runtime-verified end-to-end. Implementation is milestone-driven and
-> AI-implementable — see
-> [`docs/ROADMAP.md`](docs/ROADMAP.md),
-> [`docs/PARITY_STATUS.md`](docs/PARITY_STATUS.md),
-> [`specs/16-milestones.md`](specs/16-milestones.md), and
-> [`OPEN_QUESTIONS.md`](OPEN_QUESTIONS.md).
+> **Status (2026-05-16):** Cut-over complete. Hi-fi P1–P5 shipped;
+> smoke run green; legacy `pd-ocr-labeler` superseded. See
+> [`docs/plan-to-usable.md`](docs/plan-to-usable.md) for the full
+> cut-over checklist.
 
 ## Why
 
