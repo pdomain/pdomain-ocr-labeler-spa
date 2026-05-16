@@ -5,184 +5,17 @@
 // IS-2: added navSlot + actionsSlot props for project-route header wiring.
 //
 // Layout:
-//   Left:   logo glyph + Projects / <project-name> breadcrumb chip (project routes)
-//   Center: [navSlot] metrics strip + [actionsSlot] dialog trigger buttons
-//   Right:  UserMenu (avatar + caret) — Theme stub + Sign out
+//   Left:   logo glyph + "Projects" link back to /
+//   Center: [navSlot] + [actionsSlot] (project-route injected content)
+//   Right:  theme toggle (Dark/Light/System chips)
 //
 // 56px height (`h-14`), `bg-bg-page`, `border-b border-border-1`.
 // Gap 1: header height 40→56px (DONE).
-// Gap 3: Projects / <name> breadcrumb in left area.
-// Gap 5: metrics strip pill row (N words · N exact · N fuzzy · N ✗ · N/M validated).
 
 import type * as React from "react";
-import { Link, useMatch } from "react-router-dom";
-import { ChevronDown } from "lucide-react";
+import { Link } from "react-router-dom";
 
-import ProjectLoadControls from "./ProjectLoadControls";
-import { QuickSearch } from "./shell/QuickSearch";
-import { useProject } from "../hooks/useProject";
-import { usePage } from "../hooks/usePage";
-import { dialogStore } from "../stores/dialog-store";
 import { useThemePreference, useUiPrefs, type ThemePreference } from "../stores/ui-prefs";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "./ui/dropdown-menu";
-
-// ─── project-route hook ──────────────────────────────────────────────────────
-
-interface ProjectRouteInfo {
-  /** True when no project is loaded or the project query is pending/errored. */
-  controlsDisabled: boolean;
-  /**
-   * Human-readable project name (last path segment of project_root) when a
-   * project is loaded; undefined otherwise. Drives breadcrumb mode in
-   * ProjectLoadControls.
-   */
-  projectName: string | undefined;
-  /** 0-based page index when on a page route; undefined otherwise. */
-  pageIndex: number | undefined;
-  /** Project identifier string when on a project route; undefined otherwise. */
-  projectId: string | undefined;
-}
-
-function useProjectRouteInfo(): ProjectRouteInfo {
-  // Match either page-no or page-idx variants and the project root.
-  const matchPageNo = useMatch("/projects/:projectId/pages/pageno/:pageNo");
-  const matchPageIdx = useMatch("/projects/:projectId/pages/index/:idx0");
-  const matchProject = useMatch("/projects/:projectId");
-  const projectId =
-    matchPageNo?.params.projectId ??
-    matchPageIdx?.params.projectId ??
-    matchProject?.params.projectId;
-
-  // Derive 0-based page index from URL.
-  const pageNo = matchPageNo?.params.pageNo;
-  const idx0Raw = matchPageIdx?.params.idx0;
-  let pageIndex: number | undefined;
-  if (pageNo !== undefined) {
-    const n = parseInt(pageNo, 10);
-    if (Number.isFinite(n) && n >= 1) pageIndex = n - 1;
-  } else if (idx0Raw !== undefined) {
-    const n = parseInt(idx0Raw, 10);
-    if (Number.isFinite(n) && n >= 0) pageIndex = n;
-  }
-
-  const { data, isLoading, isError } = useProject(projectId);
-
-  if (!projectId || isLoading || isError || !data) {
-    return { controlsDisabled: true, projectName: undefined, pageIndex, projectId };
-  }
-
-  // Derive display label: last path segment of project_root, or project_id.
-  const label = data.project_root.split("/").filter(Boolean).pop() ?? projectId;
-
-  return { controlsDisabled: false, projectName: label, pageIndex, projectId };
-}
-
-// ─── MetricsStrip ─────────────────────────────────────────────────────────────
-
-interface PageMetrics {
-  totalWords: number;
-  exactCount: number;
-  fuzzyCount: number;
-  mismatchCount: number;
-  validatedCount: number;
-}
-
-function usePageMetrics(
-  projectId: string | undefined,
-  pageIndex: number | undefined,
-): PageMetrics | null {
-  const { data } = usePage(projectId, pageIndex);
-  if (!data?.line_matches?.length) return null;
-
-  let totalWords = 0;
-  let exactCount = 0;
-  let fuzzyCount = 0;
-  let mismatchCount = 0;
-  let validatedCount = 0;
-
-  for (const lm of data.line_matches) {
-    totalWords += lm.total_word_count;
-    exactCount += lm.exact_count;
-    fuzzyCount += lm.fuzzy_count;
-    mismatchCount += lm.mismatch_count;
-    validatedCount += lm.validated_word_count;
-  }
-
-  return { totalWords, exactCount, fuzzyCount, mismatchCount, validatedCount };
-}
-
-interface MetricsPillProps {
-  label: string;
-  value: number;
-  colorClass: string;
-}
-
-function MetricsPill({ label, value, colorClass }: MetricsPillProps) {
-  return (
-    <span
-      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${colorClass}`}
-    >
-      <span className="tabular-nums">{value}</span>
-      <span className="text-[9px] opacity-70">{label}</span>
-    </span>
-  );
-}
-
-interface MetricsStripProps {
-  projectId: string | undefined;
-  pageIndex: number | undefined;
-}
-
-export function MetricsStrip({ projectId, pageIndex }: MetricsStripProps) {
-  const metrics = usePageMetrics(projectId, pageIndex);
-  if (!metrics) return null;
-
-  const { totalWords, exactCount, fuzzyCount, mismatchCount, validatedCount } = metrics;
-
-  return (
-    <div
-      data-testid="metrics-strip"
-      className="flex items-center gap-1 shrink-0"
-      aria-label={`Page metrics: ${totalWords} words, ${exactCount} exact, ${fuzzyCount} fuzzy, ${mismatchCount} mismatched, ${validatedCount} of ${totalWords} validated`}
-    >
-      <MetricsPill
-        label="words"
-        value={totalWords}
-        colorClass="bg-bg-raised text-ink-2 border border-border-2"
-      />
-      <MetricsPill
-        label="exact"
-        value={exactCount}
-        colorClass="text-status-exact border border-border-2 bg-bg-raised"
-      />
-      <MetricsPill
-        label="fuzzy"
-        value={fuzzyCount}
-        colorClass="text-status-fuzzy border border-border-2 bg-bg-raised"
-      />
-      <MetricsPill
-        label="✗"
-        value={mismatchCount}
-        colorClass="text-status-mismatch border border-border-2 bg-bg-raised"
-      />
-      <span
-        data-testid="metrics-validated-pill"
-        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium text-accent border border-border-2 bg-bg-raised"
-      >
-        <span className="tabular-nums">
-          {validatedCount}/{totalWords}
-        </span>
-        <span className="text-[9px] opacity-70">validated</span>
-      </span>
-    </div>
-  );
-}
 
 // ─── ThemeChips ──────────────────────────────────────────────────────────────
 
@@ -229,81 +62,28 @@ function ThemeChips() {
   );
 }
 
-// ─── UserMenu ────────────────────────────────────────────────────────────────
-
-function UserMenu() {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          data-testid="user-menu-trigger"
-          aria-label="User menu"
-          className="flex items-center gap-1 h-7 px-2 rounded-md bg-bg-raised border border-border-2 text-ink-2 text-body hover:bg-bg-surface transition-colors"
-        >
-          {/* Avatar circle placeholder */}
-          <span
-            aria-hidden
-            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent text-accent-ink text-[9px] font-bold select-none"
-          >
-            U
-          </span>
-          <ChevronDown className="w-3 h-3 shrink-0" aria-hidden />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="bg-bg-surface border-border-2 text-ink-1">
-        {/* Theme row — Slice 24: 3-state selector */}
-        <DropdownMenuItem
-          data-testid="user-menu-theme-item"
-          className="text-body text-ink-1 focus:bg-bg-raised focus:text-ink-1 flex items-center justify-between gap-2"
-          onSelect={(e) => e.preventDefault()}
-        >
-          <span className="text-ink-2 text-[10px] uppercase tracking-wide shrink-0">Theme</span>
-          <ThemeChips />
-        </DropdownMenuItem>
-        <DropdownMenuSeparator className="bg-border-1" />
-        <DropdownMenuItem
-          data-testid="user-menu-signout-item"
-          className="text-body text-ink-1 focus:bg-bg-raised focus:text-ink-1"
-        >
-          Sign out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 // ─── HeaderBar ───────────────────────────────────────────────────────────────
 
 export interface HeaderBarProps {
   /**
-   * IS-2: Optional slot rendered in the center-left area (after logo, before
-   * ProjectLoadControls). Used to inject ProjectNavigationControls when on a
-   * project route.
+   * IS-2: Optional slot rendered in the center-left area (after logo).
+   * Used to inject ProjectNavigationControls when on a project route.
    */
   navSlot?: React.ReactNode;
   /**
    * IS-2: Optional slot rendered in the center-right area (before the
-   * UserMenu divider). Used to inject PageActionsCompact when on a project
-   * route.
+   * theme toggle). Used to inject PageActionsCompact when on a project route.
    */
   actionsSlot?: React.ReactNode;
 }
 
 export default function HeaderBar({ navSlot, actionsSlot }: HeaderBarProps = {}) {
-  const {
-    controlsDisabled: isControlsDisabled,
-    projectName,
-    pageIndex,
-    projectId,
-  } = useProjectRouteInfo();
-
   return (
     <header
       data-testid="header-bar"
       className="h-14 flex items-center gap-2 px-3 bg-bg-page border-b border-border-1"
     >
-      {/* Left: logo */}
+      {/* Left: logo + "Projects" link */}
       <Link
         to="/"
         data-testid="header-logo"
@@ -321,65 +101,27 @@ export default function HeaderBar({ navSlot, actionsSlot }: HeaderBarProps = {})
         <span className="text-heading font-semibold text-ink-1 hidden sm:inline">OCR Labeler</span>
       </Link>
 
+      {/* "Projects" breadcrumb link — always visible, navigates back to / */}
+      <Link
+        to="/"
+        data-testid="projects-home-link"
+        className="text-body text-ink-2 hover:text-ink-1 no-underline shrink-0 transition-colors"
+      >
+        Projects
+      </Link>
+
       {/* Center-left: navigation slot (project route only) */}
       {navSlot}
 
-      {/* Center: load controls + metrics strip + ⌘K search + dialog triggers */}
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        <ProjectLoadControls projectName={projectName} />
+      {/* Spacer */}
+      <div className="flex-1 min-w-0" />
 
-        {/* Metrics strip — Gap 5: visible when on a page route */}
-        {projectId !== undefined && pageIndex !== undefined && (
-          <MetricsStrip projectId={projectId} pageIndex={pageIndex} />
-        )}
+      {/* Center-right: actions slot (project route only) */}
+      {actionsSlot}
 
-        {/* Gap 6: centred ⌘K quick-search field — mx-auto pushes it to centre */}
-        <div className="flex-1 flex justify-center min-w-0">
-          <QuickSearch />
-        </div>
-
-        {/* Center-right: actions slot (project route only) */}
-        {actionsSlot}
-
-        <button
-          type="button"
-          data-testid="ocr-config-trigger-button"
-          aria-label="OCR configuration"
-          disabled={isControlsDisabled}
-          onClick={() => dialogStore.open("ocrConfig")}
-          className="px-2 py-1 text-sm border rounded disabled:opacity-50"
-        >
-          {/* SlidersIcon placeholder */}
-          &#9881;
-        </button>
-
-        <button
-          type="button"
-          data-testid="export-trigger-button"
-          aria-label="Export"
-          disabled={isControlsDisabled}
-          onClick={() => dialogStore.open("export")}
-          className="px-2 py-1 text-sm border rounded disabled:opacity-50"
-        >
-          {/* file_download glyph placeholder */}
-          &#11015;
-        </button>
-
-        <button
-          type="button"
-          data-testid="hotkey-help-trigger-button"
-          aria-label="Hotkey help (?)"
-          onClick={() => dialogStore.open("hotkeyHelp")}
-          className="px-2 py-1 text-sm border rounded"
-        >
-          {/* keyboard glyph placeholder */}
-          &#9000;
-        </button>
-      </div>
-
-      {/* Right: UserMenu */}
+      {/* Right: theme toggle */}
       <div className="shrink-0">
-        <UserMenu />
+        <ThemeChips />
       </div>
 
       {/*
