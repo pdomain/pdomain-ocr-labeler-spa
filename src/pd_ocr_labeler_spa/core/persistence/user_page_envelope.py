@@ -574,9 +574,11 @@ def _inject_glyph_annotations_none(page: dict[str, Any]) -> dict[str, Any]:
         new_words = []
         for word in words:
             if isinstance(word, dict) and "glyph_annotations" not in word:
-                word = dict(word)
-                word["glyph_annotations"] = None
-            new_words.append(word)
+                patched = dict(word)
+                patched["glyph_annotations"] = None
+                new_words.append(patched)
+            else:
+                new_words.append(word)
         new_lines.append({**line, "words": new_words})
     return {**page, "lines": new_lines}
 
@@ -693,7 +695,7 @@ def envelope_to_dict(envelope: UserPageEnvelope) -> dict[str, Any]:
     content, just as the legacy labeler wrote v2.1 without an explicit
     call to "set v2.1").
     """
-    global _v22_warn_emitted
+    global _v22_warn_emitted  # noqa: PLW0603 — intentional emit-once flag
 
     result = envelope.to_dict()
 

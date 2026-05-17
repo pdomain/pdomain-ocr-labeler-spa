@@ -117,10 +117,7 @@ class FilesystemStorage:
                 # ``list_keys("foo")`` returns ``["foo"]``, and
                 # key-equality across calls breaks silently.
                 return [base.relative_to(root).as_posix()]
-            keys: list[str] = []
-            for path in base.rglob("*"):
-                if path.is_file():
-                    keys.append(path.relative_to(root).as_posix())
+            keys = [path.relative_to(root).as_posix() for path in base.rglob("*") if path.is_file()]
             return sorted(keys)
 
         return await anyio.to_thread.run_sync(_walk)  # type: ignore[attr-defined]

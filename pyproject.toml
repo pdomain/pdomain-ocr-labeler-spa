@@ -49,7 +49,7 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=5.0",
-    "ruff>=0.7",
+    "ruff>=0.15.13",
     "httpx>=0.28",
     "basedpyright>=1.39.4",
     "gitlint>=0.19.1",
@@ -85,26 +85,145 @@ line-length = 110
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "B", "SIM", "UP", "RUF", "ERA", "T20"]
+select = [
+    # Baseline (pre-existing)
+    "E", "W",       # pycodestyle errors/warnings
+    "F",            # pyflakes
+    "I",            # isort
+    "N",            # pep8-naming
+    "B",            # flake8-bugbear
+    "SIM",          # flake8-simplify
+    "UP",           # pyupgrade
+    "RUF",          # ruff-specific
+    "ERA",          # eradicate — commented-out code
+    "T20",          # flake8-print
+    # Added per 2026-05-17 strict-linting rollout
+    "ANN",          # flake8-annotations — force type hints on all sigs
+    "S",            # flake8-bandit — security rules
+    "C4",           # flake8-comprehensions
+    "PERF",         # perflint — performance anti-patterns
+    "TC",           # flake8-type-checking — TYPE_CHECKING guards
+    "TID",          # flake8-tidy-imports
+    "PT",           # flake8-pytest-style
+    "RET",          # flake8-return
+    "PL",           # pylint subset
+    "D",            # pydocstyle
+    "BLE",          # flake8-blind-except
+    "TRY",          # tryceratops
+    "LOG",          # flake8-logging
+    "G",            # flake8-logging-format
+]
 ignore = [
-    # FastAPI's canonical pattern for dependency injection puts Depends()
-    # in default arguments. Ignoring this rule across the whole repo.
+    # FastAPI dependency-injection pattern — Depends() in default args.
     "B008",
     # `Foo(str, Enum)` — Pydantic patterns use this idiom widely.
     "UP042",
-    # En-dash (–) appears in spec line-range citations throughout docstrings
-    # (e.g. "lines 503–576"). This is deliberate typographic convention;
-    # # noqa cannot silence rules inside string literals.
+    # En-dash (–) in spec citations in docstrings — intentional typography.
     "RUF002",
+    # Docstring style conflicts: pick D211 over D203, D213 over D212.
+    "D203",
+    "D212",
+    # Missing module/package/magic-method docstrings — add incrementally.
+    "D100",
+    "D104",
+    "D107",
+    # ANN101/ANN102 removed in ruff >= 0.2 (self/cls annotation rules dropped).
+    # Keeping entries here produces a "removed rule" warning; left as comment
+    # to document they were intentionally excluded when they existed.
+    # "ANN101", "ANN102",
+    # PLR0913 (too-many-arguments): FastAPI routers legitimately use many params.
+    "PLR0913",
+    # PLR2004 (magic-value-comparison): common in geometry/threshold code.
+    "PLR2004",
+    # TRY003 (long-message-outside-exception-class): f-string error messages
+    # are the project-wide convention; enforcing everywhere is too noisy.
+    "TRY003",
+    # COM812 conflicts with ruff formatter.
+    "COM812",
+    # ANN401 (use of Any): FastAPI/Pydantic patterns require Any in several places.
+    "ANN401",
 ]
 
 [tool.ruff.lint.per-file-ignores]
 # Spec-aligned coordinate names (L/R/T/B) trigger E741 in tests.
 "tests/*" = ["E741"]
 # CLI scripts and fixture scripts — print() is the output mechanism
-"scripts/*.py" = ["T201"]
+"scripts/*.py" = ["T201", "S603", "S607", "ANN", "D"]
 # Headless export CLI console script — print() for user-facing output
 "src/pd_ocr_labeler_spa/core/jobs/handlers/export_cli.py" = ["T201"]
+# Tests: assert is the idiom (S101); magic numbers common (PLR2004);
+# no annotations required (ANN); no docstrings required (D);
+# security rules relaxed (S105/S106/S311 — test fixtures);
+# pytest.raises match= not always required (PT011);
+# /tmp paths OK in tests (S108); trivial comparisons intentional (PLR0133);
+# top-level imports in test funcs are pattern (PLC0415);
+# subprocess S603/S607 in integration tests; blind-except OK (BLE001);
+# loop-var reassignment as pattern (PLW2901); list-building in tests (PERF401).
+"tests/**/*.py" = [
+    # Security — assert, hardcoded secrets, random, subprocess, /tmp, bind-all
+    "S101", "S105", "S106", "S311", "S603", "S607", "S108", "S104",
+    # Annotations and docstrings — not required in tests
+    "ANN", "D",
+    # Pylint subset — magic numbers, trivial comparisons, loop reassign
+    "PLR2004", "PLR0133", "PLW2901", "PLR0911", "PLR0912", "PLR0913",
+    # pytest style — match= not required, use-implicit-none not enforced
+    "PT011", "PT006",
+    # Type-checking import guards — TC deferred in test files
+    "TC001", "TC002", "TC003",
+    # Non-top-level imports in test functions are the pattern
+    "PLC0415",
+    # Blind-except in test helpers
+    "BLE001",
+    # Performance — list-building in tests
+    "PERF401",
+    # tryceratops — long messages OK in tests
+    "TRY003", "TRY300", "TRY301",
+    # Return simplification — test-fixture patterns
+    "RET504",
+    # Subprocess without check= — integration test pattern
+    "PLW1510",
+    # Error messages, structural test patterns
+    "PT018", "PLR1714", "PLW0108", "PLC0414", "C408",
+    # E402 — conditional imports at test function scope
+    "E402",
+]
+# API routers: ANN/D backlogs deferred; TID252 (relative imports) common pattern.
+# BLE001/TRY: exception handling in FastAPI routes is the norm.
+# S101: assert-narrowing is the project convention in FastAPI dependencies.
+# TC001/TC002/TC003: TYPE_CHECKING refactor deferred; PLC0415 deferred.
+"src/pd_ocr_labeler_spa/api/*.py" = [
+    "ANN", "D", "BLE001", "TRY", "TID252",
+    "S101", "TC001", "TC002", "TC003", "PLC0415",
+    "RET504", "PT018", "PLR0911", "PLR0912", "PLR0915",
+]
+# Core domain — ANN/D deferred for existing large modules.
+# TC/BLE/TRY/PLC0415 deferred; RET504 implicit-return-in-try is project style.
+"src/pd_ocr_labeler_spa/core/*.py" = [
+    "ANN", "D", "TID252",
+    "TC001", "TC002", "TC003", "PLC0415",
+    "BLE001", "TRY", "RET504",
+]
+"src/pd_ocr_labeler_spa/core/**/*.py" = [
+    "ANN", "D", "TID252",
+    "TC001", "TC002", "TC003", "PLC0415",
+    "BLE001", "TRY", "RET504",
+]
+# Adapters — ANN/D/TRY deferred; adapters interface with external libs.
+# S101: assert used for invariant-checking in OCR adapters.
+"src/pd_ocr_labeler_spa/adapters/**/*.py" = [
+    "ANN", "D", "TRY", "BLE001", "TID252",
+    "S101", "TC001", "TC002", "TC003", "PLC0415",
+]
+# Top-level module files (__main__, bootstrap, settings, __init__).
+# PLC0415: deferred imports in __main__ are intentional (uvicorn, device_info).
+# PLR09xx: complex main/bootstrap functions are by design.
+"src/pd_ocr_labeler_spa/*.py" = [
+    "ANN", "D", "TC001", "TC002", "TC003",
+    "PLC0415", "PLR0911", "PLR0912", "PLR0915", "S101",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

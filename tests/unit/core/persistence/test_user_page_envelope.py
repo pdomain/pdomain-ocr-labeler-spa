@@ -559,12 +559,12 @@ def test_pytest_module_imports_clean() -> None:
 # Tests stay pd_book_tools-free by using a tiny stub ``Page`` whose
 # ``to_dict`` returns a fixed dict — the writer never inspects the dict.
 
-from pathlib import Path  # noqa: E402
+from pathlib import Path
 
-import pytest  # noqa: E402
+import pytest
 
-from pd_ocr_labeler_spa.core.models import Project  # noqa: E402
-from pd_ocr_labeler_spa.core.persistence.user_page_envelope import (  # noqa: E402
+from pd_ocr_labeler_spa.core.models import Project
+from pd_ocr_labeler_spa.core.persistence.user_page_envelope import (
     build_envelope,
 )
 

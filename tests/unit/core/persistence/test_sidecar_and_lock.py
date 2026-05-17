@@ -178,7 +178,7 @@ def test_check_and_write_pidfile_creates_cache_dir(tmp_path: Path) -> None:
 def test_check_and_write_pidfile_warns_when_other_pid_alive(tmp_path: Path, caplog) -> None:
     """When pidfile contains a PID known to be alive, WARNING is emitted."""
     import logging
-    import unittest.mock as mock
+    from unittest import mock
 
     # Simulate: pidfile holds our live PID; we monkeypatch getpid so the module
     # thinks it is running as a *different* PID, making the existing PID look

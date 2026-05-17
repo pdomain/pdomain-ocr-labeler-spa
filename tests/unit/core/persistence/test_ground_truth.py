@@ -398,7 +398,7 @@ def test_pages_json_passes_values_through_pgdp_normalizer(tmp_path: Path) -> Non
 # normalized name → normalized lowercase → basename → basename lower →
 # (if has extension) bare stem → bare stem lower.
 
-from pd_ocr_labeler_spa.core.persistence.ground_truth import (  # noqa: E402
+from pd_ocr_labeler_spa.core.persistence.ground_truth import (
     find_ground_truth_text,
 )
 
