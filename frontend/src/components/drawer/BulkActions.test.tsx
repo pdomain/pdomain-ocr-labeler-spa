@@ -25,9 +25,17 @@ describe("BulkActions (Slice 23)", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders nothing when selectedIds is empty", () => {
+  it("renders the panel even when selectedIds is empty (page-level actions always visible)", () => {
     renderWithQuery(<BulkActions projectId="p1" pageIndex={0} />);
-    expect(screen.queryByTestId("bulk-actions")).not.toBeInTheDocument();
+    expect(screen.getByTestId("bulk-actions")).toBeInTheDocument();
+    // Selection-specific UI is hidden when nothing selected.
+    expect(screen.queryByTestId("bulk-actions-count")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("bulk-actions-clear")).not.toBeInTheDocument();
+    // Page-level actions are always present.
+    expect(screen.getByTestId("bulk-actions-rerun-match")).toBeInTheDocument();
+    expect(screen.getByTestId("bulk-actions-export")).toBeInTheDocument();
+    // Mark reviewed is present but disabled.
+    expect(screen.getByTestId("bulk-actions-mark-reviewed")).toBeDisabled();
   });
 
   it("renders the bar when selectedIds has items", () => {
@@ -44,14 +52,16 @@ describe("BulkActions (Slice 23)", () => {
     await user.click(screen.getByTestId("bulk-actions-clear"));
     // After clear, store should have 0 selected ids.
     expect(worklistStore.getState().selectedIds).toHaveLength(0);
-    // Re-render to confirm bar disappears.
+    // Re-render — panel stays visible but selection row is gone.
     const qc = makeQueryClient();
     rerender(
       <QueryClientProvider client={qc}>
         <BulkActions projectId="p1" pageIndex={0} />
       </QueryClientProvider>,
     );
-    expect(screen.queryByTestId("bulk-actions")).not.toBeInTheDocument();
+    expect(screen.getByTestId("bulk-actions")).toBeInTheDocument();
+    expect(screen.queryByTestId("bulk-actions-count")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("bulk-actions-clear")).not.toBeInTheDocument();
   });
 
   it("mark-reviewed button triggers fetch and clears selection on success", async () => {

@@ -67,9 +67,6 @@ export function BulkActions({ projectId, pageIndex }: BulkActionsProps) {
   const { selectedIds } = state;
   const count = selectedIds.length;
 
-  // Do not render when nothing is selected.
-  if (count === 0) return null;
-
   async function handleMarkReviewed() {
     try {
       const body = {
@@ -126,27 +123,30 @@ export function BulkActions({ projectId, pageIndex }: BulkActionsProps) {
       data-testid="bulk-actions"
       className="flex-shrink-0 border-t border-border-1 bg-bg-surface px-3 py-2 flex flex-col gap-2"
     >
-      {/* Header row */}
-      <div className="flex items-center justify-between">
-        <span data-testid="bulk-actions-count" className="text-[11px] text-ink-2">
-          {count} selected
-        </span>
-        <button
-          type="button"
-          data-testid="bulk-actions-clear"
-          onClick={() => worklistStore.clearBulk()}
-          className="text-[10px] text-ink-3 hover:text-ink-1 transition-colors"
-        >
-          Clear
-        </button>
-      </div>
+      {/* Selection header — only when items are selected */}
+      {count > 0 && (
+        <div className="flex items-center justify-between">
+          <span data-testid="bulk-actions-count" className="text-[11px] text-ink-2">
+            {count} selected
+          </span>
+          <button
+            type="button"
+            data-testid="bulk-actions-clear"
+            onClick={() => worklistStore.clearBulk()}
+            className="text-[10px] text-ink-3 hover:text-ink-1 transition-colors"
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
       {/* Action buttons */}
       <div className="flex gap-1.5 flex-wrap">
+        {/* Selection-scoped action — only enabled when items are selected */}
         <button
           type="button"
           data-testid="bulk-actions-mark-reviewed"
-          disabled={isBusy}
+          disabled={isBusy || count === 0}
           onClick={() => void handleMarkReviewed()}
           className={cn(
             "text-[11px] px-2 py-1 rounded border transition-colors",

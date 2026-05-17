@@ -580,7 +580,13 @@ export default function ProjectPage() {
     hierarchy: lines.length,
   };
   const drawerSlot = (
-    <Drawer lineMatches={lines} page={pagePayload ?? undefined} tabCounts={drawerTabCounts} />
+    <Drawer
+      lineMatches={lines}
+      page={pagePayload ?? undefined}
+      projectId={pid}
+      pageIndex={idx0}
+      tabCounts={drawerTabCounts}
+    />
   );
 
   // IS-4: Canvas slot stripped to image-only layout.

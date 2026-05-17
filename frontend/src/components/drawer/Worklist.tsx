@@ -15,6 +15,7 @@ import { worklistStore, type MatchFilter, type WorklistSort } from "../../stores
 import { selectLine } from "../../stores/selection-store";
 import { filterLines } from "../../lib/filter-predicates";
 import { StatusPip } from "../ui/StatusPip";
+import { BulkActions } from "./BulkActions";
 
 type LineMatch = components["schemas"]["LineMatch"];
 type MatchStatus = components["schemas"]["MatchStatus"];
@@ -299,9 +300,11 @@ function filterBySearch(lines: LineMatch[], query: string): LineMatch[] {
 export interface WorklistProps {
   /** Page line matches to display. Pass undefined when page not loaded. */
   lineMatches?: LineMatch[];
+  projectId: string;
+  pageIndex: number;
 }
 
-export function Worklist({ lineMatches = [] }: WorklistProps) {
+export function Worklist({ lineMatches = [], projectId, pageIndex }: WorklistProps) {
   // Subscribe to worklist store for reactive re-renders.
   const state = useSyncExternalStore(
     worklistStore.subscribe,
@@ -360,6 +363,9 @@ export function Worklist({ lineMatches = [] }: WorklistProps) {
           ))
         )}
       </div>
+
+      {/* Bulk actions — always visible; page-level ops work without selection */}
+      <BulkActions projectId={projectId} pageIndex={pageIndex} />
     </div>
   );
 }

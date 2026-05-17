@@ -66,7 +66,14 @@ export interface DrawerProps extends WorklistProps, HierarchyProps {
   tabCounts?: Partial<Record<DrawerTab, number>>;
 }
 
-export function Drawer({ lineMatches, page, className, tabCounts }: DrawerProps) {
+export function Drawer({
+  lineMatches,
+  page,
+  projectId,
+  pageIndex,
+  className,
+  tabCounts,
+}: DrawerProps) {
   const open = useSyncExternalStore(useUiPrefs.subscribe, getDrawerOpen, getDrawerOpen);
   const activeTab = useSyncExternalStore(useUiPrefs.subscribe, getDrawerTab, getDrawerTab);
 
@@ -145,7 +152,7 @@ export function Drawer({ lineMatches, page, className, tabCounts }: DrawerProps)
           {/* Body — mount active tab content */}
           <div className="flex-1 min-h-0 overflow-hidden">
             {activeTab === "worklist" ? (
-              <Worklist lineMatches={lineMatches} />
+              <Worklist lineMatches={lineMatches} projectId={projectId} pageIndex={pageIndex} />
             ) : (
               <Hierarchy page={page} />
             )}
