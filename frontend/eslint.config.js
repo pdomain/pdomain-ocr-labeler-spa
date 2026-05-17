@@ -2,6 +2,7 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import tsParser from "@typescript-eslint/parser";
+import jsxA11y from "eslint-plugin-jsx-a11y";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
@@ -17,6 +18,31 @@ export default tseslint.config(
     ],
   },
   js.configs.recommended,
+  // Accessibility rules for JSX — fired on src/ only (non-test).
+  // Per 2026-05-17 strict-linting decision doc §TypeScript/React stack.
+  // High-volume rules deferred as warn: Konva canvas divs are intentionally
+  // interactive via JS (not native HTML); a11y fixes tracked separately.
+  {
+    ...jsxA11y.flatConfigs.recommended,
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/**/*.test.{ts,tsx}", "src/test/**/*.{ts,tsx}"],
+    rules: {
+      ...jsxA11y.flatConfigs.recommended.rules,
+      // Deferred — canvas/non-native interactive elements; a11y followup needed.
+      "jsx-a11y/click-events-have-key-events": "warn",
+      "jsx-a11y/no-noninteractive-element-interactions": "warn",
+      "jsx-a11y/no-static-element-interactions": "warn",
+      "jsx-a11y/no-noninteractive-tabindex": "warn",
+      "jsx-a11y/no-autofocus": "warn",
+      "jsx-a11y/label-has-associated-control": "warn",
+      // Deferred — abstract ARIA roles on Konva wrappers; proper ARIA fixup needed.
+      "jsx-a11y/aria-role": "warn",
+      // Deferred — focusable interactive elements on canvas tree; a11y followup needed.
+      "jsx-a11y/interactive-supports-focus": "warn",
+      // Deferred — aria-pressed on role=radio; a11y followup needed.
+      "jsx-a11y/role-supports-aria-props": "warn",
+    },
+  },
   // Type-aware rules scoped to TS/TSX source files only (non-test).
   // Uses projectService so ESLint has TS type information for no-unsafe-* rules.
   // Per 2026-05-17 strict-linting decision doc §TypeScript/React stack.
