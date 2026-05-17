@@ -52,7 +52,7 @@ function pageBase(projectId: string, pageIndex: number): string {
  */
 export function useReloadOcr(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
-  return useMutation<ReloadOCRResponse, Error>({
+  return useMutation<ReloadOCRResponse>({
     mutationFn: () =>
       apiPost<ReloadOCRResponse>(`${pageBase(projectId, pageIndex)}/reload-ocr`, {
         use_edited_image: false,
@@ -72,7 +72,7 @@ export function useReloadOcr(projectId: string, pageIndex: number) {
  * Returns 202 + job_id; same job-tracking pattern as useReloadOcr.
  */
 export function useReloadOcrEdited(projectId: string, pageIndex: number) {
-  return useMutation<ReloadOCRResponse, Error>({
+  return useMutation<ReloadOCRResponse>({
     mutationFn: () =>
       apiPost<ReloadOCRResponse>(`${pageBase(projectId, pageIndex)}/reload-ocr`, {
         use_edited_image: true,
@@ -89,7 +89,7 @@ export function useReloadOcrEdited(projectId: string, pageIndex: number) {
  */
 export function useSavePage(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
-  return useMutation<SavePageResponse, Error>({
+  return useMutation<SavePageResponse>({
     mutationFn: () => apiPost<SavePageResponse>(`${pageBase(projectId, pageIndex)}/save`, {}),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
@@ -104,7 +104,7 @@ export function useSavePage(projectId: string, pageIndex: number) {
  * Long-running; caller uses useJobProgress to show progress overlay.
  */
 export function useSaveProject(projectId: string) {
-  return useMutation<SaveProjectResponse, Error>({
+  return useMutation<SaveProjectResponse>({
     mutationFn: () => apiPost<SaveProjectResponse>(`/api/projects/${projectId}/save-all`, {}),
   });
 }
@@ -118,7 +118,7 @@ export function useSaveProject(projectId: string) {
  */
 export function useLoadPage(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
-  return useMutation<PagePayload, Error>({
+  return useMutation<PagePayload>({
     mutationFn: () => apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/load`, {}),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
@@ -135,7 +135,7 @@ export function useLoadPage(projectId: string, pageIndex: number) {
  */
 export function useRematchGt(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
-  return useMutation<PagePayload, Error>({
+  return useMutation<PagePayload>({
     mutationFn: () => apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/rematch-gt`, {}),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });

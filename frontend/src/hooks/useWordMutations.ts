@@ -274,16 +274,16 @@ type EraseShape = "rect" | "circle";
 export function useErasePixels(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
   return useMutation<
-    void,
+    undefined,
     Error,
     {
       lineIndex: number;
       wordIndex: number;
-      ops: Array<
+      ops: (
         | { tool: "brush"; x: number; y: number; radius: number }
-        | { tool: "lasso"; points: Array<[number, number]> }
+        | { tool: "lasso"; points: [number, number][] }
         | { tool: "rect"; x: number; y: number; width: number; height: number }
-      >;
+      )[];
     }
   >({
     mutationFn: async ({ lineIndex, wordIndex, ops }) => {
@@ -317,7 +317,7 @@ export function useErasePixels(projectId: string, pageIndex: number) {
           // Lasso uses AABB approximation; polygon fill not yet implemented.
           shape = "rect";
         }
-        await apiPost<void>(base, { bbox, fill_value: 255, shape });
+        await apiPost<unknown>(base, { bbox, fill_value: 255, shape });
       }
     },
     onSuccess: () => {

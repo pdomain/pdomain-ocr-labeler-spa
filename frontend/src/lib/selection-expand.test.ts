@@ -57,10 +57,7 @@ function makeLine(
   };
 }
 
-function makePage(
-  line_matches: LineMatch[],
-  selection: PagePayload["selection"] = undefined,
-): PagePayload {
+function makePage(line_matches: LineMatch[], selection?: PagePayload["selection"]): PagePayload {
   return {
     project_id: "proj-001",
     page_index: 0,

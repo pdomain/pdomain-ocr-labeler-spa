@@ -57,7 +57,7 @@ export default function ProjectNavigationControls({
     if (!projectId) return;
     if (!Number.isInteger(n)) return;
     if (n < 1 || n > totalPages) return;
-    navigate(pageNoUrl(projectId, n));
+    void navigate(pageNoUrl(projectId, n));
   }
 
   function onPrev() {
@@ -116,8 +116,12 @@ export default function ProjectNavigationControls({
         data-testid="nav-page-input"
         aria-label="Page number"
         value={gotoValue !== "" ? gotoValue : String(currentPageNo)}
-        onChange={(e) => setGotoValue(e.target.value)}
-        onBlur={() => setGotoValue("")}
+        onChange={(e) => {
+          setGotoValue(e.target.value);
+        }}
+        onBlur={() => {
+          setGotoValue("");
+        }}
         onKeyDown={onInputKeyDown}
         className="w-10 h-6 px-1 text-center text-[11px] tabular-nums border border-border-2 rounded bg-bg-sunk text-ink-1 focus:outline-none focus:border-accent"
       />

@@ -48,14 +48,74 @@ export function useMatchesHotkeys({
   onOcrToGt,
   onGtToOcr,
 }: UseMatchesHotkeysOptions): void {
-  useHotkey("j", () => onLineNav(1), { enabled });
-  useHotkey("k", () => onLineNav(-1), { enabled });
-  useHotkey("v", () => onValidate(), { enabled });
-  useHotkey("u", () => onUnvalidate(), { enabled });
-  useHotkey("d", () => onDelete(), { enabled });
-  useHotkey("r", () => onRefine(), { enabled });
-  useHotkey("shift+r", () => onExpandRefine(), { enabled });
-  useHotkey("m", () => onMerge(), { enabled });
-  useHotkey("o", () => onOcrToGt(), { enabled });
-  useHotkey("g", () => onGtToOcr(), { enabled });
+  useHotkey(
+    "j",
+    () => {
+      onLineNav(1);
+    },
+    { enabled },
+  );
+  useHotkey(
+    "k",
+    () => {
+      onLineNav(-1);
+    },
+    { enabled },
+  );
+  useHotkey(
+    "v",
+    () => {
+      onValidate();
+    },
+    { enabled },
+  );
+  useHotkey(
+    "u",
+    () => {
+      onUnvalidate();
+    },
+    { enabled },
+  );
+  useHotkey(
+    "d",
+    () => {
+      onDelete();
+    },
+    { enabled },
+  );
+  useHotkey(
+    "r",
+    () => {
+      onRefine();
+    },
+    { enabled },
+  );
+  useHotkey(
+    "shift+r",
+    () => {
+      onExpandRefine();
+    },
+    { enabled },
+  );
+  useHotkey(
+    "m",
+    () => {
+      onMerge();
+    },
+    { enabled },
+  );
+  useHotkey(
+    "o",
+    () => {
+      onOcrToGt();
+    },
+    { enabled },
+  );
+  useHotkey(
+    "g",
+    () => {
+      onGtToOcr();
+    },
+    { enabled },
+  );
 }

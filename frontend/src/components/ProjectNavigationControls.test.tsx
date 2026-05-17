@@ -76,7 +76,7 @@ function renderControls({ projectId = "proj-1", totalPages = 5, route }: RenderO
   const qc = makeQueryClient();
   const initialPath = route ?? `/projects/${projectId}/pages/pageno/1`;
   // Extract pageNo from the initial path so we can pass it as a prop.
-  const pageNoMatch = initialPath.match(/\/pageno\/(\d+)/);
+  const pageNoMatch = /\/pageno\/(\d+)/.exec(initialPath);
   const pageNo = pageNoMatch ? pageNoMatch[1] : "1";
   return render(
     <QueryClientProvider client={qc}>
@@ -129,7 +129,7 @@ describe("ProjectNavigationControls: testids", () => {
     mockProject("proj-1", 7);
     renderControls({ projectId: "proj-1", route: "/projects/proj-1/pages/pageno/3" });
 
-    const input = (await screen.findByTestId("nav-page-input")) as HTMLInputElement;
+    const input = await screen.findByTestId("nav-page-input");
     await waitFor(() => expect(input.value).toBe("3"));
   });
 });
@@ -183,7 +183,7 @@ describe("ProjectNavigationControls: GoTo", () => {
     mockProject("proj-1", 10);
     renderControls({ projectId: "proj-1", route: "/projects/proj-1/pages/pageno/2" });
 
-    const input = (await screen.findByTestId("nav-page-input")) as HTMLInputElement;
+    const input = await screen.findByTestId("nav-page-input");
     fireEvent.change(input, { target: { value: "7" } });
     fireEvent.click(screen.getByTestId("nav-goto-button"));
 
@@ -196,7 +196,7 @@ describe("ProjectNavigationControls: GoTo", () => {
     mockProject("proj-1", 10);
     renderControls({ projectId: "proj-1", route: "/projects/proj-1/pages/pageno/2" });
 
-    const input = (await screen.findByTestId("nav-page-input")) as HTMLInputElement;
+    const input = await screen.findByTestId("nav-page-input");
     fireEvent.change(input, { target: { value: "4" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
@@ -214,7 +214,7 @@ describe("ProjectNavigationControls: GoTo", () => {
       expect(screen.getByTestId("nav-page-total-label").textContent).toMatch(/\/\s*5/);
     });
 
-    const input = (await screen.findByTestId("nav-page-input")) as HTMLInputElement;
+    const input = await screen.findByTestId("nav-page-input");
     fireEvent.change(input, { target: { value: "99" } });
     fireEvent.click(screen.getByTestId("nav-goto-button"));
 
@@ -231,7 +231,7 @@ describe("ProjectNavigationControls: GoTo", () => {
       expect(screen.getByTestId("nav-page-total-label").textContent).toMatch(/\/\s*5/);
     });
 
-    const input = (await screen.findByTestId("nav-page-input")) as HTMLInputElement;
+    const input = await screen.findByTestId("nav-page-input");
     fireEvent.change(input, { target: { value: "0" } });
     fireEvent.click(screen.getByTestId("nav-goto-button"));
 
@@ -247,7 +247,7 @@ describe("ProjectNavigationControls: GoTo", () => {
       expect(screen.getByTestId("nav-page-total-label").textContent).toMatch(/\/\s*5/);
     });
 
-    const input = (await screen.findByTestId("nav-page-input")) as HTMLInputElement;
+    const input = await screen.findByTestId("nav-page-input");
     fireEvent.change(input, { target: { value: "abc" } });
     fireEvent.click(screen.getByTestId("nav-goto-button"));
 

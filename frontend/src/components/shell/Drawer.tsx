@@ -103,7 +103,9 @@ export function Drawer({
                   type="button"
                   data-testid={tab.testid}
                   data-active={isActive ? "true" : undefined}
-                  onClick={() => setDrawerTab(tab.id)}
+                  onClick={() => {
+                    setDrawerTab(tab.id);
+                  }}
                   className={cn(
                     "flex-1 h-full text-[11px] font-medium transition-colors px-2",
                     "inline-flex items-center justify-center gap-1.5",
@@ -141,7 +143,9 @@ export function Drawer({
             <button
               type="button"
               data-testid="drawer-collapse-btn"
-              onClick={() => setDrawerOpen(false)}
+              onClick={() => {
+                setDrawerOpen(false);
+              }}
               aria-label="Collapse drawer"
               className="w-8 h-full flex items-center justify-center text-ink-3 hover:text-ink-1 flex-shrink-0"
             >
@@ -165,7 +169,9 @@ export function Drawer({
         <button
           type="button"
           data-testid="drawer-expand-btn"
-          onClick={() => setDrawerOpen(true)}
+          onClick={() => {
+            setDrawerOpen(true);
+          }}
           aria-label="Expand drawer"
           className="w-full flex items-center justify-center text-ink-3 hover:text-ink-1 py-2"
         >

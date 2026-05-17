@@ -196,7 +196,14 @@ export function Rail() {
       <SectionLabel label="MODE" />
       <div className="flex flex-col border-b border-border-1 pb-1">
         {(["view", "region", "annotate", "erase"] as RailMode[]).map((m) => (
-          <ModeCard key={m} mode={m} active={mode === m} onClick={() => setMode(m)} />
+          <ModeCard
+            key={m}
+            mode={m}
+            active={mode === m}
+            onClick={() => {
+              setMode(m);
+            }}
+          />
         ))}
       </div>
 
@@ -207,25 +214,33 @@ export function Rail() {
           target="block"
           active={target === "block"}
           swatchColor={layerColors.block}
-          onClick={() => setTarget("block")}
+          onClick={() => {
+            setTarget("block");
+          }}
         />
         <TargetCell
           target="para"
           active={target === "para"}
           swatchColor={layerColors.para}
-          onClick={() => setTarget("para")}
+          onClick={() => {
+            setTarget("para");
+          }}
         />
         <TargetCell
           target="line"
           active={target === "line"}
           swatchColor={layerColors.line}
-          onClick={() => setTarget("line")}
+          onClick={() => {
+            setTarget("line");
+          }}
         />
         <TargetCell
           target="word"
           active={target === "word"}
           swatchColor={layerColors.word}
-          onClick={() => setTarget("word")}
+          onClick={() => {
+            setTarget("word");
+          }}
         />
       </div>
 
@@ -261,7 +276,9 @@ export function Rail() {
           data-testid="rail-hotkeys-button"
           title="Keyboard shortcuts (?)"
           aria-label="Keyboard shortcuts"
-          onClick={() => dialogStore.open("hotkeyHelp")}
+          onClick={() => {
+            dialogStore.open("hotkeyHelp");
+          }}
           className="w-full flex flex-col items-center justify-center gap-0.5 py-1.5 rounded text-[9px] font-medium text-ink-3 hover:text-ink-2 hover:bg-bg-raised/50 transition-colors select-none"
         >
           <Keyboard size={14} aria-hidden="true" />

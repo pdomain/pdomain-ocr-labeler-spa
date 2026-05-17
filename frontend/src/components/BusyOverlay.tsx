@@ -18,10 +18,10 @@ type Job = components["schemas"]["Job"];
 type JobType = components["schemas"]["JobType"];
 
 /** Job types that support real cooperative cancel. */
-const CANCELLABLE: Set<JobType> = new Set(["save_project", "export"]);
+const CANCELLABLE = new Set<JobType>(["save_project", "export"]);
 
 /** Job type that has cancel button but with "best-effort" warning. */
-const BEST_EFFORT_CANCEL: Set<JobType> = new Set(["reload_ocr_page"]);
+const BEST_EFFORT_CANCEL = new Set<JobType>(["reload_ocr_page"]);
 
 interface BusyOverlayProps {
   /** The currently active running job, if any. */
@@ -39,7 +39,7 @@ export function BusyOverlay({ activeJob, isMutating = false, onCancel }: BusyOve
     mutationFn: async (jobId: string) => {
       const res = await fetch(`/api/jobs/${jobId}/cancel`, { method: "POST" });
       if (!res.ok) throw new Error("Cancel failed");
-      return res.json();
+      return res.json() as Promise<unknown>;
     },
   });
 

@@ -24,7 +24,6 @@ if (typeof globalThis.ResizeObserver === "undefined") {
 // mount time without this stub. Tests that need real SSE event dispatch should
 // override globalThis.EventSource with their own mock via vi.stubGlobal.
 class EventSourceStub {
-  constructor(_url: string) {}
   addEventListener(_type: string, _fn: unknown): void {}
   removeEventListener(_type: string, _fn: unknown): void {}
   close(): void {}

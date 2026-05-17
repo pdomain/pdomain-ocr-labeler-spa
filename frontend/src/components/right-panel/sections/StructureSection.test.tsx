@@ -225,7 +225,7 @@ describe("StructureSection (Slice 18 + P3.d / Gap 37)", () => {
 
   it("gap slider defaults to 0", () => {
     renderSection(makeWord(0, 1));
-    const slider = screen.getByTestId("structure-gap-slider") as HTMLInputElement;
+    const slider = screen.getByTestId("structure-gap-slider");
     expect(slider.value).toBe("0");
   });
 
@@ -241,13 +241,13 @@ describe("StructureSection (Slice 18 + P3.d / Gap 37)", () => {
 
   it("gap slider is disabled when word is the last in the line", () => {
     renderSection(makeWord(0, 2)); // last word in 3-word line — no wi+1
-    const slider = screen.getByTestId("structure-gap-slider") as HTMLInputElement;
+    const slider = screen.getByTestId("structure-gap-slider");
     expect(slider).toBeDisabled();
   });
 
   it("gap slider is enabled for a non-last word", () => {
     renderSection(makeWord(0, 1)); // middle word — wi+1 exists
-    const slider = screen.getByTestId("structure-gap-slider") as HTMLInputElement;
+    const slider = screen.getByTestId("structure-gap-slider");
     expect(slider).not.toBeDisabled();
   });
 

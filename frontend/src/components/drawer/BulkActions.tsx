@@ -132,7 +132,9 @@ export function BulkActions({ projectId, pageIndex }: BulkActionsProps) {
           <button
             type="button"
             data-testid="bulk-actions-clear"
-            onClick={() => worklistStore.clearBulk()}
+            onClick={() => {
+              worklistStore.clearBulk();
+            }}
             className="text-[10px] text-ink-3 hover:text-ink-1 transition-colors"
           >
             Clear
@@ -191,7 +193,7 @@ export function BulkActions({ projectId, pageIndex }: BulkActionsProps) {
             ? "Done."
             : jobProgress.status === "error"
               ? `Error: ${jobProgress.error_message ?? "unknown"}`
-              : `${jobProgress.progress?.message ?? "Running…"}`}
+              : (jobProgress.progress?.message ?? "Running…")}
         </div>
       )}
     </div>

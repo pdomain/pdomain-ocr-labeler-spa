@@ -195,7 +195,7 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
 
   it("P5.b: sort dropdown renders with default 'index'", () => {
     render(<Worklist />);
-    const sel = screen.getByTestId("worklist-sort-select") as HTMLSelectElement;
+    const sel = screen.getByTestId("worklist-sort-select");
     expect(sel.value).toBe("index");
   });
 

@@ -45,7 +45,7 @@ it("disconnects the MutationObserver on unmount (no leak)", () => {
       disconnectSpy();
       super.disconnect();
     }
-  } as typeof MutationObserver;
+  };
 
   const { unmount } = renderHook(() => useLayerColors());
   unmount();

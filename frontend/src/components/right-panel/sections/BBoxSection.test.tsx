@@ -115,10 +115,10 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
 
   it("renders four numeric inputs with initial bbox values", () => {
     renderBBox();
-    const x = screen.getByTestId("bbox-input-x") as HTMLInputElement;
-    const y = screen.getByTestId("bbox-input-y") as HTMLInputElement;
-    const w = screen.getByTestId("bbox-input-w") as HTMLInputElement;
-    const h = screen.getByTestId("bbox-input-h") as HTMLInputElement;
+    const x = screen.getByTestId("bbox-input-x");
+    const y = screen.getByTestId("bbox-input-y");
+    const w = screen.getByTestId("bbox-input-w");
+    const h = screen.getByTestId("bbox-input-h");
     expect(x.value).toBe("10");
     expect(y.value).toBe("20");
     expect(w.value).toBe("30");
@@ -160,8 +160,8 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     renderBBox(word);
 
     // Initial values should match bbox
-    expect((screen.getByTestId("bbox-input-x") as HTMLInputElement).value).toBe("5");
-    expect((screen.getByTestId("bbox-input-y") as HTMLInputElement).value).toBe("6");
+    expect(screen.getByTestId("bbox-input-x").value).toBe("5");
+    expect(screen.getByTestId("bbox-input-y").value).toBe("6");
 
     // Reset without any edits should fire mutation with original values
     const handler = vi.fn(async (info: { request: Request }) => {

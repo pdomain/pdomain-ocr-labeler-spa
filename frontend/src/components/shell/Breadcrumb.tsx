@@ -62,7 +62,9 @@ const LAYER_ACTIVE_CLASS: Record<"block" | "para" | "line" | "word", string> = {
 // ─── Subscriber bridge ───────────────────────────────────────────────────────
 
 function subscribeSelection(cb: () => void): () => void {
-  return selectionStore.subscribe(() => cb());
+  return selectionStore.subscribe(() => {
+    cb();
+  });
 }
 function getSelectionSnapshot() {
   return selectionStore.getState();
@@ -163,7 +165,9 @@ export function Breadcrumb({ page }: BreadcrumbProps) {
         testid="breadcrumb-chip-root"
         label="Project"
         active={level === "none"}
-        onClick={() => clearSelection()}
+        onClick={() => {
+          clearSelection();
+        }}
       />
       {renderChips(level, resolved)}
     </div>
@@ -204,7 +208,9 @@ function renderChips(level: SelectionLevel, path: SelectionPath) {
         label={blockLabel(path.blockId)}
         layer="block"
         active={level === "block"}
-        onClick={() => selectBlock(path.blockId!)}
+        onClick={() => {
+          selectBlock(path.blockId!);
+        }}
       />,
     );
   }
@@ -217,7 +223,9 @@ function renderChips(level: SelectionLevel, path: SelectionPath) {
         label={paraLabel(path.paraId)}
         layer="para"
         active={level === "para"}
-        onClick={() => selectPara(path.paraId!)}
+        onClick={() => {
+          selectPara(path.paraId!);
+        }}
       />,
     );
   }
@@ -230,7 +238,9 @@ function renderChips(level: SelectionLevel, path: SelectionPath) {
         label={lineLabel(path.lineId)}
         layer="line"
         active={level === "line"}
-        onClick={() => selectLine(path.lineId!)}
+        onClick={() => {
+          selectLine(path.lineId!);
+        }}
       />,
     );
   }

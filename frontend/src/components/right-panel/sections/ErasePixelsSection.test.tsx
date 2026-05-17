@@ -199,12 +199,12 @@ describe("ErasePixelsSection — P3.c canvas behaviour", () => {
         <ErasePixelsSection backendAvailable={true} />
       </Wrapper>,
     );
-    const slider = screen.getByTestId("erase-brush-size") as HTMLInputElement;
+    const slider = screen.getByTestId("erase-brush-size");
     expect(slider.value).toBe("8"); // DEFAULT_BRUSH
     // userEvent.type does not work well for range inputs; fireEvent.change is cleaner.
     const { fireEvent } = await import("@testing-library/react");
     fireEvent.change(slider, { target: { value: "16" } });
-    expect((screen.getByTestId("erase-brush-size") as HTMLInputElement).value).toBe("16");
+    expect(screen.getByTestId("erase-brush-size").value).toBe("16");
   });
 });
 
@@ -324,7 +324,7 @@ describe("ErasePixelsSection — P3.c commit footer", () => {
     await user.click(screen.getByTestId("erase-canvas"));
     await user.click(screen.getByTestId("erase-apply"));
     expect(onApply).toHaveBeenCalledOnce();
-    const ops = onApply.mock.calls[0][0] as Array<{ tool: string }>;
+    const ops = onApply.mock.calls[0][0] as { tool: string }[];
     expect(ops).toHaveLength(2);
     expect(ops[0].tool).toBe("brush");
     // After successful apply, ops should be cleared.

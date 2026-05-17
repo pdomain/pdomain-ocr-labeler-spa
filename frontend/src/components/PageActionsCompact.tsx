@@ -42,7 +42,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     } else {
       // Running — update loading toast with current progress message.
       const msg = jobProgress.progress?.message ?? "Running OCR…";
-      import("sonner").then(({ toast: sonnerToast }) => {
+      void import("sonner").then(({ toast: sonnerToast }) => {
         sonnerToast.loading(msg, { id: activeJobId });
       });
     }
@@ -65,7 +65,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
         if (data?.job_id) {
           setActiveJobId(data.job_id);
           // Show initial loading toast immediately while SSE stream opens.
-          import("sonner").then(({ toast: sonnerToast }) => {
+          void import("sonner").then(({ toast: sonnerToast }) => {
             sonnerToast.loading("Running OCR…", { id: data.job_id });
           });
         }

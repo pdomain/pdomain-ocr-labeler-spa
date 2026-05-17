@@ -63,7 +63,7 @@ describe("Accordion", () => {
   it("trigger uses py-2.5 (reduced height ~36px) not py-4", () => {
     const { container } = render(<SimpleAccordion />);
     // AccordionTrigger is a <button> inside AccordionHeader <h3>
-    const trigger = container.querySelector("button[type=button]") as HTMLElement | null;
+    const trigger = container.querySelector("button[type=button]");
     if (trigger) {
       expect(trigger.className).toContain("py-2.5");
       expect(trigger.className).not.toContain("py-4");
@@ -72,7 +72,7 @@ describe("Accordion", () => {
 
   it("trigger label uses uppercase tracking style (spec accordion label)", () => {
     const { container } = render(<SimpleAccordion />);
-    const trigger = container.querySelector("button[type=button]") as HTMLElement | null;
+    const trigger = container.querySelector("button[type=button]");
     if (trigger) {
       expect(trigger.className).toContain("uppercase");
     }
@@ -82,11 +82,11 @@ describe("Accordion", () => {
     render(<SimpleAccordion />);
     fireEvent.click(screen.getByText("Section 1"));
     // Content is the Radix Content element (has data-state=open when open)
-    const openContent = document.querySelector("[data-state=open]") as HTMLElement | null;
+    const openContent = document.querySelector("[data-state=open]");
     // Walk up to find the content container with background class
     if (openContent) {
       // The content wrapper should have bg-bg-sunk
-      const contentEl = document.querySelector(".bg-bg-sunk") as HTMLElement | null;
+      const contentEl = document.querySelector(".bg-bg-sunk");
       expect(contentEl).toBeTruthy();
     }
   });

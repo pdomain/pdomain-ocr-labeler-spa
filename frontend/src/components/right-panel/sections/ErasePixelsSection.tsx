@@ -141,7 +141,9 @@ export function ErasePixelsSection({
               <span className="text-[11px] text-ink-2 truncate">{describeOp(op, i)}</span>
               <button
                 data-testid={`erase-op-${i}-remove`}
-                onClick={() => handleRemoveOp(i)}
+                onClick={() => {
+                  handleRemoveOp(i);
+                }}
                 aria-label={`Remove op ${i + 1}`}
                 className="text-ink-3 hover:text-status-mismatch text-sm px-1"
               >

@@ -66,7 +66,7 @@ const HANDLE_SIZE = 8;
 const SELECTED_STROKE_WIDTH = 2.5;
 const UNSELECTED_STROKE_WIDTH = 1.25;
 
-function buildRangePalette(): Array<{ stroke: string; fill: string }> {
+function buildRangePalette(): { stroke: string; fill: string }[] {
   const tokens = [
     readCssToken("--status-ocr", "#5d9fdf"),
     readCssToken("--status-exact", "#5fbf6a"),
@@ -260,8 +260,12 @@ export function CharFixerCanvas({
                 stroke={palette.stroke}
                 strokeWidth={isSelected ? SELECTED_STROKE_WIDTH : UNSELECTED_STROKE_WIDTH}
                 fill={palette.fill}
-                onClick={() => onSelect(i)}
-                onTap={() => onSelect(i)}
+                onClick={() => {
+                  onSelect(i);
+                }}
+                onTap={() => {
+                  onSelect(i);
+                }}
               />
             );
           })}
@@ -306,7 +310,7 @@ export function CharFixerCanvas({
  */
 export function initialCharBboxes(
   wordBbox: BBox,
-  ranges: ReadonlyArray<{ start: number; end: number }>,
+  ranges: readonly { start: number; end: number }[],
   totalChars: number,
 ): CharRangeBBox[] {
   if (totalChars <= 0 || ranges.length === 0) return [];

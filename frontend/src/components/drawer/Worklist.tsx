@@ -164,21 +164,27 @@ function FilterRow({ counts, activeFilter, sort, onFilter, onSort }: FilterRowPr
           label="All"
           count={counts.all}
           active={activeFilter === "all"}
-          onClick={() => onFilter("all")}
+          onClick={() => {
+            onFilter("all");
+          }}
         />
         <CountChip
           testid="worklist-filter-unvalidated"
           label="Unvalidated"
           count={counts.unvalidated}
           active={activeFilter === "unvalidated"}
-          onClick={() => onFilter("unvalidated")}
+          onClick={() => {
+            onFilter("unvalidated");
+          }}
         />
         <CountChip
           testid="worklist-filter-mismatched"
           label="Error"
           count={counts.error}
           active={activeFilter === "mismatched"}
-          onClick={() => onFilter("mismatched")}
+          onClick={() => {
+            onFilter("mismatched");
+          }}
         />
       </div>
 
@@ -188,7 +194,9 @@ function FilterRow({ counts, activeFilter, sort, onFilter, onSort }: FilterRowPr
         <select
           data-testid="worklist-sort-select"
           value={sort}
-          onChange={(e) => onSort(e.target.value as WorklistSort)}
+          onChange={(e) => {
+            onSort(e.target.value as WorklistSort);
+          }}
           className="text-[10px] bg-bg-raised border border-border-2 rounded px-1 py-0.5 text-ink-2 hover:border-accent focus:outline-none focus:border-accent transition-colors"
         >
           {SORT_OPTIONS.map((o) => (
@@ -242,9 +250,13 @@ function WorklistRow({ line, isSelected, isChecked, onClick }: WorklistRowProps)
           type="checkbox"
           data-testid={`worklist-row-checkbox-${line.line_index}`}
           checked={isChecked}
-          onChange={() => worklistStore.toggle(line.line_index)}
+          onChange={() => {
+            worklistStore.toggle(line.line_index);
+          }}
           // onClick stops the row-navigation handler; onChange drives the store toggle.
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
           className="w-3 h-3 cursor-pointer accent-accent"
           aria-label={`Select line ${line.line_index + 1} for bulk action`}
         />
@@ -333,8 +345,12 @@ export function Worklist({ lineMatches = [], projectId, pageIndex }: WorklistPro
         counts={counts}
         activeFilter={activeFilter}
         sort={sort}
-        onFilter={(f) => worklistStore.setActiveFilter(f)}
-        onSort={(s) => worklistStore.setSort(s)}
+        onFilter={(f) => {
+          worklistStore.setActiveFilter(f);
+        }}
+        onSort={(s) => {
+          worklistStore.setSort(s);
+        }}
       />
 
       {/* Queue list */}

@@ -153,9 +153,9 @@ describe("CharFixerSection (Slice 20)", () => {
 
   it("renders one editable input per char with the GT char as initial value", () => {
     renderSection(makeWord("Hello", "Hello"));
-    expect((screen.getByTestId("char-fixer-input-0") as HTMLInputElement).value).toBe("H");
-    expect((screen.getByTestId("char-fixer-input-1") as HTMLInputElement).value).toBe("e");
-    expect((screen.getByTestId("char-fixer-input-4") as HTMLInputElement).value).toBe("o");
+    expect(screen.getByTestId("char-fixer-input-0").value).toBe("H");
+    expect(screen.getByTestId("char-fixer-input-1").value).toBe("e");
+    expect(screen.getByTestId("char-fixer-input-4").value).toBe("o");
   });
 
   it("renders the original OCR char as a label next to each input", () => {
@@ -180,7 +180,7 @@ describe("CharFixerSection (Slice 20)", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderSection(makeWord("Hello", "Hello"));
 
-    const input4 = screen.getByTestId("char-fixer-input-4") as HTMLInputElement;
+    const input4 = screen.getByTestId("char-fixer-input-4");
     await user.clear(input4);
     await user.type(input4, "0");
 
@@ -240,38 +240,38 @@ describe("CharFixerSection — P4.b bbox canvas + handles (Gap 39)", () => {
   it("Apply button is disabled until a bbox is modified", async () => {
     const user = userEvent.setup();
     renderSection(makeWord("ab", "ab"));
-    const apply = screen.getByTestId("charfixer-apply") as HTMLButtonElement;
+    const apply = screen.getByTestId("charfixer-apply");
     expect(apply).toBeDisabled();
 
     // Edit the x1 coordinate input — that's a bbox modification.
-    const x1 = screen.getByTestId("charfixer-detail-x1") as HTMLInputElement;
+    const x1 = screen.getByTestId("charfixer-detail-x1");
     await user.clear(x1);
     await user.type(x1, "42");
 
-    expect((screen.getByTestId("charfixer-apply") as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByTestId("charfixer-apply").disabled).toBe(false);
   });
 
   it("editing a coordinate input updates the bbox in local state", async () => {
     const user = userEvent.setup();
     renderSection(makeWord("ab", "ab"));
-    const x1Before = (screen.getByTestId("charfixer-detail-x1") as HTMLInputElement).value;
+    const x1Before = screen.getByTestId("charfixer-detail-x1").value;
     expect(x1Before).toBe("0");
 
-    const x1 = screen.getByTestId("charfixer-detail-x1") as HTMLInputElement;
+    const x1 = screen.getByTestId("charfixer-detail-x1");
     await user.clear(x1);
     await user.type(x1, "3");
 
-    expect((screen.getByTestId("charfixer-detail-x1") as HTMLInputElement).value).toBe("3");
+    expect(screen.getByTestId("charfixer-detail-x1").value).toBe("3");
   });
 
   it("dragging a handle marks the bbox dirty (enables Apply)", () => {
     renderSection(makeWord("ab", "ab"));
-    expect((screen.getByTestId("charfixer-apply") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId("charfixer-apply").disabled).toBe(true);
 
     // The Konva mock surfaces onDragMove via onMouseDown on the handle rect.
     fireEvent.mouseDown(screen.getByTestId("charfixer-range-0-handle-se"));
 
-    expect((screen.getByTestId("charfixer-apply") as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByTestId("charfixer-apply").disabled).toBe(false);
   });
 
   it("clicking Apply resets the dirty flag (button disables again)", async () => {
@@ -282,14 +282,14 @@ describe("CharFixerSection — P4.b bbox canvas + handles (Gap 39)", () => {
     );
     const user = userEvent.setup();
     renderSection(makeWord("ab", "ab"));
-    const x1 = screen.getByTestId("charfixer-detail-x1") as HTMLInputElement;
+    const x1 = screen.getByTestId("charfixer-detail-x1");
     await user.clear(x1);
     await user.type(x1, "7");
-    const apply = screen.getByTestId("charfixer-apply") as HTMLButtonElement;
+    const apply = screen.getByTestId("charfixer-apply");
     expect(apply.disabled).toBe(false);
 
     await user.click(apply);
-    expect((screen.getByTestId("charfixer-apply") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId("charfixer-apply").disabled).toBe(true);
   });
 
   it("clicking Apply POSTs char_bboxes to the backend", async () => {
@@ -299,7 +299,7 @@ describe("CharFixerSection — P4.b bbox canvas + handles (Gap 39)", () => {
     renderSection(makeWord("ab", "ab"));
 
     // Dirty the state by editing a coordinate input.
-    const x1 = screen.getByTestId("charfixer-detail-x1") as HTMLInputElement;
+    const x1 = screen.getByTestId("charfixer-detail-x1");
     await user.clear(x1);
     await user.type(x1, "5");
 

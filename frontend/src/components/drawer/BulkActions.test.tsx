@@ -73,7 +73,7 @@ describe("BulkActions (Slice 23)", () => {
       ok: true,
       json: async () => ({}),
       text: async () => "",
-    } as Response);
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     renderWithQuery(<BulkActions projectId="p1" pageIndex={0} />);
@@ -99,15 +99,14 @@ describe("BulkActions (Slice 23)", () => {
 });
 
 describe("error toasts (Slice 23)", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let toastErrorSpy: any;
 
   beforeEach(async () => {
     worklistStore.reset();
     vi.restoreAllMocks();
     const sonner = await import("sonner");
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    toastErrorSpy = vi.spyOn(sonner.toast, "error").mockImplementation(() => "t1" as never);
+
+    toastErrorSpy = vi.spyOn(sonner.toast, "error").mockImplementation(() => "t1");
     worklistStore.selectAll([2]);
   });
 

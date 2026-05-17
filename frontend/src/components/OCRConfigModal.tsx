@@ -311,7 +311,9 @@ export function OCRConfigModal({
                   data-testid="auto-rotate-checkbox"
                   checked={autoRotateOnLoad}
                   disabled={!autoRotateAvailable}
-                  onChange={handleAutoRotateOnLoadChange}
+                  onChange={(e) => {
+                    void handleAutoRotateOnLoadChange(e);
+                  }}
                   className="accent-accent"
                 />
                 Auto-rotate pages on load
@@ -331,7 +333,9 @@ export function OCRConfigModal({
                   data-testid="auto-rotate-method-select"
                   value={autoRotateMethod}
                   disabled={!autoRotateAvailable || !autoRotateOnLoad}
-                  onChange={handleAutoRotateMethodChange}
+                  onChange={(e) => {
+                    void handleAutoRotateMethodChange(e);
+                  }}
                   className="border border-border-1 rounded text-xs px-1 py-0.5 bg-bg-sunk"
                   aria-label="Auto-rotation method"
                 >

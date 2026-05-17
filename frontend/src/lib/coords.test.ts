@@ -3,7 +3,7 @@ import { srcToDisplay, displayToSrc, BBox } from "./coords";
 
 describe("coords", () => {
   it("round-trips within 1px for known bbox set", () => {
-    const testCases: Array<{ bbox: BBox; scale: number }> = [
+    const testCases: { bbox: BBox; scale: number }[] = [
       // Small scale (downsampling)
       { bbox: { x: 10, y: 20, width: 100, height: 50 }, scale: 0.5 },
       { bbox: { x: 0, y: 0, width: 800, height: 600 }, scale: 0.5 },

@@ -148,7 +148,7 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
   }, [wordKey, initialDraft, initialBboxes]);
 
   // Refs to each input cell, for the unicode picker to insert into.
-  const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const lastFocusedIndex = useRef<number | null>(null);
 
   // Debounce timer for save.
@@ -297,25 +297,33 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
             label="x1"
             value={selected.bbox.x}
             testId="charfixer-detail-x1"
-            onChange={(v) => handleCoordChange("x1", v)}
+            onChange={(v) => {
+              handleCoordChange("x1", v);
+            }}
           />
           <CoordInput
             label="y1"
             value={selected.bbox.y}
             testId="charfixer-detail-y1"
-            onChange={(v) => handleCoordChange("y1", v)}
+            onChange={(v) => {
+              handleCoordChange("y1", v);
+            }}
           />
           <CoordInput
             label="x2"
             value={selected.bbox.x + selected.bbox.width}
             testId="charfixer-detail-x2"
-            onChange={(v) => handleCoordChange("x2", v)}
+            onChange={(v) => {
+              handleCoordChange("x2", v);
+            }}
           />
           <CoordInput
             label="y2"
             value={selected.bbox.y + selected.bbox.height}
             testId="charfixer-detail-y2"
-            onChange={(v) => handleCoordChange("y2", v)}
+            onChange={(v) => {
+              handleCoordChange("y2", v);
+            }}
           />
           <Button
             data-testid="charfixer-apply"
@@ -364,8 +372,12 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
                 size="sm"
                 className="text-center px-0.5 h-6"
                 value={draftChar}
-                onChange={(e) => handleChange(i, e.target.value)}
-                onFocus={() => handleFocus(i)}
+                onChange={(e) => {
+                  handleChange(i, e.target.value);
+                }}
+                onFocus={() => {
+                  handleFocus(i);
+                }}
               />
             </div>
           );
@@ -378,7 +390,9 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
           data-testid="char-fixer-open-picker-button"
           variant="secondary"
           size="sm"
-          onClick={() => setPickerOpen((v) => !v)}
+          onClick={() => {
+            setPickerOpen((v) => !v);
+          }}
         >
           {pickerOpen ? "Close Unicode picker" : "Open Unicode picker"}
         </Button>

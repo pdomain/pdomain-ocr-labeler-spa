@@ -32,7 +32,7 @@ export interface RegistryEntry {
    * Example: [["⌥", "→"]] → one KeyCap with two pills.
    *          ["?"] → one KeyCap with one pill.
    */
-  keyCaps: Array<string | string[]>;
+  keyCaps: (string | string[])[];
   group: HotkeyGroup;
   /** Optional sort weight within a group; lower = earlier. */
   order?: number;
@@ -101,7 +101,9 @@ let _snapshot: HotkeyGroupDef[] | null = null;
 
 function notify() {
   _snapshot = null;
-  _listeners.forEach((fn) => fn());
+  _listeners.forEach((fn) => {
+    fn();
+  });
 }
 
 /**

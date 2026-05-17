@@ -525,9 +525,9 @@ describe("ImageTabsHeader (#196)", () => {
       />,
     );
     // jsdom exposes inline styles as-is
-    const para = screen.getByTestId("legend-chip-para") as HTMLElement;
-    const line = screen.getByTestId("legend-chip-line") as HTMLElement;
-    const word = screen.getByTestId("legend-chip-word") as HTMLElement;
+    const para = screen.getByTestId("legend-chip-para");
+    const line = screen.getByTestId("legend-chip-line");
+    const word = screen.getByTestId("legend-chip-word");
     expect(para.style.background).toBe("var(--layer-para)");
     expect(line.style.background).toBe("var(--layer-line)");
     expect(word.style.background).toBe("var(--layer-word)");

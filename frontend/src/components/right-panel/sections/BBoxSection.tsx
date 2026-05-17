@@ -132,8 +132,12 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
             type="number"
             size="sm"
             value={draft.x}
-            onChange={(e) => handleChange("x", e.target.value)}
-            onBlur={(e) => handleBlur("x", e.target.value)}
+            onChange={(e) => {
+              handleChange("x", e.target.value);
+            }}
+            onBlur={(e) => {
+              handleBlur("x", e.target.value);
+            }}
           />
         </label>
         <label className="flex flex-col gap-0.5">
@@ -143,8 +147,12 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
             type="number"
             size="sm"
             value={draft.y}
-            onChange={(e) => handleChange("y", e.target.value)}
-            onBlur={(e) => handleBlur("y", e.target.value)}
+            onChange={(e) => {
+              handleChange("y", e.target.value);
+            }}
+            onBlur={(e) => {
+              handleBlur("y", e.target.value);
+            }}
           />
         </label>
         <label className="flex flex-col gap-0.5">
@@ -154,8 +162,12 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
             type="number"
             size="sm"
             value={draft.width}
-            onChange={(e) => handleChange("width", e.target.value)}
-            onBlur={(e) => handleBlur("width", e.target.value)}
+            onChange={(e) => {
+              handleChange("width", e.target.value);
+            }}
+            onBlur={(e) => {
+              handleBlur("width", e.target.value);
+            }}
           />
         </label>
         <label className="flex flex-col gap-0.5">
@@ -165,8 +177,12 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
             type="number"
             size="sm"
             value={draft.height}
-            onChange={(e) => handleChange("height", e.target.value)}
-            onBlur={(e) => handleBlur("height", e.target.value)}
+            onChange={(e) => {
+              handleChange("height", e.target.value);
+            }}
+            onBlur={(e) => {
+              handleBlur("height", e.target.value);
+            }}
           />
         </label>
       </div>
@@ -199,7 +215,9 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
               size="sm"
               aria-label="Nudge left"
               disabled={busy}
-              onClick={() => handleNudge("left")}
+              onClick={() => {
+                handleNudge("left");
+              }}
             >
               ←
             </Button>
@@ -209,7 +227,9 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
               size="sm"
               aria-label="Nudge right"
               disabled={busy}
-              onClick={() => handleNudge("right")}
+              onClick={() => {
+                handleNudge("right");
+              }}
             >
               →
             </Button>
@@ -219,7 +239,9 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
               size="sm"
               aria-label="Nudge up"
               disabled={busy}
-              onClick={() => handleNudge("top")}
+              onClick={() => {
+                handleNudge("top");
+              }}
             >
               ↑
             </Button>
@@ -229,7 +251,9 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
               size="sm"
               aria-label="Nudge down"
               disabled={busy}
-              onClick={() => handleNudge("bottom")}
+              onClick={() => {
+                handleNudge("bottom");
+              }}
             >
               ↓
             </Button>

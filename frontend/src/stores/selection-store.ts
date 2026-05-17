@@ -74,7 +74,9 @@ function createReactiveStore<T>(initialState: T): Store<T> {
     setState: (arg: SetStateArg<T>) => {
       const newState = typeof arg === "function" ? (arg as (s: T) => T)(state) : arg;
       state = { ...state, ...newState };
-      listeners.forEach((l) => l(state));
+      listeners.forEach((l) => {
+        l(state);
+      });
     },
     subscribe: (listener) => {
       listeners.add(listener);

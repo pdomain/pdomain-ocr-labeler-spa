@@ -84,7 +84,7 @@ describe("LineDetail (Slice 21)", () => {
   beforeEach(() => {
     clearSelection();
     // Reset density pref to default.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     useUiPrefs.setState({ lineWordsDensity: "cards" } as any);
   });
 
@@ -125,7 +125,7 @@ describe("LineDetail (Slice 21)", () => {
     expect(screen.getByTestId("line-detail-word-row-0")).toBeInTheDocument();
 
     // Pref persists in store.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     expect((useUiPrefs.getState() as any).lineWordsDensity).toBe("rows");
   });
 });
@@ -135,7 +135,7 @@ describe("LineDetail (Slice 21)", () => {
 describe("LineDetail P5.e: structure box + GT row + validate-all (Gaps 42, 43)", () => {
   beforeEach(() => {
     clearSelection();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     useUiPrefs.setState({ lineWordsDensity: "cards" } as any);
   });
 
@@ -170,7 +170,7 @@ describe("LineDetail P5.e: structure box + GT row + validate-all (Gaps 42, 43)",
     const user = userEvent.setup();
     selectLine(3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
-    const input = screen.getByTestId("line-detail-gt-input") as HTMLInputElement;
+    const input = screen.getByTestId("line-detail-gt-input");
     await user.clear(input);
     await user.type(input, "new text");
     expect(input.value).toBe("new text");
@@ -224,7 +224,7 @@ describe("LineDetail P5.e: structure box + GT row + validate-all (Gaps 42, 43)",
 describe("LineDetail P5.f: word cards with checkboxes + bulk bar (Gaps 44, 45)", () => {
   beforeEach(() => {
     clearSelection();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     useUiPrefs.setState({ lineWordsDensity: "cards" } as any);
   });
 
@@ -302,7 +302,7 @@ describe("LineDetail P5.f: word cards with checkboxes + bulk bar (Gaps 44, 45)",
 describe("LineDetail Q5: bulk bar validate/skip calls validate-batch (scope=word)", () => {
   beforeEach(() => {
     clearSelection();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     useUiPrefs.setState({ lineWordsDensity: "cards" } as any);
   });
 
@@ -387,7 +387,7 @@ describe("LineDetail Q5: bulk bar validate/skip calls validate-batch (scope=word
 describe("LineDetail GTRow: blur-commit and Escape revert (Task 3)", () => {
   beforeEach(() => {
     clearSelection();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     useUiPrefs.setState({ lineWordsDensity: "cards" } as any);
   });
 
@@ -403,7 +403,7 @@ describe("LineDetail GTRow: blur-commit and Escape revert (Task 3)", () => {
 
     selectLine(3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
-    const input = screen.getByTestId("line-detail-gt-input") as HTMLInputElement;
+    const input = screen.getByTestId("line-detail-gt-input");
 
     await user.clear(input);
     await user.type(input, "corrected text");
@@ -447,7 +447,7 @@ describe("LineDetail GTRow: blur-commit and Escape revert (Task 3)", () => {
 
     selectLine(3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
-    const input = screen.getByTestId("line-detail-gt-input") as HTMLInputElement;
+    const input = screen.getByTestId("line-detail-gt-input");
 
     // Edit the value then press Escape
     await user.clear(input);

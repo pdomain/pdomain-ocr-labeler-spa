@@ -604,8 +604,10 @@ export interface paths {
          *     Error paths:
          *     - 404 ``project_not_found`` / ``page_not_found`` (via
          *       ``_check_project_and_page``).
-         *     - 404 ``image_not_found`` on PIL open failure (missing file, corrupt
-         *       bytes).
+         *     - 404 ``image_not_found`` when the image file is missing
+         *       (``FileNotFoundError``).
+         *     - 422 ``image_corrupt`` when the file is present but unreadable
+         *       (corrupt bytes, OOM, permission error, etc.).
          */
         get: operations["get_page_image_api_projects__project_id__pages__page_index__image_get"];
         put?: never;

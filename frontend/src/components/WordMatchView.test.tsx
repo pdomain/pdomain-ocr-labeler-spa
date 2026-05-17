@@ -58,7 +58,7 @@ function makeWordMatch(overrides: Partial<WordMatch> = {}): WordMatch {
     is_validated: false,
     bbox: { x: 0, y: 0, width: 0, height: 0 },
     ...overrides,
-  } as WordMatch;
+  };
 }
 
 // ─── WordMatchView ────────────────────────────────────────────────────────
@@ -241,7 +241,7 @@ describe("LineCard word rows", () => {
       text_style_labels: [],
       word_components: [],
       ...overrides,
-    } as WordMatch;
+    };
   }
 
   it("renders a WordCell for each word_match in the line", () => {

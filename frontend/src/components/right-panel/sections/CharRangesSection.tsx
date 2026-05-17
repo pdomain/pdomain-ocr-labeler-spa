@@ -99,10 +99,7 @@ function fromApiCharRange(r: ApiCharRange): CharRange {
   const activeComponents = new Set(r.styles?.filter((s) => componentKeys.has(s)) ?? []);
   const kind: RangeKind = activeComponents.size > 0 ? "component" : "style";
   const styles = Object.fromEntries(
-    PENDING_STYLE_KEYS.map((k) => [
-      k,
-      styleSet.has(k) ? ("on" as TristateValue) : ("off" as TristateValue),
-    ]),
+    PENDING_STYLE_KEYS.map((k) => [k, styleSet.has(k) ? "on" : "off"]),
   ) as Record<PendingStyleKey, TristateValue>;
   return { start: r.start, end: r.end, kind, styles, activeStyles, activeComponents };
 }
@@ -168,7 +165,9 @@ function KindSwitcher({
     <div className="flex rounded border border-border-2 overflow-hidden text-[9px] font-bold tracking-wider uppercase">
       <button
         data-testid={`char-range-${rangeIndex}-kind-style`}
-        onClick={() => onChange("style")}
+        onClick={() => {
+          onChange("style");
+        }}
         className={[
           "px-2 py-0.5 transition-colors",
           kind === "style" ? "bg-accent text-white" : "bg-raised text-ink-3 hover:bg-bg-raised",
@@ -178,7 +177,9 @@ function KindSwitcher({
       </button>
       <button
         data-testid={`char-range-${rangeIndex}-kind-component`}
-        onClick={() => onChange("component")}
+        onClick={() => {
+          onChange("component");
+        }}
         className={[
           "px-2 py-0.5 transition-colors border-l border-border-2",
           kind === "component" ? "bg-accent text-white" : "bg-raised text-ink-3 hover:bg-bg-raised",
@@ -249,7 +250,6 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
   // Sync ranges when navigating to a different word.
   useEffect(() => {
     setRanges((word.char_ranges ?? []).map(fromApiCharRange));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [word.char_ranges]);
 
   const pendingStart = anchor !== null && endPos !== null ? Math.min(anchor, endPos) : null;
@@ -399,7 +399,9 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
               key={i}
               data-testid={`char-cell-${i}`}
               data-range-anchor={isAnchor ? "true" : undefined}
-              onClick={() => handleCellClick(i)}
+              onClick={() => {
+                handleCellClick(i);
+              }}
               className={[
                 "min-w-[18px] h-6 px-1.5 rounded border text-[11px] font-mono",
                 isInPending
@@ -430,7 +432,9 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
               variant="tristate"
               value={pendingStyles[s]}
               data-testid={`char-ranges-chip-${s}`}
-              onChange={(next) => handlePendingChipChange(s, next)}
+              onChange={(next) => {
+                handlePendingChipChange(s, next);
+              }}
             >
               {s}
             </Chip>
@@ -479,18 +483,24 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
                     label="S"
                     value={r.start}
                     max={maxIdx}
-                    onChange={(v) => handleRangeStartChange(i, v)}
+                    onChange={(v) => {
+                      handleRangeStartChange(i, v);
+                    }}
                   />
                   <PosInput
                     label="E"
                     value={r.end}
                     max={maxIdx}
-                    onChange={(v) => handleRangeEndChange(i, v)}
+                    onChange={(v) => {
+                      handleRangeEndChange(i, v);
+                    }}
                   />
 
                   <KindSwitcher
                     kind={r.kind}
-                    onChange={(k) => handleKindChange(i, k)}
+                    onChange={(k) => {
+                      handleKindChange(i, k);
+                    }}
                     rangeIndex={i}
                   />
 
@@ -507,7 +517,9 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
                       data-testid={`char-range-${i}-delete`}
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleDelete(i)}
+                      onClick={() => {
+                        handleDelete(i);
+                      }}
                     >
                       x
                     </Button>
@@ -520,14 +532,18 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
                     items={STYLE_ITEMS}
                     activeKeys={r.activeStyles}
                     data-testid-prefix={`char-range-${i}-style-chip`}
-                    onChange={(key, next) => handleStyleChipChange(i, key, next)}
+                    onChange={(key, next) => {
+                      handleStyleChipChange(i, key, next);
+                    }}
                   />
                 ) : (
                   <ChipPalette
                     items={COMPONENT_ITEMS}
                     activeKeys={r.activeComponents}
                     data-testid-prefix={`char-range-${i}-component-chip`}
-                    onChange={(key, next) => handleComponentChipChange(i, key, next)}
+                    onChange={(key, next) => {
+                      handleComponentChipChange(i, key, next);
+                    }}
                   />
                 )}
 
@@ -558,7 +574,9 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
           {r.start}..{r.end} {rangeDisplayLabel(r)}
           <button
             data-testid={`char-ranges-delete-${i}`}
-            onClick={() => handleDelete(i)}
+            onClick={() => {
+              handleDelete(i);
+            }}
             aria-hidden="true"
             tabIndex={-1}
           >

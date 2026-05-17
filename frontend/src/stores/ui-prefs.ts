@@ -148,11 +148,13 @@ function createStore<T extends object>(initialState: T): Store<T> {
   const listeners = new Set<Listener>();
 
   function notify() {
-    listeners.forEach((fn) => fn());
+    listeners.forEach((fn) => {
+      fn();
+    });
   }
 
   const setState = (arg: SetStateArg<T>) => {
-    const newState = typeof arg === "function" ? (arg as (s: T) => Partial<T>)(state) : arg;
+    const newState = typeof arg === "function" ? arg(state) : arg;
     state = { ...state, ...newState };
     notify();
   };
@@ -173,7 +175,9 @@ function createStore<T extends object>(initialState: T): Store<T> {
           notify();
         };
         mq.addEventListener("change", handler);
-        mediaQueryCleanup = () => mq.removeEventListener("change", handler);
+        mediaQueryCleanup = () => {
+          mq.removeEventListener("change", handler);
+        };
       } catch {
         // not available
       }
@@ -244,6 +248,6 @@ export function useThemePreference(): ThemePreference {
   return useSyncExternalStore(
     useUiPrefs.subscribe,
     () => useUiPrefs.getState().theme,
-    () => "system" as ThemePreference,
+    () => "system",
   );
 }

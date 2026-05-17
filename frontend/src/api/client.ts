@@ -69,7 +69,7 @@ export class ApiClient {
       );
     }
 
-    return response.json();
+    return response.json() as Promise<T>;
   }
 
   get<T>(path: string): Promise<T> {
@@ -89,8 +89,8 @@ export class ApiClient {
   }
 
   /** Persist page cursor — fire-and-forget; caller should not await errors. */
-  setCurrentPageIndex(projectId: string, pageIndex: number): Promise<void> {
-    return this.post<void>(`/api/projects/${projectId}/current-page-index`, {
+  setCurrentPageIndex(projectId: string, pageIndex: number): Promise<unknown> {
+    return this.post<unknown>(`/api/projects/${projectId}/current-page-index`, {
       page_index: pageIndex,
     });
   }

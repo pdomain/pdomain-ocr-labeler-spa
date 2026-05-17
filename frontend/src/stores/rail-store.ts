@@ -52,7 +52,9 @@ function createRailStore() {
   const listeners = new Set<Listener>();
 
   function notify() {
-    listeners.forEach((fn) => fn());
+    listeners.forEach((fn) => {
+      fn();
+    });
   }
 
   function setTarget(target: RailTarget) {

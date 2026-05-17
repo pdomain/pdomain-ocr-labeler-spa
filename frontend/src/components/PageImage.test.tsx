@@ -18,7 +18,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // vi.hoisted so the mock state is in-scope for the vi.mock factory below.
 const mockUseImageState = vi.hoisted(() => ({
   image: undefined as HTMLImageElement | undefined,
-  status: "loading" as "loading" | "loaded" | "failed",
+  status: "loading",
 }));
 
 vi.mock("use-image", () => ({

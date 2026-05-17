@@ -51,15 +51,13 @@ export function StudioShell({
     <div
       data-testid="studio-shell"
       className="h-full w-full bg-bg-page"
-      style={
-        {
-          display: "grid",
-          gridTemplateAreas: '"header header header header" "rail drawer canvas right"',
-          gridTemplateColumns: `64px ${drawerCollapsed ? "0px" : "var(--drawer-w, 320px)"} 1fr var(--right-w, 520px)`,
-          gridTemplateRows: `${headerHeight}px 1fr`,
-          ...(rightWVar ? { "--right-w": rightWVar } : {}),
-        } as React.CSSProperties
-      }
+      style={{
+        display: "grid",
+        gridTemplateAreas: '"header header header header" "rail drawer canvas right"',
+        gridTemplateColumns: `64px ${drawerCollapsed ? "0px" : "var(--drawer-w, 320px)"} 1fr var(--right-w, 520px)`,
+        gridTemplateRows: `${headerHeight}px 1fr`,
+        ...(rightWVar ? { "--right-w": rightWVar } : {}),
+      }}
     >
       {/* Header zone */}
       <div

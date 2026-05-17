@@ -78,13 +78,23 @@ export function HotkeyHelpModal() {
   const groups = useHotkeyGroups();
 
   // ? key opens help outside inputs (enableOnFormTags: false is default)
-  useHotkey("?", () => dialogStore.open("hotkeyHelp"));
+  useHotkey("?", () => {
+    dialogStore.open("hotkeyHelp");
+  });
   // Esc closes when open
-  useHotkey("escape", () => dialogStore.close("hotkeyHelp"), { enabled: open });
+  useHotkey(
+    "escape",
+    () => {
+      dialogStore.close("hotkeyHelp");
+    },
+    { enabled: open },
+  );
 
   if (!open) return null;
 
-  const close = () => dialogStore.close("hotkeyHelp");
+  const close = () => {
+    dialogStore.close("hotkeyHelp");
+  };
 
   return (
     <div

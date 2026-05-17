@@ -112,7 +112,9 @@ type LineMatch = components["schemas"]["LineMatch"];
 
 const uiPrefsListeners = new Set<() => void>();
 function notifyUiPrefs() {
-  uiPrefsListeners.forEach((fn) => fn());
+  uiPrefsListeners.forEach((fn) => {
+    fn();
+  });
 }
 function subscribeUiPrefs(cb: () => void): () => void {
   uiPrefsListeners.add(cb);
@@ -166,7 +168,9 @@ function getRightPanelOpenSnapshot(): boolean {
 // ─── selection-store subscriber ─────────────────────────────────────────────
 
 function subscribeSelection(cb: () => void): () => void {
-  return selectionStore.subscribe(() => cb());
+  return selectionStore.subscribe(() => {
+    cb();
+  });
 }
 function getSelectionSnapshot(): SelectionState {
   return selectionStore.getState();
@@ -175,7 +179,9 @@ function getSelectionSnapshot(): SelectionState {
 // ─── viewport-store subscriber (erase mode) ─────────────────────────────────
 
 function subscribeViewport(cb: () => void): () => void {
-  return viewportStore.subscribe(() => cb());
+  return viewportStore.subscribe(() => {
+    cb();
+  });
 }
 function getViewportModeSnapshot(): string {
   return viewportStore.getState().mode;
@@ -313,18 +319,19 @@ export default function ProjectPage() {
     onRematchGt: handleRematchGt,
     onExport: handleExport,
     onPrevPage: () => {
-      if (projectId && currentPageNo > 1) navigate(pageNoUrl(projectId, currentPageNo - 1));
+      if (projectId && currentPageNo > 1) void navigate(pageNoUrl(projectId, currentPageNo - 1));
     },
     onNextPage: () => {
       if (projectId && currentPageNo < totalPages)
-        navigate(pageNoUrl(projectId, currentPageNo + 1));
+        void navigate(pageNoUrl(projectId, currentPageNo + 1));
     },
     onFirstPage: () => {
-      if (projectId && totalPages > 0 && currentPageNo !== 1) navigate(pageNoUrl(projectId, 1));
+      if (projectId && totalPages > 0 && currentPageNo !== 1)
+        void navigate(pageNoUrl(projectId, 1));
     },
     onLastPage: () => {
       if (projectId && totalPages > 0 && currentPageNo !== totalPages)
-        navigate(pageNoUrl(projectId, totalPages));
+        void navigate(pageNoUrl(projectId, totalPages));
     },
   });
 
@@ -383,7 +390,7 @@ export default function ProjectPage() {
   useEffect(() => {
     if (projectNotFound) {
       toast.warn("Project not found — returning to project list.");
-      navigate("/", { replace: true, state: { skipSessionRedirect: true } });
+      void navigate("/", { replace: true, state: { skipSessionRedirect: true } });
     }
   }, [projectNotFound, navigate]);
 
@@ -399,7 +406,9 @@ export default function ProjectPage() {
         body: JSON.stringify({ page_index: idx0 }),
       });
     }, 300);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+    };
   }, [projectId, idx0]);
 
   // Show ProjectLoadingOverlay during the initial page fetch.
@@ -473,37 +482,61 @@ export default function ProjectPage() {
     void qc.invalidateQueries({ queryKey: ["page", projectId, idx0] });
   }
 
-  function trackJob<T extends { job_id?: string | null } | undefined | null>(result: T) {
+  function trackJob(result: { job_id?: string | null } | undefined | null) {
     const jobId = result?.job_id ?? null;
     if (jobId) setActiveJobId(jobId);
   }
 
   function handleReloadOcr() {
     reloadOcr.mutate(undefined, {
-      onSuccess: (data) => trackJob(data),
-      onSettled: () => invalidatePage(),
+      onSuccess: (data) => {
+        trackJob(data);
+      },
+      onSettled: () => {
+        invalidatePage();
+      },
     });
   }
   function handleReloadOcrEdited() {
     reloadOcrEdited.mutate(undefined, {
-      onSuccess: (data) => trackJob(data),
-      onSettled: () => invalidatePage(),
+      onSuccess: (data) => {
+        trackJob(data);
+      },
+      onSettled: () => {
+        invalidatePage();
+      },
     });
   }
   function handleSavePage() {
-    savePage.mutate(undefined, { onSettled: () => invalidatePage() });
+    savePage.mutate(undefined, {
+      onSettled: () => {
+        invalidatePage();
+      },
+    });
   }
   function handleSaveProject() {
     saveProject.mutate(undefined, {
-      onSuccess: (data) => trackJob(data),
-      onSettled: () => invalidatePage(),
+      onSuccess: (data) => {
+        trackJob(data);
+      },
+      onSettled: () => {
+        invalidatePage();
+      },
     });
   }
   function handleLoadPage() {
-    loadPage.mutate(undefined, { onSettled: () => invalidatePage() });
+    loadPage.mutate(undefined, {
+      onSettled: () => {
+        invalidatePage();
+      },
+    });
   }
   function handleRematchGt() {
-    rematchGt.mutate(undefined, { onSettled: () => invalidatePage() });
+    rematchGt.mutate(undefined, {
+      onSettled: () => {
+        invalidatePage();
+      },
+    });
   }
   function handleExport() {
     dialogStore.open("export");
@@ -599,11 +632,19 @@ export default function ProjectPage() {
         layerVisibility={uiPrefs.layerVisibility}
         selectionMode={uiPrefs.selectionMode}
         eraseActive={vpMode === "erase"}
-        onLayerToggle={(layer) => setLayerVisibility(layer, !uiPrefs.layerVisibility[layer])}
-        onSelectionModeChange={(mode) => setSelectionMode(mode)}
+        onLayerToggle={(layer) => {
+          setLayerVisibility(layer, !uiPrefs.layerVisibility[layer]);
+        }}
+        onSelectionModeChange={(mode) => {
+          setSelectionMode(mode);
+        }}
         onEraseToggle={toggleEraseMode}
-        onZoomFit={() => setCanvasZoom(0)}
-        onZoom100={() => setCanvasZoom(1.0)}
+        onZoomFit={() => {
+          setCanvasZoom(0);
+        }}
+        onZoom100={() => {
+          setCanvasZoom(1.0);
+        }}
         matchFilterMode={uiPrefs.matchFilterMode}
         onMatchFilterModeToggle={() => {
           useUiPrefs.setMatchFilterMode(
@@ -652,7 +693,9 @@ export default function ProjectPage() {
             pageTextGt={pagePayload?.page_text_gt}
             pageTextOcr={pagePayload?.page_text_ocr}
             lineFilter={uiPrefs.matchFilter}
-            onLineFilterChange={(f) => setMatchFilter(f as MatchFilter)}
+            onLineFilterChange={(f) => {
+              setMatchFilter(f);
+            }}
           >
             <WordMatchView lines={lines} filter={uiPrefs.matchFilter} />
           </TextTabs>
@@ -677,7 +720,9 @@ export default function ProjectPage() {
       projectId={projectId ?? undefined}
       pageIndex={idx0}
       wordSlot={wordDetailSlot}
-      onCollapse={() => useUiPrefs.setState({ rightPanelOpen: false })}
+      onCollapse={() => {
+        useUiPrefs.setState({ rightPanelOpen: false });
+      }}
     />
   ) : null;
 
@@ -707,12 +752,16 @@ export default function ProjectPage() {
         target={dialogTarget}
         lineWords={dialogLineWords}
         wordImageUrl={undefined}
-        onNavigate={(t) => dialogStore.openWordEdit({ lineIdx: t.lineIndex, wordIdx: t.wordIndex })}
+        onNavigate={(t) => {
+          dialogStore.openWordEdit({ lineIdx: t.lineIndex, wordIdx: t.wordIndex });
+        }}
         onApply={() => {
           invalidatePage();
           dialogStore.close("wordEdit");
         }}
-        onClose={() => dialogStore.close("wordEdit")}
+        onClose={() => {
+          dialogStore.close("wordEdit");
+        }}
       />
 
       {/* ConfirmDialog — opens from useConfirm() via dialogStore. */}
@@ -724,7 +773,9 @@ export default function ProjectPage() {
           confirmState.onConfirm?.();
           dialogStore.close("confirm");
         }}
-        onCancel={() => dialogStore.close("confirm")}
+        onCancel={() => {
+          dialogStore.close("confirm");
+        }}
       />
     </div>
   );

@@ -52,7 +52,9 @@ function ThemeChips() {
             role="radio"
             aria-checked={active}
             data-testid={`theme-chip-${value}`}
-            onClick={() => useUiPrefs.setTheme(value)}
+            onClick={() => {
+              useUiPrefs.setTheme(value);
+            }}
             className={`px-1.5 py-0.5 rounded border text-[10px] font-medium transition-colors ${active ? CHIP_ACTIVE[value] : CHIP_INACTIVE}`}
           >
             {label}

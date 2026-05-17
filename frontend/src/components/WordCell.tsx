@@ -178,7 +178,9 @@ export function WordCell({ word, onCommitGt, onEditWord }: WordCellProps) {
         data-testid={`gt-text-input-${l}-${w}`}
         type="text"
         value={gtValue}
-        onChange={(e) => setGtValue(e.target.value)}
+        onChange={(e) => {
+          setGtValue(e.target.value);
+        }}
         onBlur={handleBlur}
         className="w-full text-xs border border-border-1 rounded px-1 py-0.5 font-mono focus:outline-none focus:border-accent"
         aria-label={`Ground truth for "${word.ocr_text}"`}

@@ -141,12 +141,12 @@ function AppShell() {
       <HeaderBar
         navSlot={
           onProjectRoute ? (
-            <ProjectNavigationControls projectId={projectId!} pageNo={pageNo} />
+            <ProjectNavigationControls projectId={projectId} pageNo={pageNo} />
           ) : undefined
         }
         actionsSlot={
           onProjectRoute ? (
-            <PageActionsCompact projectId={projectId!} pageIndex={pageIndex} />
+            <PageActionsCompact projectId={projectId} pageIndex={pageIndex} />
           ) : undefined
         }
         projectName={headerProjectName}
@@ -205,19 +205,28 @@ function AppShell() {
        * read their open-state via their `open` prop. Export dialog only
        * shows when a project is loaded (no `projectId` → skip render).
        */}
-      <OCRConfigModal open={ocrConfigOpen} onClose={() => dialogStore.close("ocrConfig")} />
+      <OCRConfigModal
+        open={ocrConfigOpen}
+        onClose={() => {
+          dialogStore.close("ocrConfig");
+        }}
+      />
       {projectId && (
         <ExportDialog
           open={exportOpen}
           projectId={projectId}
           currentPageIndex={pageIndex}
-          onClose={() => dialogStore.close("export")}
+          onClose={() => {
+            dialogStore.close("export");
+          }}
         />
       )}
       <HotkeyHelpModal />
       <SourceFolderDialog
         open={sourceFolderOpen}
-        onClose={() => dialogStore.close("sourceFolder")}
+        onClose={() => {
+          dialogStore.close("sourceFolder");
+        }}
       />
     </div>
   );

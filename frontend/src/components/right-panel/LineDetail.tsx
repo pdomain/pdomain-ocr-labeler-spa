@@ -54,7 +54,9 @@ function statusPip(status: MatchStatus): "exact" | "fuzzy" | "mismatch" {
 // ─── store bridge ─────────────────────────────────────────────────────────
 
 function subscribeSelection(cb: () => void): () => void {
-  return selectionStore.subscribe(() => cb());
+  return selectionStore.subscribe(() => {
+    cb();
+  });
 }
 function getSelectionSnapshot() {
   return selectionStore.getState();
@@ -168,7 +170,9 @@ function GTRow({ line, projectId, pageIndex }: GTRowProps) {
         type="text"
         data-testid="line-detail-gt-input"
         value={gtText}
-        onChange={(e) => setGtText(e.target.value)}
+        onChange={(e) => {
+          setGtText(e.target.value);
+        }}
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
@@ -201,7 +205,7 @@ interface LineDetailInnerProps {
 
 function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
   // Density pref — stored in ui-prefs as "lineWordsDensity".
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const [densityPref, setDensityPref] = useState<WordDensity>(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     () => ((useUiPrefs.getState() as any).lineWordsDensity as WordDensity) ?? "cards",
@@ -217,7 +221,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
   function toggleDensity() {
     const next: WordDensity = densityPref === "cards" ? "rows" : "cards";
     setDensityPref(next);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
     useUiPrefs.setState({ lineWordsDensity: next } as any);
   }
 
@@ -270,7 +274,9 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
               <button
                 type="button"
                 data-testid="line-detail-validate-all"
-                onClick={() => validateLine.mutate({ lineIndex: line.line_index, validated: true })}
+                onClick={() => {
+                  validateLine.mutate({ lineIndex: line.line_index, validated: true });
+                }}
                 disabled={validateLine.isPending || line.is_fully_validated}
                 className="w-full text-[11px] py-1.5 rounded border border-status-exact/60 text-status-exact hover:bg-status-exact/10 transition-colors disabled:opacity-40"
               >
@@ -288,7 +294,9 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
                 className="text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
                 disabled={line.line_index === 0 || mergeLines.isPending}
                 title={line.line_index === 0 ? "No previous line" : "Merge with previous line"}
-                onClick={() => mergeLines.mutate({ lineIndex: line.line_index, direction: "prev" })}
+                onClick={() => {
+                  mergeLines.mutate({ lineIndex: line.line_index, direction: "prev" });
+                }}
               >
                 ↑ Merge prev
               </button>
@@ -298,7 +306,9 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
                 className="text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
                 disabled={mergeLines.isPending}
                 title="Merge with next line"
-                onClick={() => mergeLines.mutate({ lineIndex: line.line_index, direction: "next" })}
+                onClick={() => {
+                  mergeLines.mutate({ lineIndex: line.line_index, direction: "next" });
+                }}
               >
                 ↓ Merge next
               </button>
@@ -408,7 +418,9 @@ function WordCardsView({ line, checkedWords, onToggleCheck }: WordCardsViewProps
           key={wm.word_index}
           word={wm}
           checked={checkedWords.has(wm.word_index ?? 0)}
-          onCheckedChange={(checked) => onToggleCheck(wm.word_index ?? 0, checked)}
+          onCheckedChange={(checked) => {
+            onToggleCheck(wm.word_index ?? 0, checked);
+          }}
         />
       ))}
     </div>

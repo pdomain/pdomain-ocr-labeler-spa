@@ -229,7 +229,9 @@ export function WordImageCanvas({
             data-testid="dialog-current-zoom-toggle"
             data-zoom={z}
             aria-pressed={zoom === z}
-            onClick={() => setZoom(z)}
+            onClick={() => {
+              setZoom(z);
+            }}
             className={[
               "px-2 py-0.5 text-xs rounded border transition-colors",
               zoom === z
@@ -373,7 +375,9 @@ function ImageLayer({ url, width, height }: ImageLayerProps) {
   if (!loaded) {
     const img = new window.Image();
     img.src = url;
-    img.onload = () => setLoaded(true);
+    img.onload = () => {
+      setLoaded(true);
+    };
     imgRef.current = img;
   }
 

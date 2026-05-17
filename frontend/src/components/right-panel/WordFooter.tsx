@@ -162,7 +162,9 @@ export function WordFooter({
       {/* Delete */}
       <button
         data-testid="word-footer-delete"
-        onClick={() => setConfirmOpen(true)}
+        onClick={() => {
+          setConfirmOpen(true);
+        }}
         disabled={deleteWord.isPending}
         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium border border-mismatch/60 bg-mismatch/10 text-mismatch hover:bg-mismatch/20 transition-colors"
         aria-label="Delete word"
@@ -178,7 +180,9 @@ export function WordFooter({
         confirmLabel="Delete"
         cancelLabel="Cancel"
         onConfirm={handleDeleteConfirmed}
-        onCancel={() => setConfirmOpen(false)}
+        onCancel={() => {
+          setConfirmOpen(false);
+        }}
       />
     </div>
   );

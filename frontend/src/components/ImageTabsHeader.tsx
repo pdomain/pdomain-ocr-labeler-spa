@@ -81,7 +81,9 @@ export function ImageTabsHeader({
             type="checkbox"
             data-testid="layer-paragraphs-checkbox"
             checked={layerVisibility.paragraph}
-            onChange={() => onLayerToggle("paragraph")}
+            onChange={() => {
+              onLayerToggle("paragraph");
+            }}
             className="accent-layer-para"
             aria-label="Show paragraphs layer"
           />
@@ -93,7 +95,9 @@ export function ImageTabsHeader({
             type="checkbox"
             data-testid="layer-lines-checkbox"
             checked={layerVisibility.line}
-            onChange={() => onLayerToggle("line")}
+            onChange={() => {
+              onLayerToggle("line");
+            }}
             className="accent-layer-line"
             aria-label="Show lines layer"
           />
@@ -105,7 +109,9 @@ export function ImageTabsHeader({
             type="checkbox"
             data-testid="layer-words-checkbox"
             checked={layerVisibility.word}
-            onChange={() => onLayerToggle("word")}
+            onChange={() => {
+              onLayerToggle("word");
+            }}
             className="accent-layer-word"
             aria-label="Show words layer"
           />
@@ -125,7 +131,9 @@ export function ImageTabsHeader({
             name="selection-mode"
             data-testid="selection-mode-paragraph"
             checked={selectionMode === "paragraph"}
-            onChange={() => onSelectionModeChange("paragraph")}
+            onChange={() => {
+              onSelectionModeChange("paragraph");
+            }}
             aria-label="Select by paragraph"
           />
           <span>Para</span>
@@ -137,7 +145,9 @@ export function ImageTabsHeader({
             name="selection-mode"
             data-testid="selection-mode-line"
             checked={selectionMode === "line"}
-            onChange={() => onSelectionModeChange("line")}
+            onChange={() => {
+              onSelectionModeChange("line");
+            }}
             aria-label="Select by line"
           />
           <span>Line</span>
@@ -149,7 +159,9 @@ export function ImageTabsHeader({
             name="selection-mode"
             data-testid="selection-mode-word"
             checked={selectionMode === "word"}
-            onChange={() => onSelectionModeChange("word")}
+            onChange={() => {
+              onSelectionModeChange("word");
+            }}
             aria-label="Select by word"
           />
           <span>Word</span>

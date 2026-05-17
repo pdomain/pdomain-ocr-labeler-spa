@@ -71,7 +71,9 @@ export function TextTabs({
           aria-selected={activeTab === "matches"}
           aria-controls="panel-matches"
           data-testid="text-tab-matches"
-          onClick={() => setActiveTab("matches")}
+          onClick={() => {
+            setActiveTab("matches");
+          }}
           className={[
             "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
             activeTab === "matches"
@@ -86,7 +88,9 @@ export function TextTabs({
           aria-selected={activeTab === "ground-truth"}
           aria-controls="panel-ground-truth"
           data-testid="text-tab-ground-truth"
-          onClick={() => setActiveTab("ground-truth")}
+          onClick={() => {
+            setActiveTab("ground-truth");
+          }}
           className={[
             "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
             activeTab === "ground-truth"
@@ -101,7 +105,9 @@ export function TextTabs({
           aria-selected={activeTab === "ocr"}
           aria-controls="panel-ocr"
           data-testid="text-tab-ocr"
-          onClick={() => setActiveTab("ocr")}
+          onClick={() => {
+            setActiveTab("ocr");
+          }}
           className={[
             "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
             activeTab === "ocr"

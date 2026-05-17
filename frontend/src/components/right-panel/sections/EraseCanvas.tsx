@@ -43,7 +43,7 @@ export interface BrushOp {
 
 export interface LassoOp {
   tool: "lasso";
-  points: Array<[number, number]>;
+  points: [number, number][];
 }
 
 export interface RectOp {
@@ -105,7 +105,7 @@ interface RectDragState {
 }
 
 interface LassoDragState {
-  points: Array<[number, number]>;
+  points: [number, number][];
 }
 
 export function EraseCanvas({
@@ -211,7 +211,9 @@ export function EraseCanvas({
             data-testid={`erase-tool-${t}`}
             role="radio"
             aria-checked={tool === t}
-            onClick={() => onToolChange(t)}
+            onClick={() => {
+              onToolChange(t);
+            }}
             className={[
               "flex-1 h-6 px-2 text-[11px] rounded-md border transition-colors capitalize",
               tool === t
@@ -234,7 +236,9 @@ export function EraseCanvas({
             min={MIN_BRUSH}
             max={MAX_BRUSH}
             value={brushSize}
-            onChange={(e) => onBrushSizeChange(Number(e.target.value))}
+            onChange={(e) => {
+              onBrushSizeChange(Number(e.target.value));
+            }}
             className="flex-1 accent-accent"
           />
           <span className="w-6 text-right tabular-nums">{brushSize}px</span>

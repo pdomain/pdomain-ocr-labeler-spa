@@ -103,7 +103,9 @@ export function OcrGtCompareRow({ ocrText, gtText, onCommitGt }: OcrGtCompareRow
                 data-testid="ocr-gt-omega-btn"
                 title="Insert special character"
                 aria-pressed={pickerOpen}
-                onClick={() => setPickerOpen((o) => !o)}
+                onClick={() => {
+                  setPickerOpen((o) => !o);
+                }}
                 className={[
                   "h-4 px-1.5 text-[9px] rounded border transition-colors font-mono",
                   pickerOpen
@@ -120,7 +122,9 @@ export function OcrGtCompareRow({ ocrText, gtText, onCommitGt }: OcrGtCompareRow
             data-testid="ocr-gt-input"
             size="sm"
             value={localGt}
-            onChange={(e) => setLocalGt(e.target.value)}
+            onChange={(e) => {
+              setLocalGt(e.target.value);
+            }}
             onBlur={handleBlur}
             onKeyDown={(e) => {
               if (e.key === "Enter") {

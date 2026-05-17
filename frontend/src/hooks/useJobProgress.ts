@@ -65,10 +65,18 @@ export function useJobProgress(jobId: string | null | undefined): JobProgressEve
       }
     }
 
+    // "progress" covers running updates; "complete"/"error" are the terminal
+    // SSE event types the backend sends (event: complete / event: error).
+    // Without these, jobProgress.status never reaches "complete" and any
+    // downstream invalidateQueries call is never triggered.
     es.addEventListener("progress", handleProgress);
+    es.addEventListener("complete", handleProgress);
+    es.addEventListener("error", handleProgress);
 
     return () => {
       es.removeEventListener("progress", handleProgress);
+      es.removeEventListener("complete", handleProgress);
+      es.removeEventListener("error", handleProgress);
       // EventSource.readyState: 0=CONNECTING, 1=OPEN, 2=CLOSED
       if (es.readyState !== EventSource.CLOSED) {
         es.close();

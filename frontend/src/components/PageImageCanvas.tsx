@@ -214,14 +214,18 @@ export default function PageImageCanvas({
 
   // Subscribe to viewport store mode changes
   useEffect(() => {
-    const unsub = viewportStore.subscribe((s) => setMode(s.mode));
+    const unsub = viewportStore.subscribe((s) => {
+      setMode(s.mode);
+    });
     return unsub;
   }, []);
 
   // Subscribe to rail target changes (Slice 13 — target-scoped bbox opacity).
   // railStore.subscribe takes a no-arg Listener; read state via getState().
   useEffect(() => {
-    const unsub = railStore.subscribe(() => setRailTarget(railStore.getState().target));
+    const unsub = railStore.subscribe(() => {
+      setRailTarget(railStore.getState().target);
+    });
     return unsub;
   }, []);
 
@@ -250,7 +254,9 @@ export default function PageImageCanvas({
     () => selectionStore.getState().selectedWords.length,
   );
   useEffect(() => {
-    return selectionStore.subscribe((s) => setSelectedWordCount(s.selectedWords.length));
+    return selectionStore.subscribe((s) => {
+      setSelectedWordCount(s.selectedWords.length);
+    });
   }, []);
 
   // Subscribe to matchFilterMode from useUiPrefs (Issue #295).
@@ -267,7 +273,9 @@ export default function PageImageCanvas({
   // Zoom state (P5.d) — subscribe to viewportStore.canvasZoom.
   const [canvasZoom, setCanvasZoomLocal] = useState(() => viewportStore.getState().canvasZoom);
   useEffect(() => {
-    return viewportStore.subscribe((s) => setCanvasZoomLocal(s.canvasZoom));
+    return viewportStore.subscribe((s) => {
+      setCanvasZoomLocal(s.canvasZoom);
+    });
   }, []);
 
   // Container size — measured via ResizeObserver so fitScale stays correct
@@ -287,7 +295,9 @@ export default function PageImageCanvas({
       }
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+    };
   }, []);
 
   // Focus the wrapper on mount so keyboard hotkeys (Esc / Shift+…) work
@@ -355,8 +365,12 @@ export default function PageImageCanvas({
         layerVisibility: { ...s.layerVisibility, [layer]: !s.layerVisibility[layer] },
       }));
     },
-    onEraseToggle: () => toggleEraseMode(),
-    onAddWordToggle: () => toggleAddWordMode(),
+    onEraseToggle: () => {
+      toggleEraseMode();
+    },
+    onAddWordToggle: () => {
+      toggleAddWordMode();
+    },
     onCancelMode: () => {
       clearSelection();
       clearDrag();
@@ -666,7 +680,9 @@ export default function PageImageCanvas({
           type="button"
           data-testid="canvas-zoom-fit"
           aria-pressed={canvasZoom === 0}
-          onClick={() => setCanvasZoom(0)}
+          onClick={() => {
+            setCanvasZoom(0);
+          }}
           className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${canvasZoom === 0 ? "border-accent/60 bg-accent/10 text-accent" : "border-border-2 bg-bg-surface/90 text-ink-2 hover:text-ink-1"}`}
         >
           Fit
@@ -675,7 +691,9 @@ export default function PageImageCanvas({
           type="button"
           data-testid="canvas-zoom-100"
           aria-pressed={canvasZoom === 1.0}
-          onClick={() => setCanvasZoom(1.0)}
+          onClick={() => {
+            setCanvasZoom(1.0);
+          }}
           className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${canvasZoom === 1.0 ? "border-accent/60 bg-accent/10 text-accent" : "border-border-2 bg-bg-surface/90 text-ink-2 hover:text-ink-1"}`}
         >
           100%

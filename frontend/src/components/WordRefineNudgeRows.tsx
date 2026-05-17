@@ -163,13 +163,17 @@ export const WordRefineNudgeRows = forwardRef<WordRefineNudgeRowsHandle, WordRef
             testId="dialog-refine-button"
             label="Refine"
             disabled={busy !== null}
-            onClick={() => run("refine", () => onRefine?.() ?? Promise.resolve())}
+            onClick={() => {
+              void run("refine", () => onRefine?.() ?? Promise.resolve());
+            }}
           />
           <SmallBtn
             testId="dialog-expand-refine-button"
             label="Expand+Refine"
             disabled={busy !== null}
-            onClick={() => run("expand-refine", () => onExpandRefine?.() ?? Promise.resolve())}
+            onClick={() => {
+              void run("expand-refine", () => onExpandRefine?.() ?? Promise.resolve());
+            }}
           />
         </div>
 
@@ -182,12 +186,16 @@ export const WordRefineNudgeRows = forwardRef<WordRefineNudgeRowsHandle, WordRef
               <SmallBtn
                 testId="dialog-nudge-top-minus"
                 label="T−"
-                onClick={() => addNudge("top", -step)}
+                onClick={() => {
+                  addNudge("top", -step);
+                }}
               />
               <SmallBtn
                 testId="dialog-nudge-top-plus"
                 label="T+"
-                onClick={() => addNudge("top", step)}
+                onClick={() => {
+                  addNudge("top", step);
+                }}
               />
             </div>
             {/* Middle row: left + right edges */}
@@ -195,23 +203,31 @@ export const WordRefineNudgeRows = forwardRef<WordRefineNudgeRowsHandle, WordRef
               <SmallBtn
                 testId="dialog-nudge-left-minus"
                 label="L−"
-                onClick={() => addNudge("left", -step)}
+                onClick={() => {
+                  addNudge("left", -step);
+                }}
               />
               <SmallBtn
                 testId="dialog-nudge-left-plus"
                 label="L+"
-                onClick={() => addNudge("left", step)}
+                onClick={() => {
+                  addNudge("left", step);
+                }}
               />
               <span className="px-1 text-xs text-ink-4 self-center">·</span>
               <SmallBtn
                 testId="dialog-nudge-right-minus"
                 label="R−"
-                onClick={() => addNudge("right", -step)}
+                onClick={() => {
+                  addNudge("right", -step);
+                }}
               />
               <SmallBtn
                 testId="dialog-nudge-right-plus"
                 label="R+"
-                onClick={() => addNudge("right", step)}
+                onClick={() => {
+                  addNudge("right", step);
+                }}
               />
             </div>
             {/* Bottom edge */}
@@ -219,12 +235,16 @@ export const WordRefineNudgeRows = forwardRef<WordRefineNudgeRowsHandle, WordRef
               <SmallBtn
                 testId="dialog-nudge-bottom-minus"
                 label="B−"
-                onClick={() => addNudge("bottom", -step)}
+                onClick={() => {
+                  addNudge("bottom", -step);
+                }}
               />
               <SmallBtn
                 testId="dialog-nudge-bottom-plus"
                 label="B+"
-                onClick={() => addNudge("bottom", step)}
+                onClick={() => {
+                  addNudge("bottom", step);
+                }}
               />
             </div>
             {/* Delta display */}
@@ -250,13 +270,17 @@ export const WordRefineNudgeRows = forwardRef<WordRefineNudgeRowsHandle, WordRef
             testId="dialog-apply-button"
             label="Apply"
             disabled={!hasPending || busy !== null}
-            onClick={() => handleApply(false)}
+            onClick={() => {
+              void handleApply(false);
+            }}
           />
           <SmallBtn
             testId="dialog-apply-refine-button"
             label="Apply+Refine"
             disabled={!hasPending || busy !== null}
-            onClick={() => handleApply(true)}
+            onClick={() => {
+              void handleApply(true);
+            }}
           />
         </div>
       </div>

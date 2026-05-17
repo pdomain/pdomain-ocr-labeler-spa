@@ -56,7 +56,7 @@ function blockIds(page: PagePayload): number[] {
 }
 
 /** Sorted list of distinct paragraph indices (nulls bucketed together at end). */
-function paraIds(page: PagePayload): Array<number | null> {
+function paraIds(page: PagePayload): (number | null)[] {
   const ids = new Set<number | null>();
   let hasNull = false;
   for (const lm of page.line_matches ?? []) {
@@ -92,14 +92,14 @@ function findLine(page: PagePayload, lineId: number): LineMatch | undefined {
   return (page.line_matches ?? []).find((lm) => lm.line_index === lineId);
 }
 
-function wordIdsInLine(page: PagePayload, lineId: number): Array<[number, number]> {
+function wordIdsInLine(page: PagePayload, lineId: number): [number, number][] {
   const line = findLine(page, lineId);
   if (!line) return [];
   return line.word_matches
     .filter((wm) => typeof wm.word_index === "number")
     .slice()
     .sort((a, b) => (a.word_index ?? 0) - (b.word_index ?? 0))
-    .map((wm) => [line.line_index, wm.word_index as number] as [number, number]);
+    .map((wm) => [line.line_index, wm.word_index!] as [number, number]);
 }
 
 // ─── Sibling navigation ──────────────────────────────────────────────────────

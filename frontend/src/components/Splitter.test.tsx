@@ -26,21 +26,19 @@ function resetPrefs() {
  */
 function stubContainerRect(width = 1000, left = 0) {
   const original = Element.prototype.getBoundingClientRect;
-  Element.prototype.getBoundingClientRect = function () {
-    return {
-      x: left,
-      y: 0,
-      left,
-      right: left + width,
-      top: 0,
-      bottom: 100,
-      width,
-      height: 100,
-      toJSON() {
-        return {};
-      },
-    } as DOMRect;
-  };
+  Element.prototype.getBoundingClientRect = () => ({
+    x: left,
+    y: 0,
+    left,
+    right: left + width,
+    top: 0,
+    bottom: 100,
+    width,
+    height: 100,
+    toJSON() {
+      return {};
+    },
+  });
   return () => {
     Element.prototype.getBoundingClientRect = original;
   };
@@ -64,7 +62,7 @@ describe("Splitter", () => {
   it("initial pane widths reflect splitterRatio from the store", () => {
     useUiPrefs.setState({ splitterRatio: 0.4 });
     render(<Splitter direction="horizontal" left={<div>L</div>} right={<div>R</div>} />);
-    const left = screen.getByTestId("splitter-left") as HTMLElement;
+    const left = screen.getByTestId("splitter-left");
     expect(left.style.width).toBe("40%");
   });
 

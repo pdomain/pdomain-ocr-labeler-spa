@@ -31,7 +31,9 @@ const LABELS: Record<MatchFilter, string> = {
 
 const subscribers = new Set<() => void>();
 function notifySubscribers() {
-  subscribers.forEach((fn) => fn());
+  subscribers.forEach((fn) => {
+    fn();
+  });
 }
 function subscribe(cb: () => void): () => void {
   subscribers.add(cb);

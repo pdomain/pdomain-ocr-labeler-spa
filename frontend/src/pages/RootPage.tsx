@@ -151,11 +151,13 @@ function ProjectCard({ project }: { project: ProjectKey }) {
     mutationFn: () => postLoadProject(String(project.project_root)),
     onSettled: () => {
       // Navigate regardless of load success — project page handles missing state.
-      navigate(`/projects/${project.project_id}/pages/pageno/1`);
+      void navigate(`/projects/${project.project_id}/pages/pageno/1`);
     },
   });
 
-  const handleOpen = () => openMutation.mutate();
+  const handleOpen = () => {
+    openMutation.mutate();
+  };
 
   // Placeholder values — these will be populated when the backend exposes them.
   // For now we display meaningful placeholders so the card structure is visible.
@@ -229,7 +231,9 @@ function ProjectCard({ project }: { project: ProjectKey }) {
             <button
               type="button"
               data-testid={`project-card-menu-${project.project_id}`}
-              onClick={() => setMenuOpen((o) => !o)}
+              onClick={() => {
+                setMenuOpen((o) => !o);
+              }}
               aria-label="More actions"
               className="p-1.5 rounded border border-border-2 text-ink-3 hover:text-ink-1 hover:border-border-1 transition-colors"
             >
@@ -240,7 +244,9 @@ function ProjectCard({ project }: { project: ProjectKey }) {
                 <button
                   type="button"
                   data-testid={`project-card-delete-${project.project_id}`}
-                  onClick={() => setMenuOpen(false)}
+                  onClick={() => {
+                    setMenuOpen(false);
+                  }}
                   className="w-full text-left text-[11px] text-ink-2 px-3 py-1.5 hover:bg-bg-sunk transition-colors"
                 >
                   Delete
@@ -248,7 +254,9 @@ function ProjectCard({ project }: { project: ProjectKey }) {
                 <button
                   type="button"
                   data-testid={`project-card-archive-${project.project_id}`}
-                  onClick={() => setMenuOpen(false)}
+                  onClick={() => {
+                    setMenuOpen(false);
+                  }}
                   className="w-full text-left text-[11px] text-ink-2 px-3 py-1.5 hover:bg-bg-sunk transition-colors"
                 >
                   Archive
@@ -312,7 +320,9 @@ function ProjectListView({ projects }: { projects: ProjectKey[] }) {
             type="search"
             data-testid="root-search-input"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+            }}
             placeholder="Search projects…"
             aria-label="Search projects"
             className="w-full pl-8 pr-3 py-1.5 text-[12px] bg-bg-sunk border border-border-2 rounded focus:outline-none focus:border-accent text-ink-1 placeholder:text-ink-4 transition-colors"
@@ -332,7 +342,9 @@ function ProjectListView({ projects }: { projects: ProjectKey[] }) {
               type="button"
               data-testid={`root-filter-chip-${f}`}
               data-active={activeFilter === f ? "true" : undefined}
-              onClick={() => setActiveFilter(f)}
+              onClick={() => {
+                setActiveFilter(f);
+              }}
               style={
                 activeFilter === f
                   ? { background: "color-mix(in srgb, var(--accent) 10%, transparent)" }
@@ -456,7 +468,7 @@ export default function RootPage() {
       loadStateRef.current = "success";
       if (!derivedProjectId || !data) return;
       const pageNo = (data.last_page_index ?? 0) + 1;
-      navigate(`/projects/${derivedProjectId}/pages/pageno/${pageNo}`, { replace: true });
+      void navigate(`/projects/${derivedProjectId}/pages/pageno/${pageNo}`, { replace: true });
     },
     onError: () => {
       loadStateRef.current = "failed";

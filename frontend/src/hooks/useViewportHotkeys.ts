@@ -45,14 +45,68 @@ export function useViewportHotkeys({
   onCancelMode,
   onSelectionModeChange,
 }: UseViewportHotkeysOptions): void {
-  useHotkey("shift+p", () => onLayerToggle("paragraph"), { enabled });
-  useHotkey("shift+l", () => onLayerToggle("line"), { enabled });
-  useHotkey("shift+w", () => onLayerToggle("word"), { enabled });
-  useHotkey("shift+e", () => onEraseToggle(), { enabled });
-  useHotkey("shift+a", () => onAddWordToggle(), { enabled });
-  useHotkey("escape", () => onCancelMode(), { enabled });
+  useHotkey(
+    "shift+p",
+    () => {
+      onLayerToggle("paragraph");
+    },
+    { enabled },
+  );
+  useHotkey(
+    "shift+l",
+    () => {
+      onLayerToggle("line");
+    },
+    { enabled },
+  );
+  useHotkey(
+    "shift+w",
+    () => {
+      onLayerToggle("word");
+    },
+    { enabled },
+  );
+  useHotkey(
+    "shift+e",
+    () => {
+      onEraseToggle();
+    },
+    { enabled },
+  );
+  useHotkey(
+    "shift+a",
+    () => {
+      onAddWordToggle();
+    },
+    { enabled },
+  );
+  useHotkey(
+    "escape",
+    () => {
+      onCancelMode();
+    },
+    { enabled },
+  );
   // Spec 21 §10 — Shift+1/2/3 select-mode bindings (#304).
-  useHotkey("shift+1", () => onSelectionModeChange("paragraph"), { enabled });
-  useHotkey("shift+2", () => onSelectionModeChange("line"), { enabled });
-  useHotkey("shift+3", () => onSelectionModeChange("word"), { enabled });
+  useHotkey(
+    "shift+1",
+    () => {
+      onSelectionModeChange("paragraph");
+    },
+    { enabled },
+  );
+  useHotkey(
+    "shift+2",
+    () => {
+      onSelectionModeChange("line");
+    },
+    { enabled },
+  );
+  useHotkey(
+    "shift+3",
+    () => {
+      onSelectionModeChange("word");
+    },
+    { enabled },
+  );
 }

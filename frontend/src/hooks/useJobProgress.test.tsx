@@ -165,6 +165,34 @@ describe("useJobProgress", () => {
     await waitFor(() => expect(result.current).toBeNull());
   });
 
+  // ── Terminal SSE event TYPES (the actual bug: backend sends event: complete) ──
+  // The backend sends terminal events with SSE event type "complete" / "error",
+  // not "progress". These tests verify the hook receives them correctly.
+
+  it("receives 'complete' status when SSE event type is 'complete'", async () => {
+    const { result } = renderHook(() => useJobProgress("job-abc"));
+    const src = lastSource!;
+
+    act(() => {
+      src._emit("complete", COMPLETE_EVENT);
+    });
+
+    await waitFor(() => expect(result.current?.status).toBe("complete"));
+    expect(src.readyState).toBe(2); // CLOSED
+  });
+
+  it("receives 'error' status when SSE event type is 'error'", async () => {
+    const { result } = renderHook(() => useJobProgress("job-abc"));
+    const src = lastSource!;
+
+    act(() => {
+      src._emit("error", ERROR_EVENT);
+    });
+
+    await waitFor(() => expect(result.current?.status).toBe("error"));
+    expect(src.readyState).toBe(2); // CLOSED
+  });
+
   it("ignores malformed JSON in SSE events", async () => {
     const { result } = renderHook(() => useJobProgress("job-abc"));
 

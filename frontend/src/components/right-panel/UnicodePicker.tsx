@@ -421,7 +421,7 @@ function resolveSlashCommand(raw: string): string | null {
   if (!trimmed) return null;
 
   // U+XXXX form
-  const uMatch = trimmed.match(/^[Uu]\+([0-9A-Fa-f]{1,6})$/);
+  const uMatch = /^[Uu]\+([0-9A-Fa-f]{1,6})$/.exec(trimmed);
   if (uMatch) {
     // uMatch[1] is the capture group — always present when this branch is reached.
     const cp = parseInt(uMatch[1]!, 16);
@@ -477,7 +477,9 @@ export function UnicodePicker({ onInsert }: UnicodePickerProps) {
             key={set.id}
             type="button"
             data-testid={`unicode-set-${set.id}`}
-            onClick={() => setActiveSet(set.id)}
+            onClick={() => {
+              setActiveSet(set.id);
+            }}
             className={[
               "shrink-0 h-6 px-2.5 rounded-full border text-[10px] font-semibold transition-colors whitespace-nowrap",
               activeSet === set.id
@@ -504,7 +506,9 @@ export function UnicodePicker({ onInsert }: UnicodePickerProps) {
             type="button"
             data-testid={`unicode-char-${cp}`}
             title={cp}
-            onClick={() => onInsert(char)}
+            onClick={() => {
+              onInsert(char);
+            }}
             className="flex flex-col items-center justify-center gap-0.5 h-12 rounded border border-border-2 bg-raised text-ink-1 hover:bg-accent/10 hover:border-accent transition-colors"
           >
             <span className="font-serif text-base leading-none">{char}</span>
@@ -520,7 +524,9 @@ export function UnicodePicker({ onInsert }: UnicodePickerProps) {
         data-testid="unicode-slash-input"
         placeholder="\emdash, \alpha, U+2019…"
         value={slashValue}
-        onChange={(e) => setSlashValue(e.target.value)}
+        onChange={(e) => {
+          setSlashValue(e.target.value);
+        }}
         onKeyDown={handleSlashKeyDown}
         className="h-7 w-full rounded border border-border-2 bg-raised px-2 text-[11px] font-mono text-ink-1 placeholder:text-ink-4 focus:outline-none focus:border-accent transition-colors"
       />

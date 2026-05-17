@@ -597,7 +597,9 @@ function groupByPara(lines: LineMatch[]): Map<number | null, LineMatch[]> {
 // ─── Store bridge ─────────────────────────────────────────────────────────────
 
 function subscribeSelection(cb: () => void): () => void {
-  return selectionStore.subscribe(() => cb());
+  return selectionStore.subscribe(() => {
+    cb();
+  });
 }
 function getSelectionSnapshot() {
   return selectionStore.getState();
@@ -788,7 +790,9 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
                       key={spec.id}
                       spec={spec}
                       selected={pendingLayout === spec.id}
-                      onClick={() => handleSelectLayout(spec.id)}
+                      onClick={() => {
+                        handleSelectLayout(spec.id);
+                      }}
                     />
                   ))}
                 </div>
@@ -805,7 +809,9 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
                       key={spec.id}
                       spec={spec}
                       selected={pendingLayout === spec.id}
-                      onClick={() => handleSelectLayout(spec.id)}
+                      onClick={() => {
+                        handleSelectLayout(spec.id);
+                      }}
                     />
                   ))}
                 </div>
@@ -841,7 +847,9 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
                   type="button"
                   data-testid="block-detail-items-view-flat"
                   data-active={itemsView === "flat" ? "true" : undefined}
-                  onClick={() => setItemsView("flat")}
+                  onClick={() => {
+                    setItemsView("flat");
+                  }}
                   className={[
                     "text-[10px] px-2 py-0.5 transition-colors",
                     itemsView === "flat"
@@ -855,7 +863,9 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
                   type="button"
                   data-testid="block-detail-items-view-tree"
                   data-active={itemsView === "tree" ? "true" : undefined}
-                  onClick={() => setItemsView("tree")}
+                  onClick={() => {
+                    setItemsView("tree");
+                  }}
                   className={[
                     "text-[10px] px-2 py-0.5 transition-colors border-l border-border-2",
                     itemsView === "tree"
@@ -899,7 +909,9 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
                   <button
                     type="button"
                     data-testid={`block-detail-para-scope-${pId ?? "null"}`}
-                    onClick={() => selectPara(pId)}
+                    onClick={() => {
+                      selectPara(pId);
+                    }}
                     className="w-full flex items-center justify-between px-3 py-1.5 text-left bg-bg-raised hover:bg-bg-raised/80 transition-colors"
                   >
                     <span className="text-[11px] font-medium text-ink-1">
@@ -970,7 +982,9 @@ function ParaGroup({ paraId, lines }: ParaGroupProps) {
       <button
         type="button"
         data-testid={`block-detail-para-${paraId ?? "null"}`}
-        onClick={() => selectPara(paraId)}
+        onClick={() => {
+          selectPara(paraId);
+        }}
         className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] text-ink-3 hover:bg-bg-raised/60 hover:text-ink-2 transition-colors"
       >
         <span className="text-ink-4">¶</span>
@@ -993,7 +1007,9 @@ function LineItemCard({ line }: { line: LineMatch }) {
     <button
       type="button"
       data-testid={`block-detail-line-card-${line.line_index}`}
-      onClick={() => selectLine(line.line_index)}
+      onClick={() => {
+        selectLine(line.line_index);
+      }}
       className="flex items-center gap-2 bg-bg-raised rounded px-2 py-1 text-left hover:bg-bg-raised/80 transition-colors"
     >
       <StatusPip status={statusPip(line.overall_match_status)} />
@@ -1011,7 +1027,9 @@ export function LineItemRow({ line }: { line: LineMatch }) {
     <button
       type="button"
       data-testid={`block-detail-line-row-${line.line_index}`}
-      onClick={() => selectLine(line.line_index)}
+      onClick={() => {
+        selectLine(line.line_index);
+      }}
       className="w-full flex items-center gap-2 px-2 py-1 text-left border-b border-border-1/30 hover:bg-bg-raised/60 transition-colors"
     >
       <StatusPip status={statusPip(line.overall_match_status)} />

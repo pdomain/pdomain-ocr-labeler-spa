@@ -123,7 +123,7 @@ describe("SourceFolderDialog: Home button", () => {
     renderDialog(true);
 
     // First navigate away by typing and opening a typed path.
-    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    const input = screen.getByTestId("source-folder-path-input");
     fireEvent.change(input, { target: { value: "/some/deep/path" } });
     fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
     expect(screen.getByTestId("source-folder-current-path-label")).toHaveTextContent(
@@ -138,7 +138,7 @@ describe("SourceFolderDialog: Home button", () => {
   it("resets inputPath to ~ in the text input", () => {
     renderDialog(true);
 
-    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    const input = screen.getByTestId("source-folder-path-input");
     fireEvent.change(input, { target: { value: "/some/deep/path" } });
     fireEvent.click(screen.getByTestId("source-folder-home-button"));
     expect(input.value).toBe("~");
@@ -152,7 +152,7 @@ describe("SourceFolderDialog: Up button", () => {
     renderDialog(true);
 
     // Set a path to navigate up from.
-    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    const input = screen.getByTestId("source-folder-path-input");
     fireEvent.change(input, { target: { value: "/data/projects/mybook" } });
     fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
     expect(screen.getByTestId("source-folder-current-path-label")).toHaveTextContent(
@@ -170,7 +170,7 @@ describe("SourceFolderDialog: Up button", () => {
   it("navigates to / when already at a top-level directory", () => {
     renderDialog(true);
 
-    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    const input = screen.getByTestId("source-folder-path-input");
     fireEvent.change(input, { target: { value: "/data" } });
     fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
 
@@ -194,7 +194,7 @@ describe("SourceFolderDialog: Open-typed button", () => {
   it("sets currentPath to the value in path-input", () => {
     renderDialog(true);
 
-    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    const input = screen.getByTestId("source-folder-path-input");
     fireEvent.change(input, { target: { value: "/custom/path" } });
     fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
 
@@ -206,7 +206,7 @@ describe("SourceFolderDialog: Open-typed button", () => {
   it("Enter key in path-input triggers open-typed (not apply)", () => {
     renderDialog(true);
 
-    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    const input = screen.getByTestId("source-folder-path-input");
     fireEvent.change(input, { target: { value: "/typed/path" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
@@ -224,7 +224,7 @@ describe("SourceFolderDialog: Use-current button", () => {
     renderDialog(true);
 
     // Navigate to a path first.
-    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    const input = screen.getByTestId("source-folder-path-input");
     fireEvent.change(input, { target: { value: "/nav/path" } });
     fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
 
@@ -258,7 +258,7 @@ describe("SourceFolderDialog: Apply POSTs inputPath and closes", () => {
     const onClose = vi.fn();
     renderDialog(true, onClose);
 
-    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    const input = screen.getByTestId("source-folder-path-input");
     fireEvent.change(input, { target: { value: "/data/projects" } });
 
     fireEvent.click(screen.getByTestId("source-folder-apply-button"));
@@ -289,7 +289,7 @@ describe("SourceFolderDialog: Apply POSTs inputPath and closes", () => {
     renderDialog(true, onClose);
 
     // Type the path — do NOT click "Open Typed Path".
-    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    const input = screen.getByTestId("source-folder-path-input");
     fireEvent.change(input, {
       target: { value: "/workspaces/ocr-container/source-pgdp-data/output" },
     });
@@ -321,7 +321,7 @@ describe("SourceFolderDialog: Apply POSTs inputPath and closes", () => {
     const onClose = vi.fn();
     renderDialog(true, onClose);
 
-    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    const input = screen.getByTestId("source-folder-path-input");
     // Navigate currentPath to /nav/path.
     fireEvent.change(input, { target: { value: "/nav/path" } });
     fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
@@ -474,7 +474,7 @@ describe("SourceFolderDialog: Cancel closes without API call", () => {
     const onClose = vi.fn();
     renderDialog(true, onClose);
 
-    const input = screen.getByTestId("source-folder-path-input") as HTMLInputElement;
+    const input = screen.getByTestId("source-folder-path-input");
     fireEvent.keyDown(input, { key: "Escape" });
 
     expect(onClose).toHaveBeenCalledTimes(1);

@@ -195,7 +195,9 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
     >
       <div
         className="bg-bg-surface rounded-lg border border-border-2 max-w-md w-full mx-4 p-5 space-y-4"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
       >
         <h2 className="text-base font-semibold text-ink-1">Set Source Folder</h2>
 
@@ -254,7 +256,9 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
                   key={e.name}
                   type="button"
                   data-testid={`fs-ls-entry-${e.name}`}
-                  onClick={() => handleEntryClick(e.name)}
+                  onClick={() => {
+                    handleEntryClick(e.name);
+                  }}
                   disabled={loading}
                   className="w-full text-left px-3 py-1.5 text-sm font-mono hover:bg-bg-sunk hover:text-accent disabled:opacity-50"
                 >
@@ -275,7 +279,9 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             data-testid="source-folder-path-input"
             aria-label="Source folder path"
             value={inputPath}
-            onChange={(e) => setInputPath(e.target.value)}
+            onChange={(e) => {
+              setInputPath(e.target.value);
+            }}
             onKeyDown={handleKeyDown}
             disabled={loading}
             placeholder="/path/to/projects"

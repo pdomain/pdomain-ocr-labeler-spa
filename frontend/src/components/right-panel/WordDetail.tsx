@@ -48,7 +48,9 @@ type WordMatch = components["schemas"]["WordMatch"];
 // ─── store subscription ───────────────────────────────────────────────────
 
 function subscribeSelection(cb: () => void): () => void {
-  return selectionStore.subscribe(() => cb());
+  return selectionStore.subscribe(() => {
+    cb();
+  });
 }
 function getSelectionSnapshot() {
   return selectionStore.getState();
@@ -134,8 +136,12 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
         word={word}
         hasPrev={wordIdx > 0}
         hasNext={hasNextWord}
-        onPrev={() => walkSibling("prev", page)}
-        onNext={() => walkSibling("next", page)}
+        onPrev={() => {
+          walkSibling("prev", page);
+        }}
+        onNext={() => {
+          walkSibling("next", page);
+        }}
       />
 
       {/* P2.b: Word image preview + confidence bars */}
@@ -145,13 +151,13 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
       <OcrGtCompareRow
         ocrText={word.ocr_text}
         gtText={word.ground_truth_text}
-        onCommitGt={(text) =>
+        onCommitGt={(text) => {
           updateGt.mutate({
             lineIndex: lineIdx,
             wordIndex: wordIdx,
             text,
-          })
-        }
+          });
+        }}
       />
 
       {/* P2.d: STYLE chip palette — whole-word styling */}

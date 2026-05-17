@@ -87,14 +87,14 @@ describe("OCRConfigModal — basic rendering", () => {
 describe("OCRConfigModal — normalize toggles (pd-book-tools available)", () => {
   it("gt-matching checkbox unchecked by default", () => {
     renderModal();
-    const cb = screen.getByTestId("normalize-gt-matching-checkbox") as HTMLInputElement;
+    const cb = screen.getByTestId("normalize-gt-matching-checkbox");
     expect(cb.checked).toBe(false);
   });
 
   it("gt-matching checkbox enabled when normalize available", async () => {
     renderModal();
     await waitFor(() => {
-      const cb = screen.getByTestId("normalize-gt-matching-checkbox") as HTMLInputElement;
+      const cb = screen.getByTestId("normalize-gt-matching-checkbox");
       expect(cb.disabled).toBe(false);
     });
   });
@@ -102,7 +102,7 @@ describe("OCRConfigModal — normalize toggles (pd-book-tools available)", () =>
   it("plaintext checkbox enabled when normalize available", async () => {
     renderModal();
     await waitFor(() => {
-      const cb = screen.getByTestId("normalize-plaintext-checkbox") as HTMLInputElement;
+      const cb = screen.getByTestId("normalize-plaintext-checkbox");
       expect(cb.disabled).toBe(false);
     });
   });
@@ -111,9 +111,7 @@ describe("OCRConfigModal — normalize toggles (pd-book-tools available)", () =>
     const onNormalizeChange = vi.fn();
     renderModal({ onNormalizeChange });
     await waitFor(() => {
-      expect(
-        (screen.getByTestId("normalize-gt-matching-checkbox") as HTMLInputElement).disabled,
-      ).toBe(false);
+      expect(screen.getByTestId("normalize-gt-matching-checkbox").disabled).toBe(false);
     });
     fireEvent.click(screen.getByTestId("normalize-gt-matching-checkbox"));
     expect(onNormalizeChange).toHaveBeenCalledOnce();
@@ -125,9 +123,7 @@ describe("OCRConfigModal — normalize toggles (pd-book-tools available)", () =>
     const onNormalizeChange = vi.fn();
     renderModal({ onNormalizeChange });
     await waitFor(() => {
-      expect(
-        (screen.getByTestId("normalize-plaintext-checkbox") as HTMLInputElement).disabled,
-      ).toBe(false);
+      expect(screen.getByTestId("normalize-plaintext-checkbox").disabled).toBe(false);
     });
     fireEvent.click(screen.getByTestId("normalize-plaintext-checkbox"));
     expect(onNormalizeChange).toHaveBeenCalledOnce();
@@ -137,7 +133,7 @@ describe("OCRConfigModal — normalize toggles (pd-book-tools available)", () =>
 
   it("profile select is always disabled (v1: ascii only)", () => {
     renderModal();
-    const sel = screen.getByTestId("normalize-profile-select") as HTMLSelectElement;
+    const sel = screen.getByTestId("normalize-profile-select");
     expect(sel.disabled).toBe(true);
     expect(sel.value).toBe("ascii");
   });
@@ -152,7 +148,7 @@ describe("OCRConfigModal — toggles disabled when pd-book-tools absent", () => 
   it("gt-matching checkbox disabled when normalize unavailable", async () => {
     renderModal();
     await waitFor(() => {
-      const cb = screen.getByTestId("normalize-gt-matching-checkbox") as HTMLInputElement;
+      const cb = screen.getByTestId("normalize-gt-matching-checkbox");
       expect(cb.disabled).toBe(true);
     });
   });
@@ -160,7 +156,7 @@ describe("OCRConfigModal — toggles disabled when pd-book-tools absent", () => 
   it("plaintext checkbox disabled when normalize unavailable", async () => {
     renderModal();
     await waitFor(() => {
-      const cb = screen.getByTestId("normalize-plaintext-checkbox") as HTMLInputElement;
+      const cb = screen.getByTestId("normalize-plaintext-checkbox");
       expect(cb.disabled).toBe(true);
     });
   });
@@ -177,7 +173,7 @@ describe("OCRConfigModal — toggles state before query resolves", () => {
   it("checkboxes start disabled until availability confirmed", () => {
     // Before query resolves, normalizeAvailable defaults to false — checkboxes disabled
     renderModal();
-    const cb = screen.getByTestId("normalize-gt-matching-checkbox") as HTMLInputElement;
+    const cb = screen.getByTestId("normalize-gt-matching-checkbox");
     // Initially disabled (safe default before probe completes)
     expect(cb.disabled).toBe(true);
   });

@@ -390,7 +390,9 @@ function NodeRow({ flatNode, isSelected, isExpanded, onSelect, onToggle }: NodeR
       aria-expanded={hasChildren ? isExpanded : undefined}
       aria-selected={isSelected}
       tabIndex={0}
-      onClick={() => onSelect(id, node)}
+      onClick={() => {
+        onSelect(id, node);
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -503,7 +505,9 @@ export function Hierarchy({ page }: HierarchyProps) {
           label="All"
           kind="all"
           active={kindFilter === "all"}
-          onClick={() => setKindFilter("all")}
+          onClick={() => {
+            setKindFilter("all");
+          }}
         />
         {useBlocks && (
           <KindFilterPill
@@ -511,7 +515,9 @@ export function Hierarchy({ page }: HierarchyProps) {
             label="B Block"
             kind="block"
             active={kindFilter === "block"}
-            onClick={() => setKindFilter("block")}
+            onClick={() => {
+              setKindFilter("block");
+            }}
           />
         )}
         <KindFilterPill
@@ -519,21 +525,27 @@ export function Hierarchy({ page }: HierarchyProps) {
           label="¶ Para"
           kind="para"
           active={kindFilter === "para"}
-          onClick={() => setKindFilter("para")}
+          onClick={() => {
+            setKindFilter("para");
+          }}
         />
         <KindFilterPill
           testid="hierarchy-filter-line"
           label="Line"
           kind="line"
           active={kindFilter === "line"}
-          onClick={() => setKindFilter("line")}
+          onClick={() => {
+            setKindFilter("line");
+          }}
         />
         <KindFilterPill
           testid="hierarchy-filter-word"
           label="Word"
           kind="word"
           active={kindFilter === "word"}
-          onClick={() => setKindFilter("word")}
+          onClick={() => {
+            setKindFilter("word");
+          }}
         />
         <span
           data-testid="hierarchy-node-count"

@@ -29,13 +29,13 @@ describe("WordTagRow", () => {
 
   it("style select defaults to first option", () => {
     render(<WordTagRow styleOptions={STYLES} componentOptions={COMPONENTS} />);
-    const sel = screen.getByTestId("dialog-style-select") as HTMLSelectElement;
+    const sel = screen.getByTestId("dialog-style-select");
     expect(sel.value).toBe("italic");
   });
 
   it("scope select defaults to 'whole'", () => {
     render(<WordTagRow styleOptions={STYLES} componentOptions={COMPONENTS} />);
-    const sel = screen.getByTestId("dialog-scope-select") as HTMLSelectElement;
+    const sel = screen.getByTestId("dialog-scope-select");
     expect(sel.value).toBe("whole");
   });
 

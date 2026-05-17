@@ -55,13 +55,55 @@ export function useDialogHotkeys({
   onDelete,
   onNudge,
 }: UseDialogHotkeysOptions): void {
-  useHotkey("arrowleft", () => onPrevWord(), { enabled });
-  useHotkey("arrowright", () => onNextWord(), { enabled });
-  useHotkey("shift+enter", () => onApplyClose(), { enabled });
-  useHotkey("escape", () => onClose(), { enabled });
-  useHotkey("r", () => onRefine(), { enabled });
-  useHotkey("shift+r", () => onExpandRefine(), { enabled });
-  useHotkey("delete", () => onDelete(), { enabled });
+  useHotkey(
+    "arrowleft",
+    () => {
+      onPrevWord();
+    },
+    { enabled },
+  );
+  useHotkey(
+    "arrowright",
+    () => {
+      onNextWord();
+    },
+    { enabled },
+  );
+  useHotkey(
+    "shift+enter",
+    () => {
+      onApplyClose();
+    },
+    { enabled },
+  );
+  useHotkey(
+    "escape",
+    () => {
+      onClose();
+    },
+    { enabled },
+  );
+  useHotkey(
+    "r",
+    () => {
+      onRefine();
+    },
+    { enabled },
+  );
+  useHotkey(
+    "shift+r",
+    () => {
+      onExpandRefine();
+    },
+    { enabled },
+  );
+  useHotkey(
+    "delete",
+    () => {
+      onDelete();
+    },
+    { enabled },
+  );
 
   // Nudge bindings — spec §4.6:
   //   Shift+← / Shift+→  — nudge left edge (shrink / expand)

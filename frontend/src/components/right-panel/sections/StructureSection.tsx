@@ -120,7 +120,9 @@ function SplitPicker({ text, splitPos, onPick }: SplitPickerProps) {
             key={i}
             type="button"
             title={`Split after position ${i + 1}`}
-            onClick={() => onPick(i + 1)}
+            onClick={() => {
+              onPick(i + 1);
+            }}
             className={[
               "px-1 py-0.5 rounded text-[12px] font-mono border cursor-pointer transition-colors",
               isSelected
@@ -258,9 +260,13 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
             variant="secondary"
             size="sm"
             disabled={!hasPrev || busy}
-            onClick={() => requestMerge("left")}
+            onClick={() => {
+              requestMerge("left");
+            }}
             onMouseEnter={() => hasPrev && setHoveredMerge("left")}
-            onMouseLeave={() => setHoveredMerge(null)}
+            onMouseLeave={() => {
+              setHoveredMerge(null);
+            }}
           >
             ← Merge with prev
           </Button>
@@ -269,9 +275,13 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
             variant="secondary"
             size="sm"
             disabled={!hasNext || busy}
-            onClick={() => requestMerge("right")}
+            onClick={() => {
+              requestMerge("right");
+            }}
             onMouseEnter={() => hasNext && setHoveredMerge("right")}
-            onMouseLeave={() => setHoveredMerge(null)}
+            onMouseLeave={() => {
+              setHoveredMerge(null);
+            }}
           >
             Merge with next →
           </Button>
@@ -297,9 +307,15 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
           step={1}
           value={gapDelta}
           disabled={!hasNext || busy}
-          onChange={(e) => setGapDelta(Number(e.target.value))}
-          onMouseUp={(e) => handleGapCommit(Number((e.target as HTMLInputElement).value))}
-          onBlur={(e) => handleGapCommit(Number(e.target.value))}
+          onChange={(e) => {
+            setGapDelta(Number(e.target.value));
+          }}
+          onMouseUp={(e) => {
+            handleGapCommit(Number((e.target as HTMLInputElement).value));
+          }}
+          onBlur={(e) => {
+            handleGapCommit(Number(e.target.value));
+          }}
           className="w-full accent-accent cursor-pointer disabled:opacity-50"
           aria-label={`Word gap: ${gapDelta > 0 ? `+${gapDelta}` : gapDelta}px`}
         />

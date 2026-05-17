@@ -42,7 +42,9 @@ export function LineWordsCard({ word, checked, onCheckedChange }: LineWordsCardP
         type="checkbox"
         data-testid={`line-words-card-checkbox-${word.word_index}`}
         checked={checked}
-        onChange={(e) => onCheckedChange(e.target.checked)}
+        onChange={(e) => {
+          onCheckedChange(e.target.checked);
+        }}
         aria-label={`Select word ${wordNum}`}
         className="mt-0.5 accent-accent flex-shrink-0"
       />

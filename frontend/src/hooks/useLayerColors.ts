@@ -74,7 +74,9 @@ export function useLayerColors(): LayerColors {
       attributes: true,
       attributeFilter: ["data-theme"],
     });
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+    };
   }, []);
 
   return useMemo(() => readLayerColors(), [version]);

@@ -61,7 +61,9 @@ export function ChipPalette({
             variant="tristate"
             value={value}
             data-testid={`${testIdPrefix}-${item.key}`}
-            onChange={(next) => onChange(item.key, next)}
+            onChange={(next) => {
+              onChange(item.key, next);
+            }}
           >
             {item.label}
           </Chip>

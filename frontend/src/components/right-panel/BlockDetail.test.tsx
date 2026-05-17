@@ -354,7 +354,8 @@ describe("BlockDetail R2 — block-scope Save applies layout to all paragraphs",
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
         if (url.includes("/paragraphs/") && init?.method === "PATCH") {
           const match = /\/paragraphs\/(\d+)/.exec(url);
           if (match) patchedParagraphs.push(Number(match[1]));
@@ -413,7 +414,8 @@ describe("BlockDetail CU-5.2 — para-scope save fires PATCH with correct body",
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
         if (url.includes("/paragraphs/") && init?.method === "PATCH") {
           capturedUrl = url;
           try {
@@ -465,12 +467,13 @@ describe("BlockDetail CU-5.2 — para-scope save fires PATCH with correct body",
     selectBlock("b1");
     const user = userEvent.setup();
 
-    const patchCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const patchCalls: { url: string; body: Record<string, unknown> }[] = [];
 
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
         if (url.includes("/paragraphs/") && init?.method === "PATCH") {
           try {
             patchCalls.push({

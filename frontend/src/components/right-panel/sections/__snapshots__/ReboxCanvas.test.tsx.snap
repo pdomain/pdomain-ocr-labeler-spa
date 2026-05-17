@@ -1,0 +1,67 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ReboxCanvas (P3.b) > matches snapshot (snap tool, zoom 1, no ghost) 1`] = `
+<div>
+  <div
+    class="rounded border border-border-2 overflow-hidden bg-sunk"
+    style="cursor: default;"
+  >
+    <div
+      data-konva-node="Stage"
+      data-testid="rebox-canvas"
+    >
+      <div
+        data-konva-node="Layer"
+      >
+        <div
+          data-konva-node="Rect"
+          data-testid="rebox-canvas-background"
+        />
+      </div>
+      <div
+        data-konva-node="Layer"
+      />
+      <div
+        data-konva-node="Layer"
+      >
+        <div
+          data-konva-node="Rect"
+          data-testid="rebox-bbox"
+        />
+        <div
+          data-konva-node="Rect"
+          data-testid="rebox-handle-nw"
+        />
+        <div
+          data-konva-node="Rect"
+          data-testid="rebox-handle-n"
+        />
+        <div
+          data-konva-node="Rect"
+          data-testid="rebox-handle-ne"
+        />
+        <div
+          data-konva-node="Rect"
+          data-testid="rebox-handle-e"
+        />
+        <div
+          data-konva-node="Rect"
+          data-testid="rebox-handle-se"
+        />
+        <div
+          data-konva-node="Rect"
+          data-testid="rebox-handle-s"
+        />
+        <div
+          data-konva-node="Rect"
+          data-testid="rebox-handle-sw"
+        />
+        <div
+          data-konva-node="Rect"
+          data-testid="rebox-handle-w"
+        />
+      </div>
+    </div>
+  </div>
+</div>
+`;

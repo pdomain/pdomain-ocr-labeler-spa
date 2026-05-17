@@ -25,7 +25,7 @@ import { railStore } from "../stores/rail-store";
 // Default state: image not yet loaded → PageImage renders the grey fallback Rect.
 const mockUseImageState = vi.hoisted(() => ({
   image: undefined as HTMLImageElement | undefined,
-  status: "loading" as "loading" | "loaded" | "failed",
+  status: "loading",
 }));
 
 vi.mock("use-image", () => ({
@@ -222,10 +222,7 @@ function makeLine(
   };
 }
 
-function makePage(
-  line_matches: LineMatch[],
-  selection: PagePayload["selection"] = undefined,
-): PagePayload {
+function makePage(line_matches: LineMatch[], selection?: PagePayload["selection"]): PagePayload {
   return {
     project_id: "proj-001",
     page_index: 0,

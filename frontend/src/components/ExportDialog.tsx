@@ -228,7 +228,9 @@ export function ExportDialog({
     >
       <div
         className="bg-bg-surface rounded-lg border border-border-2 w-full max-w-lg mx-4 flex flex-col overflow-hidden max-h-[90vh]"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border-1 bg-bg-raised shrink-0">
@@ -255,7 +257,9 @@ export function ExportDialog({
                   name="export-scope"
                   value="all_validated"
                   checked={scope === "all_validated"}
-                  onChange={() => setScope("all_validated")}
+                  onChange={() => {
+                    setScope("all_validated");
+                  }}
                 />
                 All Validated Pages
               </label>
@@ -266,7 +270,9 @@ export function ExportDialog({
                   name="export-scope"
                   value="current"
                   checked={scope === "current"}
-                  onChange={() => setScope("current")}
+                  onChange={() => {
+                    setScope("current");
+                  }}
                 />
                 Current Page
               </label>
@@ -301,7 +307,9 @@ export function ExportDialog({
                       type="checkbox"
                       data-testid={`export-style-checkbox-${style}`}
                       checked={selectedStyles.includes(style)}
-                      onChange={() => toggleStyle(style)}
+                      onChange={() => {
+                        toggleStyle(style);
+                      }}
                     />
                     {style}
                   </label>
@@ -315,7 +323,9 @@ export function ExportDialog({
             <label className="text-xs font-semibold text-ink-2 mb-1 block">Component Filter</label>
             <select
               value={componentFilter}
-              onChange={(e) => setComponentFilter(e.target.value)}
+              onChange={(e) => {
+                setComponentFilter(e.target.value);
+              }}
               className="text-sm border border-border-1 rounded px-2 py-1 bg-bg-sunk text-ink-2"
             >
               {DEFAULT_COMPONENTS.map((c) => (
@@ -347,7 +357,9 @@ export function ExportDialog({
                     name="export-output-mode"
                     value={mode}
                     checked={outputMode === mode}
-                    onChange={() => setOutputMode(mode)}
+                    onChange={() => {
+                      setOutputMode(mode);
+                    }}
                   />
                   {label}
                 </label>
@@ -408,7 +420,9 @@ export function ExportDialog({
         <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border-1 bg-bg-raised shrink-0">
           {running ? (
             <button
-              onClick={handleCancel}
+              onClick={() => {
+                void handleCancel();
+              }}
               className="px-3 py-1.5 text-sm rounded border border-status-fuzzy bg-bg-surface text-status-fuzzy hover:bg-bg-raised transition-colors"
             >
               Cancel
@@ -416,7 +430,9 @@ export function ExportDialog({
           ) : (
             <button
               data-testid="export-button"
-              onClick={handleExport}
+              onClick={() => {
+                void handleExport();
+              }}
               className="px-3 py-1.5 text-sm rounded bg-accent text-accent-ink hover:opacity-90 transition-opacity"
             >
               Export

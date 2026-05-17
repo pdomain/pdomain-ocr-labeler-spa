@@ -124,13 +124,17 @@ export function WordActionRows({
           testId="dialog-merge-prev-button"
           label="← Prev"
           disabled={!hasPrev || busy !== null}
-          onClick={() => run("merge-prev", () => onMerge?.("prev") ?? Promise.resolve())}
+          onClick={() => {
+            void run("merge-prev", () => onMerge?.("prev") ?? Promise.resolve());
+          }}
         />
         <ActionBtn
           testId="dialog-merge-next-button"
           label="Next →"
           disabled={!hasNext || busy !== null}
-          onClick={() => run("merge-next", () => onMerge?.("next") ?? Promise.resolve())}
+          onClick={() => {
+            void run("merge-next", () => onMerge?.("next") ?? Promise.resolve());
+          }}
         />
       </div>
 
@@ -141,13 +145,17 @@ export function WordActionRows({
           testId="dialog-split-h-button"
           label="H"
           disabled={busy !== null}
-          onClick={() => run("split-h", () => onSplit?.(splitFraction, "h") ?? Promise.resolve())}
+          onClick={() => {
+            void run("split-h", () => onSplit?.(splitFraction, "h") ?? Promise.resolve());
+          }}
         />
         <ActionBtn
           testId="dialog-split-v-button"
           label="V"
           disabled={busy !== null}
-          onClick={() => run("split-v", () => onSplit?.(splitFraction, "v") ?? Promise.resolve())}
+          onClick={() => {
+            void run("split-v", () => onSplit?.(splitFraction, "v") ?? Promise.resolve());
+          }}
         />
         <span className="text-xs text-ink-4 ml-1">at {Math.round(splitFraction * 100)}%</span>
       </div>
@@ -160,7 +168,9 @@ export function WordActionRows({
           label="Delete"
           danger
           disabled={busy !== null}
-          onClick={() => run("delete", () => onDelete?.() ?? Promise.resolve())}
+          onClick={() => {
+            void run("delete", () => onDelete?.() ?? Promise.resolve());
+          }}
         />
       </div>
 
@@ -172,7 +182,7 @@ export function WordActionRows({
           label="↑ Above"
           disabled={busy !== null}
           onClick={() =>
-            run("crop-above", () => onCrop?.("above", cropPadding) ?? Promise.resolve())
+            void run("crop-above", () => onCrop?.("above", cropPadding) ?? Promise.resolve())
           }
         />
         <ActionBtn
@@ -180,21 +190,23 @@ export function WordActionRows({
           label="↓ Below"
           disabled={busy !== null}
           onClick={() =>
-            run("crop-below", () => onCrop?.("below", cropPadding) ?? Promise.resolve())
+            void run("crop-below", () => onCrop?.("below", cropPadding) ?? Promise.resolve())
           }
         />
         <ActionBtn
           testId="dialog-crop-left-button"
           label="← Left"
           disabled={busy !== null}
-          onClick={() => run("crop-left", () => onCrop?.("left", cropPadding) ?? Promise.resolve())}
+          onClick={() => {
+            void run("crop-left", () => onCrop?.("left", cropPadding) ?? Promise.resolve());
+          }}
         />
         <ActionBtn
           testId="dialog-crop-right-button"
           label="Right →"
           disabled={busy !== null}
           onClick={() =>
-            run("crop-right", () => onCrop?.("right", cropPadding) ?? Promise.resolve())
+            void run("crop-right", () => onCrop?.("right", cropPadding) ?? Promise.resolve())
           }
         />
         <label className="flex items-center gap-1 text-xs text-ink-3">
@@ -205,7 +217,9 @@ export function WordActionRows({
             min={0}
             max={20}
             value={cropPadding}
-            onChange={(e) => setCropPadding(Number(e.target.value))}
+            onChange={(e) => {
+              setCropPadding(Number(e.target.value));
+            }}
             className="w-16"
           />
           {cropPadding}px

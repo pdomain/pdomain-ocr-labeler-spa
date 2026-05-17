@@ -92,8 +92,12 @@ export function ReboxSection({ word, projectId, pageIndex, imageUrl }: ReboxSect
     setDraft({ ...word.bbox });
   }, [word.bbox]);
 
-  const zoomIn = () => setZoom((z) => Math.min(MAX_ZOOM, z + 1));
-  const zoomOut = () => setZoom((z) => Math.max(MIN_ZOOM, z - 1));
+  const zoomIn = () => {
+    setZoom((z) => Math.min(MAX_ZOOM, z + 1));
+  };
+  const zoomOut = () => {
+    setZoom((z) => Math.max(MIN_ZOOM, z - 1));
+  };
 
   return (
     <div
@@ -111,19 +115,25 @@ export function ReboxSection({ word, projectId, pageIndex, imageUrl }: ReboxSect
           testId="rebox-tool-snap"
           label="Snap"
           active={tool === "snap"}
-          onClick={() => setTool("snap")}
+          onClick={() => {
+            setTool("snap");
+          }}
         />
         <ToolButton
           testId="rebox-tool-draw"
           label="Draw"
           active={tool === "draw"}
-          onClick={() => setTool("draw")}
+          onClick={() => {
+            setTool("draw");
+          }}
         />
         <ToolButton
           testId="rebox-tool-pan"
           label="Pan"
           active={tool === "pan"}
-          onClick={() => setTool("pan")}
+          onClick={() => {
+            setTool("pan");
+          }}
         />
       </div>
 

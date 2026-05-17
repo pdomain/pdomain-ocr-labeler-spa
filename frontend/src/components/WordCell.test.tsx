@@ -57,7 +57,7 @@ describe("WordCell", () => {
       ground_truth_text: "world",
     });
     render(<WordCell word={word} />);
-    const input = screen.getByTestId("gt-text-input-0-0") as HTMLInputElement;
+    const input = screen.getByTestId("gt-text-input-0-0");
     expect(input.value).toBe("world");
   });
 
@@ -70,7 +70,7 @@ describe("WordCell", () => {
       ground_truth_text: "hello",
     });
     render(<WordCell word={word} onCommitGt={onCommitGt} />);
-    const input = screen.getByTestId("gt-text-input-0-0") as HTMLInputElement;
+    const input = screen.getByTestId("gt-text-input-0-0");
     fireEvent.change(input, { target: { value: "world" } });
     fireEvent.blur(input);
     expect(onCommitGt).toHaveBeenCalledOnce();

@@ -10,7 +10,7 @@ describe("Issue #190: Frontend toolchain", () => {
   it("typescript strict mode is enabled", () => {
     // This test passes if the file compiles with strict tsconfig
     // (i.e., if tsconfig.app.json has "strict": true)
-    const x: string = "hello";
+    const x = "hello";
     expect(typeof x).toBe("string");
   });
 

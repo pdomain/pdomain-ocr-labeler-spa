@@ -58,8 +58,8 @@ describe("ExportDialog", () => {
 
   it("scope radios exist and default to all_validated", async () => {
     render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
-    const allRadio = screen.getByTestId("export-scope-all") as HTMLInputElement;
-    const currentRadio = screen.getByTestId("export-scope-current") as HTMLInputElement;
+    const allRadio = screen.getByTestId("export-scope-all");
+    const currentRadio = screen.getByTestId("export-scope-current");
     expect(allRadio.checked).toBe(true);
     expect(currentRadio.checked).toBe(false);
   });
@@ -82,8 +82,8 @@ describe("ExportDialog", () => {
   it("clicking individual style unchecks All", async () => {
     render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
     await waitFor(() => screen.getByTestId("export-style-checkbox-italic"));
-    const allCheckbox = screen.getByTestId("export-style-all-checkbox") as HTMLInputElement;
-    const italicCheckbox = screen.getByTestId("export-style-checkbox-italic") as HTMLInputElement;
+    const allCheckbox = screen.getByTestId("export-style-all-checkbox");
+    const italicCheckbox = screen.getByTestId("export-style-checkbox-italic");
 
     // Initially All is checked (selectedStyles empty)
     expect(allCheckbox.checked).toBe(true);
@@ -100,18 +100,12 @@ describe("ExportDialog", () => {
 
     // Select italic first
     fireEvent.click(screen.getByTestId("export-style-checkbox-italic"));
-    expect((screen.getByTestId("export-style-checkbox-italic") as HTMLInputElement).checked).toBe(
-      true,
-    );
+    expect(screen.getByTestId("export-style-checkbox-italic").checked).toBe(true);
 
     // Click All to reset
     fireEvent.click(screen.getByTestId("export-style-all-checkbox"));
-    expect((screen.getByTestId("export-style-checkbox-italic") as HTMLInputElement).checked).toBe(
-      false,
-    );
-    expect((screen.getByTestId("export-style-all-checkbox") as HTMLInputElement).checked).toBe(
-      true,
-    );
+    expect(screen.getByTestId("export-style-checkbox-italic").checked).toBe(false);
+    expect(screen.getByTestId("export-style-all-checkbox").checked).toBe(true);
   });
 
   it("export-button present when not running", async () => {

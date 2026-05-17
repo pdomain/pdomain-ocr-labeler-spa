@@ -73,7 +73,9 @@ let state: DialogStoreState = INITIAL_STATE;
 const listeners = new Set<() => void>();
 
 function notify() {
-  listeners.forEach((l) => l());
+  listeners.forEach((l) => {
+    l();
+  });
 }
 
 function getState(): DialogStoreState {

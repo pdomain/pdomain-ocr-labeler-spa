@@ -159,7 +159,9 @@ export function WordEditDialog({
     >
       <div
         className="bg-bg-surface rounded-lg border border-border-2 w-full max-w-2xl mx-4 flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border-1 bg-bg-raised shrink-0">
@@ -269,7 +271,9 @@ export function WordEditDialog({
             eraseMode={eraseMode}
             eraseRects={eraseRects}
             onEraseRectAdd={handleEraseRectAdd}
-            onMarkerPlace={(pt) => setMarker(pt)}
+            onMarkerPlace={(pt) => {
+              setMarker(pt);
+            }}
           />
           {/* Merge/Split/Delete/Crop rows — #211 */}
           <WordActionRows
@@ -287,7 +291,9 @@ export function WordEditDialog({
             onRefine={onRefine}
             onExpandRefine={onExpandRefine}
             onApply={onApplyNudge}
-            onReset={() => setEraseRects([])}
+            onReset={() => {
+              setEraseRects([]);
+            }}
           />
           <WordTagRow
             styleOptions={styleOptions}

@@ -78,25 +78,25 @@ describe("StudioShell — 5-zone grid (Slice 8)", () => {
   it("applies hi-fi grid dimensions: 56px header, 64px rail, 320px drawer default", () => {
     renderShell();
     const shell = screen.getByTestId("studio-shell");
-    const colTemplate = (shell as HTMLElement).style.gridTemplateColumns;
+    const colTemplate = shell.style.gridTemplateColumns;
     // Rail: 64px; drawer default: var(--drawer-w, 320px); right: var(--right-w, 520px)
     expect(colTemplate).toContain("64px");
     expect(colTemplate).toContain("320px");
-    const rowTemplate = (shell as HTMLElement).style.gridTemplateRows;
+    const rowTemplate = shell.style.gridTemplateRows;
     // Header row: 56px
     expect(rowTemplate).toContain("56px");
   });
 
   it("accepts rightWidth prop and applies it as --right-w CSS variable", () => {
     renderShell(640);
-    const shell = screen.getByTestId("studio-shell") as HTMLElement;
+    const shell = screen.getByTestId("studio-shell");
     // The --right-w CSS variable should be set to 640px
     expect(shell.style.getPropertyValue("--right-w")).toBe("640px");
   });
 
   it("uses default --right-w of 520px when rightWidth is not provided", () => {
     renderShell();
-    const shell = screen.getByTestId("studio-shell") as HTMLElement;
+    const shell = screen.getByTestId("studio-shell");
     // Default: column template includes var(--right-w, 520px)
     expect(shell.style.gridTemplateColumns).toContain("520px");
   });
@@ -112,7 +112,7 @@ describe("StudioShell — 5-zone grid (Slice 8)", () => {
         right={<div>right</div>}
       />,
     );
-    const shell = screen.getByTestId("studio-shell") as HTMLElement;
+    const shell = screen.getByTestId("studio-shell");
     expect(shell.style.gridTemplateRows).toBe("0px 1fr");
   });
 
@@ -135,7 +135,7 @@ describe("StudioShell — 5-zone grid (Slice 8)", () => {
     renderShell();
     const header = screen.getByTestId("studio-shell-header");
     expect(header.classList.contains("hidden")).toBe(false);
-    const shell = screen.getByTestId("studio-shell") as HTMLElement;
+    const shell = screen.getByTestId("studio-shell");
     expect(shell.style.gridTemplateRows).toBe("56px 1fr");
   });
 });

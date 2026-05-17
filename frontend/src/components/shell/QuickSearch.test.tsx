@@ -38,7 +38,7 @@ describe("QuickSearch: testids (P1.c)", () => {
 
   it("input has 'Search…' placeholder", () => {
     render(<QuickSearch />);
-    const input = screen.getByTestId("quick-search-input") as HTMLInputElement;
+    const input = screen.getByTestId("quick-search-input");
     expect(input.placeholder).toBe("Search…");
   });
 });

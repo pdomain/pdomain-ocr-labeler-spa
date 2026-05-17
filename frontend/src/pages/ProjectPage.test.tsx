@@ -72,7 +72,7 @@ import ProjectPage from "./ProjectPage";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function renderProjectPage(path: string = "/projects/p1/pages/pageno/1") {
+function renderProjectPage(path = "/projects/p1/pages/pageno/1") {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });

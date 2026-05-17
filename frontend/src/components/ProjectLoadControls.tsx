@@ -109,7 +109,9 @@ export default function ProjectLoadControls({ projectName }: ProjectLoadControls
             type="button"
             data-testid="change-project-button"
             aria-label="Change project"
-            onClick={() => dialogStore.open("sourceFolder")}
+            onClick={() => {
+              dialogStore.open("sourceFolder");
+            }}
             className="flex items-center justify-center w-6 h-6 rounded text-ink-3 hover:text-ink-1 hover:bg-bg-raised transition-colors"
           >
             <FolderOpen size={13} aria-hidden />
@@ -122,7 +124,9 @@ export default function ProjectLoadControls({ projectName }: ProjectLoadControls
       <select
         data-testid="project-select"
         value={selectedId}
-        onChange={(e) => setSelectedId(e.target.value)}
+        onChange={(e) => {
+          setSelectedId(e.target.value);
+        }}
         className={isBreadcrumbMode ? "sr-only" : "border rounded px-2 py-1 text-sm"}
         aria-hidden={isBreadcrumbMode}
         tabIndex={isBreadcrumbMode ? -1 : undefined}
@@ -162,7 +166,9 @@ export default function ProjectLoadControls({ projectName }: ProjectLoadControls
         type="button"
         data-testid="source-folder-button"
         aria-label="Browse source folder"
-        onClick={() => dialogStore.open("sourceFolder")}
+        onClick={() => {
+          dialogStore.open("sourceFolder");
+        }}
         className={isBreadcrumbMode ? "sr-only" : "px-2 py-1 text-sm border rounded"}
         aria-hidden={isBreadcrumbMode}
         tabIndex={isBreadcrumbMode ? -1 : undefined}

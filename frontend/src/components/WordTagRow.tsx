@@ -80,7 +80,9 @@ export function WordTagRow({
         <select
           data-testid="dialog-style-select"
           value={style}
-          onChange={(e) => setStyle(e.target.value)}
+          onChange={(e) => {
+            setStyle(e.target.value);
+          }}
           className="text-xs border border-border-2 rounded px-1 py-0.5 bg-bg-surface text-ink-1"
         >
           {styleOptions.map((s) => (
@@ -92,7 +94,9 @@ export function WordTagRow({
         <select
           data-testid="dialog-scope-select"
           value={scope}
-          onChange={(e) => setScope(e.target.value as "whole" | "part")}
+          onChange={(e) => {
+            setScope(e.target.value as "whole" | "part");
+          }}
           className="text-xs border border-border-2 rounded px-1 py-0.5 bg-bg-surface text-ink-1"
         >
           <option value="whole">whole</option>
@@ -100,7 +104,9 @@ export function WordTagRow({
         </select>
         <button
           data-testid="dialog-apply-style-button"
-          onClick={() => onApplyStyle?.(style, scope)}
+          onClick={() => {
+            void onApplyStyle?.(style, scope);
+          }}
           className="px-2 py-1 text-xs rounded border border-accent bg-bg-surface text-accent hover:bg-bg-raised transition-colors"
         >
           Apply
@@ -113,7 +119,9 @@ export function WordTagRow({
         <select
           data-testid="dialog-component-select"
           value={component}
-          onChange={(e) => setComponent(e.target.value)}
+          onChange={(e) => {
+            setComponent(e.target.value);
+          }}
           className="text-xs border border-border-2 rounded px-1 py-0.5 bg-bg-surface text-ink-1"
         >
           {componentOptions.map((c) => (
@@ -124,14 +132,18 @@ export function WordTagRow({
         </select>
         <button
           data-testid="dialog-apply-component-button"
-          onClick={() => onApplyComponent?.(component, true)}
+          onClick={() => {
+            void onApplyComponent?.(component, true);
+          }}
           className="px-2 py-1 text-xs rounded border border-status-exact bg-bg-surface text-status-exact hover:bg-bg-raised transition-colors"
         >
           Set
         </button>
         <button
           data-testid="dialog-clear-component-button"
-          onClick={() => onApplyComponent?.(component, false)}
+          onClick={() => {
+            void onApplyComponent?.(component, false);
+          }}
           className="px-2 py-1 text-xs rounded border border-border-2 bg-bg-surface text-ink-2 hover:bg-bg-raised transition-colors"
         >
           Clear

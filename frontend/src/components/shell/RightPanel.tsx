@@ -29,7 +29,9 @@ type PagePayload = components["schemas"]["PagePayload"];
 // ─── Subscriber bridge ───────────────────────────────────────────────────────
 
 function subscribeSelection(cb: () => void): () => void {
-  return selectionStore.subscribe(() => cb());
+  return selectionStore.subscribe(() => {
+    cb();
+  });
 }
 function getSelectionSnapshot() {
   return selectionStore.getState();
