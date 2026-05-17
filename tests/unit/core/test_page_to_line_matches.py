@@ -343,7 +343,7 @@ def test_fuzz_threshold_app_config_field() -> None:
     assert cfg_custom.fuzz_threshold == 0.5
 
     # Round-trip through model_dump / dict load (simulating YAML parse).
-    cfg_from_dict = AppConfig(**{"fuzz_threshold": 0.9})
+    cfg_from_dict = AppConfig(**{"fuzz_threshold": 0.9})  # pyright: ignore[reportArgumentType]
     assert cfg_from_dict.fuzz_threshold == 0.9
 
 

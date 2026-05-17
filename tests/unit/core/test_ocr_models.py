@@ -63,7 +63,10 @@ class TestOCRModelOption:
         # session_state.json-only, not OCR config.)
         with pytest.raises(ValidationError):
             OCRModelOption(  # type: ignore[call-arg]
-                key="x", label="x", source="stock", extra_field="nope"
+                key="x",
+                label="x",
+                source="stock",
+                extra_field="nope",  # pyright: ignore[reportCallIssue]
             )
 
 

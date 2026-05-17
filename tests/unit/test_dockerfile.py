@@ -219,7 +219,7 @@ def test_runtime_binds_host_to_all_interfaces() -> None:
     """
     from pd_ocr_labeler_spa.settings import Settings
 
-    prefix = Settings.model_config["env_prefix"]
+    prefix = Settings.model_config["env_prefix"]  # pyright: ignore[reportTypedDictNotRequiredAccess]
     assert prefix, "Settings must declare a non-empty env_prefix"
 
     text = _dockerfile_text()
@@ -244,7 +244,7 @@ def test_dockerfile_env_lines_use_settings_prefix() -> None:
     """
     from pd_ocr_labeler_spa.settings import Settings
 
-    prefix = Settings.model_config["env_prefix"]
+    prefix = Settings.model_config["env_prefix"]  # pyright: ignore[reportTypedDictNotRequiredAccess]
     assert prefix, "Settings must declare a non-empty env_prefix"
 
     text = _dockerfile_text()

@@ -56,7 +56,7 @@ def test_request_id_filter_injects_attribute() -> None:
     token = request_id_var.set("rid-123")
     try:
         assert RequestIdFilter().filter(record) is True
-        assert record.request_id == "rid-123"
+        assert record.request_id == "rid-123"  # pyright: ignore[reportAttributeAccessIssue]
     finally:
         request_id_var.reset(token)
 
@@ -76,7 +76,7 @@ def test_request_id_filter_default_when_unset() -> None:
     token = request_id_var.set("")
     try:
         RequestIdFilter().filter(record)
-        assert record.request_id == ""
+        assert record.request_id == ""  # pyright: ignore[reportAttributeAccessIssue]
     finally:
         request_id_var.reset(token)
 

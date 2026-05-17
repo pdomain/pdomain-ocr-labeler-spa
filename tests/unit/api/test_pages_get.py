@@ -230,9 +230,9 @@ def test_page_payload_helper_returns_payload_for_loaded_project(
     endpoints will call ``_page_payload`` directly, and the shape MUST
     match what GET produces.
     """
-    app = loaded_client.app  # type: ignore[attr-defined]
-    project_state = app.state.project_state
-    settings = app.state.settings
+    app = loaded_client.app  # pyright: ignore[reportAttributeAccessIssue, reportFunctionMemberAccess]
+    project_state = app.state.project_state  # pyright: ignore[reportAttributeAccessIssue, reportFunctionMemberAccess]
+    settings = app.state.settings  # pyright: ignore[reportAttributeAccessIssue, reportFunctionMemberAccess]
 
     payload = _page_payload(
         project_id="tiny-fixture",

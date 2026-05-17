@@ -179,7 +179,7 @@ def test_refresh_version_hooks_share_single_script_entry(config: dict) -> None:
     hooks = _refresh_hooks(config)
     entries = {hook.get("entry") for hook in hooks}
     assert entries == {REFRESH_HOOK_SCRIPT}, (
-        f"all refresh-version hooks must share entry {REFRESH_HOOK_SCRIPT!r}; got {sorted(entries)}"
+        f"all refresh-version hooks must share entry {REFRESH_HOOK_SCRIPT!r}; got {sorted(entries)}"  # pyright: ignore[reportArgumentType]
     )
 
     for hook in hooks:

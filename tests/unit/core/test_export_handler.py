@@ -210,7 +210,7 @@ async def test_handle_export_style_subfolder(tmp_path: Path) -> None:
     from pd_ocr_labeler_spa.core.jobs.runner import Job
 
     runner, settings = _make_runner_with_settings(tmp_path)
-    settings.__dict__["data_root"] = data_root  # override in test
+    settings.__dict__["data_root"] = data_root  # override in test  # pyright: ignore[reportIndexIssue]
 
     # Patch _export_page to avoid cv2 dependency in unit tests.
     with (

@@ -51,7 +51,7 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.7",
     "httpx>=0.28",
-    "pyright>=1.1",
+    "basedpyright>=1.39.4",
 ]
 e2e = [
     "pytest-playwright>=0.5",
@@ -113,6 +113,40 @@ markers = [
     "slow: marks tests that call real OCR/DocTR and take more than a few seconds",
 ]
 
-[tool.pyright]
-include = ["src"]
-typeCheckingMode = "basic"
+[tool.basedpyright]
+# Include source, tests, and scripts. Match the src-layout this repo uses.
+include = ["src", "tests", "scripts"]
+exclude = [
+    "**/__pycache__",
+    "**/.venv",
+    "**/node_modules",
+    # e2e tests depend on playwright which lives in the optional [e2e] group
+    # (not installed in dev baseline); exclude to avoid spurious import errors.
+    "tests/e2e",
+]
+
+# "standard" mode during initial migration; Task 8 upgrades to "recommended".
+# See workspace decision doc 2026-05-17-strict-linting.md.
+typeCheckingMode = "standard"
+# NOTE: failOnWarnings deferred — recommended mode surfaces stub warnings
+# from FastAPI/Starlette stubs that lag the runtime.
+# failOnWarnings = true
+
+# Import cycles are structural (adapter protocols, carrier closures, etc.)
+# and resolved via TYPE_CHECKING guards. Suppress the per-file error here;
+# actual import order issues would surface as runtime ImportErrors.
+reportImportCycles = "none"
+
+# Tell basedpyright where the venv is so it finds third-party stubs.
+venvPath = "."
+venv = ".venv"
+
+# Per-execution-environment overrides (typeCheckingMode not valid per-env).
+[[tool.basedpyright.executionEnvironments]]
+root = "src"
+
+[[tool.basedpyright.executionEnvironments]]
+root = "tests"
+
+[[tool.basedpyright.executionEnvironments]]
+root = "scripts"

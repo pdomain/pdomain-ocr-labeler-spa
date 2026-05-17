@@ -179,7 +179,7 @@ def test_image_cache_disabled_in_api_only_mode(tmp_path: Path) -> None:
         mode="api_only",
     )
     app = build_app(s)
-    paths = {route.path for route in app.routes if hasattr(route, "path")}
+    paths = {route.path for route in app.routes if hasattr(route, "path")}  # pyright: ignore[reportAttributeAccessIssue]
     assert "/image-cache/{key:path}" not in paths
     assert "/{full_path:path}" not in paths
 
@@ -458,7 +458,7 @@ def test_spa_fallback_skipped_when_frontend_dev_url_set(tmp_path: Path, spa_dir:
         frontend_dev_url="http://localhost:5173",
     )
     app = build_app(s)
-    paths = {route.path for route in app.routes if hasattr(route, "path")}
+    paths = {route.path for route in app.routes if hasattr(route, "path")}  # pyright: ignore[reportAttributeAccessIssue]
     # The catch-all is NOT registered.
     assert "/{full_path:path}" not in paths
     # /healthz, /env.js, /image-cache ARE still registered.
@@ -573,7 +573,7 @@ def test_resolve_static_dir_handles_non_path_traversable() -> None:
             assert name == "static"
             return fake
 
-    real_files = importlib.resources.files
+    real_files = importlib.resources.files  # pyright: ignore[reportAttributeAccessIssue]
 
     def _patched_files(pkg: str) -> object:
         if pkg == "pd_ocr_labeler_spa":
@@ -682,7 +682,7 @@ def test_resolve_resource_dir_cache_keyed_on_logical_identity_not_id() -> None:
     static_holder = [_FakeTraversable(static_root)]
     themes_traversable = _FakeTraversable(themes_root)
 
-    real_files = importlib.resources.files
+    real_files = importlib.resources.files  # pyright: ignore[reportAttributeAccessIssue]
 
     def _patched_files(pkg: str) -> object:
         if pkg == "pkg.static":
@@ -798,7 +798,7 @@ def test_resolve_resource_dir_cache_evicts_stale_entry_after_tmpdir_vanishes() -
         def __str__(self) -> str:
             return f"<FakeTraversable at 0x{id(self):x}>"
 
-    real_files = importlib.resources.files
+    real_files = importlib.resources.files  # pyright: ignore[reportAttributeAccessIssue]
 
     def _patched_files(pkg: str) -> object:
         if pkg == "pkg.fake":
@@ -843,7 +843,7 @@ def test_catch_all_registered_after_real_routes(settings: Settings) -> None:
     be after every concrete route or it will shadow them.
     """
     app = build_app(settings)
-    paths = [route.path for route in app.routes if hasattr(route, "path")]
+    paths = [route.path for route in app.routes if hasattr(route, "path")]  # pyright: ignore[reportAttributeAccessIssue]
     assert "/{full_path:path}" in paths
     assert paths[-1] == "/{full_path:path}", (
         "SPA catch-all must be the last registered route, otherwise it "

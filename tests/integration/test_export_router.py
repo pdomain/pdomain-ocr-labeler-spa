@@ -34,12 +34,12 @@ def _make_settings(tmp_path: Path) -> Settings:
 
 
 @pytest.fixture
-def client(tmp_path: Path) -> TestClient:
+def client(tmp_path: Path) -> TestClient:  # pyright: ignore[reportInvalidTypeForm, reportReturnType]
     settings = _make_settings(tmp_path)
     app = build_app(settings)
     # Use TestClient as context manager so the lifespan (job runner) starts.
     with TestClient(app) as c:
-        yield c
+        yield c  # pyright: ignore[reportReturnType]
 
 
 def _parse_sse_events(raw: bytes) -> list[dict]:

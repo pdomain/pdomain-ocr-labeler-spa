@@ -99,14 +99,14 @@ repos:
     # later. `uv lock --check` exits non-zero if `uv.lock` is not in
     # sync with `pyproject.toml` and does NOT modify the lockfile —
     # exactly the behaviour we want from a pre-commit gate.
-    -   id: pyright
-        name: pyright (backend type-check)
-        description: Runs pyright basic type-checking on src/ to catch type errors early.
-        entry: uv run pyright src/
+    -   id: basedpyright
+        name: basedpyright (backend type-check)
+        description: Runs basedpyright standard type-checking on src/ (--level error suppresses warnings).
+        entry: uv run basedpyright src/pd_ocr_labeler_spa --level error
         language: system
         stages: [pre-commit]
         pass_filenames: false
-        files: ^src/.*\.py$
+        files: ^src/pd_ocr_labeler_spa/.*\.py$
     -   id: uv-lock-check
         name: uv.lock is in sync with pyproject.toml
         entry: uv lock --check

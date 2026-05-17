@@ -199,10 +199,10 @@ def test_get_storage_yields_same_object_as_app_state_storage(
     assert r1.status_code == 200
     assert r2.status_code == 200
     # Re-derive AppState's storage id by reaching into the running app
-    # — TestClient.app is the FastAPI instance.
-    app = probed_client.app
-    assert id(app.state.storage) == id(app.state.app_state.storage)
-    assert r1.json()["id"] == id(app.state.app_state.storage)
+    # — TestClient.app is the FastAPI instance (ASGIApp union; cast via ignore).
+    app = probed_client.app  # pyright: ignore[reportAttributeAccessIssue, reportFunctionMemberAccess]
+    assert id(app.state.storage) == id(app.state.app_state.storage)  # pyright: ignore[reportAttributeAccessIssue, reportFunctionMemberAccess]
+    assert r1.json()["id"] == id(app.state.app_state.storage)  # pyright: ignore[reportAttributeAccessIssue, reportFunctionMemberAccess]
 
 
 # ── failure mode: bare FastAPI() without bootstrap wiring ─────────────────
@@ -240,7 +240,7 @@ def test_provider_raises_runtime_error_on_unwired_app(
     # provider's failure path without going through ``build_app``.
     @app.get("/probe")
     def _probe(  # pragma: no cover - body unreached
-        dep: object = Depends(provider),
+        dep: object = Depends(provider),  # pyright: ignore[reportArgumentType]
     ) -> dict[str, str]:
         return {"ok": "yes"}
 
