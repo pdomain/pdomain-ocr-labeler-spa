@@ -39,7 +39,7 @@ export interface ErasePixelsSectionProps {
   /** Called when Apply is clicked.  Receives the ops list. */
   onApply?: (ops: EraseOp[]) => Promise<void> | void;
   /** URL of the word image slice (forwarded to EraseCanvas). */
-  imageUrl?: string;
+  imageUrl?: string | undefined;
 }
 
 const DEFAULT_BRUSH = 8;

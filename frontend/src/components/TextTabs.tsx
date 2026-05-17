@@ -35,13 +35,13 @@ const FILTER_OPTIONS: FilterOption[] = [
 
 interface TextTabsProps {
   /** Text content for the Ground Truth plain panel. */
-  pageTextGt?: string | null;
+  pageTextGt?: string | null | undefined;
   /** Text content for the OCR plain panel. */
-  pageTextOcr?: string | null;
+  pageTextOcr?: string | null | undefined;
   /** Current server-side line filter (controls segmented control). */
-  lineFilter?: LineFilter;
+  lineFilter?: LineFilter | undefined;
   /** Called when the user changes the line filter. */
-  onLineFilterChange?: (filter: LineFilter) => void;
+  onLineFilterChange?: ((filter: LineFilter) => void) | undefined;
   /** Slot for the word-match list (rendered inside the "matches" tab). */
   children?: React.ReactNode;
 }

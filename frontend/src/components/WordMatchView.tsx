@@ -109,8 +109,10 @@ export function WordMatchView({
     estimateSize: () => 80,
     overscan: 3,
     // measureElement lets the virtualiser refine heights after first render.
-    measureElement:
-      typeof window !== "undefined" ? (el) => el.getBoundingClientRect().height : undefined,
+    // Omit on server (no DOM) — exactOptionalPropertyTypes disallows explicit undefined.
+    ...(typeof window !== "undefined"
+      ? { measureElement: (el: Element) => el.getBoundingClientRect().height }
+      : {}),
   });
 
   const items = virtualizer.getVirtualItems();

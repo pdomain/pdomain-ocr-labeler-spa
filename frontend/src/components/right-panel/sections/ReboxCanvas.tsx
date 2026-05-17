@@ -44,7 +44,7 @@ export interface ReboxCanvasProps {
   /** Integer zoom factor (1×–5×). Applied as a Stage scale. */
   zoom: number;
   /** Optional URL for the cropped word image. Falls back to a neutral fill. */
-  imageUrl?: string;
+  imageUrl?: string | undefined;
 }
 
 /** Width/height of the Konva Stage in CSS pixels (before zoom). */
@@ -305,7 +305,7 @@ export function ReboxCanvas({
             y={0}
             width={CANVAS_WIDTH}
             height={CANVAS_HEIGHT}
-            fill={imageUrl ? undefined : readCssToken("--bg-raised", "#1d1d24")}
+            {...(!imageUrl ? { fill: readCssToken("--bg-raised", "#1d1d24") } : {})}
             data-testid="rebox-canvas-background"
           />
         </Layer>
@@ -337,7 +337,7 @@ export function ReboxCanvas({
             stroke={canvasColors.bboxStroke}
             strokeWidth={1.5}
             fill={canvasColors.bboxFill}
-            dash={drawing ? [4, 2] : undefined}
+            {...(drawing ? { dash: [4, 2] } : {})}
           />
           {/* Drag handles — only in snap mode and not mid-draw. */}
           {tool === "snap" &&

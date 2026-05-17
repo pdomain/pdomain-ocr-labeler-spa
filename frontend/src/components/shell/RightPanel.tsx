@@ -49,15 +49,15 @@ const LEVEL_PLACEHOLDER: Record<SelectionLevel, string> = {
 
 export interface RightPanelProps {
   /** Current page (used by Breadcrumb for label resolution and detail panels). */
-  page?: PagePayload;
+  page?: PagePayload | undefined;
   /** Project id — forwarded to detail panels for mutations. */
-  projectId?: string;
+  projectId?: string | undefined;
   /** Page index — forwarded to detail panels for mutations. */
-  pageIndex?: number;
+  pageIndex?: number | undefined;
   /** Rendered when `selection-store.level === "word"`. */
   wordSlot?: React.ReactNode;
   /** Invoked when the collapse button is clicked. */
-  onCollapse?: () => void;
+  onCollapse?: (() => void) | undefined;
 }
 
 export function RightPanel({ page, projectId, pageIndex, wordSlot, onCollapse }: RightPanelProps) {

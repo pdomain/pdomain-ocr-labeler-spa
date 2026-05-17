@@ -16,11 +16,11 @@ interface ConfirmDialogProps {
   /** Message shown to the user, e.g. "This will discard unsaved changes." */
   message: string;
   /** Optional title (defaults to "Confirm"). */
-  title?: string;
+  title?: string | undefined;
   /** Label for the confirm button (defaults to "Confirm"). */
-  confirmLabel?: string;
+  confirmLabel?: string | undefined;
   /** Label for the cancel button (defaults to "Cancel"). */
-  cancelLabel?: string;
+  cancelLabel?: string | undefined;
   /** Fired when the user clicks Confirm. */
   onConfirm: () => void;
   /** Fired when the user clicks Cancel or the overlay backdrop. */

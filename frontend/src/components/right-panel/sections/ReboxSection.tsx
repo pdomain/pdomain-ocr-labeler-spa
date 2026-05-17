@@ -42,7 +42,7 @@ export interface ReboxSectionProps {
   /** Page index (0-based). */
   pageIndex: number;
   /** Optional cropped word image URL (forwarded to the canvas). */
-  imageUrl?: string;
+  imageUrl?: string | undefined;
 }
 
 function bboxEqual(a: BBox, b: BBox): boolean {

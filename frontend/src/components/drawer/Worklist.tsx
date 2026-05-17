@@ -299,7 +299,7 @@ function filterBySearch(lines: LineMatch[], query: string): LineMatch[] {
 
 export interface WorklistProps {
   /** Page line matches to display. Pass undefined when page not loaded. */
-  lineMatches?: LineMatch[];
+  lineMatches?: LineMatch[] | undefined;
   projectId: string;
   pageIndex: number;
 }

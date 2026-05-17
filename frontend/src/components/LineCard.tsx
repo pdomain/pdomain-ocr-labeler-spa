@@ -68,30 +68,32 @@ function CountChip({ kind, count, label, chipStyle, textClass }: CountChipProps)
 export interface LineCardProps {
   line: LineMatch;
   /** Called when Validate / Unvalidate is clicked. */
-  onValidate?: (lineIndex: number, validated: boolean) => void;
+  onValidate?: ((lineIndex: number, validated: boolean) => void) | undefined;
   /** Called when GT→OCR copy is clicked. */
-  onCopyGtToOcr?: (lineIndex: number) => void;
+  onCopyGtToOcr?: ((lineIndex: number) => void) | undefined;
   /** Called when OCR→GT copy is clicked. */
-  onCopyOcrToGt?: (lineIndex: number) => void;
+  onCopyOcrToGt?: ((lineIndex: number) => void) | undefined;
   /** Called when Delete is clicked. */
-  onDelete?: (lineIndex: number) => void;
+  onDelete?: ((lineIndex: number) => void) | undefined;
   /**
    * Called when a word's GT input is blurred and the value changed.
    * Forwarded to each WordCell as onCommitGt.
    * Signature: (wordId, lineIndex, wordIndex, newText) => void
    */
-  onCommitGt?: (wordId: string, lineIndex: number, wordIndex: number, text: string) => void;
+  onCommitGt?:
+    | ((wordId: string, lineIndex: number, wordIndex: number, text: string) => void)
+    | undefined;
   /**
    * Called when the edit-word pencil button is clicked on a word row.
    * Should select the word in the selection store and open the right panel.
    * Signature: (lineIndex, wordIndex) => void
    */
-  onEditWord?: (lineIndex: number, wordIndex: number) => void;
+  onEditWord?: ((lineIndex: number, wordIndex: number) => void) | undefined;
   /**
    * Base URL for page image slices (e.g. /api/.../pages/0/image).
    * Forwarded to WordCell for optional crop thumbnail display.
    */
-  imageBaseUrl?: string;
+  imageBaseUrl?: string | undefined;
 }
 
 /**

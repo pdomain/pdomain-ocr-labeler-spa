@@ -52,7 +52,7 @@ interface DragState {
 
 interface WordImageCanvasProps {
   /** URL of the word image slice (PNG or JPEG). */
-  imageUrl?: string;
+  imageUrl?: string | undefined;
   /** Whether erase mode is currently active (from dialog state). */
   eraseMode?: boolean;
   /** External accumulator of erase rects — caller owns state and persists across navigations. */
@@ -377,16 +377,21 @@ function ImageLayer({ url, width, height }: ImageLayerProps) {
     imgRef.current = img;
   }
 
+  const hasImg = loaded && imgRef.current != null;
   return (
     <Rect
       x={0}
       y={0}
       width={width}
       height={height}
-      fill={loaded ? undefined : readCssToken("--bg-raised", "#1d1d24")}
-      fillPatternImage={loaded && imgRef.current ? imgRef.current : undefined}
-      fillPatternScaleX={loaded && imgRef.current ? width / imgRef.current.naturalWidth : 1}
-      fillPatternScaleY={loaded && imgRef.current ? height / imgRef.current.naturalHeight : 1}
+      {...(!loaded ? { fill: readCssToken("--bg-raised", "#1d1d24") } : {})}
+      {...(hasImg
+        ? {
+            fillPatternImage: imgRef.current!,
+            fillPatternScaleX: width / imgRef.current!.naturalWidth,
+            fillPatternScaleY: height / imgRef.current!.naturalHeight,
+          }
+        : {})}
     />
   );
 }

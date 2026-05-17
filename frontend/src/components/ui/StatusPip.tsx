@@ -14,7 +14,7 @@ export type StatusPipStatus = "exact" | "fuzzy" | "mismatch" | "ocr" | "gt";
 
 export interface StatusPipProps {
   status: StatusPipStatus;
-  label?: string;
+  label?: string | undefined;
 }
 
 const statusClasses: Record<StatusPipStatus, string> = {

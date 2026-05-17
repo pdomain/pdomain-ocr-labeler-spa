@@ -25,13 +25,15 @@ import { useState } from "react";
 
 export interface WordActionCallbacks {
   /** Called with "prev" or "next" */
-  onMerge?: (direction: "prev" | "next") => Promise<void>;
+  onMerge?: ((direction: "prev" | "next") => Promise<void>) | undefined;
   /** Called with split fraction (0–1) and axis ("h" | "v") */
-  onSplit?: (fraction: number, axis: "h" | "v") => Promise<void>;
+  onSplit?: ((fraction: number, axis: "h" | "v") => Promise<void>) | undefined;
   /** Called on word delete */
-  onDelete?: () => Promise<void>;
+  onDelete?: (() => Promise<void>) | undefined;
   /** Called with padding pixels and direction */
-  onCrop?: (direction: "above" | "below" | "left" | "right", padding: number) => Promise<void>;
+  onCrop?:
+    | ((direction: "above" | "below" | "left" | "right", padding: number) => Promise<void>)
+    | undefined;
 }
 
 interface WordActionRowsProps extends WordActionCallbacks {

@@ -48,13 +48,13 @@ interface WordEditDialogProps extends WordActionCallbacks {
   /** OCR text of each word in the current line (for 3-column preview). */
   lineWords: string[];
   /** URL of the current word's image slice (for the Konva canvas). */
-  wordImageUrl?: string;
+  wordImageUrl?: string | undefined;
   /** Whether erase mode is active (toggles Konva drag-erase). */
-  eraseMode?: boolean;
+  eraseMode?: boolean | undefined;
   /** Available style labels for the tag row. */
-  styleOptions?: string[];
+  styleOptions?: string[] | undefined;
   /** Available component labels for the tag row. */
-  componentOptions?: string[];
+  componentOptions?: string[] | undefined;
   /** Called when prev/next navigation is requested. */
   onNavigate: (target: DialogTarget) => void;
   /**

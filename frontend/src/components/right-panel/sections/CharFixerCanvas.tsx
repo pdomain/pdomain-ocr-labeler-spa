@@ -49,7 +49,7 @@ export interface CharFixerCanvasProps {
   /** Current per-range bboxes (image-pixel coords). */
   charBboxes: CharRangeBBox[];
   /** Optional URL of the cropped word image; falls back to a neutral fill. */
-  imageUrl?: string;
+  imageUrl?: string | undefined;
   /** Index of the currently-selected range (or null). */
   selectedIndex: number | null;
   /** Called when the user clicks a range rectangle (or its handles). */

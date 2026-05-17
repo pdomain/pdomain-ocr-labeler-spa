@@ -51,42 +51,42 @@ const PAGE_SOURCE_COLORS: Record<PageSource, string> = {
 
 interface PageActionsProps {
   /** True while any page mutation or background job is active. */
-  isBusy?: boolean;
+  isBusy?: boolean | undefined;
   /** Whether an edited image exists for this page (gates Reload OCR Edited). */
-  hasEditedImage?: boolean;
+  hasEditedImage?: boolean | undefined;
   /** Source lane for the current page data. */
-  pageSource?: PageSource | null;
+  pageSource?: PageSource | null | undefined;
   /** Human-readable provenance one-liner shown as the source badge tooltip.
    *  Assembled by the backend from saved_at + OCR engine + model names.
    *  When absent, the badge has no tooltip. */
-  provenanceSummary?: string | null;
+  provenanceSummary?: string | null | undefined;
   /** Display name for the current page (e.g. "page_001.png"). */
-  pageName?: string | null;
+  pageName?: string | null | undefined;
   /** Cumulative rotation applied to the current page (0 = original). */
-  rotationDegrees?: number;
+  rotationDegrees?: number | undefined;
   /** How the current rotation was determined. */
-  rotationSource?: RotationSource | null;
+  rotationSource?: RotationSource | null | undefined;
 
   /** Callback: user clicked Reload OCR. */
-  onReloadOcr?: () => void;
+  onReloadOcr?: (() => void) | undefined;
   /** Callback: user clicked Reload OCR (Edited). */
-  onReloadOcrEdited?: () => void;
+  onReloadOcrEdited?: (() => void) | undefined;
   /** Callback: user clicked Save Page. */
-  onSavePage?: () => void;
+  onSavePage?: (() => void) | undefined;
   /** Callback: user clicked Save Project. */
-  onSaveProject?: () => void;
+  onSaveProject?: (() => void) | undefined;
   /** Callback: user clicked Load Page. */
-  onLoadPage?: () => void;
+  onLoadPage?: (() => void) | undefined;
   /** Callback: user clicked Rematch GT. */
-  onRematchGt?: () => void;
+  onRematchGt?: (() => void) | undefined;
   /** Callback: user clicked Export. */
-  onExport?: () => void;
+  onExport?: (() => void) | undefined;
   /** Callback: user clicked Rotate CW (+90°). */
-  onRotateCw?: () => void;
+  onRotateCw?: (() => void) | undefined;
   /** Callback: user clicked Rotate CCW (-90°). */
-  onRotateCcw?: () => void;
+  onRotateCcw?: (() => void) | undefined;
   /** Callback: user clicked the rotation badge (revert auto rotation). */
-  onRotateRevert?: () => void;
+  onRotateRevert?: (() => void) | undefined;
 }
 
 /**

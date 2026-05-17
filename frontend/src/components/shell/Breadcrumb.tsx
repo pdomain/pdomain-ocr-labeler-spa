@@ -142,7 +142,7 @@ function blockLabel(blockId: string | undefined): string {
 
 export interface BreadcrumbProps {
   /** Current page payload (used for label resolution; not required for routing). */
-  page?: PagePayload;
+  page?: PagePayload | undefined;
 }
 
 export function Breadcrumb({ page }: BreadcrumbProps) {

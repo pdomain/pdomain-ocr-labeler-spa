@@ -46,18 +46,18 @@ export interface WordRefineNudgeRowsHandle {
 
 interface WordRefineNudgeRowsProps {
   /** Step size per nudge click (px). Default: 5 per spec §3.7. */
-  stepPx?: number;
+  stepPx?: number | undefined;
   /** Called when Refine is clicked. */
-  onRefine?: () => Promise<void>;
+  onRefine?: (() => Promise<void>) | undefined;
   /** Called when Expand+Refine is clicked. */
-  onExpandRefine?: () => Promise<void>;
+  onExpandRefine?: (() => Promise<void>) | undefined;
   /**
    * Called when Apply or Apply+Refine is clicked.
    * The component passes the accumulated nudge and whether refine is requested.
    */
-  onApply?: (nudge: PendingNudge, refineAfter: boolean) => Promise<void>;
+  onApply?: ((nudge: PendingNudge, refineAfter: boolean) => Promise<void>) | undefined;
   /** Called when Reset is clicked (clears nudge locally; parent may clear erase rects). */
-  onReset?: () => void;
+  onReset?: (() => void) | undefined;
 }
 
 // ---------------------------------------------------------------------------

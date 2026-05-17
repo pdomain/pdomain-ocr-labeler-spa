@@ -58,7 +58,7 @@ export type EraseOp = BrushOp | LassoOp | RectOp;
 
 export interface EraseCanvasProps {
   /** URL of the word image slice (optional — placeholder shown when absent). */
-  imageUrl?: string;
+  imageUrl?: string | undefined;
   /** Current tool selection (controlled by parent). */
   tool: EraseTool;
   /** Called when the user picks a different tool. */
@@ -263,7 +263,7 @@ export function EraseCanvas({
               y={0}
               width={width}
               height={height}
-              fill={imageUrl ? undefined : readCssToken("--bg-sunk", "#08080c")}
+              {...(!imageUrl ? { fill: readCssToken("--bg-sunk", "#08080c") } : {})}
             />
           </Layer>
 

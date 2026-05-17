@@ -105,11 +105,11 @@ interface PageImageCanvasProps {
    * (spec §4, §8). `null` or `undefined` renders an empty selection
    * (zero rects, sidecars at item-count=0).
    */
-  page?: PagePayload | null;
+  page?: PagePayload | null | undefined;
   /** Project ID for constructing POST URLs. */
-  projectId?: string;
+  projectId?: string | undefined;
   /** Page index (0-based) for constructing POST URLs. */
-  pageIndex?: number;
+  pageIndex?: number | undefined;
   /**
    * Called when a drag-select completes in "select" mode.
    * Receives the drag rect in display pixels and the modifier.
@@ -608,7 +608,7 @@ export default function PageImageCanvas({
                 width={dragRect.width}
                 height={dragRect.height}
                 stroke={modeRectColors[mode]}
-                fill={modeRectFills[mode]}
+                {...(modeRectFills[mode] !== undefined ? { fill: modeRectFills[mode] } : {})}
                 strokeWidth={2}
                 dash={[4, 2]}
                 listening={false}

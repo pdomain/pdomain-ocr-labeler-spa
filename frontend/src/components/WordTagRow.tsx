@@ -21,13 +21,13 @@ import { useState } from "react";
 
 interface WordTagRowProps {
   /** Available style labels (from backend metadata). */
-  styleOptions?: string[];
+  styleOptions?: string[] | undefined;
   /** Available component labels. */
-  componentOptions?: string[];
+  componentOptions?: string[] | undefined;
   /** Called with style + scope when Apply Style is clicked. */
-  onApplyStyle?: (style: string, scope: "whole" | "part") => Promise<void>;
+  onApplyStyle?: ((style: string, scope: "whole" | "part") => Promise<void>) | undefined;
   /** Called with component + enabled when Apply/Clear Component is clicked. */
-  onApplyComponent?: (component: string, enabled: boolean) => Promise<void>;
+  onApplyComponent?: ((component: string, enabled: boolean) => Promise<void>) | undefined;
 }
 
 // ---------------------------------------------------------------------------

@@ -428,7 +428,7 @@ function NodeRow({ flatNode, isSelected, isExpanded, onSelect, onToggle }: NodeR
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export interface HierarchyProps {
-  page?: PagePayload | null;
+  page?: PagePayload | null | undefined;
 }
 
 export function Hierarchy({ page }: HierarchyProps) {

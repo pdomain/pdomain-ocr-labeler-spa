@@ -50,16 +50,18 @@ export interface WordCellProps {
    * Called when the GT input is blurred and the value has changed.
    * Signature: (wordId, lineIndex, wordIndex, newText) => void
    */
-  onCommitGt?: (wordId: string, lineIndex: number, wordIndex: number, text: string) => void;
+  onCommitGt?:
+    | ((wordId: string, lineIndex: number, wordIndex: number, text: string) => void)
+    | undefined;
   /** Base URL for page image slices (e.g. /api/.../pages/0/image). When provided
    *  and word_id is set, a crop thumbnail is shown in row 2. */
-  imageBaseUrl?: string;
+  imageBaseUrl?: string | undefined;
   /**
    * Called when the pencil edit button is clicked.
    * Signature: (lineIndex, wordIndex) => void
    * Should select the word in the selection store and open the right panel.
    */
-  onEditWord?: (lineIndex: number, wordIndex: number) => void;
+  onEditWord?: ((lineIndex: number, wordIndex: number) => void) | undefined;
 }
 
 /**
