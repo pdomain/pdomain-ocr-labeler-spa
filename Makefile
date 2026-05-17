@@ -14,7 +14,7 @@ else
 
 .PHONY: help setup refresh-version install uninstall reset remove-venv lint fast-check format \
         pre-commit-check test integration e2e exercise-real build clean ci dev run \
-        frontend-install frontend-build frontend-dev frontend-test \
+        frontend-install frontend-build frontend-dev frontend-test frontend-knip \
         openapi-export upgrade-pd-book-tools upgrade-deps upgrade-deps-local \
         mise-download mise-setup mise-doctor \
         docker-build docker-run docker-shell \
@@ -187,6 +187,14 @@ frontend-test: ## Run the SPA's vitest suite (jsdom)
 	@$(call _npm,install)
 	@$(call _npm,test)
 
+frontend-knip: ## Run knip dead-code/unused-exports scan (non-blocking; CI informational)
+	@echo "Running knip dead-code scan..."
+	@if [ -f frontend/node_modules/.bin/knip ]; then \
+		$(call _npm,exec -- knip) || true; \
+	else \
+		echo "  [knip] not installed — run 'make frontend-install' to enable."; \
+	fi
+
 openapi-export: ## Regenerate frontend/src/api/types.ts from /openapi.json
 	@echo "Exporting OpenAPI schema and regenerating TS types..."
 	uv run python -c "import json, logging; logging.disable(logging.CRITICAL); from pd_ocr_labeler_spa.bootstrap import build_app; \
@@ -308,7 +316,7 @@ clean: ## Clean cache + build artifacts
 	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
 	rm -rf dist/ src/pd_ocr_labeler_spa/static/ frontend/dist/ 2>/dev/null || true
 
-ci: setup frontend-install pre-commit-check typecheck openapi-export frontend-build lint test frontend-test ## Full CI pipeline
+ci: setup frontend-install pre-commit-check typecheck openapi-export frontend-build lint test frontend-test frontend-knip ## Full CI pipeline
 
 # ---------------------------------------------------------------------------
 # Docker
