@@ -228,9 +228,29 @@ convention = "google"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+addopts = [
+    "-ra",                       # show short summary of all non-pass outcomes
+    "--strict-markers",          # fail on unknown markers
+    "--strict-config",           # fail on unknown pytest config keys
+    "--cov=pd_ocr_labeler_spa",
+    "--cov-branch",              # measure branch coverage
+    "--cov-report=term-missing:skip-covered",
+    "--cov-report=html",
+]
+pythonpath = ["src"]
 markers = [
     "integration: marks tests that require a live app stack (deselect with '-m not integration')",
     "slow: marks tests that call real OCR/DocTR and take more than a few seconds",
+]
+filterwarnings = [
+    # Treat all warnings as errors — surfaces deprecation issues at dev time.
+    "error",
+    # Unclosed sockets/event loops from TestClient async teardown.
+    # PytestUnraisableExceptionWarning wraps ResourceWarning from asyncio
+    # cleanup that races with pytest teardown — not actionable in test code.
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+    # Add new ignores below as new warnings surface — each with a comment
+    # explaining the package and why we tolerate it.
 ]
 
 [tool.basedpyright]
