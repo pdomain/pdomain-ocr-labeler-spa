@@ -68,6 +68,13 @@ repos:
     hooks:
     -   id: gitleaks
 
+# Commit-message linter. Config in .gitlint; rev in lockstep with pd-book-tools.
+-   repo: https://github.com/jorisroovers/gitlint
+    rev: v0.19.1
+    hooks:
+    -   id: gitlint
+        stages: [commit-msg]
+
 -   repo: local
     hooks:
     # B-11 + B-17: refresh hatch-vcs derived version after any
