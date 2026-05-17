@@ -18,13 +18,13 @@ log = logging.getLogger(__name__)
 
 # Module-level availability probe — evaluated once at import time.
 try:
-    from pd_book_tools.text.normalize import (  # type: ignore[import-untyped]
+    from pd_book_tools.text.normalize import (  # type: ignore[import-untyped]  # pyright: ignore[reportMissingImports]
         normalize_string as _pd_normalize,
     )
 
-    _AVAILABLE = True
+    _AVAILABLE: bool = True
 except ImportError:
-    _AVAILABLE = False
+    _AVAILABLE = False  # pyright: ignore[reportConstantRedefinition]
     _pd_normalize = None  # type: ignore[assignment]
 
 

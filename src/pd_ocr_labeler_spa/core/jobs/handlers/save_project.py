@@ -105,7 +105,7 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
         await runner.update_progress(job.job_id, current=0, total=0, message="No project loaded")
         return
 
-    data_root = settings.data_root  # type: ignore[attr-defined]
+    data_root = settings.data_root  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
 
     dirty = _dirty_page_indices(project_state)
     total = len(dirty)

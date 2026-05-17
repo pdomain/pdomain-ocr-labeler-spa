@@ -17,7 +17,7 @@ from pd_ocr_labeler_spa.core.models import WordMatch
 class IGlyphPredictor(Protocol):
     """Predict glyph annotations for a list of words."""
 
-    def predict(self, words: list[WordMatch]) -> list[dict | None]:
+    def predict(self, words: list[WordMatch]) -> list[dict[str, object] | None]:
         """Return one prediction dict (or None) per input word, same order."""
         ...
 
@@ -25,5 +25,5 @@ class IGlyphPredictor(Protocol):
 class NoneGlyphPredictor:
     """Default adapter — always returns None for every word."""
 
-    def predict(self, words: list[WordMatch]) -> list[dict | None]:
+    def predict(self, words: list[WordMatch]) -> list[dict[str, object] | None]:
         return [None] * len(words)

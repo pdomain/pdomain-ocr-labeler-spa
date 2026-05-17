@@ -121,12 +121,12 @@ class PageState:
     # onto ``WordMatch.char_bboxes`` in ``_page_payload``.
     # Persisted into ``word_attributes[key]["char_bboxes"]`` in the
     # saved envelope so they survive page reloads.
-    char_bboxes_map: dict = field(default_factory=dict)
+    char_bboxes_map: dict[str, object] = field(default_factory=dict)
     # Per-word char-range sidecar — keyed by ``"{line_index}_{word_index}"``.
     # Written by ``POST .../words/{li}/{wi}/char-ranges`` and surfaced
     # onto ``WordMatch.char_ranges`` in ``_page_payload``.
     # Mirrors the char_bboxes_map pattern; stored as list[dict] (API shape).
-    char_ranges_map: dict = field(default_factory=dict)
+    char_ranges_map: dict[str, object] = field(default_factory=dict)
 
 
 class ProjectState:

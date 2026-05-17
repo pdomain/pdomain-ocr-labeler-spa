@@ -74,7 +74,7 @@ class JobRunner:
         self._jobs: dict[str, Job] = {}
         self._queue: asyncio.Queue[Job] = asyncio.Queue()
         self._stop = asyncio.Event()
-        self._running_tasks: set[asyncio.Task] = set()
+        self._running_tasks: set[asyncio.Task[None]] = set()
         # Optional context dict for handlers — e.g. ``{"settings": settings}``.
         # Populated by ``build_app`` so handlers can access app-level config
         # without a full DI graph (handlers run outside FastAPI request context).

@@ -146,7 +146,7 @@ def configure_logging(log_format: LogFormat = "plain", level: int = logging.INFO
             root.removeHandler(handler)
 
     handler = logging.StreamHandler(stream=sys.stderr)
-    handler._pdlabeler_managed = True  # type: ignore[attr-defined]
+    handler._pdlabeler_managed = True  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
     handler.addFilter(RequestIdFilter())
 
     if log_format == "json":

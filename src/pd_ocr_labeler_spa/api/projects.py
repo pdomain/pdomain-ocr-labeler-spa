@@ -294,7 +294,7 @@ def _build_list_response(
         projects=projects,
         selected=selected,
         projects_root=projects_root,
-        config_source=config_source,  # type: ignore[arg-type]
+        config_source=config_source,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
     )
 
 

@@ -583,8 +583,8 @@ def _page_payload(
                     image_path,
                     source=page_source,
                     fuzz_threshold=_fuzz,
-                    char_bboxes_map=_char_bboxes_map if _char_bboxes_map else None,
-                    char_ranges_map=_char_ranges_map if _char_ranges_map else None,
+                    char_bboxes_map=_char_bboxes_map if _char_bboxes_map else None,  # pyright: ignore[reportArgumentType]
+                    char_ranges_map=_char_ranges_map if _char_ranges_map else None,  # pyright: ignore[reportArgumentType]
                 )
                 if _lms or _rec is not None:
                     page_record = _rec

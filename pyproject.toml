@@ -265,11 +265,13 @@ exclude = [
     "tests/e2e",
 ]
 
-# "standard" mode during initial migration; Task 8 upgrades to "recommended".
-# See workspace decision doc 2026-05-17-strict-linting.md.
-typeCheckingMode = "standard"
+# "recommended" is the workspace-canonical strict mode per 2026-05-17 decisions.
+# Catches unannotated functions, inferred-Any propagation, untyped decorators,
+# and missing return types that "standard" mode skips.
+typeCheckingMode = "recommended"
 # NOTE: failOnWarnings deferred — recommended mode surfaces stub warnings
-# from FastAPI/Starlette stubs that lag the runtime.
+# from FastAPI/Starlette/Pydantic stubs that lag the runtime. Enable
+# incrementally as stub coverage improves.
 # failOnWarnings = true
 
 # Import cycles are structural (adapter protocols, carrier closures, etc.)

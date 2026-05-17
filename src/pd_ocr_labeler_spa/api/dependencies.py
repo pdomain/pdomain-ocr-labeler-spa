@@ -90,19 +90,19 @@ def get_app_state(request: Request) -> AppState:
 def get_storage(request: Request) -> IStorage:
     """The configured ``IStorage`` impl (``filesystem`` in v1)."""
     storage = _state_attr(request, "storage")
-    return storage  # type: ignore[return-value]
+    return storage  # type: ignore[return-value]  # pyright: ignore[reportReturnType]
 
 
 def get_auth(request: Request) -> IAuth:
     """The configured ``IAuth`` impl (``NoneAuth`` in v1)."""
     auth = _state_attr(request, "auth")
-    return auth  # type: ignore[return-value]
+    return auth  # type: ignore[return-value]  # pyright: ignore[reportReturnType]
 
 
 def get_ocr_engine(request: Request) -> IOCREngine:
     """The configured ``IOCREngine`` impl (``LocalDoctrOCR`` in v1)."""
     ocr = _state_attr(request, "ocr_engine")
-    return ocr  # type: ignore[return-value]
+    return ocr  # type: ignore[return-value]  # pyright: ignore[reportReturnType]
 
 
 def get_active_project_carrier(request: Request) -> ActiveProjectCarrier:

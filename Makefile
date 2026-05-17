@@ -202,6 +202,9 @@ print(json.dumps(build_app().openapi(), indent=2))" > frontend/openapi.json
 # Lint / format / test / build
 # ---------------------------------------------------------------------------
 
+typecheck: ## Run basedpyright recommended on src/pd_ocr_labeler_spa (--level error, warnings suppressed)
+	uv run basedpyright src/pd_ocr_labeler_spa --level error
+
 lint: ## Run ruff + basedpyright + eslint + tsc --noEmit (backend + frontend)
 	uv run ruff check --select I --fix
 	uv run ruff check --fix
@@ -305,7 +308,7 @@ clean: ## Clean cache + build artifacts
 	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
 	rm -rf dist/ src/pd_ocr_labeler_spa/static/ frontend/dist/ 2>/dev/null || true
 
-ci: setup frontend-install pre-commit-check openapi-export frontend-build lint test frontend-test ## Full CI pipeline
+ci: setup frontend-install pre-commit-check typecheck openapi-export frontend-build lint test frontend-test ## Full CI pipeline
 
 # ---------------------------------------------------------------------------
 # Docker

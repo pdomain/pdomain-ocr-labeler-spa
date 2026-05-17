@@ -84,9 +84,9 @@ router = APIRouter(prefix="/api/ocr-config", tags=["ocr-config"])
 try:
     from pd_book_tools.ocr.rotation import detect_best_rotation as _detect_best_rotation  # noqa: F401
 
-    _AUTO_ROTATE_AVAILABLE = True
+    _AUTO_ROTATE_AVAILABLE: bool = True
 except ImportError:
-    _AUTO_ROTATE_AVAILABLE = False
+    _AUTO_ROTATE_AVAILABLE = False  # pyright: ignore[reportConstantRedefinition]
 
 MODEL_STORE_DIRNAME = "pd-ml-models"
 """Trainer-managed weights directory name. Mirror of legacy

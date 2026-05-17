@@ -255,7 +255,7 @@ def _materialise_traversable(traversable: object) -> tuple[Path, object] | None:
 
     stack = contextlib.ExitStack()
     try:
-        materialised = stack.enter_context(resources.as_file(traversable))  # type: ignore[arg-type]
+        materialised = stack.enter_context(resources.as_file(traversable))  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
     except (FileNotFoundError, ModuleNotFoundError, OSError):
         stack.close()
         return None
@@ -284,9 +284,8 @@ def _is_reserved(full_path: str) -> bool:
         if literal:
             if full_path == prefix:
                 return True
-        else:
-            if head == prefix:
-                return True
+        elif head == prefix:
+            return True
     return False
 
 

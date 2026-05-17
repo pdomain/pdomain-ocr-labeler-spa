@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
 
-def _sse_event(notif_dict: dict) -> str:
+def _sse_event(notif_dict: dict[str, object]) -> str:
     return f"event: notification\ndata: {json.dumps(notif_dict)}\n\n"
 
 

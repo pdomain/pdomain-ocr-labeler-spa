@@ -56,7 +56,7 @@ class _HasLines(Protocol):
     Used in tests that pass duck-typed stubs instead of real Page objects.
     """
 
-    lines: list
+    lines: list[object]
 
 
 # Default fuzzy-match threshold — mirrors legacy
@@ -120,7 +120,7 @@ def _word_to_word_match(
     word_obj: object,
     fuzz_threshold: float = _FUZZ_THRESHOLD,
     char_bboxes_map: dict[str, list[dict[str, int]]] | None = None,
-    char_ranges_map: dict[str, list[dict]] | None = None,
+    char_ranges_map: dict[str, list[dict[str, object]]] | None = None,
 ) -> WordMatch | None:
     """Convert one ``pd_book_tools.ocr.word.Word`` to a ``WordMatch``.
 
@@ -201,9 +201,9 @@ def _word_to_word_match(
             if raw_ranges is not None:
                 char_ranges = [
                     CharRange(
-                        start=int(r.get("start", 0)),
-                        end=int(r.get("end", 0)),
-                        styles=list(r.get("styles", [])),
+                        start=int(r.get("start", 0)),  # pyright: ignore[reportArgumentType]
+                        end=int(r.get("end", 0)),  # pyright: ignore[reportArgumentType]
+                        styles=list(r.get("styles", [])),  # pyright: ignore[reportArgumentType]
                     )
                     for r in raw_ranges
                     if isinstance(r, dict)
@@ -230,7 +230,7 @@ def _word_to_word_match(
 
 
 def _count_match_statuses(word_matches: list[WordMatch]) -> dict[MatchStatus, int]:
-    counts: dict[MatchStatus, int] = {s: 0 for s in MatchStatus}
+    counts: dict[MatchStatus, int] = dict.fromkeys(MatchStatus, 0)
     for wm in word_matches:
         counts[wm.match_status] = counts.get(wm.match_status, 0) + 1
     return counts
@@ -314,7 +314,7 @@ def page_to_line_matches(
     source: PageSource = PageSource.OCR,
     fuzz_threshold: float = _FUZZ_THRESHOLD,
     char_bboxes_map: dict[str, list[dict[str, int]]] | None = None,
-    char_ranges_map: dict[str, list[dict]] | None = None,
+    char_ranges_map: dict[str, list[dict[str, object]]] | None = None,
 ) -> tuple[PageRecord, list[LineMatch]]:
     """Convert a ``pd_book_tools.ocr.page.Page`` to ``(PageRecord, [LineMatch])``.
 

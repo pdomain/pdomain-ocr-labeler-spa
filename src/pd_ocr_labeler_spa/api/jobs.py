@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 _TERMINAL = {JobStatus.COMPLETE, JobStatus.ERROR, JobStatus.CANCELLED}
 
 
-def _runner_job_to_dict(job: RunnerJob) -> dict:
+def _runner_job_to_dict(job: RunnerJob) -> dict[str, object]:
     return job.model_dump(mode="json")
 
 
@@ -35,7 +35,7 @@ def _job_not_found(job_id: str) -> JSONResponse:
     )
 
 
-def _job_snapshot(job: RunnerJob) -> dict:
+def _job_snapshot(job: RunnerJob) -> dict[str, object]:
     ev_type = job.status.value if job.status in _TERMINAL else "progress"
     return {
         "type": ev_type,
@@ -47,7 +47,7 @@ def _job_snapshot(job: RunnerJob) -> dict:
     }
 
 
-def _sse_line(event: str, data: dict) -> str:
+def _sse_line(event: str, data: dict[str, object]) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
@@ -92,7 +92,7 @@ async def job_events(
     """
     job = runner.get_job(job_id)
     if job is None:
-        return JSONResponse(  # type: ignore[return-value]
+        return JSONResponse(  # type: ignore[return-value]  # pyright: ignore[reportReturnType]
             status_code=404,
             content=ApiError(
                 error="job_not_found",
