@@ -114,8 +114,8 @@ export default tseslint.config(
       "@typescript-eslint/no-inferrable-types": "warn",
       // consistent-generic-constructors (2): Map<K,V> vs new Map<K,V>().
       "@typescript-eslint/consistent-generic-constructors": "warn",
-      // no-explicit-any (src/): promote to warn from previous "off".
-      "@typescript-eslint/no-explicit-any": "warn",
+      // no-explicit-any: error in src/ (test files still "off" via override below).
+      "@typescript-eslint/no-explicit-any": "error",
     },
   },
   {
