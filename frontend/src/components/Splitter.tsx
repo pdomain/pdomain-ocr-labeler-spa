@@ -110,6 +110,7 @@ export function Splitter({ direction, left, right, className }: SplitterProps) {
       >
         {left}
       </div>
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- separator role captures mouse drag events for resize; keyboard resize is handled via parent-level hotkeys */}
       <div
         data-testid="splitter-divider"
         role="separator"

@@ -216,9 +216,7 @@ function ToolButton({ testId, label, active, onClick }: ToolButtonProps) {
     <button
       type="button"
       data-testid={testId}
-      role="radio"
       aria-pressed={active}
-      aria-checked={active}
       className={[
         "px-2 h-6 text-[11px] transition-colors",
         active ? "bg-accent text-accent-ink" : "bg-raised text-ink-2 hover:bg-sunk",

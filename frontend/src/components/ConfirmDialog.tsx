@@ -44,6 +44,7 @@ export function ConfirmDialog({
   if (!open) return null;
 
   return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- dialog backdrop click-to-dismiss is standard modal pattern; Esc handled via useHotkey at call sites
     <div
       role="alertdialog"
       aria-modal="true"
@@ -65,14 +66,16 @@ export function ConfirmDialog({
           >
             {cancelLabel}
           </button>
+          {/* eslint-disable jsx-a11y/no-autofocus -- confirm button auto-focus improves keyboard UX for destructive-action confirmation dialogs */}
           <button
+            autoFocus
             data-testid="confirm-dialog-confirm"
             onClick={onConfirm}
             className="px-3 py-1.5 text-sm rounded bg-status-mismatch text-accent-ink hover:opacity-90 transition-opacity"
-            autoFocus
           >
             {confirmLabel}
           </button>
+          {/* eslint-enable jsx-a11y/no-autofocus */}
         </div>
       </div>
     </div>

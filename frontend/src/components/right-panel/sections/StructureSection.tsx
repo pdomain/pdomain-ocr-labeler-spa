@@ -62,12 +62,12 @@ function computeGap(current: BBox | undefined, next: BBox | undefined): number {
 
 interface NeighborCardProps {
   word: WordMatch | null;
-  role: "prev" | "current" | "next";
+  position: "prev" | "current" | "next";
   testId: string;
 }
 
-function NeighborCard({ word, role, testId }: NeighborCardProps) {
-  const isCurrent = role === "current";
+function NeighborCard({ word, position, testId }: NeighborCardProps) {
+  const isCurrent = position === "current";
   const text = word ? wordText(word) : null;
 
   const baseClasses =
@@ -78,8 +78,8 @@ function NeighborCard({ word, role, testId }: NeighborCardProps) {
 
   return (
     <div data-testid={testId} className={`${baseClasses} ${variantClasses}`}>
-      {role === "prev" && <span className="text-[9px] text-ink-4 mb-0.5">← prev</span>}
-      {role === "next" && <span className="text-[9px] text-ink-4 mb-0.5">next →</span>}
+      {position === "prev" && <span className="text-[9px] text-ink-4 mb-0.5">← prev</span>}
+      {position === "next" && <span className="text-[9px] text-ink-4 mb-0.5">next →</span>}
       {text ? (
         <span className="text-[12px] font-mono truncate max-w-full">{text}</span>
       ) : (
@@ -245,9 +245,9 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
       <div className="flex flex-col gap-1.5">
         <p className="text-[10px] text-ink-3 uppercase tracking-wide">Context</p>
         <div className="flex gap-1.5">
-          <NeighborCard word={prev} role="prev" testId="structure-prev-word" />
-          <NeighborCard word={word} role="current" testId="structure-current-word" />
-          <NeighborCard word={next} role="next" testId="structure-next-word" />
+          <NeighborCard word={prev} position="prev" testId="structure-prev-word" />
+          <NeighborCard word={word} position="current" testId="structure-current-word" />
+          <NeighborCard word={next} position="next" testId="structure-next-word" />
         </div>
       </div>
 

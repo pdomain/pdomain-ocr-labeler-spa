@@ -42,6 +42,7 @@ export function QuickSearch() {
   }
 
   return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- cosmetic click-to-focus wrapper; the inner <input> is the real interactive element with full keyboard support
     <div
       data-testid="quick-search"
       className="flex items-center gap-1.5 h-7 px-2 rounded border border-border-2 bg-bg-sunk text-ink-3 min-w-[160px] max-w-[240px] w-full cursor-text"

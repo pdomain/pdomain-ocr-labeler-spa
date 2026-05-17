@@ -125,9 +125,10 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
 
       {/* Numeric input grid */}
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-        <label className="flex flex-col gap-0.5">
+        <label htmlFor="bbox-input-x" className="flex flex-col gap-0.5">
           <span className="text-[10px] text-ink-3 uppercase tracking-wide">X</span>
           <Input
+            id="bbox-input-x"
             data-testid="bbox-input-x"
             type="number"
             size="sm"
@@ -140,9 +141,10 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
             }}
           />
         </label>
-        <label className="flex flex-col gap-0.5">
+        <label htmlFor="bbox-input-y" className="flex flex-col gap-0.5">
           <span className="text-[10px] text-ink-3 uppercase tracking-wide">Y</span>
           <Input
+            id="bbox-input-y"
             data-testid="bbox-input-y"
             type="number"
             size="sm"
@@ -155,9 +157,10 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
             }}
           />
         </label>
-        <label className="flex flex-col gap-0.5">
+        <label htmlFor="bbox-input-w" className="flex flex-col gap-0.5">
           <span className="text-[10px] text-ink-3 uppercase tracking-wide">W</span>
           <Input
+            id="bbox-input-w"
             data-testid="bbox-input-w"
             type="number"
             size="sm"
@@ -170,9 +173,10 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
             }}
           />
         </label>
-        <label className="flex flex-col gap-0.5">
+        <label htmlFor="bbox-input-h" className="flex flex-col gap-0.5">
           <span className="text-[10px] text-ink-3 uppercase tracking-wide">H</span>
           <Input
+            id="bbox-input-h"
             data-testid="bbox-input-h"
             type="number"
             size="sm"
@@ -192,9 +196,13 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
         <p className="text-[10px] text-ink-3 uppercase tracking-wide">Nudge</p>
         <div className="flex items-center gap-1.5 flex-wrap">
           {/* Step input */}
-          <label className="flex items-center gap-1 text-[10px] text-ink-3">
+          <label
+            htmlFor="bbox-nudge-step"
+            className="flex items-center gap-1 text-[10px] text-ink-3"
+          >
             <span>Step</span>
             <Input
+              id="bbox-nudge-step"
               data-testid="bbox-nudge-step"
               type="number"
               size="sm"

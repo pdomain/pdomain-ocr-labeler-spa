@@ -562,6 +562,7 @@ export function Hierarchy({ page }: HierarchyProps) {
         role="tree"
         aria-label="Page structure hierarchy"
         className="flex-1 overflow-y-auto py-1"
+        tabIndex={0}
         onKeyDown={handleKeyDown}
       >
         {flatAll.length === 0 ? (

@@ -216,6 +216,7 @@ export function ExportDialog({
       : null;
 
   return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- dialog backdrop click-to-dismiss; Esc handled in parent via keyboard event
     <div
       role="dialog"
       aria-modal="true"
@@ -226,6 +227,7 @@ export function ExportDialog({
         if (e.target === e.currentTarget && !running) onClose();
       }}
     >
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- stopPropagation on inner panel to prevent backdrop dismissal; not interactive itself */}
       <div
         className="bg-bg-surface rounded-lg border border-border-2 w-full max-w-lg mx-4 flex flex-col overflow-hidden max-h-[90vh]"
         onClick={(e) => {
@@ -320,8 +322,14 @@ export function ExportDialog({
 
           {/* Component filter */}
           <div>
-            <label className="text-xs font-semibold text-ink-2 mb-1 block">Component Filter</label>
+            <label
+              htmlFor="export-component-filter"
+              className="text-xs font-semibold text-ink-2 mb-1 block"
+            >
+              Component Filter
+            </label>
             <select
+              id="export-component-filter"
               value={componentFilter}
               onChange={(e) => {
                 setComponentFilter(e.target.value);

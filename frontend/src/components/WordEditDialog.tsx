@@ -147,6 +147,7 @@ export function WordEditDialog({
   }
 
   return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- dialog backdrop click-to-dismiss; Esc handled via onKeyDown in WordEditDialog
     <div
       role="dialog"
       aria-modal="true"
@@ -157,6 +158,7 @@ export function WordEditDialog({
         if (e.target === e.currentTarget) onClose();
       }}
     >
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- stopPropagation on inner panel prevents backdrop dismissal; not interactive itself */}
       <div
         className="bg-bg-surface rounded-lg border border-border-2 w-full max-w-2xl mx-4 flex flex-col overflow-hidden"
         onClick={(e) => {

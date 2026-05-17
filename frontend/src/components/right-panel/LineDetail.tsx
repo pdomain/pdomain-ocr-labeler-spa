@@ -163,10 +163,14 @@ function GTRow({ line, projectId, pageIndex }: GTRowProps) {
 
   return (
     <div className="px-3 py-2 border-b border-border-1 flex-shrink-0">
-      <label className="block text-[10px] text-ink-3 mb-1 uppercase tracking-wide">
+      <label
+        htmlFor="line-detail-gt-input"
+        className="block text-[10px] text-ink-3 mb-1 uppercase tracking-wide"
+      >
         Ground Truth
       </label>
       <input
+        id="line-detail-gt-input"
         type="text"
         data-testid="line-detail-gt-input"
         value={gtText}

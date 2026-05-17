@@ -530,8 +530,11 @@ export default function PageImageCanvas({
     }
   }
 
+  /* eslint-disable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex */
+  // image viewport acts as keyboard-navigable canvas; tabIndex + onKeyDown required for hotkey dispatch (rebox/erase/select modes)
   return (
     <div
+      tabIndex={0}
       ref={wrapperRef}
       className="page-image-canvas relative select-none outline-none focus-visible:ring-2 focus-visible:ring-accent"
       style={{
@@ -545,9 +548,9 @@ export default function PageImageCanvas({
       data-mode={mode}
       role="img"
       aria-label="Page image viewport"
-      tabIndex={0}
       onKeyDown={handleKeyDown}
     >
+      {/* eslint-enable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex */}
       {/* Inner scroll container — wraps Stage only so pinned overlays are
           not clipped when the user scrolls in 100% zoom mode. */}
       <div className="w-full h-full overflow-auto">

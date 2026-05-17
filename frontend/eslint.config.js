@@ -28,19 +28,17 @@ export default tseslint.config(
     ignores: ["src/**/*.test.{ts,tsx}", "src/test/**/*.{ts,tsx}"],
     rules: {
       ...jsxA11y.flatConfigs.recommended.rules,
-      // Deferred — canvas/non-native interactive elements; a11y followup needed.
-      "jsx-a11y/click-events-have-key-events": "warn",
-      "jsx-a11y/no-noninteractive-element-interactions": "warn",
-      "jsx-a11y/no-static-element-interactions": "warn",
-      "jsx-a11y/no-noninteractive-tabindex": "warn",
-      "jsx-a11y/no-autofocus": "warn",
-      "jsx-a11y/label-has-associated-control": "warn",
-      // Deferred — abstract ARIA roles on Konva wrappers; proper ARIA fixup needed.
-      "jsx-a11y/aria-role": "warn",
-      // Deferred — focusable interactive elements on canvas tree; a11y followup needed.
-      "jsx-a11y/interactive-supports-focus": "warn",
-      // Deferred — aria-pressed on role=radio; a11y followup needed.
-      "jsx-a11y/role-supports-aria-props": "warn",
+      // Re-promoted from warn → error (2026-05-17, mirrors pd-prep-for-pgdp commit d9c2dcc).
+      // Per-site suppressions added inline where genuinely not fixable.
+      "jsx-a11y/click-events-have-key-events": "error",
+      "jsx-a11y/no-noninteractive-element-interactions": "error",
+      "jsx-a11y/no-static-element-interactions": "error",
+      "jsx-a11y/no-noninteractive-tabindex": "error",
+      "jsx-a11y/no-autofocus": "error",
+      "jsx-a11y/label-has-associated-control": "error",
+      "jsx-a11y/aria-role": "error",
+      "jsx-a11y/interactive-supports-focus": "error",
+      "jsx-a11y/role-supports-aria-props": "error",
     },
   },
   // Type-aware rules scoped to TS/TSX source files only (non-test).

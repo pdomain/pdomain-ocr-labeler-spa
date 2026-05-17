@@ -183,6 +183,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
   }
 
   return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- dialog backdrop click-to-dismiss; Esc handled via onKeyDown in this component
     <div
       role="dialog"
       aria-modal="true"
@@ -193,6 +194,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
         if (e.target === e.currentTarget && !loading) handleCancel();
       }}
     >
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- stopPropagation on inner panel prevents backdrop dismissal; not interactive itself */}
       <div
         className="bg-bg-surface rounded-lg border border-border-2 max-w-md w-full mx-4 p-5 space-y-4"
         onClick={(e) => {
@@ -203,9 +205,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
 
         {/* Current path display */}
         <div className="space-y-1">
-          <label className="text-xs font-medium text-ink-3 uppercase tracking-wide">
-            Current path
-          </label>
+          <p className="text-xs font-medium text-ink-3 uppercase tracking-wide">Current path</p>
           <div
             data-testid="source-folder-current-path-label"
             className="px-3 py-1.5 text-sm bg-bg-raised border border-border-1 rounded font-mono break-all"
@@ -240,9 +240,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
 
         {/* Directory listing */}
         <div className="space-y-1">
-          <label className="text-xs font-medium text-ink-3 uppercase tracking-wide">
-            Subdirectories
-          </label>
+          <p className="text-xs font-medium text-ink-3 uppercase tracking-wide">Subdirectories</p>
           <div className="border border-border-1 rounded max-h-40 overflow-y-auto bg-bg-raised">
             {listLoading ? (
               <div data-testid="fs-ls-loading" className="px-3 py-2 text-xs text-ink-4 italic">
@@ -271,10 +269,16 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
 
         {/* Path input */}
         <div className="space-y-1">
-          <label className="text-xs font-medium text-ink-3 uppercase tracking-wide">
+          <label
+            htmlFor="source-folder-path-input"
+            className="text-xs font-medium text-ink-3 uppercase tracking-wide"
+          >
             Type a path
           </label>
+          {/* eslint-disable jsx-a11y/no-autofocus -- dialog opens focus to path input for immediate keyboard navigation */}
           <input
+            autoFocus
+            id="source-folder-path-input"
             type="text"
             data-testid="source-folder-path-input"
             aria-label="Source folder path"
@@ -286,8 +290,8 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             disabled={loading}
             placeholder="/path/to/projects"
             className="w-full px-3 py-1.5 text-sm border border-border-2 bg-bg-sunk rounded font-mono focus:outline-none focus:border-accent disabled:opacity-50"
-            autoFocus
           />
+          {/* eslint-enable jsx-a11y/no-autofocus */}
         </div>
 
         {/* Open-typed / Use-current row */}

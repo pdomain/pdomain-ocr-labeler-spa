@@ -162,6 +162,7 @@ export function OCRConfigModal({
     "Update pd-book-tools to enable these options.";
 
   return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- dialog backdrop click-to-dismiss; Esc handled in onClose caller
     <div
       role="dialog"
       aria-modal="true"
