@@ -88,3 +88,17 @@ All are canonical source of truth. Milestone acceptance gates:
 - `../pd-book-tools/` — upstream dependency.
 - `../pd-prep-for-pgdp/` — structural reference (FastAPI + React single-wheel pattern).
 - `../pd-ocr-labeler/` — legacy NiceGUI UI being replaced; parity tracked via GitHub issues (`label:hifi:P1..P5`).
+
+## GH issues
+
+Cross-cut work tasks are tracked as GH issues in
+**`ConcaveTrillion/ocr-container-meta`** (not in this repo's own tracker).
+Plans under `docs/superpowers/plans/` in the workspace root are synced there
+via `/decompose-spec --sync`. Milestone naming: `spec: <plan-basename> (#N)`.
+
+When shipping a plan task:
+
+- Before starting: `gh issue view <N> --repo ConcaveTrillion/ocr-container-meta`
+- After completing: `gh issue close <N> --repo ConcaveTrillion/ocr-container-meta`
+- List open tasks:
+  `gh issue list --repo ConcaveTrillion/ocr-container-meta --milestone "spec: <name> (#N)" --state open`
