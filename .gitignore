@@ -44,9 +44,11 @@ frontend/coverage/
 /node_modules/
 /.vite/
 # Incremental TypeScript build cache — regenerated on every `tsc -b`,
-# never load-bearing for reproducibility (unlike package-lock.json,
-# which IS committed).
+# never load-bearing for reproducibility.
 frontend/*.tsbuildinfo
+# npm generates this when someone runs `npm install` instead of `pnpm install`.
+# pnpm-lock.yaml is the canonical lockfile; package-lock.json must not co-exist.
+frontend/package-lock.json
 
 # Playwright
 test-results/

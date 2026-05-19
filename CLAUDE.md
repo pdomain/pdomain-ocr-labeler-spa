@@ -8,7 +8,7 @@ milestone-by-milestone implementation (M0…M9). Architecture: `docs/architectur
 | target | does |
 |---|---|
 | `make setup AI=1` | `uv sync` + pre-commit hooks + hatch-vcs version refresh |
-| `make frontend-install AI=1` | `npm install` inside `frontend/` |
+| `make frontend-install AI=1` | `pnpm install --frozen-lockfile` inside `frontend/` |
 | `make test AI=1` | pytest — unit + integration, excludes `e2e/` |
 | `make frontend-test AI=1` | vitest (jsdom) |
 | `make e2e AI=1` | Playwright E2E (requires `playwright install chromium`) |

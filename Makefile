@@ -139,27 +139,27 @@ mise-doctor: ## [optional] Show resolved tool versions (mise binary + PATH fallb
 	fi
 	@echo "-- PATH (your interactive shell) --"
 	@command -v node   >/dev/null 2>&1 && echo "  node:   $$(node --version)"   || echo "  node:   not on PATH"
-	@command -v npm    >/dev/null 2>&1 && echo "  npm:    $$(npm --version)"    || echo "  npm:    not on PATH"
+	@command -v pnpm   >/dev/null 2>&1 && echo "  pnpm:   $$(pnpm --version)"   || echo "  pnpm:   not on PATH"
 	@command -v uv     >/dev/null 2>&1 && echo "  uv:     $$(uv --version)"     || echo "  uv:     not on PATH"
 	@command -v python >/dev/null 2>&1 && echo "  python: $$(python --version)" || echo "  python: not on PATH"
 
 # ---------------------------------------------------------------------------
 # Frontend
 # ---------------------------------------------------------------------------
-# Each target prefers `mise exec` (so node version matches mise.toml). Falls
-# back to PATH `npm` for contributors who manage Node themselves.
+# Each target prefers `mise exec` (so node/pnpm version matches mise.toml). Falls
+# back to PATH `pnpm` for contributors who manage Node themselves.
 
 define _npm
 	if $(HAVE_MISE); then \
 		echo "  (via $(MISE) exec)"; \
-		( cd frontend && $(MISE) exec -- npm $(1) ); \
-	elif command -v npm >/dev/null 2>&1; then \
-		( cd frontend && npm $(1) ); \
+		( cd frontend && $(MISE) exec -- pnpm $(1) ); \
+	elif command -v pnpm >/dev/null 2>&1; then \
+		( cd frontend && pnpm $(1) ); \
 	else \
-		echo "no npm available."; \
+		echo "no pnpm available."; \
 		echo "   Options:"; \
 		echo "     - run 'make mise-setup' (downloads mise locally, no shell edit)"; \
-		echo "     - install Node 24 yourself"; \
+		echo "     - install pnpm yourself: npm install -g pnpm"; \
 		echo "     - add the devcontainer node feature in .devcontainer/devcontainer.json"; \
 		exit 1; \
 	fi
@@ -167,7 +167,7 @@ endef
 
 frontend-install: ## Install frontend dependencies
 	@echo "Installing frontend deps..."
-	@$(call _npm,install)
+	@$(call _npm,install --frozen-lockfile)
 
 frontend-build: ## Build the SPA into src/pd_ocr_labeler_spa/static/ (so the wheel includes it)
 	@echo "Building frontend..."

@@ -12,6 +12,7 @@
 
 [tools]
 node = "24"     # Active LTS — matches pd-prep-for-pgdp
+pnpm = "11"     # Frontend package manager; pnpm-lock.yaml is canonical
 python = "3.13"
 
 # uv is intentionally NOT managed by mise. The shared devcontainer image
