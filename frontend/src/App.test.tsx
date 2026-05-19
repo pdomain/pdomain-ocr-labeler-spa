@@ -6,11 +6,34 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { server } from "./test/server";
 
-// App.tsx statically imports ProjectPage, which transitively imports
-// react-konva (via PageImageCanvas). jsdom can't construct an
-// HTMLCanvasElement so Konva's node entry tries to `require('canvas')`
-// and fails at module-load. Mock react-konva module-wide so the import
-// resolves to plain divs.
+// Phase 2.2: PageImageCanvas now imports @concavetrillion/pd-ui/canvas which
+// bundles react-konva. Mock pd-ui/canvas first so konva's Node.js entry never
+// loads (it would require('canvas'), a native addon unavailable in jsdom).
+// The react-konva mock below is kept for any other transitive imports.
+vi.mock("@concavetrillion/pd-ui/canvas", () => ({
+  PageImageCanvas: ({
+    page,
+    children,
+  }: {
+    src?: string;
+    page?: { width: number; height: number };
+    words?: unknown[];
+    children?: {
+      selection?: (p: Record<string, unknown>) => React.ReactNode;
+      tool?: (p: Record<string, unknown>) => React.ReactNode;
+    };
+  }) => (
+    <div
+      data-testid="image-viewport"
+      data-width={page?.width}
+      data-height={page?.height}
+      tabIndex={0}
+    >
+      {children?.selection?.({})}
+      {children?.tool?.({})}
+    </div>
+  ),
+}));
 vi.mock("react-konva", () => ({
   Stage: ({
     children,

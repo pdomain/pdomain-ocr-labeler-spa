@@ -1,27 +1,22 @@
 // PageImageCanvas.tsx — image viewport with four interaction modes (#197, #198, #297, #302)
 //
+// Phase 2.2: Replaced local Konva Stage + layers with @concavetrillion/pd-ui's
+// PageImageCanvas as the canvas host. Labeler-specific layer code lives in
+// slot fills (children.selection, children.tool). DOM overlays (mode pill,
+// zoom controls, bulk actions, event-capture div) are rendered as siblings
+// alongside pd-ui's canvas output.
+//
 // Spec: specs/21-konva-renderer.md §4 (component layout), §7 (drag modes),
 //       §9 (cursors), §12 (testids), §13 (edge cases — empty state).
+//       docs/specs/2026-05-16-cross-cut-design.md §7.2 (Phase 2.2).
 //
-// spec-21-A2 (#297) replaced the DOM-stub viewport with a real react-konva
-// <Stage> host carrying the 6-layer skeleton from spec §4:
-//
-//   image / overlay-paragraphs / overlay-lines / overlay-words / selection / drag
-//
-// spec-21-A6 (#302) migrates drag handlers from DOM events on the wrapping
-// viewport div onto the Konva <Stage> per spec §7. The handlers receive
-// `KonvaEventObject<MouseEvent>` and read pointer position via
-// `e.target.getStage().getPointerPosition()`; modifiers come from `e.evt`
-// (the underlying DOM event) and are captured at mousedown so a later
-// shift/ctrl release mid-drag doesn't change the resolved modifier. Mousemove
-// is rAF-throttled through `scheduleDragUpdate` (spec §7 / #301) so 60 Hz
-// mouse movement turns into one state update per animation frame.
-//
-// A Konva <Rect> in the `drag` <Layer> renders the live drag-preview with
-// stroke `#2563eb` (blue-600) and `dash=[4, 2]` per spec §9. A DOM sidecar
-// `<div data-testid="ocr-drag-rect">` mirrors its position so Playwright can
-// locate the drag rect via a CSS selector (Konva nodes can't carry
-// `data-testid` — spec §12).
+// Layer slot mapping (pd-ui layer name → labeler content):
+//   image     — page bitmap (managed entirely by pd-ui)
+//   underlay  — (unused by labeler)
+//   overlay   — (unused by labeler; word bboxes go via BBoxOverlay in selection slot)
+//   selection — BBoxOverlay for paragraphs / lines / words + selection highlight
+//   tool      — drag-preview Rect (mode-coloured, dashed)
+//   hud       — (unused — DOM HUD elements are positioned outside the Stage)
 //
 // Interaction modes (via viewportStore):
 //   select   — drag box-select; fires onBoxSelect(rect, modifier) (#197)
@@ -30,11 +25,30 @@
 //   erase    — drag erase rect; fires onErasePixels(rect) (#198)
 //
 // Testid layout (spec §12):
-//   image-viewport       — wrapper div around the Stage (also empty-state branch)
+//   image-viewport       — pd-ui's outer wrapper div (carries data-width / data-height)
 //   image-stage          — sidecar div mirroring Stage geometry
-//   konva-drag-preview   — the Konva drag-preview Rect inside the `drag` Layer
-//   ocr-drag-rect        — DOM sidecar mirroring drag-rect position (Playwright)
+//   image-event-overlay  — transparent event-capture div (carries data-mode + cursor)
+//   konva-drag-preview   — the Konva drag-preview Rect inside the `tool` Layer
+//   ocr-drag-rect        — DOM sidecar mirroring drag-rect position (Playwright, driver-contract)
 //   bbox-overlay-*       — sidecars rendered by BBoxOverlay (#298)
+//   canvas-mode-pill     — mode indicator pill (top-left overlay)
+//   canvas-zoom-controls — zoom buttons (bottom-left overlay)
+//   canvas-bulk-actions  — bulk-action strip (top-right overlay, ≥2 words selected)
+//
+// Capability gaps vs plain local implementation (shims):
+//   GAP-1: pd-ui manages its own internal drag for basic selection (mode=select).
+//          The labeler overrides this entirely via the event-capture overlay div
+//          which captures all mouse events. pd-ui's internal drag never fires.
+//          TODO: when pd-ui adds an `onDragComplete(rect)` callback, remove the
+//          event-capture overlay and wire callbacks through pd-ui instead.
+//   GAP-2: pd-ui's selection is word-ID-based (Set<string>). The labeler uses
+//          paragraph/line/word index tuples in selectionStore. The selection slot
+//          renders the labeler's BBoxOverlay directly from selectionStore; pd-ui's
+//          selection prop is not used (uncontrolled).
+//          TODO: when pd-ui adds a paragraph/line selection model, migrate.
+//   GAP-3: pd-ui's image-viewport outer div carries data-testid="image-viewport"
+//          but NOT data-mode or cursor style. Those attributes live on the
+//          image-event-overlay div instead. See §12 note in driver-contract.md.
 //
 // Modifier keys captured at mousedown: plain = replace, Shift = remove,
 // Ctrl/Cmd = toggle. Rebox + erase reset to "select" on a successful drag;
@@ -43,18 +57,16 @@
 // Issue #295 (Option C): Mismatches-only word bbox overlay.
 // When matchFilterMode is "mismatches_only" (read from useUiPrefs), the
 // overlay-words Layer shows all word bboxes but dims exact/validated words
-// to MISMATCH_DIM_OPACITY (0.2) via BBoxItem.dimmed. Mismatch/fuzzy/
-// unmatched/unvalidated words remain at full opacity.
+// to MISMATCH_DIM_OPACITY (0.2) via BBoxItem.dimmed.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { KonvaEventObject } from "konva/lib/Node";
-import { Layer, Rect, Stage } from "react-konva";
+import { Rect } from "react-konva";
+import { PageImageCanvas as PdUiPageImageCanvas } from "@concavetrillion/pd-ui/canvas";
 import type { components } from "../api/types";
 import { getStageDimensions, type EncodedDims } from "../lib/canvas-utils";
 import type { BBox } from "../lib/coords";
 import { expandSelection } from "../lib/selection-expand";
 import { BBoxOverlay, type BBoxItem } from "./BBoxOverlay";
-import { PageImage } from "./PageImage";
 import { scheduleDragUpdate } from "../lib/rafSchedule";
 import { readCssToken, hexToRgba } from "../hooks/useLayerColors";
 import { setDragRect, clearSelection, selectionStore, selectWord } from "../stores/selection-store";
@@ -177,20 +189,25 @@ function buildModeRectFills(): Partial<Record<ViewportMode, string>> {
   };
 }
 
-/**
- * Image viewport canvas — Konva Stage host with four interaction modes.
- *
- * The wrapping div carries `data-testid="image-viewport"` and captures DOM
- * mouse events for drag interactions; the Konva `<Stage>` lives inside it
- * with `data-testid="image-stage"` for Playwright introspection. Drag
- * handlers will migrate to Konva Stage events in spec-21-C.
- */
 /** Tag every BBoxItem with `selected: true` so BBoxOverlay's selected
  * branch lights the SELECTION_STROKE_WIDTH (3 px) path per spec §6/§8. */
 function markSelected(items: BBoxItem[]): BBoxItem[] {
   return items.map((item) => ({ ...item, selected: true }));
 }
 
+/**
+ * Image viewport canvas — pd-ui Konva Stage host with four interaction modes.
+ *
+ * Phase 2.2: The Konva Stage and image layer are now managed by
+ * @concavetrillion/pd-ui's PageImageCanvas. Labeler-specific layers
+ * (selection overlays, drag preview) live in slot fills. DOM overlays
+ * (mode pill, zoom controls, bulk actions) and the event-capture div
+ * are positioned absolutely alongside the pd-ui canvas.
+ *
+ * The testid `image-viewport` is carried by pd-ui's outer wrapper div.
+ * The testid `image-event-overlay` is our event-capture div (carries data-mode + cursor).
+ * The testid `ocr-drag-rect` and `.ocr-drag-rect` CSS class are kept for driver compat.
+ */
 export default function PageImageCanvas({
   imageUrl,
   encoded,
@@ -208,6 +225,14 @@ export default function PageImageCanvas({
   const [mode, setMode] = useState<ViewportMode>(viewportStore.getState().mode);
   const [railTarget, setRailTarget] = useState<RailTarget>(railStore.getState().target);
 
+  // clearDrag is defined here (before useViewportHotkeys and the early return)
+  // because onCancelMode in useViewportHotkeys calls it.
+  function clearDrag() {
+    dragStateRef.current = null;
+    setLocalDragRect(null);
+    setDragRect(null);
+  }
+
   // Build per-mode color maps from CSS tokens (called once per render).
   const modeRectColors = buildModeRectColors();
   const modeRectFills = buildModeRectFills();
@@ -221,7 +246,6 @@ export default function PageImageCanvas({
   }, []);
 
   // Subscribe to rail target changes (Slice 13 — target-scoped bbox opacity).
-  // railStore.subscribe takes a no-arg Listener; read state via getState().
   useEffect(() => {
     const unsub = railStore.subscribe(() => {
       setRailTarget(railStore.getState().target);
@@ -230,8 +254,6 @@ export default function PageImageCanvas({
   }, []);
 
   // Sync rail interaction mode to viewportStore so rail buttons drive canvas behavior.
-  // Use direct setState (not toggle helpers) so the result is deterministic regardless of
-  // prior mode — toggles have flip semantics that break if the guard drifts.
   useEffect(() => {
     const unsub = railStore.subscribe(() => {
       const railMode = railStore.getState().mode;
@@ -260,7 +282,6 @@ export default function PageImageCanvas({
   }, []);
 
   // Subscribe to matchFilterMode from useUiPrefs (Issue #295).
-  // Triggers a re-render when the user toggles the Mismatches-only filter.
   const [matchFilterMode, setMatchFilterModeState] = useState(
     () => useUiPrefs.getState().matchFilterMode,
   );
@@ -278,8 +299,9 @@ export default function PageImageCanvas({
     });
   }, []);
 
-  // Container size — measured via ResizeObserver so fitScale stays correct
-  // when the pane is resized (P5.d).
+  // Container size — measured via ResizeObserver on our outer wrapperRef div
+  // so our event coordinate conversion matches pd-ui's fit scale. Must be
+  // declared before any early return (Rules of Hooks).
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
   useEffect(() => {
     const el = wrapperRef.current;
@@ -300,31 +322,8 @@ export default function PageImageCanvas({
     };
   }, []);
 
-  // Focus the wrapper on mount so keyboard hotkeys (Esc / Shift+…) work
-  // immediately without an explicit click. The Stage cannot itself receive
-  // focus, so the wrapping div carries tabIndex=0 + focus-visible:ring-2
-  // (spec 21 §10, #304).
-  useEffect(() => {
-    wrapperRef.current?.focus();
-  }, []);
-
-  // Spec 21 §10 viewport hotkeys (#304). Wired to useUiPrefs (layer
-  // visibility + selection mode) and viewportStore (erase/add-word toggle,
-  // cancel mode). The hook listens at document scope; the focus wrapper
-  // gives the user a visible focus ring while these are armed.
-  //
-  // Called unconditionally before any early return so the Rules of Hooks
-  // are satisfied — `enabled: true` even on the empty-state branch is
-  // harmless because the keys still call store actions; the legacy parity
-  // is "global once mounted", which matches the document-scope behaviour
-  // the #237 hook already had. Modals self-disable global hotkeys via
-  // their own useHotkey scope/options.
   // Spec §4/§8 (spec-21-A5, #300): expand PagePayload.selection into
-  // per-layer BBoxItem arrays for the `selection` Konva layer. Memoised
-  // on the page reference so unchanged pages don't re-walk line_matches.
-  // Items are marked `selected: true` so BBoxOverlay's selected branch
-  // upgrades strokeWidth to SELECTION_STROKE_WIDTH=3 (spec §6).
-  // Called unconditionally before any early return per Rules of Hooks.
+  // per-layer BBoxItem arrays for the `selection` Konva layer.
   const expandedSelection = useMemo(() => {
     if (!page) return { paragraphs: [], lines: [], words: [] };
     const e = expandSelection(page);
@@ -335,10 +334,7 @@ export default function PageImageCanvas({
     };
   }, [page]);
 
-  // Issue #295: Word bbox overlay items for the overlay-words Layer.
-  // Builds BBoxItems from page.line_matches, applying per-item `dimmed`
-  // when matchFilterMode is "mismatches_only". Exact + validated words
-  // are dimmed; mismatch/fuzzy/unmatched/unvalidated words stay at full opacity.
+  // Issue #295: Word bbox overlay items for the overlay-words layer.
   const wordOverlayItems = useMemo<BBoxItem[]>(() => {
     const lineMatches = page?.line_matches ?? [];
     const isMismatchOnly = matchFilterMode === "mismatches_only";
@@ -357,6 +353,8 @@ export default function PageImageCanvas({
     return items;
   }, [page, matchFilterMode]);
 
+  // Spec 21 §10 viewport hotkeys (#304).
+  // Called unconditionally before any early return (Rules of Hooks).
   useViewportHotkeys({
     enabled: true,
     layerVisibility: useUiPrefs.getState().layerVisibility,
@@ -395,25 +393,8 @@ export default function PageImageCanvas({
 
   const dims = getStageDimensions(encoded);
 
-  // P5.d zoom: compute effective scale from canvasZoom + container size.
-  // canvasZoom === 0  → fit-to-container (scale ≤ 1.0 so it never upscales)
-  // canvasZoom === 1.0 → natural/100% (current legacy behaviour)
-  const fitScale =
-    containerSize.w > 0 && containerSize.h > 0
-      ? Math.min(containerSize.w / dims.width, containerSize.h / dims.height, 1.0)
-      : 1.0;
-  const effectiveScale = canvasZoom === 0 ? fitScale : canvasZoom;
-
-  function readStagePos(e: KonvaEventObject<MouseEvent>): { x: number; y: number } | null {
-    const stage = e.target?.getStage?.();
-    const pos = stage?.getPointerPosition();
-    if (!pos) return null;
-    // Convert screen-pixel coords → Konva/image coordinate space.
-    // getPointerPosition() returns pixels relative to the stage container;
-    // the stage has scaleX/Y = effectiveScale, so divide to get image coords.
-    const s = effectiveScale || 1;
-    return { x: pos.x / s, y: pos.y / s };
-  }
+  // Synthetic page shape for pd-ui (only width/height needed; pd-ui CanvasPage interface).
+  const pdUiPage = { width: dims.width, height: dims.height };
 
   function computeRect(start: DragState, end: { x: number; y: number }): BBox {
     return {
@@ -424,29 +405,41 @@ export default function PageImageCanvas({
     };
   }
 
-  function clearDrag() {
-    dragStateRef.current = null;
-    setLocalDragRect(null);
-    setDragRect(null);
+  // ── Event-capture overlay handlers ─────────────────────────────────────────
+  // The event-capture overlay sits above the pd-ui Stage and intercepts all
+  // mouse events. This overrides pd-ui's internal drag (GAP-1 shim): pd-ui's
+  // Stage never sees mouse events because our overlay captures them first.
+  // Pointer position is read from the overlay's bounding rect so coordinates
+  // are in Stage-space (the overlay exactly covers the Stage area).
+
+  function readOverlayPos(e: React.MouseEvent, scale: number): { x: number; y: number } {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = (e.clientX - rect.left) / scale;
+    const y = (e.clientY - rect.top) / scale;
+    return { x, y };
   }
 
-  function handleStageMouseDown(e: KonvaEventObject<MouseEvent>) {
-    const pos = readStagePos(e);
-    if (!pos) return;
+  // P5.d zoom: effective scale derived from canvasZoom and container size.
+  // containerSize is measured above (before early return) to satisfy Rules of Hooks.
+  const fitScale =
+    containerSize.w > 0 && containerSize.h > 0
+      ? Math.min(containerSize.w / dims.width, containerSize.h / dims.height, 1.0)
+      : 1.0;
+  const effectiveScale = canvasZoom === 0 ? fitScale : canvasZoom;
+
+  function handleOverlayMouseDown(e: React.MouseEvent) {
+    const pos = readOverlayPos(e, effectiveScale);
     dragStateRef.current = {
       startX: pos.x,
       startY: pos.y,
-      // Capture modifier at mousedown per spec §7.
-      modifier: resolveModifier(e.evt),
+      modifier: resolveModifier(e),
     };
     setLocalDragRect(null);
   }
 
-  function handleStageMouseMove(e: KonvaEventObject<MouseEvent>) {
+  function handleOverlayMouseMove(e: React.MouseEvent) {
     if (!dragStateRef.current) return;
-    const pos = readStagePos(e);
-    if (!pos) return;
-    // rAF-throttle the React state update (spec §7 / #301).
+    const pos = readOverlayPos(e, effectiveScale);
     scheduleDragUpdate(() => {
       const start = dragStateRef.current;
       if (!start) return;
@@ -456,19 +449,16 @@ export default function PageImageCanvas({
     });
   }
 
-  function handleStageMouseUp(e: KonvaEventObject<MouseEvent>) {
+  function handleOverlayMouseUp(e: React.MouseEvent) {
     const start = dragStateRef.current;
     if (!start) return;
-    const pos = readStagePos(e) ?? { x: start.startX, y: start.startY };
+    const pos = readOverlayPos(e, effectiveScale);
     const rect = computeRect(start, pos);
     const isTrivial = rect.width <= 2 && rect.height <= 2;
     const modifier = start.modifier;
     clearDrag();
 
     if (isTrivial) {
-      // Treat a trivial drag (≤2px) as a point click.
-      // Hit-test word bboxes (display-pixel coords) against the click position.
-      // On a hit, select the word and open the right panel.
       if (mode === "select") {
         const { x: cx, y: cy } = pos;
         const hit = wordOverlayItems.find(
@@ -480,9 +470,7 @@ export default function PageImageCanvas({
         );
         if (hit) {
           const parts = hit.id.split("-").map(Number);
-          // parts always has ≥2 elements (id is "lineIdx-wordIdx") — non-null safe.
           selectWord(parts[0]!, parts[1]!);
-          // Open the right panel so WordDetail becomes visible
           useUiPrefs.setState({ rightPanelOpen: true });
         }
       }
@@ -496,128 +484,87 @@ export default function PageImageCanvas({
       }
       case "rebox": {
         onRebox?.(rect);
-        // Reset to select mode after rebox
         exitToSelectMode();
         break;
       }
       case "add-word": {
         onAddWord?.(rect);
-        // Stay in add-word mode for multi-add (no reset)
         break;
       }
       case "erase": {
         onErasePixels?.(rect);
-        // Reset to select mode after erase
         exitToSelectMode();
         break;
       }
     }
   }
 
-  function handleStageMouseLeave() {
+  function handleOverlayMouseLeave() {
     if (dragStateRef.current) {
-      // Drag escaped the Stage area — abort it without firing the callback (spec §13).
       clearDrag();
     }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Escape") {
-      clearSelection();
-      clearDrag();
-      // Return to select mode on Escape
-      exitToSelectMode();
-    }
-  }
+  // Note: keyboard handling (Escape, Shift+E, etc.) is provided by useViewportHotkeys
+  // which listens at document scope. No inline onKeyDown needed on the wrapper div.
 
-  /* eslint-disable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex */
-  // image viewport acts as keyboard-navigable canvas; tabIndex + onKeyDown required for hotkey dispatch (rebox/erase/select modes)
   return (
     <div
-      tabIndex={0}
       ref={wrapperRef}
-      className="page-image-canvas relative select-none outline-none focus-visible:ring-2 focus-visible:ring-accent"
-      style={{
-        width: "100%",
-        height: "100%",
-        cursor: MODE_CURSORS[mode],
-      }}
-      data-width={dims.width}
-      data-height={dims.height}
-      data-testid="image-viewport"
-      data-mode={mode}
-      role="img"
-      aria-label="Page image viewport"
-      onKeyDown={handleKeyDown}
+      className="page-image-canvas relative select-none"
+      style={{ width: "100%", height: "100%" }}
     >
-      {/* eslint-enable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex */}
-      {/* Inner scroll container — wraps Stage only so pinned overlays are
-          not clipped when the user scrolls in 100% zoom mode. */}
-      <div className="w-full h-full overflow-auto">
-        {/* Sidecar div mirroring Stage geometry (spec §12 — Konva nodes
-            cannot themselves carry testids in jsdom or Playwright). */}
-        <div
-          data-testid="image-stage"
-          data-width={dims.width}
-          data-height={dims.height}
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            inset: 0,
-            pointerEvents: "none",
-            visibility: "hidden",
-          }}
-        />
+      {/* ── pd-ui PageImageCanvas — Konva Stage host ──────────────────────────
+          Provides: image layer, Stage setup, ResizeObserver for container size,
+          focus management (tabIndex=0 + focus() on mount), context provider.
+          Renders outer div with data-testid="image-viewport" (driver contract §2.7).
+          data-width / data-height on that div come from pdUiPage.width/height.
+          The image-stage sidecar and image-event-overlay below handle the
+          remaining testid / attribute requirements from spec §12. */}
+      <PdUiPageImageCanvas
+        src={imageUrl}
+        page={pdUiPage}
+        words={[]}
+        initialZoom={canvasZoom}
+        fitOnMount={canvasZoom === 0}
+      >
+        {{
+          // ── selection slot: labeler BBoxOverlay layers ──────────────────
+          // Rendered inside Konva Layer name="selection" by pd-ui.
+          // Replaces the local overlay-paragraphs / overlay-lines /
+          // overlay-words / selection layers from the previous implementation.
+          selection: () => (
+            <>
+              {/* Word overlay (#295 — mismatches filter) */}
+              <BBoxOverlay
+                layer="words"
+                items={wordOverlayItems}
+                visible={useUiPrefs.getState().layerVisibility.word}
+              />
+              {/* Selection highlight overlays (Slice 13 — rail target scoping) */}
+              <BBoxOverlay
+                layer="selection-paragraphs"
+                items={expandedSelection.paragraphs}
+                dimmed={railTarget !== "block"}
+              />
+              <BBoxOverlay
+                layer="selection-lines"
+                items={expandedSelection.lines}
+                dimmed={railTarget !== "line"}
+              />
+              <BBoxOverlay
+                layer="selection-words"
+                items={expandedSelection.words}
+                dimmed={railTarget !== "word"}
+              />
+            </>
+          ),
 
-        {/* Konva Stage + 6-layer skeleton from spec §4. Drag handlers live on
-            the Stage per spec §7; mousemove is rAF-throttled (spec §7 / #301).
-            P5.d: scaleX/scaleY drive zoom; Stage width/height are the scaled
-            visual dimensions; data-width/data-height on the sidecar retain the
-            unscaled natural size for driver inspection. */}
-        <Stage
-          width={dims.width * effectiveScale}
-          height={dims.height * effectiveScale}
-          scaleX={effectiveScale}
-          scaleY={effectiveScale}
-          onMouseDown={handleStageMouseDown}
-          onMouseMove={handleStageMouseMove}
-          onMouseUp={handleStageMouseUp}
-          onMouseLeave={handleStageMouseLeave}
-        >
-          <Layer name="image" listening={false}>
-            <PageImage url={imageUrl} width={dims.width} height={dims.height} />
-          </Layer>
-          <Layer name="overlay-paragraphs" listening={false} />
-          <Layer name="overlay-lines" listening={false} />
-          <Layer name="overlay-words" listening={false}>
-            {/* Issue #295: word bbox overlay with per-item dimming for mismatches filter */}
-            <BBoxOverlay
-              layer="words"
-              items={wordOverlayItems}
-              visible={useUiPrefs.getState().layerVisibility.word}
-            />
-          </Layer>
-          <Layer name="selection" listening={false}>
-            {/* Slice 13: active target layer renders full opacity; others dimmed.
-              "block" target maps to paragraph layer (closest available). */}
-            <BBoxOverlay
-              layer="selection-paragraphs"
-              items={expandedSelection.paragraphs}
-              dimmed={railTarget !== "block"}
-            />
-            <BBoxOverlay
-              layer="selection-lines"
-              items={expandedSelection.lines}
-              dimmed={railTarget !== "line"}
-            />
-            <BBoxOverlay
-              layer="selection-words"
-              items={expandedSelection.words}
-              dimmed={railTarget !== "word"}
-            />
-          </Layer>
-          <Layer name="drag">
-            {dragRect && (
+          // ── tool slot: drag-preview Rect ────────────────────────────────
+          // Rendered inside Konva Layer name="tool" by pd-ui.
+          // Replaces the local `drag` Layer Rect.
+          tool: () =>
+            dragRect ? (
               <Rect
                 data-testid="konva-drag-preview"
                 x={dragRect.x}
@@ -631,15 +578,52 @@ export default function PageImageCanvas({
                 listening={false}
                 perfectDrawEnabled={false}
               />
-            )}
-          </Layer>
-        </Stage>
-      </div>
-      {/* end inner scroll container */}
+            ) : null,
+        }}
+      </PdUiPageImageCanvas>
 
-      {/* Drag-rect sidecar — invisible element for Playwright CSS selector targeting only.
-          The Konva <Rect> in the stage layer is the actual visual.
-          Coordinates are stage-space and do NOT match wrapper-space, so no visual styling. */}
+      {/* ── image-stage sidecar (spec §12) ────────────────────────────────────
+          Mirrors Stage geometry so tests and Playwright can introspect natural
+          dimensions without diving into Konva's internal canvas nodes. */}
+      <div
+        data-testid="image-stage"
+        data-width={dims.width}
+        data-height={dims.height}
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          visibility: "hidden",
+        }}
+      />
+
+      {/* ── event-capture overlay (GAP-1 shim) ────────────────────────────────
+          Absolutely positioned over the entire canvas area. Captures all mouse
+          events so pd-ui's internal Stage drag never fires. Carries data-mode
+          (used by tests + Playwright) and cursor style (spec §9).
+          data-testid="image-event-overlay" — not a driver-contract testid;
+          used only by Vitest. The driver-contract testid is "image-viewport"
+          (on pd-ui's outer div) and ".ocr-drag-rect" (the DOM sidecar below). */}
+      <div
+        data-testid="image-event-overlay"
+        data-mode={mode}
+        style={{
+          position: "absolute",
+          inset: 0,
+          cursor: MODE_CURSORS[mode],
+        }}
+        onMouseDown={handleOverlayMouseDown}
+        onMouseMove={handleOverlayMouseMove}
+        onMouseUp={handleOverlayMouseUp}
+        onMouseLeave={handleOverlayMouseLeave}
+        aria-hidden="true"
+      />
+
+      {/* ── Drag-rect sidecar (driver contract) ───────────────────────────────
+          Invisible DOM element for Playwright CSS selector targeting only.
+          CSS class `.ocr-drag-rect` preserved per docs/architecture/13-driver-contract.md §2.
+          Coordinates are stage-space (not wrapper-space). */}
       {dragRect && (
         <div
           data-testid="ocr-drag-rect"
@@ -654,7 +638,8 @@ export default function PageImageCanvas({
         />
       )}
 
-      {/* Mode-indicator pill (P5.d, Gap 24) — top-left overlay. */}
+      {/* ── Mode-indicator pill (P5.d, Gap 24) ───────────────────────────────
+          Top-left overlay. Positioned outside the Stage (DOM sibling). */}
       <div
         data-testid="canvas-mode-pill"
         className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold pointer-events-none select-none"
@@ -672,7 +657,8 @@ export default function PageImageCanvas({
         {MODE_LABELS[mode]}
       </div>
 
-      {/* Zoom controls (P5.d) — bottom-left overlay. */}
+      {/* ── Zoom controls (P5.d) ──────────────────────────────────────────────
+          Bottom-left overlay. Positioned outside the Stage (DOM sibling). */}
       <div
         data-testid="canvas-zoom-controls"
         className="absolute bottom-2 left-2 flex items-center gap-1 pointer-events-auto"
@@ -703,7 +689,8 @@ export default function PageImageCanvas({
         </button>
       </div>
 
-      {/* Bulk-actions strip (P5.d, Gap 24) — shown when 2+ words selected. */}
+      {/* ── Bulk-actions strip (P5.d, Gap 24) ────────────────────────────────
+          Shown when 2+ words selected. Top-right overlay. */}
       {selectedWordCount >= 2 && (
         <div
           data-testid="canvas-bulk-actions"

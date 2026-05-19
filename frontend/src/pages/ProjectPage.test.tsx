@@ -39,7 +39,34 @@ vi.mock("react-router-dom", async (importOriginal) => {
 });
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
-// Mock react-konva so the PageImageCanvas subtree renders as simple divs.
+// Phase 2.2: PageImageCanvas now imports @concavetrillion/pd-ui/canvas which
+// bundles react-konva. Mock pd-ui/canvas first to prevent konva's Node.js
+// entry from trying to require('canvas'), a native addon not in jsdom.
+vi.mock("@concavetrillion/pd-ui/canvas", () => ({
+  PageImageCanvas: ({
+    page,
+    children,
+  }: {
+    src?: string;
+    page?: { width: number; height: number };
+    words?: unknown[];
+    children?: {
+      selection?: (p: Record<string, unknown>) => React.ReactNode;
+      tool?: (p: Record<string, unknown>) => React.ReactNode;
+    };
+  }) => (
+    <div
+      data-testid="image-viewport"
+      data-width={page?.width}
+      data-height={page?.height}
+      tabIndex={0}
+    >
+      {children?.selection?.({})}
+      {children?.tool?.({})}
+    </div>
+  ),
+}));
+// Mock react-konva for any remaining transitive imports.
 vi.mock("react-konva", () => ({
   Stage: ({
     children,
