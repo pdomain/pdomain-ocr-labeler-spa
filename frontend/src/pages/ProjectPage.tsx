@@ -53,6 +53,7 @@ import { toast } from "../lib/toast";
 import { useProject } from "../hooks/useProject";
 import { usePage } from "../hooks/usePage";
 import { useJobProgress } from "../hooks/useJobProgress";
+import { useJobCompletionInvalidation } from "../hooks/useJobCompletionInvalidation";
 import {
   useReloadOcr,
   useReloadOcrEdited,
@@ -267,6 +268,19 @@ export default function ProjectPage() {
 
   // ── QueryClient (for explicit invalidation after job-completion / saves) ─
   const qc = useQueryClient();
+
+  // ── Terminal-status invalidation (#377) ────────────────────────────────
+  // Mutations such as `useReloadOcr` / `useReloadOcrEdited` / `useSaveProject`
+  // return a 202 + `job_id`; their `onSettled` fires on that 202 — long before
+  // OCR has actually run. The shared hook watches `jobProgress.status` and
+  // re-invalidates the page query once the SSE terminal event arrives, so
+  // the worklist / canvas refresh when the job actually completes.
+  useJobCompletionInvalidation({
+    activeJobId,
+    jobProgress,
+    setActiveJobId,
+    invalidationKey: ["page", projectId, idx0],
+  });
 
   // ── Mutations ──────────────────────────────────────────────────────────
   // `projectId` may be undefined on first render before the URL resolves;
