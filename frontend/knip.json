@@ -3,5 +3,5 @@
   "entry": ["vite.config.ts", "src/main.tsx"],
   "project": ["src/**/*.{ts,tsx}"],
   "ignore": ["src/api/types.ts"],
-  "ignoreDependencies": []
+  "ignoreDependencies": ["@concavetrillion/pd-ui"]
 }
