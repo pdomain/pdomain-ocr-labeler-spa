@@ -236,7 +236,7 @@ pre-commit-check: ## Run pre-commit on all files
 	uv run pre-commit run --all-files
 
 test: ## Run pytest (excludes e2e/ and slow/integration markers)
-	uv run pytest tests/ -v --ignore=tests/e2e -m "not slow and not integration"
+	uv run pytest tests/ -v --ignore=tests/e2e -m "not slow and not integration" -n auto
 
 integration: ## Run slow/integration tests (real DocTR OCR pipeline, ~10 min)
 	uv run pytest tests/ -v --ignore=tests/e2e -m "slow or integration"
