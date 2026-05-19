@@ -31,6 +31,7 @@
     "src/pd_ocr_labeler_spa/static/**",
     ".pytest_cache/**",
     "docs/plans/**",
+    "docs/archive/**",
     "docs/superpowers/plans/**"
   ]
 }
