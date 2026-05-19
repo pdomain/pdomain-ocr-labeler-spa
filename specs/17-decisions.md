@@ -1232,8 +1232,7 @@ then eslint must be installed" to "`lint` must exist".
 Releases only. `install.sh` / `install.ps1` already pull from the
 Release; PyPI is not a hard requirement. Distribution will route
 through the workspace's self-hosted PEP 503 index at
-`ConcaveTrillion/pd-index` (consistent with other pd-* repos) once
-that index repo is built; the `release.yml` workflow stays
+`ConcaveTrillion/pd-index-pip` (consistent with other pd-* repos); the `release.yml` workflow stays
 PyPI-token-free, and the existing release-workflow tests continue to
 forbid `PYPI_TOKEN` references. OIDC trusted publishing (option B)
 remains a future option but isn't being wired now.
@@ -1244,13 +1243,13 @@ remains a future option but isn't being wired now.
   (workspace decision 2026-05-06).
 - GitHub Releases do not require PyPI API tokens; no token management
   for a tool that is not yet public.
-- `pd-index` (self-hosted PEP 503) allows `pip install` from the org
+- `pd-index-pip` (self-hosted PEP 503) allows `pip install` from the org
   index without PyPI registration.
 
 **Alternatives considered.**
 
 - Publish directly to PyPI with OIDC trusted publishing. Rejected:
-  not all pd-* repos are public yet; the pd-index pattern is the
+  not all pd-* repos are public yet; the pd-index-pip pattern is the
   agreed workspace standard; PyPI can be added later without breaking
   the existing install scripts.
 - Manual wheel distribution (no release automation). Rejected: the
