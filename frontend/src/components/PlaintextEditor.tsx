@@ -13,7 +13,7 @@ import type { components } from "../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
 
-export type PlaintextSource = "gt" | "ocr";
+type PlaintextSource = "gt" | "ocr";
 
 interface PlaintextEditorProps {
   source: PlaintextSource;

@@ -84,7 +84,7 @@ const STATIC_EXTRAS: RegistryEntry[] = [
 const _entries: RegistryEntry[] = [...buildBridgedEntries(), ...STATIC_EXTRAS];
 
 /** Group metadata (label + display order). */
-export const HOTKEY_GROUP_DEFS: HotkeyGroupDef[] = [
+const HOTKEY_GROUP_DEFS: HotkeyGroupDef[] = [
   { id: "selection", label: "Selection", entries: [] },
   { id: "navigation", label: "Navigation", entries: [] },
   { id: "editing", label: "Editing", entries: [] },
@@ -96,36 +96,13 @@ export const HOTKEY_GROUP_DEFS: HotkeyGroupDef[] = [
 type Listener = () => void;
 const _listeners = new Set<Listener>();
 
-/** Stable snapshot cache — invalidated on every notify(). */
+/** Stable snapshot cache — computed once for the static registry. */
 let _snapshot: HotkeyGroupDef[] | null = null;
-
-function notify() {
-  _snapshot = null;
-  _listeners.forEach((fn) => {
-    fn();
-  });
-}
-
-/**
- * Register additional hotkeys at runtime (e.g. from a hook on mount).
- * Returns a cleanup function that removes the entries.
- */
-export function registerHotkeys(entries: RegistryEntry[]): () => void {
-  _entries.push(...entries);
-  notify();
-  return () => {
-    for (const entry of entries) {
-      const idx = _entries.indexOf(entry);
-      if (idx !== -1) _entries.splice(idx, 1);
-    }
-    notify();
-  };
-}
 
 /**
  * Returns all registered entries for a given group, sorted by `order`.
  */
-export function getGroupEntries(group: HotkeyGroup): RegistryEntry[] {
+function getGroupEntries(group: HotkeyGroup): RegistryEntry[] {
   return _entries
     .filter((e) => e.group === group)
     .sort((a, b) => (a.order ?? 99) - (b.order ?? 99));

@@ -16,7 +16,7 @@ export const RAIL_TARGET_STORAGE_KEY = "pdl.rail.target";
 const VALID_TARGETS = new Set<string>(["block", "para", "line", "word"]);
 const VALID_MODES = new Set<string>(["view", "region", "annotate", "erase"]);
 
-export interface RailState {
+interface RailState {
   target: RailTarget;
   mode: RailMode;
   setTarget: (target: RailTarget) => void;

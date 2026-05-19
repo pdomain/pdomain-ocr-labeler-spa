@@ -37,8 +37,6 @@ import type { components } from "../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
 
-export type SelectionModifier = "replace" | "remove" | "toggle";
-
 export interface SelectionState {
   // ── Legacy multi-select arrays ───────────────────────────────────────────
   /** Selected paragraph indices. */

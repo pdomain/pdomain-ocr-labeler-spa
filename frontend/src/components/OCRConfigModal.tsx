@@ -58,11 +58,6 @@ export interface NormalizeSettings {
   normalize_profile: string;
 }
 
-export interface AutoRotateSettings {
-  auto_rotate_on_load: boolean;
-  auto_rotate_method: AutoRotateMethod;
-}
-
 interface OCRConfigModalProps {
   open: boolean;
   /** Current normalize settings from AppConfig. */
@@ -403,5 +398,3 @@ export function OCRConfigModal({
     </div>
   );
 }
-
-export default OCRConfigModal;

@@ -1020,23 +1020,3 @@ function LineItemCard({ line }: { line: LineMatch }) {
     </button>
   );
 }
-
-// LineItemRow is kept for compatibility but ItemsView now uses "flat" mode with cards.
-export function LineItemRow({ line }: { line: LineMatch }) {
-  return (
-    <button
-      type="button"
-      data-testid={`block-detail-line-row-${line.line_index}`}
-      onClick={() => {
-        selectLine(line.line_index);
-      }}
-      className="w-full flex items-center gap-2 px-2 py-1 text-left border-b border-border-1/30 hover:bg-bg-raised/60 transition-colors"
-    >
-      <StatusPip status={statusPip(line.overall_match_status)} />
-      <span className="flex-1 truncate text-[11px] font-mono text-ink-1">
-        {line.ocr_line_text || `Line ${line.line_index + 1}`}
-      </span>
-      <span className="text-[10px] text-ink-4 tabular-nums">{line.line_index + 1}</span>
-    </button>
-  );
-}

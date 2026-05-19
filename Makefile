@@ -187,12 +187,13 @@ frontend-test: ## Run the SPA's vitest suite (jsdom)
 	@$(call _npm,install)
 	@$(call _npm,test)
 
-frontend-knip: ## Run knip dead-code/unused-exports scan (non-blocking; CI informational)
+frontend-knip: ## Run knip dead-code/unused-exports scan (blocking; CI gate)
 	@echo "Running knip dead-code scan..."
 	@if [ -f frontend/node_modules/.bin/knip ]; then \
-		$(call _npm,exec -- knip) || true; \
+		$(call _npm,exec -- knip); \
 	else \
 		echo "  [knip] not installed — run 'make frontend-install' to enable."; \
+		exit 1; \
 	fi
 
 openapi-export: ## Regenerate frontend/src/api/types.ts from /openapi.json

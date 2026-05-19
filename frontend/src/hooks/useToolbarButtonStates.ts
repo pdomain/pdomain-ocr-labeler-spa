@@ -8,13 +8,13 @@ export interface Selection {
   selected_words: [number, number][]; // [line_idx, word_idx]
 }
 
-export interface WordValidationInfo {
+interface WordValidationInfo {
   line_index: number;
   word_index: number;
   is_validated: boolean;
 }
 
-export interface LineValidationInfo {
+interface LineValidationInfo {
   line_index: number;
   paragraph_index: number | null;
   validated_word_count: number;

@@ -14,8 +14,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { components } from "../api/types";
 
-export type JobStatus = components["schemas"]["JobStatus"];
-export type JobProgress = components["schemas"]["JobProgress"];
+type JobStatus = components["schemas"]["JobStatus"];
+type JobProgress = components["schemas"]["JobProgress"];
 
 export interface JobProgressEvent {
   job_id: string;

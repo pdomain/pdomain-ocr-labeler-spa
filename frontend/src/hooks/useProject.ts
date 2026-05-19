@@ -14,7 +14,6 @@
 // which does `project.model_dump(mode="json")` directly.
 
 import { useQuery } from "@tanstack/react-query";
-import type { components } from "../api/types";
 
 /**
  * The flat Project type returned by GET /api/projects/{project_id}.
@@ -36,9 +35,6 @@ export interface ProjectResponse {
   include_images: boolean;
   copied_images: boolean;
 }
-
-// Re-export for consumers that just need the schema type alias.
-export type { components };
 
 /** Throw on non-2xx; return parsed JSON on success. */
 async function apiFetch<T>(path: string): Promise<T> {

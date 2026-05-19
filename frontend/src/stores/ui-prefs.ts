@@ -29,11 +29,7 @@ export interface LayerVisibility {
 export type MatchFilter = "unvalidated" | "mismatched" | "all";
 
 /** Spec 22 §8 cycle order: unvalidated → mismatched → all → unvalidated. */
-export const MATCH_FILTER_CYCLE: readonly MatchFilter[] = [
-  "unvalidated",
-  "mismatched",
-  "all",
-] as const;
+const MATCH_FILTER_CYCLE: readonly MatchFilter[] = ["unvalidated", "mismatched", "all"] as const;
 
 export function nextMatchFilter(current: MatchFilter): MatchFilter {
   const idx = MATCH_FILTER_CYCLE.indexOf(current);

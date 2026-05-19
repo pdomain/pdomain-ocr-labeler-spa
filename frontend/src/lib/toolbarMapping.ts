@@ -1,4 +1,4 @@
-export interface ToolbarActionMapping {
+interface ToolbarActionMapping {
   endpoint: string;
   method: "GET" | "POST" | "DELETE" | "PUT";
   body?: Record<string, unknown>;

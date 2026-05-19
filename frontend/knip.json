@@ -1,6 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["vite.config.ts", "src/main.tsx"],
   "project": ["src/**/*.{ts,tsx}"],
   "ignore": ["src/api/types.ts"],
   "ignoreDependencies": ["@concavetrillion/pd-ui"]

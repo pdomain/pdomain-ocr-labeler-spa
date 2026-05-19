@@ -34,19 +34,19 @@ import { readCssToken, hexToRgba } from "../../../hooks/useLayerColors";
 
 export type EraseTool = "brush" | "lasso" | "rect";
 
-export interface BrushOp {
+interface BrushOp {
   tool: "brush";
   x: number;
   y: number;
   radius: number;
 }
 
-export interface LassoOp {
+interface LassoOp {
   tool: "lasso";
   points: [number, number][];
 }
 
-export interface RectOp {
+interface RectOp {
   tool: "rect";
   x: number;
   y: number;

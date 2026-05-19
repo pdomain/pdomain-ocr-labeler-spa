@@ -10,13 +10,10 @@ import { type MatchFilter } from "./ui-prefs";
 
 export type { MatchFilter };
 
-/** Status values used in the Worklist chip row. */
-export type WorklistStatus = "exact" | "fuzzy" | "mismatch" | "all";
-
 /** Sort order for the worklist queue (P5.b). */
 export type WorklistSort = "index" | "confidence" | "status";
 
-export interface WorklistState {
+interface WorklistState {
   activeFilter: MatchFilter;
   /** Sort order for the worklist queue (P5.b). Default: "index". */
   sort: WorklistSort;

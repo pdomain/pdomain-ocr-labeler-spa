@@ -10,7 +10,7 @@
 // "ocr" and "gt" share the same pill shape but use theme tokens --accent and
 // --status-fuzzy (amber) to signal data-source rather than match quality.
 
-export type StatusPipStatus = "exact" | "fuzzy" | "mismatch" | "ocr" | "gt";
+type StatusPipStatus = "exact" | "fuzzy" | "mismatch" | "ocr" | "gt";
 
 export interface StatusPipProps {
   status: StatusPipStatus;

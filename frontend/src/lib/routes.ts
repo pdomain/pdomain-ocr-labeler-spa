@@ -21,8 +21,3 @@ export const ROUTES = {
 export function pageNoUrl(projectId: string, pageNo: number): string {
   return `/projects/${projectId}/pages/pageno/${pageNo}`;
 }
-
-/** Build a project root URL from project ID. */
-export function projectUrl(projectId: string): string {
-  return `/projects/${projectId}`;
-}

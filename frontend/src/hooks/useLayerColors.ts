@@ -43,7 +43,7 @@ const FALLBACKS: LayerColors = {
  * Returns fallback values when the tokens are not defined (e.g., jsdom without
  * a real CSS engine).
  */
-export function readLayerColors(): LayerColors {
+function readLayerColors(): LayerColors {
   try {
     const style = getComputedStyle(document.documentElement);
     const block = style.getPropertyValue("--layer-block").trim() || FALLBACKS.block;
@@ -136,7 +136,7 @@ export function readCssToken(prop: string, fallback: string): string {
  * Returns a fallback orange hex if the token is not set (e.g. in jsdom).
  * Used to build selection + drag-rect layer specs using the live theme token.
  */
-export function readAccentColor(): string {
+function readAccentColor(): string {
   try {
     const style = getComputedStyle(document.documentElement);
     return style.getPropertyValue("--accent").trim() || "#d6925a";

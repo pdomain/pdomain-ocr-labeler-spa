@@ -7,7 +7,7 @@
 
 export type ViewportMode = "select" | "rebox" | "add-word" | "erase";
 
-export interface ReboxTarget {
+interface ReboxTarget {
   lineIndex: number;
   wordIndex: number;
 }
@@ -57,11 +57,6 @@ export const viewportStore = createReactiveStore<ViewportStoreState>({
   pendingReboxTarget: null,
   canvasZoom: 0, // 0 = fit-to-container (default on page load)
 });
-
-/** Enter rebox mode for a specific word. */
-export function enterReboxMode(target: ReboxTarget): void {
-  viewportStore.setState({ mode: "rebox", pendingReboxTarget: target });
-}
 
 /** Reset mode to select, clearing any pending rebox target. */
 export function exitToSelectMode(): void {

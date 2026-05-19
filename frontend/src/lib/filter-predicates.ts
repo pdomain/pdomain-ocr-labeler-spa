@@ -21,7 +21,7 @@ export type LineMatch = components["schemas"]["LineMatch"];
  *   - "mismatched"  → only lines containing any non-exact word match
  *   - "all"         → no filtering
  */
-export function linePassesFilter(line: LineMatch, filter: MatchFilter): boolean {
+function linePassesFilter(line: LineMatch, filter: MatchFilter): boolean {
   switch (filter) {
     case "unvalidated":
       return !line.is_fully_validated;

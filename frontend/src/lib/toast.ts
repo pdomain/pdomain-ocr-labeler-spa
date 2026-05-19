@@ -27,7 +27,7 @@ const TOKEN_MAP: Record<"info" | "success" | "warn" | "error", string> = {
  * Info toast — uses --status-ocr token.
  * Supports all Sonner options (e.g., { id: "unique-id" }).
  */
-export function info(message: string | React.ReactNode, options?: ExternalToast): string | number {
+function info(message: string | React.ReactNode, options?: ExternalToast): string | number {
   return sonnerToast(message, {
     ...options,
     style: { borderLeft: `3px solid ${TOKEN_MAP.info}`, ...options?.style },
@@ -38,10 +38,7 @@ export function info(message: string | React.ReactNode, options?: ExternalToast)
  * Success toast — uses --status-exact token.
  * Supports all Sonner options (e.g., { id: "unique-id" }).
  */
-export function success(
-  message: string | React.ReactNode,
-  options?: ExternalToast,
-): string | number {
+function success(message: string | React.ReactNode, options?: ExternalToast): string | number {
   return sonnerToast(message, {
     ...options,
     style: { borderLeft: `3px solid ${TOKEN_MAP.success}`, ...options?.style },
@@ -52,7 +49,7 @@ export function success(
  * Warning toast — uses --status-fuzzy token.
  * Supports all Sonner options (e.g., { id: "unique-id" }).
  */
-export function warn(message: string | React.ReactNode, options?: ExternalToast): string | number {
+function warn(message: string | React.ReactNode, options?: ExternalToast): string | number {
   return sonnerToast(message, {
     ...options,
     style: { borderLeft: `3px solid ${TOKEN_MAP.warn}`, ...options?.style },
@@ -63,7 +60,7 @@ export function warn(message: string | React.ReactNode, options?: ExternalToast)
  * Error toast — uses --status-mismatch token.
  * Supports all Sonner options (e.g., { id: "unique-id" }).
  */
-export function error(message: string | React.ReactNode, options?: ExternalToast): string | number {
+function error(message: string | React.ReactNode, options?: ExternalToast): string | number {
   return sonnerToast(message, {
     ...options,
     style: { borderLeft: `3px solid ${TOKEN_MAP.error}`, ...options?.style },

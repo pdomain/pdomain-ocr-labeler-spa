@@ -20,15 +20,15 @@ import { useSyncExternalStore } from "react";
 // ---------------------------------------------------------------------------
 
 /** Dialog keys with a plain `{ open: boolean }` shape. */
-export type SimpleDialogKey = "ocrConfig" | "export" | "hotkeyHelp" | "sourceFolder";
+type SimpleDialogKey = "ocrConfig" | "export" | "hotkeyHelp" | "sourceFolder";
 
-export interface WordEditDialogState {
+interface WordEditDialogState {
   open: boolean;
   lineIdx?: number;
   wordIdx?: number;
 }
 
-export interface ConfirmDialogState {
+interface ConfirmDialogState {
   open: boolean;
   title?: string;
   body?: string;
@@ -44,7 +44,7 @@ export interface DialogStoreState {
   confirm: ConfirmDialogState;
 }
 
-export interface DialogStoreApi {
+interface DialogStoreApi {
   /** Open a simple dialog by key. */
   open: (key: SimpleDialogKey) => void;
   /** Close any dialog (simple keys + wordEdit + confirm).

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-export type ChipVariant = "static" | "tristate";
+type ChipVariant = "static" | "tristate";
 export type TristateValue = "off" | "on" | "mixed";
 
 export interface ChipProps {
