@@ -5,7 +5,22 @@
 // sort: current sort order for the queue (P5.b).
 // selectedLineIndex: the currently-selected line index in the queue (null = none).
 // selectedIds: set of line indices chosen for bulk actions (Slice 23).
+//
+// Phase 2.5 (cross-cut-design §7.5): migrated from hand-rolled reactive
+// store to Zustand's vanilla `createStore`. External API preserved intact
+// so all call sites compile unchanged.
+//
+// GAP-3: Cannot use pd-ui's `createWorklistStore()` factory.
+//   pd-ui offers: `activeIndex: number|null, filter: string, setActiveIndex,
+//   setFilter, clearFilter`.
+//   This store needs: labeler-specific MatchFilter enum (unvalidated/
+//   mismatched/all), WorklistSort (index/confidence/status), selectedIds for
+//   bulk operations (Slice 23), and searchQuery for text filtering. The pd-ui
+//   factory covers a generic "which item is active" pattern that does not
+//   accommodate the labeler's domain-specific filter cycle or bulk-selection
+//   semantics.
 
+import { createStore } from "zustand/vanilla";
 import { type MatchFilter } from "./ui-prefs";
 
 export type { MatchFilter };
@@ -24,96 +39,65 @@ interface WorklistState {
   searchQuery: string;
 }
 
-type Listener = () => void;
+const INITIAL_STATE: WorklistState = {
+  activeFilter: "unvalidated",
+  sort: "index",
+  selectedLineIndex: null,
+  selectedIds: [],
+  searchQuery: "",
+};
 
-function createWorklistStore() {
-  let state: WorklistState = {
-    activeFilter: "unvalidated",
-    sort: "index",
-    selectedLineIndex: null,
-    selectedIds: [],
-    searchQuery: "",
-  };
-  const listeners = new Set<Listener>();
+const _store = createStore<WorklistState>(() => ({ ...INITIAL_STATE }));
 
-  function notify() {
-    listeners.forEach((fn) => {
-      fn();
-    });
-  }
+/**
+ * Worklist store — exposes Zustand's `getState`/`subscribe` for
+ * `useSyncExternalStore` wiring, plus imperative action methods used
+ * from non-React contexts (hotkey handlers, mutations).
+ */
+export const worklistStore = {
+  /** Current state snapshot — stable reference until next setState. */
+  getState: () => _store.getState(),
+  /** Subscribe to changes (returns unsubscribe). */
+  subscribe: (cb: () => void) => _store.subscribe(cb),
 
-  function setActiveFilter(filter: MatchFilter) {
-    state = { ...state, activeFilter: filter };
-    notify();
-  }
+  setActiveFilter(filter: MatchFilter) {
+    _store.setState({ activeFilter: filter });
+  },
 
-  function setSort(sort: WorklistSort) {
-    state = { ...state, sort };
-    notify();
-  }
+  setSort(sort: WorklistSort) {
+    _store.setState({ sort });
+  },
 
-  function setSelectedLineIndex(index: number | null) {
-    state = { ...state, selectedLineIndex: index };
-    notify();
-  }
+  setSelectedLineIndex(index: number | null) {
+    _store.setState({ selectedLineIndex: index });
+  },
 
-  function setSearchQuery(query: string) {
-    state = { ...state, searchQuery: query };
-    notify();
-  }
+  setSearchQuery(query: string) {
+    _store.setState({ searchQuery: query });
+  },
 
-  function reset() {
-    state = {
-      activeFilter: "unvalidated",
-      sort: "index",
-      selectedLineIndex: null,
-      selectedIds: [],
-      searchQuery: "",
-    };
-    notify();
-  }
+  reset() {
+    _store.setState({ ...INITIAL_STATE });
+  },
 
   // ── Bulk selection helpers (Slice 23) ──────────────────────────────────
 
   /** Select all from the given list of line indices. */
-  function selectAll(ids: number[]) {
-    state = { ...state, selectedIds: [...ids] };
-    notify();
-  }
+  selectAll(ids: number[]) {
+    _store.setState({ selectedIds: [...ids] });
+  },
 
   /** Clear bulk selection. */
-  function clearBulk() {
-    state = { ...state, selectedIds: [] };
-    notify();
-  }
+  clearBulk() {
+    _store.setState({ selectedIds: [] });
+  },
 
   /** Toggle a single line index in/out of bulk selection. */
-  function toggle(id: number) {
-    const has = state.selectedIds.includes(id);
-    state = {
-      ...state,
-      selectedIds: has ? state.selectedIds.filter((x) => x !== id) : [...state.selectedIds, id],
-    };
-    notify();
-  }
-
-  return {
-    getState: () => state,
-    setActiveFilter,
-    setSort,
-    setSelectedLineIndex,
-    setSearchQuery,
-    reset,
-    selectAll,
-    clearBulk,
-    toggle,
-    subscribe: (cb: Listener) => {
-      listeners.add(cb);
-      return () => {
-        listeners.delete(cb);
-      };
-    },
-  };
-}
-
-export const worklistStore = createWorklistStore();
+  toggle(id: number) {
+    const { selectedIds } = _store.getState();
+    const has = selectedIds.includes(id);
+    _store.setState({
+      selectedIds: has ? selectedIds.filter((x) => x !== id) : [...selectedIds, id],
+    });
+  },
+};

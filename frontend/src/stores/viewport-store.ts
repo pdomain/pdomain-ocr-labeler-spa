@@ -4,6 +4,18 @@
 //
 // Tracks the current viewport interaction mode and rebox target.
 // Mode is mutually exclusive: select | rebox | add-word | erase
+//
+// Phase 2.5 (cross-cut-design §7.5): migrated from hand-rolled reactive
+// store to Zustand's vanilla `createStore`.
+//
+// GAP-2: Cannot use pd-ui's `createViewportStore()` factory.
+//   pd-ui offers: `scale: number, pan: {x,y}, setScale, setPan, reset`.
+//   This store needs: labeler-specific interaction modes (select/rebox/
+//   add-word/erase), pendingReboxTarget, and canvasZoom (0 = fit-to-
+//   container). These are labeler domain concerns that pd-ui deliberately
+//   excludes per §3 "What pd-ui does not include".
+
+import { createStore } from "zustand/vanilla";
 
 export type ViewportMode = "select" | "rebox" | "add-word" | "erase";
 
@@ -24,39 +36,11 @@ export interface ViewportStoreState {
   canvasZoom: number;
 }
 
-type SetStateArg<T> = Partial<T> | ((state: T) => Partial<T>);
-
-interface Store<T> {
-  getState: () => T;
-  setState: (arg: SetStateArg<T>) => void;
-  subscribe: (listener: (state: T) => void) => () => void;
-}
-
-function createReactiveStore<T>(initialState: T): Store<T> {
-  let state = initialState;
-  const listeners = new Set<(state: T) => void>();
-
-  return {
-    getState: () => state,
-    setState: (arg: SetStateArg<T>) => {
-      const patch = typeof arg === "function" ? arg(state) : arg;
-      state = { ...state, ...patch };
-      listeners.forEach((l) => {
-        l(state);
-      });
-    },
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  };
-}
-
-export const viewportStore = createReactiveStore<ViewportStoreState>({
+export const viewportStore = createStore<ViewportStoreState>(() => ({
   mode: "select",
   pendingReboxTarget: null,
   canvasZoom: 0, // 0 = fit-to-container (default on page load)
-});
+}));
 
 /** Reset mode to select, clearing any pending rebox target. */
 export function exitToSelectMode(): void {

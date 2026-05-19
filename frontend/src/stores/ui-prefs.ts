@@ -8,7 +8,24 @@
 // `splitterRatio` is the canonical field name (matches spec 22). The
 // legacy alias `splitterPosition` was renamed; no production callers
 // exist yet — only the store + this test relied on the old name.
+//
+// Phase 2.5 (cross-cut-design §7.5): migrated from hand-rolled reactive
+// store to Zustand's vanilla `createStore`. External API (`useUiPrefs`
+// store object, `useThemePreference` hook) preserved intact.
+//
+// GAP-5: Cannot use pd-ui's `createUIPrefsStore()` factory.
+//   pd-ui offers: async load/persist callbacks, theme/density/layerColors/
+//   statusColors/accentColor with setTheme/setDensity/setAppPref.
+//   This store needs: labeler-specific prefs (lineFilter, layerVisibility,
+//   splitterRatio, selectionMode, matchFilter, drawerOpen/Tab, rightPanelOpen,
+//   matchFilterMode) all managed synchronously in-memory with localStorage
+//   persistence only for theme. The pd-ui factory's async load/persist
+//   contract targets the future pd-suite prefs API (§3.2); that wiring is
+//   deferred to when pd-ocr-ops routes are mounted (Phase 2.4+).
+//   Replace with pd-ui factory when the pd-suite prefs API is wired and
+//   the labeler-specific prefs schema is migrated into `UIPrefs.app`.
 
+import { createStore } from "zustand/vanilla";
 import { useSyncExternalStore } from "react";
 
 export interface LayerVisibility {
@@ -76,25 +93,6 @@ export interface UiPrefsState {
   matchFilterMode: "all" | "mismatches_only";
 }
 
-type SetStateArg<T> = Partial<T> | ((state: T) => Partial<T>);
-type Listener = () => void;
-
-interface Store<T> {
-  getState: () => T;
-  setState: (arg: SetStateArg<T>) => void;
-  subscribe: (listener: Listener) => () => void;
-  /** Convenience setter for splitter ratio (clamps to [0.2, 0.8]). */
-  setSplitterRatio: (ratio: number) => void;
-  /** Set the word-match filter directly. */
-  setMatchFilter: (filter: MatchFilter) => void;
-  /** Cycle through unvalidated → mismatched → all → unvalidated. */
-  cycleMatchFilter: () => void;
-  /** Set the theme preference — applies to documentElement immediately. */
-  setTheme: (theme: ThemePreference) => void;
-  /** Set the bbox overlay filter mode — Issue #295. */
-  setMatchFilterMode: (mode: "all" | "mismatches_only") => void;
-}
-
 /** Clamp the splitter ratio to the spec-22 §9 range [0.2, 0.8]. */
 export function clampSplitterRatio(ratio: number): number {
   if (Number.isNaN(ratio)) return 0.5;
@@ -139,84 +137,32 @@ function applyTheme(theme: ThemePreference) {
   }
 }
 
-function createStore<T extends object>(initialState: T): Store<T> {
-  let state = initialState;
-  const listeners = new Set<Listener>();
+// ── Media-query listener for System mode ──────────────────────────────────
+let mediaQueryCleanup: (() => void) | null = null;
 
-  function notify() {
-    listeners.forEach((fn) => {
-      fn();
-    });
+function setupSystemListener(theme: ThemePreference, notifyFn: () => void) {
+  if (mediaQueryCleanup) {
+    mediaQueryCleanup();
+    mediaQueryCleanup = null;
   }
-
-  const setState = (arg: SetStateArg<T>) => {
-    const newState = typeof arg === "function" ? arg(state) : arg;
-    state = { ...state, ...newState };
-    notify();
-  };
-
-  // ── Media-query listener for System mode ────────────────────────────────
-  let mediaQueryCleanup: (() => void) | null = null;
-
-  function setupSystemListener(theme: ThemePreference) {
-    if (mediaQueryCleanup) {
-      mediaQueryCleanup();
-      mediaQueryCleanup = null;
-    }
-    if (theme === "system") {
-      try {
-        const mq = window.matchMedia("(prefers-color-scheme: light)");
-        const handler = () => {
-          applyTheme("system");
-          notify();
-        };
-        mq.addEventListener("change", handler);
-        mediaQueryCleanup = () => {
-          mq.removeEventListener("change", handler);
-        };
-      } catch {
-        // not available
-      }
-    }
-  }
-
-  return {
-    getState: () => state,
-    setState,
-    subscribe: (listener: Listener) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
+  if (theme === "system") {
+    try {
+      const mq = window.matchMedia("(prefers-color-scheme: light)");
+      const handler = () => {
+        applyTheme("system");
+        notifyFn();
       };
-    },
-    setSplitterRatio: (ratio: number) => {
-      const clamped = clampSplitterRatio(ratio);
-      setState({ splitterRatio: clamped } as unknown as SetStateArg<T>);
-    },
-    setMatchFilter: (filter: MatchFilter) => {
-      setState({ matchFilter: filter } as unknown as SetStateArg<T>);
-    },
-    cycleMatchFilter: () => {
-      const current = (state as unknown as UiPrefsState).matchFilter;
-      setState({ matchFilter: nextMatchFilter(current) } as unknown as SetStateArg<T>);
-    },
-    setTheme: (theme: ThemePreference) => {
-      try {
-        localStorage.setItem(THEME_STORAGE_KEY, theme);
-      } catch {
-        // ignore
-      }
-      setState({ theme } as unknown as SetStateArg<T>);
-      setupSystemListener(theme);
-      applyTheme(theme);
-    },
-    setMatchFilterMode: (mode: "all" | "mismatches_only") => {
-      setState({ matchFilterMode: mode } as unknown as SetStateArg<T>);
-    },
-  };
+      mq.addEventListener("change", handler);
+      mediaQueryCleanup = () => {
+        mq.removeEventListener("change", handler);
+      };
+    } catch {
+      // not available
+    }
+  }
 }
 
-export const useUiPrefs = createStore<UiPrefsState>({
+const INITIAL_PREFS: UiPrefsState = {
   lineFilter: null,
   layerVisibility: {
     paragraph: true,
@@ -231,7 +177,70 @@ export const useUiPrefs = createStore<UiPrefsState>({
   rightPanelOpen: true,
   theme: readPersistedTheme(),
   matchFilterMode: "all",
-});
+};
+
+const _store = createStore<UiPrefsState>(() => ({ ...INITIAL_PREFS }));
+
+/**
+ * UI prefs store — exposes the same surface as the old hand-rolled store
+ * (`getState`, `setState`, `subscribe`, `setSplitterRatio`, `setMatchFilter`,
+ * `cycleMatchFilter`, `setTheme`, `setMatchFilterMode`) so all call sites
+ * remain unchanged.
+ *
+ * Named `useUiPrefs` for historical reasons (originally a hook-like object).
+ * It is NOT a React hook — it is an imperative store object that components
+ * subscribe to via `useSyncExternalStore(useUiPrefs.subscribe, ...)`.
+ */
+export const useUiPrefs = {
+  /** Current state snapshot. */
+  getState: () => _store.getState(),
+  /** Set partial state (merge). Accepts partial object or updater function. */
+  setState: (arg: Partial<UiPrefsState> | ((s: UiPrefsState) => Partial<UiPrefsState>)) => {
+    const patch = typeof arg === "function" ? arg(_store.getState()) : arg;
+    _store.setState((s) => ({ ...s, ...patch }));
+  },
+  /** Subscribe to changes (returns unsubscribe). */
+  subscribe: (listener: () => void) => _store.subscribe(listener),
+
+  /** Convenience setter for splitter ratio (clamps to [0.2, 0.8]). */
+  setSplitterRatio: (ratio: number) => {
+    const clamped = clampSplitterRatio(ratio);
+    _store.setState((s) => ({ ...s, splitterRatio: clamped }));
+  },
+
+  /** Set the word-match filter directly. */
+  setMatchFilter: (filter: MatchFilter) => {
+    _store.setState((s) => ({ ...s, matchFilter: filter }));
+  },
+
+  /** Cycle through unvalidated → mismatched → all → unvalidated. */
+  cycleMatchFilter: () => {
+    _store.setState((s) => ({ ...s, matchFilter: nextMatchFilter(s.matchFilter) }));
+  },
+
+  /** Set the theme preference — applies to documentElement immediately. */
+  setTheme: (theme: ThemePreference) => {
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // ignore
+    }
+    _store.setState((s) => ({ ...s, theme }));
+    setupSystemListener(theme, () => {
+      // Trigger a re-render by updating a stable piece of state.
+      // The theme value itself hasn't changed (still "system"), but
+      // the DOM has been updated by applyTheme; nudge Zustand so
+      // subscribers (e.g. useThemePreference) re-read getState().
+      _store.setState((s) => ({ ...s }));
+    });
+    applyTheme(theme);
+  },
+
+  /** Set the bbox overlay filter mode — Issue #295. */
+  setMatchFilterMode: (mode: "all" | "mismatches_only") => {
+    _store.setState((s) => ({ ...s, matchFilterMode: mode }));
+  },
+};
 
 // Apply initial theme on module load.
 applyTheme(useUiPrefs.getState().theme);

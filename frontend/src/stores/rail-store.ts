@@ -7,6 +7,18 @@
 //
 // mode: "view" | "region" | "annotate" | "erase"
 //   Selection interaction mode — not persisted (resets to "view" on reload).
+//
+// Phase 2.5 (cross-cut-design §7.5): migrated from hand-rolled reactive
+// store to Zustand's vanilla `createStore`. External API preserved intact.
+//
+// GAP-4: Cannot use a pd-ui store factory for rail state.
+//   No pd-ui factory covers the Rail tool-mode concept: labeler-specific
+//   target (block/para/line/word) that persists to localStorage, and an
+//   interaction mode (view/region/annotate/erase) that resets on reload.
+//   This is labeler-domain UI state that pd-ui explicitly excludes per
+//   §3 "What pd-ui does not include".
+
+import { createStore } from "zustand/vanilla";
 
 export type RailTarget = "block" | "para" | "line" | "word";
 export type RailMode = "view" | "region" | "annotate" | "erase";
@@ -23,8 +35,6 @@ interface RailState {
   setMode: (mode: RailMode) => void;
 }
 
-type Listener = () => void;
-
 function readPersistedTarget(): RailTarget {
   try {
     const raw = localStorage.getItem(RAIL_TARGET_STORAGE_KEY);
@@ -35,66 +45,39 @@ function readPersistedTarget(): RailTarget {
   return "word";
 }
 
-function makeInitialState(
-  setTarget: RailState["setTarget"],
-  setMode: RailState["setMode"],
-): RailState {
-  return {
-    target: readPersistedTarget(),
-    mode: "view",
-    setTarget,
-    setMode,
-  };
-}
-
-function createRailStore() {
-  let state: RailState;
-  const listeners = new Set<Listener>();
-
-  function notify() {
-    listeners.forEach((fn) => {
-      fn();
-    });
-  }
-
-  function setTarget(target: RailTarget) {
+const _store = createStore<RailState>((set) => ({
+  target: readPersistedTarget(),
+  mode: "view",
+  setTarget(target: RailTarget) {
     if (!VALID_TARGETS.has(target)) return;
     try {
       localStorage.setItem(RAIL_TARGET_STORAGE_KEY, target);
     } catch {
       // ignore
     }
-    state = { ...state, target };
-    notify();
-  }
-
-  function setMode(mode: RailMode) {
+    set((s) => ({ ...s, target }));
+  },
+  setMode(mode: RailMode) {
     if (!VALID_MODES.has(mode)) return;
-    state = { ...state, mode };
-    notify();
-  }
+    set((s) => ({ ...s, mode }));
+  },
+}));
 
-  // Initial state built with the action references
-  state = makeInitialState(setTarget, setMode);
-
-  return {
-    getState: () => state,
-    subscribe: (cb: Listener) => {
-      listeners.add(cb);
-      return () => {
-        listeners.delete(cb);
-      };
-    },
-    /** Re-reads persisted state; used in tests to simulate a fresh page load. */
-    reset: () => {
-      state = {
-        ...makeInitialState(setTarget, setMode),
-        setTarget,
-        setMode,
-      };
-      notify();
-    },
-  };
-}
-
-export const railStore = createRailStore();
+/**
+ * Rail store — exposes Zustand's `getState`/`subscribe` for
+ * `useSyncExternalStore` wiring, plus a `reset` helper for tests.
+ */
+export const railStore = {
+  /** Current state snapshot. */
+  getState: () => _store.getState(),
+  /** Subscribe to changes (returns unsubscribe). */
+  subscribe: (cb: () => void) => _store.subscribe(cb),
+  /** Re-reads persisted state; used in tests to simulate a fresh page load. */
+  reset() {
+    _store.setState((s) => ({
+      ...s,
+      target: readPersistedTarget(),
+      mode: "view",
+    }));
+  },
+};

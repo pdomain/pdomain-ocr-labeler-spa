@@ -22,7 +22,20 @@
 // `path={lineId:7}`, `level="line"`. Legacy call sites that mutate the
 // arrays directly via setState are still supported, but won't update
 // level/path automatically — call the action helpers for the new layer.
+//
+// Phase 2.5 (cross-cut-design §7.5): migrated from hand-rolled reactive
+// store to Zustand's vanilla `createStore`.
+//
+// GAP-1: Cannot use pd-ui's `createSelectionStore()` factory.
+//   pd-ui offers: `ids: ReadonlySet<string>, select, deselect, clearSelection`.
+//   This store needs: hierarchical path/level navigation, multi-select tuples
+//   (selectedParagraphs/Lines/Words), dragRect, walkSibling/walkLevel navigation
+//   driven by PagePayload structure. These are labeler-specific concerns that
+//   do not belong in pd-ui. Replace with pd-ui factory when pd-ui adds a
+//   hierarchical-selection extension, or accept the local implementation as a
+//   labeler-only store permanently.
 
+import { createStore } from "zustand/vanilla";
 import type { BBox } from "../lib/coords";
 import {
   nextSibling,
@@ -55,34 +68,6 @@ export interface SelectionState {
   path: SelectionPath;
 }
 
-type SetStateArg<T> = T | ((state: T) => T);
-
-interface Store<T> {
-  getState: () => T;
-  setState: (arg: SetStateArg<T>) => void;
-  subscribe: (listener: (state: T) => void) => () => void;
-}
-
-function createReactiveStore<T>(initialState: T): Store<T> {
-  let state = initialState;
-  const listeners = new Set<(state: T) => void>();
-
-  return {
-    getState: () => state,
-    setState: (arg: SetStateArg<T>) => {
-      const newState = typeof arg === "function" ? (arg as (s: T) => T)(state) : arg;
-      state = { ...state, ...newState };
-      listeners.forEach((l) => {
-        l(state);
-      });
-    },
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  };
-}
-
 const INITIAL_STATE: SelectionState = {
   selectedParagraphs: [],
   selectedLines: [],
@@ -92,7 +77,7 @@ const INITIAL_STATE: SelectionState = {
   path: {},
 };
 
-export const selectionStore = createReactiveStore<SelectionState>({ ...INITIAL_STATE });
+export const selectionStore = createStore<SelectionState>(() => ({ ...INITIAL_STATE }));
 
 // ─── Mutators ────────────────────────────────────────────────────────────────
 

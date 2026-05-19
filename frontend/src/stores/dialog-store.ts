@@ -3,9 +3,15 @@
 // Spec: specs/22-page-surface-wireup.md §5 (Dialog launchers)
 // Issue #309 (spec-22-A)
 //
-// No `zustand` package is installed; this module exports a hand-rolled
-// reactive store matching the same shape used by `selection-store.ts`,
-// plus a `useDialogStore` React hook backed by `useSyncExternalStore`.
+// Phase 2.5 (cross-cut-design §7.5): migrated from hand-rolled module-level
+// listener store to Zustand's vanilla `createStore`. External API preserved
+// (`useDialogStore` React hook, `dialogStore` imperative API).
+//
+// GAP-6: No pd-ui factory covers labeler-specific dialog orchestration.
+//   The dialogs managed here (OCR config, export, hotkey help, source folder,
+//   word-edit, confirm) are all labeler-specific features. pd-ui ships
+//   Radix-based dialog primitives but no store abstraction for domain-level
+//   dialog management. This store is kept local permanently.
 //
 // Why a single shared store: keeping each dialog's open-flag in its own
 // `useState` would force every launcher (HeaderBar trigger buttons,
@@ -13,6 +19,7 @@
 // into the component owning that flag. A single store lets any caller
 // open or close any dialog without prop drilling.
 
+import { createStore } from "zustand/vanilla";
 import { useSyncExternalStore } from "react";
 
 // ---------------------------------------------------------------------------
@@ -69,47 +76,26 @@ const INITIAL_STATE: DialogStoreState = {
   confirm: { open: false },
 };
 
-let state: DialogStoreState = INITIAL_STATE;
-const listeners = new Set<() => void>();
-
-function notify() {
-  listeners.forEach((l) => {
-    l();
-  });
-}
-
-function getState(): DialogStoreState {
-  return state;
-}
-
-function setState(next: DialogStoreState): void {
-  state = next;
-  notify();
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+const _store = createStore<DialogStoreState>(() => ({ ...INITIAL_STATE }));
 
 const api: DialogStoreApi = {
   open(key) {
-    setState({ ...state, [key]: { open: true } });
+    _store.setState((s) => ({ ...s, [key]: { open: true } }));
   },
   close(key) {
     if (key === "wordEdit") {
-      setState({ ...state, wordEdit: { open: false } });
+      _store.setState((s) => ({ ...s, wordEdit: { open: false } }));
     } else if (key === "confirm") {
-      setState({ ...state, confirm: { open: false } });
+      _store.setState((s) => ({ ...s, confirm: { open: false } }));
     } else {
-      setState({ ...state, [key]: { open: false } });
+      _store.setState((s) => ({ ...s, [key]: { open: false } }));
     }
   },
   openWordEdit({ lineIdx, wordIdx }) {
-    setState({ ...state, wordEdit: { open: true, lineIdx, wordIdx } });
+    _store.setState((s) => ({ ...s, wordEdit: { open: true, lineIdx, wordIdx } }));
   },
   openConfirm({ title, body, onConfirm }) {
-    setState({ ...state, confirm: { open: true, title, body, onConfirm } });
+    _store.setState((s) => ({ ...s, confirm: { open: true, title, body, onConfirm } }));
   },
 };
 
@@ -135,8 +121,8 @@ export function useDialogStore<T>(selector: (state: DialogStoreState) => T): T;
 export function useDialogStore<T>(selector?: (state: DialogStoreState) => T): T | DialogStoreState {
   const sel = (selector ?? identity) as (s: DialogStoreState) => T;
   return useSyncExternalStore(
-    subscribe,
-    () => sel(getState()),
+    (cb) => _store.subscribe(cb),
+    () => sel(_store.getState()),
     () => sel(INITIAL_STATE),
   );
 }
@@ -145,11 +131,11 @@ export function useDialogStore<T>(selector?: (state: DialogStoreState) => T): T 
 export const dialogStore = {
   ...api,
   /** Snapshot of current state. */
-  getState,
+  getState: () => _store.getState(),
   /** Subscribe to changes (returns unsubscribe). */
-  subscribe,
+  subscribe: (cb: () => void) => _store.subscribe(cb),
   /** Reset to initial state — primarily for tests. */
   reset(): void {
-    setState(INITIAL_STATE);
+    _store.setState({ ...INITIAL_STATE });
   },
 };
