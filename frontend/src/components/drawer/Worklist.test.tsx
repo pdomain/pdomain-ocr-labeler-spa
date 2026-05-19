@@ -1,5 +1,9 @@
 // Worklist.test.tsx — Tests for the Worklist drawer tab (Slice 11, P5.a, P5.b).
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 11, Gap 19, Gap 20.
+// Phase 2.3: pd-ui <WordList> uses react-virtuoso internally.  In jsdom there
+//   is no scroll area so Virtuoso renders zero items.  We mock the pd-ui worklist
+//   barrel to provide a test-friendly WordList that renders all items
+//   synchronously, identical to the react-konva mocking pattern.
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, act } from "@testing-library/react";
@@ -7,6 +11,59 @@ import userEvent from "@testing-library/user-event";
 import { Worklist } from "./Worklist";
 import { worklistStore } from "../../stores/worklist-store";
 import type { components } from "../../api/types";
+import type { WordRowProps } from "@concavetrillion/pd-ui/worklist";
+
+// ── @concavetrillion/pd-ui/worklist mock ──────────────────────────────────────
+// WordList uses react-virtuoso which renders zero items in jsdom (no scroll
+// height). Replace with a thin wrapper that renders every item synchronously.
+// Preserves the same render-prop contract (WordRowProps) as the real component.
+vi.mock("@concavetrillion/pd-ui/worklist", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@concavetrillion/pd-ui/worklist")>();
+  const React = await import("react");
+
+  type MockWordListProps<TWord extends { text: string; bounding_box: object }> = {
+    items: TWord[];
+    renderRow?: ((props: WordRowProps<TWord>) => React.ReactNode) | undefined;
+    selectedIndex?: number | null | undefined;
+    onSelect?: ((index: number) => void) | undefined;
+    "aria-label"?: string;
+    className?: string;
+  };
+
+  function MockWordList<TWord extends { text: string; bounding_box: object }>({
+    items,
+    renderRow,
+    selectedIndex,
+    onSelect,
+    "aria-label": ariaLabel,
+    className,
+  }: MockWordListProps<TWord>) {
+    return React.createElement(
+      "div",
+      { role: "listbox", "aria-label": ariaLabel, className },
+      ...items.map((item, i) => {
+        const isSelected = selectedIndex === i;
+        const rowContent = renderRow
+          ? renderRow({ item, index: i, isSelected, matchStatus: "none" })
+          : React.createElement("span", { key: i }, (item as { text: string }).text);
+        return React.createElement(
+          "div",
+          {
+            key: i,
+            role: "option",
+            "aria-selected": isSelected,
+            onClick: () => onSelect?.(i),
+            style: { cursor: "pointer" },
+          },
+          rowContent,
+        );
+      }),
+    );
+  }
+  MockWordList.displayName = "WordList";
+
+  return { ...actual, WordList: MockWordList };
+});
 
 // Mock selectLine so we can spy on calls without full store setup
 vi.mock("../../stores/selection-store", async (importOriginal) => {
@@ -45,19 +102,19 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
   });
 
   it("renders with data-testid=worklist", () => {
-    render(<Worklist />);
+    render(<Worklist projectId="proj-1" pageIndex={0} />);
     expect(screen.getByTestId("worklist")).toBeInTheDocument();
   });
 
   it("renders filter chip row with three chip testids", () => {
-    render(<Worklist />);
+    render(<Worklist projectId="proj-1" pageIndex={0} />);
     expect(screen.getByTestId("worklist-filter-unvalidated")).toBeInTheDocument();
     expect(screen.getByTestId("worklist-filter-mismatched")).toBeInTheDocument();
     expect(screen.getByTestId("worklist-filter-all")).toBeInTheDocument();
   });
 
   it("unvalidated filter is active by default", () => {
-    render(<Worklist />);
+    render(<Worklist projectId="proj-1" pageIndex={0} />);
     expect(screen.getByTestId("worklist-filter-unvalidated")).toHaveAttribute(
       "data-active",
       "true",
@@ -67,7 +124,7 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
   it("shows empty message when no lines match filter", () => {
     // Default filter = unvalidated; all lines are validated
     const lines = makeLines([{ is_fully_validated: true }, { is_fully_validated: true }]);
-    render(<Worklist lineMatches={lines} />);
+    render(<Worklist lineMatches={lines} projectId="proj-1" pageIndex={0} />);
     expect(screen.getByTestId("worklist-queue")).toHaveTextContent("No lines match");
   });
 
@@ -76,14 +133,14 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
       { line_index: 0, is_fully_validated: false, ocr_line_text: "hello" },
       { line_index: 1, is_fully_validated: true, ocr_line_text: "world" },
     ]);
-    render(<Worklist lineMatches={lines} />);
+    render(<Worklist lineMatches={lines} projectId="proj-1" pageIndex={0} />);
     expect(screen.getByTestId("worklist-row-0")).toBeInTheDocument();
     expect(screen.queryByTestId("worklist-row-1")).not.toBeInTheDocument();
   });
 
   it("clicking a filter chip updates worklistStore.activeFilter", async () => {
     const user = userEvent.setup();
-    render(<Worklist />);
+    render(<Worklist projectId="proj-1" pageIndex={0} />);
     await user.click(screen.getByTestId("worklist-filter-all"));
     expect(worklistStore.getState().activeFilter).toBe("all");
   });
@@ -91,7 +148,7 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
   it("clicking a row updates worklistStore.selectedLineIndex", async () => {
     const user = userEvent.setup();
     const lines = makeLines([{ line_index: 0, is_fully_validated: false }]);
-    render(<Worklist lineMatches={lines} />);
+    render(<Worklist lineMatches={lines} projectId="proj-1" pageIndex={0} />);
     await user.click(screen.getByTestId("worklist-row-0"));
     expect(worklistStore.getState().selectedLineIndex).toBe(0);
   });
@@ -99,7 +156,7 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
   it("selected row has data-selected=true", async () => {
     const user = userEvent.setup();
     const lines = makeLines([{ line_index: 0, is_fully_validated: false }]);
-    render(<Worklist lineMatches={lines} />);
+    render(<Worklist lineMatches={lines} projectId="proj-1" pageIndex={0} />);
     await user.click(screen.getByTestId("worklist-row-0"));
     expect(screen.getByTestId("worklist-row-0")).toHaveAttribute("data-selected", "true");
   });
@@ -120,7 +177,7 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
         is_fully_validated: false,
       },
     ]);
-    render(<Worklist lineMatches={lines} />);
+    render(<Worklist lineMatches={lines} projectId="proj-1" pageIndex={0} />);
     await user.click(screen.getByTestId("worklist-filter-mismatched"));
     expect(screen.getByTestId("worklist-row-0")).toBeInTheDocument();
     expect(screen.queryByTestId("worklist-row-1")).not.toBeInTheDocument();
@@ -132,7 +189,7 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
       { line_index: 0, is_fully_validated: true },
       { line_index: 1, is_fully_validated: true },
     ]);
-    render(<Worklist lineMatches={lines} />);
+    render(<Worklist lineMatches={lines} projectId="proj-1" pageIndex={0} />);
     await user.click(screen.getByTestId("worklist-filter-all"));
     expect(screen.getByTestId("worklist-row-0")).toBeInTheDocument();
     expect(screen.getByTestId("worklist-row-1")).toBeInTheDocument();
@@ -143,7 +200,7 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
   it("P5.a: row shows mono ID stamp (L-001 style)", async () => {
     const user = userEvent.setup();
     const lines = makeLines([{ line_index: 0, is_fully_validated: false }]);
-    render(<Worklist lineMatches={lines} />);
+    render(<Worklist lineMatches={lines} projectId="proj-1" pageIndex={0} />);
     // All filter so row is visible regardless of validation state
     await user.click(screen.getByTestId("worklist-filter-all"));
     expect(screen.getByTestId("worklist-row-0")).toHaveTextContent("L-001");
@@ -154,7 +211,7 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
     const lines = makeLines([
       { line_index: 0, validated_word_count: 3, total_word_count: 4, is_fully_validated: false },
     ]);
-    render(<Worklist lineMatches={lines} />);
+    render(<Worklist lineMatches={lines} projectId="proj-1" pageIndex={0} />);
     await user.click(screen.getByTestId("worklist-filter-all"));
     // 3/4 = 75%
     expect(screen.getByTestId("worklist-row-0")).toHaveTextContent("75%");
@@ -170,7 +227,7 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
         is_fully_validated: false,
       },
     ]);
-    render(<Worklist lineMatches={lines} />);
+    render(<Worklist lineMatches={lines} projectId="proj-1" pageIndex={0} />);
     await user.click(screen.getByTestId("worklist-filter-all"));
     expect(screen.getByTestId("worklist-row-0-gt")).toBeInTheDocument();
     expect(screen.getByTestId("worklist-row-0-gt")).toHaveTextContent("hello world");
@@ -186,7 +243,7 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
         is_fully_validated: false,
       },
     ]);
-    render(<Worklist lineMatches={lines} />);
+    render(<Worklist lineMatches={lines} projectId="proj-1" pageIndex={0} />);
     await user.click(screen.getByTestId("worklist-filter-all"));
     expect(screen.queryByTestId("worklist-row-0-gt")).not.toBeInTheDocument();
   });
@@ -194,14 +251,14 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
   // ── P5.b (Gap 19): filter/sort redesign ──────────────────────────────────
 
   it("P5.b: sort dropdown renders with default 'index'", () => {
-    render(<Worklist />);
+    render(<Worklist projectId="proj-1" pageIndex={0} />);
     const sel = screen.getByTestId("worklist-sort-select");
     expect(sel.value).toBe("index");
   });
 
   it("P5.b: changing sort dropdown updates store", async () => {
     const user = userEvent.setup();
-    render(<Worklist />);
+    render(<Worklist projectId="proj-1" pageIndex={0} />);
     await user.selectOptions(screen.getByTestId("worklist-sort-select"), "confidence");
     expect(worklistStore.getState().sort).toBe("confidence");
   });
@@ -217,7 +274,7 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
         mismatch_count: 1,
       },
     ]);
-    render(<Worklist lineMatches={lines} />);
+    render(<Worklist lineMatches={lines} projectId="proj-1" pageIndex={0} />);
     // All chip should show 3
     expect(screen.getByTestId("worklist-filter-all")).toHaveTextContent("3");
     // Unvalidated shows 2 (lines 0 and 2 are not fully validated, 2 has mismatch counted as error)
@@ -271,7 +328,7 @@ describe("Worklist search filter (Task 5)", () => {
       },
     ];
     worklistStore.setActiveFilter("all");
-    render(<Worklist lineMatches={lineMatches} />);
+    render(<Worklist lineMatches={lineMatches} projectId="proj-1" pageIndex={0} />);
     expect(screen.getByTestId("worklist-row-0")).toBeInTheDocument();
     expect(screen.getByTestId("worklist-row-1")).toBeInTheDocument();
 
@@ -310,7 +367,7 @@ describe("WorklistRow bridge", () => {
       },
     ];
     worklistStore.setActiveFilter("all");
-    render(<Worklist lineMatches={lineMatches} />);
+    render(<Worklist lineMatches={lineMatches} projectId="proj-1" pageIndex={0} />);
     await user.click(screen.getByTestId("worklist-row-3"));
     expect(selectLine).toHaveBeenCalledWith(3);
   });
@@ -336,7 +393,7 @@ describe("WorklistRow bridge", () => {
       },
     ];
     worklistStore.setActiveFilter("all");
-    render(<Worklist lineMatches={lineMatches} />);
+    render(<Worklist lineMatches={lineMatches} projectId="proj-1" pageIndex={0} />);
     const checkbox = screen.getByTestId("worklist-row-checkbox-2");
     await user.click(checkbox);
     expect(worklistStore.getState().selectedIds).toContain(2);
@@ -363,7 +420,7 @@ describe("WorklistRow bridge", () => {
       },
     ];
     worklistStore.setActiveFilter("all");
-    render(<Worklist lineMatches={lineMatches} />);
+    render(<Worklist lineMatches={lineMatches} projectId="proj-1" pageIndex={0} />);
     await user.click(screen.getByTestId("worklist-row-checkbox-5"));
     expect(selectLine).not.toHaveBeenCalled();
   });

@@ -2,5 +2,5 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "project": ["src/**/*.{ts,tsx}"],
   "ignore": ["src/api/types.ts"],
-  "ignoreDependencies": ["@concavetrillion/pd-ui"]
+  "ignoreDependencies": ["react-virtuoso"]
 }

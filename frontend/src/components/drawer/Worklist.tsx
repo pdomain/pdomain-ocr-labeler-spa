@@ -1,5 +1,7 @@
 // Worklist.tsx — Worklist tab inside the Drawer panel.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 11, P5.a, P5.b.
+// Phase 2.3: internals replaced with pd-ui <WordList>; labeler-specific
+//   rendering lives in the renderRow prop. See cross-cut design §7.3.
 //
 // P5.a (Gap 20): each row shows a 4px color bar + mono ID stamp + status pip +
 //   confidence % + OCR→GT diff (inline or two-line).
@@ -7,7 +9,17 @@
 //   active-filter selector.
 //
 // Regression guard: drawer width must remain 320px (Gap 17 — done).
+//
+// GAP-1: LineMatch lacks `text` and `bounding_box` required by WordListItem.
+//   We adapt via LineMatchWordItem (adds `text = ocr_line_text`, stub
+//   `bounding_box`). The renderRow override means the stub is never displayed.
+//
+// GAP-2: pd-ui WordList renders its own role=listbox div without a data-testid.
+//   We wrap it in a div[data-testid="worklist-queue"] with no role= so there
+//   is only one listbox in the subtree (the pd-ui one).
 
+import type { WordListItem, WordRowProps } from "@concavetrillion/pd-ui/worklist";
+import { WordList } from "@concavetrillion/pd-ui/worklist";
 import { useSyncExternalStore } from "react";
 import type { components } from "../../api/types";
 import { cn } from "@/lib/utils";
@@ -19,6 +31,35 @@ import { BulkActions } from "./BulkActions";
 
 type LineMatch = components["schemas"]["LineMatch"];
 type MatchStatus = components["schemas"]["MatchStatus"];
+
+// ─── GAP-1 adapter: LineMatch → WordListItem-compatible ───────────────────────
+//
+// pd-ui WordList requires TWord extends WordListItem which needs `text` and
+// `bounding_box`. LineMatch has neither. We extend with these fields so the
+// structural constraint is satisfied; renderRow overrides all presentation.
+
+interface LineMatchWordItem extends WordListItem {
+  // --- WordListItem shim fields (required by pd-ui type constraint) ---
+  // text mirrors ocr_line_text so any pd-ui default rendering falls back
+  // gracefully (though renderRow below always wins).
+  text: string;
+  bounding_box: {
+    top_left: { x: number; y: number };
+    bottom_right: { x: number; y: number };
+  };
+  // --- LineMatch fields (used by renderRow) ---
+  _lineMatch: LineMatch;
+}
+
+function adaptLineMatch(line: LineMatch): LineMatchWordItem {
+  return {
+    // WordListItem required fields (GAP-1 shim)
+    text: line.ocr_line_text ?? "",
+    bounding_box: { top_left: { x: 0, y: 0 }, bottom_right: { x: 0, y: 0 } },
+    // passthrough for renderRow
+    _lineMatch: line,
+  };
+}
 
 // ─── Status color bar (4px left accent, P5.a) ─────────────────────────────
 
@@ -210,16 +251,19 @@ function FilterRow({ counts, activeFilter, sort, onFilter, onSort }: FilterRowPr
   );
 }
 
-// ─── Row (P5.a) ───────────────────────────────────────────────────────────
+// ─── renderRow: WorklistRow content (P5.a) ────────────────────────────────
+//
+// This function satisfies pd-ui's renderRow: (props: WordRowProps<LineMatchWordItem>) => ReactNode.
+// It receives the adapted item and the selection state from pd-ui.
 
-interface WorklistRowProps {
-  line: LineMatch;
+interface WorklistRowInnerProps {
+  item: LineMatchWordItem;
   isSelected: boolean;
   isChecked: boolean;
-  onClick: () => void;
 }
 
-function WorklistRow({ line, isSelected, isChecked, onClick }: WorklistRowProps) {
+function WorklistRowInner({ item, isSelected, isChecked }: WorklistRowInnerProps) {
+  const line = item._lineMatch;
   const pip = pipStatus(line.overall_match_status);
   const barClass = STATUS_BAR_CLASS[pip];
   const pct = confidencePct(line);
@@ -230,13 +274,12 @@ function WorklistRow({ line, isSelected, isChecked, onClick }: WorklistRowProps)
   const idStamp = `L-${String(lineNum).padStart(3, "0")}`;
 
   return (
-    <button
-      type="button"
-      role="option"
+    // Note: pd-ui WordList renders the outer div[role=option] wrapping this.
+    // We render only the inner content here.
+    <div
       data-testid={`worklist-row-${line.line_index}`}
       data-selected={isSelected ? "true" : undefined}
       aria-selected={isSelected}
-      onClick={onClick}
       className={cn(
         "w-full flex items-stretch text-left text-[11px] transition-colors border-b border-border-1/40",
         isSelected
@@ -291,7 +334,7 @@ function WorklistRow({ line, isSelected, isChecked, onClick }: WorklistRowProps)
           </span>
         )}
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -338,6 +381,16 @@ export function Worklist({ lineMatches = [], projectId, pageIndex }: WorklistPro
   // Counts are always computed from the full unfiltered list for the chip row.
   const counts = computeCounts(lineMatches);
 
+  // Adapt LineMatch[] → WordListItem-compatible items for pd-ui WordList (GAP-1).
+  const wordItems: LineMatchWordItem[] = filtered.map(adaptLineMatch);
+
+  // Map line_index → display index for controlled selectedIndex prop.
+  // pd-ui WordList uses a 0-based index into the *displayed* items array.
+  const displaySelectedIndex =
+    selectedLineIndex != null
+      ? wordItems.findIndex((w) => w._lineMatch.line_index === selectedLineIndex)
+      : null;
+
   return (
     <div data-testid="worklist" className="flex flex-col h-full">
       {/* Filter + sort row (P5.b) */}
@@ -353,30 +406,34 @@ export function Worklist({ lineMatches = [], projectId, pageIndex }: WorklistPro
         }}
       />
 
-      {/* Queue list */}
-      <div
-        data-testid="worklist-queue"
-        className="flex-1 overflow-y-auto"
-        role="listbox"
-        aria-label="Line worklist queue"
-      >
+      {/* Queue list — wrapper keeps data-testid; pd-ui WordList owns role=listbox.
+          GAP-2: pd-ui WordList does not accept data-testid as a prop; the
+          wrapper div carries the testid without a conflicting role=. */}
+      <div data-testid="worklist-queue" className="flex-1 min-h-0" aria-label="Line worklist queue">
         {filtered.length === 0 ? (
           <div className="text-ink-3 text-[11px] p-3 text-center">
             No lines match current filter
           </div>
         ) : (
-          filtered.map((line) => (
-            <WorklistRow
-              key={line.line_index}
-              line={line}
-              isSelected={selectedLineIndex === line.line_index}
-              isChecked={checkedSet.has(line.line_index)}
-              onClick={() => {
-                worklistStore.setSelectedLineIndex(line.line_index);
-                selectLine(line.line_index);
-              }}
-            />
-          ))
+          <WordList<LineMatchWordItem>
+            items={wordItems}
+            selectedIndex={displaySelectedIndex ?? null}
+            onSelect={(idx) => {
+              const item = wordItems[idx];
+              if (!item) return;
+              worklistStore.setSelectedLineIndex(item._lineMatch.line_index);
+              selectLine(item._lineMatch.line_index);
+            }}
+            aria-label="Line worklist queue"
+            className="h-full"
+            renderRow={({ item, isSelected }: WordRowProps<LineMatchWordItem>) => (
+              <WorklistRowInner
+                item={item}
+                isSelected={isSelected}
+                isChecked={checkedSet.has(item._lineMatch.line_index)}
+              />
+            )}
+          />
         )}
       </div>
 
