@@ -9,10 +9,11 @@
 // The full PageActions bar (with all driver-contract testids) remains
 // mounted hidden inside ProjectPage for driver compatibility.
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useReloadOcr, useSavePage, useRematchGt } from "../hooks/usePageMutations";
 import { useJobProgress } from "../hooks/useJobProgress";
+import { useJobCompletionInvalidation } from "../hooks/useJobCompletionInvalidation";
 import { dialogStore } from "../stores/dialog-store";
 import { toast } from "../lib/toast";
 
@@ -29,25 +30,27 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
 
   // Toast lifecycle: react to OCR job progress transitions.
   // Rematch GT is synchronous (no SSE job) so it uses onSuccess/onError directly.
-  useEffect(() => {
-    if (!activeJobId || jobProgress === null) return;
-
-    if (jobProgress.status === "complete") {
-      toast.success("OCR complete", { id: activeJobId });
-      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
-      setActiveJobId(null);
-    } else if (jobProgress.status === "error") {
-      toast.error("OCR failed", { id: activeJobId });
-      setActiveJobId(null);
-    } else {
-      // Running — update loading toast with current progress message.
-      const msg = jobProgress.progress?.message ?? "Running OCR…";
+  //
+  // Invalidation + activeJobId reset are handled by the shared hook; toast
+  // text + loading-toast updates remain call-site-specific.
+  useJobCompletionInvalidation({
+    activeJobId,
+    jobProgress,
+    setActiveJobId,
+    invalidationKey: ["page", projectId, pageIndex],
+    onComplete: (jobId) => {
+      toast.success("OCR complete", { id: jobId });
+    },
+    onError: (jobId) => {
+      toast.error("OCR failed", { id: jobId });
+    },
+    onRunning: (jobId, event) => {
+      const msg = event.progress?.message ?? "Running OCR…";
       void import("sonner").then(({ toast: sonnerToast }) => {
-        sonnerToast.loading(msg, { id: activeJobId });
+        sonnerToast.loading(msg, { id: jobId });
       });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobProgress?.status, activeJobId]);
+    },
+  });
 
   const reloadOcr = useReloadOcr(projectId, pageIndex);
   const savePage = useSavePage(projectId, pageIndex);
