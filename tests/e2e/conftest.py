@@ -146,4 +146,4 @@ def live_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[LiveServer
 # Re-export so that test modules collected alone (e.g. test_ui_coverage.py)
 # can discover this module-scoped fixture without requiring
 # exercise_real_project.py to be collected in the same run.
-from tests.e2e.exercise_real_project import exercise_server as exercise_server  # noqa: E402
+from tests.e2e.exercise_real_project import exercise_server as exercise_server
