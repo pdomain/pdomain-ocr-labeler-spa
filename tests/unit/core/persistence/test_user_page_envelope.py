@@ -885,6 +885,27 @@ V22_ENVELOPE_WITH_ROTATION: dict[str, Any] = {
 }
 
 
+def _find_legacy_model_file() -> Path | None:
+    """Walk up from this test file looking for the sibling
+    ``pd-ocr-labeler`` repo's ``user_page_persistence.py``.
+
+    Returns the resolved path if found, or ``None`` if the sibling repo
+    isn't checked out alongside this one.  Using a walk (rather than a
+    hard-coded ``Path.parents[N]``) keeps the lookup robust under
+    worktrees, which insert extra directory levels
+    (``<repo>/.claude/worktrees/<id>/...``) that would break a fixed
+    parent-count lookup.  ``Path.parents`` is finite and stops at the
+    filesystem root, so the loop is bounded.
+    """
+    relative = Path("pd-ocr-labeler") / "pd_ocr_labeler" / "models" / "user_page_persistence.py"
+    cursor = Path(__file__).resolve()
+    for parent in cursor.parents:
+        candidate = parent / relative
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def test_legacy_labeler_tolerates_v22_rotation_fields() -> None:
     """Q-A1 resolution (option A): legacy ``UserPageEnvelope.from_dict``
     uses ``.get()`` throughout — extra fields like ``rotation_degrees``
@@ -902,16 +923,15 @@ def test_legacy_labeler_tolerates_v22_rotation_fields() -> None:
     """
     import importlib.util
     import sys
-    from pathlib import Path
 
-    legacy_model_path = (
-        Path(__file__).parents[5]
-        / "pd-ocr-labeler"
-        / "pd_ocr_labeler"
-        / "models"
-        / "user_page_persistence.py"
-    )
-    assert legacy_model_path.exists(), f"Legacy model file not found: {legacy_model_path}"
+    import pytest
+
+    legacy_model_path = _find_legacy_model_file()
+    if legacy_model_path is None:
+        pytest.skip(
+            "sibling pd-ocr-labeler repo not checked out alongside this one; "
+            "legacy compatibility assertion cannot be exercised here"
+        )
     mod_name = "pd_ocr_labeler.models.user_page_persistence"
     spec = importlib.util.spec_from_file_location(mod_name, legacy_model_path)
     assert spec is not None and spec.loader is not None
