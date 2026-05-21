@@ -125,12 +125,21 @@ describe("HotkeyHelpModal: KeyCap components", () => {
   });
 });
 
-// ─── completeness invariant ───────────────────────────────────────────────────
+// ─── completeness invariant (CU-3.2) ─────────────────────────────────────────
+//
+// CU-3.2 requirement: every hotkey registered in hotkey-registry.ts has a
+// corresponding KeyCap in the modal output.
 //
 // The modal reads directly from the registry (useSyncExternalStore), so this
-// invariant is structurally guaranteed. This test makes the guarantee explicit
+// invariant is structurally guaranteed. These tests make the guarantee explicit
 // and will catch any future divergence (e.g. filtering logic added to the modal
-// that incorrectly excludes entries).
+// that incorrectly excludes entries, or a registry entry added without a KeyCap).
+//
+// Each RegistryEntry has a non-empty `keyCaps` array (validated in the
+// "every entry has a non-empty label and at least one keyCap" test below).
+// The modal renders one HotkeyRow per entry; HotkeyRow maps entry.keyCaps to
+// <KeyCap> components. The structural count test (entry count = row count) and
+// the label-presence test together lock the full round-trip invariant.
 
 describe("HotkeyHelpModal: completeness invariant", () => {
   it("renders every entry label present in the registry", () => {
@@ -161,6 +170,37 @@ describe("HotkeyHelpModal: completeness invariant", () => {
       "[data-testid^='hotkey-group-table-'] tbody tr td:nth-child(2)",
     );
     expect(labelCells.length).toBe(totalRegistered);
+  });
+
+  it("every registry entry has at least one KeyCap rendered in the modal", () => {
+    renderModal();
+    const groups = getPopulatedGroups();
+
+    for (const group of groups) {
+      // The HotkeyRow renders the keyCaps in the first <td> of each row.
+      // KeyCap uses <div> elements (not <kbd>); check that the keycap cell
+      // for each row in this group is non-empty (i.e. at least one KeyCap div).
+      const tableEl = document.querySelector(`[data-testid="hotkey-group-table-${group.id}"]`);
+      expect(tableEl, `table "hotkey-group-table-${group.id}" not found in DOM`).toBeTruthy();
+
+      const keycapCells = tableEl!.querySelectorAll("tbody tr td:first-child");
+      expect(
+        keycapCells.length,
+        `group "${group.id}" — expected ${group.entries.length} keycap cells, got ${keycapCells.length}`,
+      ).toBe(group.entries.length);
+
+      keycapCells.forEach((cell, i) => {
+        const entry = group.entries[i];
+        // Each keycap cell must contain at least one nested div (the KeyCap
+        // component renders one <div> per key). An empty cell means the keyCaps
+        // array was empty or the entry was skipped by the modal renderer.
+        const innerDivs = cell.querySelectorAll("div");
+        expect(
+          innerDivs.length,
+          `entry "${entry?.label}" in group "${group.id}" — keycap cell has no <div> elements (KeyCap not rendered)`,
+        ).toBeGreaterThan(0);
+      });
+    }
   });
 });
 
