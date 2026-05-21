@@ -336,6 +336,80 @@ describe("nextSibling — block level (FO-7)", () => {
   });
 });
 
+// CU-4.2 plan test: 3-block page — middle-block sibling walk.
+describe("nextSibling — 3-block page (CU-4.2)", () => {
+  // Minimal 3-block page: one line per block.
+  const page3blocks: PagePayload = {
+    project_id: "p1",
+    page_index: 0,
+    line_filter: "all",
+    generation: 0,
+    line_matches: [
+      {
+        line_index: 0,
+        paragraph_index: 0,
+        block_index: 0,
+        ocr_line_text: "a",
+        ground_truth_line_text: "a",
+        word_matches: [w(0, 0, "a")],
+        overall_match_status: "exact",
+        exact_count: 1,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+        validated_word_count: 0,
+        total_word_count: 1,
+        is_fully_validated: false,
+      },
+      {
+        line_index: 1,
+        paragraph_index: 1,
+        block_index: 1,
+        ocr_line_text: "b",
+        ground_truth_line_text: "b",
+        word_matches: [w(1, 0, "b")],
+        overall_match_status: "exact",
+        exact_count: 1,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+        validated_word_count: 0,
+        total_word_count: 1,
+        is_fully_validated: false,
+      },
+      {
+        line_index: 2,
+        paragraph_index: 2,
+        block_index: 2,
+        ocr_line_text: "c",
+        ground_truth_line_text: "c",
+        word_matches: [w(2, 0, "c")],
+        overall_match_status: "exact",
+        exact_count: 1,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+        validated_word_count: 0,
+        total_word_count: 1,
+        is_fully_validated: false,
+      },
+    ],
+  };
+
+  it("nextSibling({blockId:'1'}, page, 'next') → blockId:'2'", () => {
+    const out = nextSibling({ blockId: "1" }, page3blocks, "next");
+    expect(out.blockId).toBe("2");
+  });
+
+  it("nextSibling({blockId:'1'}, page, 'prev') → blockId:'0'", () => {
+    const out = nextSibling({ blockId: "1" }, page3blocks, "prev");
+    expect(out.blockId).toBe("0");
+  });
+});
+
 describe("paragraph_index null bucket", () => {
   const page: PagePayload = {
     project_id: "p1",
