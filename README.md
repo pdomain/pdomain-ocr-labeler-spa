@@ -5,10 +5,11 @@ A FastAPI + React/Vite/TypeScript replacement for the NiceGUI-based
 current labeler, structurally modelled on
 [`pd-prep-for-pgdp`](../pd-prep-for-pgdp/).
 
-> **Status (2026-05-16):** Cut-over complete. Hi-fi P1–P5 shipped;
-> smoke run green; legacy `pd-ocr-labeler` superseded. See
-> [`docs/plan-to-usable.md`](docs/plan-to-usable.md) for the full
-> cut-over checklist.
+> **Status (2026-05-21):** Cut-over complete. Hi-fi P1–P5 shipped;
+> smoke run triaged; legacy `pd-ocr-labeler` superseded. See
+> [`docs/archive/plans/plan-to-usable.md`](docs/archive/plans/plan-to-usable.md)
+> for the full cut-over checklist. Known issues: see open bugs (e.g. #405 —
+> OCR-config modal has no user-facing trigger).
 
 ## Why
 
