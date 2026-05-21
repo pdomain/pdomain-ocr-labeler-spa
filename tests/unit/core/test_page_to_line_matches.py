@@ -348,6 +348,9 @@ def test_fuzz_threshold_app_config_field() -> None:
 
 
 # ── block_index round-trip (FO-7 / CU-4.1) ─────────────────────────────
+# Spec: docs/architecture/23-page-payload-backend.md §3
+# Verified: page_to_line_matches tags each LineMatch.block_index from
+# page.items[block_idx].paragraphs[].lines[] via _build_line_to_block_lookup.
 
 
 def test_line_match_carries_block_index() -> None:
