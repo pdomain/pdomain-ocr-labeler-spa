@@ -80,12 +80,24 @@ Any testid the legacy has that we want to retire requires
 
 ### 2.1 Header bar / project load
 
-| Testid | What it is | Spec |
+> **D-046 (2026-05-21):** The legacy inline header controls have been
+> deprecated and removed (see `specs/17-decisions.md` D-046). The driver
+> must reach these controls at their new locations as documented below.
+
+| Control | New location | New testid(s) |
 |---|---|---|
-| `project-select` | Project dropdown (Radix Select trigger) | [03](03-frontend.md) §HeaderBar |
-| `load-project-button` | LOAD button | same |
-| `source-folder-button` | Folder-icon button | same |
-| `ocr-config-trigger-button` | Tune-icon button | same |
+| Project dropdown | `ProjectLoadControls.tsx` on RootPage | `project-select` (real) |
+| LOAD button | `ProjectLoadControls.tsx` on RootPage | `load-project-button` (real) |
+| Source folder button | `ProjectLoadControls.tsx` (breadcrumb mode) | `source-folder-button` (real) |
+| OCR config trigger | `OCRConfigModal.tsx` (open via `dialogStore.open("ocrConfig")`) | `ocr-config-modal` (the modal itself); field stubs still in HeaderBar hidden div |
+| Export trigger | `PageActionsCompact.tsx` / `PageActions.tsx` | `page-actions-compact-export` / `export-button` |
+| Hotkey help trigger | Rail footer (`Rail.tsx`) | `rail-hotkeys-button` |
+
+The project-load trio (`project-select`, `load-project-button`,
+`source-folder-button`) are real controls inside `ProjectLoadControls`,
+rendered on the RootPage and in breadcrumb mode on project routes. The
+source-folder dialog fields (§2.2) and OCR-config modal fields (§2.3)
+continue to have stubs in the HeaderBar hidden div.
 
 ### 2.2 Source folder dialog
 
@@ -104,10 +116,15 @@ Hotkey: `Enter` on the path input triggers `source-folder-open-typed-button`.
 
 ### 2.3 OCR config modal
 
+> **D-046 (2026-05-21):** The `ocr-config-trigger-button` in HeaderBar
+> has been removed (see D-046). The modal is now opened via
+> `dialogStore.open("ocrConfig")` from project-page context. The modal
+> field stubs remain in the HeaderBar hidden div (available on every
+> route). The modal itself uses `data-testid="ocr-config-modal"`.
+
 | Testid | What it is |
 |---|---|
-| `ocr-config-trigger-button` | (header trigger) |
-| `ocr-detection-model-select` | Detection model select |
+| `ocr-detection-model-select` | Detection model select (stub in HeaderBar; real when modal open) |
 | `ocr-recognition-model-select` | Recognition model select |
 | `ocr-hf-revision-input` | HF revision input |
 | `ocr-rescan-models-button` | Rescan Models button |

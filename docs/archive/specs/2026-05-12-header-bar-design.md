@@ -1,8 +1,14 @@
 # pd-ocr-labeler-spa: HeaderBar Component
 
-> **Status**: Draft
+> **Status**: Archived (superseded by hi-fi redesign)
 > **Last updated**: 2026-05-12
 > **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#83
+>
+> **D-046 note (2026-05-21):** The inline project-load controls
+> (`project-select`, `load-project-button`, `source-folder-button`,
+> `ocr-config-trigger-button`) described here were deprecated and removed
+> from HeaderBar by GH #401. See `specs/17-decisions.md` D-046 for the
+> new locations of each control and the updated driver-contract paths.
 
 ## TL;DR
 

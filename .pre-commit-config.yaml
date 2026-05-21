@@ -37,7 +37,7 @@ repos:
     -   id: check-merge-conflict
 -   repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.15.13
+    rev: v0.15.14
     hooks:
     # Run the linter for imports
     -   id: ruff-check
@@ -119,7 +119,8 @@ repos:
     # exactly the behaviour we want from a pre-commit gate.
     -   id: basedpyright
         name: basedpyright (backend type-check)
-        description: Runs basedpyright recommended type-checking on src/ (--level error suppresses stub warnings).
+        description: Runs basedpyright recommended type-checking on src/
+          (--level error suppresses stub warnings).
         entry: uv run basedpyright src/pd_ocr_labeler_spa --level error
         language: system
         stages: [pre-commit]

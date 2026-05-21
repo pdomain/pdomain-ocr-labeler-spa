@@ -1666,6 +1666,107 @@ Cross-reference: `docs/architecture/04-image-viewport.md`,
 
 ---
 
+## D-046 — Deprecate legacy HeaderBar driver-contract stub testids (§2.1 project-load + dialog triggers)
+
+**Date:** 2026-05-21
+**Status:** Accepted
+**Closes:** GitHub issue #401
+**Supersedes:** stub-preservation rationale from commit ad71143
+
+### Context
+
+The hi-fi redesign (specs/2026-05-15-hifi-redesign-plan.md) relocated the
+controls that previously lived inline in HeaderBar:
+
+- **Project picker** (`project-select` / `load-project-button`) moved to the
+  RootPage project card grid, rendered by
+  `frontend/src/components/ProjectLoadControls.tsx`.
+- **Source folder** (`source-folder-button`) moved to
+  `frontend/src/components/SourceFolderDialog.tsx`, triggered via
+  `ProjectLoadControls` (breadcrumb mode, `change-project-button`).
+- **OCR config** (`ocr-config-trigger-button`) moved to
+  `frontend/src/components/OCRConfigModal.tsx` + the ⚙ button inside
+  `HeaderBar` (real button, not stub). The OCR config modal's internal
+  fields (`ocr-detection-model-select`, `ocr-recognition-model-select`,
+  `ocr-hf-revision-input`, `ocr-rescan-models-button`,
+  `ocr-config-cancel-button`, `ocr-config-apply-button`) live in
+  `OCRConfigModal.tsx`.
+- **Export** (`export-trigger-button` / `export-button`) moved to
+  `frontend/src/components/ExportDialog.tsx`, opened from
+  `PageActionsCompact` (`page-actions-compact-export`) and `PageActions`
+  (`export-button`).
+- **Hotkey help** (`hotkey-help-trigger-button` / `hotkey-help-dialog`)
+  moved to `frontend/src/components/HotkeyHelpModal.tsx`, opened from
+  the Rail footer button `rail-hotkeys-button`
+  (`frontend/src/components/shell/Rail.tsx:278`) via
+  `dialogStore.open("hotkeyHelp")`.
+
+Commit ad71143 preserved the deprecated controls as hidden stubs in
+HeaderBar so the driver-contract testid requirement in
+`docs/architecture/13-driver-contract.md` §2.1 was nominally satisfied.
+However, the hi-fi redesign is now shipped and the driver can reach all
+of these controls at their real locations. Keeping stubs conflicts with
+the test suite (HeaderBar.test.tsx explicitly asserts these testids are
+absent) and adds dead DOM noise.
+
+### Decision
+
+Remove the following elements from `HeaderBar.tsx`:
+
+| Deprecated testid | Element type | New location | New testid(s) |
+|---|---|---|---|
+| `project-select` | Stub (`data-testid-stub="true"`) | `ProjectLoadControls.tsx` | `project-select` (real) |
+| `load-project-button` | Stub | `ProjectLoadControls.tsx` | `load-project-button` (real) |
+| `source-folder-button` | Stub | `ProjectLoadControls.tsx` (breadcrumb mode) | `source-folder-button` (real) |
+| `ocr-config-trigger-button` | Real ⚙ button | `OCRConfigModal.tsx` (opened via `dialogStore.open("ocrConfig")`) | `ocr-config-modal` (the modal); modal-internal stubs kept in hidden div |
+| `export-trigger-button` | Never existed in SPA | `PageActionsCompact.tsx` / `PageActions.tsx` | `page-actions-compact-export` / `export-button` |
+| `hotkey-help-trigger-button` | Never existed in SPA | `Rail.tsx` footer | `rail-hotkeys-button` |
+
+The source-folder dialog field stubs
+(`source-folder-current-path-label`, `source-folder-path-input`,
+`source-folder-home-button`, `source-folder-up-button`,
+`source-folder-open-typed-button`, `source-folder-use-current-button`,
+`source-folder-cancel-button`, `source-folder-apply-button`) are
+**kept** in the HeaderBar hidden stub div — they are still needed for
+driver-contract §2.2 (source folder dialog fields available before the
+dialog opens). They are NOT removed.
+
+The OCR config modal field stubs
+(`ocr-detection-model-select`, `ocr-recognition-model-select`,
+`ocr-hf-revision-input`, `ocr-rescan-models-button`,
+`ocr-config-cancel-button`, `ocr-config-apply-button`) are also
+**kept** in the HeaderBar hidden stub div — tests assert them present
+(HeaderBar.test.tsx "stub ocr-config elements are in the DOM").
+
+The nav stubs (`nav-prev-button`, `nav-next-button`, `nav-goto-button`,
+`nav-page-input`, `nav-page-total-label`) are **not** deprecated —
+they remain in `HeaderBar.tsx` to ensure navigability from the root
+route before a project is opened.
+
+The driver contract document (`docs/architecture/13-driver-contract.md`)
+must be updated to remove §2.1 rows for the deprecated testids and
+document the new paths the driver uses for each control.
+
+### Approval
+
+CT approved the deprecation via GH issue #401 (2026-05-21). The
+OPEN_QUESTIONS.md `§2.1 testid retirement gate` (line 77–79 of
+`docs/architecture/13-driver-contract.md`) is satisfied by this ADR.
+
+### Consequences
+
+- `HeaderBar.test.tsx` tests that assert `project-select`,
+  `load-project-button`, `source-folder-button`,
+  `ocr-config-trigger-button`, `export-trigger-button`, and
+  `hotkey-help-trigger-button` are NOT in the DOM will now pass.
+- The driver must reach project-load controls via `ProjectLoadControls`
+  on the RootPage, source-folder via `SourceFolderDialog`, OCR config via
+  the real ⚙ button in HeaderBar right side or `OCRConfigModal`, export
+  via `PageActionsCompact`/`PageActions`, and hotkey help via the Rail
+  footer `rail-hotkeys-button`.
+
+---
+
 ## Pending decisions
 
 See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for any sub-questions
