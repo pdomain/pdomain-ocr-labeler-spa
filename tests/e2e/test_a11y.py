@@ -166,7 +166,9 @@ def test_a11y_word_match_region_role(live_server: LiveServer, page: Page) -> Non
 
     url = f"{live_server.base_url}/projects/{project_id}/pages/pageno/1"
     page.goto(url, timeout=15_000)
-    page.wait_for_selector("[data-testid='word-match-view']", timeout=15_000)
+    # word-match-view lives in a display:none stub wrapper (IS-4) for
+    # driver-contract testid preservation — use state="attached" not visible.
+    page.wait_for_selector("[data-testid='word-match-view']", state="attached", timeout=15_000)
 
     view = page.query_selector("[data-testid='word-match-view']")
     assert view is not None, "word-match-view not found"

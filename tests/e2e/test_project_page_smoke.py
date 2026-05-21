@@ -29,10 +29,14 @@ def test_project_page_loads_with_tiny_fixture(live_server: LiveServer, page: Pag
     wait_for_page_loaded(page, live_server.base_url, timeout=15_000)
 
     # The assembled shell mounts the major panes.
+    # image-pane is directly visible inside the canvas slot.
     page.wait_for_selector('[data-testid="image-pane"]', timeout=10_000)
-    page.wait_for_selector('[data-testid="text-pane"]', timeout=10_000)
-    page.wait_for_selector('[data-testid="splitter"]', timeout=10_000)
-    page.wait_for_selector('[data-testid="page-actions-bar"]', timeout=10_000)
+    # Phase 2: StudioShell replaces the legacy Splitter layout; use studio-shell-canvas.
+    page.wait_for_selector('[data-testid="studio-shell-canvas"]', timeout=10_000)
+    # text-pane and page-actions-bar live in display:none stub wrappers for
+    # driver-contract testid preservation (IS-4) — use state="attached".
+    page.wait_for_selector('[data-testid="text-pane"]', state="attached", timeout=10_000)
+    page.wait_for_selector('[data-testid="page-actions-bar"]', state="attached", timeout=10_000)
 
 
 @pytest.mark.e2e
@@ -68,14 +72,19 @@ def test_open_ocr_config_dialog(live_server: LiveServer, page: Page) -> None:
     page.goto(url, timeout=15_000)
     wait_for_page_loaded(page, live_server.base_url, timeout=15_000)
 
-    # Click the trigger; the modal mounts above the page shell.
-    page.click('[data-testid="ocr-config-trigger-button"]')
+    # Click the real (non-stub) trigger; the modal mounts above the page shell.
+    # Phase 2: ocr-config-trigger-button is a real button in HeaderBar (spec 22 §6).
+    trigger = page.locator('[data-testid="ocr-config-trigger-button"]:not([data-testid-stub])')
+    trigger.wait_for(state="visible", timeout=10_000)
+    trigger.click()
 
-    # The OCR-config modal mounts at AppShell once opened — wait for either
-    # its dialog container or one of its internal selects (driver-contract
-    # §2.3 catalogues `ocr-detection-model-select` etc).
+    # The OCR-config modal mounts at AppShell once opened — wait for the
+    # modal container (driver-contract §2.3: `ocr-config-modal`).
+    # The internal selects (ocr-detection-model-select etc.) are also in the DOM
+    # as stubs (display:none) — use the real modal container which is only present
+    # after dialogStore.open("ocrConfig") runs.
     page.wait_for_selector(
-        '[data-testid="ocr-detection-model-select"], [data-testid="ocr-config-modal"]',
+        '[data-testid="ocr-config-modal"]',
         timeout=10_000,
     )
 
