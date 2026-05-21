@@ -15,7 +15,7 @@
 // layer token (`text-layer-block`/`-para`/`-line`/`-word`).
 
 import { useSyncExternalStore } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight } from "@concavetrillion/pd-ui/icons";
 import { cn } from "@/lib/utils";
 import {
   selectionStore,

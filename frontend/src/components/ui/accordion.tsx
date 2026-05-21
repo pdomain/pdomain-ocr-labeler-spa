@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown } from "@concavetrillion/pd-ui/icons";
 
 import { cn } from "@/lib/utils";
 import { KeyCap } from "./KeyCap";

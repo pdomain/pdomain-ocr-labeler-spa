@@ -13,7 +13,9 @@
 // Hotkeys: 1/2/3/4 (target), V/R/A/E (mode) — wired via useRailHotkeys.
 
 import { useSyncExternalStore } from "react";
-import { Eye, Square, Plus, Eraser, Keyboard, LayoutList } from "lucide-react";
+import { Eye, Plus } from "@concavetrillion/pd-ui/icons";
+import { ModeErase } from "@concavetrillion/pd-ui/icons";
+import { Square, Keyboard, LayoutList } from "@/icons/local-shims";
 import { railStore, type RailTarget, type RailMode } from "../../stores/rail-store";
 import { useRailHotkeys } from "../../hooks/useRailHotkeys";
 import { useLayerColors } from "../../hooks/useLayerColors";
@@ -27,7 +29,7 @@ const MODE_ICONS: Record<RailMode, React.ReactNode> = {
   view: <Eye size={16} aria-hidden="true" />,
   region: <Square size={16} aria-hidden="true" />,
   annotate: <Plus size={16} aria-hidden="true" />,
-  erase: <Eraser size={16} aria-hidden="true" />,
+  erase: <ModeErase size={16} aria-hidden="true" />,
 };
 
 const MODE_LABELS: Record<RailMode, string> = {

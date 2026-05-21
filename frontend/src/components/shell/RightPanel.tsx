@@ -16,7 +16,7 @@
 // of API/data coupling.
 
 import { useSyncExternalStore } from "react";
-import { PanelRightClose } from "lucide-react";
+import { PanelRightClose } from "@/icons/local-shims";
 import { cn } from "@/lib/utils";
 import { Breadcrumb } from "./Breadcrumb";
 import { selectionStore, type SelectionLevel } from "../../stores/selection-store";

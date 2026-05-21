@@ -15,7 +15,7 @@
 //   change-project-button — breadcrumb mode only (triggers dialogStore.open("sourceFolder"))
 
 import { useState, useEffect } from "react";
-import { FolderOpen } from "lucide-react";
+import { FolderOpen } from "@/icons/local-shims";
 import type { components } from "../api/types";
 import { dialogStore } from "../stores/dialog-store";
 
