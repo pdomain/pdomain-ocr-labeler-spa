@@ -122,3 +122,27 @@ close time, then the entry moves to the archive.
      a misleading empty-but-complete state.
   3. To investigate empty-page OCR: check `LocalDoctrPageLoader` logs for the image path it
      actually reads and the raw DocTR word count before `page_to_line_matches` filtering.
+
+---
+
+## BUG-KBD-6 — `Ctrl+ArrowLeft` (prev-page hotkey) silently fails in Playwright e2e
+
+- **Status:** open (#402)
+- **Severity:** medium
+- **Found:** 2026-05-21 (CU-2 smoke run)
+- **Where:** `frontend/src/hooks/useGlobalHotkeys.ts:70` — `useHotkey("mod+arrowleft", ...)`; `frontend/src/pages/ProjectPage.tsx:335–337` — `onPrevPage` handler
+- **Issue:** `test_page_navigation_keyboard_only[chromium]` FAILS: `Ctrl+ArrowRight` advances to page 2 successfully (URL changes, `wait_for_url` passes), but `Ctrl+ArrowLeft` times out when waiting for URL `/pageno/1`. Possible causes: (a) key captured by browser before hotkeys-js sees it; (b) conflict with `useDialogHotkeys` `ctrl+arrowleft` nudge binding (enabled=true default); (c) React Router client-side navigation doesn't fire a 'load' event, but this would be asymmetric since `Ctrl+ArrowRight` passes.
+- **Why it matters:** `Mod+ArrowLeft/Right` page navigation is a core workflow shortcut listed in the M9.5 keyboard audit. The test was specifically designed to verify keyboard page navigation.
+- **Suggested fix:** (1) Confirm `useDialogHotkeys` is only mounted with `enabled=dialogOpen`. (2) In the test, switch from `wait_for_url(..., until='load')` to polling URL after a short delay to isolate test harness vs real hotkey failure. (3) If the hotkey genuinely doesn't fire, add `event.preventDefault()` to the hotkeys-js callback to block browser defaults.
+
+---
+
+## BUG-HIER-1 — Hierarchy tab shows no para/word nodes in e2e — 6 WordDetail section tests skip
+
+- **Status:** open (#403)
+- **Severity:** medium
+- **Found:** 2026-05-21 (CU-2 smoke run)
+- **Where:** `tests/e2e/test_ui_coverage.py` — `_select_first_word_via_hierarchy()`; `frontend/src/components/drawer/Hierarchy.tsx:444-449`
+- **Issue:** After switching to the Hierarchy tab, `[data-testid^="hierarchy-node-para-"]` has count 0 despite the Worklist showing rows (page data loaded). This causes 6 tests to skip: `test_char_fixer_section_in_dom`, `test_char_ranges_section_in_dom`, `test_bbox_section_in_dom`, `test_rebox_section_in_dom`, `test_style_and_component_palette_in_dom`, `test_erase_pixels_section_in_dom`. Possible cause: `pagePayload` is `null` at the first Hierarchy render (timing); or the exercise fixture envelopes don't have `paragraph_index`/`block_index` fields; or the `0.4s` sleep is insufficient after tab switch.
+- **Why it matters:** Six WordDetail accordion sections have no e2e coverage path. CharFixer, CharRanges, BBox, Rebox, StylePalette, and ErasePatch sections are untestable until the Hierarchy tree populates.
+- **Suggested fix:** In `_select_first_word_via_hierarchy`, add explicit `wait_for_selector('[data-testid^="hierarchy-node-"]')` after tab switch rather than relying on a fixed sleep. Investigate whether `pagePayload` is non-null by checking `hierarchy-node-count` text content. Check exercise fixture envelope JSON for `paragraph_index` field presence.
