@@ -272,6 +272,61 @@ describe("ErasePixelsSection — P3.c ops list", () => {
   });
 });
 
+// ── CU-6.1 acceptance tests ──────────────────────────────────────────────────
+// Plan: docs/plans/2026-05-16-complete-labeler-spa.md §CU-6.1
+// Pins the probe-gating invariant: Apply is disabled when probe returns
+// available:false, and enabled (and calls onApply) when available:true.
+//
+// Note: ErasePixelsSection delegates the actual HTTP POST to the parent via
+// the `onApply` callback (WordDetail owns useErasePixels).  We test the
+// callback path here; the backend HTTP round-trip is covered separately.
+describe("ErasePixelsSection — CU-6.1 capability probe gating", () => {
+  it("probe available:false → not-available banner shown (no canvas, no Apply)", async () => {
+    server.use(
+      http.get("/api/refine/available", () =>
+        HttpResponse.json({ available: false, reason: "engine not wired" }),
+      ),
+    );
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <ErasePixelsSection />
+      </Wrapper>,
+    );
+    await waitFor(() => expect(screen.getByTestId("erase-not-available")).toBeInTheDocument());
+    expect(screen.queryByTestId("erase-apply")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("erase-canvas")).not.toBeInTheDocument();
+  });
+
+  it("probe available:true → Apply enabled after adding op and calls onApply on click", async () => {
+    server.use(
+      http.get("/api/refine/available", () => HttpResponse.json({ available: true, reason: "" })),
+    );
+    const onApply = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    const Wrapper = makeWrapper();
+    render(
+      <Wrapper>
+        <ErasePixelsSection onApply={onApply} />
+      </Wrapper>,
+    );
+    // Wait for probe to resolve and canvas to appear.
+    await waitFor(() => expect(screen.getByTestId("erase-canvas")).toBeInTheDocument());
+    // Apply is disabled until an op is queued.
+    expect(screen.getByTestId("erase-apply")).toBeDisabled();
+    // Add an op by clicking the canvas (mock fires mouseUp → commit).
+    await user.click(screen.getByTestId("erase-canvas"));
+    // Apply now enabled.
+    expect(screen.getByTestId("erase-apply")).not.toBeDisabled();
+    // Click Apply — onApply must be called with the ops list.
+    await user.click(screen.getByTestId("erase-apply"));
+    expect(onApply).toHaveBeenCalledOnce();
+    const ops = onApply.mock.calls[0][0] as { tool: string }[];
+    expect(ops.length).toBeGreaterThan(0);
+    expect(ops[0].tool).toBe("brush");
+  });
+});
+
 describe("ErasePixelsSection — P3.c commit footer", () => {
   const Wrapper = makeWrapper();
   beforeEach(() => {
