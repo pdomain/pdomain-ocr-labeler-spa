@@ -1,4 +1,4 @@
-"""``docs/DEVELOPMENT.md`` smoke shape.
+"""``docs/process/DEVELOPMENT.md`` smoke shape.
 
 Catches the most common drift modes between the development guide and
 the actual Makefile / `mise.toml`:
@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-DOC = Path(__file__).resolve().parents[2] / "docs" / "DEVELOPMENT.md"
+DOC = Path(__file__).resolve().parents[2] / "docs" / "process" / "DEVELOPMENT.md"
 MAKEFILE = Path(__file__).resolve().parents[2] / "Makefile"
 MISE = Path(__file__).resolve().parents[2] / "mise.toml"
 

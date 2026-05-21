@@ -1,4 +1,4 @@
-"""Shape-pin tests for ``docs/M0-acceptance.md``.
+"""Shape-pin tests for ``docs/archive/specs/M0-acceptance.md``.
 
 The doc is the single page that says "what does M0-done mean and what's
 still in the way." These tests enforce the invariants that make it
@@ -27,21 +27,23 @@ from __future__ import annotations
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DOC = REPO_ROOT / "docs" / "M0-acceptance.md"
+DOC = REPO_ROOT / "docs" / "archive" / "specs" / "M0-acceptance.md"
 ROADMAP = REPO_ROOT / "docs" / "ROADMAP.md"
 SPEC_M0 = REPO_ROOT / "specs" / "16-milestones.md"
 
 
 def test_m0_acceptance_doc_exists() -> None:
     """The acceptance doc must exist alongside ROADMAP/BUGS_FOUND."""
-    assert DOC.exists(), "docs/M0-acceptance.md is missing"
+    assert DOC.exists(), "docs/archive/specs/M0-acceptance.md is missing"
 
 
 def test_m0_acceptance_doc_has_status_section() -> None:
     """A reviewer must be able to grep ``## Status`` and learn the
     current acceptance state without reading the whole doc."""
     text = DOC.read_text(encoding="utf-8")
-    assert "\n## Status\n" in text, "docs/M0-acceptance.md must include a top-level `## Status` section"
+    assert "\n## Status\n" in text, (
+        "docs/archive/specs/M0-acceptance.md must include a top-level `## Status` section"
+    )
 
 
 def test_m0_acceptance_doc_lists_open_questions_blocking_m0() -> None:
@@ -50,8 +52,8 @@ def test_m0_acceptance_doc_lists_open_questions_blocking_m0() -> None:
     in `ROADMAP.md`'s status row. If a future iter closes one, this
     test will need to be updated alongside the doc."""
     text = DOC.read_text(encoding="utf-8")
-    assert "Q-A8" in text, "docs/M0-acceptance.md must name Q-A8 (frontend toolchain blocker)"
-    assert "Q-A9" in text, "docs/M0-acceptance.md must name Q-A9 (ESLint config blocker)"
+    assert "Q-A8" in text, "docs/archive/specs/M0-acceptance.md must name Q-A8 (frontend toolchain blocker)"
+    assert "Q-A9" in text, "docs/archive/specs/M0-acceptance.md must name Q-A9 (ESLint config blocker)"
 
 
 def test_m0_acceptance_doc_covers_each_spec_acceptance_clause() -> None:
@@ -75,7 +77,7 @@ def test_m0_acceptance_doc_covers_each_spec_acceptance_clause() -> None:
     text = DOC.read_text(encoding="utf-8")
     missing = [tok for tok in expected_tokens if tok not in text]
     assert not missing, (
-        f"docs/M0-acceptance.md is missing references to spec-mandated "
+        f"docs/archive/specs/M0-acceptance.md is missing references to spec-mandated "
         f"acceptance tokens: {missing!r}. Each criterion in "
         f"`specs/16-milestones.md` §M0 must be reflected so a reviewer "
         f"can run the documented ritual end-to-end."
@@ -90,7 +92,7 @@ def test_m0_acceptance_doc_describes_signoff_ritual() -> None:
     text = DOC.read_text(encoding="utf-8")
     has_signoff = any(token in text for token in ("Sign-off", "Sign off", "Closing M0", "## Sign"))
     assert has_signoff, (
-        "docs/M0-acceptance.md must describe how M0 flips from "
+        "docs/archive/specs/M0-acceptance.md must describe how M0 flips from "
         "'in progress' to 'done' (Sign-off / Sign off / Closing M0 section)."
     )
 
@@ -102,8 +104,9 @@ def test_m0_acceptance_doc_references_authoritative_spec_and_roadmap() -> None:
     that drops the spec-as-source-of-truth framing."""
     text = DOC.read_text(encoding="utf-8")
     assert "16-milestones.md" in text, (
-        "docs/M0-acceptance.md must cite `specs/16-milestones.md` as the authoritative milestone definition"
+        "docs/archive/specs/M0-acceptance.md must cite `specs/16-milestones.md` "
+        "as the authoritative milestone definition"
     )
     assert "ROADMAP.md" in text, (
-        "docs/M0-acceptance.md must cite `docs/ROADMAP.md` as the implementation tracker"
+        "docs/archive/specs/M0-acceptance.md must cite `docs/ROADMAP.md` as the implementation tracker"
     )
