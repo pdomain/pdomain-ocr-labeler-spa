@@ -29,18 +29,18 @@ jobs:
       - uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11"
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
       - name: Install backend deps
         run: uv sync --group dev
       - name: Install frontend deps
-        run: |
-          cd frontend
-          if [ ! -f package-lock.json ]; then
-            npm install --package-lock-only --include=dev
-          fi
-          npm ci --include=dev
+        run: cd frontend && pnpm install --frozen-lockfile
       - name: Run lint (ruff + pyright + eslint + tsc)
         run: make lint
 
@@ -68,24 +68,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11"
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
       - name: Install frontend deps
-        run: |
-          cd frontend
-          if [ ! -f package-lock.json ]; then
-            npm install --package-lock-only --include=dev
-          fi
-          npm ci --include=dev
+        run: cd frontend && pnpm install --frozen-lockfile
       - name: Run vitest suite
         run: |
           cd frontend
-          npm test
+          pnpm test
       - name: Build SPA bundle
         run: |
           cd frontend
-          npm run build
+          pnpm run build
       - name: Copy bundle to static/
         run: |
           mkdir -p src/pd_ocr_labeler_spa/static
@@ -191,18 +191,18 @@ jobs:
       - uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11"
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
       - name: Install backend deps
         run: uv sync --group dev
       - name: Install frontend deps
-        run: |
-          cd frontend
-          if [ ! -f package-lock.json ]; then
-            npm install --package-lock-only --include=dev
-          fi
-          npm ci --include=dev
+        run: cd frontend && pnpm install --frozen-lockfile
       - name: Download pre-built SPA
         uses: actions/download-artifact@v4
         with:
