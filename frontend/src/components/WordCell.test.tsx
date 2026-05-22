@@ -157,4 +157,83 @@ describe("WordCell", () => {
     render(<WordCell word={word2} />);
     expect(screen.getByTestId("word-cell-unique-b")).toBeInTheDocument();
   });
+
+  // Glyph corner badge tests (spec §5.3, testid §7)
+  it("does NOT render glyph badge when both annotations and predictions are null", () => {
+    const word = makeWordMatch({ line_index: 0, word_index: 0 });
+    render(<WordCell word={word} />);
+    expect(screen.queryByTestId("word-glyph-badge-0-0")).toBeNull();
+  });
+
+  it("renders amber glyph badge when predictions present but annotations null", () => {
+    const word = makeWordMatch({
+      line_index: 1,
+      word_index: 2,
+      glyph_predictions: {
+        ligatures: [{ kind: "ct", char_span: null }],
+        long_s_positions: [],
+        swash: false,
+        source: "predicted",
+      },
+    });
+    render(<WordCell word={word} />);
+    const badge = screen.getByTestId("word-glyph-badge-1-2");
+    expect(badge).toBeTruthy();
+    expect(badge.className).toContain("amber");
+  });
+
+  it("renders blue glyph badge when annotations set (even empty)", () => {
+    const word = makeWordMatch({
+      line_index: 0,
+      word_index: 3,
+      glyph_annotations: {
+        ligatures: [],
+        long_s_positions: [],
+        swash: false,
+        source: "human",
+      },
+    });
+    render(<WordCell word={word} />);
+    const badge = screen.getByTestId("word-glyph-badge-0-3");
+    expect(badge).toBeTruthy();
+    expect(badge.className).toContain("blue");
+  });
+
+  it("renders green glyph badge when annotations have marks", () => {
+    const word = makeWordMatch({
+      line_index: 2,
+      word_index: 1,
+      glyph_annotations: {
+        ligatures: [{ kind: "ct", char_span: [1, 3] }],
+        long_s_positions: [],
+        swash: false,
+        source: "human",
+      },
+    });
+    render(<WordCell word={word} />);
+    const badge = screen.getByTestId("word-glyph-badge-2-1");
+    expect(badge).toBeTruthy();
+    expect(badge.className).toContain("green");
+  });
+
+  it("renders chip row when annotations exist", () => {
+    const word = makeWordMatch({
+      line_index: 0,
+      word_index: 0,
+      glyph_annotations: {
+        ligatures: [{ kind: "ct", char_span: [1, 3] }],
+        long_s_positions: [],
+        swash: false,
+        source: "human",
+      },
+    });
+    render(<WordCell word={word} />);
+    expect(screen.getByTestId("word-glyph-chip-row-0-0")).toBeTruthy();
+  });
+
+  it("does NOT render chip row when no annotations or predictions", () => {
+    const word = makeWordMatch({ line_index: 0, word_index: 0 });
+    render(<WordCell word={word} />);
+    expect(screen.queryByTestId("word-glyph-chip-row-0-0")).toBeNull();
+  });
 });

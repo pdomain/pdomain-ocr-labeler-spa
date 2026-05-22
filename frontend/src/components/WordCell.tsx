@@ -24,6 +24,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import type { components } from "../api/types";
+import { GlyphChip } from "./glyph/GlyphChip";
 
 type WordMatch = components["schemas"]["WordMatch"];
 type MatchStatus = components["schemas"]["MatchStatus"];
@@ -98,12 +99,47 @@ export function WordCell({ word, onCommitGt, onEditWord }: WordCellProps) {
   const l = word.line_index;
   const w = word.word_index ?? 0;
 
+  // Glyph badge color logic (spec §5.3)
+  const hasAnnotations = word.glyph_annotations != null;
+  const hasPredictions = word.glyph_predictions != null;
+  const hasMarks =
+    hasAnnotations &&
+    ((word.glyph_annotations?.ligatures?.length ?? 0) > 0 ||
+      (word.glyph_annotations?.long_s_positions?.length ?? 0) > 0 ||
+      !!word.glyph_annotations?.swash);
+
+  const badgeColor = hasMarks
+    ? "bg-green-500"
+    : hasAnnotations
+      ? "bg-blue-500"
+      : hasPredictions
+        ? "bg-amber-500"
+        : null;
+
+  const showChipRow = hasAnnotations || hasPredictions;
+
   return (
     <div
       data-testid={`word-cell-${wordId}`}
       data-testid-alias={`word-image-cell-${l}-${w}`}
-      className="border border-border-1 rounded p-1 flex flex-col gap-0.5 min-w-16 max-w-32"
+      className="border border-border-1 rounded p-1 flex flex-col gap-0.5 min-w-16 max-w-32 relative"
     >
+      {/* Glyph corner badge (spec §5.3, testid §7) */}
+      {badgeColor !== null && (
+        <span
+          data-testid={`word-glyph-badge-${l}-${w}`}
+          className={`absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-sm ${badgeColor}`}
+          aria-label="glyph annotation badge"
+          title={
+            hasMarks
+              ? "Has glyph marks"
+              : hasAnnotations
+                ? "Reviewed (no marks)"
+                : "Predictions pending review"
+          }
+        />
+      )}
+
       {/* Row 1: status icon + validated indicator + edit button stub */}
       <div className="flex items-center justify-between">
         <span
@@ -185,6 +221,64 @@ export function WordCell({ word, onCommitGt, onEditWord }: WordCellProps) {
         className="w-full text-xs border border-border-1 rounded px-1 py-0.5 font-mono focus:outline-none focus:border-accent"
         aria-label={`Ground truth for "${word.ocr_text}"`}
       />
+
+      {/* Glyph chip row (spec §5.3, testid §7) — shown when any annotations or predictions exist */}
+      {showChipRow && (
+        <div data-testid={`word-glyph-chip-row-${l}-${w}`} className="flex flex-wrap gap-0.5">
+          {(word.glyph_annotations?.ligatures ?? []).map((lig, i) => (
+            <GlyphChip
+              key={`ann-${lig.kind}-${i}`}
+              lineIndex={l}
+              wordIndex={w}
+              kind={lig.kind}
+              predicted={false}
+              onClick={() => {
+                /* future: open panel */
+              }}
+            />
+          ))}
+          {(word.glyph_annotations?.long_s_positions ?? []).map((pos) => (
+            <GlyphChip
+              key={`ls-${pos}`}
+              lineIndex={l}
+              wordIndex={w}
+              kind="long_s"
+              predicted={false}
+              onClick={() => {
+                /* future: open panel */
+              }}
+            />
+          ))}
+          {word.glyph_annotations?.swash && (
+            <GlyphChip
+              lineIndex={l}
+              wordIndex={w}
+              kind="swash"
+              predicted={false}
+              onClick={() => {
+                /* future: open panel */
+              }}
+            />
+          )}
+          {(word.glyph_predictions?.ligatures ?? [])
+            .filter(
+              (pred) =>
+                !(word.glyph_annotations?.ligatures ?? []).some((a) => a.kind === pred.kind),
+            )
+            .map((pred, i) => (
+              <GlyphChip
+                key={`pred-${pred.kind}-${i}`}
+                lineIndex={l}
+                wordIndex={w}
+                kind={pred.kind}
+                predicted={true}
+                onClick={() => {
+                  /* future: open panel */
+                }}
+              />
+            ))}
+        </div>
+      )}
 
       {/* Row 5: fuzz score (shown only for fuzzy matches) */}
       {word.match_status === "fuzzy" && word.fuzz_score != null && (
