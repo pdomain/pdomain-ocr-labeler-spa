@@ -2290,6 +2290,38 @@ export interface components {
              */
             auto_rotate_available: boolean;
         };
+        /**
+         * GlyphAnnotationsModel
+         * @description Glyph-level side-channel annotations for one word — spec §3 + D-044.
+         *
+         *     Mirrors ``pd_book_tools.ocr.glyph_annotations.GlyphAnnotations`` and adds
+         *     ``source`` (D-044: object-level provenance, not per-mark).
+         *
+         *     Tri-state semantics (spec §1):
+         *     - ``WordMatch.glyph_annotations is None`` — not yet reviewed.
+         *     - ``WordMatch.glyph_annotations == GlyphAnnotationsModel()`` — reviewed, nothing to annotate.
+         *     - ``WordMatch.glyph_annotations`` with marks — reviewed, marks present.
+         *
+         *     ``glyph_predictions`` on ``WordMatch`` uses the same shape but with
+         *     ``source="predicted"``; predictions are NEVER persisted in the envelope.
+         */
+        GlyphAnnotationsModel: {
+            /** Ligatures */
+            ligatures?: components["schemas"]["LigatureMarkModel"][];
+            /** Long S Positions */
+            long_s_positions?: number[];
+            /**
+             * Swash
+             * @default false
+             */
+            swash: boolean;
+            /**
+             * Source
+             * @default human
+             * @enum {string}
+             */
+            source: "human" | "predicted" | "human_confirmed";
+        };
         /** GroupSelectedWordsIntoNewParagraphRequest */
         GroupSelectedWordsIntoNewParagraphRequest: {
             /** Word Indices */
@@ -2363,6 +2395,30 @@ export interface components {
          * @enum {string}
          */
         JobType: "refine_bboxes_page" | "expand_refine_bboxes_page" | "reload_ocr_page" | "export" | "save_project" | "refine_bboxes_project";
+        /**
+         * LigatureMarkModel
+         * @description One ligature occurrence within a word — spec ``specs/20-glyph-annotations.md`` §3.
+         *
+         *     Mirrors ``pd_book_tools.ocr.glyph_annotations.LigatureMark`` as a Pydantic model
+         *     so it serialises correctly in the wire contract.
+         *
+         *     ``kind`` is the ligature kind string (e.g. ``"ct"``, ``"fi"``).  Values
+         *     correspond to ``pd_book_tools.ocr.glyph_annotations.LigatureKind`` but are
+         *     kept as plain strings here to avoid importing from pd_book_tools at schema
+         *     definition time (lazy import strategy for the OCR dependency).
+         *
+         *     ``char_span`` is a ``[start, end)`` tuple of char indices into the GT string,
+         *     or ``None`` when the span is unknown (coarse-grained label).
+         */
+        LigatureMarkModel: {
+            /** Kind */
+            kind: string;
+            /** Char Span */
+            char_span?: [
+                number,
+                number
+            ] | null;
+        };
         /**
          * LineFilter
          * @description Line display filter — spec §1 ``LineFilter``.
@@ -3322,6 +3378,8 @@ export interface components {
             char_bboxes?: components["schemas"]["BBox"][] | null;
             /** Char Ranges */
             char_ranges?: components["schemas"]["CharRange-Output"][] | null;
+            glyph_annotations?: components["schemas"]["GlyphAnnotationsModel"] | null;
+            glyph_predictions?: components["schemas"]["GlyphAnnotationsModel"] | null;
         };
     };
     responses: never;

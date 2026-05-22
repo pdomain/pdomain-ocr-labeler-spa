@@ -61,10 +61,9 @@ e2e = [
 ]
 
 [tool.uv.sources]
-# Pinned tag chosen to match the version pgdp-prep currently consumes,
-# so a single devcontainer can host both repos against the same
-# pd-book-tools build. Bump via `make upgrade-pd-book-tools` when ready.
-pd-book-tools = { git = "https://github.com/ConcaveTrillion/pd-book-tools.git", tag = "v0.9.0" }
+# Pinned to the commit that ships glyph_annotations (pd-book-tools#41, merged
+# after v0.12.0).  Bump to the next release tag once one is cut.
+pd-book-tools = { git = "https://github.com/ConcaveTrillion/pd-book-tools.git", rev = "675ad76ea5e418299fc804ebd062379c1c5d033a" }
 
 [tool.hatch.version]
 source = "vcs"

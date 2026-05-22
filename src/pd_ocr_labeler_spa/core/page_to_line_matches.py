@@ -39,6 +39,8 @@ if TYPE_CHECKING:
 from .models import (
     BBox,
     CharRange,
+    GlyphAnnotationsModel,
+    LigatureMarkModel,
     LineMatch,
     MatchStatus,
     PageRecord,
@@ -47,6 +49,37 @@ from .models import (
 )
 
 log = logging.getLogger(__name__)
+
+
+def _convert_glyph_annotations(ga_obj: object | None) -> GlyphAnnotationsModel | None:
+    """Convert a ``pd_book_tools.GlyphAnnotations`` dataclass to ``GlyphAnnotationsModel``.
+
+    Returns ``None`` when ``ga_obj`` is ``None`` (not-yet-reviewed state).
+    Returns an empty ``GlyphAnnotationsModel()`` when ``ga_obj`` is a
+    ``GlyphAnnotations`` with no marks (reviewed, nothing to annotate).
+
+    ``source`` is NOT carried by ``pd_book_tools.GlyphAnnotations``; it defaults
+    to ``"human"`` for any annotation that comes from a saved envelope (since
+    the SPA writes those as human-authored).  The caller is responsible for
+    setting ``source="predicted"`` when attaching classifier output via
+    ``WordMatch.glyph_predictions``.
+    """
+    if ga_obj is None:
+        return None
+    ligatures = []
+    for lm in getattr(ga_obj, "ligatures", []) or []:
+        kind_val = getattr(lm, "kind", None)
+        if kind_val is None:
+            continue
+        kind_str = kind_val.value if hasattr(kind_val, "value") else str(kind_val)
+        span = getattr(lm, "char_span", None)
+        ligatures.append(LigatureMarkModel(kind=kind_str, char_span=span))
+    return GlyphAnnotationsModel(
+        ligatures=ligatures,
+        long_s_positions=list(getattr(ga_obj, "long_s_positions", []) or []),
+        swash=bool(getattr(ga_obj, "swash", False)),
+        source="human",
+    )
 
 
 @runtime_checkable
@@ -209,6 +242,12 @@ def _word_to_word_match(
                     if isinstance(r, dict)
                 ]
 
+        # Glyph annotations — propagated from ``Word.glyph_annotations`` (spec §3).
+        # ``source`` defaults to "human" for envelope-loaded pages.
+        # ``glyph_predictions`` is left as None here; it is injected by the
+        # ``IGlyphPredictor`` adapter at payload-build time (not yet wired).
+        glyph_annotations = _convert_glyph_annotations(getattr(word_obj, "glyph_annotations", None))
+
         return WordMatch(
             line_index=line_index,
             word_index=word_index,
@@ -223,6 +262,7 @@ def _word_to_word_match(
             word_id=None,  # pd_book_tools doesn't expose a stable word-id today
             char_bboxes=char_bboxes,
             char_ranges=char_ranges,
+            glyph_annotations=glyph_annotations,
         )
     except Exception:
         log.debug("_word_to_word_match: failed for line=%d word=%d", line_index, word_index, exc_info=True)

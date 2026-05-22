@@ -180,6 +180,46 @@ class CharRange(BaseModel):
     styles: list[str]
 
 
+class LigatureMarkModel(BaseModel):
+    """One ligature occurrence within a word — spec ``specs/20-glyph-annotations.md`` §3.
+
+    Mirrors ``pd_book_tools.ocr.glyph_annotations.LigatureMark`` as a Pydantic model
+    so it serialises correctly in the wire contract.
+
+    ``kind`` is the ligature kind string (e.g. ``"ct"``, ``"fi"``).  Values
+    correspond to ``pd_book_tools.ocr.glyph_annotations.LigatureKind`` but are
+    kept as plain strings here to avoid importing from pd_book_tools at schema
+    definition time (lazy import strategy for the OCR dependency).
+
+    ``char_span`` is a ``[start, end)`` tuple of char indices into the GT string,
+    or ``None`` when the span is unknown (coarse-grained label).
+    """
+
+    kind: str
+    char_span: tuple[int, int] | None = None
+
+
+class GlyphAnnotationsModel(BaseModel):
+    """Glyph-level side-channel annotations for one word — spec §3 + D-044.
+
+    Mirrors ``pd_book_tools.ocr.glyph_annotations.GlyphAnnotations`` and adds
+    ``source`` (D-044: object-level provenance, not per-mark).
+
+    Tri-state semantics (spec §1):
+    - ``WordMatch.glyph_annotations is None`` — not yet reviewed.
+    - ``WordMatch.glyph_annotations == GlyphAnnotationsModel()`` — reviewed, nothing to annotate.
+    - ``WordMatch.glyph_annotations`` with marks — reviewed, marks present.
+
+    ``glyph_predictions`` on ``WordMatch`` uses the same shape but with
+    ``source="predicted"``; predictions are NEVER persisted in the envelope.
+    """
+
+    ligatures: list[LigatureMarkModel] = Field(default_factory=list)
+    long_s_positions: list[int] = Field(default_factory=list)
+    swash: bool = False
+    source: Literal["human", "predicted", "human_confirmed"] = "human"
+
+
 class WordMatch(BaseModel):
     """Per-word match result — spec §1 ``WordMatch``."""
 
@@ -211,6 +251,13 @@ class WordMatch(BaseModel):
     # word; empty list means ranges were cleared.  Persisted in
     # ``PageState.char_ranges_map`` sidecar so they survive page reloads.
     char_ranges: list[CharRange] | None = None
+    # Glyph-level annotations — spec ``specs/20-glyph-annotations.md`` §3.
+    # None = "not yet reviewed"; GlyphAnnotationsModel() = "reviewed, nothing".
+    # Persisted in the v2.2 envelope word dict (``glyph_annotations`` key).
+    glyph_annotations: GlyphAnnotationsModel | None = None
+    # Classifier predictions — NOT persisted; regenerated on each page fetch.
+    # Rendered as greyed-out chips in the UI (spec §5.1).
+    glyph_predictions: GlyphAnnotationsModel | None = None
 
 
 class LineMatch(BaseModel):
@@ -301,11 +348,14 @@ class Job(BaseModel):
 __all__ = [
     "BBox",
     "CachedImageSet",
+    "CharRange",
     "EncodedDims",
+    "GlyphAnnotationsModel",
     "Job",
     "JobProgress",
     "JobStatus",
     "JobType",
+    "LigatureMarkModel",
     "LineFilter",
     "LineMatch",
     "MatchStatus",
