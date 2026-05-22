@@ -89,7 +89,7 @@ Any testid the legacy has that we want to retire requires
 | Project dropdown | `ProjectLoadControls.tsx` on RootPage | `project-select` (real) |
 | LOAD button | `ProjectLoadControls.tsx` on RootPage | `load-project-button` (real) |
 | Source folder button | `ProjectLoadControls.tsx` (breadcrumb mode) | `source-folder-button` (real) |
-| OCR config trigger | `OCRConfigModal.tsx` (open via `dialogStore.open("ocrConfig")`) | `ocr-config-modal` (the modal itself); field stubs still in HeaderBar hidden div |
+| OCR config trigger | `PageActionsCompact.tsx` on project routes | `ocr-config-trigger-button` (real); field stubs still in HeaderBar hidden div |
 | Export trigger | `PageActionsCompact.tsx` / `PageActions.tsx` | `page-actions-compact-export` / `export-button` |
 | Hotkey help trigger | Rail footer (`Rail.tsx`) | `rail-hotkeys-button` |
 
@@ -98,6 +98,10 @@ The project-load trio (`project-select`, `load-project-button`,
 rendered on the RootPage and in breadcrumb mode on project routes. The
 source-folder dialog fields (§2.2) and OCR-config modal fields (§2.3)
 continue to have stubs in the HeaderBar hidden div.
+
+> **#405 (2026-05-22):** `ocr-config-trigger-button` is restored as a real button
+> in `PageActionsCompact.tsx`, available on every project route. It was inadvertently
+> left without a user-facing trigger by D-046 / #401.
 
 ### 2.2 Source folder dialog
 
@@ -116,11 +120,11 @@ Hotkey: `Enter` on the path input triggers `source-folder-open-typed-button`.
 
 ### 2.3 OCR config modal
 
-> **D-046 (2026-05-21):** The `ocr-config-trigger-button` in HeaderBar
-> has been removed (see D-046). The modal is now opened via
-> `dialogStore.open("ocrConfig")` from project-page context. The modal
-> field stubs remain in the HeaderBar hidden div (available on every
-> route). The modal itself uses `data-testid="ocr-config-modal"`.
+> **#405 (2026-05-22):** `ocr-config-trigger-button` is restored as a real visible button
+> in `PageActionsCompact.tsx` on project routes (fix for D-046 regression). Click it to
+> open the OCR-config modal. The `ocr-config-trigger-button` in the HeaderBar hidden stub
+> div is no longer present. The modal field stubs (below) remain in the HeaderBar hidden div.
+> The modal itself uses `data-testid="ocr-config-modal"`.
 
 | Testid | What it is |
 |---|---|

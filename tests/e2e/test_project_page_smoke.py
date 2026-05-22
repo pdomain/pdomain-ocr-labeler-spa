@@ -65,13 +65,11 @@ def test_navigate_prev_next(live_server: LiveServer, page: Page) -> None:
 
 @pytest.mark.e2e
 def test_open_ocr_config_dialog(live_server: LiveServer, page: Page) -> None:
-    """Opening the OCR-config modal via dialogStore.open('ocrConfig') mounts the modal.
+    """Opening the OCR-config modal via the trigger button mounts the modal.
 
-    D-046 (2026-05-21): the legacy ocr-config-trigger-button has been removed from
-    HeaderBar.  The OCR config modal is now opened programmatically via the dialog
-    store (e.g. keyboard shortcut or future trigger button).  This test exercises
-    the open path via the window.__DIALOG_STORE_OPEN bridge exposed by dialog-store.ts
-    for E2E testing.
+    #405: ocr-config-trigger-button restored in PageActionsCompact (project-page
+    context) after it was inadvertently removed by D-046 / #401.  The real button
+    lives inside PageActionsCompact, which is only rendered when on a project route.
     """
     _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
 
@@ -79,15 +77,11 @@ def test_open_ocr_config_dialog(live_server: LiveServer, page: Page) -> None:
     page.goto(url, timeout=15_000)
     wait_for_page_loaded(page, live_server.base_url, timeout=15_000)
 
-    # D-046: ocr-config-trigger-button no longer exists in HeaderBar.
-    # Verify it is absent from the DOM.
-    assert page.locator('[data-testid="ocr-config-trigger-button"]').count() == 0, (
-        "ocr-config-trigger-button should not be in DOM after D-046 removal"
-    )
-
-    # Open the OCR-config modal via the E2E test bridge (window.__DIALOG_STORE_OPEN).
-    # This mirrors the action a trigger button or keyboard shortcut would perform.
-    page.evaluate("() => { window.__DIALOG_STORE_OPEN?.('ocrConfig'); }")
+    # #405: ocr-config-trigger-button is now a real button in PageActionsCompact.
+    # Click it to open the OCR-config modal.
+    trigger = page.locator('[data-testid="ocr-config-trigger-button"]:not([data-testid-stub])')
+    trigger.wait_for(state="visible", timeout=10_000)
+    trigger.click()
 
     # The OCR-config modal mounts at AppShell once opened — wait for the
     # modal container (driver-contract §2.3: `ocr-config-modal`).
