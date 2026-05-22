@@ -6,7 +6,7 @@ describe("Accordion", () => {
   function SimpleAccordion({ tag }: { tag?: "accent" | "mismatch" }) {
     return (
       <Accordion type="single" collapsible>
-        <Accordion.Item value="item-1" tag={tag}>
+        <Accordion.Item value="item-1" {...(tag !== undefined && { tag })}>
           <Accordion.Trigger>Section 1</Accordion.Trigger>
           <Accordion.Content>Content 1</Accordion.Content>
         </Accordion.Item>

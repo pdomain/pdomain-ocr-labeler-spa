@@ -15,13 +15,9 @@ type PagePayload = components["schemas"]["PagePayload"];
 const minPage: PagePayload = {
   project_id: "proj-1",
   page_index: 0,
-  image_path: null,
-  image_width: 100,
-  image_height: 100,
   line_matches: [],
-  lines: [],
-  paragraphs: [],
   line_filter: "all",
+  generation: 0,
 };
 
 // ─── wrapper ──────────────────────────────────────────────────────────────────

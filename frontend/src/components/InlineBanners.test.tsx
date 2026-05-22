@@ -2,7 +2,6 @@
 // Spec: docs/specs/2026-05-12-notifications-design.md §inline banners
 // Issue #233
 
-import React from "react";
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { OcrFailedBanner, ProjectNotFoundBanner, ImageDriftBanner } from "./InlineBanners";

@@ -24,7 +24,6 @@ const MOCK_PAGE: PagePayload = {
   page_index: 0,
   page_record: null,
   line_matches: [],
-  selection: undefined,
   encoded_dims: null,
   line_filter: "all",
   image_url: null,

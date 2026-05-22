@@ -2,19 +2,10 @@
 // Spec: docs/specs/2026-05-12-notifications-design.md §BusyOverlay logic
 // Issue #232
 
-import React from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { QueryClient, QueryClientProvider, useMutation } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BusyOverlay, ProjectLoadingOverlay } from "./BusyOverlay";
-
-// Helper wrapper with QueryClient
-function makeWrapper(client?: QueryClient) {
-  const qc = client ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
-  };
-}
 
 describe("BusyOverlay", () => {
   it("is NOT visible when no mutations are running and no active job", () => {

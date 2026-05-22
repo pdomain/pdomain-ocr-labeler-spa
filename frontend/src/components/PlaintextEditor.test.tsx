@@ -3,7 +3,6 @@
 // Spec: specs/22-page-surface-wireup.md §3.
 // Issue #313 (spec-22-B4).
 
-import React from "react";
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { PlaintextEditor } from "./PlaintextEditor";
@@ -46,7 +45,7 @@ describe("PlaintextEditor", () => {
     let ta = screen.getByTestId("plaintext-editor-gt");
     expect(ta.value).toBe("");
 
-    rerender(<PlaintextEditor source="ocr" page={undefined} />);
+    rerender(<PlaintextEditor source="ocr" />);
     ta = screen.getByTestId("plaintext-editor-ocr");
     expect(ta.value).toBe("");
   });

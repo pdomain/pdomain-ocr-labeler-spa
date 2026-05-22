@@ -42,7 +42,7 @@ const MOCK_PROJECT: ProjectResponse = {
 beforeEach(() => {
   server.use(
     http.get("/api/projects/:projectId", ({ params }) => {
-      if (params.projectId === "proj-001") {
+      if (params["projectId"] === "proj-001") {
         return HttpResponse.json(MOCK_PROJECT);
       }
       return HttpResponse.json(

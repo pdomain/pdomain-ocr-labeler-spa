@@ -183,7 +183,7 @@ describe("useLoadPage", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.page_source).toBe("filesystem");
+    expect((result.current.data as Record<string, unknown>)["page_source"]).toBe("filesystem");
   });
 });
 
@@ -212,6 +212,6 @@ describe("useRematchGt", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.page_source).toBe("cached_ocr");
+    expect((result.current.data as Record<string, unknown>)["page_source"]).toBe("cached_ocr");
   });
 });

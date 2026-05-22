@@ -2,7 +2,6 @@
 // Spec: specs/22-page-surface-wireup.md §3 (Layout), §9 (Splitter).
 // Issue #310 (spec-22-B1)
 
-import React from "react";
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { Splitter } from "./Splitter";

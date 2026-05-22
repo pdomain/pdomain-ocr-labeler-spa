@@ -37,7 +37,7 @@ vi.mock("react-konva", () => ({
       data-testid={testId ?? "konva-stage"}
       data-width={width}
       data-height={height}
-      onMouseMove={(e) => {
+      onMouseMove={(_e) => {
         if (onMouseMove) {
           // Simulate Konva event with getStage().getPointerPosition()
           const pos = { x: 50, y: 30 };
@@ -49,7 +49,7 @@ vi.mock("react-konva", () => ({
         }
       }}
       onMouseLeave={() => onMouseLeave?.()}
-      onMouseDown={(e) => {
+      onMouseDown={(_e) => {
         if (onMouseDown) {
           const pos = { x: 20, y: 10 };
           onMouseDown({
@@ -59,7 +59,7 @@ vi.mock("react-konva", () => ({
           });
         }
       }}
-      onMouseUp={(e) => {
+      onMouseUp={(_e) => {
         if (onMouseUp) {
           const pos = { x: 60, y: 40 };
           onMouseUp({
@@ -69,7 +69,7 @@ vi.mock("react-konva", () => ({
           });
         }
       }}
-      onClick={(e) => {
+      onClick={(_e) => {
         if (onClick) {
           const pos = { x: 50, y: 30 };
           onClick({

@@ -2,11 +2,11 @@
   "extends": "./tsconfig.app.json",
   "compilerOptions": {
     "types": ["vitest/globals", "@testing-library/jest-dom"],
-    "noPropertyAccessFromIndexSignature": false,
+    "noPropertyAccessFromIndexSignature": true,
     "noUncheckedIndexedAccess": false,
-    "exactOptionalPropertyTypes": false,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false
+    "exactOptionalPropertyTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": [
     "src/**/*.test.ts",

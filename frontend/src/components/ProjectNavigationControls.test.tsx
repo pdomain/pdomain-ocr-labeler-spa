@@ -16,7 +16,6 @@
 // useProject is exercised via msw; useNavigate is mocked via vi.mock on
 // react-router-dom (the standard pattern: spy on a real export).
 
-import React from "react";
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";

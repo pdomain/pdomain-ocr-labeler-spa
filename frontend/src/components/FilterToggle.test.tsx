@@ -3,7 +3,6 @@
 // Spec: specs/22-page-surface-wireup.md §8.
 // Issue #312 (spec-22-B3).
 
-import React from "react";
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { FilterToggle } from "./FilterToggle";

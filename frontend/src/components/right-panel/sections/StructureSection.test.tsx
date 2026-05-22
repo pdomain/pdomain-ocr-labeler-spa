@@ -230,7 +230,6 @@ describe("StructureSection (Slice 18 + P3.d / Gap 37)", () => {
   });
 
   it("gap slider label updates when value changes", async () => {
-    const user = userEvent.setup();
     renderSection(makeWord(0, 1));
     const slider = screen.getByTestId("structure-gap-slider");
     // jsdom doesn't fire change on range; use fireEvent directly

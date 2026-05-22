@@ -327,10 +327,10 @@ describe("LineDetail Q5: bulk bar validate/skip calls validate-batch (scope=word
     await user.click(screen.getByTestId("line-detail-bulk-validate"));
 
     await waitFor(() => expect(capturedBody).toBeDefined());
-    expect(capturedBody?.scope).toBe("word");
-    expect(capturedBody?.validated).toBe(true);
+    expect(capturedBody?.["scope"]).toBe("word");
+    expect(capturedBody?.["validated"]).toBe(true);
     // word_index 0 in line_index 3 → tuple [3, 0]
-    expect(capturedBody?.word_indices).toEqual([[3, 0]]);
+    expect(capturedBody?.["word_indices"]).toEqual([[3, 0]]);
   });
 
   it("Skip selected posts validate-batch with validated=false and scope=word", async () => {
@@ -355,10 +355,10 @@ describe("LineDetail Q5: bulk bar validate/skip calls validate-batch (scope=word
     await user.click(screen.getByTestId("line-detail-bulk-skip"));
 
     await waitFor(() => expect(capturedBody).toBeDefined());
-    expect(capturedBody?.scope).toBe("word");
-    expect(capturedBody?.validated).toBe(false);
+    expect(capturedBody?.["scope"]).toBe("word");
+    expect(capturedBody?.["validated"]).toBe(false);
     // Both words checked: [3,0] and [3,1]
-    expect((capturedBody?.word_indices as [number, number][]).length).toBe(2);
+    expect((capturedBody?.["word_indices"] as [number, number][]).length).toBe(2);
   });
 
   it("bulk bar clears after validate", async () => {

@@ -304,7 +304,7 @@ function makePage(line_matches: LineMatch[], selection?: PagePayload["selection"
     page_index: 0,
     page_record: null,
     line_matches,
-    selection,
+    ...(selection !== undefined && { selection }),
     encoded_dims: null,
     line_filter: "all",
     image_url: null,
@@ -927,7 +927,7 @@ describe("PageImageCanvas — selection layer rendering (spec-21-A5, #300)", () 
 describe("PageImageCanvas — word bbox click → selectWord", () => {
   it("clicking within a word bbox in select mode calls selectWord(lineIdx, wordIdx)", () => {
     const page = makePage([makeLine(2, 0, [{ x: 100, y: 200, width: 50, height: 20 }])]);
-    page.line_matches[0].word_matches[0].word_index = 3;
+    page.line_matches![0].word_matches[0].word_index = 3;
 
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
     const overlay = getOverlay();

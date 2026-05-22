@@ -44,10 +44,10 @@ function renderHeaderBar({
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={[route]}>
         <HeaderBar
-          navSlot={navSlot}
-          actionsSlot={actionsSlot}
-          projectName={projectName}
-          pageMetrics={pageMetrics}
+          {...(navSlot !== undefined && { navSlot })}
+          {...(actionsSlot !== undefined && { actionsSlot })}
+          {...(projectName !== undefined && { projectName })}
+          {...(pageMetrics !== undefined && { pageMetrics })}
         />
       </MemoryRouter>
     </QueryClientProvider>,

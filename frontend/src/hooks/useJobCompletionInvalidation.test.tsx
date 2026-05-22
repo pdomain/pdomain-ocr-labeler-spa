@@ -64,9 +64,9 @@ function renderHarness(initial: HarnessOptions) {
         jobProgress: opts.jobProgress,
         setActiveJobId,
         invalidationKey: opts.invalidationKey ?? ["page", "proj-1", 0],
-        onComplete: opts.onComplete,
-        onError: opts.onError,
-        onRunning: opts.onRunning,
+        ...(opts.onComplete !== undefined && { onComplete: opts.onComplete }),
+        ...(opts.onError !== undefined && { onError: opts.onError }),
+        ...(opts.onRunning !== undefined && { onRunning: opts.onRunning }),
       });
     },
     { wrapper: Wrapper, initialProps: initial },

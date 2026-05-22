@@ -7,7 +7,7 @@
 //   - useHotkey does NOT fire inside form tags by default (enableOnFormTags: false)
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { useHotkey } from "./useHotkey";
 
 // Simple test component that calls useHotkey and renders a status

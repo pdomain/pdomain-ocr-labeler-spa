@@ -29,6 +29,7 @@ function makePage(): PagePayload {
             match_status: "exact",
             normalized_match: false,
             is_validated: false,
+            bbox: { x: 0, y: 0, width: 0, height: 0 },
           },
           {
             line_index: 0,
@@ -38,6 +39,7 @@ function makePage(): PagePayload {
             match_status: "exact",
             normalized_match: false,
             is_validated: false,
+            bbox: { x: 0, y: 0, width: 0, height: 0 },
           },
         ],
         overall_match_status: "exact",

@@ -27,6 +27,7 @@ function w(line: number, idx: number, text: string): WordMatch {
     match_status: "exact",
     normalized_match: false,
     is_validated: false,
+    bbox: { x: 0, y: 0, width: 0, height: 0 },
   };
 }
 

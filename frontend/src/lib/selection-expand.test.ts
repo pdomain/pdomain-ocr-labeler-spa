@@ -63,7 +63,7 @@ function makePage(line_matches: LineMatch[], selection?: PagePayload["selection"
     page_index: 0,
     page_record: null,
     line_matches,
-    selection,
+    ...(selection !== undefined && { selection }),
     encoded_dims: null,
     line_filter: "all",
     image_url: null,

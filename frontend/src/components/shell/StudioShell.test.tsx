@@ -14,7 +14,7 @@ describe("StudioShell — 5-zone grid (Slice 8)", () => {
         drawer={<div data-testid="slot-drawer">drawer</div>}
         canvas={<div data-testid="slot-canvas">canvas</div>}
         right={<div data-testid="slot-right">right</div>}
-        rightWidth={rightWidth}
+        {...(rightWidth !== undefined && { rightWidth })}
       />,
     );
   }

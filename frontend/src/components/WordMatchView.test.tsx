@@ -10,7 +10,6 @@
 //   - Correct header background for each MatchStatus value
 //   - Count chips render for nonzero values
 
-import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import type { components } from "../api/types";
@@ -36,6 +35,8 @@ function makeLineMatch(overrides: Partial<LineMatch> = {}): LineMatch {
     mismatch_count: 0,
     unmatched_gt_count: 0,
     unmatched_ocr_count: 0,
+    validated_word_count: 0,
+    total_word_count: 0,
     is_fully_validated: false,
     ...overrides,
   };

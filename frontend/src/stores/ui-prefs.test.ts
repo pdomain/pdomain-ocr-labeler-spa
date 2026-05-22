@@ -223,12 +223,12 @@ describe("ui-prefs: theme toggle (Slice 24)", () => {
     // Reset theme to system default before each test.
     useUiPrefs.setState({ theme: "system" });
     // Reset documentElement.dataset.theme.
-    delete document.documentElement.dataset.theme;
+    delete document.documentElement.dataset["theme"];
   });
 
   afterEach(() => {
     localStorage.clear();
-    delete document.documentElement.dataset.theme;
+    delete document.documentElement.dataset["theme"];
     vi.restoreAllMocks();
   });
 
@@ -263,12 +263,12 @@ describe("ui-prefs: theme toggle (Slice 24)", () => {
   describe("setTheme updates documentElement.dataset.theme", () => {
     it('setTheme("dark") sets data-theme="dark"', () => {
       useUiPrefs.setTheme("dark");
-      expect(document.documentElement.dataset.theme).toBe("dark");
+      expect(document.documentElement.dataset["theme"]).toBe("dark");
     });
 
     it('setTheme("light") sets data-theme="light"', () => {
       useUiPrefs.setTheme("light");
-      expect(document.documentElement.dataset.theme).toBe("light");
+      expect(document.documentElement.dataset["theme"]).toBe("light");
     });
 
     it('setTheme("system") applies resolved theme (dark when no media match)', () => {
@@ -278,7 +278,7 @@ describe("ui-prefs: theme toggle (Slice 24)", () => {
         removeEventListener: vi.fn(),
       } as unknown as MediaQueryList);
       useUiPrefs.setTheme("system");
-      expect(document.documentElement.dataset.theme).toBe("dark");
+      expect(document.documentElement.dataset["theme"]).toBe("dark");
     });
 
     it('setTheme("system") applies resolved theme (light when media matches)', () => {
@@ -288,7 +288,7 @@ describe("ui-prefs: theme toggle (Slice 24)", () => {
         removeEventListener: vi.fn(),
       } as unknown as MediaQueryList);
       useUiPrefs.setTheme("system");
-      expect(document.documentElement.dataset.theme).toBe("light");
+      expect(document.documentElement.dataset["theme"]).toBe("light");
     });
   });
 

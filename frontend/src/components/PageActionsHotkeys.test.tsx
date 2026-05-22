@@ -10,7 +10,7 @@
 //   - Hotkeys do NOT fire when isBusy=true
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, fireEvent } from "@testing-library/react";
 import { PageActions } from "./PageActions";
 
 // Note: react-hotkeys-hook fires on keydown events on the document.

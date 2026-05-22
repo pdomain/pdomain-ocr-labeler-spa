@@ -11,8 +11,6 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { WordActionRows } from "./WordActionRows";
 
-const noop = () => Promise.resolve();
-
 describe("WordActionRows", () => {
   it("renders all merge/split/delete/crop buttons", () => {
     render(<WordActionRows hasPrev hasNext splitFraction={0.5} />);
