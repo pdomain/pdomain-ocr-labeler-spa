@@ -127,6 +127,17 @@ class PageState:
     # onto ``WordMatch.char_ranges`` in ``_page_payload``.
     # Mirrors the char_bboxes_map pattern; stored as list[dict] (API shape).
     char_ranges_map: dict[str, object] = field(default_factory=dict)
+    # Per-word glyph-annotation sidecar — keyed by ``"{line_index}_{word_index}"``.
+    # Written by ``POST .../words/{li}/{wi}/glyph-annotations`` and by
+    # ``POST .../pages/{idx}/glyph-bulk-mark``.  Surfaced onto
+    # ``WordMatch.glyph_annotations`` in ``_page_payload`` via
+    # ``page_to_line_matches``.  Stored as GlyphAnnotationsModel-compatible
+    # dicts (includes ``source`` field not present on pd_book_tools type).
+    glyph_annotations_map: dict[str, object] = field(default_factory=dict)
+    # Per-word glyph-predictions sidecar — keyed by ``"{line_index}_{word_index}"``.
+    # Written by the ``IGlyphPredictor`` adapter when predictions are available.
+    # Predictions are NOT persisted; this sidecar is rebuilt on each page load.
+    glyph_predictions_map: dict[str, object] = field(default_factory=dict)
 
 
 class ProjectState:

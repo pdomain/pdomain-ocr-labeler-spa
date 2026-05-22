@@ -54,7 +54,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from ..core.envelope_lift import EnvelopeLiftError, lift_envelope_to_page
-from ..core.models import BBox
+from ..core.models import BBox, GlyphAnnotationsModel
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.lanes import LaneResolver
 from ..core.persistence.user_page_envelope import (
@@ -1336,6 +1336,167 @@ def set_char_bboxes(
         settings=settings,
         app_config=app_config,
     )
+
+
+class SetGlyphAnnotationsRequest(BaseModel):
+    """``POST .../words/{li}/{wi}/glyph-annotations`` body — spec §6.1.
+
+    ``annotations=None`` means "unset back to not-reviewed" (clears confirmed
+    annotations without touching predictions).
+    ``annotations=GlyphAnnotationsModel()`` means "reviewed, nothing to mark".
+    """
+
+    annotations: GlyphAnnotationsModel | None
+
+
+class AcceptGlyphPredictionRequest(BaseModel):
+    """``POST .../words/{li}/{wi}/accept-prediction`` body — spec §6.1.
+
+    No fields — confirms the current predictions wholesale, promoting them
+    to ``source="human_confirmed"`` annotations.
+    """
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/words/{line_index}/{word_index}/glyph-annotations",
+    response_model=PagePayload,
+)
+def set_glyph_annotations(
+    project_id: str,
+    page_index: int,
+    line_index: int,
+    word_index: int,
+    body: SetGlyphAnnotationsRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+) -> JSONResponse:
+    """``POST .../words/{li}/{wi}/glyph-annotations`` — set/clear word glyph annotations.
+
+    Sets ``WordMatch.glyph_annotations`` for the word and auto-saves to cache.
+    ``annotations=None`` clears back to "not reviewed" without touching predictions.
+
+    Spec: ``specs/20-glyph-annotations.md`` §6.1.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    sidecar_key = f"{line_index}_{word_index}"
+    ann_dict = body.annotations.model_dump() if body.annotations is not None else None
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        if ann_dict is not None:
+            pstate.glyph_annotations_map[sidecar_key] = ann_dict
+        else:
+            pstate.glyph_annotations_map.pop(sidecar_key, None)
+
+        pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+    )
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/words/{line_index}/{word_index}/accept-prediction",
+    response_model=PagePayload,
+)
+def accept_glyph_prediction(
+    project_id: str,
+    page_index: int,
+    line_index: int,
+    word_index: int,
+    body: AcceptGlyphPredictionRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+) -> JSONResponse:
+    """``POST .../words/{li}/{wi}/accept-prediction`` — confirm glyph predictions.
+
+    Promotes ``glyph_predictions`` to ``glyph_annotations`` with
+    ``source="human_confirmed"``.  Predictions remain on the in-memory word
+    model (they are not cleared by this call — re-running the classifier
+    would regenerate them).
+
+    Spec: ``specs/20-glyph-annotations.md`` §6.1.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    sidecar_key = f"{line_index}_{word_index}"
+
+    # Read current predictions from the sidecar map (if any)
+    predictions_dict = pstate.glyph_predictions_map.get(sidecar_key)
+    if predictions_dict is None:
+        return JSONResponse(
+            status_code=400,
+            content=ApiError(
+                error="no_predictions",
+                message=f"No predictions found for word {line_index}/{word_index}",
+            ).model_dump(),
+        )
+
+    # Promote predictions to confirmed annotations
+    from typing import cast
+
+    predictions_as_dict = cast("dict[str, object]", predictions_dict)
+    confirmed: dict[str, object] = {**predictions_as_dict, "source": "human_confirmed"}
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        pstate.glyph_annotations_map[sidecar_key] = confirmed
+
+        pstate.generation += 1
+        _write_cached_envelope_best_effort(
+            page=page,
+            project_state=project_state,
+            page_index=page_index,
+            settings=settings,
+        )
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+    )
+
+
+def _collect_page_words(
+    page: object,
+) -> list[dict[str, object]]:
+    """Collect all words from a Page object as dicts for bulk-mark processing."""
+    words: list[dict[str, object]] = []
+    lines = getattr(page, "lines", None) or []
+    for li, line in enumerate(lines):
+        for wi, word in enumerate(getattr(line, "words", None) or []):
+            gt = str(getattr(word, "ground_truth_text", "") or "")
+            words.append({"gt": gt, "line": li, "word": wi})
+    return words
 
 
 def install_words_router(app) -> None:  # type: ignore[no-untyped-def]

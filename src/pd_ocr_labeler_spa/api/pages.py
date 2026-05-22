@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from ..core import text_normalize
 from ..core.envelope_lift import EnvelopeLiftError, lift_envelope_to_page
+from ..core.glyph.bulk_mark import GlyphBulkMarkParams, apply_bulk_mark
 from ..core.ground_truth_matcher import rematch_page
 from ..core.jobs import JobRunner
 from ..core.models import EncodedDims, LineFilter, LineMatch, PageRecord, PageSource, Selection
@@ -1188,12 +1189,187 @@ def get_page_image(
     )
 
 
+class GlyphBulkMarkRequest(BaseModel):
+    """``POST .../pages/{idx}/glyph-bulk-mark`` body — spec §6.2.
+
+    Applies a recipe to all words on the page and optionally returns a dry-run
+    preview without mutating state.
+    """
+
+    recipe: str  # "ct_substring" | "st_substring" | "long_s_typeset_era"
+    skip_already_annotated: bool = True
+    accept_predictions: bool = False
+    dry_run: bool = False
+
+
+class GlyphBulkMarkResponse(BaseModel):
+    """``POST .../pages/{idx}/glyph-bulk-mark`` response — spec §6.2.
+
+    ``page`` is ``None`` when ``dry_run=True`` (no state change).
+    """
+
+    affected_word_ids: list[str]
+    skipped_word_ids: list[str]
+    page: PagePayload | None = None
+
+
+@router.post("/{page_index}/glyph-bulk-mark", response_model=GlyphBulkMarkResponse)
+def glyph_bulk_mark(
+    project_id: str,
+    page_index: int,
+    body: GlyphBulkMarkRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+) -> JSONResponse:
+    """``POST .../pages/{idx}/glyph-bulk-mark`` — apply a glyph-mark recipe to the page.
+
+    Runs synchronously (page-scope bulk is fast).  Dry-run returns preview
+    counts without mutating state.
+
+    Spec: ``specs/20-glyph-annotations.md`` §6.2.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object_for_pages(pstate)
+    if pstate is None or page is None:
+        return JSONResponse(
+            status_code=400,
+            content=ApiError(error="page_not_loaded", message="Page not loaded").model_dump(),
+        )
+
+    # Collect all words for bulk-mark processing
+    lines = getattr(page, "lines", None) or []
+    word_dicts: list[dict[str, object]] = []
+    for li, line in enumerate(lines):
+        for wi, word in enumerate(getattr(line, "words", None) or []):
+            gt = str(getattr(word, "ground_truth_text", "") or "")
+            sidecar_key = f"{li}_{wi}"
+            existing = pstate.glyph_annotations_map.get(sidecar_key)
+            word_dicts.append(
+                {
+                    "gt": gt,
+                    "line": li,
+                    "word": wi,
+                    "existing_annotations": existing,
+                }
+            )
+
+    _valid_recipes = ("ct_substring", "st_substring", "long_s_typeset_era")
+    if body.recipe not in _valid_recipes:
+        return JSONResponse(
+            status_code=422,
+            content=ApiError(error="invalid_recipe", message=f"Unknown recipe: {body.recipe!r}").model_dump(),
+        )
+    from typing import Literal, cast
+
+    recipe_typed = cast(
+        "Literal['ct_substring', 'st_substring', 'long_s_typeset_era']",
+        body.recipe,
+    )
+    params = GlyphBulkMarkParams(
+        recipe=recipe_typed,
+        skip_already_annotated=body.skip_already_annotated,
+        accept_predictions=body.accept_predictions,
+        dry_run=body.dry_run,
+    )
+    result = apply_bulk_mark(word_dicts, params)
+
+    page_payload_out: PagePayload | None = None
+    if not body.dry_run:
+        page_lock = project_state.get_page_lock(page_index)
+        with page_lock:
+            for pos, ann_dict in result.annotations.items():
+                li, wi = pos
+                sidecar_key = f"{li}_{wi}"
+                pstate.glyph_annotations_map[sidecar_key] = ann_dict
+            if result.annotations:
+                pstate.generation += 1
+                _write_cached_envelope_best_effort(
+                    page=page,
+                    project_state=project_state,
+                    page_index=page_index,
+                    settings=settings,
+                )
+        page_payload_out = _page_payload(
+            project_id=project_id,
+            page_index=page_index,
+            project_state=project_state,
+            settings=settings,
+            app_config=app_config,
+        )
+
+    affected = [f"{li}_{wi}" for (li, wi) in result.affected_word_ids]
+    skipped = [f"{li}_{wi}" for (li, wi) in result.skipped_word_ids]
+
+    response = GlyphBulkMarkResponse(
+        affected_word_ids=affected,
+        skipped_word_ids=skipped,
+        page=page_payload_out,
+    )
+    return JSONResponse(content=response.model_dump())
+
+
+def _resolve_page_object_for_pages(pstate: PageState | None) -> Any | None:
+    """Resolve page object for pages.py handlers (mirrors words.py helper)."""
+    if pstate is None or pstate.page_record is None:
+        return None
+    payload_obj = getattr(pstate.page_record, "payload", None)
+    if payload_obj is None:
+        return None
+    from ..core.envelope_lift import EnvelopeLiftError, lift_envelope_to_page
+
+    lift_result = lift_envelope_to_page(payload_obj)
+    if isinstance(lift_result, EnvelopeLiftError):
+        return None
+    return lift_result
+
+
+def _write_cached_envelope_best_effort(
+    *,
+    page: Any,
+    project_state: ProjectState,
+    page_index: int,
+    settings: Settings,
+) -> None:
+    """Write the cached-lane envelope (pages.py copy of the words.py helper)."""
+    project = project_state.loaded_project
+    if project is None:
+        return
+    try:
+        envelope = build_envelope(
+            page=page,
+            project=project,
+            page_index=page_index,
+            ocr_provenance=OCRProvenance(),
+            source_lane=USER_PAGE_SOURCE_LANE_CACHED,
+        )
+        resolver = LaneResolver(
+            data_root=settings.data_root,
+            cache_root=settings.cache_root,
+            project_id=project.project_id,
+        )
+        resolver.write_cached(page_index, envelope)
+    except Exception as exc:
+        log.warning(
+            "pages: glyph bulk-mark cached-envelope write failed project=%s page=%d: %s — continuing",
+            project.project_id,
+            page_index,
+            exc,
+        )
+
+
 def install_pages_router(app) -> None:  # type: ignore[no-untyped-def]
     """Register the pages router. Called from ``bootstrap.build_app``."""
     app.include_router(router)
 
 
 __all__ = [
+    "GlyphBulkMarkRequest",
+    "GlyphBulkMarkResponse",
     "PagePayload",
     "ReloadOCRRequest",
     "ReloadOCRResponse",
