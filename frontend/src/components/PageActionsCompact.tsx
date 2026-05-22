@@ -110,6 +110,10 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     dialogStore.open("export");
   }
 
+  function handleOcrConfig() {
+    dialogStore.open("ocrConfig");
+  }
+
   const base =
     "flex items-center gap-1 h-7 px-2.5 rounded border text-[11px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
   const normal = "border-border-2 bg-bg-raised text-ink-2 hover:bg-bg-surface hover:text-ink-1";
@@ -199,6 +203,20 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
         <span aria-hidden="true" className="text-[9px] opacity-70">
           ▾
         </span>
+      </button>
+
+      {/* #405: OCR-config trigger restored in project-page context (was removed from HeaderBar by D-046).
+          Driver contract §2.3: testid "ocr-config-trigger-button" preserved. */}
+      <button
+        type="button"
+        data-testid="ocr-config-trigger-button"
+        aria-label="OCR Config"
+        disabled={disabled}
+        onClick={handleOcrConfig}
+        title="OCR Config (Mod+,)"
+        className={`${base} ${normal}`}
+      >
+        OCR Config
       </button>
     </div>
   );

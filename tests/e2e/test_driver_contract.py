@@ -36,11 +36,12 @@ from tests.e2e.conftest import LiveServer
 
 # Deprecated header testids (D-046) — these MUST NOT exist anywhere in the DOM
 # after commit b101ec8 removed the legacy stubs from HeaderBar.
+# Note: ocr-config-trigger-button was briefly removed (#401) but is now restored
+# in PageActionsCompact as a real button (#405); it is no longer deprecated.
 _DEPRECATED_HEADER_TESTIDS = [
     "project-select",  # moved to ProjectLoadControls.tsx on RootPage
     "load-project-button",  # moved to ProjectLoadControls.tsx on RootPage
     "source-folder-button",  # moved to ProjectLoadControls.tsx (breadcrumb mode)
-    "ocr-config-trigger-button",  # removed; open via dialogStore.open("ocrConfig")
 ]
 
 # New §2.1 testids (post-D-046) — reachable via their real components.
@@ -48,6 +49,7 @@ _DEPRECATED_HEADER_TESTIDS = [
 _NEW_HEADER_TESTIDS = [
     "rail-hotkeys-button",  # Rail.tsx footer — hotkey help trigger
     "page-actions-compact-export",  # PageActionsCompact.tsx — export trigger
+    "ocr-config-trigger-button",  # PageActionsCompact.tsx — OCR config trigger (#405 restore)
 ]
 
 # Source-folder dialog stubs (display:none until implemented).

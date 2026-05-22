@@ -180,7 +180,7 @@ export default function HeaderBar({
       )}
 
       {/* Right: theme toggle */}
-      {/* D-046: ocr-config-trigger-button removed from HeaderBar; open via dialogStore.open("ocrConfig") */}
+      {/* D-046: ocr-config-trigger-button removed from HeaderBar; restored in PageActionsCompact (#405) */}
       <div className="shrink-0">
         <ThemeChips />
       </div>

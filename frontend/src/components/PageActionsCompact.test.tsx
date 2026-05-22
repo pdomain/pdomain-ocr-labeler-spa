@@ -82,12 +82,14 @@ describe("PageActionsCompact: testids (P1.b)", () => {
     expect(screen.getByTestId("page-actions-compact")).toBeInTheDocument();
   });
 
-  it("renders all four compact button testids", () => {
+  it("renders all five compact button testids", () => {
     renderCompact();
     expect(screen.getByTestId("page-actions-compact-reload-ocr")).toBeInTheDocument();
     expect(screen.getByTestId("page-actions-compact-rematch-gt")).toBeInTheDocument();
     expect(screen.getByTestId("page-actions-compact-save-page")).toBeInTheDocument();
     expect(screen.getByTestId("page-actions-compact-export")).toBeInTheDocument();
+    // #405: ocr-config-trigger-button restored in PageActionsCompact (project-page context)
+    expect(screen.getByTestId("ocr-config-trigger-button")).toBeInTheDocument();
   });
 
   it("shows labelled text on buttons", () => {
@@ -96,6 +98,7 @@ describe("PageActionsCompact: testids (P1.b)", () => {
     expect(screen.getByText("Rematch")).toBeInTheDocument();
     expect(screen.getByText("Save page")).toBeInTheDocument();
     expect(screen.getByText("Export")).toBeInTheDocument();
+    expect(screen.getByText("OCR Config")).toBeInTheDocument();
   });
 });
 
@@ -120,6 +123,22 @@ describe("PageActionsCompact: export opens dialog", () => {
     renderCompact();
     await user.click(screen.getByTestId("page-actions-compact-export"));
     expect(dialogStore.getState().export.open).toBe(true);
+  });
+});
+
+// ─── ocr-config-trigger-button opens dialog (#405) ───────────────────────────
+
+describe("PageActionsCompact: OCR config trigger (#405)", () => {
+  it("ocr-config-trigger-button is present in project-page context", () => {
+    renderCompact();
+    expect(screen.getByTestId("ocr-config-trigger-button")).toBeInTheDocument();
+  });
+
+  it("clicking ocr-config-trigger-button opens the ocrConfig dialog", async () => {
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("ocr-config-trigger-button"));
+    expect(dialogStore.getState().ocrConfig.open).toBe(true);
   });
 });
 
