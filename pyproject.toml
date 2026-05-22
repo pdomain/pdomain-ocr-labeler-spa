@@ -282,10 +282,7 @@ exclude = [
 # Catches unannotated functions, inferred-Any propagation, untyped decorators,
 # and missing return types that "standard" mode skips.
 typeCheckingMode = "recommended"
-# NOTE: failOnWarnings deferred — recommended mode surfaces stub warnings
-# from FastAPI/Starlette/Pydantic stubs that lag the runtime. Enable
-# incrementally as stub coverage improves.
-# failOnWarnings = true
+failOnWarnings = true
 
 # Import cycles are structural (adapter protocols, carrier closures, etc.)
 # and resolved via TYPE_CHECKING guards. Suppress the per-file error here;
