@@ -655,4 +655,3 @@ Impact: Ambiguous docstring Unicode can enter unchecked.
 Recommended fix: Remove the global ignore and escape/name intentional characters, or revise the convention explicitly.
 
 Issue: https://github.com/ConcaveTrillion/pd-ocr-labeler-spa/issues/456.
-
