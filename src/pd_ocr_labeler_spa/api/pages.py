@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse, Response
+from pd_book_tools.ocr.page import Page
 from pydantic import BaseModel, Field
 
 from ..core import text_normalize
@@ -812,11 +813,12 @@ def save_page(
 
     # Glyph-review gate: warn (but never block) when required and incomplete.
     # Counts reviewed words via glyph_annotations_map vs total page words.
-    # Uses page_obj.words; falls back silently if the payload lacks that attr.
+    # Falls back silently when payload isn't a lifted Page (e.g. UserPageEnvelope).
     warnings: list[str] = []
     if app_config.glyph_review_required:
-        try:
-            total_words = len(page_obj.words)  # type: ignore[attr-defined]  # pyright: ignore[reportAny]
+        _page_for_count = _resolve_page_object_for_pages(pstate)
+        if _page_for_count is not None:
+            total_words = len(_page_for_count.words)
             reviewed_words = len(pstate.glyph_annotations_map)
             if reviewed_words < total_words:
                 unreviewed = total_words - reviewed_words
@@ -825,9 +827,6 @@ def save_page(
                     f" {total_words} word(s) have not been glyph-reviewed"
                 )
                 warnings.append(msg)
-        except AttributeError:
-            # payload doesn't expose .words (e.g. UserPageEnvelope); skip.
-            pass
 
     return JSONResponse(
         status_code=200,
@@ -1267,11 +1266,10 @@ def glyph_bulk_mark(
         )
 
     # Collect all words for bulk-mark processing
-    lines = getattr(page, "lines", None) or []  # pyright: ignore[reportUnknownVariableType]
     word_dicts: list[dict[str, object]] = []
-    for li, line in enumerate(lines):  # pyright: ignore[reportUnknownVariableType,reportUnknownArgumentType]
-        for wi, word in enumerate(getattr(line, "words", None) or []):  # pyright: ignore[reportAny,reportUnknownArgumentType]
-            gt = str(getattr(word, "ground_truth_text", "") or "")  # pyright: ignore[reportAny]
+    for li, line in enumerate(page.lines):
+        for wi, word in enumerate(line.words):
+            gt = str(word.ground_truth_text or "")
             sidecar_key = f"{li}_{wi}"
             existing = pstate.glyph_annotations_map.get(sidecar_key)
             word_dicts.append(
@@ -1333,19 +1331,28 @@ def glyph_bulk_mark(
     return JSONResponse(content=response.model_dump())
 
 
-def _resolve_page_object_for_pages(pstate: PageState | None) -> object | None:
-    """Resolve page object for pages.py handlers (mirrors words.py helper)."""
-    if pstate is None or pstate.page_record is None:  # pyright: ignore[reportAny]
+def _resolve_page_object_for_pages(pstate: PageState | None) -> Page | None:
+    """Resolve page object for pages.py handlers (mirrors words.py helper).
+
+    ``lift_envelope_to_page`` returns either the payload unchanged (when it
+    is already a ``Page``), a freshly-constructed ``Page`` from
+    ``Page.from_dict``, or an ``EnvelopeLiftError`` on failure.  After
+    guarding against ``EnvelopeLiftError`` the result is cast to ``Page``
+    — the production contract guarantees this; tests may pass duck-typed
+    stubs that satisfy the same interface.
+    """
+    if pstate is None or pstate.page_record is None:
         return None
-    payload_obj = getattr(pstate.page_record, "payload", None)  # pyright: ignore[reportAny]
+    payload_obj = pstate.page_record.payload
     if payload_obj is None:
         return None
-    from ..core.envelope_lift import EnvelopeLiftError, lift_envelope_to_page
 
-    lift_result = lift_envelope_to_page(payload_obj)  # pyright: ignore[reportAny]
+    lift_result = lift_envelope_to_page(payload_obj)
     if isinstance(lift_result, EnvelopeLiftError):
         return None
-    return lift_result
+    from typing import cast as _cast
+
+    return _cast("Page", lift_result)
 
 
 def install_pages_router(app) -> None:  # type: ignore[no-untyped-def]

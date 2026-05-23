@@ -51,6 +51,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from pd_book_tools.ocr.page import Page
 from pydantic import BaseModel, Field, field_validator
 
 from ..core.envelope_lift import EnvelopeLiftError, lift_envelope_to_page
@@ -288,7 +289,7 @@ def _bbox_to_coords(bbox: BBox) -> tuple[int, int, int, int]:
     return bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height
 
 
-def _resolve_page_object(pstate: PageState | None) -> Any | None:
+def _resolve_page_object(pstate: PageState | None) -> Page | None:
     """Pull the ``Page``-like object out of ``PageState.page_record``.
 
     The page record (``PageLoadOutcome``) carries the loaded Page in
@@ -319,7 +320,7 @@ def _resolve_page_object(pstate: PageState | None) -> Any | None:
     """
     if pstate is None or pstate.page_record is None:
         return None
-    payload_obj = getattr(pstate.page_record, "payload", None)
+    payload_obj = pstate.page_record.payload
     if payload_obj is None:
         return None
 
@@ -334,7 +335,13 @@ def _resolve_page_object(pstate: PageState | None) -> Any | None:
             exc_info=lift_result.cause,
         )
         return None
-    return lift_result
+    # ``lift_envelope_to_page`` returns either the original ``Page``
+    # (OCR lane, passed through unchanged) or a ``Page`` from
+    # ``Page.from_dict`` (labeled/cached lane).  Cast to ``Page`` so
+    # the static return type matches; tests may pass duck-typed stubs.
+    from typing import cast as _cast
+
+    return _cast("Page", lift_result)
 
 
 def _resolve_word(page: Any, line_index: int, word_index: int) -> Any | None:
