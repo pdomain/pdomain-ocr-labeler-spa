@@ -3122,6 +3122,8 @@ export interface components {
              * @default true
              */
             saved: boolean;
+            /** Warnings */
+            warnings?: string[];
         };
         /**
          * SaveProjectResponse

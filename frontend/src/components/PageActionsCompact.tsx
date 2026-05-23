@@ -83,8 +83,13 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
 
   function handleSavePage() {
     savePage.mutate(undefined, {
-      onSuccess: () => {
-        toast.success("Page saved");
+      onSuccess: (data) => {
+        // Glyph-review gate: surface backend warnings as toasts (AC #270).
+        if (data.warnings && data.warnings.length > 0) {
+          data.warnings.forEach((w) => toast.warn(w));
+        } else {
+          toast.success("Page saved");
+        }
       },
       onError: () => {
         toast.error("Save failed");

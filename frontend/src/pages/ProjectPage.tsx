@@ -523,6 +523,12 @@ export default function ProjectPage() {
   }
   function handleSavePage() {
     savePage.mutate(undefined, {
+      onSuccess: (data) => {
+        // Glyph-review gate: surface backend warnings as toasts (AC #270).
+        if (data.warnings && data.warnings.length > 0) {
+          data.warnings.forEach((w) => toast.warn(w));
+        }
+      },
       onSettled: () => {
         invalidatePage();
       },

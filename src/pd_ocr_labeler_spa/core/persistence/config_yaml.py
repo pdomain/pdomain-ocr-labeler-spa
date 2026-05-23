@@ -72,6 +72,12 @@ class AppConfig(BaseModel):
     # fuzzy classification); 0.0 means everything is fuzzy.
     fuzz_threshold: float = 0.8
 
+    # Glyph-review gate (spec §4, issue #270).
+    # When True, saving a page that has words with ``glyph_annotations is None``
+    # (not yet reviewed) produces a ``glyph_review_incomplete`` warning in
+    # ``SavePageResponse.warnings``.  Default False (gate disabled).
+    glyph_review_required: bool = False
+
 
 # ──────────────────────────────────────────────────────────────────────
 # Readers

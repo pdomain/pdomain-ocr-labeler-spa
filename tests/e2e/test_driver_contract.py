@@ -83,6 +83,25 @@ _NAV_STUB_TESTIDS = [
     "nav-page-total-label",
 ]
 
+# Glyph testids that are always present once the project page loads.
+# (spec §7 / driver-contract §2.15, issue #270)
+# Parameterised testids (* -{line}-{word}, *-{i}) are NOT listed here —
+# their existence is state-dependent. The dialog testids are checked
+# in test_glyph_bulk_dialog_testids_present (dialog must be opened first).
+_GLYPH_STATIC_TESTIDS = [
+    "bulk-glyph-mark-button",  # always present in PageActionsCompact on project page
+]
+
+# Glyph testids visible only when the BulkGlyphMarkDialog is open.
+_GLYPH_DIALOG_TESTIDS = [
+    "bulk-glyph-mark-dialog",
+    "bulk-glyph-recipe-select",
+    "bulk-glyph-skip-annotated-checkbox",
+    "bulk-glyph-accept-predictions-checkbox",
+    "bulk-glyph-dry-run-button",
+    "bulk-glyph-apply-button",
+]
+
 # Text-tabs group (rendered when project page is active).
 _TEXT_TABS_TESTIDS = [
     "text-tab-matches",
@@ -264,3 +283,40 @@ def test_ocr_config_modal_testids_present(live_server: LiveServer, page: Page) -
     # only mounts when the button is clicked.
     missing = _all_stub_or_present(page, _OCR_CONFIG_STUB_TESTIDS)
     assert not missing, f"OCR config stub testids missing: {missing}"
+
+
+@pytest.mark.e2e
+def test_glyph_static_testids_present_on_project_page(live_server: LiveServer, page: Page) -> None:
+    """Glyph AC #270: static glyph testids present in driver-contract §2.15 on project page.
+
+    ``bulk-glyph-mark-button`` is always rendered in PageActionsCompact
+    once a project page is loaded.
+    """
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
+    page.goto(url, timeout=15_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+
+    missing = _all_stub_or_present(page, _GLYPH_STATIC_TESTIDS)
+    assert not missing, f"Static glyph testids missing from project page: {missing}"
+
+
+@pytest.mark.e2e
+def test_glyph_bulk_dialog_testids_present(live_server: LiveServer, page: Page) -> None:
+    """Glyph AC #270: dialog testids from driver-contract §2.15 present when dialog opens.
+
+    Opens the BulkGlyphMarkDialog via ``bulk-glyph-mark-button`` and asserts
+    all dialog-interior testids from spec §7.
+    """
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
+    page.goto(url, timeout=15_000)
+    page.wait_for_selector('[data-testid="bulk-glyph-mark-button"]', timeout=10_000)
+
+    page.click('[data-testid="bulk-glyph-mark-button"]')
+    page.wait_for_selector('[data-testid="bulk-glyph-mark-dialog"]', timeout=5_000)
+
+    missing = _all_stub_or_present(page, _GLYPH_DIALOG_TESTIDS)
+    assert not missing, f"Glyph dialog testids missing after opening dialog: {missing}"

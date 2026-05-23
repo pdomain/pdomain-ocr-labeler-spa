@@ -81,6 +81,11 @@ class SavePageResponse(BaseModel):
     project_id: str
     page_index: int
     saved: bool = True
+    warnings: list[str] = Field(default_factory=list)
+    """Non-fatal advisory messages.  Currently: ``glyph_review_incomplete``
+    when ``AppConfig.glyph_review_required=True`` and some words on the
+    page have ``glyph_annotations is None`` (spec §4, issue #270).
+    Save always proceeds — these are warnings, not errors."""
 
 
 class SaveFailure(BaseModel):
@@ -728,6 +733,7 @@ def save_page(
     body: SavePageRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
 ) -> JSONResponse:
     """``POST .../save`` — write the labeled-lane envelope (spec-23-B2 §4).
 
@@ -804,11 +810,29 @@ def save_page(
 
     pstate.last_saved_generation = pstate.generation
 
+    # Glyph-review gate: warn (but never block) when required and incomplete.
+    # Counts reviewed words via glyph_annotations_map vs total page words.
+    # Uses page_obj.words; falls back silently if the payload lacks that attr.
+    warnings: list[str] = []
+    if app_config.glyph_review_required:
+        try:
+            total_words = len(page_obj.words)  # type: ignore[attr-defined]
+            reviewed_words = len(pstate.glyph_annotations_map)
+            if reviewed_words < total_words:
+                unreviewed = total_words - reviewed_words
+                warnings.append(
+                    f"glyph_review_incomplete: {unreviewed} of {total_words} "
+                    "word(s) have not been glyph-reviewed"
+                )
+        except AttributeError:
+            # payload doesn't expose .words (e.g. UserPageEnvelope); skip.
+            pass
+
     return JSONResponse(
         status_code=200,
-        content=SavePageResponse(project_id=project_id, page_index=page_index, saved=True).model_dump(
-            mode="json"
-        ),
+        content=SavePageResponse(
+            project_id=project_id, page_index=page_index, saved=True, warnings=warnings
+        ).model_dump(mode="json"),
     )
 
 
