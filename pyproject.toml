@@ -23,7 +23,7 @@ dependencies = [
     "sse-starlette>=2.1",
     "anyio>=4.4",
     # OCR / image domain (wired in later milestones; harmless to declare now)
-    "pd-book-tools",
+    "pd-book-tools>=0.14.1",
     "huggingface_hub>=0.23",
 ]
 
@@ -60,10 +60,13 @@ e2e = [
     "pytest-playwright>=0.5",
 ]
 
+[[tool.uv.index]]
+name = "pd-index-pip"
+url = "https://concavetrillion.github.io/pd-index-pip/simple/"
+explicit = true
+
 [tool.uv.sources]
-# Pinned to the commit that ships glyph_annotations (pd-book-tools#41, merged
-# after v0.12.0).  Bump to the next release tag once one is cut.
-pd-book-tools = { git = "https://github.com/ConcaveTrillion/pd-book-tools.git", rev = "675ad76ea5e418299fc804ebd062379c1c5d033a" }
+pd-book-tools = { index = "pd-index-pip" }
 
 [tool.hatch.version]
 source = "vcs"

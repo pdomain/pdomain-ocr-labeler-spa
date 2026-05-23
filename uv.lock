@@ -1398,8 +1398,8 @@ wheels = [
 
 [[package]]
 name = "pd-book-tools"
-version = "0.12.1.dev17+g675ad76ea"
-source = { git = "https://github.com/ConcaveTrillion/pd-book-tools.git?rev=675ad76ea5e418299fc804ebd062379c1c5d033a#675ad76ea5e418299fc804ebd062379c1c5d033a" }
+version = "0.14.1"
+source = { registry = "https://concavetrillion.github.io/pd-index-pip/simple/" }
 dependencies = [
     { name = "huggingface-hub" },
     { name = "ipython" },
@@ -1421,6 +1421,10 @@ dependencies = [
     { name = "torchaudio" },
     { name = "torchvision" },
     { name = "transformers" },
+]
+sdist = { url = "https://github.com/ConcaveTrillion/pd-book-tools/releases/download/v0.14.1/pd_book_tools-0.14.1.tar.gz" }
+wheels = [
+    { url = "https://github.com/ConcaveTrillion/pd-book-tools/releases/download/v0.14.1/pd_book_tools-0.14.1-py3-none-any.whl" },
 ]
 
 [[package]]
@@ -1468,7 +1472,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28" },
     { name = "huggingface-hub", specifier = ">=0.23" },
     { name = "modal", marker = "extra == 'modal'", specifier = ">=0.66" },
-    { name = "pd-book-tools", git = "https://github.com/ConcaveTrillion/pd-book-tools.git?rev=675ad76ea5e418299fc804ebd062379c1c5d033a" },
+    { name = "pd-book-tools", specifier = ">=0.14.1", index = "https://concavetrillion.github.io/pd-index-pip/simple/" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.5" },
     { name = "python-multipart", specifier = ">=0.0.20" },
@@ -1991,8 +1995,8 @@ wheels = [
 
 [[package]]
 name = "python-doctr"
-version = "1.0.2a0"
-source = { git = "https://github.com/mindee/doctr.git#8fc9f331ea3af41d15f51a1e4546980755c81d9d" }
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyascii" },
     { name = "defusedxml" },
@@ -2012,6 +2016,10 @@ dependencies = [
     { name = "torchvision" },
     { name = "tqdm" },
     { name = "validators" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1f/aa/35afe5b4f2e601557f9a617411896df0a5e092caac44a7ab78caec1e7fcd/python_doctr-1.0.1.tar.gz", hash = "sha256:6fc54316ea7915e1fa96bf58e9434b16e1511c3c61dff16d0802f18c71a5d9c6", size = 223224, upload-time = "2026-02-04T15:05:51.862Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/03/1d/83cfd3f35e6f83553b3effc951a45813a794da2f6ffc5c0e8f3557f4cead/python_doctr-1.0.1-py3-none-any.whl", hash = "sha256:a54028bc59df98816059fb038265c787ca971098ee78a2af2514267e6c71ce7e", size = 288861, upload-time = "2026-02-04T15:05:48.783Z" },
 ]
 
 [[package]]

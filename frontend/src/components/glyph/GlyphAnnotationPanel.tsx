@@ -109,10 +109,12 @@ export function GlyphAnnotationPanel({
     onSetAnnotations({ ...base, long_s_positions: positions });
   }
 
-  function handleCharSpanClick(i: number) {
-    if (selectedSpan === null) {
+  function handleCharSpanClick(i: number, shiftKey = false) {
+    if (selectedSpan === null || !shiftKey) {
+      // First click (or unshifted click): set anchor at this position.
       setSelectedSpan([i, i + 1]);
     } else {
+      // Shift-click: extend span from anchor to include i.
       const [start] = selectedSpan;
       if (i < start) {
         setSelectedSpan([i, start + 1]);
@@ -170,7 +172,7 @@ export function GlyphAnnotationPanel({
               <button
                 key={i}
                 data-testid={`glyph-panel-charspan-cell-${i}`}
-                onClick={() => handleCharSpanClick(i)}
+                onClick={(e) => handleCharSpanClick(i, e.shiftKey)}
                 className={[
                   "w-5 h-5 text-[10px] font-mono border rounded cursor-pointer",
                   selectedSpan !== null && i >= selectedSpan[0] && i < selectedSpan[1]

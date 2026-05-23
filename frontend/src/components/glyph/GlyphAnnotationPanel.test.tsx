@@ -152,4 +152,33 @@ describe("GlyphAnnotationPanel", () => {
     expect(screen.getByTestId("glyph-panel-charspan-cell-1")).toBeTruthy();
     expect(screen.getByTestId("glyph-panel-charspan-cell-2")).toBeTruthy();
   });
+
+  it("shift-click on charspan cell extends selection from anchor — AC #269", () => {
+    // AC: click cell 0 (anchor), shift-click cell 2 → span [0, 3) selected.
+    // Verify via the add-ligature flow: add-ligature button with a selected span
+    // stores char_span correctly.
+    const handleSet = vi.fn();
+    render(
+      <GlyphAnnotationPanel
+        lineIndex={0}
+        wordIndex={0}
+        gtText="action"
+        annotations={emptyAnnotations}
+        predictions={null}
+        onSetAnnotations={handleSet}
+        onAcceptPrediction={vi.fn()}
+      />,
+    );
+    // Click cell 0 (anchor — no shiftKey)
+    fireEvent.click(screen.getByTestId("glyph-panel-charspan-cell-0"));
+    // Shift-click cell 2 → span should be [0, 3)
+    fireEvent.click(screen.getByTestId("glyph-panel-charspan-cell-2"), { shiftKey: true });
+    // Now click Add Ligature — the span [0,3) should be recorded
+    fireEvent.click(screen.getByTestId("glyph-panel-add-ligature"));
+    expect(handleSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ligatures: expect.arrayContaining([expect.objectContaining({ char_span: [0, 3] })]),
+      }),
+    );
+  });
 });
