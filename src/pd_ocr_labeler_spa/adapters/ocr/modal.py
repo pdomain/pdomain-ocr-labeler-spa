@@ -18,7 +18,7 @@ from ...core.exceptions import NotImplementedYet
 from .base import OCRProvenance
 
 if TYPE_CHECKING:
-    from pd_book_tools.ocr.document import Page
+    from pd_book_tools.ocr.page import Page
 
 
 class ModalOCR:

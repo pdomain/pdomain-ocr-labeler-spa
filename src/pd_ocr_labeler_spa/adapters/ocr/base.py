@@ -21,9 +21,9 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    # Imported lazily — ``pd_book_tools.ocr.document.Page`` is heavy and
-    # the Protocol surface only needs the *type*, not the runtime class.
-    from pd_book_tools.ocr.document import Page
+    # Imported lazily — ``pd_book_tools.ocr.page.Page`` is the canonical
+    # export; the Protocol surface only needs the *type*, not the runtime class.
+    from pd_book_tools.ocr.page import Page
 
 
 class OCRProvenance(BaseModel):

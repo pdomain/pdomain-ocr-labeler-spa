@@ -731,9 +731,9 @@ def save_page(
     project_id: str,
     page_index: int,
     body: SavePageRequest,
-    project_state: ProjectState = Depends(get_project_state),
-    settings: Settings = Depends(get_settings),
-    app_config: AppConfig = Depends(get_app_config),
+    project_state: ProjectState = Depends(get_project_state),  # pyright: ignore[reportCallInDefaultInitializer]
+    settings: Settings = Depends(get_settings),  # pyright: ignore[reportCallInDefaultInitializer]
+    app_config: AppConfig = Depends(get_app_config),  # pyright: ignore[reportCallInDefaultInitializer]
 ) -> JSONResponse:
     """``POST .../save`` — write the labeled-lane envelope (spec-23-B2 §4).
 
@@ -816,14 +816,15 @@ def save_page(
     warnings: list[str] = []
     if app_config.glyph_review_required:
         try:
-            total_words = len(page_obj.words)  # type: ignore[attr-defined]
+            total_words = len(page_obj.words)  # type: ignore[attr-defined]  # pyright: ignore[reportAny]
             reviewed_words = len(pstate.glyph_annotations_map)
             if reviewed_words < total_words:
                 unreviewed = total_words - reviewed_words
-                warnings.append(
-                    f"glyph_review_incomplete: {unreviewed} of {total_words} "
-                    "word(s) have not been glyph-reviewed"
+                msg = (
+                    f"glyph_review_incomplete: {unreviewed} of"
+                    f" {total_words} word(s) have not been glyph-reviewed"
                 )
+                warnings.append(msg)
         except AttributeError:
             # payload doesn't expose .words (e.g. UserPageEnvelope); skip.
             pass
@@ -1242,9 +1243,9 @@ def glyph_bulk_mark(
     project_id: str,
     page_index: int,
     body: GlyphBulkMarkRequest,
-    project_state: ProjectState = Depends(get_project_state),
-    settings: Settings = Depends(get_settings),
-    app_config: AppConfig = Depends(get_app_config),
+    project_state: ProjectState = Depends(get_project_state),  # pyright: ignore[reportCallInDefaultInitializer]
+    settings: Settings = Depends(get_settings),  # pyright: ignore[reportCallInDefaultInitializer]
+    app_config: AppConfig = Depends(get_app_config),  # pyright: ignore[reportCallInDefaultInitializer]
 ) -> JSONResponse:
     """``POST .../pages/{idx}/glyph-bulk-mark`` — apply a glyph-mark recipe to the page.
 
@@ -1266,11 +1267,11 @@ def glyph_bulk_mark(
         )
 
     # Collect all words for bulk-mark processing
-    lines = getattr(page, "lines", None) or []
+    lines = getattr(page, "lines", None) or []  # pyright: ignore[reportUnknownVariableType]
     word_dicts: list[dict[str, object]] = []
-    for li, line in enumerate(lines):
-        for wi, word in enumerate(getattr(line, "words", None) or []):
-            gt = str(getattr(word, "ground_truth_text", "") or "")
+    for li, line in enumerate(lines):  # pyright: ignore[reportUnknownVariableType,reportUnknownArgumentType]
+        for wi, word in enumerate(getattr(line, "words", None) or []):  # pyright: ignore[reportAny,reportUnknownArgumentType]
+            gt = str(getattr(word, "ground_truth_text", "") or "")  # pyright: ignore[reportAny]
             sidecar_key = f"{li}_{wi}"
             existing = pstate.glyph_annotations_map.get(sidecar_key)
             word_dicts.append(
@@ -1288,14 +1289,9 @@ def glyph_bulk_mark(
             status_code=422,
             content=ApiError(error="invalid_recipe", message=f"Unknown recipe: {body.recipe!r}").model_dump(),
         )
-    from typing import Literal, cast
 
-    recipe_typed = cast(
-        "Literal['ct_substring', 'st_substring', 'long_s_typeset_era']",
-        body.recipe,
-    )
     params = GlyphBulkMarkParams(
-        recipe=recipe_typed,
+        recipe=body.recipe,
         skip_already_annotated=body.skip_already_annotated,
         accept_predictions=body.accept_predictions,
         dry_run=body.dry_run,
@@ -1337,53 +1333,19 @@ def glyph_bulk_mark(
     return JSONResponse(content=response.model_dump())
 
 
-def _resolve_page_object_for_pages(pstate: PageState | None) -> Any | None:
+def _resolve_page_object_for_pages(pstate: PageState | None) -> object | None:
     """Resolve page object for pages.py handlers (mirrors words.py helper)."""
-    if pstate is None or pstate.page_record is None:
+    if pstate is None or pstate.page_record is None:  # pyright: ignore[reportAny]
         return None
-    payload_obj = getattr(pstate.page_record, "payload", None)
+    payload_obj = getattr(pstate.page_record, "payload", None)  # pyright: ignore[reportAny]
     if payload_obj is None:
         return None
     from ..core.envelope_lift import EnvelopeLiftError, lift_envelope_to_page
 
-    lift_result = lift_envelope_to_page(payload_obj)
+    lift_result = lift_envelope_to_page(payload_obj)  # pyright: ignore[reportAny]
     if isinstance(lift_result, EnvelopeLiftError):
         return None
     return lift_result
-
-
-def _write_cached_envelope_best_effort(
-    *,
-    page: Any,
-    project_state: ProjectState,
-    page_index: int,
-    settings: Settings,
-) -> None:
-    """Write the cached-lane envelope (pages.py copy of the words.py helper)."""
-    project = project_state.loaded_project
-    if project is None:
-        return
-    try:
-        envelope = build_envelope(
-            page=page,
-            project=project,
-            page_index=page_index,
-            ocr_provenance=OCRProvenance(),
-            source_lane=USER_PAGE_SOURCE_LANE_CACHED,
-        )
-        resolver = LaneResolver(
-            data_root=settings.data_root,
-            cache_root=settings.cache_root,
-            project_id=project.project_id,
-        )
-        resolver.write_cached(page_index, envelope)
-    except Exception as exc:
-        log.warning(
-            "pages: glyph bulk-mark cached-envelope write failed project=%s page=%d: %s — continuing",
-            project.project_id,
-            page_index,
-            exc,
-        )
 
 
 def install_pages_router(app) -> None:  # type: ignore[no-untyped-def]

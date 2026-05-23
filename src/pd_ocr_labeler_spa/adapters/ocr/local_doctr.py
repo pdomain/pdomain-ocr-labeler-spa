@@ -68,7 +68,7 @@ def _write_cached_envelope_text(path: Path, text: str) -> None:
 
 
 if TYPE_CHECKING:
-    from pd_book_tools.ocr.document import Page
+    from pd_book_tools.ocr.page import Page
 
 
 class LocalDoctrOCR:

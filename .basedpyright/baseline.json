@@ -476,14 +476,6 @@
         ],
         "./src/pd_ocr_labeler_spa/adapters/ocr/base.py": [
             {
-                "code": "reportMissingTypeStubs",
-                "range": {
-                    "startColumn": 9,
-                    "endColumn": 35,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportAny",
                 "range": {
                     "startColumn": 8,
@@ -506,14 +498,6 @@
                 "range": {
                     "startColumn": 4,
                     "endColumn": 43,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportMissingTypeStubs",
-                "range": {
-                    "startColumn": 9,
-                    "endColumn": 35,
                     "lineCount": 1
                 }
             },
@@ -640,14 +624,6 @@
         ],
         "./src/pd_ocr_labeler_spa/adapters/ocr/modal.py": [
             {
-                "code": "reportMissingTypeStubs",
-                "range": {
-                    "startColumn": 9,
-                    "endColumn": 35,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportAny",
                 "range": {
                     "startColumn": 8,
@@ -697,14 +673,6 @@
             }
         ],
         "./src/pd_ocr_labeler_spa/adapters/ocr/shared_container.py": [
-            {
-                "code": "reportMissingTypeStubs",
-                "range": {
-                    "startColumn": 9,
-                    "endColumn": 35,
-                    "lineCount": 1
-                }
-            },
             {
                 "code": "reportAny",
                 "range": {
@@ -2580,14 +2548,6 @@
         ],
         "./src/pd_ocr_labeler_spa/api/ocr_config.py": [
             {
-                "code": "reportMissingTypeStubs",
-                "range": {
-                    "startColumn": 9,
-                    "endColumn": 35,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportUnusedImport",
                 "range": {
                     "startColumn": 67,
@@ -3070,22 +3030,6 @@
                 }
             },
             {
-                "code": "reportCallInDefaultInitializer",
-                "range": {
-                    "startColumn": 34,
-                    "endColumn": 60,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportCallInDefaultInitializer",
-                "range": {
-                    "startColumn": 25,
-                    "endColumn": 46,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportAny",
                 "range": {
                     "startColumn": 25,
@@ -3548,14 +3492,6 @@
                 "range": {
                     "startColumn": 24,
                     "endColumn": 47,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportMissingTypeStubs",
-                "range": {
-                    "startColumn": 13,
-                    "endColumn": 39,
                     "lineCount": 1
                 }
             },
@@ -5184,14 +5120,6 @@
                 }
             },
             {
-                "code": "reportMissingTypeStubs",
-                "range": {
-                    "startColumn": 13,
-                    "endColumn": 35,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportAny",
                 "range": {
                     "startColumn": 8,
@@ -6768,14 +6696,6 @@
         ],
         "./src/pd_ocr_labeler_spa/core/page_to_line_matches.py": [
             {
-                "code": "reportMissingTypeStubs",
-                "range": {
-                    "startColumn": 9,
-                    "endColumn": 31,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportExplicitAny",
                 "range": {
                     "startColumn": 23,
@@ -7154,57 +7074,9 @@
                     "endColumn": 20,
                     "lineCount": 1
                 }
-            },
-            {
-                "code": "reportUnknownArgumentType",
-                "range": {
-                    "startColumn": 27,
-                    "endColumn": 30,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownArgumentType",
-                "range": {
-                    "startColumn": 27,
-                    "endColumn": 30,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownArgumentType",
-                "range": {
-                    "startColumn": 27,
-                    "endColumn": 30,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownArgumentType",
-                "range": {
-                    "startColumn": 27,
-                    "endColumn": 30,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnknownArgumentType",
-                "range": {
-                    "startColumn": 27,
-                    "endColumn": 30,
-                    "lineCount": 1
-                }
             }
         ],
         "./src/pd_ocr_labeler_spa/core/persistence/ground_truth.py": [
-            {
-                "code": "reportMissingTypeStubs",
-                "range": {
-                    "startColumn": 5,
-                    "endColumn": 36,
-                    "lineCount": 1
-                }
-            },
             {
                 "code": "reportAny",
                 "range": {

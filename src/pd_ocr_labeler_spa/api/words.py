@@ -1367,9 +1367,9 @@ def set_glyph_annotations(
     line_index: int,
     word_index: int,
     body: SetGlyphAnnotationsRequest,
-    project_state: ProjectState = Depends(get_project_state),
-    settings: Settings = Depends(get_settings),
-    app_config: AppConfig = Depends(get_app_config),
+    project_state: ProjectState = Depends(get_project_state),  # pyright: ignore[reportCallInDefaultInitializer]
+    settings: Settings = Depends(get_settings),  # pyright: ignore[reportCallInDefaultInitializer]
+    app_config: AppConfig = Depends(get_app_config),  # pyright: ignore[reportCallInDefaultInitializer]
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/glyph-annotations`` — set/clear word glyph annotations.
 
@@ -1395,7 +1395,7 @@ def set_glyph_annotations(
         if ann_dict is not None:
             pstate.glyph_annotations_map[sidecar_key] = ann_dict
         else:
-            pstate.glyph_annotations_map.pop(sidecar_key, None)
+            _ = pstate.glyph_annotations_map.pop(sidecar_key, None)
 
         pstate.generation += 1
         _write_cached_envelope_best_effort(
@@ -1423,10 +1423,10 @@ def accept_glyph_prediction(
     page_index: int,
     line_index: int,
     word_index: int,
-    body: AcceptGlyphPredictionRequest,
-    project_state: ProjectState = Depends(get_project_state),
-    settings: Settings = Depends(get_settings),
-    app_config: AppConfig = Depends(get_app_config),
+    body: AcceptGlyphPredictionRequest,  # pyright: ignore[reportUnusedParameter]
+    project_state: ProjectState = Depends(get_project_state),  # pyright: ignore[reportCallInDefaultInitializer]
+    settings: Settings = Depends(get_settings),  # pyright: ignore[reportCallInDefaultInitializer]
+    app_config: AppConfig = Depends(get_app_config),  # pyright: ignore[reportCallInDefaultInitializer]
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/accept-prediction`` — confirm glyph predictions.
 
@@ -1484,19 +1484,6 @@ def accept_glyph_prediction(
         settings=settings,
         app_config=app_config,
     )
-
-
-def _collect_page_words(
-    page: object,
-) -> list[dict[str, object]]:
-    """Collect all words from a Page object as dicts for bulk-mark processing."""
-    words: list[dict[str, object]] = []
-    lines = getattr(page, "lines", None) or []
-    for li, line in enumerate(lines):
-        for wi, word in enumerate(getattr(line, "words", None) or []):
-            gt = str(getattr(word, "ground_truth_text", "") or "")
-            words.append({"gt": gt, "line": li, "word": wi})
-    return words
 
 
 def install_words_router(app) -> None:  # type: ignore[no-untyped-def]

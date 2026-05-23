@@ -65,12 +65,12 @@ class BulkMarkResult:
     annotations: dict[tuple[int, int], dict[str, object]] = field(default_factory=dict)
 
     def __getitem__(self, key: str) -> object:
-        return getattr(self, key)
+        return getattr(self, key)  # pyright: ignore[reportAny]
 
 
 def _find_substring_spans(gt: str, sub: str) -> list[tuple[int, int]]:
     """Return all non-overlapping ``[start, end)`` spans of *sub* in *gt*."""
-    spans = []
+    spans: list[tuple[int, int]] = []
     start = 0
     while True:
         idx = gt.lower().find(sub, start)
@@ -83,7 +83,7 @@ def _find_substring_spans(gt: str, sub: str) -> list[tuple[int, int]]:
 
 def _long_s_positions(gt: str) -> list[int]:
     """Return char indices where long-s applies (typeset-era heuristic)."""
-    positions = []
+    positions: list[int] = []
     for i, ch in enumerate(gt):
         if ch != "s":
             continue

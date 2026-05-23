@@ -66,13 +66,13 @@ def _convert_glyph_annotations(ga_obj: object | None) -> GlyphAnnotationsModel |
     """
     if ga_obj is None:
         return None
-    ligatures = []
-    for lm in getattr(ga_obj, "ligatures", []) or []:
-        kind_val = getattr(lm, "kind", None)
+    ligatures: list[LigatureMarkModel] = []
+    for lm in getattr(ga_obj, "ligatures", []) or []:  # pyright: ignore[reportAny]
+        kind_val = getattr(lm, "kind", None)  # pyright: ignore[reportAny]
         if kind_val is None:
             continue
-        kind_str = kind_val.value if hasattr(kind_val, "value") else str(kind_val)
-        span = getattr(lm, "char_span", None)
+        kind_str = kind_val.value if hasattr(kind_val, "value") else str(kind_val)  # pyright: ignore[reportAny]
+        span = getattr(lm, "char_span", None)  # pyright: ignore[reportAny]
         ligatures.append(LigatureMarkModel(kind=kind_str, char_span=span))
     return GlyphAnnotationsModel(
         ligatures=ligatures,

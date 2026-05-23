@@ -111,7 +111,7 @@ def load_config(config_root: Path) -> AppConfig:
         return AppConfig()
 
     try:
-        return AppConfig(**raw)
+        return AppConfig(**raw)  # pyright: ignore[reportUnknownArgumentType] — yaml.safe_load returns untyped dict
     except Exception:
         log.warning("config_yaml_validation_failed path=%s", path, exc_info=True)
         return AppConfig()
