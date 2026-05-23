@@ -123,15 +123,15 @@ class PageLoadOutcome:
     will need a one-line rename when ``PageRecord`` lands, but the
     *behavior* won't change.
 
-    ``payload`` is typed ``Any`` because the eventual ``Page`` (from
-    ``pd_book_tools.ocr.page``) isn't importable at this slice without
-    pulling in the heavyweight OCR dep. Tests pass plain Python
-    objects (``str`` markers, ``object()`` sentinels).
+    ``payload`` is typed ``object`` (not ``Any``) so callers must narrow
+    to ``Page`` (or another concrete type) before accessing attributes.
+    Tests can pass plain Python objects (``str`` markers, ``object()``
+    sentinels) since all types are ``object`` subtypes.
     """
 
     page_index: int
     source: PageSource
-    payload: Any
+    payload: object
 
 
 class PageIndexOutOfRangeError(IndexError):

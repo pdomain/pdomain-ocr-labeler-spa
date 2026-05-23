@@ -69,9 +69,12 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING
 
 from .models import Project, Selection
+
+if TYPE_CHECKING:
+    from .page_state import PageLoadOutcome
 
 
 @dataclass
@@ -87,10 +90,9 @@ class PageState:
 
     Slice 8b adds the ``page_record`` field as the in-memory cache slot
     that ``core/page_state.ensure_page_model`` writes after a
-    successful load. Typed ``Any`` to avoid a circular import between
-    ``project_state`` and ``page_state``. M3-proper will tighten the
-    annotation to ``PageRecord | None`` once that lives in
-    ``core/models.py``.
+    successful load. Typed as ``PageLoadOutcome | None`` via
+    ``TYPE_CHECKING`` import to avoid a circular import between
+    ``project_state`` and ``page_state`` at runtime.
 
     Not frozen: M3 will add mutable selection-set fields. The carrier
     above doesn't depend on frozenness — it depends on the ``page_index``
@@ -107,7 +109,7 @@ class PageState:
     """
 
     page_index: int
-    page_record: Any = field(default=None)
+    page_record: PageLoadOutcome | None = field(default=None)
     generation: int = 0
     last_saved_generation: int = 0
     # Per-page UI selection (spec-23-E §10). Mutated by
