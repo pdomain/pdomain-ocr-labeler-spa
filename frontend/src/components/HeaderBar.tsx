@@ -74,6 +74,8 @@ export interface PageMetrics {
   fuzzy: number;
   mismatch: number;
   validated: number;
+  /** Number of words with glyph_annotations !== null (spec §8). Optional — only shown when present. */
+  glyphs_reviewed?: number | undefined;
 }
 
 export interface HeaderBarProps {
@@ -176,6 +178,14 @@ export default function HeaderBar({
           <span>
             {pageMetrics.validated}/{pageMetrics.total} validated
           </span>
+          {pageMetrics.glyphs_reviewed !== undefined && (
+            <>
+              <span>·</span>
+              <span>
+                {pageMetrics.glyphs_reviewed}/{pageMetrics.total} glyphs
+              </span>
+            </>
+          )}
         </div>
       )}
 

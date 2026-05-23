@@ -341,6 +341,39 @@ The Rail is the 64px left column. It has three sections: MODE, TARGET, and LAYER
 Active cells carry `data-active="true"`. Hotkeys: `1`/`2`/`3`/`4` → block/para/line/word;
 `V`/`R`/`A`/`E` → view/region/annotate/erase.
 
+### 2.15 Glyph annotations (spec `specs/20-glyph-annotations.md §7`, issue #270)
+
+Parameterised testids use `{line}` and `{word}` (0-based indices matching the
+word's position in the page line-match list).
+
+| Testid | What it is |
+|---|---|
+| `word-glyph-badge-{line}-{word}` | Corner badge on `<WordCell>`; absent when no annotations/predictions |
+| `word-glyph-chip-row-{line}-{word}` | Chip row under GT input |
+| `word-glyph-chip-{line}-{word}-{kind}` | Individual chip (`kind` ∈ `ct`, `st`, `long_s`, `fi`, `swash`, `predicted-{kind}`) |
+| `glyph-panel-{line}-{word}` | The `<GlyphAnnotationPanel>` popover/section |
+| `glyph-panel-add-ligature` | "Add ligature" button inside panel |
+| `glyph-panel-ligature-kind-select` | Ligature kind enum picker |
+| `glyph-panel-charspan-cell-{i}` | i-th char-cell in the span picker |
+| `glyph-panel-long-s-cell-{i}` | i-th char-cell in the long-s picker |
+| `glyph-panel-swash-checkbox` | Swash toggle |
+| `glyph-panel-mark-reviewed-empty` | "Mark reviewed (no marks)" button |
+| `glyph-panel-reset` | "Reset" → set annotations back to None |
+| `glyph-panel-accept-prediction-{kind}` | Accept a single predicted mark |
+| `glyph-panel-reject-prediction-{kind}` | Reject a single predicted mark |
+| `bulk-glyph-mark-button` | Toolbar entry that opens the bulk dialog |
+| `bulk-glyph-mark-dialog` | The `<BulkGlyphMarkDialog>` |
+| `bulk-glyph-recipe-select` | Recipe dropdown |
+| `bulk-glyph-skip-annotated-checkbox` | "Skip already annotated" |
+| `bulk-glyph-accept-predictions-checkbox` | "Also confirm matching predictions" |
+| `bulk-glyph-dry-run-button` | Preview button |
+| `bulk-glyph-apply-button` | Apply button |
+| `bulk-glyph-preview-count` | Span containing preview count text (e.g. `47 words will be modified`) |
+
+The `{line}-{word}` suffix matches the legacy `gt-text-input-{l}-{w}` convention.
+Parameterised testids above (`*-{line}-{word}`, `*-{kind}`, `*-{i}`) exist for
+specific values only; the conformance test asserts the static/trigger testids.
+
 ---
 
 ## 3. ARIA + accessible-name guarantees

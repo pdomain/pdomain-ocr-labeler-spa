@@ -144,12 +144,14 @@ function AppInner() {
     const words = lineMatches.flatMap((l) => l.word_matches);
     const total = words.length;
     if (total === 0) return null;
+    const glyphsReviewedCount = words.filter((w) => w.glyph_annotations != null).length;
     return {
       total,
       exact: words.filter((w) => w.match_status === "exact").length,
       fuzzy: words.filter((w) => w.match_status === "fuzzy").length,
       mismatch: words.filter((w) => w.match_status === "mismatch").length,
       validated: words.filter((w) => w.is_validated).length,
+      glyphs_reviewed: glyphsReviewedCount,
     };
   })();
 

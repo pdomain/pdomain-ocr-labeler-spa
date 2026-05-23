@@ -16,6 +16,7 @@ import { useJobProgress } from "../hooks/useJobProgress";
 import { useJobCompletionInvalidation } from "../hooks/useJobCompletionInvalidation";
 import { dialogStore } from "../stores/dialog-store";
 import { toast } from "../lib/toast";
+import { BulkGlyphMarkDialog } from "./glyph/BulkGlyphMarkDialog";
 
 export interface PageActionsCompactProps {
   projectId: string;
@@ -26,6 +27,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   const qc = useQueryClient();
 
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [bulkGlyphOpen, setBulkGlyphOpen] = useState(false);
   const jobProgress = useJobProgress(activeJobId);
 
   // Toast lifecycle: react to OCR job progress transitions.
@@ -81,8 +83,13 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
 
   function handleSavePage() {
     savePage.mutate(undefined, {
-      onSuccess: () => {
-        toast.success("Page saved");
+      onSuccess: (data) => {
+        // Glyph-review gate: surface backend warnings as toasts (AC #270).
+        if (data.warnings && data.warnings.length > 0) {
+          data.warnings.forEach((w) => toast.warn(w));
+        } else {
+          toast.success("Page saved");
+        }
       },
       onError: () => {
         toast.error("Save failed");
@@ -218,6 +225,27 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       >
         OCR Config
       </button>
+
+      <button
+        type="button"
+        data-testid="bulk-glyph-mark-button"
+        aria-label="Bulk-mark glyphs"
+        disabled={disabled}
+        onClick={() => setBulkGlyphOpen(true)}
+        title="Bulk-mark glyphs"
+        className={`${base} ${normal}`}
+      >
+        Bulk glyphs
+      </button>
+
+      {bulkGlyphOpen && (
+        <BulkGlyphMarkDialog
+          open={bulkGlyphOpen}
+          projectId={projectId}
+          pageIndex={pageIndex}
+          onClose={() => setBulkGlyphOpen(false)}
+        />
+      )}
     </div>
   );
 }

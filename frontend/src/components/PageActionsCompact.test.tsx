@@ -92,6 +92,11 @@ describe("PageActionsCompact: testids (P1.b)", () => {
     expect(screen.getByTestId("ocr-config-trigger-button")).toBeInTheDocument();
   });
 
+  it("renders bulk-glyph-mark-button with correct testid (spec §7)", () => {
+    renderCompact();
+    expect(screen.getByTestId("bulk-glyph-mark-button")).toBeInTheDocument();
+  });
+
   it("shows labelled text on buttons", () => {
     renderCompact();
     expect(screen.getByText("Reload OCR")).toBeInTheDocument();

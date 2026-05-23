@@ -135,7 +135,10 @@ def test_save_returns_200_and_writes_labeled_envelope(loaded_client: TestClient)
     resp = loaded_client.post("/api/projects/book1/pages/0/save", json={})
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body == {"project_id": "book1", "page_index": 0, "saved": True}
+    assert body["project_id"] == "book1"
+    assert body["page_index"] == 0
+    assert body["saved"] is True
+    assert "warnings" in body  # present even when empty (AC #270)
 
     # The labeled envelope must exist on disk.
     expected_path = labeled_envelope_path(settings.data_root, "book1", 0)
@@ -297,3 +300,98 @@ def test_save_then_load_roundtrip(loaded_client: TestClient) -> None:
 
     pstate_after = project_state.page_states[0]
     assert pstate_after.page_record is not None
+
+
+# ── glyph_review_required warning ────────────────────────────────────
+
+
+class _StubPageWithWords:
+    """Stub Page that exposes a ``.words`` list for the glyph-warn check."""
+
+    def __init__(self, word_count: int, label: str = "stub") -> None:
+        self._words = [object()] * word_count  # opaque stand-ins
+        self.label = label
+
+    @property
+    def words(self) -> list[object]:
+        return self._words
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "words": [],
+            "paragraphs": [],
+            "lines": [],
+            "source_identifier": f"{self.label}.png",
+        }
+
+
+def test_save_emits_glyph_review_warning_when_required_and_incomplete(
+    loaded_client: TestClient,
+    tmp_path: Path,
+) -> None:
+    """AC #270: glyph_review_required=True + unreviewed words → warning in response.
+
+    Uses a stub page with 3 words; glyph_annotations_map is empty (no reviews).
+    Expected: SavePageResponse.warnings contains 'glyph_review_incomplete'.
+    """
+    from pd_ocr_labeler_spa.core.persistence.config_yaml import AppConfig
+
+    # app_config is frozen on app.state at boot; patch it directly.
+    current_cfg: AppConfig = loaded_client.app.state.app_config  # type: ignore[attr-defined]
+    loaded_client.app.state.app_config = current_cfg.model_copy(  # type: ignore[attr-defined]
+        update={"glyph_review_required": True}
+    )
+
+    project_state = loaded_client.app.state.project_state  # type: ignore[attr-defined]
+
+    # 3 words, none reviewed.
+    page = _StubPageWithWords(word_count=3, label="ocr_0")
+    outcome = PageLoadOutcome(page_index=0, source=PageSource.OCR, payload=page)
+    pstate = PageState(page_index=0, page_record=outcome)
+    pstate.generation = 1
+    pstate.glyph_annotations_map = {}  # no reviews
+    project_state._page_states[0] = pstate
+
+    try:
+        resp = loaded_client.post("/api/projects/book1/pages/0/save", json={})
+    finally:
+        # Always restore original config so other tests are unaffected.
+        loaded_client.app.state.app_config = current_cfg  # type: ignore[attr-defined]
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["saved"] is True
+    warnings = body.get("warnings", [])
+    assert len(warnings) == 1
+    assert "glyph_review_incomplete" in warnings[0]
+    assert "3" in warnings[0]  # total word count mentioned
+
+
+def test_save_no_warning_when_all_words_reviewed(loaded_client: TestClient) -> None:
+    """AC #270: glyph_review_required=True but all words reviewed → no warning."""
+    from pd_ocr_labeler_spa.core.persistence.config_yaml import AppConfig
+
+    current_cfg: AppConfig = loaded_client.app.state.app_config  # type: ignore[attr-defined]
+    loaded_client.app.state.app_config = current_cfg.model_copy(  # type: ignore[attr-defined]
+        update={"glyph_review_required": True}
+    )
+
+    project_state = loaded_client.app.state.project_state  # type: ignore[attr-defined]
+
+    # 2 words, both reviewed.
+    page = _StubPageWithWords(word_count=2, label="ocr_0")
+    outcome = PageLoadOutcome(page_index=0, source=PageSource.OCR, payload=page)
+    pstate = PageState(page_index=0, page_record=outcome)
+    pstate.generation = 1
+    pstate.glyph_annotations_map = {"0_0": {}, "0_1": {}}  # 2 reviewed
+    project_state._page_states[0] = pstate
+
+    try:
+        resp = loaded_client.post("/api/projects/book1/pages/0/save", json={})
+    finally:
+        loaded_client.app.state.app_config = current_cfg  # type: ignore[attr-defined]
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["saved"] is True
+    assert body.get("warnings", []) == []

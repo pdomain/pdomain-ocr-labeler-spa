@@ -238,6 +238,17 @@ describe("HeaderBar: metrics strip", () => {
     expect(screen.getByTestId("header-metrics-strip")).toHaveTextContent("4/12 validated");
   });
 
+  it("shows glyphs-reviewed fraction when glyphs_reviewed is provided (spec §8)", async () => {
+    const withGlyphs: PageMetrics = { ...metrics, glyphs_reviewed: 7 };
+    renderHeaderBar({ pageMetrics: withGlyphs });
+    expect(screen.getByTestId("header-metrics-strip")).toHaveTextContent("7/12 glyphs");
+  });
+
+  it("does NOT show glyphs metric when glyphs_reviewed is absent", async () => {
+    renderHeaderBar({ pageMetrics: metrics });
+    expect(screen.getByTestId("header-metrics-strip")).not.toHaveTextContent("glyphs");
+  });
+
   it("does NOT render header-metrics-strip when total is 0", async () => {
     const zeroMetrics: PageMetrics = { total: 0, exact: 0, fuzzy: 0, mismatch: 0, validated: 0 };
     renderHeaderBar({ pageMetrics: zeroMetrics });
