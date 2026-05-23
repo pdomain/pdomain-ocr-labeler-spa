@@ -41,8 +41,8 @@ output for debugging.
 - Open questions live in `OPEN_QUESTIONS.md`; do not resolve them unilaterally.
 - After FastAPI model changes: run `make openapi-export` to keep TS types in sync.
 - `make build` will refuse without a populated `static/` — run `make frontend-build` first.
-- Archive closed bugs/questions on close: cut from `docs/BUGS_FOUND.md` / `OPEN_QUESTIONS.md`
-  into `docs/archive/BUGS_RESOLVED.md` / `docs/archive/QUESTIONS_RESOLVED.md` in the same commit.
+- Archive closed bugs/questions on close: cut from `docs/archive/research/BUGS_FOUND.md` / `OPEN_QUESTIONS.md`
+  into `docs/archive/research/BUGS_RESOLVED.md` / `docs/archive/research/QUESTIONS_RESOLVED.md` in the same commit.
 - Auth/S3/Postgres/managed-adapter axes are deferred (D-042) — do not implement without user OK.
 
 ## Current milestone
@@ -51,7 +51,7 @@ output for debugging.
 and all 8 CU milestones (complete-labeler-spa plan) are shipped.
 M9.1 (manual rotate) and M9.2 (auto-rotate-all) ship the job/SSE
 plumbing only — the actual image rotation, re-OCR, and PageRecord
-update are stubbed. See `docs/BUGS_FOUND.md`.
+update are stubbed. See `docs/archive/research/BUGS_FOUND.md`.
 Milestone history lives in GitHub milestones and `specs/16-milestones.md`.
 
 **Path to usable** — see `docs/archive/plans/plan-to-usable.md` (archived,

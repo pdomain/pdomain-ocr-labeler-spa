@@ -143,23 +143,23 @@ Mirrors the `.github/workflows/release.yml` pipeline.
 
 ## Archive on close
 
-`docs/BUGS_FOUND.md` and `OPEN_QUESTIONS.md` track *currently-open* findings
+`docs/archive/research/BUGS_FOUND.md` and `OPEN_QUESTIONS.md` track *currently-open* findings
 and questions only. When you close one, **move its full entry to the matching
 archive file in the same commit that lands the close** — don't leave it in
 the active list with a `(closed)` tag. Active docs are for in-flight work;
-[`docs/archive/`](archive/) is the historical record.
+[`docs/archive/`](../archive/) is the historical record.
 
 The recipe:
 
 1. Land the fix (or the resolution ADR).
 2. In the same commit that closes the entry, edit the active doc:
-   - For a bug: cut the full `## B-NN — …` block from `docs/BUGS_FOUND.md`
+   - For a bug: cut the full `## B-NN — …` block from `docs/archive/research/BUGS_FOUND.md`
      and paste it (verbatim, plus the closing-commit hash and iter number on
-     the **Status** line) into `docs/archive/BUGS_RESOLVED.md`, preserving
+     the **Status** line) into `docs/archive/research/BUGS_RESOLVED.md`, preserving
      numeric `B-NN` order.
    - For a question: cut the full `## Q-NN — …` block (or the
      Resolved-pending entry) from `OPEN_QUESTIONS.md` and paste it into
-     `docs/archive/QUESTIONS_RESOLVED.md`, plus add a row to the
+     `docs/archive/research/QUESTIONS_RESOLVED.md`, plus add a row to the
      Resolution-log table at the bottom.
 3. Keep the active doc's pointer to the archive — don't strip it; new
    contributors find the historical record through that link.
@@ -179,7 +179,7 @@ of resolved work. The same was happening to `OPEN_QUESTIONS.md`. The
 - [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) — deferred decisions.
 - [`specs/16-milestones.md`](../specs/16-milestones.md) — implementation status by
   milestone.
-- [`docs/BUGS_FOUND.md`](BUGS_FOUND.md) — open code-review findings;
+- [`docs/archive/research/BUGS_FOUND.md`](../archive/research/BUGS_FOUND.md) — open code-review findings;
   closed entries archived in
-  [`docs/archive/BUGS_RESOLVED.md`](archive/BUGS_RESOLVED.md).
+  [`docs/archive/research/BUGS_RESOLVED.md`](../archive/research/BUGS_RESOLVED.md).
 - [`docs/archive/`](archive/) — closed bugs + resolved questions.

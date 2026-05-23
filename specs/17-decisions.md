@@ -1344,7 +1344,7 @@ leak.
 **Refs.** [`OPEN_QUESTIONS.md Q-A11`](../OPEN_QUESTIONS.md),
 [`02-backend.md`](../docs/architecture/02-backend.md) §3 (Settings field list) and §8
 (error handling),
-[`docs/BUGS_FOUND.md` B-51](../docs/BUGS_FOUND.md).
+[`docs/archive/research/BUGS_FOUND.md` B-51](../docs/archive/research/BUGS_FOUND.md).
 
 ---
 
@@ -1409,7 +1409,7 @@ dropped-key-name in `extra=`).
 [`09-persistence.md`](../docs/architecture/09-persistence.md) §6 (session_state.json) — to
 be amended; §11 (UserPageEnvelope) — kept strict per documented
 asymmetry,
-[`docs/BUGS_FOUND.md` B-58](../docs/BUGS_FOUND.md).
+[`docs/archive/research/BUGS_FOUND.md` B-58](../docs/archive/research/BUGS_FOUND.md).
 
 ---
 
@@ -1516,7 +1516,7 @@ removed.
 - [`../docs/architecture/21-konva-renderer.md`](../docs/architecture/21-konva-renderer.md) is the implementation spec; it
   replaces `04-image-viewport.md` §0 ("research spike at M4 start").
 - `OPEN_QUESTIONS.md` Q-A14 is resolved: the spike is unnecessary.
-  Move Q-A14 to `docs/archive/QUESTIONS_RESOLVED.md` in the same
+  Move Q-A14 to `docs/archive/research/QUESTIONS_RESOLVED.md` in the same
   commit that lands this ADR.
 - `use-image@^1.1` is added to `frontend/package.json` as a runtime
   dependency.
