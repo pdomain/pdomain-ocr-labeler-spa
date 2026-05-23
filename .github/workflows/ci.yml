@@ -127,7 +127,7 @@ jobs:
       - name: Install Playwright browsers
         run: uv run playwright install chromium --with-deps
       - name: Run Playwright E2E tests
-        run: uv run --group e2e pytest tests/e2e -v
+        run: uv run --group e2e pytest tests/e2e -v -n auto
 
 # ---------------------------------------------------------------------------
 # 5. build-wheel — assert static/index.html is present in the wheel zip
