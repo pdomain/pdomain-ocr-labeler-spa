@@ -414,8 +414,12 @@ def test_spa_fallback_does_not_shadow_real_mounts(settings: Settings, spa_dir: P
     assert "html" not in r.headers.get("content-type", "")
 
 
-def test_spa_fallback_404_when_dist_missing(settings: Settings) -> None:
-    """When ``index.html`` is absent (M0/dev mode), the catch-all 404s.
+def test_spa_fallback_503_when_dist_missing(settings: Settings) -> None:
+    """When ``index.html`` is absent, the catch-all returns 503.
+
+    503 (Service Unavailable) distinguishes "SPA not built" from
+    "route not found" (404), enabling deployment diagnostics to
+    detect a missing ``make frontend-build`` step explicitly.
 
     The error message names the missing dir + the build target so
     a developer iterating on the backend without a built SPA gets a
@@ -434,7 +438,7 @@ def test_spa_fallback_404_when_dist_missing(settings: Settings) -> None:
     with TestClient(app) as client:
         r = client.get("/projects/foo")
 
-    assert r.status_code == 404
+    assert r.status_code == 503
     body = r.json()
     # ``api.middleware.error_handler`` wraps HTTPException as
     # ``{error, message, details}`` — read ``message``, not ``detail``.

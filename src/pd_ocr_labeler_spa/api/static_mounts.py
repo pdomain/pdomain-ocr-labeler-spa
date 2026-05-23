@@ -316,7 +316,7 @@ def install_spa_fallback(app: FastAPI) -> None:
         log.warning(
             "SPA static bundle not found (expected `index.html` under "
             "src/pd_ocr_labeler_spa/static/). Run `make frontend-build` "
-            "to populate it. The catch-all will 404 until then.",
+            "to populate it. The catch-all will 503 until then.",
         )
 
         @app.get("/{full_path:path}", include_in_schema=False)
@@ -324,7 +324,7 @@ def install_spa_fallback(app: FastAPI) -> None:
             if _is_reserved(full_path):
                 raise HTTPException(status_code=404, detail="not found")
             raise HTTPException(
-                status_code=404,
+                status_code=503,
                 detail=(
                     "SPA bundle not built — run `make frontend-build` "
                     "to populate src/pd_ocr_labeler_spa/static/."
