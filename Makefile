@@ -16,7 +16,7 @@ else
         pre-commit-check test integration e2e exercise-real build clean ci dev run \
         frontend-install frontend-build frontend-dev frontend-test frontend-knip \
         openapi-export upgrade-pd-book-tools upgrade-deps upgrade-deps-local \
-        mise-download mise-setup mise-doctor \
+        mise-download mise-trust-worktrees mise-setup mise-doctor \
         docker-build docker-run docker-shell \
         release-patch release-minor release-major _do-release
 
@@ -112,6 +112,7 @@ upgrade-deps-local: ## [dev-local] Upgrade deps then restore dev-local state (ed
 # versions; your interactive shell is unchanged.
 
 MISE := $(shell command -v mise 2>/dev/null || echo $$HOME/.local/bin/mise)
+WORKSPACE_ROOT := $(abspath $(CURDIR)/..)
 HAVE_MISE = [ -x "$(MISE)" ]
 
 mise-download: ## [optional] Download the mise binary only (no shell init, no tools yet)
@@ -123,7 +124,19 @@ mise-download: ## [optional] Download the mise binary only (no shell init, no to
 		echo "mise downloaded. Run 'make mise-setup' next to install pinned tools."; \
 	fi
 
-mise-setup: mise-download ## [optional] Download mise + install pinned tools from mise.toml
+mise-trust-worktrees: mise-download ## [optional] Trust repo + generated worktree roots for mise
+	@echo "Trusting mise config roots for this repo and generated worktrees..."
+	@mkdir -p "$$HOME/.config/mise/conf.d"
+	@printf '%s\n' \
+		'[settings]' \
+		'trusted_config_paths = [' \
+		'    "$(WORKSPACE_ROOT)",' \
+		'    "/srv/bot-workspaces",' \
+		']' \
+		> "$$HOME/.config/mise/conf.d/ocr-container-worktrees.toml"
+	@echo "mise trust roots configured."
+
+mise-setup: mise-download mise-trust-worktrees ## [optional] Download mise + install pinned tools from mise.toml
 	@echo "Installing tools from mise.toml..."
 	@$(MISE) install
 	@echo "mise tools installed."
