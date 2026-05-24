@@ -15,6 +15,9 @@ dist/
 .env
 .env.local
 
+# Local-dev mode marker (written by `make local-dev`, read by local-* scripts)
+.venv/.pd-local-mode
+
 # uv
 uv-receipt.json
 

@@ -17,6 +17,7 @@ else
         frontend-install frontend-build frontend-dev frontend-test frontend-knip \
         frontend-lint frontend-format frontend-format-check \
         openapi-export upgrade-pd-book-tools upgrade-deps upgrade-deps-local \
+        local-setup local-dev local-check local-upgrade-deps local-run \
         mise-download mise-trust-worktrees mise-setup mise-doctor \
         docker-build docker-run docker-shell \
         release-patch release-minor release-major _do-release
@@ -88,21 +89,30 @@ upgrade-deps: ## Upgrade dependency lockfile (refuses in a dev-local venv)
 	uv sync --group dev
 	@echo "Dependencies upgraded and environment synced."
 
-upgrade-deps-local: ## [dev-local] Upgrade deps then restore dev-local state (editable siblings)
-	@echo "Upgrading dependency lockfile..."
-	uv lock --upgrade
-	@echo "Syncing upgraded dependencies..."
-	uv sync --group dev
-	@echo "Restoring dev-local environment..."
-	@RESTORE_SCRIPT="../scripts/pd-dev-local-restore.sh"; \
-	if [ -f "$$RESTORE_SCRIPT" ]; then \
-		bash "$$RESTORE_SCRIPT"; \
-	else \
-		echo "  workspace script not found at $$RESTORE_SCRIPT — skipping dev-local restore."; \
-	fi
-	@echo "Writing .venv/.pd-dev-local marker..."
-	@touch .venv/.pd-dev-local
-	@echo "Dependencies upgraded; .venv/.pd-dev-local marker written."
+upgrade-deps-local: ## [deprecated] Use 'make local-upgrade-deps' instead
+	@echo "DEPRECATED: use 'make local-upgrade-deps' (canonical local-dev target)." >&2
+	@$(MAKE) --no-print-directory local-upgrade-deps
+
+# ---------------------------------------------------------------------------
+# Local-dev mode — editable sibling pd-* deps (pd-book-tools + pd-ui)
+# ---------------------------------------------------------------------------
+# 5-script SPA pattern: Python sibling pd-book-tools; npm sibling pd-ui.
+# Scripts live in scripts/local-*.sh (idempotent; safe to re-run).
+
+local-setup: ## Clone any missing sibling pd-* repos (pd-book-tools, pd-ui)
+	@./scripts/local-setup.sh
+
+local-dev: ## Switch to local-dev mode (editable pd-book-tools + linked pd-ui; writes marker)
+	@./scripts/local-dev.sh
+
+local-check: ## Print local-dev mode status (marker + editable / linked state)
+	@./scripts/local-check.sh
+
+local-upgrade-deps: ## Upgrade deps then restore editable siblings (requires local-dev mode)
+	@./scripts/local-upgrade-deps.sh
+
+local-run: ## Run the SPA against local-dev workspace (requires local-dev mode)
+	@./scripts/local-run.sh
 
 # ---------------------------------------------------------------------------
 # Optional: mise-managed tool versions (mirrors pd-prep-for-pgdp pattern)
