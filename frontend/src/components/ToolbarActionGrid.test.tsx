@@ -4,8 +4,8 @@
 //   - All 56 cells present (4 rows × 14 columns)
 //   - Absent cells have data-testid-stub="true"
 //   - useToolbarButtonStates drives disabled state
-//   - Apply-style row present (apply-style-select, apply-scope-select, etc.)
-//   - Add Word row present (add-word-button)
+//   - Apply-style row present (apply-style-select, scope-select, etc.) — driver-contract §2.10
+//   - Add Word row present (word-add-button) — driver-contract §2.10
 
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
@@ -69,9 +69,9 @@ describe("ToolbarActionGrid — structure", () => {
     expect(screen.getByTestId("apply-style-select")).toBeTruthy();
   });
 
-  it("renders apply-scope-select", () => {
+  it("renders scope-select (driver-contract §2.10 canonical id)", () => {
     render(<ToolbarActionGrid {...defaultProps} />);
-    expect(screen.getByTestId("apply-scope-select")).toBeTruthy();
+    expect(screen.getByTestId("scope-select")).toBeTruthy();
   });
 
   it("renders apply-component-select", () => {
@@ -89,9 +89,9 @@ describe("ToolbarActionGrid — structure", () => {
     expect(screen.getByTestId("clear-style-button")).toBeTruthy();
   });
 
-  it("renders add-word-button", () => {
+  it("renders word-add-button (driver-contract §2.10 canonical id)", () => {
     render(<ToolbarActionGrid {...defaultProps} />);
-    expect(screen.getByTestId("add-word-button")).toBeTruthy();
+    expect(screen.getByTestId("word-add-button")).toBeTruthy();
   });
 });
 
@@ -126,16 +126,16 @@ describe("ToolbarActionGrid — interactions", () => {
     expect(onClearStyle).toHaveBeenCalledOnce();
   });
 
-  it("Add Word button calls onAddWordToggle", () => {
+  it("word-add-button calls onAddWordToggle", () => {
     const onAddWordToggle = vi.fn();
     render(<ToolbarActionGrid {...defaultProps} onAddWordToggle={onAddWordToggle} />);
-    fireEvent.click(screen.getByTestId("add-word-button"));
+    fireEvent.click(screen.getByTestId("word-add-button"));
     expect(onAddWordToggle).toHaveBeenCalledOnce();
   });
 
-  it("Add Word button shows active state when addWordActive=true", () => {
+  it("word-add-button shows active state when addWordActive=true", () => {
     render(<ToolbarActionGrid {...defaultProps} addWordActive={true} />);
-    const btn = screen.getByTestId("add-word-button");
+    const btn = screen.getByTestId("word-add-button");
     expect(btn.getAttribute("aria-pressed")).toBe("true");
   });
 });

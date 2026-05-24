@@ -6,9 +6,10 @@
 // Absent cells (not valid for a scope): data-testid-stub="true", always disabled.
 // Disabled state computed by useToolbarButtonStates.
 //
-// Apply Style row: apply-style-select, apply-scope-select, apply-component-select,
-//   apply-style-button, clear-style-button
-// Add Word row: add-word-button
+// Apply Style row (driver-contract §2.10):
+//   apply-style-select, scope-select, apply-component-select,
+//   apply-style-button, apply-component-button, clear-component-button
+// Add Word row (driver-contract §2.10): word-add-button
 
 import {
   useToolbarButtonStates,
@@ -154,6 +155,10 @@ export interface ToolbarActionGridProps {
   onAction: (key: keyof ButtonStates) => void;
   onApplyStyle: () => void;
   onClearStyle: () => void;
+  /** Called when Apply Component is clicked (driver-contract §2.10). */
+  onApplyComponent?: (() => void) | undefined;
+  /** Called when Clear Component is clicked (driver-contract §2.10). */
+  onClearComponent?: (() => void) | undefined;
   addWordActive: boolean;
   onAddWordToggle: () => void;
 }
@@ -175,6 +180,8 @@ export function ToolbarActionGrid({
   onAction,
   onApplyStyle,
   onClearStyle,
+  onApplyComponent,
+  onClearComponent,
   addWordActive,
   onAddWordToggle,
 }: ToolbarActionGridProps) {
@@ -268,7 +275,7 @@ export function ToolbarActionGrid({
         </select>
 
         <select
-          data-testid="apply-scope-select"
+          data-testid="scope-select"
           className="text-xs border border-border-2 rounded px-1 py-0.5 bg-bg-sunk"
           aria-label="Apply scope"
           defaultValue="whole"
@@ -308,12 +315,28 @@ export function ToolbarActionGrid({
         >
           Clear
         </button>
+
+        <button
+          data-testid="apply-component-button"
+          onClick={onApplyComponent}
+          className="px-2 py-0.5 text-xs rounded border border-border-2 bg-bg-surface hover:bg-bg-raised hover:border-accent text-ink-2 transition-colors"
+        >
+          Set
+        </button>
+
+        <button
+          data-testid="clear-component-button"
+          onClick={onClearComponent}
+          className="px-2 py-0.5 text-xs rounded border border-border-2 bg-bg-surface hover:bg-bg-raised hover:border-status-mismatch text-ink-2 transition-colors"
+        >
+          Clear
+        </button>
       </div>
 
       {/* Add Word row */}
       <div className="flex items-center gap-2 px-1 py-0.5">
         <button
-          data-testid="add-word-button"
+          data-testid="word-add-button"
           aria-pressed={addWordActive}
           onClick={onAddWordToggle}
           title="Toggle Add Word mode (Shift+A)"
