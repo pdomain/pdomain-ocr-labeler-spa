@@ -16,11 +16,26 @@ from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/fs", tags=["fs"])
 
 
-@router.get("/ls")
+class FsEntry(BaseModel):
+    """One directory entry returned by ``GET /api/fs/ls``."""
+
+    name: str
+    is_dir: bool
+
+
+class FsListResponse(BaseModel):
+    """Response for ``GET /api/fs/ls`` — spec §10."""
+
+    path: str
+    entries: list[FsEntry]
+
+
+@router.get("/ls", response_model=FsListResponse)
 def list_directory(
     path: str = Query(default="~", description="Absolute or ~ path to list"),
 ) -> JSONResponse:

@@ -107,7 +107,7 @@ def _check_project_and_page(
     return None
 
 
-@router.post("/{project_id}/pages/{page_index}/refine", response_model=RefineJobResponse)
+@router.post("/{project_id}/pages/{page_index}/refine", status_code=202, response_model=RefineJobResponse)
 def refine_scope(
     project_id: str,
     page_index: int,

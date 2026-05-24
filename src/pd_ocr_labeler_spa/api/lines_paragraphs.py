@@ -101,6 +101,7 @@ from ..settings import Settings
 from .dependencies import get_job_runner, get_project_state, get_settings
 from .middleware.error_handler import ApiError
 from .pages import PagePayload
+from .refine import RefineJobResponse
 from .words import (
     _GT_FORBIDDEN_CODEPOINTS,
     _page_not_loaded,
@@ -819,6 +820,7 @@ def split_by_words(
 @router.post(
     "/{project_id}/pages/{page_index}/lines/refine-batch",
     status_code=202,
+    response_model=RefineJobResponse,
 )
 def refine_lines_batch(
     project_id: str,
