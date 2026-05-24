@@ -188,8 +188,28 @@ _DOCTR_EXPORT_DIRNAME = "doctr-export"
 
 
 def export_output_dir(data_root: Path, project_id: str, subfolder: str) -> Path:
-    """``<data_root>/doctr-export/<project_id>/<subfolder>/``."""
-    return data_root / _DOCTR_EXPORT_DIRNAME / project_id / subfolder
+    """``<data_root>/doctr-export/<project_id>/<subfolder>/``.
+
+    Raises ``ValueError`` if the resolved path is not strictly under the
+    project export root.  This is a defence-in-depth guard; the API layer
+    should have already rejected unsafe strings via ``ExportRequest``
+    validators.
+
+    The function is pure (no I/O side-effects) so it can be tested in
+    isolation.  ``Path.resolve()`` fully normalises the path without
+    requiring the paths to exist (Python 3.6+).
+
+    Spec: ``docs/specs/2026-05-24-F-001-export-path-traversal.md``.
+    """
+    export_root = (data_root / _DOCTR_EXPORT_DIRNAME / project_id).resolve()
+    candidate = (data_root / _DOCTR_EXPORT_DIRNAME / project_id / subfolder).resolve()
+    # Accept paths that are strict descendants of export_root OR equal to it.
+    if not str(candidate).startswith(str(export_root) + "/") and candidate != export_root:
+        raise ValueError(
+            f"Export subfolder {subfolder!r} resolves outside the project"
+            f" export root: {candidate} is not under {export_root}"
+        )
+    return candidate
 
 
 def _subfolder_for_style(style_filter: str | None) -> str:
