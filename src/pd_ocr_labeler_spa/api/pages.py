@@ -1144,7 +1144,11 @@ def update_selection(
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
-@router.get("/{page_index}/image")
+@router.get(
+    "/{page_index}/image",
+    response_class=Response,
+    response_model=None,  # binary JPEG — not expressible as Pydantic; spec §3
+)
 def get_page_image(
     project_id: str,
     page_index: int,
