@@ -97,7 +97,8 @@ Order:
    - `task = asyncio.create_task(runner.run_forever())`
    - on shutdown: `await runner.stop()`, await task, `await app_state.shutdown()`.
 6. `FastAPI(title="pd-ocr-labeler-spa", lifespan=lifespan)`.
-7. Add `CORSMiddleware(allow_origins=["*"], ...)` (same shape as pgdp-prep).
+7. Add `CORSMiddleware(allow_origins=settings.cors_allowed_origins, ...)` (F-002: explicit allowlist).
+   Add `LocalTrustMiddleware` after CORS (guards `/api/fs/ls` + `/api/projects/source-root`).
 8. Add `RequestIdMiddleware` last (becomes outermost).
 9. Stash adapters + state on `app.state`.
 10. Install error handlers + every router.
@@ -603,16 +604,45 @@ table is in-memory and lost on server restart — but the on-disk state
 
 ## 12. CORS / middleware
 
-CORS: `allow_origins=["*"]`, `allow_methods=["*"]`, `allow_headers=["*"]`.
-Same as pgdp-prep. Acceptable because the SPA serves from the same
-origin in production; wide setting unblocks Vite-dev (5173 → 8080).
+**F-002 hardening** (2026-05-24, issue #407): wildcard CORS replaced with
+an explicit localhost allowlist; `LocalTrustMiddleware` added to gate the
+two highest-risk filesystem routes.
 
-Middleware order (Starlette applies outermost first):
+### CORS
+
+`CORSMiddleware` is wired with:
+
+- `allow_origins = settings.cors_allowed_origins` — default:
+  `["http://localhost:5173", "http://127.0.0.1:5173"]` (Vite dev
+  server). Override via `PDLABELER_CORS_ALLOWED_ORIGINS` env var
+  (JSON list). Set to `[]` for same-origin-only production enforcement.
+- `allow_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]`
+- `allow_headers = ["Content-Type", "Authorization", "X-Request-ID"]`
+- `allow_credentials` absent (auth deferred; D-042).
+
+### LocalTrustMiddleware
+
+`middleware/local_trust.py` rejects cross-origin requests to
+`LOCAL_TRUST_ROUTES`:
+
+- `GET /api/fs/ls` — arbitrary directory listing
+- `POST /api/projects/source-root` — persistent config mutation
+
+A request is rejected (403) if:
+
+1. `Sec-Fetch-Site` is present and is not `same-origin`, **or**
+2. `Origin` is present and is not in the localhost allowlist.
+
+Requests without `Origin` or `Sec-Fetch-Site` (curl, `TestClient`,
+server-to-server) pass through unchanged. This preserves the existing
+test suite without modification.
+
+### Middleware order (Starlette applies outermost first)
 
 1. `RequestIdMiddleware` (added last → outermost)
-2. `CORSMiddleware`
-
-No additional middleware in v1.
+2. `LocalTrustMiddleware`
+3. `CORSMiddleware` (innermost — handles preflight OPTIONS before
+   LocalTrustMiddleware sees them)
 
 ---
 
