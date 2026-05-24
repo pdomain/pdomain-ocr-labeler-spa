@@ -19,12 +19,16 @@ from fastapi.testclient import TestClient
 
 
 def test_traversal_via_style_filter(client: TestClient) -> None:
-    """A crafted style_filter with ../ must be rejected 422 before the fix."""
+    """A crafted style_filter with ../ must be rejected at the API boundary.
+
+    The app maps ``RequestValidationError`` → 400 (see
+    ``api/middleware/error_handler.py``), not the FastAPI default of 422.
+    """
     resp = client.post(
         "/api/projects/my-project/export",
         json={"scope": "all_validated", "style_filters": ["../../evil"]},
     )
-    assert resp.status_code == 422
+    assert resp.status_code == 400
 
 
 def test_export_output_dir_containment_guard(tmp_path: object) -> None:
@@ -53,14 +57,18 @@ def test_export_output_dir_containment_guard(tmp_path: object) -> None:
         {"component_filter": "../evil"},  # component_filter traversal
     ],
 )
-def test_attack_vectors_rejected_422(client: TestClient, payload: dict) -> None:
-    """Every attack-vector entry must be rejected with 422."""
+def test_attack_vectors_rejected(client: TestClient, payload: dict) -> None:
+    """Every attack-vector entry must be rejected.
+
+    The app maps ``RequestValidationError`` → 400 (see
+    ``api/middleware/error_handler.py``), not the FastAPI default of 422.
+    """
     resp = client.post(
         "/api/projects/my-project/export",
         json={"scope": "all_validated", **payload},
     )
-    assert resp.status_code == 422, (
-        f"Expected 422 for payload {payload!r}, got {resp.status_code}: {resp.text}"
+    assert resp.status_code == 400, (
+        f"Expected 400 for payload {payload!r}, got {resp.status_code}: {resp.text}"
     )
 
 
@@ -74,7 +82,7 @@ def test_attack_vectors_rejected_422(client: TestClient, payload: dict) -> None:
     ["italics", "small caps", "drop cap", "all", "a-1", "footnote marker"],
 )
 def test_valid_style_filters_accepted(client: TestClient, label: str) -> None:
-    """Valid style-label strings must be accepted (202 Accepted, not 422)."""
+    """Valid style-label strings must be accepted (202 Accepted, not rejected)."""
     resp = client.post(
         "/api/projects/my-project/export",
         json={"scope": "all_validated", "style_filters": [label]},

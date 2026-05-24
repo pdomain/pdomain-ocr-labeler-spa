@@ -14,20 +14,35 @@ Routes:
 - ``GET /api/projects/{project_id}/exports`` → list of past exports
   (best-effort, read from disk — stub returning empty list until the
   export handler writes manifests).
+
+Security note: ``ExportRequest.style_filters`` and ``component_filter`` are
+validated against ``_SAFE_LABEL_RE`` to prevent path-traversal attacks.
+F-001: ``docs/specs/2026-05-24-F-001-export-path-traversal.md``.
 """
 
 from __future__ import annotations
 
 import enum
+import re
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from ..core.jobs import JobRunner
 from .dependencies import get_job_runner
 
 router = APIRouter(prefix="/api/projects", tags=["export"])
+
+# ---------------------------------------------------------------------------
+# Validation — F-001 path-traversal guard
+# ---------------------------------------------------------------------------
+
+# Allowlist: starts with alphanumeric; remaining chars may be alphanumeric,
+# space, hyphen, or underscore; max 63 chars total.  This admits all current
+# style labels ("italics", "small caps", "drop cap", "footnote marker",
+# "all", …) while rejecting traversal sequences and filesystem separators.
+_SAFE_LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _\-]{0,62}$")
 
 
 class ExportScope(str, enum.Enum):
@@ -57,6 +72,35 @@ class ExportRequest(BaseModel):
     detection_only: bool = False
     recognition_only: bool = False
     normalize_recognition_labels: bool = False
+
+    @field_validator("style_filters", mode="before")
+    @classmethod
+    def _validate_style_filters(cls, v: object) -> list[str]:
+        """Reject any style filter that is not a safe path-component string.
+
+        Spec: ``docs/specs/2026-05-24-F-001-export-path-traversal.md``.
+        Raises ``ValueError`` so FastAPI returns 422 Unprocessable Entity.
+        """
+        if not isinstance(v, list):
+            raise ValueError("style_filters must be a list")
+        for label in v:
+            if not isinstance(label, str) or not _SAFE_LABEL_RE.match(label):
+                raise ValueError(f"Invalid style filter {label!r}: must match {_SAFE_LABEL_RE.pattern}")
+        return v  # type: ignore[return-value]
+
+    @field_validator("component_filter", mode="before")
+    @classmethod
+    def _validate_component_filter(cls, v: object) -> str | None:
+        """Reject a component_filter that is not a safe path-component string.
+
+        Spec: ``docs/specs/2026-05-24-F-001-export-path-traversal.md``.
+        Raises ``ValueError`` so FastAPI returns 422 Unprocessable Entity.
+        """
+        if v is None:
+            return None
+        if not isinstance(v, str) or not _SAFE_LABEL_RE.match(v):
+            raise ValueError(f"Invalid component_filter {v!r}: must match {_SAFE_LABEL_RE.pattern}")
+        return v
 
     @model_validator(mode="after")
     def _page_index_required_for_current(self) -> ExportRequest:
