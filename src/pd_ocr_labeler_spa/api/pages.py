@@ -1148,6 +1148,20 @@ def update_selection(
     "/{page_index}/image",
     response_class=Response,
     response_model=None,  # binary JPEG — not expressible as Pydantic; spec §3
+    responses={
+        200: {
+            "content": {"image/jpeg": {}},
+            "description": "JPEG-encoded page image (optionally resized via ?w=N).",
+        },
+        404: {
+            "model": ApiError,
+            "description": "project_not_found | page_not_found | image_not_found",
+        },
+        422: {
+            "model": ApiError,
+            "description": "image_corrupt — file present but unreadable",
+        },
+    },
 )
 def get_page_image(
     project_id: str,
