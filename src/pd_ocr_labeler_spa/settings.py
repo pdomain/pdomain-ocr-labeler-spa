@@ -121,6 +121,20 @@ class Settings(BaseSettings):
     no_prefetch: bool = False
     """When True, skip the startup model-prefetch step — M3-deferred consumer."""
 
+    # ── CORS (docs/specs/2026-05-24-F-002-cors-and-auth-hardening.md) ────────────────────
+    cors_allowed_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ],
+        description=(
+            "CORS allow-origins list. In production the SPA is served from the same "
+            "origin as the API, so this list only needs to cover the Vite dev server. "
+            "Override with PDLABELER_CORS_ALLOWED_ORIGINS env var (JSON list). "
+            "Set to [] for same-origin-only enforcement."
+        ),
+    )
+
     # ── Error-handler debug surface (docs/architecture/02-backend.md §8 / D-040) ─────────
     # Q-A11 (resolved 2026-05-07, option B): the unhandled-`Exception`
     # 500 envelope's ``details`` field surfaces the last 3 traceback

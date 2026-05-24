@@ -6,6 +6,10 @@ reject the response. ``pd-prep-for-pgdp`` (the declared structural
 model) sets only ``allow_origins``/``allow_methods``/``allow_headers``;
 spec ``docs/architecture/02-backend.md §step-7`` matches.
 
+F-002 hardening: wildcard ``allow_origins=["*"]`` replaced with an
+explicit localhost allowlist. See
+``docs/specs/2026-05-24-F-002-cors-and-auth-hardening.md``.
+
 We introspect ``app.user_middleware`` because Starlette stores
 middleware-class + kwargs on each entry. That's the cheapest way to
 assert the wired config without spinning up a TestClient and round-
@@ -54,14 +58,18 @@ def test_cors_middleware_does_not_enable_credentials() -> None:
     )
 
 
-def test_cors_middleware_matches_pgdp_prep_shape() -> None:
-    # Spec docs/architecture/02-backend.md §step-7 lists the three wildcards; pgdp-prep
-    # uses the same shape. Pin it so a refactor doesn't silently
-    # reintroduce credentials.
+def test_cors_middleware_no_wildcards() -> None:
+    # F-002: all three wildcard positions replaced with explicit lists.
+    # allow_origins comes from Settings.cors_allowed_origins (defaults
+    # to Vite dev origins); allow_methods and allow_headers are explicit
+    # enumerations. No position may contain "*".
     app = build_app(Settings(mode="api_only"))
     kwargs = _cors_kwargs(app)
-    assert kwargs.get("allow_origins") == ["*"]
-    assert kwargs.get("allow_methods") == ["*"]
-    assert kwargs.get("allow_headers") == ["*"]
+    assert "*" not in kwargs.get("allow_origins", []), (
+        "F-002: allow_origins must not include '*'. "
+        "See docs/specs/2026-05-24-F-002-cors-and-auth-hardening.md."
+    )
+    assert "*" not in kwargs.get("allow_methods", []), "F-002: allow_methods must be explicit, not '*'."
+    assert "*" not in kwargs.get("allow_headers", []), "F-002: allow_headers must be explicit, not '*'."
     # Either absent or explicitly False — both are acceptable.
     assert kwargs.get("allow_credentials", False) is False

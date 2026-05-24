@@ -245,21 +245,19 @@ def build_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="pd-ocr-labeler-spa", lifespan=lifespan)
 
-    # CORS: same shape as pgdp-prep. Acceptable because the SPA serves
-    # from the same origin in production; wide setting unblocks
-    # Vite-dev (5173 → 8080).
+    # CORS: restrict to explicit localhost origins (F-002 hardening).
+    # The SPA is served from the same origin as the API in production,
+    # so only the Vite dev-server origins need to be listed here.
+    # Operators can override via PDLABELER_CORS_ALLOWED_ORIGINS env var.
     #
-    # NOTE: ``allow_credentials`` is intentionally omitted. Per the CORS
-    # spec, browsers reject ``Access-Control-Allow-Origin: *`` paired
-    # with ``Access-Control-Allow-Credentials: true``. Matches
-    # pd-prep-for-pgdp/src/pd_prep_for_pgdp/bootstrap.py and
-    # docs/architecture/02-backend.md §step-7. Auth (M2+) will switch to a concrete
-    # origin list and may then re-enable credentials.
+    # NOTE: ``allow_credentials`` is intentionally omitted — browsers
+    # reject ``Access-Control-Allow-Origin: *`` paired with credentials,
+    # and auth is deferred (D-042). See docs/architecture/02-backend.md §step-7.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=settings.cors_allowed_origins,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
     )
 
     # Spec §2 step 8 + §12: RequestIdMiddleware is added LAST so it
