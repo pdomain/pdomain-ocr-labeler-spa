@@ -74,6 +74,7 @@ from .core.persistence.session_state import load_session_state
 from .core.project_state import ProjectState
 from .core.source_root_state import SourceRootCarrier
 from .core.startup_discovery import resolve_initial_project
+from .middleware.local_trust import LocalTrustMiddleware
 from .settings import Settings
 
 log = logging.getLogger(__name__)
@@ -259,6 +260,14 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
     )
+
+    # F-002: LocalTrustMiddleware blocks cross-origin requests to
+    # designated local-trust-required routes (/api/fs/ls,
+    # /api/projects/source-root). Added AFTER CORSMiddleware so it runs
+    # inside CORS — CORS preflight OPTIONS requests are already handled
+    # before this middleware fires. Requests without an Origin header
+    # (curl, TestClient) are passed through unchanged.
+    app.add_middleware(LocalTrustMiddleware)
 
     # Spec §2 step 8 + §12: RequestIdMiddleware is added LAST so it
     # becomes the OUTERMOST layer. Starlette's ``add_middleware``
