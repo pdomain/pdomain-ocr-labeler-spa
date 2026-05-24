@@ -13,13 +13,19 @@
 // Refine/Nudge/Tag rows (#212): Refine + nudge accumulator + Style/Component tag row
 //   + dialog hotkeys (Shift+Arrow nudge).
 //
-// data-testids (driver-contract):
-//   dialog-backdrop, dialog-header-label
+// data-testids (driver-contract §2.11):
+//   word-edit-dialog               — outer dialog wrapper (spec canonical)
+//   dialog-backdrop                — outer backdrop (internal alias)
+//   dialog-header-label            — "Edit Line N, Word M"
 //   dialog-apply-close-button, dialog-close-button
+//   dialog-previous-preview-column — left column wrapper
+//   dialog-current-preview-column  — centre column wrapper
+//   dialog-next-preview-column     — right column wrapper
 //   dialog-prev-button, dialog-next-button
-//   dialog-prev-word, dialog-current-word, dialog-next-word
+//   dialog-tag-chips-slot          — container for tag chips
 //   dialog-current-zoom-toggle, dialog-current-marker, dialog-hover-guide
 //   dialog-erase-rect, dialog-word-stage
+//   dialog-gt-input                — GT text input inside dialog (§2.11)
 //   dialog-refine-button, dialog-expand-refine-button
 //   dialog-nudge-{left|right|top|bottom}-{minus|plus}
 //   dialog-nudge-display, dialog-reset-button, dialog-apply-button, dialog-apply-refine-button
@@ -55,6 +61,12 @@ interface WordEditDialogProps extends WordActionCallbacks {
   styleOptions?: string[] | undefined;
   /** Available component labels for the tag row. */
   componentOptions?: string[] | undefined;
+  /** GT text for the current word (driver-contract §2.11 dialog-gt-input). */
+  gtText?: string | undefined;
+  /** Called when GT input value changes in the dialog. */
+  onGtChange?: ((text: string) => void) | undefined;
+  /** Called when GT input is committed (Enter key) in the dialog. */
+  onGtCommit?: ((text: string) => void) | undefined;
   /** Called when prev/next navigation is requested. */
   onNavigate: (target: DialogTarget) => void;
   /**
@@ -99,6 +111,9 @@ export function WordEditDialog({
   eraseMode = false,
   styleOptions,
   componentOptions,
+  gtText = "",
+  onGtChange,
+  onGtCommit,
   onNavigate,
   onApply,
   onClose,
@@ -152,7 +167,8 @@ export function WordEditDialog({
       role="dialog"
       aria-modal="true"
       aria-label={`Edit Line ${lineIndex}, Word ${wordIndex}`}
-      data-testid="dialog-backdrop"
+      data-testid="word-edit-dialog"
+      data-testid-alias="dialog-backdrop"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -195,7 +211,10 @@ export function WordEditDialog({
         {/* 3-column preview row */}
         <div className="flex items-stretch gap-2 px-4 py-3 border-b border-border-1 shrink-0">
           {/* Prev word */}
-          <div className="flex flex-col items-center gap-1 flex-1">
+          <div
+            data-testid="dialog-previous-preview-column"
+            className="flex flex-col items-center gap-1 flex-1"
+          >
             <button
               data-testid="dialog-prev-button"
               disabled={!hasPrev}
@@ -223,7 +242,10 @@ export function WordEditDialog({
           </div>
 
           {/* Current word (highlighted) */}
-          <div className="flex flex-col items-center gap-1 flex-[2]">
+          <div
+            data-testid="dialog-current-preview-column"
+            className="flex flex-col items-center gap-1 flex-[2]"
+          >
             <div className="text-xs text-ink-4 font-medium">Current</div>
             <div
               data-testid="dialog-current-word"
@@ -235,7 +257,10 @@ export function WordEditDialog({
           </div>
 
           {/* Next word */}
-          <div className="flex flex-col items-center gap-1 flex-1">
+          <div
+            data-testid="dialog-next-preview-column"
+            className="flex flex-col items-center gap-1 flex-1"
+          >
             <button
               data-testid="dialog-next-button"
               disabled={!hasNext}
@@ -261,6 +286,26 @@ export function WordEditDialog({
               {nextWord ?? "–"}
             </div>
           </div>
+        </div>
+
+        {/* GT text input (driver-contract §2.11 dialog-gt-input) */}
+        <div className="px-4 py-2 border-b border-border-1 shrink-0">
+          <input
+            data-testid="dialog-gt-input"
+            type="text"
+            value={gtText}
+            onChange={(e) => {
+              onGtChange?.(e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                onGtCommit?.(gtText);
+              }
+            }}
+            className="w-full text-sm border border-border-2 rounded px-2 py-1 font-mono focus:outline-none focus:border-accent bg-bg-surface text-ink-1"
+            aria-label="Ground truth text"
+            placeholder="Ground truth…"
+          />
         </div>
 
         {/* Konva interactive word image — #210 */}
@@ -302,6 +347,12 @@ export function WordEditDialog({
             componentOptions={componentOptions}
             onApplyStyle={onApplyStyle}
             onApplyComponent={onApplyComponent}
+          />
+          {/* Tag chips slot (driver-contract §2.11 dialog-tag-chips-slot) */}
+          <div
+            data-testid="dialog-tag-chips-slot"
+            className="flex flex-wrap gap-1 min-h-[1.5rem] w-full"
+            aria-label="Active tag chips"
           />
         </div>
       </div>

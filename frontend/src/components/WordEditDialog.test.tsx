@@ -229,7 +229,7 @@ describe("WordEditDialog", () => {
         onClose={onClose}
       />,
     );
-    fireEvent.click(screen.getByTestId("dialog-backdrop"));
+    fireEvent.click(screen.getByTestId("word-edit-dialog"));
     expect(onApply).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledOnce();
   });

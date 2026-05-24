@@ -316,8 +316,8 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
   it("does NOT mount the WordEditDialog when closed (default)", async () => {
     renderProjectPage();
     await screen.findByTestId("project-page");
-    // WordEditDialog returns null when open=false → no dialog-backdrop.
-    expect(screen.queryByTestId("dialog-backdrop")).toBeNull();
+    // WordEditDialog returns null when open=false → no word-edit-dialog.
+    expect(screen.queryByTestId("word-edit-dialog")).toBeNull();
   });
 
   it("does NOT mount the ConfirmDialog when closed (default)", async () => {
