@@ -72,6 +72,19 @@ class ExportResponse(BaseModel):
     job_id: str
 
 
+class ExportManifest(BaseModel):
+    """One past export manifest entry — spec §5.9 line 326.
+
+    Shape is best-effort: the export handler will write manifests in M3.
+    Until then this model is a placeholder that matches the empty-list stub.
+    Fields are intentionally minimal; the handler will expand them.
+    """
+
+    job_id: str
+    scope: str
+    created_at: str
+
+
 @router.post("/{project_id}/export", response_model=ExportResponse, status_code=202)
 def start_export(
     project_id: str,
@@ -106,7 +119,7 @@ def start_export(
     )
 
 
-@router.get("/{project_id}/export/styles")
+@router.get("/{project_id}/export/styles", response_model=list[str])
 def list_export_styles(project_id: str) -> JSONResponse:
     """``GET /api/projects/{id}/export/styles`` — distinct style labels.
 
@@ -124,7 +137,7 @@ def list_export_styles(project_id: str) -> JSONResponse:
     return JSONResponse(status_code=200, content=[])
 
 
-@router.get("/{project_id}/exports")
+@router.get("/{project_id}/exports", response_model=list[ExportManifest])
 def list_exports(project_id: str) -> JSONResponse:
     """``GET /api/projects/{id}/exports`` — past exports (best-effort).
 

@@ -18,13 +18,20 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from ..core.text_normalize import is_available
 
 router = APIRouter(prefix="/api/normalize", tags=["normalize"])
 
 
-@router.get("/available")
+class NormalizeAvailableResponse(BaseModel):
+    """Response for ``GET /api/normalize/available`` — spec §Toggle UI."""
+
+    available: bool
+
+
+@router.get("/available", response_model=NormalizeAvailableResponse)
 def normalize_available() -> JSONResponse:
     """``GET /api/normalize/available`` — probe for normalize module.
 

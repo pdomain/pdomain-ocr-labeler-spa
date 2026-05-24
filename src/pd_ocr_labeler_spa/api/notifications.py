@@ -58,7 +58,7 @@ async def notifications_stream(
     return StreamingResponse(stream(), media_type="text/event-stream")
 
 
-@router.post("/{notification_id}/dismiss")
+@router.post("/{notification_id}/dismiss", status_code=204, response_model=None)
 def dismiss_notification(
     notification_id: str,
     nq: NotificationQueue = Depends(get_notification_queue),

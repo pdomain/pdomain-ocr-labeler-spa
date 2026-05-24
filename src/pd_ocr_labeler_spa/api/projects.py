@@ -160,6 +160,19 @@ class SetSourceProjectsRootResponse(BaseModel):
     projects: list[ProjectKey]
 
 
+class CurrentPageIndexResponse(BaseModel):
+    """Response for ``POST /api/projects/{id}/current-page-index`` — F1 fix."""
+
+    project_id: str
+    page_index: int
+
+
+class AutoRotateAllResponse(BaseModel):
+    """Response for ``POST /api/projects/{id}/auto-rotate-all`` → 202 — spec §M9.2."""
+
+    job_id: str
+
+
 class LoadProjectResponse(BaseModel):
     """M2 slice-5 response — interim shape on the path to spec-canonical.
 
@@ -341,7 +354,7 @@ def discover_projects(
     return _build_list_response(src_carrier.get(), carrier)
 
 
-@router.post("/load")
+@router.post("/load", response_model=LoadProjectResponse)
 def load_project(
     body: LoadProjectRequest,
     request: Request,
@@ -510,7 +523,7 @@ def load_project(
     return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
 
 
-@router.get("/{project_id}")
+@router.get("/{project_id}", response_model=Project)
 def get_project_by_id(
     project_id: str,
     project_state: ProjectState = Depends(get_project_state),
@@ -558,7 +571,7 @@ class SetCurrentPageIndexRequest(BaseModel):
     page_index: int
 
 
-@router.post("/{project_id}/current-page-index")
+@router.post("/{project_id}/current-page-index", response_model=CurrentPageIndexResponse)
 def set_current_page_index(
     project_id: str,
     body: SetCurrentPageIndexRequest,
@@ -681,7 +694,7 @@ def set_source_root(
     )
 
 
-@router.post("/{project_id}/save-all", response_model=SaveProjectResponse)
+@router.post("/{project_id}/save-all", status_code=202, response_model=SaveProjectResponse)
 def save_all(
     project_id: str,
     project_state: ProjectState = Depends(get_project_state),
@@ -726,7 +739,7 @@ def delete_project(
     return Response(status_code=204)
 
 
-@router.post("/{project_id}/auto-rotate-all")
+@router.post("/{project_id}/auto-rotate-all", status_code=202, response_model=AutoRotateAllResponse)
 def post_auto_rotate_all(
     project_id: str,
     body: AutoRotateAllRequest,
@@ -797,6 +810,8 @@ def install_projects_router(app) -> None:  # type: ignore[no-untyped-def]
 
 __all__ = [
     "AutoRotateAllRequest",
+    "AutoRotateAllResponse",
+    "CurrentPageIndexResponse",
     "ListProjectsResponse",
     "LoadProjectRequest",
     "LoadProjectResponse",

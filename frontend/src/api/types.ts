@@ -2109,6 +2109,14 @@ export interface components {
             overwrite_manual: boolean;
         };
         /**
+         * AutoRotateAllResponse
+         * @description Response for ``POST /api/projects/{id}/auto-rotate-all`` → 202 — spec §M9.2.
+         */
+        AutoRotateAllResponse: {
+            /** Job Id */
+            job_id: string;
+        };
+        /**
          * BBox
          * @description Image-coordinate bounding box — ``docs/architecture/01-data-models.md §1`` lines 137-143.
          */
@@ -2188,6 +2196,16 @@ export interface components {
              * @enum {string}
              */
             direction: "gt_to_ocr" | "ocr_to_gt";
+        };
+        /**
+         * CurrentPageIndexResponse
+         * @description Response for ``POST /api/projects/{id}/current-page-index`` — F1 fix.
+         */
+        CurrentPageIndexResponse: {
+            /** Project Id */
+            project_id: string;
+            /** Page Index */
+            page_index: number;
         };
         /**
          * DeleteScopeRequest
@@ -2272,6 +2290,22 @@ export interface components {
             shape: "rect" | "circle";
         };
         /**
+         * ExportManifest
+         * @description One past export manifest entry — spec §5.9 line 326.
+         *
+         *     Shape is best-effort: the export handler will write manifests in M3.
+         *     Until then this model is a placeholder that matches the empty-list stub.
+         *     Fields are intentionally minimal; the handler will expand them.
+         */
+        ExportManifest: {
+            /** Job Id */
+            job_id: string;
+            /** Scope */
+            scope: string;
+            /** Created At */
+            created_at: string;
+        };
+        /**
          * ExportRequest
          * @description Body for ``POST /api/projects/{id}/export`` — spec §2 lines 414-420.
          *
@@ -2329,6 +2363,26 @@ export interface components {
          * @enum {string}
          */
         ExportScope: "current" | "all_validated";
+        /**
+         * FsEntry
+         * @description One directory entry returned by ``GET /api/fs/ls``.
+         */
+        FsEntry: {
+            /** Name */
+            name: string;
+            /** Is Dir */
+            is_dir: boolean;
+        };
+        /**
+         * FsListResponse
+         * @description Response for ``GET /api/fs/ls`` — spec §10.
+         */
+        FsListResponse: {
+            /** Path */
+            path: string;
+            /** Entries */
+            entries: components["schemas"]["FsEntry"][];
+        };
         /**
          * GetOCRConfigResponse
          * @description OCR config snapshot — spec lines 385-396.
@@ -2638,6 +2692,59 @@ export interface components {
             initial_page_index: number;
         };
         /**
+         * LoadProjectResponse
+         * @description M2 slice-5 response — interim shape on the path to spec-canonical.
+         *
+         *     Spec-canonical (``§01-data-models.md`` lines 221-223) is::
+         *
+         *         class LoadProjectResponse(BaseModel):
+         *             project: Project
+         *             current_page: PagePayload
+         *
+         *     ``PagePayload`` (``§01-data-models.md`` lines 236-244) bundles
+         *     ``PageRecord`` + ``EncodedDims`` + ``LineMatch[]`` + image-cache
+         *     URLs — none of which exist yet (those models land in M3 with the
+         *     OCR / page-cache / encode-dims plumbing).
+         *
+         *     Slice 5 ships ``current_page_index: int`` in place of
+         *     ``current_page: PagePayload``. Why this is acceptable scope:
+         *
+         *     - The route name + URL stay spec-canonical (purely additive
+         *       expansion in M3).
+         *     - The carrier swap, project-state mutation, and ``Project``
+         *       construction are all real — no stub data.
+         *     - The SPA only needs the index right now to redirect to
+         *       ``/page/{idx0+1}``; the rich ``PagePayload`` is a follow-up
+         *       fetch via ``GET /api/projects/{id}/pages/{idx}`` in M3.
+         *
+         *     M3 will rename ``current_page_index`` → ``current_page`` and
+         *     swap ``int`` → ``PagePayload`` simultaneously when the page-payload
+         *     plumbing is in place. The TS generator pins on field name + type,
+         *     so a renamed field IS a breaking client change — the SPA will be
+         *     updated in the same M3 milestone.
+         *
+         *     ``generation`` mirrors slice 4's stub semantics: the
+         *     ``ProjectState.generation`` counter AFTER the swap, so the SPA can
+         *     distinguish "I just loaded X" from "someone else loaded X 2
+         *     generations ago" once SSE lands.
+         *
+         *     Fields:
+         *
+         *     - ``project``: the loaded ``Project`` model — full image_paths +
+         *       ground_truth_map + persisted-metadata.
+         *     - ``current_page_index``: the 0-based cursor (clamped + seeded
+         *       from ``project.json`` if previously saved).
+         *     - ``generation``: the ``ProjectState.generation`` counter AFTER
+         *       this load. Increments by ≥1 on every successful load.
+         */
+        LoadProjectResponse: {
+            project: components["schemas"]["Project"];
+            /** Current Page Index */
+            current_page_index: number;
+            /** Generation */
+            generation: number;
+        };
+        /**
          * MatchStatus
          * @description Per-word match result — spec §1 ``MatchStatus``.
          *
@@ -2701,6 +2808,14 @@ export interface components {
              * @enum {string}
              */
             direction: "left" | "right";
+        };
+        /**
+         * NormalizeAvailableResponse
+         * @description Response for ``GET /api/normalize/available`` — spec §Toggle UI.
+         */
+        NormalizeAvailableResponse: {
+            /** Available */
+            available: boolean;
         };
         /**
          * NudgeBboxRequest
@@ -2911,6 +3026,59 @@ export interface components {
         PatchParagraphRequest: {
             /** Layout Type */
             layout_type: string;
+        };
+        /**
+         * Project
+         * @description One labeler project — ``docs/architecture/01-data-models.md §1`` lines 28-44.
+         *
+         *     Mirrors legacy ``pd_ocr_labeler/models/project_model.py:9``.
+         */
+        Project: {
+            /** Project Id */
+            project_id: string;
+            /**
+             * Project Root
+             * Format: path
+             */
+            project_root: string;
+            /** Image Paths */
+            image_paths: string[];
+            /** Ground Truth Map */
+            ground_truth_map: {
+                [key: string]: string;
+            };
+            /**
+             * Version
+             * @default 1.0
+             */
+            version: string;
+            /**
+             * Source Lib
+             * @default doctr-pd-labeled
+             */
+            source_lib: string;
+            /** Total Pages */
+            total_pages: number;
+            /**
+             * Saved Pages
+             * @default 0
+             */
+            saved_pages: number;
+            /**
+             * Current Page Index
+             * @default 0
+             */
+            current_page_index: number;
+            /**
+             * Include Images
+             * @default true
+             */
+            include_images: boolean;
+            /**
+             * Copied Images
+             * @default false
+             */
+            copied_images: boolean;
         };
         /**
          * ProjectKey
@@ -3586,7 +3754,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["LoadProjectResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3617,7 +3785,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Project"];
                 };
             };
             /** @description Validation Error */
@@ -3681,7 +3849,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CurrentPageIndexResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3740,7 +3908,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3775,12 +3943,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AutoRotateAllResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3812,7 +3980,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["FsListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3943,7 +4111,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4015,7 +4183,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4303,7 +4471,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": string[];
                 };
             };
             /** @description Validation Error */
@@ -4334,7 +4502,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ExportManifest"][];
                 };
             };
             /** @description Validation Error */
@@ -4365,7 +4533,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5286,7 +5454,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RefineJobResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5770,13 +5938,11 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": unknown;
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -5930,7 +6096,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NormalizeAvailableResponse"];
                 };
             };
         };
