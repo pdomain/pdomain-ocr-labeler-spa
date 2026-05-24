@@ -127,6 +127,52 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
   const wordKey = `${word.line_index}-${word.word_index ?? 0}-${word.ground_truth_text}`;
   const lastWordKey = useRef(wordKey);
 
+  // Refs to each input cell, for the unicode picker to insert into.
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const lastFocusedIndex = useRef<number | null>(null);
+
+  // Debounce timer for save.
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Keep a ref to the latest draft so the flush-on-cleanup can access it.
+  const draftRef = useRef<string[]>(initialDraft);
+
+  // F-036: flush any pending debounced save immediately.
+  // Defined before the word-change reset effect so it can be called from there.
+  const flushPendingSave = useCallback(() => {
+    if (debounceTimer.current !== null) {
+      clearTimeout(debounceTimer.current);
+      debounceTimer.current = null;
+      const text = draftRef.current.join("");
+      updateGt.mutate({
+        lineIndex: word.line_index,
+        wordIndex: word.word_index ?? 0,
+        text,
+      });
+    }
+  }, [updateGt, word.line_index, word.word_index]);
+
+  // F-036: flush on unmount so navigation never silently drops edits.
+  useEffect(() => {
+    return () => {
+      flushPendingSave();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: stale-close; flushPendingSave captures stable refs
+  }, []);
+
+  function scheduleSave(next: string[]) {
+    draftRef.current = next;
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      debounceTimer.current = null;
+      const text = next.join("");
+      updateGt.mutate({
+        lineIndex: word.line_index,
+        wordIndex: word.word_index ?? 0,
+        text,
+      });
+    }, DEBOUNCE_MS);
+  }
+
   // ---- P4.b: bbox state -----------------------------------------------------
 
   const initialBboxes = useMemo(() => buildInitialCharBboxes(word), [word]);
@@ -137,40 +183,17 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
   const [dirty, setDirty] = useState(false);
 
   // Reset draft + bbox state when the underlying word changes.
+  // F-036: flush any pending save for the old word before resetting state.
   useEffect(() => {
     if (lastWordKey.current !== wordKey) {
+      flushPendingSave();
       setDraft(initialDraft);
       setCharBboxes(initialBboxes);
       setSelectedIndex(initialBboxes.length > 0 ? 0 : null);
       setDirty(false);
       lastWordKey.current = wordKey;
     }
-  }, [wordKey, initialDraft, initialBboxes]);
-
-  // Refs to each input cell, for the unicode picker to insert into.
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const lastFocusedIndex = useRef<number | null>(null);
-
-  // Debounce timer for save.
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function scheduleSave(next: string[]) {
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => {
-      const text = next.join("");
-      updateGt.mutate({
-        lineIndex: word.line_index,
-        wordIndex: word.word_index ?? 0,
-        text,
-      });
-    }, DEBOUNCE_MS);
-  }
-
-  useEffect(() => {
-    return () => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    };
-  }, []);
+  }, [wordKey, initialDraft, initialBboxes, flushPendingSave]);
 
   function handleChange(i: number, value: string) {
     setDraft((prev) => {

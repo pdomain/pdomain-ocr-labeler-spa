@@ -195,6 +195,34 @@ describe("CharFixerSection (Slice 20)", () => {
     await waitFor(() => expect(handler).toHaveBeenCalled());
   });
 
+  // F-036 regression: unmounting before the debounce fires must still POST
+  it("F-036: unmounting before debounce fires flushes the save immediately", async () => {
+    let capturedText: string | null = null;
+    const handler = vi.fn(async (info: { request: Request }) => {
+      const body = (await info.request.json()) as { text: string };
+      capturedText = body.text;
+      return HttpResponse.json(makePageResponse(body.text));
+    });
+    server.use(http.post("/api/projects/p1/pages/0/words/0/0/gt", handler));
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { unmount } = renderSection(makeWord("Hello", "Hello"));
+
+    const input4 = screen.getByTestId("char-fixer-input-4");
+    await user.clear(input4);
+    await user.type(input4, "0");
+
+    // Debounce has NOT fired yet (no timer advance)
+    expect(handler).not.toHaveBeenCalled();
+
+    // Unmount simulates navigation / panel close
+    unmount();
+
+    // The flush-on-cleanup should have fired the save synchronously
+    await waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+    expect(capturedText).toBe("Hell0");
+  });
+
   it("renders an Open Unicode picker button", () => {
     renderSection();
     expect(screen.getByTestId("char-fixer-open-picker-button")).toBeInTheDocument();
