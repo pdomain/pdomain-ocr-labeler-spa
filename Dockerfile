@@ -12,25 +12,17 @@
 
 # ──────────────────────────── Stage 1: build SPA ────────────────────────────
 # Node 24 matches `mise.toml` so dev and image builds share a toolchain.
+# pnpm is used exclusively (tracks `frontend/pnpm-lock.yaml`).
 FROM node:24-bookworm-slim AS spa
+# Install pnpm via corepack (ships with Node 24).
+RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /work
-COPY frontend/package.json frontend/package-lock.json* ./
-# B-19 / B-28: this two-pass install is byte-aligned with the
-# corresponding `run:` block in `.github/workflows/release.yml`.
-# Behaviour: when `package-lock.json` is absent (Q-A8 — Node not yet
-# in devcontainer, lockfile not hand-generated), the first pass
-# generates the lock in-place via `npm install --package-lock-only`
-# (`--include=dev` so devDependencies needed for `npm run build`
-# resolve too); the second pass is `npm ci`, the canonical CI-safe
-# install that fails fast on drift and never mutates the lock. Once
-# the lockfile is committed, the first pass becomes a no-op and `npm
-# ci` stays the source of truth.
-RUN if [ ! -f package-lock.json ]; then \
-        npm install --package-lock-only --include=dev; \
-    fi \
-    && npm ci --include=dev
+# Copy lockfile + manifest first so pnpm store layer is cached.
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/.npmrc* ./
+# --frozen-lockfile: fail fast on lockfile drift (no mutations in image builds).
+RUN pnpm install --frozen-lockfile
 COPY frontend/ ./
-RUN npm run build
+RUN pnpm run build
 
 # ──────────────────────────── Stage 2: build wheel ──────────────────────────
 # Python 3.13 matches `mise.toml` and `pyproject.toml requires-python`.

@@ -392,133 +392,89 @@ def test_runtime_stage_does_not_keep_git_installed() -> None:
 
 
 # ---------------------------------------------------------------------------
-# B-19 / B-28: the spa stage must use the same two-pass `npm ci` install
-# as `.github/workflows/release.yml`, so docker builds and CI publishes
-# don't drift in opposite directions on the same lockfile question.
+# F-011 / #416: the spa stage must use pnpm --frozen-lockfile (not npm),
+# matching release.yml and ci.yml — all three must agree on pnpm.
 # ---------------------------------------------------------------------------
 
 
-def test_spa_stage_uses_npm_ci_with_lockfile_fallback() -> None:
-    """B-19: the spa stage must use `npm ci` as the canonical install.
-
-    Until Q-A8 lands a real `frontend/package-lock.json`, an
-    `npm install --package-lock-only` bootstrap runs first when the
-    lockfile is missing, then `npm ci` consumes it. The bare-mutation
-    `npm install` form is forbidden — the docker build must not produce
-    different node_modules/ trees on different days while CI uses
-    `npm ci`.
-    """
+def _spa_stage_text() -> str:
+    """Return the text of the spa stage (between first FROM and second FROM)."""
     text = _dockerfile_text()
-    # Slice to the spa stage (between first FROM and second FROM).
     spa_start = text.lower().find("\nfrom node")
     if spa_start == -1:
         spa_start = 0 if text.lower().startswith("from node") else -1
     assert spa_start != -1 or text.lower().startswith("from node"), "could not locate spa FROM"
-    # Find next FROM after the spa one.
     next_from = text.lower().find("\nfrom ", max(spa_start, 0) + 1)
     assert next_from != -1, "could not locate stage following spa"
-    spa = text[max(spa_start, 0) : next_from]
+    return text[max(spa_start, 0) : next_from]
 
-    assert re.search(r"\bnpm\s+ci\b", spa), (
-        "spa stage must invoke `npm ci` (B-19); a bare `npm install` "
-        "tolerates lockfile drift and is forbidden in the immutable "
-        "image build."
+
+def test_spa_stage_uses_pnpm_frozen_lockfile() -> None:
+    """F-011: the spa stage must install with ``pnpm install --frozen-lockfile``.
+
+    The tracked lockfile is ``frontend/pnpm-lock.yaml``, not
+    ``package-lock.json``. ``--frozen-lockfile`` is pnpm's CI-safe
+    install primitive — it fails fast on drift and never mutates the
+    lock (#416 / F-011).
+    """
+    spa = _spa_stage_text()
+    assert "pnpm install --frozen-lockfile" in spa, (
+        "Dockerfile spa stage must use `pnpm install --frozen-lockfile` "
+        "(not npm) — lockfile is frontend/pnpm-lock.yaml (#416 / F-011)."
     )
 
-    # The bootstrap fallback so missing-lockfile runs don't fail.
-    assert "--package-lock-only" in spa, (
-        "spa stage must include an `npm install --package-lock-only` "
-        "fallback so docker builds succeed while Q-A8 keeps "
-        "`frontend/package-lock.json` absent (B-19 / B-28)."
-    )
-
-    # No bare `npm install` outside the bootstrap form.
+    # No npm references in the spa stage.
     for line in spa.splitlines():
-        # Strip comment portion (after `#` not in a string — Dockerfile
-        # comment syntax is line-leading `#`).
         stripped = line.strip()
         if stripped.startswith("#"):
             continue
-        if re.search(r"\bnpm\s+install\b", line) and "--package-lock-only" not in line:
+        if re.search(r"\bnpm\b", line):
             raise AssertionError(
-                f"Dockerfile spa stage uses bare `npm install`: {line!r} — "
-                "use `npm ci` (or `npm install --package-lock-only` to "
-                "bootstrap a missing lockfile)."
+                f"Dockerfile spa stage uses npm: {line!r} — "
+                "switch to `pnpm install --frozen-lockfile` (#416 / F-011)."
             )
 
 
-def test_dockerfile_and_release_workflow_agree_on_npm_install_logic() -> None:
-    """B-19 / B-28 / B-38 (anti-drift): the Dockerfile spa stage and
-    the release workflow's Build SPA bundle step must use the SAME
-    shape of install logic.
+def test_spa_stage_copies_pnpm_lockfile_and_npmrc() -> None:
+    """F-011: the spa stage must COPY the pnpm lockfile (and .npmrc for
+    registry config) before running ``pnpm install`` so Docker layer
+    caching works correctly and the install uses the tracked lock.
 
-    Concretely: both must contain
-      - the `--package-lock-only` bootstrap (B-28)
-      - the `npm ci` execution (B-19)
-      - `--include=dev` on BOTH the bootstrap install and the `npm
-        ci` (B-38) — so a future runner setting `NODE_ENV=production`
-        can't silently break `npm run build` (which needs vite + tsc
-        devDependencies) on one side without breaking the other.
+    The .npmrc holds the ``@concavetrillion`` scope registry pointer;
+    omitting it causes ``pnpm install`` to fail on packages from that
+    scope (#416 / F-011).
+    """
+    spa = _spa_stage_text()
+    assert "pnpm-lock.yaml" in spa, (
+        "Dockerfile spa stage must COPY `pnpm-lock.yaml` before `pnpm install` "
+        "so the build uses the tracked lockfile (#416 / F-011)."
+    )
 
-    If a future iter tightens one without the other, the docker build
-    and the GitHub Actions release will disagree about lockfile or
-    dev-dependency policy — exactly the iter-25 / iter-30 finding
-    pattern.
 
-    We don't byte-compare (shell-vs-Dockerfile syntax differs); we
-    require the load-bearing tokens to appear in both files AND we
-    pin `--include=dev` symmetry so the two stages can't drift on
-    flag-set even when both still pass the token-presence checks.
+def test_dockerfile_and_release_workflow_agree_on_pnpm_install_logic() -> None:
+    """F-011 / #416 (anti-drift): the Dockerfile spa stage and the release
+    workflow's SPA-build steps must both use ``pnpm install --frozen-lockfile``.
 
-    B-41 BREADCRUMB — PLANNED OBSOLESCENCE OF `--package-lock-only`
-    --------------------------------------------------------------
-    When Q-A8 unblocks (Node toolchain in devcontainer) and a real
-    `frontend/package-lock.json` is committed, the
-    `--package-lock-only` bootstrap becomes permanent dead code.
-    At that point: drop the bootstrap block from BOTH `release.yml`
-    AND `Dockerfile` (spa stage) in the SAME commit, drop the
-    `--package-lock-only` clauses from this assertion, AND drop the
-    sibling assertion in
-    `test_release_workflow.py::test_uses_two_pass_install_with_lockfile_fallback`.
-    The `npm ci` + `--include=dev` symmetry pins should remain;
-    only the bootstrap pins go away. All four changes must land in
-    one commit — splitting risks half-finished cleanup leaving dead
-    code in one file but not the other.
+    If a future change tightens one without the other, docker builds and
+    GitHub Actions releases will disagree on install policy. This test
+    catches that class of drift before it reaches CI.
     """
     workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    dockerfile = _dockerfile_text()
+    spa = _spa_stage_text()
 
-    for label, text in (("release.yml", workflow), ("Dockerfile", dockerfile)):
-        assert re.search(r"\bnpm\s+ci\b", text), f"{label} must invoke `npm ci`"
-        assert "--package-lock-only" in text, (
-            f"{label} must include the `--package-lock-only` bootstrap fallback (B-28 alignment)"
+    for label, text in (("release.yml", workflow), ("Dockerfile spa stage", spa)):
+        # pnpm, not npm.
+        assert "pnpm install --frozen-lockfile" in text, (
+            f"{label} must invoke `pnpm install --frozen-lockfile` (#416 / F-011)."
         )
-        # B-38: `--include=dev` must appear on BOTH passes (bootstrap
-        # + ci) so the dev-dep set is explicit, not implicit-via-npm-
-        # default. Match in non-comment lines only — `release.yml` has
-        # explanatory comments that name the flag.
-        if label == "release.yml":
-            # YAML: comments are `#`-prefixed. Strip them so a future
-            # comment-mention can't satisfy this on its own.
-            code = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
-        else:
-            # Dockerfile: same line-leading `#` rule.
-            code = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
-        # Two lines must each contain --include=dev: one with
-        # --package-lock-only, one with `npm ci`.
-        bootstrap_lines = [ln for ln in code.splitlines() if "--package-lock-only" in ln]
-        ci_lines = [ln for ln in code.splitlines() if re.search(r"\bnpm\s+ci\b", ln)]
-        assert bootstrap_lines, f"{label}: no `--package-lock-only` line found in code (non-comment)"
-        assert ci_lines, f"{label}: no `npm ci` line found in code (non-comment)"
-        for ln in bootstrap_lines:
-            assert "--include=dev" in ln, (
-                f"{label}: bootstrap install line must use `--include=dev` (B-38 symmetry); got: {ln!r}"
-            )
-        for ln in ci_lines:
-            assert "--include=dev" in ln, (
-                f"{label}: `npm ci` line must use `--include=dev` "
-                f"(B-38 symmetry — `npm run build` needs vite/tsc devDeps); got: {ln!r}"
-            )
+        # No npm install or npm ci.
+        code_lines = [ln for ln in text.splitlines() if not ln.lstrip().startswith("#")]
+        for line in code_lines:
+            if re.search(r"\bnpm\s+(install|ci)\b", line):
+                raise AssertionError(
+                    f"{label} uses npm in: {line!r} — "
+                    "switch to `pnpm install --frozen-lockfile` (#416 / F-011)."
+                )
 
 
 def test_dockerignore_excludes_essential_paths() -> None:

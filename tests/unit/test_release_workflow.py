@@ -161,28 +161,17 @@ def test_release_workflow_has_concurrency_block() -> None:
     )
 
 
-def test_setup_node_npm_cache_disabled_until_lockfile_lands() -> None:
-    """B-37: until Q-A8 unblocks Node in the devcontainer and a real
-    `frontend/package-lock.json` is committed, `actions/setup-node@v4`
-    must NOT declare `cache: "npm"`.
+def test_setup_node_uses_pnpm_cache_with_lockfile_path() -> None:
+    """F-011 / #416: now that ``frontend/pnpm-lock.yaml`` is committed,
+    ``actions/setup-node@v4`` must declare ``cache: "pnpm"`` and
+    ``cache-dependency-path: frontend/pnpm-lock.yaml``.
 
-    setup-node's npm-cache integration treats a missing lockfile at
-    `cache-dependency-path` as a hard error ("Dependencies lock file
-    is not found in …"), failing the workflow at the Setup Node.js
-    step BEFORE the iter-26 two-pass install gets a chance to
-    bootstrap the lockfile. Enabling the cache here would silently
-    re-open B-28.
+    ``pnpm/action-setup`` must precede ``actions/setup-node`` in each
+    job so pnpm is on PATH when setup-node primes the cache.
 
-    YAML-walk the setup-node `with:` block (rather than regex over
-    text) so the explanatory comment that names the parameter doesn't
-    falsely trip this assertion. When Q-A8 lands the real lockfile,
-    flip this test to assert `cache: "npm"` IS set (and re-introduce
-    the `cache-dependency-path: frontend/package-lock.json` pin).
-
-    The uv cache (`astral-sh/setup-uv` `enable-cache: true`) is the
-    valid caching path today — `uv.lock` exists and the cache primes
-    without a setup-step hard-fail. See
-    `test_setup_uv_enables_cache`.
+    (Replaces the former B-37 assertion that forbade ``cache:`` while
+    ``package-lock.json`` was absent. Now that the tracked lockfile is
+    ``pnpm-lock.yaml`` the cache key is valid and cache: pnpm is correct.)
     """
     data = _load_workflow()
     found_setup_node = False
@@ -192,17 +181,16 @@ def test_setup_node_npm_cache_disabled_until_lockfile_lands() -> None:
             if uses.startswith("actions/setup-node@"):
                 found_setup_node = True
                 with_block = step.get("with") or {}
-                assert "cache" not in with_block, (
-                    "B-37: `actions/setup-node` must NOT declare a `cache:` key "
-                    "until Q-A8 unblocks a committed `frontend/package-lock.json`. "
-                    "setup-node hard-fails on missing lockfile when `cache:` is set, "
-                    "which would re-open B-28. Found in job "
-                    f"{job_name!r} with-block: {with_block!r}"
+                assert with_block.get("cache") == "pnpm", (
+                    f"release.yml job {job_name!r}: `actions/setup-node` must set "
+                    "`cache: pnpm` so the pnpm store is cached between runs (#416 / F-011). "
+                    f"Got: {with_block!r}"
                 )
-                assert "cache-dependency-path" not in with_block, (
-                    "B-37: drop `cache-dependency-path` together with `cache:` — "
-                    "neither is meaningful without the other. Found in job "
-                    f"{job_name!r} with-block: {with_block!r}"
+                dep_path = with_block.get("cache-dependency-path", "")
+                assert "pnpm-lock.yaml" in dep_path, (
+                    f"release.yml job {job_name!r}: `actions/setup-node` must set "
+                    "`cache-dependency-path` to `frontend/pnpm-lock.yaml` so the "
+                    f"cache key is invalidated on lockfile changes (#416). Got: {dep_path!r}"
                 )
     assert found_setup_node, "no `actions/setup-node` step found in release.yml"
 
@@ -326,75 +314,63 @@ def test_python_pin_in_release_workflow_matches_mise_if_set() -> None:
         )
 
 
-def test_uses_npm_ci_not_npm_install() -> None:
-    """``npm install`` mutates lockfiles in CI; ``npm ci`` is the right primitive.
+def test_uses_pnpm_frozen_lockfile_not_npm() -> None:
+    """release.yml must install frontend deps with ``pnpm install --frozen-lockfile``.
 
-    Exception (B-28): until Q-A8 unblocks Node in the devcontainer and
-    a real `frontend/package-lock.json` is committed, the workflow uses
-    a two-pass install — `npm install --package-lock-only` to bootstrap
-    a lock when missing, then `npm ci` as the source of truth. The
-    `--package-lock-only` invocation never touches `node_modules/` and
-    cannot drift transitive versions inside CI, so the reproducibility
-    concern that motivated this test is preserved.
+    npm is not used — the tracked lockfile is ``frontend/pnpm-lock.yaml``.
+    ``--frozen-lockfile`` is the pnpm equivalent of ``npm ci``: it fails
+    fast on lockfile drift and never mutates the lock in CI (#416 / F-011).
     """
     text = _workflow_text()
-    assert "npm ci" in text, "release.yml must use `npm ci` (not `npm install`)"
-    # Defensive: forbid the bare `npm install` regression — a plain
-    # `npm install` (no flags) on a non-comment line would re-introduce
-    # the lockfile-mutation hazard. The bootstrap form
-    # (`npm install --package-lock-only [...]`) is allowed.
+    assert "pnpm install --frozen-lockfile" in text, (
+        "release.yml must use `pnpm install --frozen-lockfile` (not npm) "
+        "to install frontend deps — lockfile is frontend/pnpm-lock.yaml (#416 / F-011)."
+    )
+    # Defensive: no bare npm install or npm ci should appear in non-comment lines.
     code_lines = [ln for ln in text.splitlines() if not ln.lstrip().startswith("#")]
-    code = "\n".join(code_lines)
-    # Match `npm install` only when NOT immediately followed by
-    # `--package-lock-only` somewhere on the same line.
-    for line in code.splitlines():
-        if re.search(r"\bnpm install\b", line) and "--package-lock-only" not in line:
+    for line in code_lines:
+        if re.search(r"\bnpm\s+(install|ci)\b", line):
             raise AssertionError(
-                f"release.yml line uses bare `npm install`: {line!r} — "
-                "use `npm ci` (or `npm install --package-lock-only` to "
-                "bootstrap a missing lockfile)."
+                f"release.yml uses npm in: {line!r} — "
+                "switch to `pnpm install --frozen-lockfile` (#416 / F-011)."
             )
 
 
-def test_uses_two_pass_install_with_lockfile_fallback() -> None:
-    """B-28: the SPA-build step must handle both lockfile-present and
-    lockfile-absent states.
+def test_uses_pnpm_action_setup_in_release_jobs() -> None:
+    """Both release jobs must set up pnpm via ``pnpm/action-setup`` before
+    the Node setup so ``actions/setup-node`` can cache the pnpm store.
 
-    With a real `frontend/package-lock.json`, the bootstrap branch is a
-    fast no-op and `npm ci` runs from the lock. Without it (Q-A8 still
-    blocking), the bootstrap generates the lock in-place via
-    `npm install --package-lock-only`, then `npm ci` consumes it. Both
-    paths converge on a deterministic install.
-
-    Pin the bootstrap form explicitly so a regression that drops it
-    (and re-introduces the iter-24 first-tag-push failure) fails fast.
-
-    B-41 BREADCRUMB — PLANNED OBSOLESCENCE
-    --------------------------------------
-    When Q-A8 unblocks (Node toolchain in devcontainer) and a real
-    `frontend/package-lock.json` is committed, the bootstrap branch
-    becomes permanent dead code. At that point: drop the
-    `if [ ! -f package-lock.json ]; then npm install --package-lock-only ...; fi`
-    block from BOTH `release.yml` AND `Dockerfile` (spa stage) in the
-    SAME commit AND delete this assertion plus the cross-file pin in
-    `tests/unit/test_dockerfile.py::test_dockerfile_and_release_workflow_agree_on_npm_install_logic`.
-    All three changes must land together — splitting risks the
-    iter-25 inconsistency this test was designed to prevent.
+    The ``cache: pnpm`` key in ``actions/setup-node`` only works when
+    pnpm is already on ``PATH`` (provided by ``pnpm/action-setup``)
+    and ``cache-dependency-path`` points at the tracked lockfile (#416).
     """
-    text = _workflow_text()
-    assert "--package-lock-only" in text, (
-        "release.yml must include the `npm install --package-lock-only` "
-        "fallback so the workflow does not fail on the first tag push "
-        "while `frontend/package-lock.json` is still absent (B-28 / Q-A8)."
-    )
-    # The fallback should be conditional — guarded by a `! -f
-    # package-lock.json` shell test — so once a real lockfile lands the
-    # bootstrap is a no-op rather than a mutation each run.
-    assert re.search(r"!\s*-f\s+package-lock\.json", text), (
-        "release.yml must guard the `--package-lock-only` bootstrap on "
-        "`! -f package-lock.json` so it becomes a no-op once the real "
-        "lockfile is committed."
-    )
+    data = _load_workflow()
+    for job_name, job in data.get("jobs", {}).items():
+        steps = job.get("steps", []) or []
+        uses_list = [s.get("uses", "") for s in steps]
+        has_pnpm_setup = any("pnpm/action-setup" in u for u in uses_list)
+        assert has_pnpm_setup, (
+            f"release.yml job {job_name!r} must include `pnpm/action-setup` "
+            "so pnpm is available for `pnpm install --frozen-lockfile` (#416 / F-011)."
+        )
+
+
+def test_release_workflow_lockfile_cache_dependency_path() -> None:
+    """``actions/setup-node`` steps that enable ``cache: pnpm`` must point
+    ``cache-dependency-path`` at ``frontend/pnpm-lock.yaml`` so cache
+    keys are invalidated on lockfile changes (#416 / F-011).
+    """
+    data = _load_workflow()
+    for job_name, job in data.get("jobs", {}).items():
+        for step in job.get("steps", []) or []:
+            with_block = step.get("with") or {}
+            if with_block.get("cache") == "pnpm":
+                dep_path = with_block.get("cache-dependency-path", "")
+                assert "pnpm-lock.yaml" in dep_path, (
+                    f"release.yml job {job_name!r}: `actions/setup-node` with "
+                    f"`cache: pnpm` must set `cache-dependency-path` to the pnpm "
+                    f"lockfile (`frontend/pnpm-lock.yaml`); got: {dep_path!r} (#416)."
+                )
 
 
 def test_invokes_uv_build() -> None:
