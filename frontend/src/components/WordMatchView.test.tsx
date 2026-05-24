@@ -251,10 +251,10 @@ describe("LineCard word rows", () => {
       word_matches: [makeWordMatchFull(0, 0), makeWordMatchFull(0, 1), makeWordMatchFull(0, 2)],
     });
     render(<LineCard line={line} />);
-    // Each WordCell gets data-testid="word-cell-{word_id}"
-    expect(screen.getByTestId("word-cell-w-0-0")).toBeInTheDocument();
-    expect(screen.getByTestId("word-cell-w-0-1")).toBeInTheDocument();
-    expect(screen.getByTestId("word-cell-w-0-2")).toBeInTheDocument();
+    // Each WordCell gets data-testid="word-image-cell-{l}-{w}" (driver-contract §2.8 canonical)
+    expect(screen.getByTestId("word-image-cell-0-0")).toBeInTheDocument();
+    expect(screen.getByTestId("word-image-cell-0-1")).toBeInTheDocument();
+    expect(screen.getByTestId("word-image-cell-0-2")).toBeInTheDocument();
   });
 
   it("renders gt-text-input-{l}-{w} testids for each word", () => {
@@ -297,7 +297,7 @@ describe("LineCard word rows", () => {
     render(<LineCard line={line} />);
     expect(screen.getByText("fallback preview text")).toBeInTheDocument();
     // No word cells
-    expect(screen.queryByTestId(/^word-cell-/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(/^word-image-cell-/)).not.toBeInTheDocument();
   });
 
   it("WordMatchView threads onEditWord through to word rows", () => {

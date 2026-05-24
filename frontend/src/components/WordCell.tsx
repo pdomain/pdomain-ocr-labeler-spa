@@ -14,13 +14,17 @@
 // via natural DOM tab order (inputs within a line card render in DOM order).
 //
 // data-testids (driver-contract §2.8):
-//   word-cell-{word_id}         — outer container
-//   gt-text-input-{l}-{w}       — GT text input (spec canonical)
-//   ocr-text-label-{l}-{w}      — OCR text label (spec canonical)
-//   word-status-icon-{l}-{w}    — status icon (spec canonical)
-//   word-tag-chip-{l}-{w}-{key} — style/component chip (CSS class: word-tag-chip)
+//   word-image-cell-{l}-{w}          — outer container (spec canonical, driver-contract §2.8)
+//   word-cell-{word_id}              — outer container (internal alias; kept for tests)
+//   word-checkbox-{l}-{w}            — word selection checkbox (§2.8)
+//   word-validate-button-{l}-{w}     — per-word validate toggle (§2.8)
+//   gt-text-input-{l}-{w}            — GT text input (spec canonical)
+//   ocr-text-label-{l}-{w}           — OCR text label (spec canonical)
+//   word-status-icon-{l}-{w}         — status icon (spec canonical)
+//   word-tag-chip-{l}-{w}-{key}      — style/component chip (CSS class: word-tag-chip)
+//   word-tag-clear-button-{l}-{w}-{key} — × button on a chip (§2.8)
 // Legacy (kept for backward compat):
-//   gt-input-{word_id}          — GT text input (legacy form)
+//   gt-input-{word_id}               — GT text input (legacy form)
 
 import { useState, useEffect, useRef } from "react";
 import type { components } from "../api/types";
@@ -120,8 +124,8 @@ export function WordCell({ word, onCommitGt, onEditWord }: WordCellProps) {
 
   return (
     <div
-      data-testid={`word-cell-${wordId}`}
-      data-testid-alias={`word-image-cell-${l}-${w}`}
+      data-testid={`word-image-cell-${l}-${w}`}
+      data-testid-alias={`word-cell-${wordId}`}
       className="border border-border-1 rounded p-1 flex flex-col gap-0.5 min-w-16 max-w-32 relative"
     >
       {/* Glyph corner badge (spec §5.3, testid §7) */}
@@ -142,20 +146,33 @@ export function WordCell({ word, onCommitGt, onEditWord }: WordCellProps) {
 
       {/* Row 1: status icon + validated indicator + edit button stub */}
       <div className="flex items-center justify-between">
-        <span
-          data-testid={`word-status-icon-${l}-${w}`}
-          className={`text-xs font-bold ${statusColor}`}
-          aria-label={`${word.match_status} match`}
-          title={word.match_status}
-        >
-          {statusIcon}
-        </span>
         <div className="flex items-center gap-0.5">
-          {word.is_validated && (
-            <span className="text-xs text-status-exact" title="Validated" aria-label="Validated">
-              ✔
-            </span>
-          )}
+          {/* Word selection checkbox (driver-contract §2.8) */}
+          <input
+            type="checkbox"
+            data-testid={`word-checkbox-${l}-${w}`}
+            aria-label={`Select word ${w} in line ${l}`}
+            className="w-3 h-3 accent-accent"
+          />
+          <span
+            data-testid={`word-status-icon-${l}-${w}`}
+            className={`text-xs font-bold ${statusColor}`}
+            aria-label={`${word.match_status} match`}
+            title={word.match_status}
+          >
+            {statusIcon}
+          </span>
+        </div>
+        <div className="flex items-center gap-0.5">
+          {/* Per-word validate toggle (driver-contract §2.8) */}
+          <button
+            data-testid={`word-validate-button-${l}-${w}`}
+            aria-label={`${word.is_validated ? "Unvalidate" : "Validate"} word ${w} in line ${l}`}
+            className={`text-[10px] px-0.5 leading-none ${word.is_validated ? "text-status-exact" : "text-ink-4 hover:text-status-exact"}`}
+            title={word.is_validated ? "Unvalidate word" : "Validate word"}
+          >
+            ✔
+          </button>
           {/* Edit button — selects the word and opens the right-panel word detail view */}
           <button
             data-testid={`edit-word-button-${l}-${w}`}
@@ -185,24 +202,40 @@ export function WordCell({ word, onCommitGt, onEditWord }: WordCellProps) {
             <span
               key={`style-${label}`}
               data-testid={`word-tag-chip-${l}-${w}-${label}`}
-              className="word-tag-chip px-1 py-0 text-[10px] rounded"
+              className="word-tag-chip flex items-center gap-0.5 px-1 py-0 text-[10px] rounded"
               style={{ background: "color-mix(in srgb, var(--status-ocr) 12%, var(--bg-raised))" }}
               title={`Style: ${label}`}
             >
               {label}
+              <button
+                data-testid={`word-tag-clear-button-${l}-${w}-${label}`}
+                className="word-tag-clear-button text-[8px] text-ink-3 hover:text-ink-1 leading-none"
+                aria-label={`Remove style ${label}`}
+                title={`Remove style ${label}`}
+              >
+                ×
+              </button>
             </span>
           ))}
           {word.word_components?.map((comp) => (
             <span
               key={`comp-${comp}`}
               data-testid={`word-tag-chip-${l}-${w}-${comp}`}
-              className="word-tag-chip px-1 py-0 text-[10px] rounded"
+              className="word-tag-chip flex items-center gap-0.5 px-1 py-0 text-[10px] rounded"
               style={{
                 background: "color-mix(in srgb, var(--status-exact) 12%, var(--bg-raised))",
               }}
               title={`Component: ${comp}`}
             >
               {comp}
+              <button
+                data-testid={`word-tag-clear-button-${l}-${w}-${comp}`}
+                className="word-tag-clear-button text-[8px] text-ink-3 hover:text-ink-1 leading-none"
+                aria-label={`Remove component ${comp}`}
+                title={`Remove component ${comp}`}
+              >
+                ×
+              </button>
             </span>
           ))}
         </div>

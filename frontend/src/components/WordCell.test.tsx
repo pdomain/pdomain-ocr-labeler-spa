@@ -3,11 +3,10 @@
 // Issue #203, #241
 //
 // Acceptance:
-//   - Renders with data-testid="word-cell-{word_id}"
+//   - Renders with data-testid="word-image-cell-{l}-{w}" (driver-contract §2.8 canonical)
 //   - GT input has data-testid="gt-text-input-{l}-{w}" (spec canonical)
 //   - Blur-commit: fires onCommitGt with new value when changed
 //   - Blur with unchanged value: does NOT fire onCommitGt
-//   - word_id used as React key / testid (not line/word index)
 //   - Tag chips render for text_style_labels and word_components
 
 import { describe, it, expect, vi } from "vitest";
@@ -36,10 +35,10 @@ function makeWordMatch(overrides: Partial<WordMatch> = {}): WordMatch {
 }
 
 describe("WordCell", () => {
-  it("renders with data-testid='word-cell-{word_id}'", () => {
-    const word = makeWordMatch({ word_id: "w-abc" });
+  it("renders with data-testid='word-image-cell-{l}-{w}' (driver-contract §2.8 canonical)", () => {
+    const word = makeWordMatch({ word_id: "w-abc", line_index: 0, word_index: 0 });
     render(<WordCell word={word} />);
-    expect(screen.getByTestId("word-cell-w-abc")).toBeInTheDocument();
+    expect(screen.getByTestId("word-image-cell-0-0")).toBeInTheDocument();
   });
 
   it("GT input has data-testid='gt-text-input-{l}-{w}' (spec canonical)", () => {
@@ -147,15 +146,11 @@ describe("WordCell", () => {
     expect(() => fireEvent.click(button)).not.toThrow();
   });
 
-  it("uses word_id (not line/word index) as the testid", () => {
-    // Two words with same line_index=0, word_index=0 but different word_ids
+  it("uses line/word index (not word_id) as the canonical testid (driver-contract §2.8)", () => {
+    // The canonical testid is word-image-cell-{l}-{w}; word_id is on the alias attribute.
     const word1 = makeWordMatch({ word_id: "unique-a", line_index: 0, word_index: 0 });
-    const word2 = makeWordMatch({ word_id: "unique-b", line_index: 0, word_index: 0 });
-    const { unmount } = render(<WordCell word={word1} />);
-    expect(screen.getByTestId("word-cell-unique-a")).toBeInTheDocument();
-    unmount();
-    render(<WordCell word={word2} />);
-    expect(screen.getByTestId("word-cell-unique-b")).toBeInTheDocument();
+    render(<WordCell word={word1} />);
+    expect(screen.getByTestId("word-image-cell-0-0")).toBeInTheDocument();
   });
 
   // Glyph corner badge tests (spec §5.3, testid §7)

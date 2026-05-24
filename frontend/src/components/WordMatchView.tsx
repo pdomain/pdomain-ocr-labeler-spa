@@ -118,6 +118,21 @@ export function WordMatchView({
   const items = virtualizer.getVirtualItems();
   const totalSize = virtualizer.getTotalSize();
 
+  // Compute which lines are the first in their paragraph (driver-contract §2.8).
+  // A line is paragraph-first when its paragraph_index is not null and hasn't
+  // been seen yet in the visible list.
+  const paragraphFirstSet = useMemo(() => {
+    const seen = new Set<number>();
+    const result = new Set<number>();
+    for (const line of visibleLines) {
+      if (line.paragraph_index !== null && !seen.has(line.paragraph_index)) {
+        seen.add(line.paragraph_index);
+        result.add(line.line_index);
+      }
+    }
+    return result;
+  }, [visibleLines]);
+
   if (visibleLines.length === 0) {
     return (
       <div
@@ -160,6 +175,7 @@ export function WordMatchView({
             >
               <LineCard
                 line={line}
+                paragraphFirst={paragraphFirstSet.has(line.line_index)}
                 onValidate={onValidate}
                 onCopyGtToOcr={onCopyGtToOcr}
                 onCopyOcrToGt={onCopyOcrToGt}

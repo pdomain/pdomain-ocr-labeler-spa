@@ -19,6 +19,8 @@
 // data-testids (driver-contract §2.8):
 //   line-card-{n}              — full card (spec canonical)
 //   line-card-{n}-header       — header row
+//   line-checkbox-{n}          — line selection checkbox (driver-contract §2.8)
+//   paragraph-checkbox-{p}     — paragraph checkbox, only on paragraph-first lines (§2.8)
 //   line-gt-to-ocr-button-{n}  — GT→OCR button (spec canonical)
 //   line-ocr-to-gt-button-{n}  — OCR→GT button (spec canonical)
 //   line-validate-button-{n}   — Validate/Unvalidate (spec canonical)
@@ -67,6 +69,11 @@ function CountChip({ kind, count, label, chipStyle, textClass }: CountChipProps)
 
 export interface LineCardProps {
   line: LineMatch;
+  /**
+   * True when this line is the first line of its paragraph.
+   * When true, renders the paragraph-checkbox-{p} element (driver-contract §2.8).
+   */
+  paragraphFirst?: boolean | undefined;
   /** Called when Validate / Unvalidate is clicked. */
   onValidate?: ((lineIndex: number, validated: boolean) => void) | undefined;
   /** Called when GT→OCR copy is clicked. */
@@ -105,6 +112,7 @@ export interface LineCardProps {
  */
 export function LineCard({
   line,
+  paragraphFirst = false,
   onValidate,
   onCopyGtToOcr,
   onCopyOcrToGt,
@@ -171,6 +179,24 @@ export function LineCard({
             label="unmatched OCR"
             chipStyle={{ background: "var(--bg-raised)" }}
             textClass="text-ink-2"
+          />
+        </div>
+
+        {/* Paragraph and line selection checkboxes (driver-contract §2.8) */}
+        <div className="flex items-center gap-1 shrink-0">
+          {paragraphFirst && line.paragraph_index !== null && (
+            <input
+              type="checkbox"
+              data-testid={`paragraph-checkbox-${line.paragraph_index}`}
+              aria-label={`Select paragraph ${line.paragraph_index}`}
+              className="w-3 h-3 accent-accent"
+            />
+          )}
+          <input
+            type="checkbox"
+            data-testid={`line-checkbox-${line.line_index}`}
+            aria-label={`Select line ${line.line_index}`}
+            className="w-3 h-3 accent-accent"
           />
         </div>
 
