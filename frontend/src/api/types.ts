@@ -2066,6 +2066,22 @@ export interface components {
             text: string;
         };
         /**
+         * ApiError
+         * @description The uniform error envelope returned by every handler.
+         *
+         *     Kept as a pydantic model (rather than a plain dict literal) so the
+         *     OpenAPI export carries a schema for it — the generated TS types
+         *     then expose ``ApiError`` for the SPA's ``client.ts`` to consume.
+         */
+        ApiError: {
+            /** Error */
+            error: string;
+            /** Message */
+            message: string;
+            /** Details */
+            details?: unknown;
+        };
+        /**
          * ApplyComponentRequest
          * @description Spec §2 lines 293-295.
          */
@@ -4252,20 +4268,31 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description JPEG-encoded page image (optionally resized via ?w=N). */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "image/jpeg": unknown;
+                };
             };
-            /** @description Validation Error */
+            /** @description project_not_found | page_not_found | image_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description image_corrupt — file present but unreadable */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
         };

@@ -132,6 +132,41 @@ def test_202_routes_have_job_id_response_model(schema_routes: list[APIRoute]) ->
     )
 
 
+def test_image_route_openapi_declares_jpeg(schema_routes: list[APIRoute]) -> None:
+    """The page-image binary route must advertise image/jpeg in its OpenAPI 200 response.
+
+    Acceptance criterion for F-031 (#436): before this fix the route omitted a
+    ``responses=`` dict, so FastAPI fell back to ``content: {application/json: {}}``
+    (the default for ``response_class=Response``).  The fix adds an explicit
+    ``responses={200: {"content": {"image/jpeg": {}}}}`` to the decorator.
+
+    We verify this by walking the live OpenAPI schema rather than inspecting the
+    route object, so we catch any FastAPI serialisation quirk that could drop the
+    override.
+    """
+    from pd_ocr_labeler_spa.bootstrap import build_app
+
+    schema = build_app().openapi()
+    # Locate the page-image path — ends with /{page_index}/image.
+    image_paths = [p for p in schema.get("paths", {}) if p.endswith("/{page_index}/image")]
+    assert image_paths, "Could not find /{page_index}/image path in OpenAPI schema"
+
+    for path in image_paths:
+        get_op = schema["paths"][path].get("get", {})
+        responses = get_op.get("responses", {})
+        content_200 = responses.get("200", {}).get("content", {})
+        assert "image/jpeg" in content_200, (
+            f"OpenAPI path {path} GET 200 content should include image/jpeg; "
+            f"got: {list(content_200.keys())!r}"
+        )
+        # Also confirm JSON is NOT the sole advertised type (the bug was that
+        # application/json:{} was the only entry).
+        assert content_200 != {"application/json": {}}, (
+            f"OpenAPI path {path} GET 200 content still shows the default "
+            "application/json fallback — responses= override did not take effect"
+        )
+
+
 def test_sse_routes_use_streaming_response_class(schema_routes: list[APIRoute]) -> None:
     """SSE routes must set response_class=StreamingResponse and response_model=None.
 
