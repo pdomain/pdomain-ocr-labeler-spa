@@ -16,7 +16,7 @@ else
         pre-commit-check test integration e2e exercise-real build clean ci dev run \
         frontend-install frontend-build frontend-dev frontend-test frontend-knip \
         frontend-lint frontend-format frontend-format-check \
-        openapi-export upgrade-pd-book-tools upgrade-deps upgrade-deps-local \
+        openapi-export update-pd-deps upgrade-pd-book-tools upgrade-deps upgrade-deps-local \
         local-setup local-dev local-check local-upgrade-deps local-run \
         mise-download mise-trust-worktrees mise-setup mise-doctor \
         docker-build docker-run docker-shell \
@@ -113,6 +113,21 @@ local-upgrade-deps: ## Upgrade deps then restore editable siblings (requires loc
 
 local-run: ## Run the SPA against local-dev workspace (requires local-dev mode)
 	@./scripts/local-run.sh
+
+# ---------------------------------------------------------------------------
+# Sibling-dep refresh (spec #363) — update-pd-deps
+# ---------------------------------------------------------------------------
+# Queries pd-index-pip + pd-index-npm for each sibling, bumps minimum-version
+# pins in pyproject.toml and frontend/package.json, then leaves the diff for
+# human review. Does NOT commit. Idempotent.
+# See ../docs/process/update-pd-deps.md for full workflow.
+
+update-pd-deps: ## Bump all sibling pd-* deps (Python + npm) to registry latest; leaves diff for review
+	@./scripts/update-pd-deps.sh
+
+upgrade-pd-book-tools: ## DEPRECATED: use update-pd-deps
+	@echo "warning: 'upgrade-pd-book-tools' is deprecated; use 'make update-pd-deps'"
+	@$(MAKE) --no-print-directory update-pd-deps
 
 # ---------------------------------------------------------------------------
 # Optional: mise-managed tool versions (mirrors pd-prep-for-pgdp pattern)
