@@ -113,6 +113,52 @@ _TEXT_TABS_TESTIDS = [
     "match-filter-all",
 ]
 
+# Apply Style toolbar row (driver-contract §2.10) — present when project page loads.
+# Parameterised stubs ("toolbar-{scope}-{action}") are NOT listed here.
+_APPLY_STYLE_TOOLBAR_TESTIDS = [
+    "apply-style-select",
+    "scope-select",  # was "apply-scope-select" — bug #452
+    "apply-component-select",
+    "apply-style-button",
+    "apply-component-button",  # bug #452: was absent
+    "clear-component-button",  # bug #452: was absent
+    "word-add-button",  # was "add-word-button" — bug #452
+]
+
+# Word-edit dialog testids (driver-contract §2.11).
+# Checked after opening the dialog via edit-word-button-0-0.
+_WORD_EDIT_DIALOG_TESTIDS = [
+    "word-edit-dialog",  # bug #454: was "dialog-backdrop" only
+    "dialog-header-label",
+    "dialog-apply-close-button",
+    "dialog-close-button",
+    "dialog-previous-preview-column",  # bug #454: was "dialog-prev-word" only
+    "dialog-current-preview-column",  # bug #454: was "dialog-current-word" only
+    "dialog-next-preview-column",  # bug #454: was "dialog-next-word" only
+    "dialog-gt-input",  # bug #454: was absent
+    "dialog-tag-chips-slot",  # bug #454: was absent
+    "dialog-refine-button",
+    "dialog-expand-refine-button",
+    "dialog-reset-button",
+    "dialog-apply-button",
+    "dialog-apply-refine-button",
+    "dialog-merge-prev-button",
+    "dialog-merge-next-button",
+    "dialog-split-h-button",
+    "dialog-split-v-button",
+    "dialog-delete-word-button",
+    "dialog-crop-above-button",
+    "dialog-crop-below-button",
+    "dialog-crop-left-button",
+    "dialog-crop-right-button",
+    "dialog-style-select",
+    "dialog-scope-select",
+    "dialog-component-select",
+    "dialog-apply-style-button",
+    "dialog-apply-component-button",
+    "dialog-clear-component-button",
+]
+
 
 def _all_stub_or_present(page: Page, testids: list[str]) -> list[str]:
     """Return list of testids that are completely absent from the DOM."""
@@ -320,3 +366,106 @@ def test_glyph_bulk_dialog_testids_present(live_server: LiveServer, page: Page) 
 
     missing = _all_stub_or_present(page, _GLYPH_DIALOG_TESTIDS)
     assert not missing, f"Glyph dialog testids missing after opening dialog: {missing}"
+
+
+# ── F-046 / F-047 / F-048 / F-049 coverage ──────────────────────────────────
+
+
+@pytest.mark.e2e
+def test_apply_style_toolbar_testids_present(live_server: LiveServer, page: Page) -> None:
+    """Driver-contract §2.10: all Apply Style toolbar testids present on project page.
+
+    Covers #452 (F-047): scope-select, apply-component-button, clear-component-button,
+    word-add-button were missing or had wrong IDs.
+    """
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
+    page.goto(url, timeout=15_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+
+    missing = _all_stub_or_present(page, _APPLY_STYLE_TOOLBAR_TESTIDS)
+    assert not missing, (
+        f"Apply Style toolbar testids missing from project page (driver-contract §2.10, #452): {missing}"
+    )
+
+
+@pytest.mark.e2e
+def test_per_line_driver_testids_present(live_server: LiveServer, page: Page) -> None:
+    """Driver-contract §2.8: per-line testids (line-checkbox, line-card) present on project page.
+
+    Covers #453 (F-048): line-checkbox-{n} was absent.
+    Asserts line-card-0 and line-checkbox-0 are present after the matches tab renders.
+    """
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
+    page.goto(url, timeout=15_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+
+    # Navigate to the Matches tab (text-tab-matches) to ensure word-match-view renders.
+    page.click('[data-testid="text-tab-matches"]')
+    page.wait_for_selector('[data-testid="word-match-view"]', timeout=10_000)
+
+    # The tiny-fixture has at least one line; line-card-0 and line-checkbox-0 must exist.
+    missing = _all_stub_or_present(page, ["line-card-0", "line-checkbox-0"])
+    assert not missing, f"Per-line driver-contract §2.8 testids missing (#453): {missing}"
+
+
+@pytest.mark.e2e
+def test_per_word_driver_testids_present(live_server: LiveServer, page: Page) -> None:
+    """Driver-contract §2.8: per-word testids present in the first line card.
+
+    Covers #453 (F-048): word-checkbox-{l}-{w}, word-validate-button-{l}-{w},
+    word-image-cell-{l}-{w} were absent or on alias attributes.
+    """
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
+    page.goto(url, timeout=15_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+
+    page.click('[data-testid="text-tab-matches"]')
+    page.wait_for_selector('[data-testid="word-match-view"]', timeout=10_000)
+
+    # word-image-cell-0-0, word-checkbox-0-0, word-validate-button-0-0 must exist
+    # for the first word (line 0, word 0).
+    per_word_testids = [
+        "word-image-cell-0-0",
+        "word-checkbox-0-0",
+        "word-validate-button-0-0",
+        "gt-text-input-0-0",
+        "ocr-text-label-0-0",
+        "word-status-icon-0-0",
+        "edit-word-button-0-0",
+    ]
+    missing = _all_stub_or_present(page, per_word_testids)
+    assert not missing, f"Per-word driver-contract §2.8 testids missing (#453): {missing}"
+
+
+@pytest.mark.e2e
+def test_word_edit_dialog_testids_present(live_server: LiveServer, page: Page) -> None:
+    """Driver-contract §2.11: word-edit-dialog testids present when dialog is open.
+
+    Covers #454 (F-049): word-edit-dialog, dialog-{previous,current,next}-preview-column,
+    dialog-gt-input, dialog-tag-chips-slot were absent or misnamed.
+
+    Opens the word-edit dialog via edit-word-button-0-0, then asserts all
+    §2.11 testids are present in the DOM.
+    """
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
+    page.goto(url, timeout=15_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+
+    page.click('[data-testid="text-tab-matches"]')
+    page.wait_for_selector('[data-testid="edit-word-button-0-0"]', timeout=10_000)
+
+    page.click('[data-testid="edit-word-button-0-0"]')
+    page.wait_for_selector('[data-testid="word-edit-dialog"]', timeout=5_000)
+
+    missing = _all_stub_or_present(page, _WORD_EDIT_DIALOG_TESTIDS)
+    assert not missing, (
+        f"Word-edit dialog testids missing after opening dialog (driver-contract §2.11, #454): {missing}"
+    )
