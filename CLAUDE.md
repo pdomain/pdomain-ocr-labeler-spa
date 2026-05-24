@@ -22,6 +22,13 @@ milestone-by-milestone implementation (M0…M9). Architecture: `docs/architectur
 | `make run` | builds SPA if missing, then `pd-ocr-labeler-ui` (production-style) |
 | `make ci AI=1` | setup + test + frontend-test + build |
 | `make docker-build` | builds the production Docker image |
+| `make local-setup` | clone any missing sibling pd-* repos |
+| `make local-dev` | switch to local-dev mode (pd-book-tools editable + pd-ui linked + marker) |
+| `make local-check` | print local-dev mode + per-sibling resolution |
+| `make local-upgrade-deps` | upgrade deps then restore editables (local-mode only) |
+| `make local-run` | run the SPA against local-dev workspace (local-mode only) |
+
+See [workspace `docs/process/local-dev.md`](../docs/process/local-dev.md) for the canonical local-dev pattern (spec #362).
 
 `AI=1` captures verbose output to `.ci-ai.log`; stdout shows `✅` on pass or
 filtered failure sections on error. Remove `AI=1` only if you need full verbose
