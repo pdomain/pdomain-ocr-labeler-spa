@@ -891,7 +891,7 @@ def load_page(
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
-@router.post("/{page_index}/reload-ocr", response_model=ReloadOCRResponse)
+@router.post("/{page_index}/reload-ocr", status_code=202, response_model=ReloadOCRResponse)
 def reload_ocr(
     project_id: str,
     page_index: int,
@@ -1045,7 +1045,7 @@ def rematch_gt(
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
-@router.post("/{page_index}/rotate", response_model=RotatePageResponse)
+@router.post("/{page_index}/rotate", status_code=202, response_model=RotatePageResponse)
 def rotate_page(
     project_id: str,
     page_index: int,
