@@ -13,9 +13,9 @@
 # ──────────────────────────── Stage 1: build SPA ────────────────────────────
 # Node 24 matches `mise.toml` so dev and image builds share a toolchain.
 # pnpm is used exclusively (tracks `frontend/pnpm-lock.yaml`).
-FROM node:24-bookworm-slim AS spa
+FROM node:24.15.0-bookworm-slim AS spa
 # Install pnpm via corepack (ships with Node 24).
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@11.3.0 --activate
 WORKDIR /work
 # Copy lockfile + manifest first so pnpm store layer is cached.
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/.npmrc* ./
@@ -26,7 +26,7 @@ RUN pnpm run build
 
 # ──────────────────────────── Stage 2: build wheel ──────────────────────────
 # Python 3.13 matches `mise.toml` and `pyproject.toml requires-python`.
-FROM python:3.13-slim-bookworm AS wheel
+FROM python:3.13.13-slim-bookworm AS wheel
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -42,7 +42,7 @@ RUN apt-get update \
 
 # Pull `uv` from Astral's official image — `python:3.13-slim` ships
 # without curl/wget, so the install.sh path doesn't work here.
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.11.16 /uv /usr/local/bin/uv
 
 WORKDIR /build
 
@@ -83,7 +83,7 @@ RUN uv export --frozen --no-emit-project --no-dev --no-hashes \
     -o /dist/requirements.txt
 
 # ──────────────────────────── Stage 3: runtime ──────────────────────────────
-FROM python:3.13-slim-bookworm AS runtime
+FROM python:3.13.13-slim-bookworm AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
