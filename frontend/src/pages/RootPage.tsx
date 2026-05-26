@@ -150,10 +150,11 @@ function ProjectCard({ project }: { project: ProjectKey }) {
 
   const openMutation = useMutation({
     mutationFn: () => postLoadProject(String(project.project_root)),
-    onSettled: () => {
-      // Navigate regardless of load success — project page handles missing state.
+    onSuccess: () => {
+      // Navigate only when the load succeeded — do not navigate on error.
       void navigate(`/projects/${encodeURIComponent(project.project_id)}/pages/pageno/1`);
     },
+    // onError: mutation.isError state is sufficient — no extra action needed here.
   });
 
   const handleOpen = () => {
@@ -165,10 +166,15 @@ function ProjectCard({ project }: { project: ProjectKey }) {
   const pageCount: number | null = null; // not yet in ProjectKey API
   const progressPercent: number | null = null; // not yet in ProjectKey API
 
+  const isLoadError = openMutation.isError;
+
   return (
     <div
       data-testid={`project-card-${project.project_id}`}
-      className="flex flex-col rounded-lg bg-bg-surface border border-border-1 overflow-hidden hover:border-border-2 transition-colors"
+      className={[
+        "flex flex-col rounded-lg bg-bg-surface border overflow-hidden transition-colors",
+        isLoadError ? "border-red-500" : "border-border-1 hover:border-border-2",
+      ].join(" ")}
     >
       {/* Thumbnail area — placeholder until API exposes first-page image */}
       <div
@@ -215,14 +221,26 @@ function ProjectCard({ project }: { project: ProjectKey }) {
           {project.project_root}
         </div>
 
+        {/* Error indicator — shown when POST /api/projects/load fails (F-043) */}
+        {isLoadError && (
+          <div
+            data-testid={`project-card-error-${project.project_id}`}
+            role="alert"
+            className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1"
+          >
+            Failed to open project. Please try again.
+          </div>
+        )}
+
         {/* Action row */}
         <div className="flex items-center gap-1 mt-1">
           <button
             type="button"
             data-testid={`project-card-open-${project.project_id}`}
             onClick={handleOpen}
-            disabled={openMutation.isPending}
-            className="flex-1 text-[11px] font-medium px-2 py-1.5 rounded bg-accent text-accent-ink hover:opacity-90 transition-opacity disabled:opacity-60"
+            disabled={openMutation.isPending || isLoadError}
+            aria-disabled={isLoadError ? "true" : undefined}
+            className="flex-1 text-[11px] font-medium px-2 py-1.5 rounded bg-accent text-accent-ink hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {openMutation.isPending ? "Loading…" : "Open"}
           </button>
