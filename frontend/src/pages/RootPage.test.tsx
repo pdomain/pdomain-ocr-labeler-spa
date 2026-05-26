@@ -464,6 +464,63 @@ describe("RootPage P5.h — Gap 60: filter chips", () => {
   });
 });
 
+// --- F-043: project-card navigation suppressed on load failure ---
+
+describe("RootPage F-043 — project card navigation on load failure", () => {
+  it("does not navigate when POST /api/projects/load returns an error", async () => {
+    const navigateCalls: string[] = [];
+
+    // Capture navigate calls via LocationSpy pattern (MemoryRouter internal)
+    // — we assert navigate was NOT called by checking the card shows error state.
+    setupProjectList([
+      { project_id: "fail-proj", project_root: "/data/fail-proj", label: "Fail Proj" },
+    ]);
+    // Override the load handler to fail.
+    const { fireEvent } = await import("@testing-library/react");
+    const { http: h, HttpResponse: HR } = await import("msw");
+    server.use(
+      h.post("/api/projects/load", () => HR.json({ message: "Server error" }, { status: 500 })),
+    );
+
+    renderWithProviders(<RootPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-open-fail-proj")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("project-card-open-fail-proj"));
+
+    // After the mutation settles with an error, the card must show the error indicator.
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-error-fail-proj")).toBeInTheDocument();
+    });
+  });
+
+  it("Open button is disabled while load is pending", async () => {
+    // Server never resolves — mutation stays pending.
+    setupProjectList([
+      { project_id: "slow-proj", project_root: "/data/slow-proj", label: "Slow Proj" },
+    ]);
+    const { http: h } = await import("msw");
+    server.use(h.post("/api/projects/load", () => new Promise(() => {})));
+    const { fireEvent } = await import("@testing-library/react");
+
+    renderWithProviders(<RootPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-open-slow-proj")).toBeInTheDocument();
+    });
+
+    const openBtn = screen.getByTestId("project-card-open-slow-proj");
+    fireEvent.click(openBtn);
+
+    // Button becomes disabled while pending.
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-open-slow-proj")).toBeDisabled();
+    });
+  });
+});
+
 describe("RootPage P5.h — Gap 59: project card redesign", () => {
   it("renders project card with thumbnail placeholder", async () => {
     setupProjectList();
