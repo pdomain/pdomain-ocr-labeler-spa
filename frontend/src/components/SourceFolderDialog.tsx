@@ -2,7 +2,7 @@
 // Issue #294 (spec 22 §10 — real source-folder picker).
 //
 // driver-contract testids (docs/architecture/13-driver-contract.md §2.2):
-//   source-folder-dialog              — dialog root
+//   source-folder-dialog              — dialog root (DialogContent)
 //   source-folder-current-path-label  — read-only display of the currently browsed path
 //   source-folder-path-input          — text input for typing a path directly
 //   source-folder-home-button         — resets current path to "~"
@@ -14,9 +14,20 @@
 //
 // Directory listing: GET /api/fs/ls?path=<currentPath>
 //   Each entry row testid: data-testid="fs-ls-entry-{name}"
+//
+// Chrome backed by pd-ui's Radix Dialog suite. Radix provides a native focus
+// trap and Escape key handling — the manual Escape onKeyDown branch is removed.
 
 import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@concavetrillion/pd-ui/primitives";
 
 interface FsEntry {
   name: string;
@@ -50,7 +61,7 @@ function parentPath(p: string): string {
  *
  * On apply, POSTs { path: inputPath } to POST /api/projects/source-root.
  * Directory listing is fetched from GET /api/fs/ls?path=<currentPath>.
- * Renders nothing when `open` is false.
+ * Backed by pd-ui's Radix Dialog suite (native focus trap + Escape handling).
  */
 export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
   const queryClient = useQueryClient();
@@ -90,8 +101,6 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
         setListLoading(false);
       });
   }, [currentPath, open]);
-
-  if (!open) return null;
 
   // --- navigation handlers (client-side only) ----------------------------------
 
@@ -160,12 +169,10 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
     }
   }
 
-  function handleCancel() {
-    if (loading) return;
+  function resetState() {
     setCurrentPath("~");
     setInputPath("~");
     setError(null);
-    onClose();
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -177,31 +184,33 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
       // Enter in path-input triggers open-typed (spec §2.2 hotkey note).
       e.preventDefault();
       handleOpenTyped();
-    } else if (e.key === "Escape") {
-      handleCancel();
     }
+    // NOTE: Escape bubbles to Radix Dialog's native handler → onOpenChange(false) → onClose.
+    // We do NOT stop propagation here so Radix can close the dialog.
   }
 
   return (
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- dialog backdrop click-to-dismiss; Esc handled via onKeyDown in this component
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Set source folder"
-      data-testid="source-folder-dialog"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !loading) handleCancel();
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen && !loading) {
+          resetState();
+          onClose();
+        }
       }}
     >
-      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- stopPropagation on inner panel prevents backdrop dismissal; not interactive itself */}
-      <div
-        className="bg-bg-surface rounded-lg border border-border-2 max-w-md w-full mx-4 p-5 space-y-4"
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
+      {/* DialogContent auto-composes DialogPortal + DialogOverlay (pd-ui convention).
+          The overlay uses class "dialog-overlay" — primitives.css defines the backdrop.
+          Tailwind overrides supply the labeler's visual chrome. */}
+      <DialogContent
+        data-testid="source-folder-dialog"
+        className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 max-w-md w-full mx-4 bg-bg-surface rounded-lg border border-border-2 p-5 space-y-4 shadow-lg focus:outline-none"
       >
-        <h2 className="text-base font-semibold text-ink-1">Set Source Folder</h2>
+        <DialogHeader>
+          <DialogTitle className="text-base font-semibold text-ink-1">
+            Set Source Folder
+          </DialogTitle>
+        </DialogHeader>
 
         {/* Current path display */}
         <div className="space-y-1">
@@ -329,17 +338,17 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
           </div>
         )}
 
-        {/* Cancel / Apply */}
-        <div className="flex justify-end gap-2 pt-1">
-          <button
-            type="button"
-            data-testid="source-folder-cancel-button"
-            onClick={handleCancel}
-            disabled={loading}
-            className="px-3 py-1.5 text-sm rounded border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
-          >
-            Cancel
-          </button>
+        <DialogFooter className="flex justify-end gap-2 pt-1">
+          <DialogClose asChild>
+            <button
+              type="button"
+              data-testid="source-folder-cancel-button"
+              disabled={loading}
+              className="px-3 py-1.5 text-sm rounded border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </DialogClose>
           <button
             type="button"
             data-testid="source-folder-apply-button"
@@ -349,8 +358,8 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
           >
             {loading ? "Setting…" : "Apply"}
           </button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

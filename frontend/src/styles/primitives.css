@@ -544,6 +544,18 @@
   color: var(--ink-1);
 }
 
+/* ─── dialog overlay (backdrop) ──────────────────────────────── */
+/* pd-ui's DialogContent / AlertDialogContent render a <*Overlay> with
+ * class "dialog-overlay". Without a local definition the backdrop is
+ * invisible. This rule restores the visual scrim for all three Radix-
+ * backed dialogs (ConfirmDialog, HotkeyHelpModal, SourceFolderDialog). */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.4);
+  z-index: 49;
+}
+
 /* ─── scrollbars ──────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 10px;
