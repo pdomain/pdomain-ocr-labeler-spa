@@ -35,6 +35,21 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // pd-ui 0.2.1 was published with a dev-mode JSX transform: its dist files
+      // import `jsxDEV` from "react/jsx-dev-runtime". In production, React's
+      // jsx-dev-runtime exports `jsxDEV = undefined`, so any pd-ui component call
+      // throws "TypeError: jsxDEV is not a function", preventing React from
+      // mounting into #root.
+      //
+      // The fix: alias "react/jsx-dev-runtime" to a local shim that re-exports
+      // `jsxDEV` as the production `jsx` function. Aliasing directly to
+      // "react/jsx-runtime" would not work because jsx-runtime doesn't export
+      // `jsxDEV`, leaving `f.jsxDEV` as undefined in inlined call sites.
+      //
+      // Remove this alias (and the shim file) once pd-ui is rebuilt with a
+      // production JSX transform.
+      // Tracked: pd-ui issue (cross-repo recommendation filed 2026-05-26).
+      "react/jsx-dev-runtime": path.resolve(__dirname, "./src/jsx-dev-runtime-shim.ts"),
     },
     // Force single instances of all React-ecosystem packages when pnpm symlink
     // scoping creates multiple paths for the same package.

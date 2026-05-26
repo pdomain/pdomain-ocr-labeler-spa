@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "project": ["src/**/*.{ts,tsx}"],
-  "ignore": ["src/api/types.ts"],
+  "ignore": ["src/api/types.ts", "src/jsx-dev-runtime-shim.ts"],
   "ignoreDependencies": ["react-virtuoso", "lucide-react"]
 }
