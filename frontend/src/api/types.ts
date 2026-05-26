@@ -4257,6 +4257,7 @@ export interface operations {
     get_page_image_api_projects__project_id__pages__page_index__image_get: {
         parameters: {
             query?: {
+                /** @description Target width in pixels (1-8000).  Height is scaled proportionally.  Values outside this range are rejected to prevent memory-exhaustion DoS via enormous resize requests (F-004, #409).  8000 px exceeds the widest archival book scans in practice. */
                 w?: number | null;
             };
             header?: never;

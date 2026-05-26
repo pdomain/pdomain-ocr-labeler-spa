@@ -1,4 +1,4 @@
-// useDialogHotkeys.ts — word-edit dialog scope hotkeys (#237, #212)
+// useDialogHotkeys.ts — word-edit dialog scope hotkeys (#237, #212, #444)
 // Spec: docs/specs/2026-05-12-hotkeys-a11y-design.md §Word edit dialog
 //      docs/architecture/07-word-edit-dialog.md §4.6
 //
@@ -12,6 +12,10 @@
 //   Shift+ArrowUp/Down     — nudge top edge (expand / shrink)
 //   Ctrl+ArrowLeft/Right   — nudge right edge (shrink / expand)
 //   Ctrl+ArrowUp/Down      — nudge bottom edge (shrink / expand)
+//
+// All bindings use ignoreDialogGate: true so they remain active while
+// the WordEditDialog itself is open (issue #444 — the dialog gate in
+// useHotkey would otherwise block them since wordEdit.open is true).
 
 import { useHotkey } from "./useHotkey";
 
@@ -60,49 +64,49 @@ export function useDialogHotkeys({
     () => {
       onPrevWord();
     },
-    { enabled },
+    { enabled, ignoreDialogGate: true },
   );
   useHotkey(
     "arrowright",
     () => {
       onNextWord();
     },
-    { enabled },
+    { enabled, ignoreDialogGate: true },
   );
   useHotkey(
     "shift+enter",
     () => {
       onApplyClose();
     },
-    { enabled },
+    { enabled, ignoreDialogGate: true },
   );
   useHotkey(
     "escape",
     () => {
       onClose();
     },
-    { enabled },
+    { enabled, ignoreDialogGate: true },
   );
   useHotkey(
     "r",
     () => {
       onRefine();
     },
-    { enabled },
+    { enabled, ignoreDialogGate: true },
   );
   useHotkey(
     "shift+r",
     () => {
       onExpandRefine();
     },
-    { enabled },
+    { enabled, ignoreDialogGate: true },
   );
   useHotkey(
     "delete",
     () => {
       onDelete();
     },
-    { enabled },
+    { enabled, ignoreDialogGate: true },
   );
 
   // Nudge bindings — spec §4.6:
@@ -110,12 +114,12 @@ export function useDialogHotkeys({
   //   Shift+↑ / Shift+↓  — nudge top edge  (expand / shrink)
   //   Ctrl+← / Ctrl+→    — nudge right edge (shrink / expand)
   //   Ctrl+↑ / Ctrl+↓    — nudge bottom edge (shrink / expand)
-  useHotkey("shift+arrowleft", () => onNudge?.("left", -1), { enabled });
-  useHotkey("shift+arrowright", () => onNudge?.("left", 1), { enabled });
-  useHotkey("shift+arrowup", () => onNudge?.("top", 1), { enabled });
-  useHotkey("shift+arrowdown", () => onNudge?.("top", -1), { enabled });
-  useHotkey("ctrl+arrowleft", () => onNudge?.("right", -1), { enabled });
-  useHotkey("ctrl+arrowright", () => onNudge?.("right", 1), { enabled });
-  useHotkey("ctrl+arrowup", () => onNudge?.("bottom", -1), { enabled });
-  useHotkey("ctrl+arrowdown", () => onNudge?.("bottom", 1), { enabled });
+  useHotkey("shift+arrowleft", () => onNudge?.("left", -1), { enabled, ignoreDialogGate: true });
+  useHotkey("shift+arrowright", () => onNudge?.("left", 1), { enabled, ignoreDialogGate: true });
+  useHotkey("shift+arrowup", () => onNudge?.("top", 1), { enabled, ignoreDialogGate: true });
+  useHotkey("shift+arrowdown", () => onNudge?.("top", -1), { enabled, ignoreDialogGate: true });
+  useHotkey("ctrl+arrowleft", () => onNudge?.("right", -1), { enabled, ignoreDialogGate: true });
+  useHotkey("ctrl+arrowright", () => onNudge?.("right", 1), { enabled, ignoreDialogGate: true });
+  useHotkey("ctrl+arrowup", () => onNudge?.("bottom", -1), { enabled, ignoreDialogGate: true });
+  useHotkey("ctrl+arrowdown", () => onNudge?.("bottom", 1), { enabled, ignoreDialogGate: true });
 }
