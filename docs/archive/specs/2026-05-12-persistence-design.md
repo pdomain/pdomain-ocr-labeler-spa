@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: Persistence
+# pdomain-ocr-labeler-spa: Persistence
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#22
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#22
 
 ## TL;DR
 

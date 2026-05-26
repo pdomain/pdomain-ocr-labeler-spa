@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: Toolbar Action Grid
+# pdomain-ocr-labeler-spa: Toolbar Action Grid
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#16
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#16
 
 ## TL;DR
 
@@ -24,7 +24,7 @@ the Matches / GT / OCR tab switch.
 
 - **Disabled-state is pure.** `useToolbarButtonStates(selection)` takes the current
   `Selection` and returns a `ButtonStates` record. No side effects, fully testable.
-- **`pd-book-tools` owns label vocabularies.** `ALLOWED_TEXT_STYLE_LABELS` and
+- **`pdomain-book-tools` owns label vocabularies.** `ALLOWED_TEXT_STYLE_LABELS` and
   `ALLOWED_WORD_COMPONENT_LABELS` are imported from `pd_book_tools`; not hardcoded.
 - **`data-testid="toolbar-{scope}-{action}"`** on every cell (even absent ones, with
   `data-testid-stub="true"` to allow driver assertions without crashes).
@@ -92,7 +92,7 @@ things depending on how many cells are present. Stubs chosen.
 
 - Adding a new action column requires updating the grid layout, the `ButtonStates` type,
   `useToolbarButtonStates`, and the driver contract testid table.
-- The Apply Style row depends on `pd-book-tools` label lists; a label rename there
+- The Apply Style row depends on `pdomain-book-tools` label lists; a label rename there
   requires a frontend rebuild and potentially a data migration for saved labels.
 
 ## Open questions

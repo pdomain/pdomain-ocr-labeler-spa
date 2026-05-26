@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: Milestones Roadmap
+# pdomain-ocr-labeler-spa: Milestones Roadmap
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#36
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#36
 
 ## TL;DR
 

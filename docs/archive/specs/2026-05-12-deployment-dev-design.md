@@ -1,21 +1,21 @@
-# pd-ocr-labeler-spa: Deployment + Developer Workflow
+# pdomain-ocr-labeler-spa: Deployment + Developer Workflow
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#34
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#34
 
 ## TL;DR
 
 Single-wheel install via `install.sh` + `uv tool install`. Console scripts: `pd-ocr-labeler-ui`,
-`pd-ocr-labeler-spa-export`, `pd-ocr-labeler-spa-prefetch`. Dev loop: `make setup` then two
+`pdomain-ocr-labeler-spa-export`, `pdomain-ocr-labeler-spa-prefetch`. Dev loop: `make setup` then two
 terminals (uvicorn + vite). CI: lint → test-backend → test-frontend → test-e2e → build-wheel
 → openapi-drift. `Makefile` has `upgrade-deps` (canonical) and `upgrade-deps-local` (dev-local
-aware: refuses-with-message when editable `pd-book-tools` detected). `hatch-vcs` version from
+aware: refuses-with-message when editable `pdomain-book-tools` detected). `hatch-vcs` version from
 git tags. Docker multi-stage: spa builder → wheel builder → slim runtime.
 
 ## Context
 
-The deployment pattern mirrors `pd-prep-for-pgdp` throughout: same Makefile structure, same
+The deployment pattern mirrors `pdomain-prep-for-pgdp` throughout: same Makefile structure, same
 `build_app(settings)` test seam, same SPA-presence build hook, same openapi-drift CI gate.
 The `pd-ocr-labeler-ui` console script name is preserved from the legacy so end users swap
 binaries without learning a new command. Node is provided via `mise.toml` (pinned at 24);
@@ -27,7 +27,7 @@ binaries without learning a new command. Node is provided via `mise.toml` (pinne
 - **`make frontend-build` before `make build`.** The SPA build hook (`build_hooks/spa_check.py`)
   raises at wheel-build time if `static/index.html` is absent.
 - **`upgrade-deps` must refuse in a dev-local venv.** Three detection probes: editable
-  `pd-book-tools` (`uv pip show` check), `.venv/.pd-dev-local` marker, `PD_DEV_LOCAL=1` env.
+  `pdomain-book-tools` (`uv pip show` check), `.venv/.pd-dev-local` marker, `PD_DEV_LOCAL=1` env.
   Refusing silently would be worse than blocking.
 - **`openapi-drift` CI gate is required.** Closes the pgdp-prep gap where `types.ts` silently
   diverged from the backend schema.
@@ -42,8 +42,8 @@ binaries without learning a new command. Node is provided via `mise.toml` (pinne
 
 `pyproject.toml [project.scripts]`:
 `pd-ocr-labeler-ui = "pd_ocr_labeler_spa.__main__:main"`,
-`pd-ocr-labeler-spa-export = "pd_ocr_labeler_spa.operations.export.cli:main"`,
-`pd-ocr-labeler-spa-prefetch = "pd_ocr_labeler_spa.prefetch:main"`.
+`pdomain-ocr-labeler-spa-export = "pd_ocr_labeler_spa.operations.export.cli:main"`,
+`pdomain-ocr-labeler-spa-prefetch = "pd_ocr_labeler_spa.prefetch:main"`.
 
 ### Boot flags
 
@@ -60,7 +60,7 @@ wire-shape change; runs `openapi-typescript` to regenerate `frontend/src/api/typ
 
 ### upgrade-deps guard
 
-`make upgrade-deps`: probes in order — (1) `uv pip show pd-book-tools | grep "Editable
+`make upgrade-deps`: probes in order — (1) `uv pip show pdomain-book-tools | grep "Editable
 project location"`, (2) `.venv/.pd-dev-local` marker, (3) `PD_DEV_LOCAL=1`. On any match:
 print refusal message naming the probe, exit non-zero without touching the venv.
 
@@ -103,7 +103,7 @@ Envelope/project schema versions are independent; see `specs/01-data-models.md �
 - `pd-ocr-labeler-ui --no-browser --port 8080` serves 200 at `/healthz` and SPA at `/`.
 - `make build` produces a wheel; `python -m zipfile -l <whl>` shows `static/index.html`.
 - `upgrade-deps` refuses-with-message in a dev-local venv; succeeds in canonical venv.
-- `upgrade-deps-local` leaves venv with editable `pd-book-tools` intact + marker present.
+- `upgrade-deps-local` leaves venv with editable `pdomain-book-tools` intact + marker present.
 - `openapi-drift` CI job fails when `types.ts` is out of sync with backend schema.
 - Pre-commit hooks pass clean on the full repo.
 
@@ -141,5 +141,5 @@ None.
 
 - `specs/15-deployment-dev.md` — legacy feature doc (full Makefile targets, Dockerfile, CI YAML)
 - `specs/14-testing.md §7` — CI gate details
-- `pd-prep-for-pgdp/` — structural reference (Makefile, install.sh, Dockerfile, build_hooks)
+- `pdomain-prep-for-pgdp/` — structural reference (Makefile, install.sh, Dockerfile, build_hooks)
 - `build_hooks/spa_check.py` — SPA presence build hook

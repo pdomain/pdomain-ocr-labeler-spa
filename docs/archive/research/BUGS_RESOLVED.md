@@ -89,7 +89,7 @@ Active findings live in [`../BUGS_FOUND.md`](../BUGS_FOUND.md).
   it) `allow_origins=["*"]` and `allow_credentials=True` are mutually
   exclusive — modern browsers reject the combo. pgdp-prep, the
   declared model, sets only `allow_origins`/`allow_methods`/`allow_headers`
-  (see `pd-prep-for-pgdp/src/pd_prep_for_pgdp/bootstrap.py:216-219`).
+  (see `pdomain-prep-for-pgdp/src/pd_prep_for_pgdp/bootstrap.py:216-219`).
   Spec `specs/02-backend.md:557` lists only the three wildcards — no
   `allow_credentials`.
 - **Why it matters:** Cookie/credentialed cross-origin requests will
@@ -235,15 +235,15 @@ Active findings live in [`../BUGS_FOUND.md`](../BUGS_FOUND.md).
 - **Status:** ✅ **Fixed in iter 7 (2026-05-06)** — `git tag -d v0.0`
   + `git tag v0.0.0 2f01b17`. Same target commit, so hatch-vcs
   derivation is stable for that point in history. After
-  `uv sync --reinstall-package pd-ocr-labeler-spa` the wheel filename
+  `uv sync --reinstall-package pdomain-ocr-labeler-spa` the wheel filename
   resolves to `pd_ocr_labeler_spa-0.0.1.dev6+g6b6835b13.d20260506`
   (verified via `uv build --wheel`). No push performed; pure local
   retag. LOOP_STATE iter-7 row records the sha.
 - **Severity:** nit
 - **Where:** repo `git tag v0.0` (commit `2f01b17`); confirmed by
   `uv run pd-ocr-labeler-ui --version` → `0.0`.
-- **Issue:** Peer pd-* repos start at `v0.1` (`pd-prep-for-pgdp`)
-  or use full SemVer `v0.10.0` (`pd-book-tools`). `0.0` parses fine
+- **Issue:** Peer pd-* repos start at `v0.1` (`pdomain-prep-for-pgdp`)
+  or use full SemVer `v0.10.0` (`pdomain-book-tools`). `0.0` parses fine
   via `packaging.version.Version("0.0")` and hatch-vcs accepts it,
   but it's sub-canonical (no patch component) and could break
   consumers that grep on a SemVer regex. README/docs do not
@@ -285,7 +285,7 @@ Active findings live in [`../BUGS_FOUND.md`](../BUGS_FOUND.md).
 - Pre-commit YAML matches pgdp-prep hook list verbatim
   (trailing-whitespace, end-of-file-fixer, check-yaml, check-json,
   ruff-check ×2, ruff-format, pre-commit-update). All revs pinned.
-- pyproject.toml's `pd-book-tools` git pin (`v0.9.0`) matches
+- pyproject.toml's `pdomain-book-tools` git pin (`v0.9.0`) matches
   pgdp-prep's pin — confirmed cross-repo dep alignment.
 - OPEN_QUESTIONS Q-A1..Q-A4 still open and unaffected by shipped
   code (none of the rotation / normalization / 301 paths exist
@@ -338,7 +338,7 @@ iter-5). Findings below are quibbles — no blockers, no high.
   `test_pre_commit_config.py::test_default_install_hook_types_includes_post_commit`,
   `test_pre_commit_config.py::test_local_refresh_version_post_commit_hook_present`,
   and `test_version.py` (full module: pins both the runtime invariant
-  `__version__ == importlib.metadata.version("pd-ocr-labeler-spa")` and
+  `__version__ == importlib.metadata.version("pdomain-ocr-labeler-spa")` and
   the static AST invariant that `__init__.py` only ever assigns
   `__version__` from a `version()` call or a literal inside an
   `except PackageNotFoundError:` block — preventing any future drift
@@ -585,8 +585,8 @@ auto-mounted `/openapi.json` + `/docs` + `/redoc`).
   --no-deps …*.whl` in the runtime slice (slicing from the third FROM
   so the wheel-stage `uv export` can't satisfy a runtime assertion).
 - **Severity:** low
-- **Where:** `Dockerfile:48-67` (wheel stage) + `Dockerfile:88` (runtime `pip install /tmp/*.whl`). Note `pyproject.toml` declares `pd-book-tools = { git = ..., tag = "v0.9.0" }` and the repo carries a `uv.lock` (545 KB).
-- **Issue:** The wheel stage runs `uv build --wheel` which produces a wheel with the runtime dependency *requirements* baked in (matching `pyproject.toml`), but the *resolution* is deferred to `pip install /tmp/*.whl` in the runtime stage. `pip install` doesn't read `uv.lock` — it resolves freshly against PyPI + the git source. The `uv.lock` in the repo is therefore decorative for the docker path; reproducibility depends solely on the git tag pin (`v0.9.0` for pd-book-tools) and PyPI's behaviour for the rest.
+- **Where:** `Dockerfile:48-67` (wheel stage) + `Dockerfile:88` (runtime `pip install /tmp/*.whl`). Note `pyproject.toml` declares `pdomain-book-tools = { git = ..., tag = "v0.9.0" }` and the repo carries a `uv.lock` (545 KB).
+- **Issue:** The wheel stage runs `uv build --wheel` which produces a wheel with the runtime dependency *requirements* baked in (matching `pyproject.toml`), but the *resolution* is deferred to `pip install /tmp/*.whl` in the runtime stage. `pip install` doesn't read `uv.lock` — it resolves freshly against PyPI + the git source. The `uv.lock` in the repo is therefore decorative for the docker path; reproducibility depends solely on the git tag pin (`v0.9.0` for pdomain-book-tools) and PyPI's behaviour for the rest.
 - **Why it matters:** Lower severity than B-19 because the wheel does have a tagged git source for the only non-PyPI dep, and `>=` floors on FastAPI/uvicorn/etc. are wide enough that minor PyPI bumps shouldn't break the wheel. But the `uv.lock` file in the build context is a Chekhov's gun: future readers will assume the docker build is fully locked. It isn't.
 - **Suggested fix:** Either (a) accept the looser-but-tagged shape (current state) and add a comment in the Dockerfile explicitly disclaiming "runtime resolves PyPI freshly; pin upper bounds in pyproject.toml if a regression bites", OR (b) use `uv pip install --frozen` against `uv.lock` in the runtime stage instead of `pip install` against the wheel — but that changes the install model from "install a self-contained wheel" to "install dependencies from lock then the wheel", which is an architecture decision worth discussing with the user before flipping. (a) is the lower-effort honest path.
 ## B-21 — `Dockerfile` installs `git` + `ca-certificates` in both `wheel` and `runtime` stages
@@ -596,7 +596,7 @@ auto-mounted `/openapi.json` + `/docs` + `/redoc`).
   and `apt-get purge --autoremove -y git ca-certificates` — all in a
   single RUN so the final image layer's net contribution is the
   installed Python wheels and *not* the git binary. Wheel stage still
-  installs both packages (uv needs git to resolve the pd-book-tools
+  installs both packages (uv needs git to resolve the pdomain-book-tools
   git source during `uv export`), but the wheel stage isn't part of
   the final image. New regression test
   `test_runtime_stage_does_not_keep_git_installed`: if the runtime
@@ -606,7 +606,7 @@ auto-mounted `/openapi.json` + `/docs` + `/redoc`).
   a fatter image).
 - **Severity:** nit
 - **Where:** `Dockerfile:33-35` (wheel stage apt-get) + `Dockerfile:78-80` (runtime stage apt-get).
-- **Issue:** The wheel stage installs `git ca-certificates` to let `uv` fetch the `pd-book-tools` git source during `uv build`. The runtime stage installs the same packages because `pip install /tmp/*.whl` re-resolves and re-fetches the same git source. Each apt-get layer is ~10MB+ pre-cleanup; the runtime image keeps `git` installed (the cleanup only drops the apt cache), so the final image carries git for no runtime reason. Not a correctness bug; build-time/image-size waste.
+- **Issue:** The wheel stage installs `git ca-certificates` to let `uv` fetch the `pdomain-book-tools` git source during `uv build`. The runtime stage installs the same packages because `pip install /tmp/*.whl` re-resolves and re-fetches the same git source. Each apt-get layer is ~10MB+ pre-cleanup; the runtime image keeps `git` installed (the cleanup only drops the apt cache), so the final image carries git for no runtime reason. Not a correctness bug; build-time/image-size waste.
 - **Why it matters:** Cosmetic. The runtime image is larger than necessary because git stays installed after the install step.
 - **Suggested fix:** In the runtime stage, wrap the install step in a single RUN that installs git + ca-certificates, runs `pip install /tmp/*.whl && rm /tmp/*.whl`, then `apt-get purge --autoremove -y git ca-certificates && rm -rf /var/lib/apt/lists/*`. That keeps the install-time deps available without bloating the final layer. Cross-check with pgdp-prep's Dockerfile to keep the pattern consistent.
 ## B-22 — Iter-12 commit message claims "iter-10 review backlog now zero" but B-11's underlying class remains (see B-17)
@@ -705,7 +705,7 @@ iters 18+19 landed but their boxes still read `[ ]`).
 - **Where:** absence — `.pre-commit-config.yaml` (no `uv lock --check` hook), `Makefile` `ci` target line 186 (no `uv lock --check`), `tests/` (no test that asserts lock freshness).
 - **Issue:** Iter-17 (`e7fe5ef`) wired the Dockerfile to `uv export --frozen ...` which fails loudly if `uv.lock` is out of date relative to `pyproject.toml`. That's the right fail-mode — **but it only fires inside `docker build`**, which neither `make ci` nor `make test` runs. A contributor who adds a new direct dep to `pyproject.toml` without running `uv lock` would: (a) pass all 92 unit tests; (b) pass ruff; (c) commit; (d) pass the post-commit refresh-version hook because that calls `uv pip install -e .` (which ignores `uv.lock`); (e) only learn about the drift when a CI/release pipeline that actually runs `docker build` fires. There's no `make ci` step nor pre-commit hook that runs `uv lock --check` (or `uv sync --locked`, which is the modern equivalent).
 - **Why it matters:** Reproducibility is the whole point of the B-20 fix. Today the lockfile is decorative for everyone except docker-build. M1+ work that adds backend deps will routinely ship with a stale `uv.lock` and the contributor won't notice until the release pipeline lights up. Severity medium because (a) `uv.lock` is in the repo and reviewers can spot drift in PR diffs, (b) the in-image build catches it before publish, (c) M0 has no published release yet so impact is bounded — but the gap exists *now* and grows with M1.
-- **Suggested fix:** Add a `uv lock --check` (or `uv sync --locked --no-install-project`) step to either (a) a new pre-commit hook in `.pre-commit-config.yaml` `local` repo (mirrors how `pd-prep-for-pgdp` does this — worth checking peer parity), or (b) `make ci` after `make setup`. Option (a) is friendlier because it catches the drift at commit time rather than CI time. Either way, add a unit test that asserts the gate exists (text-grep for `uv lock --check` or `uv sync --locked` in either the Makefile `ci` recipe or the pre-commit-config hook list).
+- **Suggested fix:** Add a `uv lock --check` (or `uv sync --locked --no-install-project`) step to either (a) a new pre-commit hook in `.pre-commit-config.yaml` `local` repo (mirrors how `pdomain-prep-for-pgdp` does this — worth checking peer parity), or (b) `make ci` after `make setup`. Option (a) is friendlier because it catches the drift at commit time rather than CI time. Either way, add a unit test that asserts the gate exists (text-grep for `uv lock --check` or `uv sync --locked` in either the Makefile `ci` recipe or the pre-commit-config hook list).
 ## B-24 — `make docker-build/run/shell` fail with bare `command not found` when Docker isn't on PATH
 - **Status:** ✅ **Fixed in iter 22 (2026-05-06)** — added a `_docker`
   macro to the Makefile (parallels `_npm`) that runs `command -v
@@ -720,7 +720,7 @@ iters 18+19 landed but their boxes still read `[ ]`).
   `_docker` appears, so a regression that copies a recipe and
   forgets the macro fails cleanly. Verified via `make -n
   docker-build` — rendered recipe still contains
-  `pd-ocr-labeler-spa:dev` and `-p 8080:8080` so the existing
+  `pdomain-ocr-labeler-spa:dev` and `-p 8080:8080` so the existing
   three-way port-alignment + image-tag invariants still hold.
 - **Severity:** low
 - **Where:** `Makefile:209-216` (the three docker-* recipes) — neither has a guard like the `_npm` macro's "no npm available; here are your options" fallback.
@@ -773,14 +773,14 @@ iters 18+19 landed but their boxes still read `[ ]`).
   pins both halves: the new endpoint must appear, and the bare
   `/repos/X/tags` shape must NOT (the regex tolerates
   `/releases/tags/<tag>` if a future iter wants to fetch a specific
-  release by tag name). Cross-repo: peer `pd-prep-for-pgdp/install.sh`
+  release by tag name). Cross-repo: peer `pdomain-prep-for-pgdp/install.sh`
   *still* uses the `/tags` shape — that's a divergence we accept
   here rather than block on a cross-repo flip. The peer install.sh
   has its own scope/agent and the pattern can propagate when that
   agent picks up parity work.
 - **Severity:** nit
 - **Where:** `install.sh:28-29` (`curl … "https://api.github.com/repos/${REPO}/tags" … | grep '"name"' | head -1`).
-- **Issue:** The GitHub `/tags` endpoint returns refs ordered by **commit date of the tagged sha**, not by semver. Two relevant pre-1.0 quirks: (a) re-tagging an existing tag (B-09's history has exactly this — `v0.0` was deleted and `v0.0.0` recreated at the iter-1 sha) means the "latest" by tag date may be older than the actual newest commit. (b) Hot-fix back-port flows that tag a release branch can leave `/tags` ordered counter-intuitively. The peer `pd-prep-for-pgdp/install.sh:44` uses the *same* shape, so this is parity — but parity to a slightly fragile pattern. The `releases/latest` endpoint returns the most recently *published* (not most recently *tagged*) release and is the GitHub-blessed shape for installers.
+- **Issue:** The GitHub `/tags` endpoint returns refs ordered by **commit date of the tagged sha**, not by semver. Two relevant pre-1.0 quirks: (a) re-tagging an existing tag (B-09's history has exactly this — `v0.0` was deleted and `v0.0.0` recreated at the iter-1 sha) means the "latest" by tag date may be older than the actual newest commit. (b) Hot-fix back-port flows that tag a release branch can leave `/tags` ordered counter-intuitively. The peer `pdomain-prep-for-pgdp/install.sh:44` uses the *same* shape, so this is parity — but parity to a slightly fragile pattern. The `releases/latest` endpoint returns the most recently *published* (not most recently *tagged*) release and is the GitHub-blessed shape for installers.
 - **Why it matters:** Today the repo has exactly one tag (`v0.0.0`) and no published Releases, so the script fails with "no .whl asset attached" regardless of which endpoint it hits. The bug is dormant. It activates the moment a hot-fix flow ships v0.1.1 from a release branch while v0.2.0 already exists on main — `/tags` will return v0.1.1 (newest commit-date) over v0.2.0 (older tag date but higher semver).
 - **Suggested fix:** Either (a) switch to `https://api.github.com/repos/${REPO}/releases/latest` which returns the most recently published release and embeds the wheel URLs directly (saves the second curl call too), or (b) accept parity with pgdp-prep and leave this. (a) is cleaner; (b) preserves the cross-repo sameness the iter-19 commit message values. If keeping (b), add a regression test that the selected tag is the *latest semver* not just the *first listed*. Cross-repo discussion needed before flipping pgdp-prep.
 
@@ -789,7 +789,7 @@ iters 18+19 landed but their boxes still read `[ ]`).
 - **`pre-commit` framework supports `post-commit`, `post-rewrite`, `post-checkout` stages.** Verified by inspecting `pre_commit/clientlib.py` in the installed venv — all three appear in the supported-stages list. `uv run pre-commit validate-config` accepts the YAML.
 - **`scripts/refresh_version_git_hook.sh` is executable + has shebang + fail-soft semantics.** `ls -l` shows mode `0755`, line 1 is `#!/usr/bin/env bash`, lines 42-46 fail-soft when `make` is missing (`echo … >&2 ; exit 0`). Won't block a commit/rebase/checkout if the toolchain isn't there.
 - **Refresh hook uses `set -u` not `set -euo pipefail`.** Deliberate — the script must not propagate failures (a `make refresh-version` error during `git rebase` would be very disruptive). Fail-soft is the correct mode for post-* git hooks.
-- **B-20 two-pass `pip install` pattern doesn't conflict with `--no-deps`.** `uv export --no-emit-project` excludes the project itself from `requirements.txt` (verified by running it: `pd-ocr-labeler-spa==…` does not appear, only `# via pd-ocr-labeler-spa` comment lines which pip ignores). Pass 1 installs all transitive deps at locked versions; pass 2 adds the project wheel with `--no-deps`. No conflict.
+- **B-20 two-pass `pip install` pattern doesn't conflict with `--no-deps`.** `uv export --no-emit-project` excludes the project itself from `requirements.txt` (verified by running it: `pdomain-ocr-labeler-spa==…` does not appear, only `# via pdomain-ocr-labeler-spa` comment lines which pip ignores). Pass 1 installs all transitive deps at locked versions; pass 2 adds the project wheel with `--no-deps`. No conflict.
 - **B-21 `apt-get purge` actually shrinks the layer.** Lines 106-113 are a single `RUN`. The layer's net contribution is the post-purge state. Final image carries no git binary — confirmed by reading the recipe (would also be confirmed by `docker history` if docker were available).
 - **`/bin/bash` exists in `python:3.13-slim-bookworm`.** Debian slim variants keep bash by default; only Alpine and busybox-based slim images drop it. The `docker-shell` `--entrypoint /bin/bash` invocation is fine.
 - **`install.sh` uses `set -euo pipefail` correctly with curl pipelines.** Pipelines that may fail under pipefail (`curl … | grep | head | sed`) all end with `|| true` to swallow non-zero exits, then check the resulting variable for emptiness. No `read` prompts (would need stdin on a piped install). uv-not-installed branch auto-installs uv before continuing.
@@ -1533,7 +1533,7 @@ Findings B-42 through B-49 (8 items: 0 blocker, 0 high, 3 medium, 3 low, 2 nit).
   - request_start info log on entry (path, method, request_id).
   - request_end info log on exit (status, duration_ms).
   ```
-  The iter-34 commit message says "Verbatim ports from pd-prep-for-pgdp per spec §9" and ships the first two bullets — but **the third bullet (the audit log that explicitly "closes the pgdp-prep gap") is silently absent**. The middleware has no `log.info("request_start", ...)` / `log.info("request_end", ...)` calls. Iter-34's ROADMAP entry doesn't mention it as remaining work either; the gap is invisible.
+  The iter-34 commit message says "Verbatim ports from pdomain-prep-for-pgdp per spec §9" and ships the first two bullets — but **the third bullet (the audit log that explicitly "closes the pgdp-prep gap") is silently absent**. The middleware has no `log.info("request_start", ...)` / `log.info("request_end", ...)` calls. Iter-34's ROADMAP entry doesn't mention it as remaining work either; the gap is invisible.
 - **Why it matters:** This is the only piece of §9 the spec calls a *new feature beyond pgdp-prep parity*, so quietly skipping it on the "verbatim port" iter means the feature lands when, exactly? It's not in any remaining-M1-sub-tasks list. M1's acceptance test (`test_request_id_echoed`) doesn't catch it. Operational triage of a misbehaving job will be missing path/method/duration_ms breadcrumbs the spec promised.
 - **Suggested fix:** Either (1) add the audit-log lines now (`log.info("request_start", extra={"path": ..., "method": ..., "request_id": rid})` on entry, `log.info("request_end", extra={"status": response.status_code, "duration_ms": ...})` in the `finally`-or-after-call-next branch), or (2) explicitly file a follow-on task in the M1 sub-task list naming this gap and a target iter. Don't leave it implicit.
 - **Status:** Fixed in iter 36 via approach (1). `RequestIdMiddleware.dispatch` now emits `log.info("request_start", extra={"path", "method"})` on entry (after the contextvar is set, so `RequestIdFilter` tags it with `request_id`) and `log.info("request_end", extra={"path", "method", "status", "duration_ms"})` in the `finally` block (also inside the contextvar scope, BEFORE the token reset, so the tag still applies). `time.monotonic()` is used so wall-clock jumps cannot produce negative `duration_ms`; `status_code` defaults to 500 if `call_next` raises before assignment. Three new tests in `tests/unit/core/test_request_audit_log.py`: `test_request_start_emitted_with_path_method`, `test_request_end_emitted_with_status_duration` (asserts non-negative int `duration_ms`), `test_audit_log_carries_request_id` (uses `RequestIdFilter` on caplog to verify `rid` tag).
@@ -2019,7 +2019,7 @@ Iter 45 = next code-review checkpoint.
 - **Where:** `src/pd_ocr_labeler_spa/api/static_mounts.py:230-248`.
 - **Issue:** `FileResponse(os.fspath(index_file))` returns the SPA shell with default headers — Starlette's `FileResponse` sets `etag` based on file mtime + size (good for revalidation) but no explicit `Cache-Control`. Browsers default to heuristic caching for HTML — typically a fraction of the time-since-Last-Modified — so a developer who rebuilds the SPA and refreshes the browser may see the OLD index.html served from disk cache. Static assets under `/assets/<hash>.js` are content-addressed so they're safe under aggressive cache; index.html is NOT (filename is stable across builds; only contents change).
 - **Why it matters:** The dev loop is `make frontend-build` → reload tab. If the browser serves stale `index.html` from disk cache, the new bundle hashes in the new index aren't even fetched, and the developer sees "my changes didn't land" with no log evidence. Worse for users post-release: a tab kept open through an `pd-ocr-labeler-ui` upgrade may reload an old shell that points at hash-named assets which no longer exist on disk → 404 storm. The `image-cache` mount sets `Cache-Control: public, max-age=3600, immutable` correctly (because content-addressed); the SPA shell needs the *opposite*.
-- **Suggested fix:** Wrap the `FileResponse` for `index.html` with explicit `headers={"Cache-Control": "no-store"}` — match `pd-prep-for-pgdp`'s SPA fallback if it has one (parity check), else add the header unconditionally. Asset passthrough (`/assets/<hash>.js`) keeps default caching. Pin with `test_spa_index_html_no_store` (response to `/` has `Cache-Control` containing `no-store`) and `test_spa_asset_passthrough_default_caching` (response to `/assets/main.js` does NOT have `no-store`).
+- **Suggested fix:** Wrap the `FileResponse` for `index.html` with explicit `headers={"Cache-Control": "no-store"}` — match `pdomain-prep-for-pgdp`'s SPA fallback if it has one (parity check), else add the header unconditionally. Asset passthrough (`/assets/<hash>.js`) keeps default caching. Pin with `test_spa_index_html_no_store` (response to `/` has `Cache-Control` containing `no-store`) and `test_spa_asset_passthrough_default_caching` (response to `/assets/main.js` does NOT have `no-store`).
 
 ---
 

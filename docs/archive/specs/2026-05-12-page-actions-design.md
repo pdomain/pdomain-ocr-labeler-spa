@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: Page Actions Bar
+# pdomain-ocr-labeler-spa: Page Actions Bar
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#20
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#20
 
 ## TL;DR
 

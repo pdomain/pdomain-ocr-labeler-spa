@@ -1,15 +1,15 @@
-# pd-ocr-labeler-spa: Export Dialog + DocTR Export Pipeline
+# pdomain-ocr-labeler-spa: Export Dialog + DocTR Export Pipeline
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#24
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#24
 
 ## TL;DR
 
 Export dialog (`<ExportDialog />`) triggered from `<PageActions />`. Scope: current page or
 all validated pages. Filters: style (multi-checkbox), component (dropdown), output mode
 (classification / detection / recognition). POST returns 202+job; SSE progress shown inline.
-Headless CLI `pd-ocr-labeler-spa-export` reuses same `DocTRExportOperations` driver.
+Headless CLI `pdomain-ocr-labeler-spa-export` reuses same `DocTRExportOperations` driver.
 
 ## Context
 
@@ -84,7 +84,7 @@ to project_id.
 
 ### Headless CLI
 
-`pd-ocr-labeler-spa-export` console script at `src/.../operations/export/cli.py`. Reads
+`pdomain-ocr-labeler-spa-export` console script at `src/.../operations/export/cli.py`. Reads
 envelopes from disk via `parse_envelope`, applies same `DocTRExportOperations` driver. Flags
 mirror dialog options. No FastAPI boot required.
 

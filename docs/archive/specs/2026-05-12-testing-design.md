@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: Testing Strategy
+# pdomain-ocr-labeler-spa: Testing Strategy
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#32
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#32
 
 ## TL;DR
 
@@ -13,7 +13,7 @@ lint → test-backend → test-frontend → test-e2e → build-wheel → openapi
 
 ## Context
 
-The testing structure mirrors `pd-prep-for-pgdp` (same `conftest.py` seam, same
+The testing structure mirrors `pdomain-prep-for-pgdp` (same `conftest.py` seam, same
 uvicorn-in-thread E2E pattern). Legacy tests in `pd-ocr-labeler/tests/` are ported where
 applicable. Conformance tests ensure `UserPageEnvelope` v2.1 round-trips byte-equal against
 frozen legacy fixtures. Most tests use pre-OCR'd fixtures so DocTR doesn't need to run; real-
@@ -122,4 +122,4 @@ None.
 - `specs/14-testing.md` — legacy feature doc (full file tree, conftest shapes, CI YAML)
 - `specs/13-driver-contract.md` — driver conformance test (`test_driver_contract.py`)
 - `specs/16-milestones.md` — per-milestone acceptance test lists
-- `pd-prep-for-pgdp/tests/conftest.py:44-63` — pgdp-prep conftest seam reference
+- `pdomain-prep-for-pgdp/tests/conftest.py:44-63` — pgdp-prep conftest seam reference

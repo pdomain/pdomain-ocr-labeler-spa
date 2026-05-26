@@ -21,7 +21,7 @@ close time, then the entry moves to the archive.
 - **Found:** 2026-05-16
 - **Where:** `core/jobs/handlers/rotate.py` and `core/jobs/handlers/auto_rotate_all.py`
 - **Issue:** Both handlers do `await asyncio.sleep(0)` and emit `complete`. Steps 2–4
-  (rotate image via pd-book-tools, re-run OCR, update `PageRecord.rotation_degrees`) are
+  (rotate image via pdomain-book-tools, re-run OCR, update `PageRecord.rotation_degrees`) are
   not implemented. CLAUDE.md and `specs/16-milestones.md` previously listed M9.1 and M9.2
   as ✅ shipped — corrected 2026-05-16.
 - **Why it matters:** User clicks Rotate, gets a success toast, image is unchanged.

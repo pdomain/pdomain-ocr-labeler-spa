@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: SPA Architecture Overview
+# pdomain-ocr-labeler-spa: SPA Architecture Overview
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#4
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#4
 
 ## TL;DR
 
@@ -22,11 +22,11 @@ has three limitations that motivate a rewrite:
    without a browser.
 2. **Hard to test.** NiceGUI's server-rendered model makes unit and integration testing
    cumbersome. FastAPI + pytest + `TestClient` is well-understood and mirrors
-   `pd-prep-for-pgdp`.
+   `pdomain-prep-for-pgdp`.
 3. **No type safety across the stack.** OpenAPI → generated TypeScript client closes the
    server/client contract gap.
 
-`pd-prep-for-pgdp` is the reference implementation: FastAPI backend, React/Vite/TS frontend,
+`pdomain-prep-for-pgdp` is the reference implementation: FastAPI backend, React/Vite/TS frontend,
 single-wheel distribution via `hatchling` + `hatch-vcs`. This project mirrors that pattern
 exactly where it applies, and documents every deliberate divergence.
 
@@ -41,12 +41,12 @@ losing work (decision D-003).
   path that keeps the legacy labeler able to read the files.
 - **Local-mode only for M0–M9 (D-042).** Postgres, S3, managed OCR, and multi-user axes are
   deferred. Every adapter interface has a seam but only the local impl ships active.
-- **Single-wheel distribution.** End-users install with `uv tool install pd-ocr-labeler-spa`.
+- **Single-wheel distribution.** End-users install with `uv tool install pdomain-ocr-labeler-spa`.
   The SPA frontend must be built into the wheel (`src/pd_ocr_labeler_spa/static/`).
 - **Stable driver testid contract.** Every `data-testid` and URL shape consumed by
   `pd-ocr-labeler-driver` is listed in `specs/13-driver-contract.md` and covered by a
   conformance test. Breaking a testid is a breaking change.
-- **`pd-book-tools` as the only OCR/layout primitive.** The SPA never reaches into DocTR
+- **`pdomain-book-tools` as the only OCR/layout primitive.** The SPA never reaches into DocTR
   or OpenCV directly; it delegates to `pd_book_tools` APIs.
 - **No backwards-compat shims.** New repo; clean slate. Only the envelope schema is
   frozen by D-003.
@@ -153,7 +153,7 @@ logged the deferred decision; D-020 spike at M4 start will confirm or revise thi
   `IOCREngine` and wiring in `build_app`; no other files need to change.
 - The `data-testid` contract is a breaking-change boundary: renaming a testid requires a
   coordinated update to `pd-ocr-labeler-driver` and a version bump.
-- `pd-book-tools` is a hard dependency; any OCR/layout primitive needed by the SPA must be
+- `pdomain-book-tools` is a hard dependency; any OCR/layout primitive needed by the SPA must be
   added there first, not in this repo.
 
 ## Open questions
@@ -164,7 +164,7 @@ None — all architecture decisions resolved in `specs/17-decisions.md`.
 
 - `specs/00-overview.md` — legacy feature-description doc (precursor to this design spec)
 - `specs/17-decisions.md` — ADR log for all numbered design decisions (D-001–D-042+)
-- `../pd-prep-for-pgdp/` — reference implementation for FastAPI + React single-wheel pattern
+- `../pdomain-prep-for-pgdp/` — reference implementation for FastAPI + React single-wheel pattern
 - `specs/13-driver-contract.md` — stable testid and URL contract for the Playwright driver
 - `specs/16-milestones.md` — M0–M9 milestone acceptance gates
 - `specs/09-persistence.md` — `UserPageEnvelope` v2.1 schema and compatibility rules

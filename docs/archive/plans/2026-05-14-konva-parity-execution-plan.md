@@ -158,10 +158,10 @@ but every issue inside a wave is parallel-safe.
 
 None blocking.  Notes for the dispatcher:
 
-- **pd-book-tools method audit.** Phase D issues each call out that
-  any missing pd-book-tools method (per spec 23 §9) must be filed as a
-  tracking issue against `pd-book-tools` rather than no-op'd. The
-  child bot lane should route those through the `pd-book-tools` agent.
+- **pdomain-book-tools method audit.** Phase D issues each call out that
+  any missing pdomain-book-tools method (per spec 23 §9) must be filed as a
+  tracking issue against `pdomain-book-tools` rather than no-op'd. The
+  child bot lane should route those through the `pdomain-book-tools` agent.
 - **#305 perf benchmark flakiness.** The 60-fps benchmark may fail on
   shared CI hardware. The issue body asks the reviewer to bump
   tolerance to 45 frames and file a follow-up rather than block-merge.

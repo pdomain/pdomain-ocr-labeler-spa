@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: Word Edit Dialog
+# pdomain-ocr-labeler-spa: Word Edit Dialog
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#18
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#18
 
 ## TL;DR
 
@@ -64,7 +64,7 @@ In erase mode: staged erase rects drawn as red semi-transparent overlays.
   grid (8-direction pixel-delta accumulator, committed on Apply).
 - **Apply/Reset/Apply+Refine buttons** in the refine row.
 - **Tag chips row:** style chips (italic, small_caps, etc.) + component chips (footnote,
-  drop_cap, etc.) from `pd-book-tools`. Each chip is a toggle; POST
+  drop_cap, etc.) from `pdomain-book-tools`. Each chip is a toggle; POST
   `.../apply-style` / `.../apply-component` on click.
 
 ### Dialog hotkeys (scoped to dialog)

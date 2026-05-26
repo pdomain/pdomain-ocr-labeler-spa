@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: Architecture Decisions Log
+# pdomain-ocr-labeler-spa: Architecture Decisions Log
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#38
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#38
 
 ## TL;DR
 

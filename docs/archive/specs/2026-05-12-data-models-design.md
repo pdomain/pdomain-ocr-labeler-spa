@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: Data Models
+# pdomain-ocr-labeler-spa: Data Models
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#6
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#6
 
 ## TL;DR
 
@@ -47,7 +47,7 @@ the legacy source files it cross-references.
 - **No separate DTO layer.** Per-route request/response shapes (`<Verb><Noun>Request` /
   `<Verb><Noun>Response`) live in the route module that defines them, not in a separate
   `dto.py`. Domain models are reused directly where the wire shape matches.
-- **`pd-book-tools` owns label vocabularies.** `ALLOWED_TEXT_STYLE_LABELS` and
+- **`pdomain-book-tools` owns label vocabularies.** `ALLOWED_TEXT_STYLE_LABELS` and
   `ALLOWED_WORD_COMPONENT_LABELS` come from `pd_book_tools.ocr.label_normalization`;
   the SPA must not hardcode its own copies.
 
@@ -63,7 +63,7 @@ the legacy source files it cross-references.
 - **`PageSource`** — StrEnum: `ocr | cached_ocr | filesystem | fallback`.
 - **`MatchStatus`** — StrEnum: `exact | fuzzy | mismatch | unmatched_ocr | unmatched_gt`.
 - **`WordMatch`** — per-word match result including bbox, labels, validation flag, stable
-  `word_id` from `pd-book-tools`.
+  `word_id` from `pdomain-book-tools`.
 - **`LineMatch`** — per-line rollup with pre-computed counters (`exact_count`,
   `fuzzy_count`, etc.) and `is_fully_validated`.
 - **`BBox`** — `{x, y, width, height}` in image-space pixels.
@@ -146,7 +146,7 @@ transition period. Chosen: `extra="forbid"` on top-level envelopes only.
   TS types; CI gate catches drift automatically.
 - Any additive field to `UserPageEnvelope` must be declared optional with a default so
   legacy files without it still round-trip (backward-compat reading rule).
-- `word_id` from `pd-book-tools` must be stable across OCR runs for optimistic UI
+- `word_id` from `pdomain-book-tools` must be stable across OCR runs for optimistic UI
   updates to work correctly after a refine or reload.
 
 ## Open questions
@@ -159,6 +159,6 @@ None.
   semantics)
 - `specs/09-persistence.md` — `UserPageEnvelope` v2.1 full schema and round-trip rules
 - `specs/02-backend.md` — FastAPI endpoint list that consumes these shapes
-- `../pd-prep-for-pgdp/src/pd_prep_for_pgdp/core/models.py` — reference implementation
-- `pd-book-tools` — `ALLOWED_TEXT_STYLE_LABELS`, `ALLOWED_WORD_COMPONENT_LABELS`,
+- `../pdomain-prep-for-pgdp/src/pd_prep_for_pgdp/core/models.py` — reference implementation
+- `pdomain-book-tools` — `ALLOWED_TEXT_STYLE_LABELS`, `ALLOWED_WORD_COMPONENT_LABELS`,
   `Page`, `Word`, `BBox` types

@@ -69,7 +69,7 @@ describe("WorklistRow bridge", () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && npx vitest run frontend/src/components/drawer/Worklist.test.tsx 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && npx vitest run frontend/src/components/drawer/Worklist.test.tsx 2>&1 | tail -20
 ```
 
 Expected: FAIL — `selectLine` not called.
@@ -98,7 +98,7 @@ onClick={() => {
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && npx vitest run frontend/src/components/drawer/Worklist.test.tsx 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && npx vitest run frontend/src/components/drawer/Worklist.test.tsx 2>&1 | tail -20
 ```
 
 Expected: PASS
@@ -203,7 +203,7 @@ In the Worklist component, pass `isChecked`:
 - [ ] **Step 7: Run tests to verify all pass**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && npx vitest run frontend/src/components/drawer/Worklist.test.tsx 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && npx vitest run frontend/src/components/drawer/Worklist.test.tsx 2>&1 | tail -20
 ```
 
 Expected: all PASS
@@ -211,8 +211,8 @@ Expected: all PASS
 - [ ] **Step 8: Commit**
 
 ```bash
-git -C /workspaces/ocr-container/pd-ocr-labeler-spa add frontend/src/components/drawer/Worklist.tsx frontend/src/components/drawer/Worklist.test.tsx
-git -C /workspaces/ocr-container/pd-ocr-labeler-spa commit -m "feat(worklist): bridge row click to selectionStore + add bulk-select checkboxes"
+git -C /workspaces/ocr-container/pdomain-ocr-labeler-spa add frontend/src/components/drawer/Worklist.tsx frontend/src/components/drawer/Worklist.test.tsx
+git -C /workspaces/ocr-container/pdomain-ocr-labeler-spa commit -m "feat(worklist): bridge row click to selectionStore + add bulk-select checkboxes"
 ```
 
 ---
@@ -273,7 +273,7 @@ def test_set_line_gt_404_unknown_line(seeded_client, project_id, page_idx):
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && uv run pytest tests/test_lines_paragraphs_router.py -k "set_line_gt" -v 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && uv run pytest tests/test_lines_paragraphs_router.py -k "set_line_gt" -v 2>&1 | tail -20
 ```
 
 Expected: FAIL — 404 (endpoint does not exist yet)
@@ -376,7 +376,7 @@ Also add `SetLineGtRequest` to `__all__` at the bottom of the file.
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && uv run pytest tests/test_lines_paragraphs_router.py -k "set_line_gt" -v 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && uv run pytest tests/test_lines_paragraphs_router.py -k "set_line_gt" -v 2>&1 | tail -20
 ```
 
 Expected: PASS (the seeded tests that need a real page object may be skipped/partial — that is fine; the 404 and 422 tests must pass)
@@ -384,7 +384,7 @@ Expected: PASS (the seeded tests that need a real page object may be skipped/par
 - [ ] **Step 5: Regenerate OpenAPI types**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && make openapi-export AI=1 2>&1 | tail -10
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && make openapi-export AI=1 2>&1 | tail -10
 ```
 
 Expected: `frontend/src/api/types.ts` updated with `SetLineGtRequest` schema.
@@ -392,8 +392,8 @@ Expected: `frontend/src/api/types.ts` updated with `SetLineGtRequest` schema.
 - [ ] **Step 6: Commit**
 
 ```bash
-git -C /workspaces/ocr-container/pd-ocr-labeler-spa add src/pd_ocr_labeler_spa/api/lines_paragraphs.py tests/test_lines_paragraphs_router.py frontend/src/api/types.ts
-git -C /workspaces/ocr-container/pd-ocr-labeler-spa commit -m "feat(api): POST lines/{li}/set-gt — distribute line GT text to words"
+git -C /workspaces/ocr-container/pdomain-ocr-labeler-spa add src/pd_ocr_labeler_spa/api/lines_paragraphs.py tests/test_lines_paragraphs_router.py frontend/src/api/types.ts
+git -C /workspaces/ocr-container/pdomain-ocr-labeler-spa commit -m "feat(api): POST lines/{li}/set-gt — distribute line GT text to words"
 ```
 
 ---
@@ -428,7 +428,7 @@ describe("useSetLineGt", () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && npx vitest run frontend/src/hooks/useLineMutations.test.tsx -t "useSetLineGt" 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && npx vitest run frontend/src/hooks/useLineMutations.test.tsx -t "useSetLineGt" 2>&1 | tail -20
 ```
 
 Expected: FAIL — `useSetLineGt` not defined.
@@ -466,7 +466,7 @@ export function useSetLineGt(projectId: string, pageIndex: number) {
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && npx vitest run frontend/src/hooks/useLineMutations.test.tsx -t "useSetLineGt" 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && npx vitest run frontend/src/hooks/useLineMutations.test.tsx -t "useSetLineGt" 2>&1 | tail -20
 ```
 
 Expected: PASS
@@ -514,7 +514,7 @@ it("reverts GT text on Escape without committing", async () => {
 - [ ] **Step 6: Run test to verify it fails**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && npx vitest run frontend/src/components/right-panel/LineDetail.test.tsx 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && npx vitest run frontend/src/components/right-panel/LineDetail.test.tsx 2>&1 | tail -20
 ```
 
 Expected: FAIL
@@ -602,7 +602,7 @@ Update the `GTRow` call site inside `LineDetailInner` to pass the new props:
 - [ ] **Step 8: Run tests to verify they pass**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && npx vitest run frontend/src/components/right-panel/LineDetail.test.tsx 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && npx vitest run frontend/src/components/right-panel/LineDetail.test.tsx 2>&1 | tail -20
 ```
 
 Expected: PASS
@@ -610,8 +610,8 @@ Expected: PASS
 - [ ] **Step 9: Commit**
 
 ```bash
-git -C /workspaces/ocr-container/pd-ocr-labeler-spa add frontend/src/hooks/useLineMutations.ts frontend/src/components/right-panel/LineDetail.tsx frontend/src/hooks/useLineMutations.test.tsx frontend/src/components/right-panel/LineDetail.test.tsx
-git -C /workspaces/ocr-container/pd-ocr-labeler-spa commit -m "feat(line-detail): wire GT input commit on blur/Enter via set-gt endpoint"
+git -C /workspaces/ocr-container/pdomain-ocr-labeler-spa add frontend/src/hooks/useLineMutations.ts frontend/src/components/right-panel/LineDetail.tsx frontend/src/hooks/useLineMutations.test.tsx frontend/src/components/right-panel/LineDetail.test.tsx
+git -C /workspaces/ocr-container/pdomain-ocr-labeler-spa commit -m "feat(line-detail): wire GT input commit on blur/Enter via set-gt endpoint"
 ```
 
 ---
@@ -627,7 +627,7 @@ git -C /workspaces/ocr-container/pd-ocr-labeler-spa commit -m "feat(line-detail)
 Read `frontend/src/stores/viewport-store.ts` to confirm that `exitToSelectMode`, `toggleAddWordMode`, `toggleEraseMode`, and `viewportStore` are exported. If names differ, adjust the steps below.
 
 ```bash
-grep -n "export" /workspaces/ocr-container/pd-ocr-labeler-spa/frontend/src/stores/viewport-store.ts | head -20
+grep -n "export" /workspaces/ocr-container/pdomain-ocr-labeler-spa/frontend/src/stores/viewport-store.ts | head -20
 ```
 
 Expected output should include all four of: `exitToSelectMode`, `toggleAddWordMode`, `toggleEraseMode`, `viewportStore`.
@@ -670,7 +670,7 @@ describe("rail mode → canvas sync", () => {
 - [ ] **Step 3: Run test to verify it fails**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && npx vitest run frontend/src/components/PageImageCanvas.test.tsx -t "rail mode" 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && npx vitest run frontend/src/components/PageImageCanvas.test.tsx -t "rail mode" 2>&1 | tail -20
 ```
 
 Expected: FAIL — viewportStore mode unchanged.
@@ -713,7 +713,7 @@ useEffect(() => {
 - [ ] **Step 5: Run tests to verify they pass**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && npx vitest run frontend/src/components/PageImageCanvas.test.tsx -t "rail mode" 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && npx vitest run frontend/src/components/PageImageCanvas.test.tsx -t "rail mode" 2>&1 | tail -20
 ```
 
 Expected: PASS
@@ -721,8 +721,8 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git -C /workspaces/ocr-container/pd-ocr-labeler-spa add frontend/src/components/PageImageCanvas.tsx frontend/src/components/PageImageCanvas.test.tsx
-git -C /workspaces/ocr-container/pd-ocr-labeler-spa commit -m "feat(canvas): sync rail mode changes to viewport interaction mode"
+git -C /workspaces/ocr-container/pdomain-ocr-labeler-spa add frontend/src/components/PageImageCanvas.tsx frontend/src/components/PageImageCanvas.test.tsx
+git -C /workspaces/ocr-container/pdomain-ocr-labeler-spa commit -m "feat(canvas): sync rail mode changes to viewport interaction mode"
 ```
 
 ---
@@ -763,7 +763,7 @@ describe("searchQuery", () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && npx vitest run frontend/src/stores/worklist-store.test.ts -t "searchQuery" 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && npx vitest run frontend/src/stores/worklist-store.test.ts -t "searchQuery" 2>&1 | tail -20
 ```
 
 Expected: FAIL — `searchQuery` undefined, `setSearchQuery` not a function.
@@ -842,7 +842,7 @@ return {
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && npx vitest run frontend/src/stores/worklist-store.test.ts -t "searchQuery" 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && npx vitest run frontend/src/stores/worklist-store.test.ts -t "searchQuery" 2>&1 | tail -20
 ```
 
 Expected: PASS
@@ -882,7 +882,7 @@ it("input is no longer readOnly", () => {
 - [ ] **Step 6: Run test to verify it fails**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && npx vitest run frontend/src/components/shell/QuickSearch.test.tsx 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && npx vitest run frontend/src/components/shell/QuickSearch.test.tsx 2>&1 | tail -20
 ```
 
 Expected: FAIL — input is readOnly, no store update.
@@ -960,7 +960,7 @@ export function QuickSearch() {
 - [ ] **Step 8: Run QuickSearch tests to verify they pass**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && npx vitest run frontend/src/components/shell/QuickSearch.test.tsx 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && npx vitest run frontend/src/components/shell/QuickSearch.test.tsx 2>&1 | tail -20
 ```
 
 Expected: PASS
@@ -989,7 +989,7 @@ it("filters rows by searchQuery in worklistStore", async () => {
 - [ ] **Step 10: Run test to verify it fails**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && npx vitest run frontend/src/components/drawer/Worklist.test.tsx -t "filters rows by searchQuery" 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && npx vitest run frontend/src/components/drawer/Worklist.test.tsx -t "filters rows by searchQuery" 2>&1 | tail -20
 ```
 
 Expected: FAIL — both rows visible despite search query.
@@ -1025,7 +1025,7 @@ const filtered = sortLines(
 - [ ] **Step 12: Run all Worklist tests to verify they pass**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && npx vitest run frontend/src/components/drawer/Worklist.test.tsx 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && npx vitest run frontend/src/components/drawer/Worklist.test.tsx 2>&1 | tail -20
 ```
 
 Expected: all PASS
@@ -1033,8 +1033,8 @@ Expected: all PASS
 - [ ] **Step 13: Commit**
 
 ```bash
-git -C /workspaces/ocr-container/pd-ocr-labeler-spa add frontend/src/stores/worklist-store.ts frontend/src/components/shell/QuickSearch.tsx frontend/src/components/drawer/Worklist.tsx frontend/src/stores/worklist-store.test.ts frontend/src/components/shell/QuickSearch.test.tsx frontend/src/components/drawer/Worklist.test.tsx
-git -C /workspaces/ocr-container/pd-ocr-labeler-spa commit -m "feat(search): wire QuickSearch input to filter worklist by OCR/GT text"
+git -C /workspaces/ocr-container/pdomain-ocr-labeler-spa add frontend/src/stores/worklist-store.ts frontend/src/components/shell/QuickSearch.tsx frontend/src/components/drawer/Worklist.tsx frontend/src/stores/worklist-store.test.ts frontend/src/components/shell/QuickSearch.test.tsx frontend/src/components/drawer/Worklist.test.tsx
+git -C /workspaces/ocr-container/pdomain-ocr-labeler-spa commit -m "feat(search): wire QuickSearch input to filter worklist by OCR/GT text"
 ```
 
 ---
@@ -1046,7 +1046,7 @@ git -C /workspaces/ocr-container/pd-ocr-labeler-spa commit -m "feat(search): wir
 - [ ] **Step 1: Run full backend test suite**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && make test AI=1 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && make test AI=1 2>&1 | tail -20
 ```
 
 Expected: all PASS
@@ -1054,7 +1054,7 @@ Expected: all PASS
 - [ ] **Step 2: Run full frontend test suite**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && make frontend-test AI=1 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && make frontend-test AI=1 2>&1 | tail -20
 ```
 
 Expected: all PASS
@@ -1062,7 +1062,7 @@ Expected: all PASS
 - [ ] **Step 3: Run lint**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa && make lint AI=1 2>&1 | tail -20
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa && make lint AI=1 2>&1 | tail -20
 ```
 
 Expected: no errors

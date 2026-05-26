@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: HeaderBar Component
+# pdomain-ocr-labeler-spa: HeaderBar Component
 
 > **Status**: Archived (superseded by hi-fi redesign)
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#83
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#83
 >
 > **D-046 note (2026-05-21):** The inline project-load controls
 > (`project-select`, `load-project-button`, `source-folder-button`,

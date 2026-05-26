@@ -3,16 +3,16 @@ status: complete
 synced: 2026-05-21
 completed: 2026-05-21
 milestone: 45
-repo: ConcaveTrillion/pd-ocr-labeler-spa
+repo: ConcaveTrillion/pdomain-ocr-labeler-spa
 ---
 
-# pd-ocr-labeler-spa — Complete Implementation Plan
+# pdomain-ocr-labeler-spa — Complete Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Bring pd-ocr-labeler-spa to a fully usable labeling application that faithfully replaces the NiceGUI pd-ocr-labeler.
+**Goal:** Bring pdomain-ocr-labeler-spa to a fully usable labeling application that faithfully replaces the NiceGUI pd-ocr-labeler.
 
-**Architecture:** FastAPI backend serving a React/Vite/TypeScript SPA; JSON-sidecar persistence; modeled on pd-prep-for-pgdp patterns.
+**Architecture:** FastAPI backend serving a React/Vite/TypeScript SPA; JSON-sidecar persistence; modeled on pdomain-prep-for-pgdp patterns.
 
 **Tech Stack:** Python 3.12, FastAPI, Pydantic v2, React 18, Vite, TypeScript, Tailwind CSS, shadcn/ui, pytest, Vitest, Playwright
 
@@ -61,7 +61,7 @@ Reference screenshots: `docs/Screenshot from 2026-05-15 17-45-55.png` (shipped s
 
 ## Plan structure
 
-Each milestone below is **bounded enough for one agent session**. Tasks are TDD: write a failing test, run it to confirm fail, implement, run to confirm pass, commit. File paths are absolute from the repo root `pd-ocr-labeler-spa/`.
+Each milestone below is **bounded enough for one agent session**. Tasks are TDD: write a failing test, run it to confirm fail, implement, run to confirm pass, commit. File paths are absolute from the repo root `pdomain-ocr-labeler-spa/`.
 
 Verification gates per milestone:
 
@@ -435,14 +435,14 @@ def test_refine_available_returns_capability_flags(client):
 
 ## Milestone CU-8 — Cut-over polish + legacy-superseded banner
 
-**Outcome.** The legacy `pd-ocr-labeler` README carries a "superseded by `pd-ocr-labeler-spa`" banner; `docs/plan-to-usable.md` "Legacy README" row closes; the SPA's README "Status" block updates to reflect post-cut-over reality; a new screenshot lands at `docs/Screenshot-hifi-gaps-closed.png`.
+**Outcome.** The legacy `pd-ocr-labeler` README carries a "superseded by `pdomain-ocr-labeler-spa`" banner; `docs/plan-to-usable.md` "Legacy README" row closes; the SPA's README "Status" block updates to reflect post-cut-over reality; a new screenshot lands at `docs/Screenshot-hifi-gaps-closed.png`.
 
 **Spec refs.** `docs/plan-to-usable.md` cut-over checklist; `docs/plans/archive/2026-05-15-hifi-gaps-plan.md` Acceptance section.
 
 **Files touched.**
 
 - `../pd-ocr-labeler/README.md` (route to the `pd-ocr-labeler` agent — this repo's agent cannot edit it).
-- `pd-ocr-labeler-spa/README.md` Status block.
+- `pdomain-ocr-labeler-spa/README.md` Status block.
 - `docs/plan-to-usable.md` — flip both remaining checkboxes.
 - `docs/Screenshot-hifi-gaps-closed.png` (new — take from `make dev` against a real project).
 
@@ -460,7 +460,7 @@ def test_refine_available_returns_capability_flags(client):
 
 ### Task 8.3 — CU-8.3: Route legacy README update {#cu-83-route-legacy-readme-update}
 
-- [x] Step 1: This task cannot be completed in-tree. Hand off to the `pd-ocr-labeler` agent with prompt: "Add a top-of-README banner to `/workspaces/ocr-container/pd-ocr-labeler/README.md` reading `> **Superseded by [`pd-ocr-labeler-spa`](../pd-ocr-labeler-spa/). This NiceGUI labeler is no longer under active development as of 2026-05-16.**`. Commit message: `docs(readme): mark legacy NiceGUI labeler as superseded`."
+- [x] Step 1: This task cannot be completed in-tree. Hand off to the `pd-ocr-labeler` agent with prompt: "Add a top-of-README banner to `/workspaces/ocr-container/pd-ocr-labeler/README.md` reading `> **Superseded by [`pdomain-ocr-labeler-spa`](../pdomain-ocr-labeler-spa/). This NiceGUI labeler is no longer under active development as of 2026-05-16.**`. Commit message: `docs(readme): mark legacy NiceGUI labeler as superseded`."
 - [x] Step 2: Once the sibling agent confirms the commit, flip the corresponding row in `docs/plan-to-usable.md` to checked. Commit `docs(plan-to-usable): close legacy-superseded row`.
 
 **Acceptance.** Both `docs/plan-to-usable.md` checkboxes are checked; legacy README has the banner; SPA README Status is current.

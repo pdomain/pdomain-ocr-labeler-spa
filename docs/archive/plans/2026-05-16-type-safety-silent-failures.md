@@ -4,7 +4,7 @@
 
 **Goal:** Eliminate every `except Exception: log.debug(...)` silent-swallow in the OCR page-loading pipeline, add proper type guards so wrong-type inputs fail loudly, and cover all `# pragma: no cover - defensive` sites with real tests.
 
-**Architecture:** Three interlocking layers — (1) a shared `envelope_lift.py` helper that replaces duplicated lift code in `api/pages.py` and `api/words.py`, (2) a `payload_error` field on `PageRecord` that makes failures machine-readable on the wire, and (3) targeted tests that inject faults at every previously-uncovered defensive path. Type annotations (Phase 5) use `TYPE_CHECKING` guards for pd-book-tools imports so tests don't need the full OCR stack.
+**Architecture:** Three interlocking layers — (1) a shared `envelope_lift.py` helper that replaces duplicated lift code in `api/pages.py` and `api/words.py`, (2) a `payload_error` field on `PageRecord` that makes failures machine-readable on the wire, and (3) targeted tests that inject faults at every previously-uncovered defensive path. Type annotations (Phase 5) use `TYPE_CHECKING` guards for pdomain-book-tools imports so tests don't need the full OCR stack.
 
 **Tech Stack:** Python 3.13, FastAPI, Pydantic v2, pytest, `caplog` fixture for log assertions, `monkeypatch` for fault injection. No new dependencies.
 
@@ -149,7 +149,7 @@ def test_double_nested_envelope_unwrap(monkeypatch):
 - [x] **Step 2: Run tests to confirm they all fail**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa
 uv run pytest tests/unit/core/test_envelope_lift.py -v 2>&1 | tail -20
 ```
 
@@ -309,7 +309,7 @@ In `src/pd_ocr_labeler_spa/core/models.py`, find `PageRecord` (around line 133) 
 - [x] **Step 4: Run `make openapi-export` to sync TS types**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa
 make openapi-export AI=1 2>&1 | tail -5
 ```
 
@@ -1087,7 +1087,7 @@ This is the test that would have caught C2/C3: if the pipeline were returning wr
 - [x] **Step 1: Check whether DocTR is loadable in this environment**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa
 uv run python -c "from pd_book_tools.ocr import LocalDoctrPageLoader; print('doctr available')" 2>&1
 ```
 
@@ -1316,7 +1316,7 @@ git commit -m "test(integration): real OCR pipeline test — catches envelope-li
 
 ## Task 9: Type annotations pass — replace `Any` in critical signatures
 
-Replace `Any` with proper types in the three files that have the most impact. Use `TYPE_CHECKING` guards for pd-book-tools imports so tests don't need the full stack.
+Replace `Any` with proper types in the three files that have the most impact. Use `TYPE_CHECKING` guards for pdomain-book-tools imports so tests don't need the full stack.
 
 **Files:**
 - Modify: `src/pd_ocr_labeler_spa/core/page_to_line_matches.py`
@@ -1327,7 +1327,7 @@ Replace `Any` with proper types in the three files that have the most impact. Us
 - [x] **Step 1: Add `py.typed` marker**
 
 ```bash
-touch /workspaces/ocr-container/pd-ocr-labeler-spa/src/pd_ocr_labeler_spa/py.typed
+touch /workspaces/ocr-container/pdomain-ocr-labeler-spa/src/pd_ocr_labeler_spa/py.typed
 ```
 
 - [x] **Step 2: Type `page_to_line_matches.py` — replace `Any` in signatures**
@@ -1394,7 +1394,7 @@ def _build_line_to_block_lookup(page: object) -> dict[int, int]:
 def _resolve_page_object(pstate: PageState | None) -> Any | None:
 def _resolve_word(page: Any, line_index: int, word_index: int) -> Any | None:
 
-# After (use object since we can't import Page without pd-book-tools):
+# After (use object since we can't import Page without pdomain-book-tools):
 def _resolve_page_object(pstate: PageState | None) -> object | None:
 def _resolve_word(page: object, line_index: int, word_index: int) -> object | None:
 ```
@@ -1402,7 +1402,7 @@ def _resolve_word(page: object, line_index: int, word_index: int) -> object | No
 - [x] **Step 4: Run pyright to check type errors**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa
 uv run pyright src/pd_ocr_labeler_spa/core/page_to_line_matches.py src/pd_ocr_labeler_spa/api/words.py 2>&1 | tail -20
 ```
 
@@ -1469,7 +1469,7 @@ only — the actual image rotation, re-OCR, and PageRecord update are stubbed
 
 `core/jobs/handlers/rotate.py` and `core/jobs/handlers/auto_rotate_all.py`
 both do `await asyncio.sleep(0)` and emit `complete`. Steps 2–4 (rotate image
-via pd-book-tools, re-run OCR, update PageRecord.rotation_degrees) are not
+via pdomain-book-tools, re-run OCR, update PageRecord.rotation_degrees) are not
 implemented.
 
 CLAUDE.md and specs/16-milestones.md incorrectly list M9.1 and M9.2 as ✅.
@@ -1479,7 +1479,7 @@ Tracking: update specs/16-milestones.md to show these as "plumbing only."
 - [x] **Step 3: Run `make ci AI=1` to confirm nothing broke**
 
 ```bash
-cd /workspaces/ocr-container/pd-ocr-labeler-spa
+cd /workspaces/ocr-container/pdomain-ocr-labeler-spa
 make ci AI=1 2>&1 | tail -15
 ```
 

@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: Image Viewport (Left Pane)
+# pdomain-ocr-labeler-spa: Image Viewport (Left Pane)
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#12
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#12
 
 ## TL;DR
 

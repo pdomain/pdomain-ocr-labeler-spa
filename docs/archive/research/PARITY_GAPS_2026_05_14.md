@@ -1,6 +1,6 @@
 # Parity gap audit — 2026-05-14
 
-**Author.** `pd-ocr-labeler-spa` agent (re-spec pass triggered by CT).
+**Author.** `pdomain-ocr-labeler-spa` agent (re-spec pass triggered by CT).
 **Trigger.** CT observed that `PageImageCanvas.tsx` is a DOM stub
 despite being listed as shipped at M4 (#197/#198), and asked for a
 full audit against the legacy NiceGUI labeler.
@@ -55,8 +55,8 @@ user-facing flow. Spot-checks against the source modules under
 ones cited below.
 
 **1b. SPA inventory.** `grep`/`Read` against
-`pd-ocr-labeler-spa/frontend/src/` and
-`pd-ocr-labeler-spa/src/pd_ocr_labeler_spa/`. The killer query was
+`pdomain-ocr-labeler-spa/frontend/src/` and
+`pdomain-ocr-labeler-spa/src/pd_ocr_labeler_spa/`. The killer query was
 `grep -rln "import.*<Component>"` per major component — a component
 that is never imported outside its own test file is, by definition,
 not part of any rendered tree.
@@ -301,7 +301,7 @@ Covered by spec 23 (backend) + spec 22 (wireup).
 ### 2.12 Text normalization, search, drop-cap, glyph annotations
 
 **Legacy.** Long-S, ligature normalization (D-025) — implemented in
-pd-book-tools, surfaced via per-line plaintext rendering. No search.
+pdomain-book-tools, surfaced via per-line plaintext rendering. No search.
 
 **SPA today.** Normalize fields landed (#259/#260/#261) on the
 backend plus an OCRConfigModal section. **OCRConfigModal not mounted**

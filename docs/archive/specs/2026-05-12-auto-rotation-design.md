@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: Auto-Rotation + Manual Rotate
+# pdomain-ocr-labeler-spa: Auto-Rotation + Manual Rotate
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#42
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#42
 
 ## TL;DR
 
@@ -18,8 +18,8 @@ Book scans sometimes arrive sideways or upside-down. The legacy `pd-ocr-labeler`
 rotation support. The SPA adds it post-GA (M9.1 / M9.2). Manual rotation re-runs OCR because
 bboxes change when the image rotates. Auto-rotation is a project-load pass that evaluates all
 four cardinal orientations and selects the best. The gt-best-match algorithm lives in
-`pd_book_tools.ocr.rotation` (new module, delegated to pd-book-tools). Layout fallback
-(`layout_only_orientation_score`) also lives in pd-book-tools.
+`pd_book_tools.ocr.rotation` (new module, delegated to pdomain-book-tools). Layout fallback
+(`layout_only_orientation_score`) also lives in pdomain-book-tools.
 
 ## Constraints
 
@@ -28,7 +28,7 @@ four cardinal orientations and selects the best. The gt-best-match algorithm liv
 - **Auto-rotate is opt-in.** `auto_rotate_on_load = true` in OCR config; default true but
   user can disable.
 - **gt-best-match requires GT.** When no GT exists, fall back to layout method automatically.
-- **Rotation algorithm lives in pd-book-tools.** SPA calls `pd_book_tools.ocr.rotation`; if
+- **Rotation algorithm lives in pdomain-book-tools.** SPA calls `pd_book_tools.ocr.rotation`; if
   module is absent, auto-rotate is disabled with a warning.
 - **Envelope bump to v2.2 is conditional.** Before writing v2.2, verify legacy reader tolerates
   extra nested fields. If it does not, use a sidecar `_rotation.json` file (Q-A1 fallback).
@@ -66,7 +66,7 @@ applies if confidence exceeds threshold (TBD, suggest 0.6).
 GT-best-match algorithm: try each of {0, 90, 180, 270}, call `ocr_engine.ocr_image(rotated,
 fast=True)`, compute `fuzz.ratio(normalize(ocr_text), normalize(gt_text)) / 100`, select max
 score. Returns `(degrees, confidence)`. Layout fallback: `layout_only_orientation_score(image)`
-from pd-book-tools; no GT required.
+from pdomain-book-tools; no GT required.
 
 ### Rotation badge
 
@@ -108,7 +108,7 @@ provenance tolerates the new fields. If legacy crashes (Q-A1 option B): store in
   shows "↻ 90 auto"; click-to-revert: badge hides.
 - `rotation_degrees` and `rotation_source` persist in envelope (or sidecar if Q-A1 resolves
   option B); survive server restart.
-- When pd-book-tools rotation module absent: `auto_rotate_on_load` config toggle disabled
+- When pdomain-book-tools rotation module absent: `auto_rotate_on_load` config toggle disabled
   with tooltip; manual rotate still works.
 
 ## Trade-offs considered
@@ -153,4 +153,4 @@ with little GT overlap. The threshold is a config value (not hardcoded) so it ca
 - `specs/17-decisions.md §D-029` — auto-rotation deferred to M9.1/M9.2 decision
 - `specs/08-page-actions.md` — rotate button placement in PageActions
 - `specs/13-driver-contract.md` — rotation-badge and rotate-button testid additions
-- `pd_book_tools.ocr.rotation` — gt-best-match and layout algorithm (pd-book-tools team)
+- `pd_book_tools.ocr.rotation` — gt-best-match and layout algorithm (pdomain-book-tools team)

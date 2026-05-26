@@ -22,7 +22,7 @@ loaded without error; the new fields are simply never accessed. **No
 compatibility shim needed** for the read path. The write path would strip new
 fields (legacy `to_dict` only emits the five fields it knows), which is
 acceptable during the transition window. GitHub:
-ConcaveTrillion/pd-ocr-labeler-spa#56 (closed).
+ConcaveTrillion/pdomain-ocr-labeler-spa#56 (closed).
 
 ---
 
@@ -32,7 +32,7 @@ ConcaveTrillion/pd-ocr-labeler-spa#56 (closed).
 at 40% opacity, exposed as CSS custom property `--predictions-ghost-color` on
 `:root` so operators can theme it without a code change. Spec updated:
 `specs/20-glyph-annotations.md` §5.6. GitHub:
-ConcaveTrillion/pd-ocr-labeler-spa#57 (closed).
+ConcaveTrillion/pdomain-ocr-labeler-spa#57 (closed).
 
 ---
 
@@ -163,7 +163,7 @@ the user.
 
 ## Q-A14 — M4 renderer: must Konva be validated by spike before M4 starts?
 
-**Filed.** 2026-05-11 (ConcaveTrillion/pd-ocr-labeler-spa#55).
+**Filed.** 2026-05-11 (ConcaveTrillion/pdomain-ocr-labeler-spa#55).
 
 **Background.** `docs/architecture/04-image-viewport.md` is written
 against a Konva component tree, but D-020 left the renderer choice
@@ -196,7 +196,7 @@ implementation spec; D-020 is superseded.
 ---
 
 ## Q-A7 — Per-mark provenance: is object-level `source` granular enough?
-> GitHub: ConcaveTrillion/pd-ocr-labeler-spa#58
+> GitHub: ConcaveTrillion/pdomain-ocr-labeler-spa#58
 
 **Q.** In v1, `GlyphAnnotations.source` is a single `Literal["human",
 "predicted", "human_confirmed"]` field on the whole `GlyphAnnotations` object —
@@ -256,8 +256,8 @@ Decisions live in [`../specs/17-decisions.md`](../specs/17-decisions.md).
 | Q11 | Multi-tab races | (A) last-writer-wins; optimistic locking later | [D-023](../specs/17-decisions.md) |
 | Q12 | shadcn/ui adoption | (B) adopt; delegate pgdp-prep doc update | [D-004](../specs/17-decisions.md) (delegated 2026-05-06) |
 | Q13 | pd-png-optimizer dep | No, not used | [D-024](../specs/17-decisions.md) |
-| Q14 | Ligature/long-s normalization | Configurable, default Unicode glyphs; design lives in pd-book-tools | [D-025](../specs/17-decisions.md) (delegated 2026-05-06) |
-| Q15 | Refine-bbox refactor | (A) for v1, (B) on pd-book-tools roadmap | [D-026](../specs/17-decisions.md) (delegated 2026-05-06) |
+| Q14 | Ligature/long-s normalization | Configurable, default Unicode glyphs; design lives in pdomain-book-tools | [D-025](../specs/17-decisions.md) (delegated 2026-05-06) |
+| Q15 | Refine-bbox refactor | (A) for v1, (B) on pdomain-book-tools roadmap | [D-026](../specs/17-decisions.md) (delegated 2026-05-06) |
 | Q16 | Export bundling | (C) same wheel + jobs runner | [D-027](../specs/17-decisions.md) |
 | Q17 | Devcontainer | Makefile is canonical; devcontainer optional | [D-028](../specs/17-decisions.md) |
 | Q18 | Auto-rotation | (B) AND (C) with GT-best-match heuristic | [D-029](../specs/17-decisions.md) |
@@ -281,8 +281,8 @@ Decisions live in [`../specs/17-decisions.md`](../specs/17-decisions.md).
 ### Delegations to peer-repo agents (2026-05-06)
 
 - **pgdp-prep:** roadmap entry "Adopt shadcn/ui + Radix" added to
-  `pd-prep-for-pgdp/docs/08-roadmap.md` (P2 — Frontend polish, item 13a).
-- **pd-book-tools:** roadmap entries for `bbox.refine_robust(...)` and
+  `pdomain-prep-for-pgdp/docs/08-roadmap.md` (P2 — Frontend polish, item 13a).
+- **pdomain-book-tools:** roadmap entries for `bbox.refine_robust(...)` and
   `pd_book_tools.text.normalize` — *delegated, agent running*.
-- **pd-ocr-cli:** roadmap entry "Output normalization (post-OCR)" added
-  to `pd-ocr-cli/docs/usage.md` § Text normalization.
+- **pdomain-ocr-cli:** roadmap entry "Output normalization (post-OCR)" added
+  to `pdomain-ocr-cli/docs/usage.md` § Text normalization.

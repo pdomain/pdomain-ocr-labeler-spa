@@ -213,7 +213,7 @@ The hi-fi gaps plan is **done** when:
 After cut-over:
 
 - Legacy `pd-ocr-labeler` README gets a "superseded by
-  `pd-ocr-labeler-spa`" banner.
+  `pdomain-ocr-labeler-spa`" banner.
 - `docs/plan-to-usable.md` smoke-run row + cut-over banner row check off.
 - This plan moves to `docs/archive/plans/`.
 

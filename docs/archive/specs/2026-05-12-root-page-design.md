@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: RootPage Component
+# pdomain-ocr-labeler-spa: RootPage Component
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#85
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#85
 
 ## TL;DR
 

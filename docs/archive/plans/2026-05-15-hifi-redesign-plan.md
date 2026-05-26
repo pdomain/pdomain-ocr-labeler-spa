@@ -1,4 +1,4 @@
-# pd-ocr-labeler-spa UI Redesign — Implementation Plan
+# pdomain-ocr-labeler-spa UI Redesign — Implementation Plan
 
 **Status:** ✅ SHIPPED — All Slices 0–27 (Phases 0–6) completed as of 2026-05-15.
 

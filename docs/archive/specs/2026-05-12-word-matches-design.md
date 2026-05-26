@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: Word Matches View (Right Pane)
+# pdomain-ocr-labeler-spa: Word Matches View (Right Pane)
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#14
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#14
 
 ## TL;DR
 

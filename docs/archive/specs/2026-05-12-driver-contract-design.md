@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: Driver-Compatibility Contract
+# pdomain-ocr-labeler-spa: Driver-Compatibility Contract
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#30
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#30
 
 ## TL;DR
 

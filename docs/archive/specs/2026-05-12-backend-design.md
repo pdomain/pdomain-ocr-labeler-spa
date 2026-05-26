@@ -1,12 +1,12 @@
-# pd-ocr-labeler-spa: FastAPI Backend
+# pdomain-ocr-labeler-spa: FastAPI Backend
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#8
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#8
 
 ## TL;DR
 
-The Python backend for `pd-ocr-labeler-spa`: a `build_app(settings)` FastAPI factory,
+The Python backend for `pdomain-ocr-labeler-spa`: a `build_app(settings)` FastAPI factory,
 10 resource-organized routers, three adapter protocols (IStorage / IAuth / IOCREngine),
 an in-process job runner with SSE progress, and a `lifespan` hook that discovers projects
 and restores session on startup. All endpoints declared in `specs/02-backend.md` are the
@@ -16,7 +16,7 @@ canonical contract; the spec wins over the implementation if they diverge.
 
 The backend replaces NiceGUI's server-rendered event model with a stateless FastAPI REST
 surface that any HTTP client (SPA, driver agent, CLI) can consume. It mirrors the
-`pd-prep-for-pgdp` architecture (`build_app` factory, `app.state` DI, `IStorage`
+`pdomain-prep-for-pgdp` architecture (`build_app` factory, `app.state` DI, `IStorage`
 adapter) with three key differences:
 
 1. **OCR adapter axis.** `IOCREngine` replaces pgdp-prep's processing pipeline. Only
@@ -48,7 +48,7 @@ The three-level state tree (`AppState → ProjectState → PageState`) lives in-
   handler; each endpoint does one logical operation + one autosave side-effect.
 - **Autosave is server-side.** After any mutation the handler writes through to disk
   (cached lane) without a client-side debounce timer.
-- **`pd-book-tools` only.** No direct DocTR or OpenCV imports in the backend; all OCR
+- **`pdomain-book-tools` only.** No direct DocTR or OpenCV imports in the backend; all OCR
   and layout primitives come from `pd_book_tools`.
 
 ## Decision
@@ -192,5 +192,5 @@ None.
 - `specs/01-data-models.md` — all request/response Pydantic shapes
 - `specs/13-driver-contract.md` — URL invariants and testid contract
 - `specs/09-persistence.md` — on-disk lanes and `UserPageEnvelope` schema
-- `../pd-prep-for-pgdp/src/pd_prep_for_pgdp/bootstrap.py` — reference `build_app`
+- `../pdomain-prep-for-pgdp/src/pd_prep_for_pgdp/bootstrap.py` — reference `build_app`
   implementation

@@ -1,16 +1,16 @@
-# pd-ocr-labeler-spa: Text Normalization (Long-S, Ligatures, Glyph Variants)
+# pdomain-ocr-labeler-spa: Text Normalization (Long-S, Ligatures, Glyph Variants)
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#40
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#40
 
 ## TL;DR
 
 OCR fidelity wins by default: `ſhall` is stored as-is. Normalization runs on the way out
 (plaintext tabs, export labels) or on-demand for GT-matching. Glyph→ASCII map lives in
 `pd_book_tools.text.normalize`; SPA calls in, ships no map of its own. Toggle UI in the OCR
-config modal ships in M9. When pd-book-tools hasn't shipped the API, toggles are disabled with
-"Requires pd-book-tools ≥ X.Y.Z" tooltip.
+config modal ships in M9. When pdomain-book-tools hasn't shipped the API, toggles are disabled with
+"Requires pdomain-book-tools ≥ X.Y.Z" tooltip.
 
 ## Context
 
@@ -89,7 +89,7 @@ New "Text normalization" section in `<OCRConfigModal />`:
 `normalize-profile-select` (greyed out in v1, only `ascii` available).
 
 When `pd_book_tools.text.normalize` is unavailable (ImportError), the section shows
-"Requires pd-book-tools ≥ X.Y.Z" and toggles are disabled.
+"Requires pdomain-book-tools ≥ X.Y.Z" and toggles are disabled.
 
 ### GT validation
 
@@ -105,8 +105,8 @@ validation error message.
 - With `normalize_plaintext_tabs=true`: plaintext OCR tab shows `shall` for `ſhall`.
 - Export with `normalize_recognition_labels=true`: `labels.json` contains `shall`.
 - POST GT input containing `ﬁ` returns 400 `validation_error`.
-- When pd-book-tools normalize module is absent: toggles are disabled, no 500.
-- Unit: `normalize_string("ſhall", "ascii") == "shall"` (in pd-book-tools test; SPA test
+- When pdomain-book-tools normalize module is absent: toggles are disabled, no 500.
+- Unit: `normalize_string("ſhall", "ascii") == "shall"` (in pdomain-book-tools test; SPA test
   verifies the call is made correctly).
 
 ## Trade-offs considered
@@ -115,21 +115,21 @@ validation error message.
 path). Normalizing on output preserves all raw data while giving downstream consumers what they
 need. Chosen: normalize on output only.
 
-**SPA-local glyph map vs delegate to pd-book-tools.** A local map would work today but creates
-two maps to maintain (SPA + pd-book-tools). Any future profile addition must be done in one
-place. Chosen: delegate entirely to pd-book-tools.
+**SPA-local glyph map vs delegate to pdomain-book-tools.** A local map would work today but creates
+two maps to maintain (SPA + pdomain-book-tools). Any future profile addition must be done in one
+place. Chosen: delegate entirely to pdomain-book-tools.
 
 **Always normalize GT display vs toggle.** Always normalizing the plaintext tabs would simplify
 the UI but surprises researchers who want to see the raw OCR glyphs. Toggle chosen; default off.
 
-**Profile registry at SPA level vs pd-book-tools.** Profiles are complex (locale-specific
-heuristics). SPA passes through the profile name string; pd-book-tools owns the registry.
+**Profile registry at SPA level vs pdomain-book-tools.** Profiles are complex (locale-specific
+heuristics). SPA passes through the profile name string; pdomain-book-tools owns the registry.
 Chosen: SPA is a thin caller.
 
 ## Consequences
 
 - If `pd_book_tools.text.normalize` API changes, the SPA call site needs updating. Pin the
-  minimum pd-book-tools version in `pyproject.toml` when the module is first consumed.
+  minimum pdomain-book-tools version in `pyproject.toml` when the module is first consumed.
 - The "≈" badge on normalized-exact matches must appear in the word-status-icon testid (or as
   a separate `word-normalized-badge-{l}-{w}` testid) — add to `specs/13-driver-contract.md`
   when implemented.
@@ -147,4 +147,4 @@ Chosen: SPA is a thin caller.
 - `specs/18-text-normalization.md` — legacy feature doc (glyph table, matching algorithm, tests)
 - `specs/17-decisions.md §D-025, §D-033` — normalization principles and toggle-scope decision
 - `specs/20-glyph-annotations.md` — the side-channel spec (glyph typographic data, distinct from normalization)
-- `pd_book_tools.text.normalize` — implementation home (pd-book-tools team)
+- `pd_book_tools.text.normalize` — implementation home (pdomain-book-tools team)

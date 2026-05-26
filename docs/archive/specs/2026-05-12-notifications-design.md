@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: Notifications, Busy Overlays, and SSE Jobs
+# pdomain-ocr-labeler-spa: Notifications, Busy Overlays, and SSE Jobs
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#26
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#26
 
 ## TL;DR
 

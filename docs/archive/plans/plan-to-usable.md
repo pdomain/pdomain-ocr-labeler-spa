@@ -1,4 +1,4 @@
-# Plan: pd-ocr-labeler-spa → usable
+# Plan: pdomain-ocr-labeler-spa → usable
 
 > **Status:** Cut-over complete — 2026-05-21.
 > B1/B2/B3/F1/F2/F3/F4/F6 closed. F5 audit doc committed; browser walk TODOs
@@ -94,7 +94,7 @@ retiring the legacy `pd-ocr-labeler`:
       2026-05-16 — `POST .../words/0/0/gt` → 200, `POST .../save`
       with generation from GET → 200.
 - [x] Legacy `pd-ocr-labeler` repo gets a "superseded by
-      `pd-ocr-labeler-spa`" note in its README; no further development.
+      `pdomain-ocr-labeler-spa`" note in its README; no further development.
       — 2026-05-16 (commit 81c5c7d in pd-ocr-labeler)
 
 ## Out of scope for cut-over

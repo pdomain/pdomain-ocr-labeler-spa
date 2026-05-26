@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: Glyph-level Side-channel Annotations
+# pdomain-ocr-labeler-spa: Glyph-level Side-channel Annotations
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#44
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#44
 
 ## TL;DR
 
@@ -17,7 +17,7 @@ recipes: CT, ST, long-s heuristic). Driver automates bulk marking via `bulk-glyp
 
 Pre-1800s printing uses ligature forms (`ct`, `st`, `fi`, `fl`) and long-s (`ſ`) that disappear
 from ASCII ground truth. The SPA preserves these as side-channel data so typography researchers,
-font-training pipelines, and pd-ocr-synth recipes can consume them. GT text stays ASCII (enforced
+font-training pipelines, and pdomain-ocr-synth recipes can consume them. GT text stays ASCII (enforced
 by backend validation). The glyph data model lives in `pd_book_tools.ocr.glyph_annotations` (new
 module). A future pd-ocr-trainer classifier can inject `glyph_predictions`; the SPA surfaces them
 as advisory marks awaiting human confirmation.
@@ -30,7 +30,7 @@ as advisory marks awaiting human confirmation.
   classifier adapter. Only `glyph_annotations` (confirmed) writes to the envelope.
 - **Three-state distinction is load-bearing.** `None` ≠ empty `GlyphAnnotations()`. The progress
   metric counts "glyphs reviewed" only for non-None words.
-- **Data model lives in pd-book-tools.** SPA imports `GlyphAnnotations`, `LigatureMark`,
+- **Data model lives in pdomain-book-tools.** SPA imports `GlyphAnnotations`, `LigatureMark`,
   `LigatureKind` from `pd_book_tools.ocr.glyph_annotations`; ships no local copy.
 - **Envelope v2.2 conditional on Q-A5.** If the legacy reader's `extra="forbid"` on nested
   fields rejects v2.2: fall back to sidecar `<project_id>_<page:03d>.glyph.json`.
@@ -40,7 +40,7 @@ as advisory marks awaiting human confirmation.
 
 ## Decision
 
-### Data model (defined in pd-book-tools)
+### Data model (defined in pdomain-book-tools)
 
 `LigatureKind` enum: CT, ST, LONG_ST, FI, FL, FFI, FFL, OE, AE. `LigatureMark(kind, char_span)`.
 `GlyphAnnotations(ligatures, long_s_positions, swash, source)` where
@@ -75,7 +75,7 @@ Green = reviewed with ≥1 mark.
 
 **`<BulkGlyphMarkDialog>`**: opened from `<ToolbarActionGrid>` "Bulk-mark glyphs" button.
 Three recipes: CT substring auto-mark, ST substring auto-mark, long-s typeset-era heuristic.
-Recipe is data-driven; pd-book-tools may add future profiles. Dry-run preview shows affected
+Recipe is data-driven; pdomain-book-tools may add future profiles. Dry-run preview shows affected
 count. POST `glyph-bulk-mark` endpoint; synchronous (no SSE needed for page-scope).
 
 **Predictions overlay** (M11.x polish): ghost outlines on words with pending predictions in
@@ -138,7 +138,7 @@ iterate pages; page-scope is sufficient for v1. Chosen: page-scope synchronous b
 
 ## Consequences
 
-- The `GlyphAnnotations` data model must be stable in pd-book-tools before M9 ships;
+- The `GlyphAnnotations` data model must be stable in pdomain-book-tools before M9 ships;
   a breaking change in `LigatureKind` after the envelope format is fixed would require a
   data migration.
 - The progress metric change ("Glyphs reviewed") adds a new field to `PagePayload`; update
@@ -157,5 +157,5 @@ iterate pages; page-scope is sufficient for v1. Chosen: page-scope synchronous b
 - `specs/18-text-normalization.md` — sister spec (the normalization map; this spec is the side-channel)
 - `specs/17-decisions.md §D-025, §D-026, §D-032, §D-034` — relevant ADR entries
 - `specs/13-driver-contract.md §2.x` — glyph testid additions for driver bulk-mark
-- `pd_book_tools.ocr.glyph_annotations` — data model home (pd-book-tools team)
+- `pd_book_tools.ocr.glyph_annotations` — data model home (pdomain-book-tools team)
 - `OPEN_QUESTIONS.md §Q-A7` — per-mark provenance question (Q-A5 and Q-A6 resolved)

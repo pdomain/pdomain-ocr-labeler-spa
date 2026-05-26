@@ -1,8 +1,8 @@
-# pd-ocr-labeler-spa: React/Vite/TS Frontend Shell
+# pdomain-ocr-labeler-spa: React/Vite/TS Frontend Shell
 
 > **Status**: Draft
 > **Last updated**: 2026-05-12
-> **Spec-Issue**: ConcaveTrillion/pd-ocr-labeler-spa#10
+> **Spec-Issue**: ConcaveTrillion/pdomain-ocr-labeler-spa#10
 
 ## TL;DR
 
@@ -20,7 +20,7 @@ configuration, the `HeaderBar` chrome, and the generated TypeScript API client. 
 decisions cascade into every component spec, so they are locked here and referenced
 rather than redecided per feature.
 
-`pd-prep-for-pgdp` is the reference implementation for the build pipeline, TypeScript
+`pdomain-prep-for-pgdp` is the reference implementation for the build pipeline, TypeScript
 config, Vitest setup, and msw handler structure. Divergences from pgdp-prep are noted
 explicitly.
 
@@ -142,4 +142,4 @@ None.
 - `specs/03-frontend.md` — legacy feature-description doc
 - `specs/13-driver-contract.md` — testid and URL contract
 - `specs/04-image-viewport.md` through `specs/12-hotkeys-a11y.md` — per-component specs
-- `../pd-prep-for-pgdp/frontend/` — reference implementation
+- `../pdomain-prep-for-pgdp/frontend/` — reference implementation
