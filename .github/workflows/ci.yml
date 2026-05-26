@@ -166,9 +166,9 @@ jobs:
           fi
           for whl in "${wheels[@]}"; do
             echo "checking $whl"
-            if ! python3 -m zipfile -l "$whl" | grep -q 'pd_ocr_labeler_spa/static/index\.html'; then
+            if ! uv run python -m zipfile -l "$whl" | grep -q 'pd_ocr_labeler_spa/static/index\.html'; then
               echo "::error::$whl is missing pd_ocr_labeler_spa/static/index.html"
-              python3 -m zipfile -l "$whl"
+              uv run python -m zipfile -l "$whl"
               exit 1
             fi
             echo "ok: $whl contains pd_ocr_labeler_spa/static/index.html"
