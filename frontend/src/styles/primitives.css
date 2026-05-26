@@ -556,6 +556,92 @@
   z-index: 49;
 }
 
+/* ─── Banner (pd-ui primitive) ────────────────────────────────── */
+/* pd-ui Banner renders <section class="banner" data-tone="…">. Without
+ * local rules the element has no layout or tone tinting. These rules
+ * match the former hand-rolled AlertBanner visual: border, rounded
+ * corners, small gap, and tone-mapped color-mix tinting via the same
+ * --status-* tokens the old component used.
+ *
+ * Tone → token mapping (mirrors pd-ui Banner docstring):
+ *   danger  → var(--status-mismatch)
+ *   warning → var(--status-fuzzy)
+ *   info    → var(--status-ocr)
+ *   success → var(--status-exact)   (not used by labeler yet)
+ *   neutral → var(--ink-3)          (fallback)
+ */
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  padding: 12px 16px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--ink-1);
+  background: var(--bg-surface);
+}
+
+.banner__body {
+  flex: 1 1 0%;
+}
+
+.banner__leading {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.banner__headline {
+  font-weight: 600;
+}
+
+.banner__subtext {
+  margin-top: 2px;
+  color: var(--ink-2);
+}
+
+.banner__footer {
+  margin-top: 8px;
+}
+
+.banner__actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Tone tinting */
+.banner[data-tone="danger"] {
+  color: var(--status-mismatch);
+  background: color-mix(in srgb, var(--status-mismatch) 8%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--status-mismatch) 33%, transparent);
+}
+
+.banner[data-tone="warning"] {
+  color: var(--status-fuzzy);
+  background: color-mix(in srgb, var(--status-fuzzy) 8%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--status-fuzzy) 33%, transparent);
+}
+
+.banner[data-tone="info"] {
+  color: var(--status-ocr);
+  background: color-mix(in srgb, var(--status-ocr) 8%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--status-ocr) 33%, transparent);
+}
+
+.banner[data-tone="success"] {
+  color: var(--status-exact);
+  background: color-mix(in srgb, var(--status-exact) 8%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--status-exact) 33%, transparent);
+}
+
+.banner[data-tone="neutral"] {
+  color: var(--ink-3);
+}
+
 /* ─── scrollbars ──────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 10px;
