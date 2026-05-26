@@ -48,8 +48,11 @@ needs it); for now we inline the same pattern here.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -203,11 +206,13 @@ def last_project_path_exists(state: SessionState) -> bool:
 def save_session_state(data_root: Path, state: SessionState) -> None:
     """Write ``state`` atomically to ``<data_root>/session_state.json``.
 
-    Atomicity: writes ``<path>.tmp`` then ``Path.replace`` — POSIX
-    rename is atomic so readers see either the old file or the new
-    file (never a half-written one). On Windows ``Path.replace``
-    delegates to ``MoveFileExW(MOVEFILE_REPLACE_EXISTING)`` which is
-    also atomic.
+    Atomicity: writes to a unique temp file in the same directory as
+    ``path``, then ``os.replace`` — POSIX rename is atomic so readers
+    see either the old file or the new file (never a half-written one).
+    On Windows ``os.replace`` delegates to
+    ``MoveFileExW(MOVEFILE_REPLACE_EXISTING)`` which is also atomic.
+    Using a random temp name avoids a deterministic-name collision when
+    two processes write the same target file concurrently.
 
     Creates ``data_root`` (and any parent dirs) if missing — the
     ``mkdir`` is the only filesystem mutation other than the write
@@ -224,9 +229,15 @@ def save_session_state(data_root: Path, state: SessionState) -> None:
     path = session_state_path(data_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(state.model_dump(), indent=2, ensure_ascii=False)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(payload, encoding="utf-8")
-    tmp.replace(path)
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(payload)
+        os.replace(tmp_name, path)
+    except Exception:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_name)
+        raise
     logger.debug(
         "Saved session state to %s (project=%s page_index=%s).",
         path,

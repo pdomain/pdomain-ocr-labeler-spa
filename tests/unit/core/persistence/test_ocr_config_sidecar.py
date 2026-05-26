@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -294,10 +295,12 @@ def test_save_swallows_oserror_and_logs_warning(
     so an operator can spot persistent disk-side failures.
     """
 
-    def _boom(self, target):  # type: ignore[no-untyped-def]
+    import os as _os
+
+    def _boom(src: str, dst: str) -> None:
         raise OSError("simulated rename failure")
 
-    monkeypatch.setattr(Path, "replace", _boom)
+    monkeypatch.setattr(_os, "replace", _boom)
     with caplog.at_level(logging.WARNING, logger="pd_ocr_labeler_spa.core.persistence.ocr_config"):
         # MUST NOT raise — that's the policy contract.
         save_ocr_config(tmp_path, OCRConfigSidecar())
@@ -389,3 +392,44 @@ def test_load_does_not_warn_when_no_extras_present(
         if r.levelno == logging.WARNING and "ocr_config_extras_dropped" in r.getMessage()
     ]
     assert drift_warnings == []
+
+
+def test_save_ocr_config_concurrent_writes_no_collision(tmp_path: Path) -> None:
+    """Concurrent ``save_ocr_config`` calls each use a unique temp file.
+
+    With the old deterministic ``<path>.tmp`` name, two concurrent writers
+    would race on the same temp file (one could ``os.replace`` before the
+    other finishes writing). With random temp names each writer has its
+    own private temp file.
+
+    Post-conditions:
+    - No exception raised (``save_ocr_config`` swallows OSError, but
+      an unexpected exception type would still propagate and fail the test).
+    - The sidecar file exists and is valid JSON.
+    - No ``.tmp`` files remain.
+    """
+    data_root = tmp_path / "data"
+    data_root.mkdir()
+    n = 8
+
+    def write_i(i: int) -> None:
+        save_ocr_config(
+            data_root,
+            OCRConfigSidecar(
+                schema_version="1.0",
+                selected_detection_key=f"det-{i}",
+                selected_recognition_key=f"rec-{i}",
+                hf_pinned_revision=None,
+            ),
+        )
+
+    with ThreadPoolExecutor(max_workers=n) as pool:
+        list(pool.map(write_i, range(n)))
+
+    # Target must exist and be valid.
+    loaded = load_ocr_config(data_root)
+    assert loaded is not None
+    assert loaded.selected_detection_key.startswith("det-")
+
+    # No orphan temp files.
+    assert list(data_root.glob("*.tmp")) == []

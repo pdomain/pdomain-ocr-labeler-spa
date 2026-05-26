@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -29,28 +31,36 @@ class TestWriteJsonAtomic:
         with open(target) as f:
             assert json.load(f) == data
 
-    def test_uses_tmp_suffix(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """`write_json_atomic` writes to `.tmp` before replace."""
+    def test_uses_tmp_file_in_same_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """`write_json_atomic` creates a temp file in the same dir before replace.
+
+        We can't predict the exact random name, but we can assert:
+        - a ``*.tmp`` file exists in the parent dir during the write, and
+        - no ``*.tmp`` files remain afterwards.
+        """
         target = tmp_path / "test.json"
         data = {"test": True}
+        tmp_files_during_write: list[list[str]] = []
 
-        # Track open calls to verify `.tmp` file is used
-        open_calls = []
-        original_open = open
+        original_replace = os.replace
 
-        def tracked_open(path, *args, **kwargs):
-            open_calls.append(str(path))
-            return original_open(path, *args, **kwargs)
+        def patched_replace(src: str, dst: str) -> None:
+            # Capture any .tmp files in the parent dir just before the rename.
+            parent = Path(dst).parent
+            tmp_files_during_write.append([p.name for p in parent.glob("*.tmp")])
+            original_replace(src, dst)
 
-        monkeypatch.setattr("builtins.open", tracked_open)
+        monkeypatch.setattr(os, "replace", patched_replace)
 
         write_json_atomic(target, data)
 
-        # Verify .tmp file was created and written to
-        tmp_path_str = str(target.with_suffix(".tmp"))
-        assert tmp_path_str in open_calls
-        # The .tmp file should have been replaced, so it shouldn't exist anymore
-        assert not target.with_suffix(".tmp").exists()
+        # At least one .tmp existed in the same directory just before replace.
+        assert tmp_files_during_write, "os.replace was never called"
+        assert len(tmp_files_during_write[0]) >= 1, "no *.tmp in parent dir during write"
+
+        # No .tmp files remain after the call.
+        remaining_tmp = list(tmp_path.glob("*.tmp"))
+        assert remaining_tmp == []
         assert target.exists()
 
     def test_overwrites_existing_file(self, tmp_path: Path) -> None:
@@ -81,6 +91,28 @@ class TestWriteJsonAtomic:
 
         assert json.loads(target.read_text()) == data
 
+    def test_concurrent_writes_produce_unique_temp_names(self, tmp_path: Path) -> None:
+        """Concurrent writes to the same target each get a distinct temp file.
+
+        Both writers should succeed (last one wins via os.replace); the key
+        property is that neither collides with the other's temp file, so no
+        ``FileNotFoundError`` or torn write occurs.  After both finish, the
+        target exists and no ``.tmp`` files remain.
+        """
+        target = tmp_path / "shared.json"
+        n = 8
+
+        def write_i(i: int) -> None:
+            write_json_atomic(target, {"writer": i})
+
+        with ThreadPoolExecutor(max_workers=n) as pool:
+            list(pool.map(write_i, range(n)))
+
+        assert target.exists()
+        result = json.loads(target.read_text())
+        assert "writer" in result  # one of the n writes won
+        assert list(tmp_path.glob("*.tmp")) == []  # no leftover temp files
+
 
 class TestWriteBytesAtomic:
     """Test `write_bytes_atomic` atomicity."""
@@ -95,28 +127,28 @@ class TestWriteBytesAtomic:
         assert target.exists()
         assert target.read_bytes() == data
 
-    def test_uses_tmp_suffix(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """`write_bytes_atomic` writes to `.tmp` before replace."""
+    def test_uses_tmp_file_in_same_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """`write_bytes_atomic` creates a temp file in the same dir before replace."""
         target = tmp_path / "test.bin"
         data = b"test data"
+        tmp_files_during_write: list[list[str]] = []
 
-        # Track open calls
-        open_calls = []
-        original_open = open
+        original_replace = os.replace
 
-        def tracked_open(path, *args, **kwargs):
-            open_calls.append(str(path))
-            return original_open(path, *args, **kwargs)
+        def patched_replace(src: str, dst: str) -> None:
+            parent = Path(dst).parent
+            tmp_files_during_write.append([p.name for p in parent.glob("*.tmp")])
+            original_replace(src, dst)
 
-        monkeypatch.setattr("builtins.open", tracked_open)
+        monkeypatch.setattr(os, "replace", patched_replace)
 
         write_bytes_atomic(target, data)
 
-        # Verify .tmp file was created and written to
-        tmp_path_str = str(target.with_suffix(".tmp"))
-        assert tmp_path_str in open_calls
-        # The .tmp file should have been replaced
-        assert not target.with_suffix(".tmp").exists()
+        assert tmp_files_during_write, "os.replace was never called"
+        assert len(tmp_files_during_write[0]) >= 1
+
+        remaining_tmp = list(tmp_path.glob("*.tmp"))
+        assert remaining_tmp == []
         assert target.exists()
 
     def test_overwrites_existing_file(self, tmp_path: Path) -> None:
@@ -138,135 +170,168 @@ class TestWriteBytesAtomic:
 
         assert target.read_bytes() == data
 
+    def test_concurrent_writes_produce_unique_temp_names(self, tmp_path: Path) -> None:
+        """Concurrent byte writes each get a distinct temp file, no collisions."""
+        target = tmp_path / "shared.bin"
+        n = 8
 
-class TestAtomicityPowerFailSimulation:
-    """Test atomicity via power-fail simulation (fork+exit between write and replace)."""
+        def write_i(i: int) -> None:
+            write_bytes_atomic(target, f"writer-{i}".encode())
 
-    def test_json_no_partial_file_on_mid_write_exit(self, tmp_path: Path) -> None:
-        """No partial `.json` file left if process exits between write and replace.
+        with ThreadPoolExecutor(max_workers=n) as pool:
+            list(pool.map(write_i, range(n)))
 
-        This simulates a power failure by forking and calling `os._exit(1)`
-        after writing the temp file but before `os.replace`.
-        """
+        assert target.exists()
+        assert list(tmp_path.glob("*.tmp")) == []
+
+
+class TestAtomicityCleanupOnFailure:
+    """Test that temp files are cleaned up if os.replace raises."""
+
+    def test_json_cleans_up_tmp_on_replace_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If os.replace raises, the temp file is removed (no orphan)."""
         target = tmp_path / "test.json"
-        test_script = tmp_path / "test_crash.py"
-        data = {"key": "value"}
 
-        # Create a test script that exits mid-operation
-        test_script.write_text(
-            f"""
-import os
-import sys
-sys.path.insert(0, {sys.path[0]!r})
+        def failing_replace(src: str, dst: str) -> None:
+            raise OSError("simulated replace failure")
 
-from pd_ocr_labeler_spa.core.persistence.atomic import write_json_atomic
-from pathlib import Path
+        monkeypatch.setattr(os, "replace", failing_replace)
 
-target = Path({str(target)!r})
-data = {data!r}
+        with pytest.raises(OSError, match="simulated replace failure"):
+            write_json_atomic(target, {"x": 1})
 
-# Monkey-patch os.replace to exit before it completes
-original_replace = os.replace
-def crashing_replace(src, dst):
-    # Simulate crash between write_text and replace
-    os._exit(1)
-
-os.replace = crashing_replace
-
-try:
-    write_json_atomic(target, data)
-except SystemExit:
-    pass
-"""
-        )
-
-        # Run the script in a subprocess that will crash
-        result = subprocess.run(
-            [sys.executable, str(test_script)],
-            capture_output=True,
-        )
-
-        # Process should have exited abnormally
-        assert result.returncode != 0
-
-        # The target file should NOT exist (crashed before replace)
         assert not target.exists()
+        assert list(tmp_path.glob("*.tmp")) == []
 
-        # The .tmp file should exist (was written but not replaced)
-        tmp_file = target.with_suffix(".tmp")
-        assert tmp_file.exists()
-
-    def test_bytes_no_partial_file_on_mid_write_exit(self, tmp_path: Path) -> None:
-        """No partial `.bin` file left if process exits between write and replace.
-
-        This simulates a power failure by forking and calling `os._exit(1)`
-        after writing the temp file but before `os.replace`.
-        """
+    def test_bytes_cleans_up_tmp_on_replace_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If os.replace raises, the temp file is removed (no orphan)."""
         target = tmp_path / "test.bin"
-        test_script = tmp_path / "test_crash.py"
-        data = b"binary content"
 
-        # Create a test script that exits mid-operation
-        test_script.write_text(
-            f"""
-import os
-import sys
-sys.path.insert(0, {sys.path[0]!r})
+        def failing_replace(src: str, dst: str) -> None:
+            raise OSError("simulated replace failure")
 
-from pd_ocr_labeler_spa.core.persistence.atomic import write_bytes_atomic
-from pathlib import Path
+        monkeypatch.setattr(os, "replace", failing_replace)
 
-target = Path({str(target)!r})
-data = {data!r}
+        with pytest.raises(OSError, match="simulated replace failure"):
+            write_bytes_atomic(target, b"data")
 
-# Monkey-patch os.replace to exit before it completes
-original_replace = os.replace
-def crashing_replace(src, dst):
-    # Simulate crash between write and replace
-    os._exit(1)
-
-os.replace = crashing_replace
-
-try:
-    write_bytes_atomic(target, data)
-except SystemExit:
-    pass
-"""
-        )
-
-        # Run the script in a subprocess that will crash
-        result = subprocess.run(
-            [sys.executable, str(test_script)],
-            capture_output=True,
-        )
-
-        # Process should have exited abnormally
-        assert result.returncode != 0
-
-        # The target file should NOT exist (crashed before replace)
         assert not target.exists()
+        assert list(tmp_path.glob("*.tmp")) == []
 
-        # The .tmp file should exist (was written but not replaced)
-        tmp_file = target.with_suffix(".tmp")
-        assert tmp_file.exists()
+    def test_idempotent_after_power_fail_leftover(self, tmp_path: Path) -> None:
+        """After a crash that leaves a stale ``.tmp`` file, a new write succeeds.
 
-    def test_idempotent_after_power_fail(self, tmp_path: Path) -> None:
-        """After a power failure, retrying the write succeeds.
-
-        If a crash leaves a .tmp file, the next write attempt should
-        clean it up and succeed.
+        The new writer creates its own unique temp name — it does NOT clobber
+        the stale one, and after completion both stale and target state is clean.
         """
         target = tmp_path / "test.json"
-        tmp_file = target.with_suffix(".tmp")
+        stale_tmp = tmp_path / "stale_crash.json.tmp"
+        stale_tmp.write_text("incomplete json")
 
-        # Simulate leftover .tmp file from crashed write
-        tmp_file.write_text("incomplete json")
-
-        # New write should succeed and replace .tmp + target
+        # New write should succeed regardless of the stale file
         data = {"recovered": True}
         write_json_atomic(target, data)
 
         assert target.exists()
         assert json.loads(target.read_text()) == data
-        # Old .tmp should be gone
-        assert not tmp_file.exists()
+        # The new writer's temp file was cleaned up (os.replace succeeded)
+        # The stale file is NOT touched by the new writer — it remains
+        # as an orphan (operator cleans it up separately, or next writer
+        # for that file will overwrite it via os.replace).
+        # What matters: the target is correct and no NEW .tmp orphans were left.
+        new_tmps = [p for p in tmp_path.glob("*.tmp") if p != stale_tmp]
+        assert new_tmps == []
+
+
+class TestAtomicityPowerFailSimulation:
+    """Test atomicity via power-fail simulation (subprocess exit between write and replace)."""
+
+    def test_json_no_partial_file_on_mid_write_exit(self, tmp_path: Path) -> None:
+        """No partial `.json` file left if process exits between write and replace."""
+        target = tmp_path / "test.json"
+        test_script = tmp_path / "test_crash.py"
+        data = {"key": "value"}
+
+        test_script.write_text(
+            f"""
+import os
+import sys
+import tempfile
+sys.path.insert(0, {sys.path[0]!r})
+
+from pathlib import Path
+
+target = Path({str(target)!r})
+
+# Monkey-patch os.replace to exit before it completes
+original_replace = os.replace
+def crashing_replace(src, dst):
+    os._exit(1)
+
+os.replace = crashing_replace
+
+from pd_ocr_labeler_spa.core.persistence.atomic import write_json_atomic
+
+try:
+    write_json_atomic(target, {data!r})
+except SystemExit:
+    pass
+"""
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(test_script)],
+            capture_output=True,
+        )
+
+        assert result.returncode != 0
+        # The target file should NOT exist (crashed before replace)
+        assert not target.exists()
+        # At least one .tmp orphan should exist (the crashed write left it)
+        tmp_files = list(tmp_path.glob("*.tmp"))
+        assert len(tmp_files) == 1
+
+    def test_bytes_no_partial_file_on_mid_write_exit(self, tmp_path: Path) -> None:
+        """No partial `.bin` file left if process exits between write and replace."""
+        target = tmp_path / "test.bin"
+        test_script = tmp_path / "test_crash.py"
+        data = b"binary content"
+
+        test_script.write_text(
+            f"""
+import os
+import sys
+sys.path.insert(0, {sys.path[0]!r})
+
+from pathlib import Path
+
+target = Path({str(target)!r})
+
+original_replace = os.replace
+def crashing_replace(src, dst):
+    os._exit(1)
+
+os.replace = crashing_replace
+
+from pd_ocr_labeler_spa.core.persistence.atomic import write_bytes_atomic
+
+try:
+    write_bytes_atomic(target, {data!r})
+except SystemExit:
+    pass
+"""
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(test_script)],
+            capture_output=True,
+        )
+
+        assert result.returncode != 0
+        assert not target.exists()
+        tmp_files = list(tmp_path.glob("*.tmp"))
+        assert len(tmp_files) == 1

@@ -52,8 +52,11 @@ selection persisted; seed the carrier with defaults".
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -198,9 +201,11 @@ def load_ocr_config(data_root: Path) -> OCRConfigSidecar | None:
 def save_ocr_config(data_root: Path, state: OCRConfigSidecar) -> None:
     """Write ``state`` atomically to ``<data_root>/ocr_config.json``.
 
-    Atomicity: ``<path>.tmp`` then ``Path.replace`` — POSIX rename is
-    atomic so readers see either the old file or the new file (never
-    a half-written one).
+    Atomicity: unique temp file in the same directory as ``path``, then
+    ``os.replace`` — POSIX rename is atomic so readers see either the
+    old file or the new file (never a half-written one). Using a random
+    temp name avoids a deterministic-name collision when two processes
+    write the same target file concurrently.
 
     Creates ``data_root`` (and any parent dirs) if missing.
 
@@ -218,9 +223,15 @@ def save_ocr_config(data_root: Path, state: OCRConfigSidecar) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = json.dumps(state.model_dump(), indent=2, ensure_ascii=False)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(payload, encoding="utf-8")
-        tmp.replace(path)
+        fd, tmp_name = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(payload)
+            os.replace(tmp_name, path)
+        except Exception:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_name)
+            raise
     except OSError as exc:
         logger.warning(
             "ocr_config_save_failed — could not persist OCR config to %s (%s). "

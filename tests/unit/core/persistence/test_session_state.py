@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -454,3 +455,42 @@ def test_load_does_not_warn_when_no_extras_present(
         "WARNING must be silent when only declared keys are present — "
         "the substring is reserved for actual drift signals (D-041)."
     )
+
+
+def test_save_concurrent_writes_no_collision(tmp_path: Path) -> None:
+    """Concurrent ``save_session_state`` calls each use a unique temp file.
+
+    With the deterministic ``<path>.tmp`` name, two concurrent writers
+    would collide on the temp file.  With random temp names each writer
+    gets its own private temp file, so ``os.replace`` always finds the
+    file it created and the last caller's data wins (no exception).
+
+    Post-conditions:
+    - No exception raised by any writer.
+    - The session-state file exists and is valid JSON with the expected shape.
+    - No ``.tmp`` files remain in the data root.
+    """
+    data_root = tmp_path / "data"
+    data_root.mkdir()
+    n = 8
+
+    def write_i(i: int) -> None:
+        save_session_state(
+            data_root,
+            SessionState(
+                schema_version="1.0",
+                last_project_path=f"/proj/{i}",
+                last_page_index=i,
+            ),
+        )
+
+    with ThreadPoolExecutor(max_workers=n) as pool:
+        list(pool.map(write_i, range(n)))
+
+    # Target must exist and be a valid session-state file.
+    loaded = load_session_state(data_root)
+    assert loaded is not None
+    assert loaded.last_page_index in range(n)
+
+    # No orphan temp files.
+    assert list(data_root.glob("*.tmp")) == []
