@@ -212,23 +212,32 @@ def test_checkout_uses_fetch_depth_zero() -> None:
     # Find the checkout step and assert fetch-depth: 0 is in the
     # `with:` block that immediately follows it. Looser than a YAML
     # walk but matches how a reviewer reads the file.
-    assert "actions/checkout@v4" in text, "must use actions/checkout@v4"
+    # Accept either @vN tag-pin or a full 40-char SHA pin (supply-chain hardening).
+    assert re.search(r"actions/checkout@([0-9a-f]{40}|v\d)", text), (
+        "must use actions/checkout pinned to a SHA or @vN tag"
+    )
     assert "fetch-depth: 0" in text, "actions/checkout must set fetch-depth: 0 so hatch-vcs sees tags"
 
 
-def test_action_versions_are_major_pinned() -> None:
-    """No ``@main`` / ``@master`` / floating refs — supply-chain hygiene."""
+def test_action_versions_are_sha_or_major_pinned() -> None:
+    """No ``@main`` / ``@master`` / floating refs — supply-chain hygiene.
+
+    Accepts either:
+    - ``@v<N>...`` major-version tag, or
+    - ``@<40-hex-char-sha>`` commit SHA pin (preferred — immutable).
+    Rejects bare ``@main``, ``@master``, ``@latest``, or unversioned refs.
+    """
     text = _workflow_text()
-    # Every `uses:` line should pin a `@v<N>` major or a sha. We
-    # don't ship sha pins here, so enforce `@v<digit>` form.
-    uses_lines = re.findall(r"uses:\s*([^\s]+)", text)
+    uses_lines = re.findall(r"uses:\s*([^\s#]+)", text)
     assert uses_lines, "no `uses:` directives found in workflow"
     for ref in uses_lines:
-        # Allow `owner/repo@v<N>...` form. Reject @main, @master,
-        # @latest, or unversioned refs.
         assert "@" in ref, f"action ref {ref!r} is unpinned"
         version = ref.split("@", 1)[1]
-        assert re.match(r"^v\d", version), f"action ref {ref!r} must be major-pinned (@v<N>), not @{version}"
+        is_major_tag = bool(re.match(r"^v\d", version))
+        is_sha_pin = bool(re.match(r"^[0-9a-f]{40}$", version))
+        assert is_major_tag or is_sha_pin, (
+            f"action ref {ref!r} must be SHA-pinned (@<40-hex>) or major-pinned (@v<N>), not @{version}"
+        )
 
 
 def test_node_version_matches_mise() -> None:
