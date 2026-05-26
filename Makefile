@@ -141,12 +141,22 @@ MISE := $(shell command -v mise 2>/dev/null || echo $$HOME/.local/bin/mise)
 WORKSPACE_ROOT := $(abspath $(CURDIR)/..)
 HAVE_MISE = [ -x "$(MISE)" ]
 
+# Security (F-017 Option B): pin mise installer to an immutable tagged GitHub
+# Release asset URL rather than piping the floating https://mise.run shortlink
+# to a shell. GitHub Release assets are immutable once a tag is published; TLS
+# to github.com provides transport integrity. To upgrade: bump MISE_INSTALLER_VERSION.
+MISE_INSTALLER_VERSION := v2026.5.15
+MISE_INSTALLER_URL := https://github.com/jdx/mise/releases/download/$(MISE_INSTALLER_VERSION)/install.sh
+
 mise-download: ## [optional] Download the mise binary only (no shell init, no tools yet)
 	@if $(HAVE_MISE); then \
 		echo "mise already installed at $(MISE)"; \
 	else \
-		echo "Downloading mise to $$HOME/.local/bin/mise..."; \
-		curl -fsSL https://mise.run | sh; \
+		echo "Downloading mise $(MISE_INSTALLER_VERSION) to $$HOME/.local/bin/mise..."; \
+		MISE_TMP=$$(mktemp) && \
+		curl -fsSL -o "$$MISE_TMP" "$(MISE_INSTALLER_URL)" && \
+		sh "$$MISE_TMP" && \
+		rm -f "$$MISE_TMP"; \
 		echo "mise downloaded. Run 'make mise-setup' next to install pinned tools."; \
 	fi
 

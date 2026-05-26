@@ -257,3 +257,43 @@ def test_ci_runs_frontend_install_before_pre_commit_check() -> None:
         f"frontend-install must appear before pre-commit-check in ci: target "
         f"so node_modules exists when pre-commit hooks fire; got: {ci_line!r}"
     )
+
+
+def test_makefile_mise_download_pins_version() -> None:
+    """mise-download target must fetch mise from a pinned, immutable GitHub release URL.
+
+    ``curl https://mise.run | sh`` floats to whatever mise.run currently
+    serves — a compromised CDN or DNS-spoofed origin can inject arbitrary
+    code. Option-B fix: pin to a specific tagged GitHub release asset URL
+    (github.com/jdx/mise/releases/download/<tag>/install.sh). GitHub
+    release assets are immutable once a tag is published; TLS provides
+    transport integrity. Upstream (jdx/mise) does publish install.sh in
+    each release, but requiring minisign on developer machines is impractical,
+    so the pinned-URL approach is the pragmatic baseline (F-017).
+
+    Comment lines (``# ...``) are excluded from the pipe-to-shell check
+    since the comment block may reference the old pattern as context.
+    """
+    import re
+
+    text = MAKEFILE.read_text()
+    # Strip comment-only lines for the floating-URL check; executable
+    # recipe lines must not use the mise.run shortlink.
+    code_lines = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    assert "https://mise.run" not in code_lines, (
+        "Makefile mise-download must not use the floating https://mise.run URL "
+        "in executable lines — pin to a tagged GitHub release URL instead (F-017 Option B)"
+    )
+    # Must pin to a versioned GitHub release asset. Accept either a literal
+    # version (`v2026.5.15/install.sh`) or a Make-variable form
+    # (`$(MISE_INSTALLER_VERSION)/install.sh` with a matching
+    # MISE_INSTALLER_VERSION := vX.Y.Z assignment nearby).
+    pinned_literal = re.search(r"github\.com/jdx/mise/releases/download/v[\d.]+/install\.sh", text)
+    pinned_via_var = re.search(r"MISE_INSTALLER_VERSION\s*:=\s*v[\d.]+", text) and re.search(
+        r"github\.com/jdx/mise/releases/download/\$\(MISE_INSTALLER_VERSION\)/install\.sh", text
+    )
+    assert pinned_literal or pinned_via_var, (
+        "Makefile mise-download must pin mise installer to a tagged "
+        "github.com/jdx/mise/releases/download/<version>/install.sh URL (F-017). "
+        "Use either a literal version or a MISE_INSTALLER_VERSION := vX.Y.Z variable."
+    )

@@ -28,9 +28,22 @@ function Test-Command {
 }
 
 # 1. Install uv if not already present (provides Python 3.13 too).
+#
+# Security (F-017 Option B): download from a pinned, immutable GitHub Release
+# asset URL rather than piping https://astral.sh/uv/install.ps1 into
+# Invoke-Expression. GitHub Release assets at tagged URLs are immutable once
+# published; TLS to github.com provides transport integrity. Upstream
+# (astral-sh/uv) does not publish a checksum for the installer script itself
+# (sha256.sum covers binary tarballs only), so the pinned-tag approach is the
+# pragmatic baseline. To upgrade: update $uvVer below.
+$uvVer = "0.11.16"
 if (-not (Test-Command -Name "uv")) {
-    Write-Host "uv not found — installing uv from https://astral.sh/uv/install.ps1 ..."
-    Invoke-RestMethod -Uri "https://astral.sh/uv/install.ps1" -UseBasicParsing | Invoke-Expression
+    Write-Host "uv not found — installing uv $uvVer from GitHub Releases..."
+    $uvInstallerUrl = "https://github.com/astral-sh/uv/releases/download/$uvVer/uv-installer.ps1"
+    $uvInstallerTmp = Join-Path ([System.IO.Path]::GetTempPath()) "uv-installer-$([System.Guid]::NewGuid()).ps1"
+    Invoke-WebRequest -Uri $uvInstallerUrl -OutFile $uvInstallerTmp -UseBasicParsing
+    try { & powershell -NoProfile -ExecutionPolicy Bypass -File $uvInstallerTmp }
+    finally { Remove-Item $uvInstallerTmp -ErrorAction SilentlyContinue }
     $env:Path = "$HOME\.local\bin;" + $env:Path
 }
 

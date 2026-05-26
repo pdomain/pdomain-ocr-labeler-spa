@@ -17,10 +17,26 @@ set -euo pipefail
 
 REPO="ConcaveTrillion/pd-ocr-labeler-spa"
 
+# Shared temp directory; cleaned up on exit, interrupt, or termination.
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT INT TERM
+
 # 1. Install uv if not already present (provides Python 3.13 too).
+#
+# Security (F-017 Option B): download from a pinned, immutable GitHub
+# Release asset URL rather than piping https://astral.sh/uv/install.sh
+# directly to a shell. GitHub Release assets at tagged URLs are immutable
+# once published; TLS to github.com provides transport integrity. Upstream
+# (astral-sh/uv) does not publish a checksum for the installer script
+# itself (sha256.sum covers binary tarballs only), so the pinned-tag
+# approach is the pragmatic baseline. To upgrade: update UV_VER below.
+UV_VER="0.11.16"
 if ! command -v uv >/dev/null 2>&1; then
-    echo "uv not found — installing uv from https://astral.sh/uv/install.sh ..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    echo "uv not found — installing uv ${UV_VER} from GitHub Releases..."
+    UV_INST="${TMPDIR}/uv-installer.sh"
+    curl -LsSf -o "$UV_INST" \
+        "https://github.com/astral-sh/uv/releases/download/${UV_VER}/uv-installer.sh"
+    sh "$UV_INST"
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
@@ -76,10 +92,7 @@ if [ -z "$WHEEL_URL" ]; then
     exit 1
 fi
 
-# 5. Download the wheel to a temp dir and install it as a uv tool.
-TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT INT TERM
-
+# 5. Download the wheel to the shared temp dir and install it as a uv tool.
 WHEEL_FILE="${TMPDIR}/$(basename "$WHEEL_URL")"
 echo "Downloading ${WHEEL_URL}..."
 curl -fsSL -o "$WHEEL_FILE" "$WHEEL_URL"

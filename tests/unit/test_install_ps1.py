@@ -306,20 +306,64 @@ def test_install_ps1_detects_ms_store_stub_python() -> None:
 
 
 # ---------------------------------------------------------------------------
+# F-017 — supply-chain hardening: no pipe-remote-to-shell
+# ---------------------------------------------------------------------------
+
+
+def _ps1_non_comment_lines(text: str) -> str:
+    """Return PS1 script text with comment-only lines stripped."""
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+
+
+def test_install_ps1_does_not_pipe_to_invoke_expression() -> None:
+    """install.ps1 must not pipe a remote script directly to Invoke-Expression.
+
+    ``irm <url> | iex`` (Invoke-Expression) is the PowerShell analogue of
+    ``curl <url> | sh`` — a compromised CDN or MITM can inject arbitrary
+    code without any verification step. The pattern must be absent from
+    executable (non-comment) lines.
+    """
+    code = _ps1_non_comment_lines(INSTALL_PS1.read_text())
+    # Match any pipeline into Invoke-Expression or iex (with optional whitespace).
+    assert not re.search(r"\|\s*(?:Invoke-Expression|iex)\b", code), (
+        "install.ps1 must not pipe a remote URL into Invoke-Expression / iex — "
+        "download to a temp file first, then execute (F-017 supply-chain hardening)"
+    )
+
+
+def test_install_ps1_pins_uv_to_tagged_release() -> None:
+    """install.ps1 must fetch uv from a pinned, immutable GitHub release URL.
+
+    Mirrors test_install_sh_pins_uv_to_tagged_release. Option-B strategy:
+    GitHub release assets are immutable once a tag is published; TLS to
+    github.com provides transport integrity. Upstream (astral.sh) does
+    not publish a checksum for the installer script itself.
+    """
+    text = INSTALL_PS1.read_text()
+    code = _ps1_non_comment_lines(text)
+    # Non-comment lines must not reference the floating astral.sh URL.
+    assert not re.search(r"astral\.sh/uv/install\.ps1", code), (
+        "install.ps1 must not use the floating https://astral.sh/uv/install.ps1 URL "
+        "in executable lines — pin to a tagged GitHub release URL instead (F-017 Option B)"
+    )
+    assert re.search(r"github\.com/astral-sh/uv/releases/download/\S+/uv-installer\.ps1", text), (
+        "install.ps1 must pin uv installer to a tagged github.com release asset URL "
+        "(github.com/astral-sh/uv/releases/download/<tag>/uv-installer.ps1)"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Length sanity — keep the chunk reviewable
 # ---------------------------------------------------------------------------
 
 
 def test_install_ps1_under_size_budget():
-    # Keep the installer scannable in one screen. Soft-cap at 140 lines
-    # to leave headroom for PowerShell's chattier idiom (Test-Command
-    # helper, try/catch blocks, here-string error message, B-33 MS
-    # Store stub detection branch) but still flag accidental sprawl.
-    # install.sh sits at 95 with an 80-line target / 100 hard cap;
-    # PowerShell needs a few more lines for the same logic, plus the
-    # Windows-only stub-detection branch that has no install.sh peer.
+    # Keep the installer scannable in one screen. Soft-cap bumped to 155
+    # in F-017 to accommodate the download-then-execute pattern that
+    # replaced the irm | iex anti-pattern (adds ~5 lines for PowerShell's
+    # chattier Invoke-WebRequest + temp-file idiom).
     line_count = len(INSTALL_PS1.read_text().splitlines())
-    assert line_count <= 140, (
+    assert line_count <= 155, (
         f"install.ps1 has grown to {line_count} lines; consider extracting "
         "logic to a helper script before the installer becomes hard to audit"
     )
