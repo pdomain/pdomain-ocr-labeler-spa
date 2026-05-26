@@ -22,6 +22,14 @@ dependencies = [
     "httpx>=0.28",
     "sse-starlette>=2.1",
     "anyio>=4.4",
+    # Security advisory lower-bounds (direct constraints so pip-audit stays clean
+    # regardless of what fastapi/httpx pull in transitively).
+    # idna>=3.15 — CVE-2026-45409 (ReDoS in idna.encode())
+    "idna>=3.15",
+    # starlette>=1.0.1 — PYSEC-2026-161 / GHSA-86qp-5c8j-p5mr (host-header handling)
+    "starlette>=1.0.1",
+    # urllib3>=2.7.0 — PYSEC-2026-141 / PYSEC-2026-142
+    "urllib3>=2.7.0",
     # OCR / image domain (wired in later milestones; harmless to declare now)
     "pd-book-tools>=0.14.1",
     "huggingface_hub>=0.23",
