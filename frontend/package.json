@@ -20,7 +20,7 @@
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
-    "@pdomain/pdomain-ui": "file:../pdomain-pdomain-ui-0.2.1.tgz",
+    "@pdomain/pdomain-ui": "file:../../pd-ui",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-slot": "^1.2.0",
     "@radix-ui/react-tabs": "^1.1.13",
