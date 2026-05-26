@@ -1,5 +1,6 @@
 // OCRConfigModal.test.tsx — tests for OCR config modal with normalize section (#261)
 // Spec: docs/specs/2026-05-12-text-normalization-design.md §Toggle UI
+// Issue #447: POST /api/ocr-config/auto-rotate failures must be surfaced to the user.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
@@ -200,4 +201,116 @@ describe("OCRConfigModal — close behaviour", () => {
   // (the inner panel), so that click path is no longer the backdrop-dismiss route.
   // Radix Dialog's native Escape + overlay-click behaviour is tested in the pd-ui
   // primitives package and doesn't need re-testing here.
+});
+
+// ─── Issue #447: POST /api/ocr-config/auto-rotate HTTP failure surfacing ─────
+describe("OCRConfigModal — auto-rotate POST failure surfacing (#447)", () => {
+  beforeEach(() => {
+    // Provide a working ocr-config GET so auto-rotate controls are rendered and enabled.
+    server.use(
+      http.get("/api/ocr-config", () =>
+        HttpResponse.json({
+          auto_rotate_available: true,
+          auto_rotate_on_load: true,
+          auto_rotate_method: "auto",
+        }),
+      ),
+    );
+  });
+
+  it("shows ocr-config-save-error banner when POST returns 500, modal stays open", async () => {
+    // Override POST to return a 500.
+    server.use(
+      http.post("/api/ocr-config/auto-rotate", () =>
+        HttpResponse.json({ detail: "Internal Server Error" }, { status: 500 }),
+      ),
+    );
+
+    const onClose = vi.fn();
+    renderModal({ onClose });
+
+    // Wait for auto-rotate controls to be enabled (ocr-config GET resolved).
+    await waitFor(() => {
+      expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
+    });
+
+    // Toggle the checkbox to trigger the POST.
+    fireEvent.click(screen.getByTestId("auto-rotate-checkbox"));
+
+    // Error banner should appear.
+    await waitFor(() => {
+      expect(screen.getByTestId("ocr-config-save-error")).toBeInTheDocument();
+    });
+
+    // Modal must still be open — onClose must NOT have been called.
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId("ocr-config-modal")).toBeInTheDocument();
+  });
+
+  it("shows ocr-config-save-error banner when POST returns 422", async () => {
+    server.use(
+      http.post("/api/ocr-config/auto-rotate", () =>
+        HttpResponse.json({ detail: "Unprocessable Entity" }, { status: 422 }),
+      ),
+    );
+
+    renderModal();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
+    });
+
+    fireEvent.click(screen.getByTestId("auto-rotate-checkbox"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("ocr-config-save-error")).toBeInTheDocument();
+    });
+  });
+
+  it("clears error banner on a subsequent successful POST", async () => {
+    // First POST fails.
+    server.use(
+      http.post("/api/ocr-config/auto-rotate", () =>
+        HttpResponse.json({ detail: "error" }, { status: 500 }),
+      ),
+    );
+
+    renderModal();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
+    });
+
+    // Trigger failure.
+    fireEvent.click(screen.getByTestId("auto-rotate-checkbox"));
+    await waitFor(() => {
+      expect(screen.getByTestId("ocr-config-save-error")).toBeInTheDocument();
+    });
+
+    // Now make POST succeed.
+    server.use(http.post("/api/ocr-config/auto-rotate", () => HttpResponse.json({})));
+
+    // Trigger success.
+    fireEvent.click(screen.getByTestId("auto-rotate-checkbox"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("ocr-config-save-error")).toBeNull();
+    });
+  });
+
+  it("no error banner when POST succeeds", async () => {
+    server.use(http.post("/api/ocr-config/auto-rotate", () => HttpResponse.json({})));
+
+    renderModal();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
+    });
+
+    fireEvent.click(screen.getByTestId("auto-rotate-checkbox"));
+
+    // Wait a tick and confirm no error banner appears.
+    await waitFor(() => {
+      expect(screen.queryByTestId("ocr-config-save-error")).toBeNull();
+    });
+  });
 });

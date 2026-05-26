@@ -1,7 +1,7 @@
 // OCRConfigModal.tsx — OCR configuration modal with text-normalization and auto-rotation sections.
 // Spec: docs/specs/2026-05-12-text-normalization-design.md §Toggle UI
 // Spec: docs/specs/2026-05-12-auto-rotation-design.md §OCR config additions
-// Issues #261, #264
+// Issues #261, #264, #447
 //
 // Sections:
 //   - Text normalization: normalize-gt-matching-checkbox, normalize-plaintext-checkbox,
@@ -16,11 +16,13 @@
 // Testids: ocr-config-modal (DialogContent), normalize-gt-matching-checkbox,
 //          normalize-plaintext-checkbox, normalize-profile-select,
 //          auto-rotate-checkbox, auto-rotate-method-select,
-//          ocr-config-close-button, ocr-config-done-button
+//          ocr-config-close-button, ocr-config-done-button,
+//          ocr-config-save-error (error banner when POST /api/ocr-config/auto-rotate fails)
 //          (stub: ocr-detection-model-select, ocr-recognition-model-select,
 //           ocr-hf-revision-input, ocr-rescan-models-button,
 //           ocr-config-cancel-button, ocr-config-apply-button)
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
@@ -57,15 +59,20 @@ async function fetchOcrConfig(): Promise<{
   };
 }
 
+// Fix #447: check response.ok and throw with server text on failure.
 async function postAutoRotateConfig(settings: {
   auto_rotate_on_load: boolean;
   auto_rotate_method: AutoRotateMethod;
 }): Promise<void> {
-  await fetch("/api/ocr-config/auto-rotate", {
+  const resp = await fetch("/api/ocr-config/auto-rotate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(text || `Server error ${resp.status.toString()}`);
+  }
 }
 
 export interface NormalizeSettings {
@@ -98,6 +105,9 @@ interface OCRConfigModalProps {
  *   - ``normalize-gt-matching-checkbox``
  *   - ``normalize-plaintext-checkbox``
  *   - ``normalize-profile-select``
+ *
+ * Issue #447 testid contract:
+ *   - ``ocr-config-save-error``  (error banner on POST failure)
  */
 export function OCRConfigModal({
   open,
@@ -111,6 +121,9 @@ export function OCRConfigModal({
     normalize_profile: "ascii",
   };
   const settings = normalizeSettings ?? defaults;
+
+  // Fix #447: track save errors from POST /api/ocr-config/auto-rotate.
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Probe pd_book_tools normalize availability.
   const { data: normalizeAvailable = false } = useQuery({
@@ -132,19 +145,29 @@ export function OCRConfigModal({
   const autoRotateMethod: AutoRotateMethod = ocrConfig?.auto_rotate_method ?? "auto";
 
   async function handleAutoRotateOnLoadChange(e: React.ChangeEvent<HTMLInputElement>) {
-    await postAutoRotateConfig({
-      auto_rotate_on_load: e.target.checked,
-      auto_rotate_method: autoRotateMethod,
-    });
-    void refetchOcrConfig();
+    setSaveError(null);
+    try {
+      await postAutoRotateConfig({
+        auto_rotate_on_load: e.target.checked,
+        auto_rotate_method: autoRotateMethod,
+      });
+      void refetchOcrConfig();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save auto-rotate settings.");
+    }
   }
 
   async function handleAutoRotateMethodChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    await postAutoRotateConfig({
-      auto_rotate_on_load: autoRotateOnLoad,
-      auto_rotate_method: e.target.value as AutoRotateMethod,
-    });
-    void refetchOcrConfig();
+    setSaveError(null);
+    try {
+      await postAutoRotateConfig({
+        auto_rotate_on_load: autoRotateOnLoad,
+        auto_rotate_method: e.target.value as AutoRotateMethod,
+      });
+      void refetchOcrConfig();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save auto-rotate settings.");
+    }
   }
 
   function handleGtMatchingChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -202,6 +225,21 @@ export function OCRConfigModal({
 
         {/* Body */}
         <div className="px-4 py-4 overflow-y-auto flex-1">
+          {/* Fix #447: save-error banner — shown when POST /api/ocr-config/auto-rotate fails. */}
+          {saveError !== null && (
+            <p
+              role="alert"
+              data-testid="ocr-config-save-error"
+              className="text-xs rounded px-2 py-1 mb-3"
+              style={{
+                color: "var(--status-bad)",
+                background: "color-mix(in srgb, var(--status-bad) 8%, var(--bg-surface))",
+              }}
+            >
+              Failed to save: {saveError}
+            </p>
+          )}
+
           {/* Text normalization section */}
           <section aria-labelledby="normalize-section-heading">
             <h3 id="normalize-section-heading" className="text-sm font-medium text-ink-2 mb-2">
