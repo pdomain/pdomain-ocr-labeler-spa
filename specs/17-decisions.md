@@ -1282,69 +1282,55 @@ shape — but the default rule is one verbosity flag, matching legacy.
 ## D-040 — Unhandled-exception traceback disclosure gated by `debug_unhandled_traceback` flag
 
 **Date.** 2026-05-07. Resolves Q-A11 / pairs with B-51.
+**Amended.** 2026-05-26 — default changed from `True` to `False` (F-003 / #408).
 
-**Decision.** Add `Settings.debug_unhandled_traceback: bool = True`
+**Decision.** `Settings.debug_unhandled_traceback: bool = False`
 (env `PDLABELER_DEBUG_UNHANDLED_TRACEBACK`). The 500 envelope emitted
 from the `Exception` catch-all in `api/middleware/error_handler.py`
-becomes flag-conditional:
+is flag-conditional:
 
-- When `True` (default — single-user-on-laptop UX, current behaviour
-  preserved): `details = traceback.format_exc().splitlines()[-3:]` and
-  `message = str(exc)`. Browser-console triage works without server
-  log access.
-- When `False` (any deployment past v1 single-user, or any future
-  managed/multi-tenant shape): `details = null`, `message =
-  "internal server error"`. Full traceback is still emitted via
+- When `False` (default — secure): `details = null`, `message =
+  "Internal server error"`. The exception text and traceback tail do
+  NOT cross the API boundary. Full traceback is still emitted via
   `logger.exception(...)` server-side; correlation to the client-side
   envelope is via the `X-Request-ID` header (echoed in the response
   and stamped on every log line via `RequestIdFilter` per spec §9).
-  An operator triages from server logs, not the browser console.
+- When `True` (explicit opt-in for local dev / single-user-on-laptop):
+  `details = traceback.format_exc().splitlines()[-3:]`. The `message`
+  is still always `"Internal server error"` — only `details` expands.
+  Browser-console triage works without server log access.
 
 In both modes the server-side log emission is unchanged.
 
-**Why default `True`.** v1 ships single-user-on-laptop. The user IS
-the operator, the browser DevTools console IS the triage tool, and
-opening a separate terminal to tail logs for a 500 would be hostile
-ergonomics. Parity with pgdp-prep stays intact for the default path.
+**Why default `False` (amendment from original `True`).** F-003 (#408)
+identified that `message=str(exc)` exposed internal paths, env-specific
+values, and sensitive exception text to any HTTP client. Even on a
+single-user laptop the API may be reachable from the local network
+(especially with wildcard CORS — see F-002). The safe default is to
+never leak exception internals; a local dev who needs the detail can
+set the env var once.
 
-**Why a flag rather than a hardcoded choice.** The spec explicitly
-admits future adapter axes (managed multi-tenant via JWT + S3 storage,
-plus off-machine GPU per D-005 / D-018 / D-019). The moment any of those
-land, the verbatim-traceback in the 500 body becomes a real disclosure
-vector — the last 3 traceback lines on Python 3.13 include the
-*source code of the raising line*, which means string literals in
-`raise X(...)` expressions, hard-coded SQL fragments, paths with
-usernames, internal endpoint names, etc. all leak into the response.
-A flag lets a deployment flip the default without code change at the
-moment its threat model shifts.
+**Why a flag rather than always redact.** The `details` field (traceback
+tail, NOT the exception message) may be legitimately surfaced to a
+developer running a local instance. The flag gates only `details`; the
+`message` is always the generic string regardless of flag value.
 
-**Why not always redact (option C of Q-A11).** Removes the v1 ergonomic
-win for no v1 benefit. The flag default + opt-in redaction gives both
-populations what they want.
-
-**Spec §8 amendment (security clause).** `02-backend.md §8` grows a
+**Spec §8 amendment (security clause).** `02-backend.md §8` carries a
 sub-clause naming the flag, the default, and the trade-off:
 
-> The `Exception` catch-all's emission of `details` is gated on
-> `Settings.debug_unhandled_traceback`. Default `True` (v1 single-user
-> ergonomics: browser-console triage). Set `False` for any deployment
-> whose threat model includes information disclosure via 500 bodies —
-> the response becomes `{error: "internal_error", message: "internal
-> server error", details: null}` while `logger.exception` continues
-> to emit the full traceback server-side, correlated to the request
-> via `X-Request-ID`.
-
-**Implementation pending.** Iter that lands the impl: add the field to
-`Settings` (frozen — D-004 settings model is `frozen=True`); plumb the
-read into `error_handler.py`; add the spec §8 sub-clause; flip
-`tests/unit/core/test_error_handler.py:175-189` to parametrise across
-both flag values rather than asserting the literal "internal secret"
-leak.
+> The `Exception` catch-all always returns `{error: "internal_error",
+> message: "Internal server error", details: null}` to the client.
+> The full traceback is always emitted server-side via `logger.exception`.
+> `Settings.debug_unhandled_traceback` (default `False`) gates only
+> whether `details` is populated with the last 3 traceback lines —
+> set `True` via `PDLABELER_DEBUG_UNHANDLED_TRACEBACK=true` for local
+> dev triage. The message field is always the generic string.
 
 **Refs.** [`OPEN_QUESTIONS.md Q-A11`](../OPEN_QUESTIONS.md),
 [`02-backend.md`](../docs/architecture/02-backend.md) §3 (Settings field list) and §8
 (error handling),
-[`docs/archive/research/BUGS_FOUND.md` B-51](../docs/archive/research/BUGS_FOUND.md).
+[`docs/archive/research/BUGS_FOUND.md` B-51](../docs/archive/research/BUGS_FOUND.md),
+F-003 / GH #408.
 
 ---
 

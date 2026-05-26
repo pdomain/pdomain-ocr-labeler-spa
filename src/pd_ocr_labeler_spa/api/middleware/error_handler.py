@@ -155,25 +155,29 @@ def install_error_handlers(app: FastAPI) -> None:
         # ``logger.exception`` emits the full traceback at ERROR level
         # — combined with ``RequestIdFilter`` the operator gets one log
         # line per request with the correlation id and the full stack.
-        # This fires UNCONDITIONALLY: even when the client-side
-        # ``details`` is redacted (D-040), operators correlate via the
-        # X-Request-ID header against this log line.
+        # This fires UNCONDITIONALLY: the client-side response is always
+        # a generic message (F-003 / #408), but operators correlate via
+        # the X-Request-ID header against this log line.
         log.exception("unhandled exception in %s %s", request.method, request.url.path)
         # The ``details`` field is gated on
         # ``Settings.debug_unhandled_traceback`` (D-040, Q-A11). Default
-        # True keeps single-user-laptop UX (browser-console triage).
+        # False (secure): no exception text or traceback crosses the wire.
         # Read from ``request.app.state.settings`` — set by
-        # ``bootstrap.build_app`` step 1; falls back to ``True`` if the
+        # ``bootstrap.build_app`` step 1; falls back to ``False`` if the
         # app was constructed without going through bootstrap (defensive
         # — the test harness builds bare FastAPI apps in a few places).
         settings = getattr(request.app.state, "settings", None)
-        debug_traceback = getattr(settings, "debug_unhandled_traceback", True)
+        debug_traceback = getattr(settings, "debug_unhandled_traceback", False)
         details = traceback.format_exc().splitlines()[-3:] if debug_traceback else None
+        # ``message`` is ALWAYS the generic string regardless of debug mode —
+        # ``str(exc)`` can contain internal paths, env-specific values, or
+        # other sensitive data (F-003 / #408). The full exception is in the
+        # server-side log; the client only needs enough to file a report.
         return JSONResponse(
             status_code=500,
             content=ApiError(
                 error="internal_error",
-                message=str(exc) or exc.__class__.__name__,
+                message="Internal server error",
                 details=details,
             ).model_dump(),
         )

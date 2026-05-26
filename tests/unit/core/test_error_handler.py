@@ -173,20 +173,41 @@ def test_geometry_error_maps_to_422_geometry_error() -> None:
 
 
 def test_unhandled_exception_returns_500_envelope() -> None:
-    """Spec §8 case 4: any unhandled exception → ``500 internal_error``."""
+    """Spec §8 case 4: any unhandled exception → ``500 internal_error``.
+
+    F-003 / #408: the response body must NOT contain the exception message
+    or any traceback tail — those stay server-side in the log only.
+    The client always receives the generic string "Internal server error".
+    """
     with _client() as client:
         response = client.get("/_probe/boom")
     assert response.status_code == 500
     body = response.json()
     assert body["error"] == "internal_error"
-    # The catch-all DOES surface ``str(exc)`` in ``message`` (spec
-    # mirrors pgdp-prep here — the message is human-readable diagnostic
-    # text, not a security boundary). Operators rely on this to
-    # triage from a browser console.
-    assert "internal secret" in body["message"]
-    # ``details`` is the LAST 3 traceback lines.
-    assert isinstance(body["details"], list)
-    assert len(body["details"]) <= 3
+    # Generic message — no exception text leaks to the client (F-003 / #408).
+    assert body["message"] == "Internal server error"
+    assert "internal secret" not in body["message"], (
+        "exception message must NOT cross the API boundary (F-003 / #408)"
+    )
+    # ``details`` is None when debug_unhandled_traceback is False (the
+    # secure default). No traceback tail reaches the client.
+    assert body["details"] is None, "traceback tail must NOT cross the API boundary (F-003 / #408)"
+
+
+def test_unhandled_exception_body_contains_no_exception_text() -> None:
+    """Regression guard for F-003 / #408: full response body is scrubbed.
+
+    Asserts the raw response text (not just the parsed ``message``) does
+    not contain the secret token — guards against any future envelope
+    field that might accidentally re-add it (e.g. ``details`` re-enabled
+    with wrong gating logic).
+    """
+    with _client() as client:
+        response = client.get("/_probe/boom")
+    assert response.status_code == 500
+    assert "internal secret" not in response.text, (
+        "exception message appeared in raw response body — security regression (F-003 / #408)"
+    )
 
 
 def test_unhandled_exception_emits_full_traceback_log(caplog) -> None:

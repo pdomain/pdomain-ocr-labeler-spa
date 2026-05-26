@@ -142,8 +142,13 @@ class Settings(BaseSettings):
     # any deployment that doesn't trust its clients. The full traceback
     # always reaches the server log via ``logger.exception`` — this
     # flag governs only what crosses the wire to the browser.
-    debug_unhandled_traceback: bool = True
-    """When True (default), the catch-all 500 envelope includes the last 3
-    traceback lines as ``details``. When False, ``details`` is ``None`` —
-    operators must correlate via the ``X-Request-ID`` header against the
-    server-side ``logger.exception`` line. See D-040 + spec §8."""
+    debug_unhandled_traceback: bool = False
+    """When True, the catch-all 500 envelope includes the last 3 traceback
+    lines as ``details``. Default ``False`` (secure): ``details`` is
+    ``None`` and the message is always the generic string "Internal server
+    error" — operators must correlate via the ``X-Request-ID`` header
+    against the server-side ``logger.exception`` line. See D-040 + spec §8.
+
+    Set ``PDLABELER_DEBUG_UNHANDLED_TRACEBACK=true`` on a local dev
+    instance to restore the diagnostic detail; never set True in any
+    deployment that exposes the API to untrusted clients."""
