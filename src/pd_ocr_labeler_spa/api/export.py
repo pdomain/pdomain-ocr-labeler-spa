@@ -103,10 +103,35 @@ class ExportRequest(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def _page_index_required_for_current(self) -> ExportRequest:
-        """``page_index`` is mandatory when scope is ``current``."""
-        if self.scope == ExportScope.CURRENT and self.page_index is None:
-            raise ValueError("page_index is required when scope is 'current'")
+    def _validate_scope_and_mode_constraints(self) -> ExportRequest:
+        """Cross-field validation for scope/page_index/mode consistency.
+
+        F-005 constraints:
+        1. ``page_index`` is mandatory when scope is ``current``.
+        2. ``page_index`` must be non-negative when scope is ``current``.
+        3. ``page_index`` must be ``None`` when scope is ``all_validated``
+           (supplying a page index alongside "all validated" is contradictory).
+        4. ``detection_only`` and ``recognition_only`` cannot both be ``True``
+           (would disable all output while reporting success).
+        """
+        if self.scope == ExportScope.CURRENT:
+            if self.page_index is None:
+                raise ValueError("page_index is required when scope is 'current'")
+            if self.page_index < 0:
+                raise ValueError(
+                    f"page_index must be non-negative for scope 'current'; got {self.page_index}"
+                )
+        elif self.scope == ExportScope.ALL_VALIDATED:
+            if self.page_index is not None:
+                raise ValueError(
+                    "page_index must not be supplied when scope is 'all_validated'; "
+                    "it is only meaningful for scope 'current'"
+                )
+        if self.detection_only and self.recognition_only:
+            raise ValueError(
+                "detection_only and recognition_only cannot both be True: "
+                "this would disable all export output"
+            )
         return self
 
 
