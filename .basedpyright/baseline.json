@@ -6756,8 +6756,8 @@
             {
                 "code": "reportUnusedCallResult",
                 "range": {
-                    "startColumn": 8,
-                    "endColumn": 21,
+                    "startColumn": 12,
+                    "endColumn": 25,
                     "lineCount": 1
                 }
             }
@@ -7142,16 +7142,8 @@
             {
                 "code": "reportUnusedCallResult",
                 "range": {
-                    "startColumn": 8,
-                    "endColumn": 49,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnusedCallResult",
-                "range": {
-                    "startColumn": 8,
-                    "endColumn": 25,
+                    "startColumn": 16,
+                    "endColumn": 32,
                     "lineCount": 1
                 }
             },
@@ -7460,16 +7452,8 @@
             {
                 "code": "reportUnusedCallResult",
                 "range": {
-                    "startColumn": 4,
-                    "endColumn": 45,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnusedCallResult",
-                "range": {
-                    "startColumn": 4,
-                    "endColumn": 21,
+                    "startColumn": 12,
+                    "endColumn": 28,
                     "lineCount": 1
                 }
             }
