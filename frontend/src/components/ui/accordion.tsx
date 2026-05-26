@@ -1,5 +1,9 @@
 import * as React from "react";
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
+import {
+  Accordion as PdAccordion,
+  AccordionItem as PdAccordionItem,
+} from "@concavetrillion/pd-ui/primitives";
 import { ChevronDown } from "@concavetrillion/pd-ui/icons";
 
 import { cn } from "@/lib/utils";
@@ -15,15 +19,18 @@ const tagClasses: Record<AccordionTagVariant, string> = {
 
 const defaultItemClasses = "border border-border-1 rounded-md";
 
-type AccordionItemProps = React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Item> & {
+// LabelerAccordionItem: wraps pd-ui AccordionItem with the labeler's `tag`
+// variant (colored left-border stripe). When `tag` is absent the default
+// border/rounded style is applied instead.
+type AccordionItemProps = React.ComponentPropsWithoutRef<typeof PdAccordionItem> & {
   tag?: AccordionTagVariant;
 };
 
 const AccordionItem = React.forwardRef<
-  React.ComponentRef<typeof AccordionPrimitive.Item>,
+  React.ComponentRef<typeof PdAccordionItem>,
   AccordionItemProps
 >(({ className, tag, ...props }, ref) => (
-  <AccordionPrimitive.Item
+  <PdAccordionItem
     ref={ref}
     className={cn(tag ? tagClasses[tag] : defaultItemClasses, className)}
     {...props}
@@ -31,6 +38,13 @@ const AccordionItem = React.forwardRef<
 ));
 AccordionItem.displayName = "AccordionItem";
 
+// AccordionTrigger: the labeler's trigger has a richer layout than pd-ui's
+// AccordionTrigger (hint text, keycap chip, custom chevron, uppercase label).
+// pd-ui's AccordionTrigger internally wraps with AccordionPrimitive.Header AND
+// appends its own chevron span, making it incompatible with the labeler layout.
+// We build on the Radix primitives directly here; @radix-ui/react-accordion
+// remains an explicit dep for this reason.
+//
 // Extended trigger props: optional helper text + keycap hint.
 // P2.g (Gap 32, 54): spec'd row is: UPPERCASE LABEL · hint text · keycap
 type AccordionTriggerProps = React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Trigger> & {
@@ -76,6 +90,9 @@ const AccordionTrigger = React.forwardRef<
 ));
 AccordionTrigger.displayName = AccordionPrimitive.Trigger.displayName;
 
+// AccordionContent: built directly on Radix Content rather than pd-ui's wrapper
+// because the labeler's bg-bg-sunk + animation classes are applied at this layer
+// and pd-ui's AccordionContent adds its own 'acc-body' class that would conflict.
 const AccordionContent = React.forwardRef<
   React.ComponentRef<typeof AccordionPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Content>
@@ -94,11 +111,12 @@ const AccordionContent = React.forwardRef<
 ));
 AccordionContent.displayName = AccordionPrimitive.Content.displayName;
 
-// Rename root to avoid conflict with compound namespace export below
-const AccordionRoot = AccordionPrimitive.Root;
-
-// Compound namespace export for convenient API
-const Accordion = Object.assign(AccordionRoot, {
+// Accordion root: adopted from pd-ui (replaces AccordionPrimitive.Root directly).
+// Compound namespace export for dot-syntax compatibility.
+// Dot-syntax is kept (not migrated to named imports at callsites) because the
+// 2 callsites both use it and the trigger/content wrappers carry labeler-specific
+// logic. A follow-on refactor can remove the namespace shim when desired.
+const Accordion = Object.assign(PdAccordion, {
   Item: AccordionItem,
   Trigger: AccordionTrigger,
   Content: AccordionContent,
