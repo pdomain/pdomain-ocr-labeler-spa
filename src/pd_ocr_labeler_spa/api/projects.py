@@ -475,7 +475,10 @@ def load_project(
         )
 
     snap = carrier.snapshot()
-    assert snap is not None  # we just set it
+    if snap is None:  # we just set it; None here is a bootstrap bug
+        raise RuntimeError(
+            "carrier.snapshot() returned None immediately after set_active_project — this is a bug"
+        )
 
     # Step 6 (slice 5): build the full ``Project`` from disk — image
     # scan + ground-truth load + optional ``project.json`` metadata.

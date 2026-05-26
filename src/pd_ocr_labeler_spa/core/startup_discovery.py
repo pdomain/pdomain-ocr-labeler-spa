@@ -173,9 +173,12 @@ def resolve_initial_project(
     if session_state is not None and last_project_path_exists(session_state):
         # ``last_project_path_exists`` is True → ``last_project_path``
         # is a non-None string AND resolves to an existing directory.
-        # Type-checkers don't know the implication, so the cast is
+        # Type-checkers don't know the implication, so the check is
         # explicit.
-        assert session_state.last_project_path is not None
+        if session_state.last_project_path is None:  # pragma: no cover
+            raise RuntimeError(
+                "last_project_path_exists returned True but last_project_path is None — invariant violated"
+            )
         path = Path(session_state.last_project_path).resolve()
         logger.info(
             "Initial project resolved from session_state.json",

@@ -58,7 +58,10 @@ def _state_attr(request: Request, name: str) -> object:
 def get_settings(request: Request) -> Settings:
     """The hermetic, frozen ``Settings`` instance the app booted with."""
     settings = _state_attr(request, "settings")
-    assert isinstance(settings, Settings)
+    if not isinstance(settings, Settings):
+        raise RuntimeError(
+            f"app.state.settings is {type(settings)!r}, expected Settings — bootstrap misconfigured"
+        )
     return settings
 
 
@@ -76,14 +79,20 @@ def get_app_config(request: Request) -> AppConfig:
     ``PDLABELER_*``-env-var ``Settings``) should prefer this provider.
     """
     cfg = _state_attr(request, "app_config")
-    assert isinstance(cfg, AppConfig)
+    if not isinstance(cfg, AppConfig):
+        raise RuntimeError(
+            f"app.state.app_config is {type(cfg)!r}, expected AppConfig — bootstrap misconfigured"
+        )
     return cfg
 
 
 def get_app_state(request: Request) -> AppState:
     """The full ``AppState`` singleton — settings + every adapter."""
     state = _state_attr(request, "app_state")
-    assert isinstance(state, AppState)
+    if not isinstance(state, AppState):
+        raise RuntimeError(
+            f"app.state.app_state is {type(state)!r}, expected AppState — bootstrap misconfigured"
+        )
     return state
 
 
@@ -116,7 +125,11 @@ def get_active_project_carrier(request: Request) -> ActiveProjectCarrier:
     importable from route modules under construction.
     """
     carrier = _state_attr(request, "active_project_carrier")
-    assert isinstance(carrier, ActiveProjectCarrier)
+    if not isinstance(carrier, ActiveProjectCarrier):
+        raise RuntimeError(
+            f"app.state.active_project_carrier is {type(carrier)!r}, "
+            "expected ActiveProjectCarrier — bootstrap misconfigured"
+        )
     return carrier
 
 
@@ -151,21 +164,30 @@ def get_project_state(request: Request) -> ProjectState:
     will reach for the same provider.
     """
     state = _state_attr(request, "project_state")
-    assert isinstance(state, ProjectState)
+    if not isinstance(state, ProjectState):
+        raise RuntimeError(
+            f"app.state.project_state is {type(state)!r}, expected ProjectState — bootstrap misconfigured"
+        )
     return state
 
 
 def get_job_runner(request: Request) -> JobRunner:
     """The in-process ``JobRunner`` — spec §5.10 / §11."""
     runner = _state_attr(request, "job_runner")
-    assert isinstance(runner, JobRunner)
+    if not isinstance(runner, JobRunner):
+        raise RuntimeError(
+            f"app.state.job_runner is {type(runner)!r}, expected JobRunner — bootstrap misconfigured"
+        )
     return runner
 
 
 def get_job_events(request: Request) -> JobEventBroker:
     """The ``JobEventBroker`` for SSE fan-out — spec §11."""
     broker = _state_attr(request, "job_events")
-    assert isinstance(broker, JobEventBroker)
+    if not isinstance(broker, JobEventBroker):
+        raise RuntimeError(
+            f"app.state.job_events is {type(broker)!r}, expected JobEventBroker — bootstrap misconfigured"
+        )
     return broker
 
 
@@ -176,7 +198,11 @@ def get_notification_queue(request: Request) -> NotificationQueue:
     One ``NotificationQueue`` per ``build_app`` instance (no module-global state).
     """
     nq = _state_attr(request, "notification_queue")
-    assert isinstance(nq, NotificationQueue)
+    if not isinstance(nq, NotificationQueue):
+        raise RuntimeError(
+            f"app.state.notification_queue is {type(nq)!r}, "
+            "expected NotificationQueue — bootstrap misconfigured"
+        )
     return nq
 
 
@@ -192,7 +218,11 @@ def get_ocr_config_carrier(request: Request) -> OCRConfigCarrier:
     8c-iv-b (``ocr_config.json`` sidecar).
     """
     carrier = _state_attr(request, "ocr_config_carrier")
-    assert isinstance(carrier, OCRConfigCarrier)
+    if not isinstance(carrier, OCRConfigCarrier):
+        raise RuntimeError(
+            f"app.state.ocr_config_carrier is {type(carrier)!r}, "
+            "expected OCRConfigCarrier — bootstrap misconfigured"
+        )
     return carrier
 
 
@@ -208,7 +238,11 @@ def get_source_root_carrier(request: Request) -> SourceRootCarrier:
     > ``None`` (``bootstrap.build_app`` step 9).
     """
     carrier = _state_attr(request, "source_root_carrier")
-    assert isinstance(carrier, SourceRootCarrier)
+    if not isinstance(carrier, SourceRootCarrier):
+        raise RuntimeError(
+            f"app.state.source_root_carrier is {type(carrier)!r}, "
+            "expected SourceRootCarrier — bootstrap misconfigured"
+        )
     return carrier
 
 

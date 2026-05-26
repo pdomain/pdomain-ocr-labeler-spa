@@ -522,9 +522,19 @@ def _page_payload(
     """
     project = project_state.loaded_project
     # Pre-condition guaranteed by _check_project_and_page on the HTTP
-    # path; assert here so misuse from a non-HTTP caller fails loudly.
-    assert project is not None and project.project_id == project_id
-    assert 0 <= page_index < project.total_pages
+    # path; explicit raises here so misuse from a non-HTTP caller fails
+    # loudly even under -O / -OO.
+    if project is None or project.project_id != project_id:
+        loaded_id = project.project_id if project is not None else None
+        raise RuntimeError(
+            f"_page_payload called with project_id={project_id!r} but loaded project is "
+            f"{loaded_id!r} — caller contract violated"
+        )
+    if not (0 <= page_index < project.total_pages):
+        raise RuntimeError(
+            f"_page_payload called with page_index={page_index} "
+            f"outside [0, {project.total_pages}) — caller contract violated"
+        )
 
     pstate = project_state.get_page_state(page_index)
 
@@ -790,7 +800,8 @@ def save_page(
     page_obj = pstate.page_record.payload
 
     project = project_state.loaded_project
-    assert project is not None  # _check_project_and_page guarantees
+    if project is None:  # _check_project_and_page guarantees; explicit to survive -O
+        raise RuntimeError("project is None after _check_project_and_page passed — invariant violated")
 
     try:
         persist_page_to_file(
@@ -958,7 +969,8 @@ def rematch_gt(
         return err
 
     project = project_state.loaded_project
-    assert project is not None  # _check_project_and_page guarantees
+    if project is None:  # _check_project_and_page guarantees; explicit to survive -O
+        raise RuntimeError("project is None after _check_project_and_page passed — invariant violated")
 
     pstate = project_state.get_page_state(page_index)
     if pstate is None or pstate.page_record is None:
@@ -1189,7 +1201,8 @@ def get_page_image(
         return err  # type: ignore[return-value]
 
     project = project_state.loaded_project
-    assert project is not None  # _check_project_and_page guarantees
+    if project is None:  # _check_project_and_page guarantees; explicit to survive -O
+        raise RuntimeError("project is None after _check_project_and_page passed — invariant violated")
 
     image_path = project.image_paths[page_index]
 

@@ -79,7 +79,8 @@ algorithm and the wire DTO.
 # Defensive sync check — if the DTO Literal evolves the algorithm
 # must follow. ``__args__`` on Literal returns the value tuple.
 _selection_reason_annotation = GetOCRConfigResponse.model_fields["selection_reason"].annotation
-assert _selection_reason_annotation is not None, "selection_reason annotation must not be None"
+if _selection_reason_annotation is None:
+    raise RuntimeError("selection_reason annotation must not be None")
 _DTO_REASONS = set(_selection_reason_annotation.__args__)  # type: ignore[union-attr]
 _LOCAL_REASONS = {
     "hf-latest",
@@ -89,10 +90,11 @@ _LOCAL_REASONS = {
     "hf-unreachable-no-local",
     "stock-fallback",
 }
-assert _DTO_REASONS == _LOCAL_REASONS, (
-    "selection_reason drift between core.ocr_models.GetOCRConfigResponse "
-    "and core.model_selection — keep them in sync."
-)
+if _DTO_REASONS != _LOCAL_REASONS:
+    raise RuntimeError(
+        "selection_reason drift between core.ocr_models.GetOCRConfigResponse "
+        "and core.model_selection — keep them in sync."
+    )
 
 
 @dataclass(frozen=True)
@@ -203,8 +205,14 @@ def pick_default_keys(
 
     # Case 1: HF reachable, AND (no local OR HF >= local newest).
     if hf_reachable:
-        assert hf_record is not None  # for type-checkers
-        assert hf_record.hf_last_modified is not None
+        # hf_reachable=True implies hf_record is not None (set two lines above).
+        # Explicit checks so invariants survive -O / -OO.
+        if hf_record is None:  # pragma: no cover
+            raise RuntimeError("hf_reachable is True but hf_record is None — invariant violated")
+        if hf_record.hf_last_modified is None:  # pragma: no cover
+            raise RuntimeError(
+                "hf_reachable is True but hf_record.hf_last_modified is None — invariant violated"
+            )
         if local_mtime is None or hf_record.hf_last_modified >= local_mtime:
             return HF_LATEST_KEY, HF_LATEST_KEY, "hf-latest"
 

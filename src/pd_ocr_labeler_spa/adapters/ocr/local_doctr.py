@@ -278,7 +278,10 @@ class LocalDoctrPageLoader:
         ``_envelope.json`` suffix avoids collision with legacy's plain
         ``.json`` writes to the shared cache dir.
         """
-        assert self.cache_root is not None  # caller-checked
+        if self.cache_root is None:  # caller-checked; explicit raise survives -O
+            raise RuntimeError(
+                "_write_cached_envelope called with cache_root=None — caller contract violated"
+            )
         try:
             envelope = build_envelope(
                 page=page_obj,
