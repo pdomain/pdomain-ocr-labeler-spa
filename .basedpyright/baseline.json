@@ -444,6 +444,14 @@
             {
                 "code": "reportAny",
                 "range": {
+                    "startColumn": 26,
+                    "endColumn": 35,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportAny",
+                "range": {
                     "startColumn": 11,
                     "endColumn": 26,
                     "lineCount": 1
@@ -849,6 +857,22 @@
             }
         ],
         "./src/pd_ocr_labeler_spa/api/export.py": [
+            {
+                "code": "reportUnknownVariableType",
+                "range": {
+                    "startColumn": 12,
+                    "endColumn": 17,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnknownVariableType",
+                "range": {
+                    "startColumn": 15,
+                    "endColumn": 16,
+                    "lineCount": 1
+                }
+            },
             {
                 "code": "reportCallInDefaultInitializer",
                 "range": {
@@ -4976,6 +5000,14 @@
                 }
             },
             {
+                "code": "reportImplicitStringConcatenation",
+                "range": {
+                    "startColumn": 12,
+                    "endColumn": 67,
+                    "lineCount": 2
+                }
+            },
+            {
                 "code": "reportUnusedFunction",
                 "range": {
                     "startColumn": 4,
@@ -8532,6 +8564,16 @@
                 "range": {
                     "startColumn": 15,
                     "endColumn": 21,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./src/pd_ocr_labeler_spa/middleware/local_trust.py": [
+            {
+                "code": "reportImplicitOverride",
+                "range": {
+                    "startColumn": 14,
+                    "endColumn": 22,
                     "lineCount": 1
                 }
             }
