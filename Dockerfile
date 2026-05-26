@@ -89,6 +89,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
+# Non-root user for runtime security. UID/GID 1000 matches the default user
+# on most Linux distros; override at build time if the host bind-mount UID
+# differs (e.g. --build-arg APP_UID=1001).
+#
+# Bind-mount caveat: in local mode the source root is mounted into the
+# container. The host directory must be owned by UID 1000 (or the overridden
+# UID). In future managed-storage mode no local bind-mounts are needed.
+ARG APP_UID=1000
+ARG APP_GID=1000
+RUN groupadd -g ${APP_GID} app \
+    && useradd -m -u ${APP_UID} -g app -s /bin/bash app
+
 WORKDIR /app
 COPY --from=wheel /dist/*.whl /dist/requirements.txt /tmp/
 
@@ -117,6 +129,13 @@ RUN apt-get update \
     && apt-get purge --autoremove -y git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Transfer ownership of /app to the non-root user so the app can write any
+# local temp files it needs.
+RUN chown -R app:app /app
+
+# Drop privileges — all subsequent RUN/CMD/ENTRYPOINT run as app (UID 1000).
+USER app
+
 # Listen on 0.0.0.0:8080 inside the container; users map the port out.
 # `--no-browser` because there is no browser to open inside a container.
 #
@@ -127,6 +146,7 @@ RUN apt-get update \
 # also fight any user override of `--host`. Users can still override
 # the port at runtime by passing `-e PDLABELER_PORT=…` to `docker run`,
 # which Settings will pick up automatically.
+# Port 8080 is non-privileged; no extra capabilities are needed.
 EXPOSE 8080
 
 ENTRYPOINT ["pd-ocr-labeler-ui", "--host", "0.0.0.0", "--no-browser"]
