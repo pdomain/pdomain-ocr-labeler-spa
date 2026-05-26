@@ -152,7 +152,7 @@ function ProjectCard({ project }: { project: ProjectKey }) {
     mutationFn: () => postLoadProject(String(project.project_root)),
     onSettled: () => {
       // Navigate regardless of load success — project page handles missing state.
-      void navigate(`/projects/${project.project_id}/pages/pageno/1`);
+      void navigate(`/projects/${encodeURIComponent(project.project_id)}/pages/pageno/1`);
     },
   });
 
@@ -469,7 +469,10 @@ export default function RootPage() {
       loadStateRef.current = "success";
       if (!derivedProjectId || !data) return;
       const pageNo = (data.last_page_index ?? 0) + 1;
-      void navigate(`/projects/${derivedProjectId}/pages/pageno/${pageNo}`, { replace: true });
+      void navigate(
+        `/projects/${encodeURIComponent(derivedProjectId)}/pages/pageno/${encodeURIComponent(String(pageNo))}`,
+        { replace: true },
+      );
     },
     onError: () => {
       loadStateRef.current = "failed";

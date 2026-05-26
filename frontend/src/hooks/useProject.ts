@@ -67,7 +67,8 @@ async function apiFetch<T>(path: string): Promise<T> {
 export function useProject(projectId: string | undefined) {
   return useQuery<ProjectResponse>({
     queryKey: ["project", projectId],
-    queryFn: () => apiFetch<ProjectResponse>(`/api/projects/${projectId}`),
+    queryFn: () =>
+      apiFetch<ProjectResponse>(`/api/projects/${encodeURIComponent(String(projectId))}`),
     enabled: projectId !== undefined && projectId !== "",
     staleTime: 30_000,
   });

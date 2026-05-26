@@ -46,7 +46,7 @@ export function useJobProgress(jobId: string | null | undefined): JobProgressEve
       return;
     }
 
-    const es = new EventSource(`/api/jobs/${jobId}/events`);
+    const es = new EventSource(`/api/jobs/${encodeURIComponent(jobId)}/events`);
     esRef.current = es;
 
     function handleProgress(e: MessageEvent) {

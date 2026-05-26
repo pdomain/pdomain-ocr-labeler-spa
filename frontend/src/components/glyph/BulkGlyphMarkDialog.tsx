@@ -49,7 +49,7 @@ export function BulkGlyphMarkDialog({
   if (!open) return null;
 
   async function callBulkMark(dryRun: boolean) {
-    const url = `/api/projects/${projectId}/pages/${pageIndex}/glyph-bulk-mark`;
+    const url = `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}/glyph-bulk-mark`;
     const resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

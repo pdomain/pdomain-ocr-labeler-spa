@@ -47,7 +47,7 @@ async function apiPost<T>(url: string, body: unknown, method = "POST"): Promise<
 }
 
 function pageBase(projectId: string, pageIndex: number): string {
-  return `/api/projects/${projectId}/pages/${pageIndex}`;
+  return `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}`;
 }
 
 // ─── useValidateLine (#202) ───────────────────────────────────────────────
@@ -87,9 +87,12 @@ export function useCopyLineGt(projectId: string, pageIndex: number) {
     { lineIndex: number; direction: CopyLineGtRequest["direction"] }
   >({
     mutationFn: ({ lineIndex, direction }) =>
-      apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/lines/${lineIndex}/copy-gt`, {
-        direction,
-      } satisfies CopyLineGtRequest),
+      apiPost<PagePayload>(
+        `${pageBase(projectId, pageIndex)}/lines/${encodeURIComponent(String(lineIndex))}/copy-gt`,
+        {
+          direction,
+        } satisfies CopyLineGtRequest,
+      ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
     },
@@ -126,7 +129,7 @@ export function useUpdateWordGt(projectId: string, pageIndex: number) {
     mutationFn: ({ lineIndex, wordIndex, text }) => {
       const body: UpdateWordGroundTruthRequest = { text };
       return apiPost<WordMatch>(
-        `${pageBase(projectId, pageIndex)}/words/${lineIndex}/${wordIndex}/gt`,
+        `${pageBase(projectId, pageIndex)}/words/${encodeURIComponent(String(lineIndex))}/${encodeURIComponent(String(wordIndex))}/gt`,
         body,
       );
     },
@@ -153,7 +156,7 @@ export function usePatchParagraph(projectId: string, pageIndex: number) {
     mutationFn: ({ paragraphIndex, layoutType }) => {
       const body: PatchParagraphRequest = { layout_type: layoutType };
       return apiPost<PagePayload>(
-        `${pageBase(projectId, pageIndex)}/paragraphs/${paragraphIndex}`,
+        `${pageBase(projectId, pageIndex)}/paragraphs/${encodeURIComponent(String(paragraphIndex))}`,
         body,
         "PATCH",
       );
@@ -198,7 +201,7 @@ export function useSetLineGt(projectId: string, pageIndex: number) {
     mutationFn: ({ lineIndex, text }) => {
       const body: SetLineGtRequest = { text };
       return apiPost<PagePayload>(
-        `${pageBase(projectId, pageIndex)}/lines/${lineIndex}/set-gt`,
+        `${pageBase(projectId, pageIndex)}/lines/${encodeURIComponent(String(lineIndex))}/set-gt`,
         body,
       );
     },

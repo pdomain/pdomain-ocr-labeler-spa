@@ -50,7 +50,7 @@ function wordBase(
   lineIndex: number,
   wordIndex: number,
 ): string {
-  return `/api/projects/${projectId}/pages/${pageIndex}/words/${lineIndex}/${wordIndex}`;
+  return `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}/words/${encodeURIComponent(String(lineIndex))}/${encodeURIComponent(String(wordIndex))}`;
 }
 
 // ─── useReboxWord ──────────────────────────────────────────────────────────

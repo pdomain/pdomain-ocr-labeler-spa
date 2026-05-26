@@ -1,5 +1,74 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ApiClient, ApiError } from "./client";
+import { pageNoUrl } from "../lib/routes";
+
+// ─── URL encoding tests ───────────────────────────────────────────────────────
+
+describe("URL encoding", () => {
+  describe("ApiClient.setCurrentPageIndex", () => {
+    it("encodes a projectId containing a slash into the path", async () => {
+      let capturedUrl = "";
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: RequestInfo | URL) => {
+          capturedUrl = String(url);
+          return new Response(JSON.stringify({}), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }),
+      );
+
+      const client = new ApiClient("http://localhost:8000");
+      await client.setCurrentPageIndex("proj/with/slash", 0);
+
+      expect(capturedUrl).toContain("proj%2Fwith%2Fslash");
+      expect(capturedUrl).not.toMatch(/proj\/with\/slash/);
+    });
+
+    it("encodes a projectId containing a hash", async () => {
+      let capturedUrl = "";
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: RequestInfo | URL) => {
+          capturedUrl = String(url);
+          return new Response(JSON.stringify({}), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }),
+      );
+
+      const client = new ApiClient("http://localhost:8000");
+      await client.setCurrentPageIndex("proj#fragment", 2);
+
+      expect(capturedUrl).toContain("proj%23fragment");
+      expect(capturedUrl).not.toContain("proj#fragment");
+    });
+  });
+
+  describe("pageNoUrl", () => {
+    it("encodes a projectId containing a slash", () => {
+      const url = pageNoUrl("my/project", 1);
+      expect(url).toBe("/projects/my%2Fproject/pages/pageno/1");
+    });
+
+    it("encodes a projectId containing a hash", () => {
+      const url = pageNoUrl("my#project", 3);
+      expect(url).toBe("/projects/my%23project/pages/pageno/3");
+    });
+
+    it("encodes a projectId containing a question mark", () => {
+      const url = pageNoUrl("my?project", 5);
+      expect(url).toBe("/projects/my%3Fproject/pages/pageno/5");
+    });
+
+    it("leaves normal projectIds unchanged", () => {
+      const url = pageNoUrl("myproject123", 2);
+      expect(url).toBe("/projects/myproject123/pages/pageno/2");
+    });
+  });
+});
 
 describe("ApiClient", () => {
   let apiClient: ApiClient;

@@ -423,7 +423,7 @@ export default function ProjectPage() {
   useEffect(() => {
     if (!projectId) return;
     const timer = setTimeout(() => {
-      void fetch(`/api/projects/${projectId}/current-page-index`, {
+      void fetch(`/api/projects/${encodeURIComponent(projectId)}/current-page-index`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ page_index: idx0 }),

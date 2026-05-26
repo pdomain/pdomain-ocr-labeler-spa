@@ -19,5 +19,5 @@ export const ROUTES = {
 
 /** Build a page URL from project ID and 1-based page number. */
 export function pageNoUrl(projectId: string, pageNo: number): string {
-  return `/projects/${projectId}/pages/pageno/${pageNo}`;
+  return `/projects/${encodeURIComponent(projectId)}/pages/pageno/${encodeURIComponent(String(pageNo))}`;
 }

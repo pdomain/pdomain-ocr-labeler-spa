@@ -116,7 +116,7 @@ export function ExportDialog({
     if (!open || scope !== "all_validated") return;
     let cancelled = false;
     setStylesLoading(true);
-    fetch(`/api/projects/${projectId}/export/styles`)
+    fetch(`/api/projects/${encodeURIComponent(projectId)}/export/styles`)
       .then((r) => r.json())
       .then((data: string[]) => {
         if (!cancelled) {
@@ -191,7 +191,7 @@ export function ExportDialog({
     };
 
     try {
-      const resp = await fetch(`/api/projects/${projectId}/export`, {
+      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/export`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -214,7 +214,10 @@ export function ExportDialog({
 
   async function handleCancel() {
     if (!jobId) return;
-    await fetch(`/api/projects/${projectId}/jobs/${jobId}/cancel`, { method: "POST" });
+    await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/jobs/${encodeURIComponent(jobId)}/cancel`,
+      { method: "POST" },
+    );
     setRunning(false);
     setJobId(null);
   }

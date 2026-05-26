@@ -90,7 +90,7 @@ export class ApiClient {
 
   /** Persist page cursor — fire-and-forget; caller should not await errors. */
   setCurrentPageIndex(projectId: string, pageIndex: number): Promise<unknown> {
-    return this.post<unknown>(`/api/projects/${projectId}/current-page-index`, {
+    return this.post<unknown>(`/api/projects/${encodeURIComponent(projectId)}/current-page-index`, {
       page_index: pageIndex,
     });
   }

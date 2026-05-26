@@ -74,14 +74,21 @@ const queryClient = new QueryClient({
 /** Redirect /projects/:id → /projects/:id/pages/pageno/1 */
 function ProjectRootRedirect() {
   const { projectId } = useParams<{ projectId: string }>();
-  return <Navigate to={`/projects/${projectId}/pages/pageno/1`} replace />;
+  return (
+    <Navigate to={`/projects/${encodeURIComponent(projectId ?? "")}/pages/pageno/1`} replace />
+  );
 }
 
 /** Redirect /projects/:id/pages/index/:idx0 → pageno equivalent */
 function ProjectPageIndexRedirect() {
   const { projectId, idx0 } = useParams<{ projectId: string; idx0: string }>();
   const pageNo = (parseInt(idx0 ?? "0", 10) + 1).toString();
-  return <Navigate to={`/projects/${projectId}/pages/pageno/${pageNo}`} replace />;
+  return (
+    <Navigate
+      to={`/projects/${encodeURIComponent(projectId ?? "")}/pages/pageno/${encodeURIComponent(pageNo)}`}
+      replace
+    />
+  );
 }
 
 /** Read projectId + 0-based pageIndex from the URL (best effort).

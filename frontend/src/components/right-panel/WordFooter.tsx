@@ -57,7 +57,7 @@ function useToggleValidated(projectId: string, pageIndex: number) {
     mutationFn: ({ lineIndex, wordIndex, validated }) => {
       const body: ToggleValidatedRequest = { validated };
       return apiPost<PagePayload>(
-        `/api/projects/${projectId}/pages/${pageIndex}/words/${lineIndex}/${wordIndex}/validated`,
+        `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}/words/${encodeURIComponent(String(lineIndex))}/${encodeURIComponent(String(wordIndex))}/validated`,
         body,
       );
     },
@@ -77,7 +77,10 @@ function useDeleteWord(projectId: string, pageIndex: number) {
         line_indices: [],
         word_indices: [[lineIndex, wordIndex]],
       };
-      return apiPost<PagePayload>(`/api/projects/${projectId}/pages/${pageIndex}/delete`, body);
+      return apiPost<PagePayload>(
+        `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}/delete`,
+        body,
+      );
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });

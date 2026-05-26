@@ -51,7 +51,7 @@ export function usePage(
     queryFn: () => {
       const params = new URLSearchParams({ line_filter: filter });
       return apiFetch<PagePayload>(
-        `/api/projects/${projectId}/pages/${pageIndex}?${params.toString()}`,
+        `/api/projects/${encodeURIComponent(String(projectId))}/pages/${encodeURIComponent(String(pageIndex))}?${params.toString()}`,
       );
     },
     enabled:

@@ -41,7 +41,7 @@ async function apiPost<T>(url: string, body: unknown): Promise<T> {
 }
 
 function pageBase(projectId: string, pageIndex: number): string {
-  return `/api/projects/${projectId}/pages/${pageIndex}`;
+  return `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}`;
 }
 
 // ─── useReloadOcr (#215) ───────────────────────────────────────────────────
@@ -105,7 +105,8 @@ export function useSavePage(projectId: string, pageIndex: number) {
  */
 export function useSaveProject(projectId: string) {
   return useMutation<SaveProjectResponse>({
-    mutationFn: () => apiPost<SaveProjectResponse>(`/api/projects/${projectId}/save-all`, {}),
+    mutationFn: () =>
+      apiPost<SaveProjectResponse>(`/api/projects/${encodeURIComponent(projectId)}/save-all`, {}),
   });
 }
 

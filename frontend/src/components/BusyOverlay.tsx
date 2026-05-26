@@ -37,7 +37,7 @@ export function BusyOverlay({ activeJob, isMutating = false, onCancel }: BusyOve
 
   const cancelMutation = useMutation({
     mutationFn: async (jobId: string) => {
-      const res = await fetch(`/api/jobs/${jobId}/cancel`, { method: "POST" });
+      const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" });
       if (!res.ok) throw new Error("Cancel failed");
       return res.json() as Promise<unknown>;
     },

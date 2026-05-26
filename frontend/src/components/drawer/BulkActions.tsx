@@ -77,7 +77,7 @@ export function BulkActions({ projectId, pageIndex }: BulkActionsProps) {
         validated: true,
       };
       await apiPost<unknown>(
-        `/api/projects/${projectId}/pages/${pageIndex}/words/validate-batch`,
+        `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}/words/validate-batch`,
         body,
       );
       worklistStore.clearBulk();
@@ -89,7 +89,7 @@ export function BulkActions({ projectId, pageIndex }: BulkActionsProps) {
   async function handleRerunMatch() {
     try {
       const res = await apiPost<{ job_id: string }>(
-        `/api/projects/${projectId}/pages/${pageIndex}/reload-ocr`,
+        `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}/reload-ocr`,
         { use_edited_image: false },
       );
       setJobId(res.job_id);
@@ -108,7 +108,10 @@ export function BulkActions({ projectId, pageIndex }: BulkActionsProps) {
         detection_only: false,
         normalize_recognition_labels: false,
       };
-      const res = await apiPost<{ job_id: string }>(`/api/projects/${projectId}/export`, body);
+      const res = await apiPost<{ job_id: string }>(
+        `/api/projects/${encodeURIComponent(projectId)}/export`,
+        body,
+      );
       setJobId(res.job_id);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Export failed");
