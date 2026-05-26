@@ -437,3 +437,80 @@ def test_get_page_image_corrupt_returns_422(
 
     assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
     assert resp.json()["error"] == "image_corrupt"
+
+
+@pytest.fixture
+def valid_jpeg_projects_root(tmp_path: Path) -> Path:
+    """Projects root with a real 10x10 JPEG so image-endpoint tests don't hit PIL errors."""
+    import io as _io
+
+    import PIL.Image
+
+    root = tmp_path / "projects_jpeg"
+    root.mkdir()
+    proj = root / "book1"
+    proj.mkdir()
+    buf = _io.BytesIO()
+    PIL.Image.new("RGB", (10, 10), color=(128, 128, 128)).save(buf, format="JPEG")
+    (proj / "001.png").write_bytes(buf.getvalue())
+    (proj / "002.png").write_bytes(buf.getvalue())
+    return root
+
+
+def test_get_page_image_rejects_oversized_width(
+    tmp_path: Path,
+    valid_jpeg_projects_root: Path,
+) -> None:
+    """``?w=100000`` must be rejected before PIL is invoked (security: F-004, #409).
+
+    The endpoint constrains ``w`` via ``Query(ge=1, le=8000)``.  FastAPI validates
+    query parameters before the handler body runs; the custom
+    ``RequestValidationError`` handler in this app maps that to
+    ``400 validation_error`` (not the standard FastAPI 422).
+    """
+    settings = _make_settings(tmp_path, source_projects_root=valid_jpeg_projects_root)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        c.post("/api/projects/load", json={"project_root": str(valid_jpeg_projects_root / "book1")})
+        resp = c.get("/api/projects/book1/pages/0/image?w=100000")
+
+    # Custom error handler maps RequestValidationError → 400 validation_error.
+    assert resp.status_code == 400, (
+        f"Expected 400 for oversized ?w=100000, got {resp.status_code}: {resp.text}"
+    )
+    body = resp.json()
+    assert body.get("error") == "validation_error", f"Expected validation_error body: {body}"
+
+
+def test_get_page_image_rejects_zero_width(
+    tmp_path: Path,
+    valid_jpeg_projects_root: Path,
+) -> None:
+    """``?w=0`` must be rejected with 400 validation_error (security: F-004, issue #409).
+
+    Width must be at least 1 pixel.  Same custom handler maps to 400.
+    """
+    settings = _make_settings(tmp_path, source_projects_root=valid_jpeg_projects_root)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        c.post("/api/projects/load", json={"project_root": str(valid_jpeg_projects_root / "book1")})
+        resp = c.get("/api/projects/book1/pages/0/image?w=0")
+
+    assert resp.status_code == 400, f"Expected 400 for ?w=0, got {resp.status_code}: {resp.text}"
+    body = resp.json()
+    assert body.get("error") == "validation_error", f"Expected validation_error body: {body}"
+
+
+def test_get_page_image_accepts_valid_width(
+    tmp_path: Path,
+    valid_jpeg_projects_root: Path,
+) -> None:
+    """``?w=1200`` (typical display width) must be accepted (security: F-004, issue #409)."""
+    settings = _make_settings(tmp_path, source_projects_root=valid_jpeg_projects_root)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        c.post("/api/projects/load", json={"project_root": str(valid_jpeg_projects_root / "book1")})
+        resp = c.get("/api/projects/book1/pages/0/image?w=1200")
+
+    assert resp.status_code == 200, f"Expected 200 for valid ?w=1200, got {resp.status_code}: {resp.text}"
+    assert resp.headers["content-type"].startswith("image/jpeg")
