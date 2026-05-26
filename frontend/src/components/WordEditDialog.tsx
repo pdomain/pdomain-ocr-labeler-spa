@@ -13,9 +13,14 @@
 // Refine/Nudge/Tag rows (#212): Refine + nudge accumulator + Style/Component tag row
 //   + dialog hotkeys (Shift+Arrow nudge).
 //
+// Chrome backed by pd-ui's Radix Dialog suite (@concavetrillion/pd-ui/primitives).
+// Uses explicit DialogPortal + DialogOverlay + DialogContent so that
+// data-testid="dialog-backdrop" lands on DialogOverlay (driver-contract §2.11).
+// Radix provides native focus trap and Escape key handling.
+//
 // data-testids (driver-contract §2.11):
-//   word-edit-dialog               — outer dialog wrapper (spec canonical)
-//   dialog-backdrop                — outer backdrop (internal alias)
+//   word-edit-dialog               — DialogContent (outer dialog panel)
+//   dialog-backdrop                — DialogOverlay (backdrop scrim)
 //   dialog-header-label            — "Edit Line N, Word M"
 //   dialog-apply-close-button, dialog-close-button
 //   dialog-previous-preview-column — left column wrapper
@@ -40,6 +45,12 @@ import type { EraseRect, MarkerPoint } from "./WordImageCanvas";
 import { WordRefineNudgeRows } from "./WordRefineNudgeRows";
 import type { PendingNudge, WordRefineNudgeRowsHandle } from "./WordRefineNudgeRows";
 import { WordTagRow } from "./WordTagRow";
+import {
+  Dialog,
+  DialogContent,
+  DialogOverlay,
+  DialogPortal,
+} from "@concavetrillion/pd-ui/primitives";
 
 export interface DialogTarget {
   lineIndex: number;
@@ -101,7 +112,12 @@ interface WordEditDialogProps extends WordActionCallbacks {
  *
  * Apply & Close fires onApply (with pending erase rects, marker, and nudge) then onClose.
  * x Close fires onClose only (discards).
- * Backdrop click fires onClose (discards).
+ * Backdrop click (DialogOverlay) fires onClose via onOpenChange (discards).
+ *
+ * Chrome: pd-ui Radix Dialog — DialogPortal > DialogOverlay > DialogContent.
+ * This explicit composition lets us attach data-testid="dialog-backdrop" to
+ * DialogOverlay directly (no data-testid-alias needed).
+ * Escape is handled natively by Radix Dialog.
  */
 export function WordEditDialog({
   open,
@@ -130,8 +146,6 @@ export function WordEditDialog({
   const [eraseRects, setEraseRects] = useState<EraseRect[]>([]);
   const [marker, setMarker] = useState<MarkerPoint | null>(null);
   const nudgeRef = useRef<WordRefineNudgeRowsHandle>(null);
-
-  if (!open) return null;
 
   const { lineIndex, wordIndex } = target;
   const hasPrev = wordIndex > 0;
@@ -162,200 +176,200 @@ export function WordEditDialog({
   }
 
   return (
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- dialog backdrop click-to-dismiss; Esc handled via onKeyDown in WordEditDialog
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Edit Line ${lineIndex}, Word ${wordIndex}`}
-      data-testid="word-edit-dialog"
-      data-testid-alias="dialog-backdrop"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) onClose();
       }}
     >
-      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- stopPropagation on inner panel prevents backdrop dismissal; not interactive itself */}
-      <div
-        className="bg-bg-surface rounded-lg border border-border-2 w-full max-w-2xl mx-4 flex flex-col overflow-hidden"
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border-1 bg-bg-raised shrink-0">
-          <span data-testid="dialog-header-label" className="text-sm font-semibold text-ink-1">
-            Edit Line {lineIndex}, Word {wordIndex}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              data-testid="dialog-apply-close-button"
-              onClick={handleApplyClose}
-              title="Apply changes and close (Shift+Enter)"
-              className="flex items-center gap-1 px-3 py-1.5 text-sm rounded bg-accent text-accent-ink hover:opacity-90 transition-opacity"
-            >
-              <span aria-hidden="true">✓</span>
-              Apply &amp; Close
-            </button>
-            <button
-              data-testid="dialog-close-button"
-              onClick={onClose}
-              title="Discard changes and close"
-              aria-label="Close dialog"
-              className="px-2 py-1.5 text-lg text-ink-3 hover:text-ink-1 hover:bg-bg-raised rounded transition-colors"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-
-        {/* 3-column preview row */}
-        <div className="flex items-stretch gap-2 px-4 py-3 border-b border-border-1 shrink-0">
-          {/* Prev word */}
-          <div
-            data-testid="dialog-previous-preview-column"
-            className="flex flex-col items-center gap-1 flex-1"
-          >
-            <button
-              data-testid="dialog-prev-button"
-              disabled={!hasPrev}
-              onClick={handlePrev}
-              title="Previous word (←)"
-              className={[
-                "px-2 py-1 text-xs rounded border transition-colors",
-                hasPrev
-                  ? "border-border-2 bg-bg-surface hover:bg-bg-raised text-ink-2"
-                  : "border-border-1 bg-bg-raised text-ink-4 cursor-default",
-              ].join(" ")}
-            >
-              ← Prev
-            </button>
-            <div
-              data-testid="dialog-prev-word"
-              className={[
-                "w-full min-h-[3rem] flex items-center justify-center rounded border p-2 text-sm font-mono",
-                "bg-bg-raised text-ink-3 border-border-1",
-                !hasPrev ? "opacity-30" : "",
-              ].join(" ")}
-            >
-              {prevWord ?? "–"}
-            </div>
-          </div>
-
-          {/* Current word (highlighted) */}
-          <div
-            data-testid="dialog-current-preview-column"
-            className="flex flex-col items-center gap-1 flex-[2]"
-          >
-            <div className="text-xs text-ink-4 font-medium">Current</div>
-            <div
-              data-testid="dialog-current-word"
-              className="w-full min-h-[3rem] flex items-center justify-center rounded border-2 border-accent p-2 text-sm font-mono font-semibold text-ink-1"
-              style={{ background: "color-mix(in srgb, var(--status-ocr) 8%, var(--bg-surface))" }}
-            >
-              {currentWord}
-            </div>
-          </div>
-
-          {/* Next word */}
-          <div
-            data-testid="dialog-next-preview-column"
-            className="flex flex-col items-center gap-1 flex-1"
-          >
-            <button
-              data-testid="dialog-next-button"
-              disabled={!hasNext}
-              onClick={handleNext}
-              title="Next word (→)"
-              className={[
-                "px-2 py-1 text-xs rounded border transition-colors",
-                hasNext
-                  ? "border-border-2 bg-bg-surface hover:bg-bg-raised text-ink-2"
-                  : "border-border-1 bg-bg-raised text-ink-4 cursor-default",
-              ].join(" ")}
-            >
-              Next →
-            </button>
-            <div
-              data-testid="dialog-next-word"
-              className={[
-                "w-full min-h-[3rem] flex items-center justify-center rounded border p-2 text-sm font-mono",
-                "bg-bg-raised text-ink-3 border-border-1",
-                !hasNext ? "opacity-30" : "",
-              ].join(" ")}
-            >
-              {nextWord ?? "–"}
-            </div>
-          </div>
-        </div>
-
-        {/* GT text input (driver-contract §2.11 dialog-gt-input) */}
-        <div className="px-4 py-2 border-b border-border-1 shrink-0">
-          <input
-            data-testid="dialog-gt-input"
-            type="text"
-            value={gtText}
-            onChange={(e) => {
-              onGtChange?.(e.target.value);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                onGtCommit?.(gtText);
-              }
-            }}
-            className="w-full text-sm border border-border-2 rounded px-2 py-1 font-mono focus:outline-none focus:border-accent bg-bg-surface text-ink-1"
-            aria-label="Ground truth text"
-            placeholder="Ground truth…"
-          />
-        </div>
-
-        {/* Konva interactive word image — #210 */}
-        <div
-          data-testid="dialog-action-rows"
-          className="flex-1 p-4 flex flex-col items-center gap-3"
+      {/* Explicit DialogPortal + DialogOverlay composition so we can attach
+          data-testid="dialog-backdrop" to DialogOverlay (driver-contract §2.11).
+          The .dialog-overlay CSS in primitives.css provides the visual scrim. */}
+      <DialogPortal>
+        <DialogOverlay data-testid="dialog-backdrop" className="dialog-overlay" />
+        <DialogContent
+          data-testid="word-edit-dialog"
+          aria-label={`Edit Line ${lineIndex}, Word ${wordIndex}`}
+          className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 bg-bg-surface rounded-lg border border-border-2 w-full max-w-2xl mx-4 flex flex-col overflow-hidden focus:outline-none"
         >
-          <WordImageCanvas
-            imageUrl={wordImageUrl}
-            eraseMode={eraseMode}
-            eraseRects={eraseRects}
-            onEraseRectAdd={handleEraseRectAdd}
-            onMarkerPlace={(pt) => {
-              setMarker(pt);
-            }}
-          />
-          {/* Merge/Split/Delete/Crop rows — #211 */}
-          <WordActionRows
-            hasPrev={wordIndex > 0}
-            hasNext={wordIndex < lineWords.length - 1}
-            splitFraction={marker ? marker.x / 200 : 0.5}
-            onMerge={onMerge}
-            onSplit={onSplit}
-            onDelete={onDelete}
-            onCrop={onCrop}
-          />
-          {/* Refine/Nudge/Tag rows — #212 */}
-          <WordRefineNudgeRows
-            ref={nudgeRef}
-            onRefine={onRefine}
-            onExpandRefine={onExpandRefine}
-            onApply={onApplyNudge}
-            onReset={() => {
-              setEraseRects([]);
-            }}
-          />
-          <WordTagRow
-            styleOptions={styleOptions}
-            componentOptions={componentOptions}
-            onApplyStyle={onApplyStyle}
-            onApplyComponent={onApplyComponent}
-          />
-          {/* Tag chips slot (driver-contract §2.11 dialog-tag-chips-slot) */}
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border-1 bg-bg-raised shrink-0">
+            <span data-testid="dialog-header-label" className="text-sm font-semibold text-ink-1">
+              Edit Line {lineIndex}, Word {wordIndex}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                data-testid="dialog-apply-close-button"
+                onClick={handleApplyClose}
+                title="Apply changes and close (Shift+Enter)"
+                className="flex items-center gap-1 px-3 py-1.5 text-sm rounded bg-accent text-accent-ink hover:opacity-90 transition-opacity"
+              >
+                <span aria-hidden="true">✓</span>
+                Apply &amp; Close
+              </button>
+              <button
+                data-testid="dialog-close-button"
+                onClick={onClose}
+                title="Discard changes and close"
+                aria-label="Close dialog"
+                className="px-2 py-1.5 text-lg text-ink-3 hover:text-ink-1 hover:bg-bg-raised rounded transition-colors"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+
+          {/* 3-column preview row */}
+          <div className="flex items-stretch gap-2 px-4 py-3 border-b border-border-1 shrink-0">
+            {/* Prev word */}
+            <div
+              data-testid="dialog-previous-preview-column"
+              className="flex flex-col items-center gap-1 flex-1"
+            >
+              <button
+                data-testid="dialog-prev-button"
+                disabled={!hasPrev}
+                onClick={handlePrev}
+                title="Previous word (←)"
+                className={[
+                  "px-2 py-1 text-xs rounded border transition-colors",
+                  hasPrev
+                    ? "border-border-2 bg-bg-surface hover:bg-bg-raised text-ink-2"
+                    : "border-border-1 bg-bg-raised text-ink-4 cursor-default",
+                ].join(" ")}
+              >
+                ← Prev
+              </button>
+              <div
+                data-testid="dialog-prev-word"
+                className={[
+                  "w-full min-h-[3rem] flex items-center justify-center rounded border p-2 text-sm font-mono",
+                  "bg-bg-raised text-ink-3 border-border-1",
+                  !hasPrev ? "opacity-30" : "",
+                ].join(" ")}
+              >
+                {prevWord ?? "–"}
+              </div>
+            </div>
+
+            {/* Current word (highlighted) */}
+            <div
+              data-testid="dialog-current-preview-column"
+              className="flex flex-col items-center gap-1 flex-[2]"
+            >
+              <div className="text-xs text-ink-4 font-medium">Current</div>
+              <div
+                data-testid="dialog-current-word"
+                className="w-full min-h-[3rem] flex items-center justify-center rounded border-2 border-accent p-2 text-sm font-mono font-semibold text-ink-1"
+                style={{
+                  background: "color-mix(in srgb, var(--status-ocr) 8%, var(--bg-surface))",
+                }}
+              >
+                {currentWord}
+              </div>
+            </div>
+
+            {/* Next word */}
+            <div
+              data-testid="dialog-next-preview-column"
+              className="flex flex-col items-center gap-1 flex-1"
+            >
+              <button
+                data-testid="dialog-next-button"
+                disabled={!hasNext}
+                onClick={handleNext}
+                title="Next word (→)"
+                className={[
+                  "px-2 py-1 text-xs rounded border transition-colors",
+                  hasNext
+                    ? "border-border-2 bg-bg-surface hover:bg-bg-raised text-ink-2"
+                    : "border-border-1 bg-bg-raised text-ink-4 cursor-default",
+                ].join(" ")}
+              >
+                Next →
+              </button>
+              <div
+                data-testid="dialog-next-word"
+                className={[
+                  "w-full min-h-[3rem] flex items-center justify-center rounded border p-2 text-sm font-mono",
+                  "bg-bg-raised text-ink-3 border-border-1",
+                  !hasNext ? "opacity-30" : "",
+                ].join(" ")}
+              >
+                {nextWord ?? "–"}
+              </div>
+            </div>
+          </div>
+
+          {/* GT text input (driver-contract §2.11 dialog-gt-input) */}
+          <div className="px-4 py-2 border-b border-border-1 shrink-0">
+            <input
+              data-testid="dialog-gt-input"
+              type="text"
+              value={gtText}
+              onChange={(e) => {
+                onGtChange?.(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  onGtCommit?.(gtText);
+                }
+              }}
+              className="w-full text-sm border border-border-2 rounded px-2 py-1 font-mono focus:outline-none focus:border-accent bg-bg-surface text-ink-1"
+              aria-label="Ground truth text"
+              placeholder="Ground truth…"
+            />
+          </div>
+
+          {/* Konva interactive word image — #210 */}
           <div
-            data-testid="dialog-tag-chips-slot"
-            className="flex flex-wrap gap-1 min-h-[1.5rem] w-full"
-            aria-label="Active tag chips"
-          />
-        </div>
-      </div>
-    </div>
+            data-testid="dialog-action-rows"
+            className="flex-1 p-4 flex flex-col items-center gap-3"
+          >
+            <WordImageCanvas
+              imageUrl={wordImageUrl}
+              eraseMode={eraseMode}
+              eraseRects={eraseRects}
+              onEraseRectAdd={handleEraseRectAdd}
+              onMarkerPlace={(pt) => {
+                setMarker(pt);
+              }}
+            />
+            {/* Merge/Split/Delete/Crop rows — #211 */}
+            <WordActionRows
+              hasPrev={wordIndex > 0}
+              hasNext={wordIndex < lineWords.length - 1}
+              splitFraction={marker ? marker.x / 200 : 0.5}
+              onMerge={onMerge}
+              onSplit={onSplit}
+              onDelete={onDelete}
+              onCrop={onCrop}
+            />
+            {/* Refine/Nudge/Tag rows — #212 */}
+            <WordRefineNudgeRows
+              ref={nudgeRef}
+              onRefine={onRefine}
+              onExpandRefine={onExpandRefine}
+              onApply={onApplyNudge}
+              onReset={() => {
+                setEraseRects([]);
+              }}
+            />
+            <WordTagRow
+              styleOptions={styleOptions}
+              componentOptions={componentOptions}
+              onApplyStyle={onApplyStyle}
+              onApplyComponent={onApplyComponent}
+            />
+            {/* Tag chips slot (driver-contract §2.11 dialog-tag-chips-slot) */}
+            <div
+              data-testid="dialog-tag-chips-slot"
+              className="flex flex-wrap gap-1 min-h-[1.5rem] w-full"
+              aria-label="Active tag chips"
+            />
+          </div>
+        </DialogContent>
+      </DialogPortal>
+    </Dialog>
   );
 }
