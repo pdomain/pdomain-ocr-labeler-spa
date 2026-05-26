@@ -194,4 +194,116 @@ describe("ApiClient", () => {
       }
     });
   });
+
+  describe("falsy body serialization (Bug 1)", () => {
+    it("sends body=0 as JSON string '0'", async () => {
+      let capturedBody: string | null = null;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+          capturedBody = init?.body != null ? String(init.body) : null;
+          return new Response(null, { status: 204 });
+        }),
+      );
+
+      await apiClient.post<null>("/test", 0);
+
+      expect(capturedBody).toBe("0");
+    });
+
+    it("sends body=false as JSON string 'false'", async () => {
+      let capturedBody: string | null = null;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+          capturedBody = init?.body != null ? String(init.body) : null;
+          return new Response(null, { status: 204 });
+        }),
+      );
+
+      await apiClient.post<null>("/test", false);
+
+      expect(capturedBody).toBe("false");
+    });
+
+    it("sends body='' as JSON string '\"\"'", async () => {
+      let capturedBody: string | null = null;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+          capturedBody = init?.body != null ? String(init.body) : null;
+          return new Response(null, { status: 204 });
+        }),
+      );
+
+      await apiClient.post<null>("/test", "");
+
+      expect(capturedBody).toBe('""');
+    });
+
+    it("does not send a body when options.body is undefined (GET)", async () => {
+      let capturedBody: string | undefined = undefined;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+          capturedBody = init?.body !== undefined ? String(init.body) : undefined;
+          return new Response(JSON.stringify({}), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }),
+      );
+
+      await apiClient.get("/test");
+
+      expect(capturedBody).toBeUndefined();
+    });
+  });
+
+  describe("empty / no-content response handling (Bug 2)", () => {
+    it("returns null for a 204 No Content response without throwing", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => new Response(null, { status: 204 })),
+      );
+
+      const result = await apiClient.post<null>("/test", {});
+
+      expect(result).toBeNull();
+    });
+
+    it("returns null for a 200 response with empty body (Content-Length: 0)", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async () =>
+            new Response("", {
+              status: 200,
+              headers: { "Content-Length": "0" },
+            }),
+        ),
+      );
+
+      const result = await apiClient.post<null>("/test", {});
+
+      expect(result).toBeNull();
+    });
+
+    it("still parses JSON body for normal 200 responses", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async () =>
+            new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }),
+        ),
+      );
+
+      const result = await apiClient.get<{ ok: boolean }>("/test");
+
+      expect(result).toEqual({ ok: true });
+    });
+  });
 });
