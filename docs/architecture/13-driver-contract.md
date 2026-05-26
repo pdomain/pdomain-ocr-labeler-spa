@@ -449,12 +449,16 @@ CSS classes we DO preserve (for any external script that may style):
 
 ## 7. URL deep-link behaviour
 
-The driver agent navigates to:
+The driver agent navigates to the **canonical** routes from section 1.1:
 
-- `/project/foo/page/3` — opens project `foo` at page 3.
-- `/project/foo/page/3` after a refresh — same.
-- `/project/foo` — opens project `foo` at page 1.
+- `/projects/foo/pages/pageno/3` — opens project `foo` at page 3.
+- `/projects/foo/pages/pageno/3` after a refresh — same.
+- `/projects/foo` — opens project `foo` at page 1.
 - `/` — placeholder OR last-loaded redirect.
+
+Legacy paths (`/project/foo/page/3`, `/project/foo`) remain valid via 301
+redirects (see section 1.2) but the driver should prefer the canonical forms
+above to avoid the extra round-trip.
 
 Edge cases (verbatim from legacy `_initialize_from_url:523`):
 
