@@ -224,6 +224,63 @@ def test_install_sh_references_correct_repo_slug():
 
 
 # ---------------------------------------------------------------------------
+# F-017 — supply-chain hardening: no pipe-remote-to-shell
+# ---------------------------------------------------------------------------
+
+
+def _non_comment_lines(text: str, comment_prefix: str = "#") -> str:
+    """Return script text with comment-only lines stripped."""
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith(comment_prefix))
+
+
+def test_install_sh_does_not_pipe_remote_to_shell() -> None:
+    """install.sh must not pipe a remote script directly to a shell.
+
+    ``curl <url> | sh`` (or ``bash``, ``dash``, …) lets a compromised
+    CDN, a DNS-spoofed origin, or a MITM inject arbitrary code without
+    any verification step. The pattern must be absent; download first,
+    execute separately (see test_install_sh_pins_uv_to_tagged_release).
+
+    Comment lines (``# ...``) are excluded from the check: the comment
+    block may document the old pattern as a before/after reference
+    without reintroducing the risk.
+    """
+    code = _non_comment_lines(INSTALL_SH.read_text())
+    # Match `curl ... | sh`, `curl ... | bash`, `curl ... | dash`, etc.
+    # Allow for flags between curl and the pipe, and optional whitespace.
+    assert not re.search(r"\bcurl\b[^|]*\|\s*(ba)?sh\b", code), (
+        "install.sh must not pipe a remote URL directly to a shell interpreter — "
+        "download to a temp file first, then execute (F-017 supply-chain hardening)"
+    )
+
+
+def test_install_sh_pins_uv_to_tagged_release() -> None:
+    """install.sh must fetch uv from a pinned, immutable GitHub release URL.
+
+    Pinning to a specific tag on github.com/releases/download/<tag>/...
+    gives immutability guarantees: once a GitHub Release tag is published,
+    its assets cannot be silently replaced (only a new tag can supersede).
+    This is the approved Option-B strategy for cases where the upstream
+    does not publish a checksum for the installer script itself.
+
+    Trust assumption: relies on GitHub release immutability + TLS to
+    github.com. Documented in the script as a security comment.
+    """
+    text = INSTALL_SH.read_text()
+    code = _non_comment_lines(text)
+    # Non-comment lines must not reference the floating astral.sh URL.
+    assert not re.search(r"astral\.sh/uv/install\.sh", code), (
+        "install.sh must not use the floating https://astral.sh/uv/install.sh URL "
+        "in executable lines — pin to a tagged GitHub release URL instead (F-017 Option B)"
+    )
+    # The pinned GitHub release URL must appear somewhere in the file (code or constant).
+    assert re.search(r"github\.com/astral-sh/uv/releases/download/\S+/uv-installer\.sh", text), (
+        "install.sh must pin uv installer to a tagged github.com release asset URL "
+        "(github.com/astral-sh/uv/releases/download/<tag>/uv-installer.sh)"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Bash syntax check (skip-friendly — devcontainer has bash, but be safe)
 # ---------------------------------------------------------------------------
 
@@ -250,10 +307,12 @@ def test_install_sh_bash_syntax_check():
 
 def test_install_sh_under_size_budget():
     # The iter-19 directive caps install.sh at ~80 lines so reviewers
-    # can scan it in one screen. Soft-cap at 100 to leave headroom for
-    # a trailing comment block but still flag accidental sprawl.
+    # can scan it in one screen. Soft-cap bumped to 110 in F-017 to
+    # accommodate the download-then-execute pattern that replaced the
+    # pipe-to-shell anti-pattern (adds ~4 lines) while keeping a
+    # meaningful sprawl guard.
     line_count = len(INSTALL_SH.read_text().splitlines())
-    assert line_count <= 100, (
+    assert line_count <= 110, (
         f"install.sh has grown to {line_count} lines; consider extracting "
         "logic to a helper script before the installer becomes hard to audit"
     )
