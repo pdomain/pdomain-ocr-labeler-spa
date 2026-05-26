@@ -1,1 +1,0 @@
-["All 6 required jobs pass on push to main", "openapi-drift job fails if types.ts is out of sync", "build-wheel job asserts `static/index.html` in wheel zip", "test-e2e builds frontend before running playwright"]
