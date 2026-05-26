@@ -1,14 +1,29 @@
-// ConfirmDialog.tsx — lightweight confirm dialog for destructive hotkey actions.
+// ConfirmDialog.tsx — destructive-action confirmation dialog, backed by pd-ui AlertDialog.
 // Spec: docs/specs/2026-05-12-hotkeys-a11y-design.md §Destructive keys confirm
 // Issue #236
 //
-// Used by global hotkeys (Mod+L Load Page, Mod+G Rematch GT) and any other
-// action that needs "Are you sure?" before executing.
+// Replaces the hand-rolled modal with @concavetrillion/pd-ui's AlertDialog suite
+// (Radix-based). This gives us a native focus trap and Escape handling built in,
+// addressing the aria-modal-without-focus-trap concern from issue #445.
+//
+// Public API is unchanged — callers do not need modification.
 //
 // data-testids:
-//   confirm-dialog         — outer overlay
-//   confirm-dialog-confirm — confirm button
-//   confirm-dialog-cancel  — cancel button
+//   confirm-dialog         — AlertDialogContent (the dialog panel)
+//   confirm-dialog-confirm — confirm button (AlertDialogAction)
+//   confirm-dialog-cancel  — cancel button (AlertDialogCancel)
+
+import { useRef } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@concavetrillion/pd-ui/primitives";
 
 interface ConfirmDialogProps {
   /** Whether the dialog is visible. */
@@ -23,14 +38,19 @@ interface ConfirmDialogProps {
   cancelLabel?: string | undefined;
   /** Fired when the user clicks Confirm. */
   onConfirm: () => void;
-  /** Fired when the user clicks Cancel or the overlay backdrop. */
+  /** Fired when the user clicks Cancel, presses Escape, or clicks the overlay. */
   onCancel: () => void;
 }
 
 /**
- * Simple modal confirm dialog for destructive actions.
+ * Modal confirm dialog for destructive actions, backed by pd-ui's Radix-based
+ * AlertDialog suite. Provides a native focus trap and Escape key handling.
  *
- * Renders nothing when `open` is false.
+ * Both AlertDialogAction and AlertDialogCancel close the dialog (triggering
+ * onOpenChange(false)). We use a ref to distinguish: if the user clicked
+ * Confirm, we fire onConfirm and suppress the onCancel that onOpenChange
+ * would otherwise emit. All other close paths (Cancel button, Escape key,
+ * overlay click) fire onCancel.
  */
 export function ConfirmDialog({
   open,
@@ -41,43 +61,56 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  if (!open) return null;
+  // Track whether the confirm button was just clicked, so onOpenChange can
+  // distinguish a confirm-close from a cancel/escape/overlay-close.
+  const confirmedRef = useRef(false);
 
   return (
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- dialog backdrop click-to-dismiss is standard modal pattern; Esc handled via useHotkey at call sites
-    <div
-      role="alertdialog"
-      aria-modal="true"
-      aria-label={title}
-      data-testid="confirm-dialog"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel();
+    <AlertDialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          if (confirmedRef.current) {
+            confirmedRef.current = false;
+            // onConfirm was already called in the button's onClick handler.
+          } else {
+            onCancel();
+          }
+        }
       }}
     >
-      <div className="bg-bg-surface rounded-lg border border-border-2 max-w-sm w-full mx-4 p-5 space-y-4">
-        <h2 className="text-base font-semibold">{title}</h2>
-        <p className="text-sm text-ink-2">{message}</p>
-        <div className="flex justify-end gap-2">
-          <button
+      {/* AlertDialogContent already composes AlertDialogPortal + AlertDialogOverlay
+          internally (pd-ui convention). The overlay uses class "dialog-overlay" and
+          the content uses class "dialog" — we supplement with Tailwind to match the
+          labeler's visual style since those CSS classes have no definition in the
+          local primitives.css. */}
+      <AlertDialogContent
+        data-testid="confirm-dialog"
+        className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 max-w-sm w-full mx-4 bg-bg-surface rounded-lg border border-border-2 p-5 space-y-4 shadow-lg focus:outline-none"
+      >
+        <AlertDialogHeader className="space-y-1">
+          <AlertDialogTitle className="text-base font-semibold">{title}</AlertDialogTitle>
+          <AlertDialogDescription className="text-sm text-ink-2">{message}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="flex justify-end gap-2">
+          <AlertDialogCancel
             data-testid="confirm-dialog-cancel"
-            onClick={onCancel}
             className="px-3 py-1.5 text-sm rounded border border-border-2 bg-bg-surface hover:bg-bg-raised"
           >
             {cancelLabel}
-          </button>
-          {/* eslint-disable jsx-a11y/no-autofocus -- confirm button auto-focus improves keyboard UX for destructive-action confirmation dialogs */}
-          <button
-            autoFocus
+          </AlertDialogCancel>
+          <AlertDialogAction
             data-testid="confirm-dialog-confirm"
-            onClick={onConfirm}
+            onClick={() => {
+              confirmedRef.current = true;
+              onConfirm();
+            }}
             className="px-3 py-1.5 text-sm rounded bg-status-mismatch text-accent-ink hover:opacity-90 transition-opacity"
           >
             {confirmLabel}
-          </button>
-          {/* eslint-enable jsx-a11y/no-autofocus */}
-        </div>
-      </div>
-    </div>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
