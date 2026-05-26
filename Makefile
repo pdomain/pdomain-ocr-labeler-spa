@@ -381,6 +381,27 @@ clean: ## Clean cache + build artifacts
 	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
 	rm -rf dist/ src/pd_ocr_labeler_spa/static/ frontend/dist/ 2>/dev/null || true
 
+# ---------------------------------------------------------------------------
+# Security audit (F-021) — pip-audit with non-PyPI manifest
+# ---------------------------------------------------------------------------
+# pip-audit cannot query advisories for packages served from private registries
+# (e.g. pd-book-tools from pd-index-pip). Passing such packages to pip-audit
+# causes it to fail or silently skip them. This target:
+#   1. Parses uv.lock to find every non-PyPI source package.
+#   2. Prints an explicit manifest of those packages so nothing is invisible.
+#   3. Audits the remaining PyPI-resolvable packages via the OSV advisory DB.
+#
+# NOT included in `make ci` — requires network access and pip-audit install.
+# Run manually or from a dedicated security-scan workflow step.
+#
+# See docs/research/2026-05-22-deep-code-review-security-scan.md F-021.
+
+pip-audit: ## Audit PyPI deps; print manifest of skipped non-PyPI packages (F-021)
+	@bash scripts/pip-audit-with-manifest.sh
+
+pip-audit-no-dev: ## Audit runtime-only PyPI deps (excludes dev group)
+	@bash scripts/pip-audit-with-manifest.sh --no-dev
+
 ci: setup frontend-install pre-commit-check typecheck openapi-export frontend-build lint test frontend-format-check frontend-lint frontend-test frontend-knip ## Full CI pipeline
 
 # ---------------------------------------------------------------------------
