@@ -1,156 +1,45 @@
-/* Dual-theme CSS custom-property token layer.
- * Dark mode is the default (:root).
- * Light mode is [data-theme="light"] override.
- * Media query fallback: respects prefers-color-scheme: light when data-theme is not set.
- */
+/* ── Base design tokens — imported from pd-ui canonical token set ──────────────
+ * Provides: --bg-page, --bg-surface, --bg-raised, --bg-sunk,
+ *           --border-1/2/3, --ink-1/2/3/4,
+ *           --accent, --accent-ink,
+ *           --exact, --fuzzy, --mismatch, --ocr, --gt (labeler status tokens)
+ *           --block, --para, --line, --word (canvas layer tokens)
+ *           --ui-font, --mono-font, --shadow-floating, --overlay-scrim
+ *
+ * Theme convention (from pd-ui): :root = dark (warm charcoal), [data-theme="light"] = light.
+ * ui-prefs.ts applies data-theme on document.documentElement on load from localStorage
+ * (default "system", resolved via prefers-color-scheme). Polarity matches pd-ui exactly.
+ * ─────────────────────────────────────────────────────────────────────────── */
+@import "@concavetrillion/pd-ui/theme/tokens.css";
 
+/* ── Labeler-specific extensions — not in pd-ui ─────────────────────────────
+ * These are prefixed aliases for pd-ui's canonical unprefixed status/layer
+ * tokens. The entire labeler codebase uses the prefixed form (--status-exact,
+ * --layer-block, etc.) as its domain vocabulary; these aliases keep all call
+ * sites stable while delegating actual color values to pd-ui.
+ *
+ * Local extensions retained:
+ *   --status-{exact,fuzzy,mismatch,ocr,gt}  → aliases for pd-ui --exact/--fuzzy/etc.
+ *   --layer-{block,para,line,word}           → aliases for pd-ui --block/--para/etc.
+ *
+ * Note: The @media (prefers-color-scheme: light) block from the pre-pd-ui
+ * version has been removed. Theme switching is handled entirely by the
+ * ui-prefs.ts store setting data-theme on document.documentElement, which
+ * activates pd-ui's [data-theme="light"] overrides.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/* Dark default (matches pd-ui :root dark palette) */
 :root {
-  /* Surfaces */
-  --bg-page: #0c0c10;
-  --bg-surface: #15151b;
-  --bg-raised: #1d1d24;
-  --bg-sunk: #08080c;
+  /* Labeler domain aliases — prefixed status tokens → pd-ui canonical */
+  --status-exact: var(--exact);
+  --status-fuzzy: var(--fuzzy);
+  --status-mismatch: var(--mismatch);
+  --status-ocr: var(--ocr);
+  --status-gt: var(--gt);
 
-  /* Borders */
-  --border-1: #222229;
-  --border-2: #2f2f38;
-  --border-3: #3f3f49;
-
-  /* Text */
-  --ink-1: #f0f0f2;
-  --ink-2: #b0b0b8;
-  --ink-3: #7a7a85;
-  --ink-4: #4e4e58;
-
-  /* Accent */
-  --accent: #d6925a;
-  --accent-ink: #1a0f08;
-
-  /* Status */
-  --status-exact: #5fbf6a;
-  --status-fuzzy: #e8a83a;
-  --status-mismatch: #dc6555;
-  --status-ocr: #5d9fdf;
-  --status-gt: #a888d4;
-
-  /* Layers */
-  --layer-block: #a89074;
-  --layer-para: #7fb56a;
-  --layer-line: #d088a8;
-  --layer-word: #6e9cdf;
-
-  /* Type families */
-  --ui-font: "Inter", system-ui, sans-serif;
-  --mono-font: "JetBrains Mono", ui-monospace, monospace;
-  /* Elevation — floating chrome only */
-  --shadow-floating: 0 3px 10px rgba(0, 0, 0, 0.35);
-
-  /* Design-system aliases (unprefixed) */
-  --exact: var(--status-exact);
-  --fuzzy: var(--status-fuzzy);
-  --mismatch: var(--status-mismatch);
-  --ocr: var(--status-ocr);
-  --gt: var(--status-gt);
-  --block: var(--layer-block);
-  --para: var(--layer-para);
-  --line: var(--layer-line);
-  --word: var(--layer-word);
-}
-
-[data-theme="light"] {
-  /* Surfaces */
-  --bg-page: #f6f4ef;
-  --bg-surface: #ffffff;
-  --bg-raised: #ecebe5;
-  --bg-sunk: #f0eee7;
-
-  /* Borders */
-  --border-1: #d8d4c8;
-  --border-2: #c2bdaf;
-  --border-3: #a39e8d;
-
-  /* Text */
-  --ink-1: #1a1810;
-  --ink-2: #4a4538;
-  --ink-3: #7c7665;
-  --ink-4: #b0aa95;
-
-  /* Accent */
-  --accent: #b85a2e;
-  --accent-ink: #ffffff;
-
-  /* Status */
-  --status-exact: #2d8c3a;
-  --status-fuzzy: #b87b1f;
-  --status-mismatch: #b13d32;
-  --status-ocr: #2d6fb5;
-  --status-gt: #6e4ea5;
-
-  /* Layers */
-  --layer-block: #7a5e3a;
-  --layer-para: #4d8a3a;
-  --layer-line: #a8527a;
-  --layer-word: #3d6bb8;
-
-  --shadow-floating: 0 3px 10px rgba(60, 40, 20, 0.1);
-  /* Design-system aliases (unprefixed) */
-  --exact: var(--status-exact);
-  --fuzzy: var(--status-fuzzy);
-  --mismatch: var(--status-mismatch);
-  --ocr: var(--status-ocr);
-  --gt: var(--status-gt);
-  --block: var(--layer-block);
-  --para: var(--layer-para);
-  --line: var(--layer-line);
-  --word: var(--layer-word);
-}
-
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) {
-    /* Surfaces */
-    --bg-page: #f6f4ef;
-    --bg-surface: #ffffff;
-    --bg-raised: #ecebe5;
-    --bg-sunk: #f0eee7;
-
-    /* Borders */
-    --border-1: #d8d4c8;
-    --border-2: #c2bdaf;
-    --border-3: #a39e8d;
-
-    /* Text */
-    --ink-1: #1a1810;
-    --ink-2: #4a4538;
-    --ink-3: #7c7665;
-    --ink-4: #b0aa95;
-
-    /* Accent */
-    --accent: #b85a2e;
-    --accent-ink: #ffffff;
-
-    /* Status */
-    --status-exact: #2d8c3a;
-    --status-fuzzy: #b87b1f;
-    --status-mismatch: #b13d32;
-    --status-ocr: #2d6fb5;
-    --status-gt: #6e4ea5;
-
-    /* Layers */
-    --layer-block: #7a5e3a;
-    --layer-para: #4d8a3a;
-    --layer-line: #a8527a;
-    --layer-word: #3d6bb8;
-
-    --shadow-floating: 0 3px 10px rgba(60, 40, 20, 0.1);
-    /* Design-system aliases (unprefixed) */
-    --exact: var(--status-exact);
-    --fuzzy: var(--status-fuzzy);
-    --mismatch: var(--status-mismatch);
-    --ocr: var(--status-ocr);
-    --gt: var(--status-gt);
-    --block: var(--layer-block);
-    --para: var(--layer-para);
-    --line: var(--layer-line);
-    --word: var(--layer-word);
-  }
+  /* Labeler domain aliases — prefixed layer tokens → pd-ui canonical */
+  --layer-block: var(--block);
+  --layer-para: var(--para);
+  --layer-line: var(--line);
+  --layer-word: var(--word);
 }

@@ -5,49 +5,33 @@ import { describe, it, expect } from "vitest";
 describe("tokens.css", () => {
   const css = readFileSync(resolve(__dirname, "./tokens.css"), "utf-8");
 
-  it("dark default has correct bg-page", () => {
-    expect(css).toContain("--bg-page: #0c0c10");
+  it("imports pd-ui canonical token set", () => {
+    expect(css).toContain('@import "@concavetrillion/pd-ui/theme/tokens.css"');
   });
 
-  it("light override has correct bg-page", () => {
-    expect(css).toContain("--bg-page: #f6f4ef");
+  it("has all 5 status alias tokens pointing to pd-ui canonical names", () => {
+    // These are labeler-specific aliases → pd-ui canonical unprefixed names.
+    // Hex values are owned by pd-ui/theme/tokens.css, not this file.
+    expect(css).toContain("--status-exact: var(--exact)");
+    expect(css).toContain("--status-fuzzy: var(--fuzzy)");
+    expect(css).toContain("--status-mismatch: var(--mismatch)");
+    expect(css).toContain("--status-ocr: var(--ocr)");
+    expect(css).toContain("--status-gt: var(--gt)");
   });
 
-  it("dark accent is amber", () => {
-    expect(css).toContain("--accent: #d6925a");
+  it("has all 4 layer alias tokens pointing to pd-ui canonical names", () => {
+    // These are labeler-specific aliases → pd-ui canonical unprefixed names.
+    expect(css).toContain("--layer-block: var(--block)");
+    expect(css).toContain("--layer-para: var(--para)");
+    expect(css).toContain("--layer-line: var(--line)");
+    expect(css).toContain("--layer-word: var(--word)");
   });
 
-  it("light accent is terracotta", () => {
-    expect(css).toContain("--accent: #b85a2e");
-  });
-
-  it("has all 5 status tokens in dark", () => {
-    expect(css).toContain("--status-exact: #5fbf6a");
-    expect(css).toContain("--status-fuzzy: #e8a83a");
-    expect(css).toContain("--status-mismatch: #dc6555");
-    expect(css).toContain("--status-ocr: #5d9fdf");
-    expect(css).toContain("--status-gt: #a888d4");
-  });
-
-  it("has all 4 layer tokens in dark", () => {
-    expect(css).toContain("--layer-block: #a89074");
-    expect(css).toContain("--layer-para: #7fb56a");
-    expect(css).toContain("--layer-line: #d088a8");
-    expect(css).toContain("--layer-word: #6e9cdf");
-  });
-
-  it("has all 5 status tokens in light", () => {
-    expect(css).toContain("--status-exact: #2d8c3a");
-    expect(css).toContain("--status-fuzzy: #b87b1f");
-    expect(css).toContain("--status-mismatch: #b13d32");
-    expect(css).toContain("--status-ocr: #2d6fb5");
-    expect(css).toContain("--status-gt: #6e4ea5");
-  });
-
-  it("has all 4 layer tokens in light", () => {
-    expect(css).toContain("--layer-block: #7a5e3a");
-    expect(css).toContain("--layer-para: #4d8a3a");
-    expect(css).toContain("--layer-line: #a8527a");
-    expect(css).toContain("--layer-word: #3d6bb8");
+  it("does not define raw hex values for bg/accent/ink (owned by pd-ui)", () => {
+    // Surfaces, borders, text and accent are wholly owned by pd-ui now.
+    // If any hex literal for these appears here it is an accidental override.
+    expect(css).not.toContain("--bg-page: #");
+    expect(css).not.toContain("--accent: #");
+    expect(css).not.toContain("--ink-1: #");
   });
 });
