@@ -34,7 +34,7 @@ export class ApiClient {
       headers,
     };
 
-    if (options?.body) {
+    if (options !== undefined && "body" in options) {
       fetchOptions.body = JSON.stringify(options.body);
     }
 
@@ -69,7 +69,15 @@ export class ApiClient {
       );
     }
 
-    return response.json() as Promise<T>;
+    // Handle 204 No Content and empty bodies — do not attempt JSON.parse.
+    if (response.status === 204 || response.headers.get("content-length") === "0") {
+      return null as T;
+    }
+    const responseText = await response.text();
+    if (!responseText) {
+      return null as T;
+    }
+    return JSON.parse(responseText) as T;
   }
 
   get<T>(path: string): Promise<T> {
