@@ -10,6 +10,18 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+// Mock lib/toast so we can assert toast.error calls without the real sonner DOM.
+vi.mock("../../../lib/toast", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+  },
+}));
+
+import { toast } from "../../../lib/toast";
+
 // Mock react-konva so CharFixerCanvas renders deterministic <div>s carrying
 // the data-testid props we exercise (the real Stage/Layer/Rect tree would
 // otherwise need a canvas, which jsdom doesn't provide). The mock surfaces
@@ -387,5 +399,60 @@ describe("CharFixerSection — CU-6.2 char-bboxes POST body shape", () => {
     expect("height" in bbox0).toBe(true);
     // The modified bbox should have x=2 (we set charfixer-detail-x1 to "2").
     expect(bbox0.x).toBe(2);
+  });
+});
+
+// ── F-041 regression tests ────────────────────────────────────────────────────
+// Char-bbox Apply must NOT clear dirty state until the save succeeds.
+// If the save fails, the Apply button should remain enabled and an error toast
+// must be shown so the user knows the edit was NOT persisted.
+describe("CharFixerSection — F-041 dirty state on failed save", () => {
+  beforeEach(() => {
+    vi.mocked(toast.error).mockClear();
+  });
+
+  it("keeps Apply enabled when the char-bboxes POST fails", async () => {
+    // Return a 500 so the mutation rejects.
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/0/0/char-bboxes", () =>
+        HttpResponse.json({ detail: "internal error" }, { status: 500 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderSection(makeWord("ab", "ab"));
+
+    // Dirty the state by editing a coordinate input.
+    const x1 = screen.getByTestId("charfixer-detail-x1");
+    await user.clear(x1);
+    await user.type(x1, "7");
+    const apply = screen.getByTestId("charfixer-apply");
+    expect(apply.disabled).toBe(false);
+
+    // Click Apply — mutation fires but server returns 500.
+    await user.click(apply);
+
+    // After the failed mutation, dirty state must remain true (button still enabled).
+    await waitFor(() => expect(vi.mocked(toast.error)).toHaveBeenCalled());
+    expect(screen.getByTestId("charfixer-apply").disabled).toBe(false);
+  });
+
+  it("calls toast.error when the char-bboxes POST fails", async () => {
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/0/0/char-bboxes", () =>
+        HttpResponse.json({ detail: "internal error" }, { status: 500 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderSection(makeWord("ab", "ab"));
+
+    const x1 = screen.getByTestId("charfixer-detail-x1");
+    await user.clear(x1);
+    await user.type(x1, "3");
+
+    await user.click(screen.getByTestId("charfixer-apply"));
+
+    await waitFor(() =>
+      expect(vi.mocked(toast.error)).toHaveBeenCalledWith("Failed to save char bboxes"),
+    );
   });
 });

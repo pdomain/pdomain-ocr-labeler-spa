@@ -51,6 +51,7 @@ import { UnicodePicker } from "../UnicodePicker";
 import { useUpdateWordGroundTruth, useSetCharBboxes } from "../../../hooks/useWordMutations";
 import type { components } from "../../../api/types";
 import { CharFixerCanvas, initialCharBboxes, type CharRangeBBox } from "./CharFixerCanvas";
+import { toast } from "../../../lib/toast";
 
 type WordMatch = components["schemas"]["WordMatch"];
 type BBox = components["schemas"]["BBox"];
@@ -275,12 +276,23 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
   function handleApply() {
     // POST the current per-char bboxes to the backend so they survive
     // page reloads (stored in word_attributes sidecar via char-bboxes endpoint).
-    charBboxesMutation.mutate({
-      lineIndex: word.line_index,
-      wordIndex: word.word_index ?? 0,
-      charBboxes: charBboxes.map((r) => r.bbox),
-    });
-    setDirty(false);
+    // F-041: dirty is cleared only on save success; on failure dirty stays true
+    // so the user knows the edit was not persisted.
+    charBboxesMutation.mutate(
+      {
+        lineIndex: word.line_index,
+        wordIndex: word.word_index ?? 0,
+        charBboxes: charBboxes.map((r) => r.bbox),
+      },
+      {
+        onSuccess: () => {
+          setDirty(false);
+        },
+        onError: () => {
+          toast.error("Failed to save char bboxes");
+        },
+      },
+    );
   }
 
   const selected =
