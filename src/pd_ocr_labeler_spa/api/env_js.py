@@ -28,7 +28,7 @@ def _build_env() -> dict[str, object]:
     # underscoring it) keeps the M0 surface honest about its inputs.
     return {
         "API_BASE": "",
-        "API_TOKEN": None,
+        "API_TOKEN": None,  # nosec B105 — key is a JS env-var name, not a credential; value is None
     }
 
 
