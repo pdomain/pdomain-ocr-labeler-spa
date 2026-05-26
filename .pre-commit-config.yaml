@@ -20,11 +20,11 @@ default_install_hook_types: [pre-commit, post-commit, post-rewrite,
 
 repos:
 -   repo: https://gitlab.com/vojko.pribudic.foss/pre-commit-update
-    rev: v0.9.0
+    rev: 4fd4fcef9cf0a3c95b61c76de4a2b1a0bb0666fc  # frozen: v0.9.0
     hooks:
     -   id: pre-commit-update
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
     hooks:
     -   id: trailing-whitespace
     -   id: end-of-file-fixer
@@ -37,7 +37,7 @@ repos:
     -   id: check-merge-conflict
 -   repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.15.14
+    rev: 0c7b6c989466a93942def1f84baf36ddfcd60c83  # frozen: v0.15.14
     hooks:
     # Run the linter for imports
     -   id: ruff-check
@@ -54,7 +54,7 @@ repos:
 # environment can be cached across the workspace and bumps happen
 # in one place. Per-repo rules live in `.markdownlint-cli2.jsonc`.
 -   repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.22.1
+    rev: 996abf60411a8d954288ac9856aae7602b80cbda  # frozen: v0.22.1
     hooks:
     -   id: markdownlint-cli2
     -   id: markdownlint-cli2
@@ -64,13 +64,13 @@ repos:
 
 # Secret scanner. Rev kept in lockstep with pd-book-tools canonical (v8.30.1).
 -   repo: https://github.com/gitleaks/gitleaks
-    rev: v8.30.1
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # frozen: v8.30.1
     hooks:
     -   id: gitleaks
 
 # Commit-message linter. Config in .gitlint; rev in lockstep with pd-book-tools.
 -   repo: https://github.com/jorisroovers/gitlint
-    rev: v0.19.1
+    rev: acc9d9de6369b76d22cb4167029d2035e8730b98  # frozen: v0.19.1
     hooks:
     -   id: gitlint
         stages: [commit-msg]
@@ -138,7 +138,9 @@ repos:
         description: TypeScript project-references type-check for the React SPA.
         # mise-trust-worktrees trusts generated worktree roots so this can use
         # the project tool versions from mise.toml without per-worktree prompts.
-        entry: bash -c 'cd frontend && if command -v mise >/dev/null 2>&1; then exec mise exec -- npx tsc -b --noEmit; else exec npx tsc -b --noEmit; fi'
+        entry: bash -c 'cd frontend && if command -v mise >/dev/null 2>&1; then
+          exec mise exec -- npx tsc -b --noEmit; else exec npx tsc -b --noEmit;
+          fi'
         language: system
         files:
           ^frontend/(src/.*\.(ts|tsx)|tsconfig.*\.json|package(-lock)?\.json|vite\.config\.ts)$
@@ -146,7 +148,9 @@ repos:
     -   id: frontend-eslint
         name: frontend eslint
         description: ESLint flat-config check for the React SPA.
-        entry: bash -c 'cd frontend && if command -v mise >/dev/null 2>&1; then exec mise exec -- npm run --silent lint; else exec npm run --silent lint; fi'
+        entry: bash -c 'cd frontend && if command -v mise >/dev/null 2>&1; then
+          exec mise exec -- npm run --silent lint; else exec npm run --silent
+          lint; fi'
         language: system
         # Match what eslint actually lints: SPA source, the flat config
         # itself, and dependency manifests (a new dep can change rules
@@ -158,7 +162,9 @@ repos:
     -   id: frontend-prettier
         name: frontend prettier --check
         description: Prettier format check for the React SPA.
-        entry: bash -c 'cd frontend && if command -v mise >/dev/null 2>&1; then exec mise exec -- npm run --silent format:check; else exec npm run --silent format:check; fi'
+        entry: bash -c 'cd frontend && if command -v mise >/dev/null 2>&1; then
+          exec mise exec -- npm run --silent format:check; else exec npm run
+          --silent format:check; fi'
         language: system
         # Prettier covers a broader file set than ESLint (CSS, JSON,
         # config files); keep the path filter wide enough to match.
