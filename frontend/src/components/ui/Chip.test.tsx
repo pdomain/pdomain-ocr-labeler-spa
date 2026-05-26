@@ -32,6 +32,35 @@ describe("Chip — static variant", () => {
   });
 });
 
+describe("Chip — tristate a11y (aria-pressed)", () => {
+  it('exposes aria-pressed=false when value is "off"', () => {
+    render(
+      <Chip variant="tristate" value="off" onChange={() => {}}>
+        Status
+      </Chip>,
+    );
+    expect(screen.getByRole("button")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it('exposes aria-pressed=true when value is "on"', () => {
+    render(
+      <Chip variant="tristate" value="on" onChange={() => {}}>
+        Status
+      </Chip>,
+    );
+    expect(screen.getByRole("button")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it('exposes aria-pressed=mixed when value is "mixed"', () => {
+    render(
+      <Chip variant="tristate" value="mixed" onChange={() => {}}>
+        Status
+      </Chip>,
+    );
+    expect(screen.getByRole("button")).toHaveAttribute("aria-pressed", "mixed");
+  });
+});
+
 describe("Chip — tristate variant", () => {
   it("starts at off state", () => {
     render(

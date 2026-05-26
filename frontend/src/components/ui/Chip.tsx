@@ -46,9 +46,13 @@ export function Chip({
       onChange?.(cycle[value]);
     };
 
+    const ariaPressed: true | false | "mixed" =
+      value === "on" ? true : value === "mixed" ? "mixed" : false;
+
     return (
       <div
         role="button"
+        aria-pressed={ariaPressed}
         tabIndex={0}
         data-tristate
         data-tristate-value={value}
