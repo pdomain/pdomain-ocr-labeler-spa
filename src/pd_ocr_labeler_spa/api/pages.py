@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import JSONResponse, Response
 from pd_book_tools.ocr.page import Page
 from pydantic import BaseModel, Field
@@ -1178,7 +1178,17 @@ def update_selection(
 def get_page_image(
     project_id: str,
     page_index: int,
-    w: int | None = None,
+    w: int | None = Query(
+        default=None,
+        ge=1,
+        le=8000,
+        description=(
+            "Target width in pixels (1-8000).  Height is scaled proportionally."
+            "  Values outside this range are rejected to prevent"
+            " memory-exhaustion DoS via enormous resize requests (F-004, #409)."
+            "  8000 px exceeds the widest archival book scans in practice."
+        ),
+    ),
     project_state: ProjectState = Depends(get_project_state),
 ) -> Response:
     """``GET /api/projects/{id}/pages/{idx}/image`` — serve the page image.
