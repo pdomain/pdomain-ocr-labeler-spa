@@ -476,7 +476,7 @@ def test_apply_style_toolbar_row_present(exercise_server: ExerciseServer, page: 
         "apply-style-select",
         "apply-component-select",
         "apply-style-button",
-        "add-word-button",
+        "word-add-button",  # canonical id (was "add-word-button" — bug #452)
     ]
     missing = [t for t in s2_10_testids if page.locator(f'[data-testid="{t}"]').count() == 0]
     assert not missing, f"§2.10 apply-style row testids missing from DOM: {missing}"
@@ -504,8 +504,8 @@ def test_word_add_button_toggle(exercise_server: ExerciseServer, page: Page) -> 
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
-    btn = page.locator('[data-testid="add-word-button"]').first
-    assert btn.count() > 0, "add-word-button (word-add-button) must be in DOM"
+    btn = page.locator('[data-testid="word-add-button"]').first
+    assert btn.count() > 0, "word-add-button must be in DOM"
 
     if btn.is_visible():
         btn.click()
