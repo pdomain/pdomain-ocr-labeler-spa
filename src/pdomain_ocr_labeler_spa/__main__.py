@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import Any
 
 import uvicorn
-from pdomain_ocr_ops.suite import find_available_port, register_self
+from pdomain_ops.suite import find_available_port, register_self
 
 from .settings import Settings
 

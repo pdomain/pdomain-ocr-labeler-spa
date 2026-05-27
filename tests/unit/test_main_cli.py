@@ -957,7 +957,7 @@ def test_default_port_free_no_scan(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     """When default port 8080 is free, find_available_port returns 8080 and
     uvicorn is called with it. No stderr notice should be emitted.
 
-    Port resolution now delegates to ``pdomain_ocr_ops.suite.find_available_port``;
+    Port resolution now delegates to ``pdomain_ops.suite.find_available_port``;
     this test mocks that helper directly so no real socket is probed.
     """
     _clear_pdlabeler_env(monkeypatch)
@@ -987,7 +987,7 @@ def test_auto_port_scan_when_default_busy(monkeypatch: pytest.MonkeyPatch, tmp_p
     """When find_available_port returns a shifted port (e.g. 8082), uvicorn
     starts on that port and .pdlabeler-port is written with it.
 
-    The actual port-scanning logic lives in pdomain-ocr-ops; here we just
+    The actual port-scanning logic lives in pdomain-ops; here we just
     verify that main() honours whatever find_available_port returns.
     """
     _clear_pdlabeler_env(monkeypatch)
@@ -1043,7 +1043,7 @@ def test_find_available_port_runtime_error_exits(
     main() prints the error to stderr and exits with code 1.
 
     The local ``_find_free_port`` had an OS-fallback to port 0; the
-    pdomain-ocr-ops helper raises RuntimeError instead. This test pins the
+    pdomain-ops helper raises RuntimeError instead. This test pins the
     error-handling path introduced alongside the migration.
     """
     _clear_pdlabeler_env(monkeypatch)
@@ -1233,7 +1233,7 @@ def test_register_self_called_with_actual_port(monkeypatch: pytest.MonkeyPatch, 
     ``_caller_package="pdomain_ocr_labeler_spa"`` and ``actual_port=<resolved>``.
 
     This pins the suite-registry wiring introduced alongside the
-    pdomain-ocr-ops ``find_available_port`` migration so cross-app links
+    pdomain-ops ``find_available_port`` migration so cross-app links
     (e.g. the dashboard) always discover the real address.
     """
     _clear_pdlabeler_env(monkeypatch)
