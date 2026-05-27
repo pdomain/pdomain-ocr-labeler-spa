@@ -120,6 +120,8 @@ def test_main_prints_device_line_before_listening(
     with (
         patch.object(main_mod, "uvicorn") as mock_uvicorn,
         patch.object(main_mod, "webbrowser"),
+        patch.object(main_mod, "find_available_port", return_value=8080),
+        patch.object(main_mod, "register_self"),
     ):
         mock_uvicorn.run.side_effect = lambda *a, **kw: None
         rc = main(["--no-browser", "--data-root", str(tmp_path)])
@@ -193,6 +195,7 @@ def test_cli_overrides_layered_into_settings(monkeypatch: pytest.MonkeyPatch, tm
     with (
         patch.object(main_mod, "uvicorn") as mock_uvicorn,
         patch.object(main_mod, "webbrowser") as _mock_wb,
+        patch.object(main_mod, "register_self"),
     ):
         mock_uvicorn.run.side_effect = _capture_run
         rc = main(["--port", "8123", "--no-browser", "--data-root", str(tmp_path)])
@@ -239,12 +242,13 @@ def test_cli_omitted_flag_does_not_override_env(monkeypatch: pytest.MonkeyPatch,
         def getsockname(self) -> tuple[str, int]:
             return ("127.0.0.1", 8080)
 
-    monkeypatch.setattr(main_mod._socket, "socket", lambda *_a, **_kw: _FakeSock())
     monkeypatch.chdir(tmp_path)
 
     with (
         patch.object(main_mod, "uvicorn") as mock_uvicorn,
         patch.object(main_mod, "webbrowser"),
+        patch.object(main_mod, "find_available_port", return_value=8080),
+        patch.object(main_mod, "register_self"),
     ):
         mock_uvicorn.run.side_effect = _capture_run
         # No --data-root passed; env value should persist into Settings.
@@ -304,6 +308,7 @@ def test_main_invokes_uvicorn_with_factory_and_correct_kwargs(
     with (
         patch.object(main_mod, "uvicorn") as mock_uvicorn,
         patch.object(main_mod, "webbrowser"),
+        patch.object(main_mod, "register_self"),
     ):
         mock_uvicorn.run.side_effect = _capture_run
         rc = main(
@@ -336,28 +341,13 @@ def test_main_does_not_open_browser_when_reload_true(monkeypatch: pytest.MonkeyP
         if var.startswith("PDLABELER_"):
             monkeypatch.delenv(var, raising=False)
 
-    class _FakeSock:
-        def __enter__(self) -> _FakeSock:
-            return self
-
-        def __exit__(self, *_: Any) -> None:
-            pass
-
-        def setsockopt(self, *_: Any) -> None:
-            pass
-
-        def bind(self, addr: tuple[str, int]) -> None:
-            pass  # port always "free"
-
-        def getsockname(self) -> tuple[str, int]:
-            return ("127.0.0.1", 8080)
-
-    monkeypatch.setattr(main_mod._socket, "socket", lambda *_a, **_kw: _FakeSock())
     monkeypatch.chdir(tmp_path)
 
     with (
         patch.object(main_mod, "uvicorn"),
         patch.object(main_mod, "webbrowser") as mock_wb,
+        patch.object(main_mod, "find_available_port", return_value=8080),
+        patch.object(main_mod, "register_self"),
     ):
         rc = main(["--reload", "--data-root", str(tmp_path)])
 
@@ -371,28 +361,13 @@ def test_main_does_not_open_browser_when_no_browser(monkeypatch: pytest.MonkeyPa
         if var.startswith("PDLABELER_"):
             monkeypatch.delenv(var, raising=False)
 
-    class _FakeSock:
-        def __enter__(self) -> _FakeSock:
-            return self
-
-        def __exit__(self, *_: Any) -> None:
-            pass
-
-        def setsockopt(self, *_: Any) -> None:
-            pass
-
-        def bind(self, addr: tuple[str, int]) -> None:
-            pass  # port always "free"
-
-        def getsockname(self) -> tuple[str, int]:
-            return ("127.0.0.1", 8080)
-
-    monkeypatch.setattr(main_mod._socket, "socket", lambda *_a, **_kw: _FakeSock())
     monkeypatch.chdir(tmp_path)
 
     with (
         patch.object(main_mod, "uvicorn"),
         patch.object(main_mod, "webbrowser") as mock_wb,
+        patch.object(main_mod, "find_available_port", return_value=8080),
+        patch.object(main_mod, "register_self"),
     ):
         rc = main(["--no-browser", "--data-root", str(tmp_path)])
 
@@ -433,14 +408,14 @@ def test_main_opens_browser_in_default_mode(monkeypatch: pytest.MonkeyPatch, tmp
             return ("127.0.0.1", 8080)
 
     monkeypatch.setattr(main_mod._socket, "create_connection", lambda *_a, **_kw: _FakeSock())
-    # Also stub socket.socket so the port-resolution path doesn't hit a real socket.
-    monkeypatch.setattr(main_mod._socket, "socket", lambda *_a, **_kw: _FakeSock())
 
     monkeypatch.chdir(tmp_path)
 
     with (
         patch.object(main_mod, "uvicorn"),
         patch.object(main_mod, "webbrowser") as mock_wb,
+        patch.object(main_mod, "find_available_port", return_value=8080),
+        patch.object(main_mod, "register_self"),
     ):
         rc = main(["--data-root", str(tmp_path)])
         # Wait for the daemon poller thread to finish before asserting.
@@ -480,6 +455,8 @@ def test_data_root_cli_flag_threads_into_settings(tmp_path: Path) -> None:
         patch.object(main_mod, "uvicorn"),
         patch.object(main_mod, "webbrowser"),
         patch.object(main_mod, "Settings", side_effect=_capture_settings),
+        patch.object(main_mod, "find_available_port", return_value=8080),
+        patch.object(main_mod, "register_self"),
     ):
         rc = main(["--data-root", str(target), "--no-browser"])
 
@@ -505,6 +482,8 @@ def test_projects_root_cli_flag_threads_into_settings(tmp_path: Path) -> None:
         patch.object(main_mod, "uvicorn"),
         patch.object(main_mod, "webbrowser"),
         patch.object(main_mod, "Settings", side_effect=_capture_settings),
+        patch.object(main_mod, "find_available_port", return_value=8080),
+        patch.object(main_mod, "register_self"),
     ):
         rc = main(
             [
@@ -537,6 +516,8 @@ def test_project_dir_positional_threads_into_settings(tmp_path: Path) -> None:
         patch.object(main_mod, "uvicorn"),
         patch.object(main_mod, "webbrowser"),
         patch.object(main_mod, "Settings", side_effect=_capture_settings),
+        patch.object(main_mod, "find_available_port", return_value=8080),
+        patch.object(main_mod, "register_self"),
     ):
         rc = main(
             [
@@ -581,6 +562,8 @@ def test_no_overrides_omits_path_keys_entirely(monkeypatch: pytest.MonkeyPatch) 
         patch.object(main_mod, "uvicorn"),
         patch.object(main_mod, "webbrowser"),
         patch.object(main_mod, "Settings", side_effect=_capture_settings),
+        patch.object(main_mod, "find_available_port", return_value=8080),
+        patch.object(main_mod, "register_self"),
     ):
         main(["--no-browser"])
 
@@ -743,27 +726,15 @@ def test_main_with_none_argv_reads_sys_argv(monkeypatch: pytest.MonkeyPatch, tmp
         if var.startswith("PDLABELER_"):
             monkeypatch.delenv(var, raising=False)
 
-    class _FakeSock:
-        def __enter__(self) -> _FakeSock:
-            return self
-
-        def __exit__(self, *_: Any) -> None:
-            pass
-
-        def setsockopt(self, *_: Any) -> None:
-            pass
-
-        def bind(self, addr: tuple[str, int]) -> None:
-            pass  # port always "free"
-
-        def getsockname(self) -> tuple[str, int]:
-            return ("127.0.0.1", 8080)
-
-    monkeypatch.setattr(main_mod._socket, "socket", lambda *_a, **_kw: _FakeSock())
     monkeypatch.chdir(tmp_path)
 
     monkeypatch.setattr(sys, "argv", ["pd-ocr-labeler-ui", "--no-browser", "--data-root", str(tmp_path)])
-    with patch.object(main_mod, "uvicorn"), patch.object(main_mod, "webbrowser"):
+    with (
+        patch.object(main_mod, "uvicorn"),
+        patch.object(main_mod, "webbrowser"),
+        patch.object(main_mod, "find_available_port", return_value=8080),
+        patch.object(main_mod, "register_self"),
+    ):
         rc = main(None)
     assert rc == 0
 
@@ -897,6 +868,8 @@ def test_verbose_flag_sets_log_level_in_settings(monkeypatch: pytest.MonkeyPatch
         patch.object(main_mod, "uvicorn"),
         patch.object(main_mod, "webbrowser"),
         patch.object(main_mod, "Settings", side_effect=_capture_settings),
+        patch.object(main_mod, "find_available_port", return_value=8080),
+        patch.object(main_mod, "register_self"),
     ):
         rc = main(["--verbose", "--verbose", "--no-browser", "--data-root", str(tmp_path)])
 
@@ -930,6 +903,8 @@ def test_single_verbose_flag_preserves_info_level(monkeypatch: pytest.MonkeyPatc
         patch.object(main_mod, "uvicorn"),
         patch.object(main_mod, "webbrowser"),
         patch.object(main_mod, "Settings", side_effect=_capture_settings),
+        patch.object(main_mod, "find_available_port", return_value=8080),
+        patch.object(main_mod, "register_self"),
     ):
         rc = main(["--verbose", "--no-browser", "--data-root", str(tmp_path)])
 
@@ -958,6 +933,8 @@ def test_no_verbose_flag_uses_default_info_level(monkeypatch: pytest.MonkeyPatch
         patch.object(main_mod, "uvicorn"),
         patch.object(main_mod, "webbrowser"),
         patch.object(main_mod, "Settings", side_effect=_capture_settings),
+        patch.object(main_mod, "find_available_port", return_value=8080),
+        patch.object(main_mod, "register_self"),
     ):
         rc = main(["--no-browser", "--data-root", str(tmp_path)])
 
@@ -977,9 +954,11 @@ def _clear_pdlabeler_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_default_port_free_no_scan(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """When default port 8080 is free, uvicorn is called with 8080 directly.
+    """When default port 8080 is free, find_available_port returns 8080 and
+    uvicorn is called with it. No stderr notice should be emitted.
 
-    No stderr notice should be emitted (the port didn't shift).
+    Port resolution now delegates to ``pdomain_ocr_ops.suite.find_available_port``;
+    this test mocks that helper directly so no real socket is probed.
     """
     _clear_pdlabeler_env(monkeypatch)
 
@@ -988,43 +967,28 @@ def test_default_port_free_no_scan(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     def _capture_run(*args: Any, **kwargs: Any) -> None:
         captured["kwargs"] = kwargs
 
-    class _FakeSock:
-        def __init__(self) -> None:
-            self._bound_port: int = 0
-
-        def __enter__(self) -> _FakeSock:
-            return self
-
-        def __exit__(self, *_: Any) -> None:
-            pass
-
-        def setsockopt(self, *_: Any) -> None:
-            pass
-
-        def bind(self, addr: tuple[str, int]) -> None:
-            self._bound_port = addr[1]  # bind always succeeds
-
-        def getsockname(self) -> tuple[str, int]:
-            return ("127.0.0.1", self._bound_port)
-
-    monkeypatch.setattr(main_mod._socket, "socket", lambda *_a, **_kw: _FakeSock())
     monkeypatch.chdir(tmp_path)
 
     with (
         patch.object(main_mod, "uvicorn") as mock_uv,
         patch.object(main_mod, "webbrowser"),
+        patch.object(main_mod, "find_available_port", return_value=8080) as mock_fap,
+        patch.object(main_mod, "register_self"),
     ):
         mock_uv.run.side_effect = _capture_run
         rc = main(["--no-browser", "--data-root", str(tmp_path)])
 
     assert rc == 0
     assert captured["kwargs"]["port"] == 8080
+    mock_fap.assert_called_once_with(8080)
 
 
 def test_auto_port_scan_when_default_busy(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """When 8080–8081 are busy, uvicorn starts on the first free port (8082).
+    """When find_available_port returns a shifted port (e.g. 8082), uvicorn
+    starts on that port and .pdlabeler-port is written with it.
 
-    .pdlabeler-port is written with the actual port.
+    The actual port-scanning logic lives in pdomain-ocr-ops; here we just
+    verify that main() honours whatever find_available_port returns.
     """
     _clear_pdlabeler_env(monkeypatch)
 
@@ -1032,34 +996,6 @@ def test_auto_port_scan_when_default_busy(monkeypatch: pytest.MonkeyPatch, tmp_p
 
     def _capture_run(*args: Any, **kwargs: Any) -> None:
         captured["kwargs"] = kwargs
-
-    busy_ports = {8080, 8081}
-    bound_ports: list[int] = []
-
-    class _FakeSock:
-        def __init__(self) -> None:
-            self._port: int | None = None
-
-        def __enter__(self) -> _FakeSock:
-            return self
-
-        def __exit__(self, *_: Any) -> None:
-            pass
-
-        def setsockopt(self, *_: Any) -> None:
-            pass
-
-        def bind(self, addr: tuple[str, int]) -> None:
-            port = addr[1]
-            if port in busy_ports:
-                raise OSError(f"port {port} busy")
-            self._port = port
-            bound_ports.append(port)
-
-        def getsockname(self) -> tuple[str, int]:
-            return ("127.0.0.1", self._port or 0)
-
-    monkeypatch.setattr(main_mod._socket, "socket", lambda *_a, **_kw: _FakeSock())
 
     port_file = tmp_path / ".pdlabeler-port"
     monkeypatch.chdir(tmp_path)
@@ -1067,6 +1003,8 @@ def test_auto_port_scan_when_default_busy(monkeypatch: pytest.MonkeyPatch, tmp_p
     with (
         patch.object(main_mod, "uvicorn") as mock_uv,
         patch.object(main_mod, "webbrowser"),
+        patch.object(main_mod, "find_available_port", return_value=8082),
+        patch.object(main_mod, "register_self"),
     ):
         mock_uv.run.side_effect = _capture_run
         rc = main(["--no-browser", "--data-root", str(tmp_path)])
@@ -1079,39 +1017,17 @@ def test_auto_port_scan_when_default_busy(monkeypatch: pytest.MonkeyPatch, tmp_p
 def test_auto_port_prints_notice_to_stderr(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """When the port shifts from 8080, a notice is printed to stderr."""
+    """When find_available_port returns a port != 8080, a notice is printed to
+    stderr so users know the address has shifted."""
     _clear_pdlabeler_env(monkeypatch)
 
-    busy_ports = {8080}
-
-    class _FakeSock:
-        def __init__(self) -> None:
-            self._port: int | None = None
-
-        def __enter__(self) -> _FakeSock:
-            return self
-
-        def __exit__(self, *_: Any) -> None:
-            pass
-
-        def setsockopt(self, *_: Any) -> None:
-            pass
-
-        def bind(self, addr: tuple[str, int]) -> None:
-            port = addr[1]
-            if port in busy_ports:
-                raise OSError(f"port {port} busy")
-            self._port = port
-
-        def getsockname(self) -> tuple[str, int]:
-            return ("127.0.0.1", self._port or 0)
-
-    monkeypatch.setattr(main_mod._socket, "socket", lambda *_a, **_kw: _FakeSock())
     monkeypatch.chdir(tmp_path)
 
     with (
         patch.object(main_mod, "uvicorn"),
         patch.object(main_mod, "webbrowser"),
+        patch.object(main_mod, "find_available_port", return_value=8081),
+        patch.object(main_mod, "register_self"),
     ):
         rc = main(["--no-browser", "--data-root", str(tmp_path)])
 
@@ -1120,56 +1036,34 @@ def test_auto_port_prints_notice_to_stderr(
     assert "Port 8080 in use" in err
 
 
-def test_auto_port_os_fallback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """When all 20 sequential ports (8080–8099) are busy, fall back to OS-assigned.
+def test_find_available_port_runtime_error_exits(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """When find_available_port raises RuntimeError (all 100 candidates busy),
+    main() prints the error to stderr and exits with code 1.
 
-    The OS-assigned port is > 0 and uvicorn is called with it.
+    The local ``_find_free_port`` had an OS-fallback to port 0; the
+    pdomain-ocr-ops helper raises RuntimeError instead. This test pins the
+    error-handling path introduced alongside the migration.
     """
     _clear_pdlabeler_env(monkeypatch)
-
-    captured: dict[str, Any] = {}
-
-    def _capture_run(*args: Any, **kwargs: Any) -> None:
-        captured["kwargs"] = kwargs
-
-    _ephemeral_port = 54321
-
-    class _FakeSock:
-        def __init__(self) -> None:
-            self._port: int | None = None
-
-        def __enter__(self) -> _FakeSock:
-            return self
-
-        def __exit__(self, *_: Any) -> None:
-            pass
-
-        def setsockopt(self, *_: Any) -> None:
-            pass
-
-        def bind(self, addr: tuple[str, int]) -> None:
-            port = addr[1]
-            # Port 0 succeeds (OS assignment); all others fail.
-            if port != 0:
-                raise OSError(f"port {port} busy")
-            self._port = _ephemeral_port
-
-        def getsockname(self) -> tuple[str, int]:
-            return ("127.0.0.1", self._port or 0)
-
-    monkeypatch.setattr(main_mod._socket, "socket", lambda *_a, **_kw: _FakeSock())
     monkeypatch.chdir(tmp_path)
 
     with (
-        patch.object(main_mod, "uvicorn") as mock_uv,
+        patch.object(main_mod, "uvicorn"),
         patch.object(main_mod, "webbrowser"),
+        patch.object(
+            main_mod,
+            "find_available_port",
+            side_effect=RuntimeError("Could not find a free port in range [8080, 8180)"),
+        ),
+        pytest.raises(SystemExit) as exc_info,
     ):
-        mock_uv.run.side_effect = _capture_run
-        rc = main(["--no-browser", "--data-root", str(tmp_path)])
+        main(["--no-browser", "--data-root", str(tmp_path)])
 
-    assert rc == 0
-    assert captured["kwargs"]["port"] == _ephemeral_port
-    assert captured["kwargs"]["port"] > 0
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "Could not find a free port" in err
 
 
 def test_explicit_port_busy_exits_with_error(
@@ -1232,6 +1126,7 @@ def test_explicit_port_free_starts_normally(monkeypatch: pytest.MonkeyPatch, tmp
     with (
         patch.object(main_mod, "uvicorn") as mock_uv,
         patch.object(main_mod, "webbrowser"),
+        patch.object(main_mod, "register_self"),
     ):
         mock_uv.run.side_effect = _capture_run
         rc = main(["--port", "9999", "--no-browser", "--data-root", str(tmp_path)])
@@ -1302,6 +1197,7 @@ def test_env_port_free_starts_normally(monkeypatch: pytest.MonkeyPatch, tmp_path
     with (
         patch.object(main_mod, "uvicorn") as mock_uv,
         patch.object(main_mod, "webbrowser"),
+        patch.object(main_mod, "register_self"),
     ):
         mock_uv.run.side_effect = _capture_run
         rc = main(["--no-browser", "--data-root", str(tmp_path)])
@@ -1316,6 +1212,57 @@ def test_port_file_written_on_start(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     """Every successful start writes the actual port to .pdlabeler-port in cwd."""
     _clear_pdlabeler_env(monkeypatch)
 
+    monkeypatch.chdir(tmp_path)
+
+    with (
+        patch.object(main_mod, "uvicorn"),
+        patch.object(main_mod, "webbrowser"),
+        patch.object(main_mod, "find_available_port", return_value=8080),
+        patch.object(main_mod, "register_self"),
+    ):
+        rc = main(["--no-browser", "--data-root", str(tmp_path)])
+
+    assert rc == 0
+    port_file = tmp_path / ".pdlabeler-port"
+    assert port_file.exists(), ".pdlabeler-port was not written"
+    assert port_file.read_text().strip() == "8080"
+
+
+def test_register_self_called_with_actual_port(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """After port resolution, register_self must be called with
+    ``_caller_package="pdomain_ocr_labeler_spa"`` and ``actual_port=<resolved>``.
+
+    This pins the suite-registry wiring introduced alongside the
+    pdomain-ocr-ops ``find_available_port`` migration so cross-app links
+    (e.g. the dashboard) always discover the real address.
+    """
+    _clear_pdlabeler_env(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+
+    register_calls: list[dict[str, Any]] = []
+
+    def _capture_register(**kwargs: Any) -> None:
+        register_calls.append(kwargs)
+
+    with (
+        patch.object(main_mod, "uvicorn"),
+        patch.object(main_mod, "webbrowser"),
+        patch.object(main_mod, "find_available_port", return_value=8083),
+        patch.object(main_mod, "register_self", side_effect=_capture_register),
+    ):
+        rc = main(["--no-browser", "--data-root", str(tmp_path)])
+
+    assert rc == 0
+    assert len(register_calls) == 1
+    kw = register_calls[0]
+    assert kw.get("_caller_package") == "pdomain_ocr_labeler_spa"
+    assert kw.get("actual_port") == 8083
+
+
+def test_register_self_called_with_explicit_port(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """register_self must also be called when --port is given explicitly."""
+    _clear_pdlabeler_env(monkeypatch)
+
     class _FakeSock:
         def __enter__(self) -> _FakeSock:
             return self
@@ -1327,21 +1274,28 @@ def test_port_file_written_on_start(monkeypatch: pytest.MonkeyPatch, tmp_path: P
             pass
 
         def bind(self, addr: tuple[str, int]) -> None:
-            pass
+            pass  # port free
 
         def getsockname(self) -> tuple[str, int]:
-            return ("127.0.0.1", 8080)
+            return ("127.0.0.1", 9876)
 
     monkeypatch.setattr(main_mod._socket, "socket", lambda *_a, **_kw: _FakeSock())
     monkeypatch.chdir(tmp_path)
 
+    register_calls: list[dict[str, Any]] = []
+
+    def _capture_register(**kwargs: Any) -> None:
+        register_calls.append(kwargs)
+
     with (
         patch.object(main_mod, "uvicorn"),
         patch.object(main_mod, "webbrowser"),
+        patch.object(main_mod, "register_self", side_effect=_capture_register),
     ):
-        rc = main(["--no-browser", "--data-root", str(tmp_path)])
+        rc = main(["--port", "9876", "--no-browser", "--data-root", str(tmp_path)])
 
     assert rc == 0
-    port_file = tmp_path / ".pdlabeler-port"
-    assert port_file.exists(), ".pdlabeler-port was not written"
-    assert port_file.read_text().strip() == "8080"
+    assert len(register_calls) == 1
+    kw = register_calls[0]
+    assert kw.get("_caller_package") == "pdomain_ocr_labeler_spa"
+    assert kw.get("actual_port") == 9876

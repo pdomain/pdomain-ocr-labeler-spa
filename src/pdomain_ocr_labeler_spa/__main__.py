@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any
 
 import uvicorn
+from pdomain_ocr_ops.suite import find_available_port, register_self
 
 from .settings import Settings
 
@@ -263,29 +264,6 @@ def _open_when_ready(
 
 
 _DEFAULT_PORT: int = 8080
-_PORT_SCAN_RANGE: int = 20
-
-
-def _find_free_port(start: int, max_attempts: int = _PORT_SCAN_RANGE) -> int:
-    """Return the first free TCP port in ``[start, start+max_attempts)``.
-
-    If all sequential attempts fail, fall back to an OS-assigned ephemeral
-    port (bind to port 0). Always returns a positive port number.
-
-    Issue #323: auto-select a free port when the default is in use.
-    """
-    for port in range(start, start + max_attempts):
-        try:
-            with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
-                s.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 0)
-                s.bind(("127.0.0.1", port))
-                return port
-        except OSError:
-            continue
-    # All sequential attempts failed — let the OS assign an ephemeral port.
-    with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -330,12 +308,32 @@ def main(argv: list[str] | None = None) -> int:
             sys.exit(1)
         actual_port = _requested_port
     else:
-        actual_port = _find_free_port(_DEFAULT_PORT)
+        # Auto-select: delegate to the suite helper so all pd-* SPAs share
+        # the same probe logic. find_available_port raises RuntimeError if
+        # all 100 candidates are busy — extremely unlikely in practice, but
+        # we surface it as a clean error rather than a traceback.
+        try:
+            actual_port = find_available_port(_DEFAULT_PORT)
+        except RuntimeError as exc:
+            print(  # noqa: T201  # intentional error output to stderr
+                f"Error: {exc}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         if actual_port != _DEFAULT_PORT:
             print(  # noqa: T201  # intentional notice to stderr
                 f"Port {_DEFAULT_PORT} in use — starting on port {actual_port}",
                 file=sys.stderr,
             )
+
+    # Register the bound port with the suite registry so cross-app links
+    # (e.g. the dashboard) can discover the real address even when the
+    # default port was not available. actual_port=N overrides the
+    # default_port field in any pre-existing registry entry.
+    register_self(
+        _caller_package="pdomain_ocr_labeler_spa",
+        actual_port=actual_port,
+    )
 
     # Write the resolved port to .pdlabeler-port so vite.config.ts can
     # read it during `make frontend-dev` (issue #323).
