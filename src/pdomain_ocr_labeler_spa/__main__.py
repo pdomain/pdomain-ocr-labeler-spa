@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import Any
 
 import uvicorn
-from pdomain_ops.suite import find_available_port, register_self
+from pdomain_ops.suite import bootstrap_spa, register_self
 
 from .settings import Settings
 
@@ -308,12 +308,17 @@ def main(argv: list[str] | None = None) -> int:
             sys.exit(1)
         actual_port = _requested_port
     else:
-        # Auto-select: delegate to the suite helper so all pd-* SPAs share
-        # the same probe logic. find_available_port raises RuntimeError if
-        # all 100 candidates are busy — extremely unlikely in practice, but
-        # we surface it as a clean error rather than a traceback.
+        # Auto-select: delegate to bootstrap_spa so all pd-* SPAs share
+        # the same probe + registration + URL-print logic.
+        # bootstrap_spa raises RuntimeError if all 100 candidates are busy —
+        # extremely unlikely in practice, but we surface it as a clean error
+        # rather than a traceback.
         try:
-            actual_port = find_available_port(_DEFAULT_PORT)
+            actual_port = bootstrap_spa(
+                preferred=_DEFAULT_PORT,
+                caller_package="pdomain_ocr_labeler_spa",
+                port_env="PDLABELER_PORT",
+            )
         except RuntimeError as exc:
             print(  # noqa: T201  # intentional error output to stderr
                 f"Error: {exc}",
@@ -326,14 +331,15 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
 
-    # Register the bound port with the suite registry so cross-app links
-    # (e.g. the dashboard) can discover the real address even when the
-    # default port was not available. actual_port=N overrides the
-    # default_port field in any pre-existing registry entry.
-    register_self(
-        _caller_package="pdomain_ocr_labeler_spa",
-        actual_port=actual_port,
-    )
+    if _explicit_port:
+        # Register the bound port with the suite registry so cross-app links
+        # (e.g. the dashboard) can discover the real address even when the
+        # explicit port was not the default.  For the auto path, bootstrap_spa
+        # already called register_self internally.
+        register_self(
+            _caller_package="pdomain_ocr_labeler_spa",
+            actual_port=actual_port,
+        )
 
     # Write the resolved port to .pdlabeler-port so vite.config.ts can
     # read it during `make frontend-dev` (issue #323).
