@@ -9,7 +9,7 @@
 set -euo pipefail
 
 # Keep PY_SIBLINGS in sync with scripts/local-dev.sh.
-PY_SIBLINGS=(pdomain-book-tools)
+PY_SIBLINGS=(pdomain-book-tools pdomain-ops)
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir)"

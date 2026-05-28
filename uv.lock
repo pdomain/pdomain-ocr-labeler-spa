@@ -1478,7 +1478,7 @@ requires-dist = [
     { name = "idna", specifier = ">=3.15" },
     { name = "modal", marker = "extra == 'modal'", specifier = ">=0.66" },
     { name = "pdomain-book-tools", specifier = ">=0.14.1", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
-    { name = "pdomain-ops", editable = "../../../../pdomain-ops" },
+    { name = "pdomain-ops", editable = "/workspaces/ocr-container/pdomain-ops" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.5" },
     { name = "python-multipart", specifier = ">=0.0.20" },
@@ -1506,7 +1506,7 @@ e2e = [{ name = "pytest-playwright", specifier = ">=0.5" }]
 
 [[package]]
 name = "pdomain-ops"
-source = { editable = "../../../../pdomain-ops" }
+source = { editable = "/workspaces/ocr-container/pdomain-ops" }
 dependencies = [
     { name = "fastapi" },
     { name = "filelock" },

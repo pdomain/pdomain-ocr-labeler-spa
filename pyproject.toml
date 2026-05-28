@@ -77,11 +77,12 @@ explicit = true
 
 [tool.uv.sources]
 pdomain-book-tools = { index = "pdomain-index-pip" }
-# pdomain-ops>=0.3.0 ships find_available_port; use local path until
-# that release lands in the registry. Switch back to:
+# pdomain-ops>=0.3.0 ships find_available_port; use absolute local path
+# until that release lands in the registry (matches pdomain-ocr-simple-gui).
+# Switch back to:
 #   pdomain-ops = { index = "pdomain-index-pip" }
 # once 0.3.0 is published.
-pdomain-ops = { path = "../../../../pdomain-ops", editable = true }
+pdomain-ops = { path = "/workspaces/ocr-container/pdomain-ops", editable = true }
 
 [tool.hatch.version]
 source = "vcs"

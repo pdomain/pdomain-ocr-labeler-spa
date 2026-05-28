@@ -9,3 +9,9 @@ allowBuilds:
 # window. Other packages still respect the 1440-minute default.
 minimumReleaseAgeExclude:
   - "@pdomain/*"
+# react/react-dom pinned to the app's single declared version so a locally
+# linked @pdomain/pdomain-ui shares one React instance (matches
+# pdomain-ocr-simple-gui) — avoids duplicate-React broken hooks.
+overrides:
+  react: $react
+  react-dom: $react-dom
