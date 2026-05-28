@@ -1,17 +1,17 @@
 // PageImageCanvas.test.tsx — viewport canvas tests (#196, #197, #198, #297, #302)
 //
-// Phase 2.2: Updated for the pdomain-ui-wrapped PageImageCanvas.
+// Pointer interaction is driven by pdomain-ui's onStagePointerDown/Move/Up slot
+// callbacks (replacing the former DOM event-capture overlay). Tests fire DOM
+// mouse events on the mocked canvas's `image-event-surface`, which forwards them
+// as Konva-style stage events with a CoordContext (scale=1) — exercising the
+// real `getPointerPosition() / ctx.scale` math.
 //
-// Key testid changes from pre-Phase-2.2:
-//   - Drag handlers moved from Konva Stage to DOM event-capture overlay.
-//     Tests now fire events on `data-testid="image-event-overlay"`.
-//   - `data-mode` and `cursor` style live on `image-event-overlay`,
-//     not on `image-viewport` (which is owned by pdomain-ui).
-//   - Drag Layer renamed from `konva-layer-drag` → `konva-layer-tool` (pdomain-ui naming).
-//   - Overlay layers (overlay-paragraphs / overlay-lines / overlay-words) merged
-//     into the `selection` slot: BBoxOverlays render inside `konva-layer-selection`.
-//   - `focus-visible:ring-2` and tabIndex/focus tests now validate pdomain-ui's outer div
-//     (`image-viewport`) which pdomain-ui renders with tabIndex=0 and auto-focus.
+// Testid notes:
+//   - `data-mode` lives on the `image-stage` sidecar (Vitest-only attribute).
+//   - The mode cursor lives on the `.page-image-canvas` wrapper div.
+//   - Drag Layer is `konva-layer-tool` (pdomain-ui naming).
+//   - Selection BBoxOverlays render inside `konva-layer-selection` (selection slot).
+//   - `image-viewport` is pdomain-ui's outer div (tabIndex=0, auto-focus).
 //
 // Spec: specs/21-konva-renderer.md §4, §7, §9, §12, §13.
 
@@ -31,21 +31,51 @@ import { railStore } from "../stores/rail-store";
 // imports resolve so the canvas binary is never loaded.
 //
 // The mock renders the structural skeleton that the real pdomain-ui component
-// renders, so PageImageCanvas.tsx's slot fills land inside the right
-// layer divs. Mirrors pdomain-ui's outer div testid, data-width/height,
-// tabIndex=0, and focus-on-mount behaviour.
+// renders, so PageImageCanvas.tsx's slot fills land inside the right layer
+// divs. It also exposes a DOM hit-surface (`image-event-surface`) that
+// translates DOM mouse events into the Konva-style event + CoordContext shape
+// pdomain-ui passes to onStagePointerDown/Move/Up. The Konva pointer position
+// is taken straight from clientX/clientY and the CoordContext uses scale=1 so
+// the helper coordinates below land 1:1 in page space — this is exactly the
+// `pointer / ctx.scale` math the real component runs.
+type StagePointerHandler = (
+  e: {
+    evt: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean };
+    target: { getStage: () => { getPointerPosition: () => { x: number; y: number } } };
+  },
+  ctx: {
+    scale: number;
+    stageWidth: number;
+    stageHeight: number;
+    pageWidth: number;
+    pageHeight: number;
+  },
+) => void;
+
+// Controllable CoordContext scale for the mocked canvas. Tests set this to a
+// value != 1 to prove the component divides the Konva pointer position by
+// ctx.scale (i.e. that hit-testing is scale-aware, not relying on a 1:1
+// jsdom zero-rect fallback). Reset to 1 in afterEach.
+const mockStageScale = vi.hoisted(() => ({ value: 1 }));
+
 vi.mock("@pdomain/pdomain-ui/canvas", async () => {
   const { useEffect, useRef } = await import("react");
   return {
     PageImageCanvas: ({
       page,
       children,
+      onStagePointerDown,
+      onStagePointerMove,
+      onStagePointerUp,
     }: {
       src?: string;
       page?: { width: number; height: number };
       words?: unknown[];
       initialZoom?: number;
       fitOnMount?: boolean;
+      onStagePointerDown?: StagePointerHandler;
+      onStagePointerMove?: StagePointerHandler;
+      onStagePointerUp?: StagePointerHandler;
       children?: {
         selection?: (p: Record<string, unknown>) => React.ReactNode;
         tool?: (p: Record<string, unknown>) => React.ReactNode;
@@ -58,6 +88,22 @@ vi.mock("@pdomain/pdomain-ui/canvas", async () => {
         divRef.current?.focus();
       }, []);
       const slotProps = {};
+      const ctx = {
+        scale: mockStageScale.value,
+        stageWidth: (page?.width ?? 0) * mockStageScale.value,
+        stageHeight: (page?.height ?? 0) * mockStageScale.value,
+        pageWidth: page?.width ?? 0,
+        pageHeight: page?.height ?? 0,
+      };
+      const toKonva = (e: React.MouseEvent) => {
+        // Konva's getPointerPosition() returns stage-space coords (already
+        // scaled). clientX/Y stand in for that scaled position here.
+        const pos = { x: e.clientX, y: e.clientY };
+        return {
+          evt: { shiftKey: !!e.shiftKey, ctrlKey: !!e.ctrlKey, metaKey: !!e.metaKey },
+          target: { getStage: () => ({ getPointerPosition: () => pos }) },
+        };
+      };
       return (
         <div
           ref={divRef}
@@ -96,6 +142,13 @@ vi.mock("@pdomain/pdomain-ui/canvas", async () => {
               {children?.hud?.(slotProps)}
             </div>
           </div>
+          {/* Hit-surface translating DOM mouse events → Konva stage callbacks. */}
+          <div
+            data-testid="image-event-surface"
+            onMouseDown={(e) => onStagePointerDown?.(toKonva(e), ctx)}
+            onMouseMove={(e) => onStagePointerMove?.(toKonva(e), ctx)}
+            onMouseUp={(e) => onStagePointerUp?.(toKonva(e), ctx)}
+          />
         </div>
       );
     },
@@ -114,60 +167,10 @@ vi.mock("use-image", () => ({
 
 // ── react-konva mock — render simple divs so jsdom can probe the tree ────────
 //
-// Stage: pdomain-ui passes data-testid="canvas-stage" to Stage, so the mock renders
-// that testid. Our drag handlers are on image-event-overlay (DOM), not Stage.
-type KonvaMouseHandler = (e: {
-  evt: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean };
-  target: { getStage: () => { getPointerPosition: () => { x: number; y: number } } };
-}) => void;
-
-function makeKonvaEvent(e: React.MouseEvent) {
-  const pos = { x: e.clientX, y: e.clientY };
-  return {
-    evt: {
-      shiftKey: !!e.shiftKey,
-      ctrlKey: !!e.ctrlKey,
-      metaKey: !!e.metaKey,
-    },
-    target: {
-      getStage: () => ({ getPointerPosition: () => pos }),
-    },
-  };
-}
-
+// The labeler component renders only Konva <Rect> (drag-preview) directly; the
+// Stage is owned by the mocked pdomain-ui PageImageCanvas above. Pointer events
+// are delivered through that mock's image-event-surface, not via react-konva.
 vi.mock("react-konva", () => ({
-  Stage: ({
-    children,
-    width,
-    height,
-    "data-testid": testId,
-    onMouseDown,
-    onMouseMove,
-    onMouseUp,
-    onMouseLeave,
-  }: {
-    children?: React.ReactNode;
-    width?: number;
-    height?: number;
-    "data-testid"?: string;
-    onMouseDown?: KonvaMouseHandler;
-    onMouseMove?: KonvaMouseHandler;
-    onMouseUp?: KonvaMouseHandler;
-    onMouseLeave?: KonvaMouseHandler;
-    [key: string]: unknown;
-  }) => (
-    <div
-      data-testid={testId ?? "konva-stage"}
-      data-width={width}
-      data-height={height}
-      onMouseDown={(e) => onMouseDown?.(makeKonvaEvent(e))}
-      onMouseMove={(e) => onMouseMove?.(makeKonvaEvent(e))}
-      onMouseUp={(e) => onMouseUp?.(makeKonvaEvent(e))}
-      onMouseLeave={(e) => onMouseLeave?.(makeKonvaEvent(e))}
-    >
-      {children}
-    </div>
-  ),
   Layer: ({
     children,
     name,
@@ -341,15 +344,20 @@ afterEach(() => {
   });
   mockUseImageState.image = undefined;
   mockUseImageState.status = "loading";
+  mockStageScale.value = 1;
 });
 
-// ── Phase 2.2 helpers ────────────────────────────────────────────────────────
+// ── Pointer-interaction helpers ──────────────────────────────────────────────
 //
-// Drag handlers moved from Konva Stage to DOM event-capture overlay.
-// Use image-event-overlay for simulating drag interactions.
+// Pointer interaction is driven by pdomain-ui's onStagePointer* slot callbacks.
+// The mocked pdomain-ui canvas above exposes `image-event-surface`, which
+// translates DOM mouse events into Konva-style stage events (clientX/Y →
+// getPointerPosition()) with a CoordContext scale of 1. Firing DOM mouse events
+// on this surface exercises the real component handlers and their
+// `pointer / ctx.scale` coordinate math.
 
 function getOverlay(): HTMLElement {
-  return screen.getByTestId("image-event-overlay");
+  return screen.getByTestId("image-event-surface");
 }
 
 function simulateDrag(
@@ -372,7 +380,7 @@ describe("PageImageCanvas — Konva Stage scaffold (spec-21-A2, #297)", () => {
     expect(viewport.getAttribute("data-state")).toBe("empty");
     // No Stage / Layers / event-overlay in the empty branch.
     expect(screen.queryByTestId("canvas-stage")).toBeNull();
-    expect(screen.queryByTestId("image-event-overlay")).toBeNull();
+    expect(screen.queryByTestId("image-event-surface")).toBeNull();
   });
 
   it("mounts a Konva Stage sized to encoded.display_width × display_height (spec §4)", () => {
@@ -450,10 +458,10 @@ describe("PageImageCanvas — dimensions", () => {
   });
 });
 
-// ── Drag-mode behavior (event-capture overlay) ───────────────────────────────
+// ── Drag-mode behavior (pdomain-ui onStagePointer* callbacks) ─────────────────
 //
-// Phase 2.2: drag handlers are on image-event-overlay (DOM), not Konva Stage.
-// Tests fire DOM events on the overlay div, not on konva-stage.
+// Drag is driven through the mocked canvas's image-event-surface (which forwards
+// to onStagePointerDown/Move/Up), not a DOM event-capture overlay.
 
 describe("PageImageCanvas — Select mode (drag box-select, #197, #302)", () => {
   it("shows no drag-rect initially", () => {
@@ -512,9 +520,9 @@ describe("PageImageCanvas — Select mode (drag box-select, #197, #302)", () => 
     expect(onBoxSelect).not.toHaveBeenCalled();
   });
 
-  it("data-mode attribute is 'select' by default on image-event-overlay", () => {
+  it("data-mode attribute is 'select' by default on image-stage", () => {
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
-    expect(screen.getByTestId("image-event-overlay").getAttribute("data-mode")).toBe("select");
+    expect(screen.getByTestId("image-stage").getAttribute("data-mode")).toBe("select");
   });
 
   it("Escape key clears drag state", () => {
@@ -531,13 +539,13 @@ describe("PageImageCanvas — Select mode (drag box-select, #197, #302)", () => 
   });
 });
 
-// ── Phase 2.2: event-capture overlay + drag-preview Rect ─────────────────────
+// ── drag-preview Rect + sidecar ──────────────────────────────────────────────
 
-describe("PageImageCanvas — event-capture overlay + drag-preview (Phase 2.2)", () => {
-  it("image-event-overlay has cursor: crosshair in select mode (spec §9)", () => {
+describe("PageImageCanvas — drag-preview Rect + sidecar", () => {
+  it("wrapper has cursor: crosshair in select mode (spec §9)", () => {
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
-    const overlay = screen.getByTestId("image-event-overlay");
-    expect(overlay.style.cursor).toBe("crosshair");
+    const wrapper = screen.getByTestId("image-canvas-wrapper");
+    expect(wrapper.style.cursor).toBe("crosshair");
   });
 
   it("ocr-drag-rect sidecar mirrors the Konva drag-preview rect position", () => {
@@ -569,28 +577,6 @@ describe("PageImageCanvas — event-capture overlay + drag-preview (Phase 2.2)",
     expect(dragPreview?.getAttribute("data-width")).toBe("100");
     expect(dragPreview?.getAttribute("data-height")).toBe("70");
   });
-
-  it("mouseleave on the event-capture overlay clears drag state (spec §13)", () => {
-    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
-    const overlay = getOverlay();
-    fireEvent.mouseDown(overlay, { clientX: 50, clientY: 50 });
-    fireEvent.mouseMove(overlay, { clientX: 150, clientY: 150 });
-    expect(screen.queryByTestId("ocr-drag-rect")).not.toBeNull();
-
-    fireEvent.mouseLeave(overlay);
-    expect(screen.queryByTestId("ocr-drag-rect")).toBeNull();
-  });
-
-  it("mouseleave on the overlay does NOT fire onBoxSelect (drag aborted)", () => {
-    const onBoxSelect = vi.fn();
-    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} onBoxSelect={onBoxSelect} />);
-    const overlay = getOverlay();
-    fireEvent.mouseDown(overlay, { clientX: 50, clientY: 50 });
-    fireEvent.mouseMove(overlay, { clientX: 150, clientY: 150 });
-    fireEvent.mouseLeave(overlay);
-
-    expect(onBoxSelect).not.toHaveBeenCalled();
-  });
 });
 
 // ── spec-21-A7 (#303): per-mode cursors + drag-preview colours/fill ─────────
@@ -599,19 +585,19 @@ describe("PageImageCanvas — per-mode cursors (spec-21-A7, #303, spec §9)", ()
   it("cursor is 'cell' in rebox mode", () => {
     viewportStore.setState({ mode: "rebox", pendingReboxTarget: null });
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
-    expect(screen.getByTestId("image-event-overlay").style.cursor).toBe("cell");
+    expect(screen.getByTestId("image-canvas-wrapper").style.cursor).toBe("cell");
   });
 
   it("cursor is 'copy' in add-word mode", () => {
     viewportStore.setState({ mode: "add-word", pendingReboxTarget: null });
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
-    expect(screen.getByTestId("image-event-overlay").style.cursor).toBe("copy");
+    expect(screen.getByTestId("image-canvas-wrapper").style.cursor).toBe("copy");
   });
 
   it("cursor is 'not-allowed' in erase mode", () => {
     viewportStore.setState({ mode: "erase", pendingReboxTarget: null });
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
-    expect(screen.getByTestId("image-event-overlay").style.cursor).toBe("not-allowed");
+    expect(screen.getByTestId("image-canvas-wrapper").style.cursor).toBe("not-allowed");
   });
 });
 
@@ -672,10 +658,10 @@ describe("PageImageCanvas — erase drag-preview fill (spec-21-A7, #303, spec §
 });
 
 describe("PageImageCanvas — Rebox mode (#198)", () => {
-  it("data-mode='rebox' when rebox mode active (on image-event-overlay)", () => {
+  it("data-mode='rebox' when rebox mode active (on image-stage)", () => {
     viewportStore.setState({ mode: "rebox", pendingReboxTarget: { lineIndex: 0, wordIndex: 0 } });
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
-    expect(screen.getByTestId("image-event-overlay").getAttribute("data-mode")).toBe("rebox");
+    expect(screen.getByTestId("image-stage").getAttribute("data-mode")).toBe("rebox");
   });
 
   it("calls onRebox with drag rect", () => {
@@ -709,10 +695,10 @@ describe("PageImageCanvas — Rebox mode (#198)", () => {
 });
 
 describe("PageImageCanvas — Add Word mode (#198)", () => {
-  it("data-mode='add-word' when add-word mode active (on image-event-overlay)", () => {
+  it("data-mode='add-word' when add-word mode active (on image-stage)", () => {
     viewportStore.setState({ mode: "add-word", pendingReboxTarget: null });
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
-    expect(screen.getByTestId("image-event-overlay").getAttribute("data-mode")).toBe("add-word");
+    expect(screen.getByTestId("image-stage").getAttribute("data-mode")).toBe("add-word");
   });
 
   it("calls onAddWord with drag rect", () => {
@@ -993,13 +979,62 @@ describe("PageImageCanvas — word bbox click → selectWord", () => {
     const sel = selectionStore.getState();
     expect(sel.level).toBe("none");
   });
+
+  // ── Scale-aware hit-testing (regression for #bbox-click-selection) ──────────
+  //
+  // The previous DOM event-capture overlay computed its OWN effectiveScale and
+  // divided (clientX - rect.left) by it. Under jsdom that rect was zero-size, so
+  // scale fell back to 1 and the tests passed without ever exercising the
+  // divide — masking the production bug where the overlay's scale disagreed with
+  // pdomain-ui's internal scale and clicks missed the bbox.
+  //
+  // These tests force ctx.scale != 1, so a hit is only registered if the
+  // component divides the (scaled) Konva pointer position by ctx.scale. They
+  // would FAIL against the old overlay (which ignored pdomain-ui's scale).
+
+  it("hit-tests in page space: a 2x-scaled pointer maps back through ctx.scale onto the word bbox", () => {
+    mockStageScale.value = 2;
+    const page = makePage([makeLine(2, 0, [{ x: 100, y: 200, width: 50, height: 20 }])]);
+    page.line_matches![0].word_matches[0].word_index = 3;
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+    const overlay = getOverlay();
+
+    // Stage-space pointer (250, 420) ÷ scale 2 = page-space (125, 210),
+    // which is inside the word bbox 100..150 × 200..220.
+    fireEvent.mouseDown(overlay, { clientX: 250, clientY: 420 });
+    fireEvent.mouseUp(overlay, { clientX: 250, clientY: 420 });
+
+    const sel = selectionStore.getState();
+    expect(sel.level).toBe("word");
+    expect(sel.selectedWords).toEqual([[2, 3]]);
+  });
+
+  it("does NOT hit when the raw (un-divided) stage pointer would fall inside the bbox", () => {
+    // Guard against a regression that forgets the ÷ ctx.scale: the raw pointer
+    // (125, 210) lands in the bbox, but the page-space coord at scale 2 is
+    // (62.5, 105), which is OUTSIDE the bbox — so no selection must occur.
+    mockStageScale.value = 2;
+    const page = makePage([makeLine(2, 0, [{ x: 100, y: 200, width: 50, height: 20 }])]);
+    page.line_matches![0].word_matches[0].word_index = 3;
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+    const overlay = getOverlay();
+
+    fireEvent.mouseDown(overlay, { clientX: 125, clientY: 210 });
+    fireEvent.mouseUp(overlay, { clientX: 125, clientY: 210 });
+
+    const sel = selectionStore.getState();
+    expect(sel.level).toBe("none");
+    expect(sel.selectedWords).toEqual([]);
+  });
 });
 
 describe("PageImageCanvas — Erase mode (#198)", () => {
-  it("data-mode='erase' when erase mode active (on image-event-overlay)", () => {
+  it("data-mode='erase' when erase mode active (on image-stage)", () => {
     viewportStore.setState({ mode: "erase", pendingReboxTarget: null });
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
-    expect(screen.getByTestId("image-event-overlay").getAttribute("data-mode")).toBe("erase");
+    expect(screen.getByTestId("image-stage").getAttribute("data-mode")).toBe("erase");
   });
 
   it("calls onErasePixels with drag rect", () => {
