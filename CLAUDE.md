@@ -26,7 +26,10 @@ milestone-by-milestone implementation (M0…M9). Architecture: `docs/architectur
 | `make local-dev` | switch to local-dev mode (pdomain-book-tools editable + pdomain-ui linked + marker) |
 | `make local-check` | print local-dev mode + per-sibling resolution |
 | `make local-upgrade-deps` | upgrade deps then restore editables (local-mode only) |
-| `make local-run` | run the SPA against local-dev workspace (local-mode only) |
+| `make local-setup-py` | re-apply editable Python siblings after any `uv sync` (idempotent) |
+| `make local-frontend-install` | `pnpm install` + restore `pnpm link` overlays for npm siblings |
+| `make local-frontend-build` | Vite build via local-link-preserving path (depends on `local-frontend-install`) |
+| `make local-run` | run SPA against local-dev workspace — re-applies Python editables + rebuilds SPA via local path (does NOT call `make run`; avoids registry `pnpm install --frozen-lockfile` that would discard `pnpm link`) |
 | `make update-pd-deps` | bump pd-* sibling deps to registry latest; leaves diff for review |
 
 See [workspace `docs/process/local-dev.md`](../docs/process/local-dev.md) for the canonical local-dev pattern (spec #362).

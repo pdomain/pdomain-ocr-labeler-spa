@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
-# scripts/local-run.sh — run repo's CLI/server against the local-dev workspace.
+# scripts/local-run.sh — run the SPA against the local-dev workspace.
 #
-# Requires local-dev mode. Delegates to repo-specific `make run` after the guard.
+# Requires local-dev mode. Re-applies editable sibling overlays (Python
+# + npm), builds the SPA via the local-frontend-* path (which preserves
+# `pnpm link` after pnpm install), and launches the app.
+#
+# Deliberately does NOT delegate to `make run` — that path runs
+# `frontend-build` -> `frontend-install` (--frozen-lockfile), which is
+# the registry path and would discard the local-link overlay.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -15,7 +21,15 @@ if [[ ! -f "$MARKER" ]]; then
   exit 1
 fi
 
-# Repo-specific run target
-# UV_NO_SYNC=1: keep editable pd-* siblings; a plain `make run` re-syncs and
-# reverts them to registry versions, breaking unreleased editable APIs at runtime.
-exec env UV_NO_SYNC=1 make -C "$REPO_ROOT" run
+# 1) Re-apply editable Python siblings (uv sync drops them; defensive here).
+make -C "$REPO_ROOT" local-setup-py
+
+# 2) Build SPA bundle via local-frontend path (preserves pnpm link).
+make -C "$REPO_ROOT" local-frontend-build
+
+# 3) Launch — reproduce `make run`'s launch step inline so we don't
+#    trigger the registry-path `frontend-build` dependency chain.
+#    --no-sync is REQUIRED: a plain `uv run` re-syncs and reverts the
+#    editable pd-* siblings that local-setup-py just installed, breaking
+#    editable APIs at runtime.
+exec uv run --no-sync --project "$CANONICAL_REPO_ROOT" pd-ocr-labeler-ui

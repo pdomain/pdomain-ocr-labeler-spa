@@ -18,6 +18,7 @@ else
         frontend-lint frontend-format frontend-format-check \
         openapi-export update-pd-deps upgrade-pdomain-book-tools upgrade-deps upgrade-deps-local \
         local-setup local-dev local-check local-upgrade-deps local-run \
+        local-setup-py local-frontend-install local-frontend-build \
         mise-download mise-trust-worktrees mise-setup mise-doctor \
         docker-build docker-run docker-shell \
         release-patch release-minor release-major _do-release
@@ -113,6 +114,19 @@ local-upgrade-deps: ## Upgrade deps then restore editable siblings (requires loc
 
 local-run: ## Run the SPA against local-dev workspace (requires local-dev mode)
 	@./scripts/local-run.sh
+
+local-setup-py: ## Re-apply editable Python siblings (idempotent; safe after uv sync)
+	@./scripts/local-setup-py.sh
+
+local-frontend-install: ## pnpm install + restore pnpm link overlays for npm siblings
+	@./scripts/local-frontend-install.sh
+
+local-frontend-build: local-frontend-install ## Vite build using local-linked siblings (preserves pnpm link)
+	@$(call _npm,run build)
+	@mkdir -p src/pdomain_ocr_labeler_spa/static
+	@rm -rf src/pdomain_ocr_labeler_spa/static/*
+	cp -r frontend/dist/. src/pdomain_ocr_labeler_spa/static/
+	@echo "Frontend bundled into src/pdomain_ocr_labeler_spa/static/"
 
 # ---------------------------------------------------------------------------
 # Sibling-dep refresh (spec #363) — update-pd-deps
