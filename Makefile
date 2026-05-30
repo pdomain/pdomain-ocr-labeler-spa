@@ -21,7 +21,7 @@ else
         local-setup-py local-frontend-install local-frontend-build local-frontend-test \
         mise-download mise-trust-worktrees mise-setup mise-doctor \
         docker-build docker-run docker-shell \
-        release-patch release-minor release-major _do-release
+        release-patch release-minor release-major _do-release ci-slow
 
 # ---------------------------------------------------------------------------
 # Help / discovery
@@ -421,6 +421,8 @@ pip-audit-no-dev: ## Audit runtime-only PyPI deps (excludes dev group)
 
 ci: setup frontend-install pre-commit-check typecheck openapi-export frontend-build lint test frontend-format-check frontend-lint frontend-test frontend-knip ## Full CI pipeline
 
+ci-slow: ci build ## Full pre-flight for releases (CI plus wheel build)
+
 # ---------------------------------------------------------------------------
 # Docker
 # ---------------------------------------------------------------------------
@@ -474,7 +476,7 @@ docker-shell: ## Open a debugging shell in the built image
 # Release
 # ---------------------------------------------------------------------------
 # Three public targets delegate to `_do-release` with the bump kind.
-# `_do-release` calls scripts/do-release.sh, which runs the full `make ci`
+# `_do-release` calls scripts/do-release.sh, which runs the full `make ci-slow`
 # pre-flight, creates an annotated three-component tag, and pushes.
 #
 # Usage:
@@ -484,18 +486,18 @@ docker-shell: ## Open a debugging shell in the built image
 #
 # Escape hatches (passed through to do-release.sh):
 #   FORCE=1      skip repo-state guards (dirty tree / branch / origin sync)
-#   SKIP_PUSH=1  create tag locally but don't push or trigger the workflow
+#   SKIP_PUSH=1  create tag locally but don't push
 
-release-patch: ## Tag + push a patch release (vX.Y.Z+1)
+release-patch: ## Release: bump patch, run ci-slow, tag, push
 	@$(MAKE) --no-print-directory _do-release BUMP=patch
 
-release-minor: ## Tag + push a minor release (vX.Y+1.0)
+release-minor: ## Release: bump minor, run ci-slow, tag, push
 	@$(MAKE) --no-print-directory _do-release BUMP=minor
 
-release-major: ## Tag + push a major release (vX+1.0.0)
+release-major: ## Release: bump major, run ci-slow, tag, push
 	@$(MAKE) --no-print-directory _do-release BUMP=major
 
 _do-release:
-	BUMP=$(or $(BUMP),minor) ./scripts/do-release.sh
+	@BUMP=$(or $(BUMP),minor) ./scripts/do-release.sh
 
 endif
