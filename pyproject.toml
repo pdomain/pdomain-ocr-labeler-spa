@@ -34,7 +34,7 @@ dependencies = [
     "pdomain-book-tools>=0.14.1",
     "huggingface_hub>=0.23",
     # Suite plumbing: port probing + registry (find_available_port, register_self)
-    "pdomain-ops>=0.3.0",
+    "pdomain-ops>=0.4.0",
 ]
 
 [project.optional-dependencies]
