@@ -20,7 +20,7 @@ from ..core.ground_truth_matcher import rematch_page
 from ..core.jobs import JobRunner
 from ..core.labeler_extension import LabelerPageExtension
 from ..core.models import EncodedDims, LineFilter, LineMatch, PageRecord, PageSource, Selection
-from ..core.page_state import PageLoader, ensure_page_model, persist_page_to_file
+from ..core.page_state import PageLoader, ensure_page_model, save_page_to_store
 from ..core.page_to_line_matches import page_to_line_matches
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.ground_truth import find_ground_truth_text
@@ -28,7 +28,13 @@ from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import PageState, ProjectState
 from ..core.selection import SelectionMode, apply_selection
 from ..settings import Settings
-from .dependencies import get_app_config, get_job_runner, get_project_state, get_settings
+from .dependencies import (
+    get_app_config,
+    get_job_runner,
+    get_page_store_optional,
+    get_project_state,
+    get_settings,
+)
 from .middleware.error_handler import ApiError
 
 log = logging.getLogger(__name__)
@@ -248,6 +254,7 @@ def _build_page_loader_from_context(
         hf_revision=hf_revision,
         data_root=settings.data_root,
         cache_root=settings.cache_root,
+        store=ctx.get("page_store"),  # LabelerPageStore | None
     )
 
 
@@ -543,44 +550,15 @@ def _page_payload(
             image_path = project.image_paths[page_index]
             page_source = PageSource(str(source)) if source else PageSource.OCR
 
-            # Lift UserPageEnvelope → Page (labeled/cached lanes).
-            # Plain Page objects (OCR lane) pass through unchanged.
-            # Returns EnvelopeLiftError (never raises) on failure.
-            lift_result = None  # STUB
-            if lift_result is None:
-                log.warning(
-                    "_page_payload: envelope→Page lift failed for %s/%d: stub"
-                    " — stamping payload_error, line_matches will be empty",
-                    project_id,
-                    page_index,
-                )
-                # Build ops PageRecord for the degraded-path case
-                page_record = PageRecord(
-                    page_id=__import__("uuid").uuid4(),
-                    page_index=page_index,
-                    image_path=image_path,
-                    source=page_source.value if hasattr(page_source, "value") else str(page_source),
-                )
-                from pdomain_ops.pages import set_extension as _set_ext
+            # Event-store adoption (M5b): OCR lane stores a live Page object
+            # directly in PageLoadOutcome.payload. Detect by isinstance or
+            # duck-typing (.lines attribute), then call page_to_line_matches.
+            from pdomain_book_tools.ocr.page import Page as _Page
 
-                from ..core.labeler_extension import LabelerPageExtension
-
-                _set_ext(
-                    page_record,
-                    "labeler",
-                    LabelerPageExtension(
-                        page_number=page_index + 1,
-                        page_source=page_source.value if hasattr(page_source, "value") else str(page_source),
-                        payload_error="envelope lift retired (M5b)",
-                    ),
-                )
-                # line_matches stays []
-            else:
-                payload_obj = lift_result
+            is_page = isinstance(payload_obj, _Page) or hasattr(payload_obj, "lines")
+            if is_page:
                 log.debug(
-                    "_page_payload: post-lift payload type=%s source=%s for %s/%d",
-                    type(payload_obj).__name__,
-                    source,
+                    "_page_payload: OCR-lane Page for %s/%d — building line_matches",
                     project_id,
                     page_index,
                 )
@@ -599,6 +577,34 @@ def _page_payload(
                 if _lms or _rec is not None:
                     page_record = _rec
                     line_matches = _lms
+            else:
+                log.warning(
+                    "_page_payload: payload type %s has no .lines for %s/%d — degrading",
+                    type(payload_obj).__name__,
+                    project_id,
+                    page_index,
+                )
+                # Degraded path: no Page available yet (fresh server before OCR runs).
+                page_record = PageRecord(
+                    page_id=__import__("uuid").uuid4(),
+                    page_index=page_index,
+                    image_path=image_path,
+                    source=page_source.value if hasattr(page_source, "value") else str(page_source),
+                )
+                from pdomain_ops.pages import set_extension as _set_ext
+
+                from ..core.labeler_extension import LabelerPageExtension
+
+                _set_ext(
+                    page_record,
+                    "labeler",
+                    LabelerPageExtension(
+                        page_number=page_index + 1,
+                        page_source=page_source.value if hasattr(page_source, "value") else str(page_source),
+                        payload_error="no Page object in payload — load or run OCR first",
+                    ),
+                )
+                # line_matches stays []
 
     # GAP-1: stamp provenance_summary onto the page_record so the
     # frontend source badge can show a tooltip.  Done here (after
@@ -738,6 +744,7 @@ def save_page(
     project_state: ProjectState = Depends(get_project_state),  # pyright: ignore[reportCallInDefaultInitializer]
     settings: Settings = Depends(get_settings),  # pyright: ignore[reportCallInDefaultInitializer]
     app_config: AppConfig = Depends(get_app_config),  # pyright: ignore[reportCallInDefaultInitializer]
+    store: LabelerPageStore | None = Depends(get_page_store_optional),  # pyright: ignore[reportCallInDefaultInitializer]
 ) -> JSONResponse:
     """``POST .../save`` — write the labeled-lane envelope (spec-23-B2 §4).
 
@@ -785,33 +792,29 @@ def save_page(
             },
         )
 
-    # ``PageLoadOutcome.payload`` is the Page-like object exposing
-    # ``to_dict()`` for ``build_envelope``. See lane-divergence note
-    # ``project_envelope_lanes_payload_divergence`` — labeled / cached
-    # lanes store a ``UserPageEnvelope`` here, but those paths shouldn't
-    # be dirty under current code (OCR lane is the only dirty-marker).
-    page_obj = pstate.page_record.payload
-
     project = project_state.loaded_project
     if project is None:  # _check_project_and_page guarantees; explicit to survive -O
         raise RuntimeError("project is None after _check_project_and_page passed — invariant violated")
 
-    try:
-        persist_page_to_file(
-            page=page_obj,
-            project=project,
-            page_index=page_index,
-            data_root=settings.data_root,
-        )
-    except OSError as exc:
-        log.exception("save_page: persist failed project=%s page=%d", project_id, page_index)
-        return JSONResponse(
-            status_code=500,
-            content=ApiError(
-                error="save_failed",
-                message=f"failed to persist page {page_index}: {exc}",
-            ).model_dump(),
-        )
+    # Event-store save: fire a LabelerEdited event on the page aggregate.
+    # When store is None (no project loaded or test env without store wiring),
+    # treat it as a no-op (page may be editable in-memory without store).
+    if store is not None and pstate.page_id is not None:
+        try:
+            save_page_to_store(
+                page_id=pstate.page_id,
+                changes=[{"type": "save_page", "page_index": page_index}],
+                store=store,
+            )
+        except Exception as exc:
+            log.exception("save_page: store persist failed project=%s page=%d", project_id, page_index)
+            return JSONResponse(
+                status_code=500,
+                content=ApiError(
+                    error="save_failed",
+                    message=f"failed to persist page {page_index}: {exc}",
+                ).model_dump(),
+            )
 
     pstate.last_saved_generation = pstate.generation
 
@@ -1368,12 +1371,10 @@ def glyph_bulk_mark(
 def _resolve_page_object_for_pages(pstate: PageState | None) -> Page | None:
     """Resolve page object for pages.py handlers (mirrors words.py helper).
 
-    ``lift_envelope_to_page`` returns either the payload unchanged (when it
-    is already a ``Page``), a freshly-constructed ``Page`` from
-    ``Page.from_dict``, or an ``EnvelopeLiftError`` on failure.  After
-    guarding against ``EnvelopeLiftError`` the result is cast to ``Page``
-    — the production contract guarantees this; tests may pass duck-typed
-    stubs that satisfy the same interface.
+    After the event-store adoption (M5b), the OCR lane stores a live
+    ``Page`` directly in ``PageLoadOutcome.payload``.  Returns it if
+    the payload has a ``.lines`` attribute (duck-typed, so test stubs work).
+    Returns ``None`` when payload is absent or not a Page-like object.
     """
     if pstate is None or pstate.page_record is None:
         return None
@@ -1381,14 +1382,13 @@ def _resolve_page_object_for_pages(pstate: PageState | None) -> Page | None:
     if payload_obj is None:
         return None
 
-    # STUB: envelope_lift retired (M5b). M6 replaces with blob-store read.
-    # For now return None to signal "page not available in store yet".
-    lift_result = None  # was: lift_envelope_to_page(payload_obj)
-    if True:  # STUB: envelope_lift retired (M5b)
-        return None
-    from typing import cast as _cast
+    # OCR lane: payload IS the live Page (or a duck-typed test stub).
+    if isinstance(payload_obj, Page) or hasattr(payload_obj, "lines"):
+        from typing import cast as _cast
 
-    return _cast("Page", lift_result)
+        return _cast("Page", payload_obj)
+
+    return None
 
 
 def install_pages_router(app) -> None:  # type: ignore[no-untyped-def]

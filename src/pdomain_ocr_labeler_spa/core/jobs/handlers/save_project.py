@@ -35,7 +35,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from ...notifications import NotificationKind, NotificationQueue
-from ...page_state import persist_page_to_file
+from ...page_state import persist_page_to_file, save_page_to_store
 from ...project_state import ProjectState
 
 if TYPE_CHECKING:
@@ -46,24 +46,24 @@ log = logging.getLogger(__name__)
 
 def _get_required_context(
     runner: JobRunner,
-) -> tuple[ProjectState, NotificationQueue, object]:
+) -> tuple[ProjectState, NotificationQueue, object, Any]:
     """Pull required carriers off ``runner.context``; raise if absent.
 
-    Returns ``(project_state, notification_queue, settings)``. The
-    ``settings`` object is needed for ``data_root``; it's wired by
-    ``bootstrap.build_app`` step 9.
+    Returns ``(project_state, notification_queue, settings, page_store)``.
+    ``page_store`` may be ``None`` (no project loaded or store not wired).
     """
     ctx: dict[str, Any] = runner.context
     project_state = ctx.get("project_state")
     notification_queue = ctx.get("notification_queue")
     settings = ctx.get("settings")
+    page_store = ctx.get("page_store")  # LabelerPageStore | None
     if not isinstance(project_state, ProjectState):
         raise RuntimeError("save_project: runner.context['project_state'] is not wired")
     if not isinstance(notification_queue, NotificationQueue):
         raise RuntimeError("save_project: runner.context['notification_queue'] is not wired")
     if settings is None:
         raise RuntimeError("save_project: runner.context['settings'] is not wired")
-    return project_state, notification_queue, settings
+    return project_state, notification_queue, settings, page_store
 
 
 def _dirty_page_indices(project_state: ProjectState) -> list[int]:
@@ -95,7 +95,7 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
     ``error``; we catch ``OSError`` per-page so partial failures don't
     abort the whole job).
     """
-    project_state, notification_queue, settings = _get_required_context(runner)
+    project_state, notification_queue, _settings, page_store = _get_required_context(runner)
     project = project_state.loaded_project
     if project is None:
         # No project loaded → nothing to do. Treat as a clean no-op so
@@ -104,8 +104,6 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
         # defensive against an out-of-band cancel/reload race.)
         await runner.update_progress(job.job_id, current=0, total=0, message="No project loaded")
         return
-
-    data_root = settings.data_root  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
 
     dirty = _dirty_page_indices(project_state)
     total = len(dirty)
@@ -136,31 +134,39 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
         pstate = project_state.page_states.get(page_index)
         if pstate is None or pstate.page_record is None:  # pragma: no cover - race-defense
             continue
-        # ``PageLoadOutcome.payload`` is the Page-like object exposing
-        # ``to_dict()`` — what ``build_envelope`` requires. The labeled
-        # / cached lanes also store a ``UserPageEnvelope`` here (see
-        # ``project_envelope_lanes_payload_divergence`` memory note);
-        # those paths are read-only consumers and would not be marked
-        # dirty by current code paths, so we only see Page-shaped
-        # payloads from the OCR lane in practice.
-        page_obj = pstate.page_record.payload
-        try:
-            persist_page_to_file(
-                page=page_obj,
-                project=project,
-                page_index=page_index,
-                data_root=data_root,
-            )
-        except OSError as exc:
-            log.warning(
-                "save_project: persist failed page=%d project=%s: %s",
-                page_index,
-                project.project_id,
-                exc,
-            )
-            failures.append({"page_index": page_index, "error": str(exc)})
+        # Event-store save path: fire LabelerEdited on each dirty page.
+        # Skip pages without a registered page_id (not yet in the store —
+        # no-op is safe; they'll be saved when OCR writes them to the store).
+        if page_store is not None and pstate.page_id is not None:
+            try:
+                save_page_to_store(
+                    page_id=pstate.page_id,
+                    changes=[{"type": "save_project", "page_index": page_index}],
+                    store=page_store,
+                )
+            except Exception as exc:
+                log.warning(
+                    "save_project: store persist failed page=%d project=%s: %s",
+                    page_index,
+                    project.project_id,
+                    exc,
+                )
+                failures.append({"page_index": page_index, "error": str(exc)})
+                completed += 1
+                await runner.update_progress(
+                    job.job_id,
+                    current=completed,
+                    total=total,
+                    message=f"Failed page {page_index + 1}/{total}",
+                )
+                continue
+        elif page_store is None:
+            # No store available — treat as clean success (in-memory only session).
+            log.debug("save_project: no page_store in context — skipping store write for page %d", page_index)
         else:
-            pstate.last_saved_generation = pstate.generation
+            # page_id not set — page not yet registered in store, skip.
+            log.debug("save_project: page %d has no page_id — skipping store write", page_index)
+        pstate.last_saved_generation = pstate.generation
 
         completed += 1
         await runner.update_progress(

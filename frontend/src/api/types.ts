@@ -884,7 +884,7 @@ export interface paths {
          *     Spec 23 §9 row 1: ``word.set_ground_truth_text(text)`` → property
          *     setter ``word.ground_truth_text = text``. Holds the per-page lock
          *     for the full mutation window: resolve → mutate → generation bump →
-         *     cached-envelope write (spec §13).
+         *     event-store write (spec §13).
          */
         post: operations["update_word_ground_truth_api_projects__project_id__pages__page_index__words__line_index___word_index__gt_post"];
         delete?: never;
@@ -999,7 +999,7 @@ export interface paths {
          *     - ``word``: each ``(li, wi)`` tuple in ``word_indices``.
          *
          *     Single ``pstate.generation`` bump for the whole batch (one
-         *     user-observable mutation event); one cached-envelope write.
+         *     user-observable mutation event); one event-store write.
          */
         post: operations["validate_batch_api_projects__project_id__pages__page_index__words_validate_batch_post"];
         delete?: never;

@@ -214,6 +214,7 @@ class LocalDoctrPageLoader:
     hf_revision: str | None
     data_root: Path | None = None
     cache_root: Path | None = None
+    store: Any = None  # LabelerPageStore | None — write OCR result to event store
 
     def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
         """STUB: labeled lane retired (M5b). Returns None — M8/M9 wires LabelerPageStore."""
@@ -276,16 +277,38 @@ class LocalDoctrPageLoader:
                     exc,
                 )
 
-        # Auto-cache-write side effect (legacy parity:
-        # pd-ocr-labeler/state/project_state.py:752-799). After a
-        # successful OCR run, persist the cached envelope so subsequent
-        # loads hit the cached lane instead of paying OCR cost again.
-        # No-op when ``cache_root is None`` (preserves slice-8b-ii ctor
-        # signature for OCR-only callers). Failures are
-        # log-and-swallowed (legacy lines 789-794): a write failure
-        # must not turn a successful OCR into a 5xx — the in-memory
-        # outcome is still returned to the caller.
-        # STUB: cached-lane envelope write retired (M5b). M9 uses LabelerPageStore.
+        # Event-store write: persist OCR result as OcrCompleted event.
+        # Best-effort: a write failure must not turn a successful OCR
+        # result into a 5xx — the in-memory outcome is still returned.
+        # After a successful write, the returned PageLoadOutcome carries
+        # the ``page_id`` from the aggregate so callers can stamp it on
+        # ``PageState.page_id`` for subsequent event-store mutations.
+        if self.store is not None:
+            try:
+                image_bytes = image_path.read_bytes()
+                agg = _ingest_ocr_result(
+                    page=page_obj,
+                    image_bytes=image_bytes,
+                    page_index=page_index,
+                    store=self.store,
+                )
+                # Stamp the page_id from the aggregate onto the page object
+                # so callers can transfer it to PageState.page_id.
+                # Use setattr to avoid basedpyright reportAttributeAccessIssue on
+                # the typed Page class — this is a dynamic sidecar attr, not a
+                # part of the Page API.
+                object.__setattr__(page_obj, "_labeler_page_id", agg.record.page_id)
+                logger.debug(
+                    "run_ocr: wrote OCR result to event store page_id=%s page=%d",
+                    agg.record.page_id,
+                    page_index,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "run_ocr: event-store write failed for page=%d: %s — returning in-memory result",
+                    page_index,
+                    exc,
+                )
 
         return PageLoadOutcome(
             page_index=page_index,

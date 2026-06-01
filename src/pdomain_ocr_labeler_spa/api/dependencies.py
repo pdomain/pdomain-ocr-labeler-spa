@@ -260,6 +260,18 @@ def get_page_store(request: Request) -> LabelerPageStore:
     return store  # type: ignore[return-value]
 
 
+def get_page_store_optional(request: Request) -> LabelerPageStore | None:
+    """The project-scoped ``LabelerPageStore``, or ``None`` if not wired.
+
+    Soft dependency used by mutation routes: returns ``None`` when no project
+    is loaded (or when running in a test environment without a store).  The
+    caller is responsible for deciding how to handle ``None``; mutation routes
+    skip the event-store write path when ``None`` (store unavailable → no
+    durability, but the in-memory mutation still succeeds).
+    """
+    return getattr(request.app.state, "page_store", None)  # type: ignore[return-value]
+
+
 __all__ = [
     "get_active_project",
     "get_active_project_carrier",
@@ -272,6 +284,7 @@ __all__ = [
     "get_ocr_config_carrier",
     "get_ocr_engine",
     "get_page_store",
+    "get_page_store_optional",
     "get_project_state",
     "get_settings",
     "get_source_root_carrier",

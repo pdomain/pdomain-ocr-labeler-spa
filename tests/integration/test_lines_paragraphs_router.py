@@ -373,15 +373,12 @@ def _make_two_word_line() -> _StubLine:
 # ── set-line-gt ───────────────────────────────────────────────────────────
 
 
-def test_set_line_gt_returns_page_not_loaded_when_lift_is_stub(loaded_client: TestClient) -> None:
-    """POST .../lines/0/set-gt returns 400 page_not_loaded while _resolve_page_object is a stub.
+def test_set_line_gt_succeeds_with_seeded_page_state(loaded_client: TestClient) -> None:
+    """POST .../lines/0/set-gt returns 200 when PageState has a Page-like payload.
 
-    Replaces 2 retired envelope-path tests (M5b). The set-gt endpoint calls
-    _resolve_page_object which is a stub returning None — so the route returns
-    page_not_loaded even when a PageState is seeded with a page object.
-
-    Successor: tests/integration/test_words_router_page_store.py covers
-    the new LocalPageStore-backed mutation cycle once the stub is replaced.
+    After the _resolve_page_object fix (event-store adoption M5b), the endpoint
+    resolves the page from the in-memory PageState payload directly (duck-type
+    check on .lines). The set-gt endpoint mutates the line's ground truth in-memory.
     """
     page = _StubPage(lines_=[_make_two_word_line()])
     _seed_page_state(loaded_client, page_index=0, page=page)
@@ -389,9 +386,7 @@ def test_set_line_gt_returns_page_not_loaded_when_lift_is_stub(loaded_client: Te
         "/api/projects/book1/pages/0/lines/0/set-gt",
         json={"text": "hello world"},
     )
-    # Stub returns None → page_not_loaded (not 500)
-    assert resp.status_code == 400
-    assert resp.json()["error"] == "page_not_loaded"
+    assert resp.status_code == 200, f"expected 200 but got {resp.status_code}: {resp.text}"
 
 
 def test_set_line_gt_rejects_ligatures(bare_client: TestClient) -> None:

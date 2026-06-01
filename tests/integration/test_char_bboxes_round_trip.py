@@ -156,24 +156,17 @@ def seeded_client(tmp_path: Path, projects_root: Path) -> Iterator[TestClient]:
 # ── CU-6.2 acceptance tests ───────────────────────────────────────────────────
 
 
-def test_char_bboxes_returns_page_not_loaded_when_lift_is_stub(seeded_client: TestClient) -> None:
-    """POST char-bboxes returns 400 page_not_loaded while _resolve_page_object is a stub.
+def test_char_bboxes_succeeds_with_seeded_page_state(seeded_client: TestClient) -> None:
+    """POST char-bboxes returns 200 when PageState has a Page-like payload.
 
-    Replaces 4 retired envelope-path tests (M5b). The char-bboxes endpoint
-    calls _resolve_page_object which is a stub returning None — so the route
-    returns page_not_loaded even when a PageState is seeded with a page object.
-
-    Successor: tests/integration/test_words_router_page_store.py covers
-    the new LocalPageStore-backed mutation cycle once the stub is replaced
-    with a real blob-store-backed page resolution. Full round-trip tests
-    (POST char-bboxes → GET page → word carries char_bboxes) will be
-    re-enabled when the stub is replaced.
+    After the _resolve_page_object fix (event-store adoption M5b), the endpoint
+    resolves the page from the in-memory PageState payload directly (duck-type
+    check on .lines). Char-bboxes data is stored on the pstate sidecar and
+    survives within the process lifetime.
     """
     char_bboxes = [{"x": 0, "y": 0, "width": 5, "height": 10}]
     resp = seeded_client.post(
         "/api/projects/book1/pages/0/words/0/0/char-bboxes",
         json={"char_bboxes": char_bboxes},
     )
-    # Stub returns None → page_not_loaded (not 500)
-    assert resp.status_code == 400
-    assert resp.json()["error"] == "page_not_loaded"
+    assert resp.status_code == 200, f"expected 200 but got {resp.status_code}: {resp.text}"

@@ -152,6 +152,7 @@ def _get_page_loader(
         hf_revision=hf_revision,
         data_root=settings.data_root,
         cache_root=settings.cache_root,
+        store=ctx.get("page_store"),  # LabelerPageStore | None
     )
 
 
@@ -219,6 +220,13 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
             existing = PageState(page_index=page_index)
             project_state._page_states[page_index] = existing
         existing.page_record = outcome
+        # Stamp page_id from the OCR result onto PageState so subsequent
+        # mutation routes can fire event-store saves (M9 wiring).
+        page_payload_obj = getattr(outcome, "payload", None)
+        labeler_page_id = getattr(page_payload_obj, "_labeler_page_id", None)
+        if labeler_page_id is not None and existing.page_id is None:
+            existing.page_id = labeler_page_id
+            log.debug("reload_ocr: stamped page_id=%s on pstate page=%d", labeler_page_id, page_index)
         # Per-page generation bump (spec-23-B2 / spec §4 + §8): mark the
         # page dirty so subsequent ``POST .../save`` or ``save_project``
         # passes pick it up. The pre-existing ``ProjectState._generation``

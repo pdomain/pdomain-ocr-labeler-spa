@@ -235,6 +235,13 @@ def ensure_page_model(
             existing = PageState(page_index=page_index)
             state._page_states[page_index] = existing
         existing.page_record = outcome
+        # Stamp page_id from OCR result if available (M9 event-store wiring).
+        # The loader stamps _labeler_page_id on the Page object during run_ocr
+        # when a LabelerPageStore is available.
+        payload_obj = getattr(outcome, "payload", None)
+        labeler_page_id = getattr(payload_obj, "_labeler_page_id", None)
+        if labeler_page_id is not None and existing.page_id is None:
+            existing.page_id = labeler_page_id
         state._generation += 1
         return outcome
 

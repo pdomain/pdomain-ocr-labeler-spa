@@ -362,6 +362,7 @@ def load_project(
     carrier: ActiveProjectCarrier = Depends(get_active_project_carrier),
     project_state: ProjectState = Depends(get_project_state),
     src_carrier: SourceRootCarrier = Depends(get_source_root_carrier),
+    runner: JobRunner = Depends(get_job_runner),
 ) -> JSONResponse:
     """``POST /api/projects/load`` — validate path, swap carrier.
 
@@ -495,6 +496,22 @@ def load_project(
     # counter — separate from the carrier's, but moves in lockstep on
     # successful loads.
     project_state.set_loaded_project(project)
+
+    # Step 8a (M9): initialize and stash the LabelerPageStore for this project.
+    # Creates the .pd-pages/ event store + blob store under the project dir.
+    # Best-effort: a store init failure must not block the load response —
+    # the store is used for durability but in-memory mutations still work.
+    page_store_factory = getattr(request.app.state, "page_store_factory", None)
+    if page_store_factory is not None:
+        try:
+            from ..core.persistence.page_store import LabelerPageStore as _LabelerPageStore
+
+            new_store: _LabelerPageStore = page_store_factory(resolved)
+            request.app.state.page_store = new_store
+            runner.context["page_store"] = new_store
+            log.debug("load_project: LabelerPageStore initialized at %s/.pd-pages/", resolved)
+        except Exception as exc:
+            log.warning("load_project: LabelerPageStore init failed (continuing): %s", exc)
 
     # Step 8 (M2-tail): persist session state so the next startup can
     # resume at this project + page. Best-effort: a write failure must

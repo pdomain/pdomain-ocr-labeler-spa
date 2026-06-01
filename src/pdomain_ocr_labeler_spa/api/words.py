@@ -56,9 +56,10 @@ from pydantic import BaseModel, Field, field_validator
 
 from ..core.models import BBox, GlyphAnnotationsModel
 from ..core.persistence.config_yaml import AppConfig
+from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import PageState, ProjectState
 from ..settings import Settings
-from .dependencies import get_app_config, get_project_state, get_settings
+from .dependencies import get_app_config, get_page_store_optional, get_project_state, get_settings
 from .middleware.error_handler import ApiError
 from .pages import PagePayload, _page_payload
 
@@ -285,31 +286,17 @@ def _bbox_to_coords(bbox: BBox) -> tuple[int, int, int, int]:
 def _resolve_page_object(pstate: PageState | None) -> Page | None:
     """Pull the ``Page``-like object out of ``PageState.page_record``.
 
-    The page record (``PageLoadOutcome``) carries the loaded Page in
-    its ``payload`` field.  Returns ``None`` when no record is cached
-    yet — callers map that to a 400 ``page_not_loaded`` envelope.
+    After the greenfield event-store adoption (M5b), the OCR lane stores a
+    live ``pdomain_book_tools.ocr.page.Page`` directly in
+    ``PageLoadOutcome.payload``.  This helper returns it directly when
+    present — no envelope-lift needed for the OCR lane.
 
-    BUG-SMOKE-1 fix: labeled/cached lanes store a ``UserPageEnvelope``
-    in ``payload`` (not a ``Page``).  ``UserPageEnvelope`` has no
-    ``.lines`` attribute, so ``_resolve_word`` would see ``lines=None``
-    and return ``None`` for every word → 404 ``word_not_found``.
+    For the store-reload lane (new process pointing at an existing project),
+    the payload slot is empty and the caller should seed the page via
+    ``POST .../load`` before mutating.
 
-    Delegates to ``core.envelope_lift.lift_envelope_to_page``: a plain
-    ``Page`` (OCR lane) is returned unchanged; a ``UserPageEnvelope``
-    (labeled/cached lane) is lifted via ``Page.from_dict``.  On lift
-    failure an ``EnvelopeLiftError`` is returned by the helper, which we
-    map to ``None`` here so the caller produces a 400 ``page_not_loaded``
-    response (the envelope was malformed — treat it as not-loaded).
-
-    NOTE: the lifted ``Page`` is **not** written back to
-    ``pstate.page_record.payload`` because ``PageLoadOutcome`` is a
-    frozen dataclass.  Word mutations hold the per-page lock and operate
-    on the returned ``Page`` object in-memory; any subsequent
-    ``_page_payload`` call performs its own independent lift from the
-    same envelope dict.  This is safe because the lifted ``Page`` is
-    mutated in place (pdomain-book-tools ``Word`` / ``Line`` objects carry
-    state by reference) and the envelope's ``payload.page`` dict is not
-    re-read for the in-process lifetime of the request.
+    Returns ``None`` when no record is cached yet or payload is not a Page.
+    Callers map ``None`` to a 400 ``page_not_loaded`` envelope.
     """
     if pstate is None or pstate.page_record is None:
         return None
@@ -317,21 +304,25 @@ def _resolve_page_object(pstate: PageState | None) -> Page | None:
     if payload_obj is None:
         return None
 
-    # Lift UserPageEnvelope → Page (labeled/cached lanes).
-    lift_result = None  # STUB: envelope_lift retired (M5b)
-    if lift_result is None:
-        log.warning(
-            "_resolve_page_object: envelope→Page lift retired (M5b)"
-            " — returning None so caller maps to page_not_loaded",
-        )
-        return None
-    # ``lift_envelope_to_page`` returns either the original ``Page``
-    # (OCR lane, passed through unchanged) or a ``Page`` from
-    # ``Page.from_dict`` (labeled/cached lane).  Cast to ``Page`` so
-    # the static return type matches; tests may pass duck-typed stubs.
-    from typing import cast as _cast
+    # OCR lane: payload IS the live Page object (event-store adoption M5b).
+    # isinstance check keeps the static type; duck-typed test stubs still
+    # work because they also pass isinstance(stub, Page) checks via the
+    # Page Protocol (or we use hasattr("lines") as the secondary gate).
+    if isinstance(payload_obj, Page):
+        return payload_obj
 
-    return _cast("Page", lift_result)
+    # Secondary gate for duck-typed test stubs that expose .lines without
+    # being actual Page instances.
+    if hasattr(payload_obj, "lines"):
+        from typing import cast as _cast
+
+        return _cast("Page", payload_obj)
+
+    log.warning(
+        "_resolve_page_object: payload type %s has no .lines — page_not_loaded",
+        type(payload_obj).__name__,
+    )
+    return None
 
 
 def _resolve_word(page: Any, line_index: int, word_index: int) -> Any | None:
@@ -350,24 +341,30 @@ def _resolve_word(page: Any, line_index: int, word_index: int) -> Any | None:
     return words[word_index]
 
 
-def _write_cached_envelope_best_effort(
+def _save_to_store_best_effort(
     *,
-    page: Any,
-    project_state: ProjectState,
-    page_index: int,
-    settings: Settings,
+    pstate: PageState,
+    store: Any,  # LabelerPageStore | None
+    changes: list[dict[str, Any]],
 ) -> None:
-    """Write the cached-lane envelope; log + swallow on failure.
+    """Fire ``save_page_to_store`` for a word-mutation event; swallow errors.
 
-    Spec 23 §12: cached-lane write is best-effort. ``LaneResolver.write_cached``
-    already swallows ``OSError``; we still wrap broad ``Exception`` here
-    so a misconfigured envelope (e.g. a stub Page whose ``to_dict``
-    raises) cannot turn a successful in-memory mutation into a 500.
+    Best-effort: a store write failure must not turn a successful
+    in-memory mutation into a 500.  Logs at WARNING so problems are
+    visible without being fatal.
+
+    ``store=None`` is a no-op (test environments without a wired store).
+    ``pstate.page_id=None`` is also a no-op (page not yet registered in
+    the event store — e.g. the fake-loader test path).
     """
-    project = project_state.loaded_project
-    if project is None:
+    if store is None or pstate.page_id is None:
         return
-    # STUB: cached-lane envelope write retired (M5b). No-op until M9 wires LabelerPageStore.
+    try:
+        from ..core.page_state import save_page_to_store
+
+        save_page_to_store(page_id=pstate.page_id, changes=changes, store=store)
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("_save_to_store_best_effort: failed page_id=%s: %s", pstate.page_id, exc)
 
 
 def _refresh_payload_response(
@@ -389,6 +386,22 @@ def _refresh_payload_response(
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
+def _write_cached_envelope_best_effort(
+    *,
+    page: Any,
+    project_state: ProjectState,
+    page_index: int,
+    settings: Settings,
+) -> None:
+    """Backward-compat stub for ``lines_paragraphs.py`` import.
+
+    The cached-lane envelope write was retired (M5b). Callers in
+    ``lines_paragraphs.py`` still import this name; it's kept here as a
+    no-op so those imports don't break. Word-mutation routes have been
+    migrated to ``_save_to_store_best_effort`` (the event-store path).
+    """
+
+
 # ── Routes ─────────────────────────────────────────────────────────────
 
 
@@ -405,13 +418,14 @@ def update_word_ground_truth(
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/gt`` — update ground-truth text for a word.
 
     Spec 23 §9 row 1: ``word.set_ground_truth_text(text)`` → property
     setter ``word.ground_truth_text = text``. Holds the per-page lock
     for the full mutation window: resolve → mutate → generation bump →
-    cached-envelope write (spec §13).
+    event-store write (spec §13).
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -429,7 +443,11 @@ def update_word_ground_truth(
             return _word_not_found(line_index, word_index)
         word.ground_truth_text = body.text
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[{"type": "word_gt", "line": line_index, "word": word_index, "text": body.text}],
+        )
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -453,6 +471,7 @@ def apply_style(
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/style`` — apply text style label to a word.
 
@@ -475,7 +494,19 @@ def apply_style(
             return _word_not_found(line_index, word_index)
         word.apply_style_scope(body.style, body.scope)
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {
+                    "type": "word_style",
+                    "line": line_index,
+                    "word": word_index,
+                    "style": body.style,
+                    "scope": body.scope,
+                }
+            ],
+        )
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -499,6 +530,7 @@ def apply_component(
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/component`` — toggle a word component flag.
 
@@ -523,7 +555,19 @@ def apply_component(
             return _word_not_found(line_index, word_index)
         word.apply_component(body.component, enabled=body.enabled)
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {
+                    "type": "word_component",
+                    "line": line_index,
+                    "word": word_index,
+                    "component": body.component,
+                    "enabled": body.enabled,
+                }
+            ],
+        )
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -547,6 +591,7 @@ def toggle_validated(
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/validated`` — toggle the validated flag.
 
@@ -581,7 +626,18 @@ def toggle_validated(
         new_value = (not current) if body.validated is None else bool(body.validated)
         word.is_validated = new_value
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {
+                    "type": "word_validated",
+                    "line": line_index,
+                    "word": word_index,
+                    "validated": new_value,
+                }
+            ],
+        )
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -603,6 +659,7 @@ def validate_batch(
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/validate-batch`` — bulk validate/unvalidate a scope.
 
@@ -618,7 +675,7 @@ def validate_batch(
     - ``word``: each ``(li, wi)`` tuple in ``word_indices``.
 
     Single ``pstate.generation`` bump for the whole batch (one
-    user-observable mutation event); one cached-envelope write.
+    user-observable mutation event); one event-store write.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -638,7 +695,11 @@ def validate_batch(
         # the SPA as "I sent a validate-batch and got an updated
         # generation back".
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[{"type": "validate_batch", "scope": body.scope, "validated": body.validated}],
+        )
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -697,6 +758,7 @@ def add_word(
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/add`` — insert a new word bbox.
 
@@ -723,7 +785,11 @@ def add_word(
         if not ok:
             return _mutation_failed(f"add_word_to_page rejected bbox=({x1}, {y1}, {x2}, {y2})")
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[{"type": "word_add", "bbox": [x1, y1, x2, y2], "text": body.text}],
+        )
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -747,6 +813,7 @@ def rebox_word(
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/rebox`` — replace the word's bounding box.
 
@@ -775,7 +842,18 @@ def rebox_word(
                 f"rebox_word rejected line={line_index} word={word_index} bbox=({x1}, {y1}, {x2}, {y2})"
             )
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {
+                    "type": "word_rebox",
+                    "line": line_index,
+                    "word": word_index,
+                    "bbox": [x1, y1, x2, y2],
+                }
+            ],
+        )
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -799,6 +877,7 @@ def nudge_bbox(
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/nudge`` — nudge bbox edges by pixel offsets.
 
@@ -836,7 +915,18 @@ def nudge_bbox(
                 f"deltas=({body.left}, {body.right}, {body.top}, {body.bottom})"
             )
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {
+                    "type": "word_nudge",
+                    "line": line_index,
+                    "word": word_index,
+                    "deltas": [body.left, body.right, body.top, body.bottom],
+                }
+            ],
+        )
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -860,6 +950,7 @@ def split_word(
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/split`` — split one word bbox into two.
 
@@ -894,7 +985,18 @@ def split_word(
                 f"split_word rejected line={line_index} word={word_index} fraction={body.x_fraction}"
             )
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {
+                    "type": "word_split",
+                    "line": line_index,
+                    "word": word_index,
+                    "fraction": body.x_fraction,
+                }
+            ],
+        )
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -918,6 +1020,7 @@ def merge_words(
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/merge`` — merge with adjacent word.
 
@@ -951,7 +1054,18 @@ def merge_words(
                 f"merge_word_{body.direction} rejected line={line_index} word={word_index}"
             )
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {
+                    "type": "word_merge",
+                    "line": line_index,
+                    "word": word_index,
+                    "direction": body.direction,
+                }
+            ],
+        )
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -975,6 +1089,7 @@ def erase_pixels(
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/erase-pixels`` — erase pixels in a bbox.
 
@@ -1063,7 +1178,18 @@ def erase_pixels(
         if callable(finalize):
             finalize()
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {
+                    "type": "erase_pixels",
+                    "line": line_index,
+                    "word": word_index,
+                    "bbox": [x1, y1, x2, y2],
+                }
+            ],
+        )
 
     return _refresh_payload_response(
         project_id=project_id,

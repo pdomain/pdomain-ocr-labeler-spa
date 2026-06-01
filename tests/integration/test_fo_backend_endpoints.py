@@ -401,16 +401,12 @@ def _seed_page_state(client: TestClient, *, page_index: int, page: _StubPage) ->
     return pstate
 
 
-def test_char_ranges_returns_page_not_loaded_when_lift_is_stub(loaded_client: TestClient) -> None:
-    """POST char-ranges returns 400 page_not_loaded while _resolve_page_object is a stub.
+def test_char_ranges_succeeds_with_seeded_page_state(loaded_client: TestClient) -> None:
+    """POST char-ranges returns 200 when PageState has a Page-like payload.
 
-    Replaces two retired envelope-path tests (M5b). The char-ranges endpoint
-    calls _resolve_page_object which is a stub returning None — so the route
-    returns page_not_loaded even when a PageState is seeded with a page object.
-
-    Successor: tests/integration/test_words_router_page_store.py covers
-    the new LocalPageStore-backed mutation cycle once the stub is replaced
-    with a real blob-store-backed page resolution.
+    After the _resolve_page_object fix (event-store adoption M5b), the endpoint
+    resolves the page from the in-memory PageState payload directly (duck-type
+    check on .lines). Char-ranges data is stored on the pstate sidecar.
     """
     page = _StubPage(
         lines_=[_StubLine(words=[_StubWord(text="hello"), _StubWord(text="world")])],
@@ -422,6 +418,4 @@ def test_char_ranges_returns_page_not_loaded_when_lift_is_stub(loaded_client: Te
         "/api/projects/book1/pages/0/words/0/0/char-ranges",
         json={"ranges": [{"start": 0, "end": 2, "styles": ["bold"]}]},
     )
-    # Stub returns None → page_not_loaded (not 500)
-    assert resp.status_code == 400
-    assert resp.json()["error"] == "page_not_loaded"
+    assert resp.status_code == 200, f"expected 200 but got {resp.status_code}: {resp.text}"
