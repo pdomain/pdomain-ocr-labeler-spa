@@ -67,6 +67,81 @@ def _write_cached_envelope_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _ingest_ocr_result(
+    *,
+    page: Any,
+    image_bytes: bytes,
+    page_index: int,
+    store: Any,  # LabelerPageStore — TYPE_CHECKING import avoids circular dep
+) -> Any:  # PageAggregate
+    """Fire OcrCompleted on a new PageAggregate and persist via LabelerPageStore.
+
+    This is the new event-store write path replacing ``build_envelope``. Called
+    from ``run_ocr`` when a ``LabelerPageStore`` is available. Falls back to
+    the legacy envelope write when ``store`` is ``None``.
+
+    Parameters
+    ----------
+    page:
+        ``pdomain_book_tools.ocr.page.Page`` — must expose ``page_id`` (UUID)
+        and ``to_dict() -> dict``.
+    image_bytes:
+        Raw PNG bytes for the full image. Written to BlobStore.
+    page_index:
+        0-based index within the project.
+    store:
+        The project's ``LabelerPageStore``.
+
+    Returns
+    -------
+    PageAggregate
+        The newly saved aggregate.
+    """
+    from uuid import UUID, uuid4
+
+    from pdomain_ops.page_aggregate import PageAggregate
+    from pdomain_ops.pages import PageRecord, ProvenanceGraph, ProvenanceNode
+
+    page_id = page.page_id
+    if not isinstance(page_id, UUID):
+        page_id = uuid4()
+
+    # Write image blob
+    image_hash = store.blobs.write(image_bytes)
+
+    # Write Page JSON blob
+    page_json_bytes = json.dumps(page.to_dict()).encode("utf-8")
+    content_hash = store.blobs.write(page_json_bytes)
+
+    # Build a minimal provenance node
+    prov_node = ProvenanceNode(
+        id=str(page_id),
+        source="ocr",
+        tool="doctr",
+        blob_refs=[content_hash, image_hash],
+    )
+    prov_graph = ProvenanceGraph(
+        nodes={prov_node.id: prov_node},
+        head_id=prov_node.id,
+        history=[prov_node.id],
+    )
+
+    record = PageRecord(
+        page_id=page_id,
+        page_index=page_index,
+        source="ocr",
+        provenance=prov_graph,
+    )
+
+    agg = PageAggregate(record)
+    agg.ocr_completed(
+        provenance_node=prov_node,
+        blob_refs=[content_hash, image_hash],
+    )
+    store.save_page(agg)
+    return agg
+
+
 if TYPE_CHECKING:
     from pdomain_book_tools.ocr.page import Page
 
