@@ -326,6 +326,12 @@ integration: ## Run slow/integration tests (real DocTR OCR pipeline, ~10 min)
 e2e: frontend-build ## Run Playwright E2E tests (requires `playwright install chromium`)
 	uv run --group e2e pytest tests/e2e -v
 
+e2e-browser: frontend-build ## Run Playwright browser verification tests
+	uv run --group e2e pytest tests/e2e/test_browser_verification.py -m e2e -v --browser chromium
+
+setup-e2e: ## Install Playwright browser binaries
+	uv run --group e2e playwright install chromium
+
 # ---------------------------------------------------------------------------
 # Exercise harness — multi-page real-project workflow smoke run
 # ---------------------------------------------------------------------------
