@@ -289,6 +289,29 @@ def _is_reserved(full_path: str) -> bool:
     return False
 
 
+def install_blob_route(app: FastAPI) -> None:
+    """Register ``GET /api/blobs/{blob_hash}`` served from the project BlobStore.
+
+    Replaces the old ``/image-cache/`` StaticFiles mount after
+    UserPageEnvelope + image_cache.py retirement (M5b / M10).
+    The blob_hash is the SHA256 of the blob content.
+    """
+
+    @app.get("/api/blobs/{blob_hash}", include_in_schema=False)
+    async def _serve_blob(blob_hash: str, request: Request) -> Response:
+        store = getattr(request.app.state, "page_store", None)
+        if store is None:
+            raise HTTPException(status_code=503, detail="no project loaded")
+        if not store.blobs.exists(blob_hash):
+            raise HTTPException(status_code=404, detail=f"blob {blob_hash!r} not found")
+        data = store.blobs.read(blob_hash)
+        return Response(
+            content=data,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+
 def install_spa_fallback(app: FastAPI) -> None:
     """Register the SPA catch-all. MUST be called AFTER every other route.
 
@@ -367,4 +390,4 @@ def install_spa_fallback(app: FastAPI) -> None:
         )
 
 
-__all__ = ["install_image_cache", "install_spa_fallback"]
+__all__ = ["install_blob_route", "install_image_cache", "install_spa_fallback"]

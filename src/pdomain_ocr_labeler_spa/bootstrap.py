@@ -54,7 +54,7 @@ from .api.pages import install_pages_router
 from .api.projects import install_projects_router
 from .api.refine import install_refine_router
 from .api.session_state import install_session_state_router
-from .api.static_mounts import install_spa_fallback
+from .api.static_mounts import install_blob_route, install_spa_fallback
 from .api.words import install_words_router
 from .core.active_project import (
     ActiveProjectCarrier,
@@ -450,6 +450,7 @@ def build_app(settings: Settings | None = None) -> FastAPI:
         # 3. SPA fallback `/{full_path:path}` — registered LAST so every
         #    real route wins ahead of the catch-all. Spec §10.
         install_env_js(app)
+        install_blob_route(app)
         install_spa_fallback(app)
     else:
         log.debug("api_only mode: skipping /env.js + /image-cache + SPA fallback")
