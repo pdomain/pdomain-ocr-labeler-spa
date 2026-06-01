@@ -255,13 +255,31 @@ def spa_dir() -> Iterator[Path]:
     "bundle absent" to exercise both branches of the SPA fallback.
     Tests that consume this fixture get a populated dir; tests that
     don't get the as-checked-in state (just ``.gitkeep``).
+
+    Teardown preserves a pre-existing real ``index.html`` (written by
+    ``make frontend-build``) so ``make ci-slow`` does not lose the
+    bundle after ``make test`` runs.  Without this, the ``spa_dir``
+    cleanup removes whatever ``index.html`` was present — including the
+    real bundle — which causes the subsequent ``uv build --wheel`` step
+    to fail the SPA-present guard in ``build_hooks/spa_check.py``.
     """
-    static_dir = _populate_static_dir()
+    import pdomain_ocr_labeler_spa as pkg
+
+    static_dir = Path(pkg.__file__).parent / "static"
+    index_file = static_dir / "index.html"
+    # Snapshot the original bytes (None when file was absent, e.g. on a
+    # fresh checkout before ``make frontend-build`` has been run).
+    original_content: bytes | None = index_file.read_bytes() if index_file.exists() else None
+
+    _populate_static_dir()
     try:
         yield static_dir
     finally:
-        index_file = static_dir / "index.html"
-        if index_file.exists():
+        if original_content is not None:
+            # Restore the pre-existing bundle (real build or another stub).
+            index_file.write_bytes(original_content)
+        # Nothing was there before — remove only the stub we wrote.
+        elif index_file.exists():
             index_file.unlink()
 
 
@@ -380,31 +398,39 @@ def test_spa_fallback_serves_static_asset_directly(settings: Settings, spa_dir: 
 def test_b72_test_isolation_does_not_mutate_real_static_assets(spa_dir: Path) -> None:
     """B-72 regression pin: tests in this module MUST NOT delete or
     overwrite a real frontend bundle that pre-existed under
-    ``static/assets/``.
+    ``static/assets/`` or ``static/index.html``.
 
-    The check captures the assets-dir contents at the start of *this*
-    test (which runs after the two B-72 victims thanks to pytest's
-    in-file declaration order — see comment block above), then walks
-    the dir again and asserts the same set survives. If the B-72 fix
-    regresses (someone re-introduces an unconditional ``rmdir`` in
-    teardown), this fixture goes red on a tree where ``make
-    frontend-build`` has run.
+    The check captures the assets-dir contents and index.html presence
+    at the start of *this* test (which runs after the two B-72 victims
+    thanks to pytest's in-file declaration order — see comment block
+    above), then walks the dir again and asserts the same set survives.
+    If the B-72 fix regresses (someone re-introduces an unconditional
+    ``rmdir`` or ``unlink`` in teardown), this fixture goes red on a
+    tree where ``make frontend-build`` has run.
 
     On a clean tree (no bundle), this test is a no-op assertion that
     the dir is either absent or empty — still a useful invariant.
     """
     assets_dir = spa_dir / "assets"
+    index_file = spa_dir / "index.html"
     snapshot_before = sorted(p.name for p in assets_dir.iterdir()) if assets_dir.is_dir() else []
+    index_before = index_file.exists()
     # Run a probe through the SPA fallback so any in-test mutation of
     # the assets dir (write/unlink) would happen before we re-check.
     app = build_app(Settings(mode="normal"))
     with TestClient(app) as client:
         client.get("/")  # SPA shell
     snapshot_after = sorted(p.name for p in assets_dir.iterdir()) if assets_dir.is_dir() else []
+    index_after = index_file.exists()
     assert snapshot_before == snapshot_after, (
         f"B-72 regression: static/assets/ contents changed during a "
         f"test run; before={snapshot_before!r} after={snapshot_after!r}. "
         f"Tests in this module must use _write_test_asset/_cleanup_test_asset."
+    )
+    assert index_before == index_after, (
+        f"B-72 regression: static/index.html presence changed during a test run "
+        f"(before={index_before}, after={index_after}). "
+        f"The spa_dir fixture must restore pre-existing index.html on teardown."
     )
 
 
@@ -459,7 +485,7 @@ def test_spa_fallback_does_not_shadow_real_mounts(settings: Settings, spa_dir: P
     assert "html" not in r.headers.get("content-type", "")
 
 
-def test_spa_fallback_503_when_dist_missing(settings: Settings) -> None:
+def test_spa_fallback_503_when_dist_missing(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
     """When ``index.html`` is absent, the catch-all returns 503.
 
     503 (Service Unavailable) distinguishes "SPA not built" from
@@ -469,15 +495,15 @@ def test_spa_fallback_503_when_dist_missing(settings: Settings) -> None:
     The error message names the missing dir + the build target so
     a developer iterating on the backend without a built SPA gets a
     pointer to the fix instead of an opaque ``FileNotFoundError``.
-    """
-    # Confirm the static dir is empty (just `.gitkeep`).
-    import pdomain_ocr_labeler_spa as pkg
 
-    static_dir = Path(pkg.__file__).parent / "static"
-    assert not (static_dir / "index.html").exists(), (
-        "test pre-condition: SPA bundle must be absent. "
-        "Did `make frontend-build` run? Tear it down before this test."
-    )
+    ``monkeypatch`` is used instead of a real-dir precondition so the
+    test passes regardless of whether ``make frontend-build`` has
+    populated ``static/`` — making ``make ci-slow`` green end-to-end.
+    """
+    import pdomain_ocr_labeler_spa.api.static_mounts as sm
+
+    # Patch _resolve_static_dir to return None, simulating a missing bundle.
+    monkeypatch.setattr(sm, "_resolve_static_dir", lambda: None)
 
     app = build_app(settings)
     with TestClient(app) as client:
