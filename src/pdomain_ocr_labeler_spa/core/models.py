@@ -17,9 +17,12 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
 
+from pdomain_ops.pages import RotationSource
 from pydantic import BaseModel, ConfigDict, Field
 
-from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import OCRProvenance
+from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
+    OCRProvenance,
+)  # kept until M5b removes PageRecord
 
 _MAX_DISPLAY_DIMENSION = 1200
 
@@ -116,18 +119,6 @@ class CachedImageSet(BaseModel):
     paragraphs: str | None = None
     words: str | None = None
     matched_words: str | None = None
-
-
-class RotationSource(StrEnum):
-    """How a page's rotation was determined.
-
-    Spec: ``docs/specs/2026-05-12-auto-rotation-design.md §PageRecord`` /
-    issue #263 (M9.1).  Defaults to ``"none"`` (original orientation).
-    """
-
-    NONE = "none"
-    AUTO = "auto"
-    MANUAL = "manual"
 
 
 class PageRecord(BaseModel):

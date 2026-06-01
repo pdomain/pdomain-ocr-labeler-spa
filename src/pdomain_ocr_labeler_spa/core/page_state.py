@@ -85,30 +85,14 @@ Exception types:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from .models import Project
+from .models import PageSource, Project
 from .persistence.atomic import write_json_atomic
 from .persistence.paths import labeled_projects_root
 from .persistence.user_page_envelope import OCRProvenance, build_envelope, labeled_envelope_path
 from .project_state import PageState, ProjectState
-
-
-class PageSource(StrEnum):
-    """Mirrors ``docs/architecture/01-data-models.md §1.PageRecord`` lines 55–59.
-
-    Defined locally rather than imported from ``core/models.py`` so
-    this slice doesn't depend on the M3-proper ``PageRecord`` import.
-    M3-proper will canonicalize this enum on ``core/models.py`` and
-    re-export it from here for backward compatibility.
-    """
-
-    OCR = "ocr"
-    CACHED_OCR = "cached_ocr"
-    FILESYSTEM = "filesystem"
-    FALLBACK = "fallback"
 
 
 @dataclass(frozen=True)
