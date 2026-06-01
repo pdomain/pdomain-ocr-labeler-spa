@@ -1490,7 +1490,7 @@ requires-dist = [
     { name = "idna", specifier = ">=3.15" },
     { name = "modal", marker = "extra == 'modal'", specifier = ">=0.66" },
     { name = "pdomain-book-tools", specifier = ">=0.17.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
-    { name = "pdomain-ops", specifier = ">=0.7.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
+    { name = "pdomain-ops", specifier = ">=0.7.1", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.5" },
     { name = "python-multipart", specifier = ">=0.0.20" },
@@ -1518,7 +1518,7 @@ e2e = [{ name = "pytest-playwright", specifier = ">=0.5" }]
 
 [[package]]
 name = "pdomain-ops"
-version = "0.7.0"
+version = "0.7.1"
 source = { registry = "https://pdomain.github.io/pdomain-index-pip/simple/" }
 dependencies = [
     { name = "eventsourcing" },
@@ -1532,9 +1532,9 @@ dependencies = [
     { name = "tomli-w" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://github.com/pdomain/pdomain-ops/releases/download/v0.7.0/pdomain_ops-0.7.0.tar.gz", hash = "sha256:bdc382cef02a2990c2538faf9455f7ac0ab0be071794008b76f44e41eb6a6eed" }
+sdist = { url = "https://github.com/pdomain/pdomain-ops/releases/download/v0.7.1/pdomain_ops-0.7.1.tar.gz", hash = "sha256:b22f8c3006f1d2bc350410731b5527c6d78fa4d1021e56ae8f788a6abd41d24d" }
 wheels = [
-    { url = "https://github.com/pdomain/pdomain-ops/releases/download/v0.7.0/pdomain_ops-0.7.0-py3-none-any.whl", hash = "sha256:5ee21c7b0afb0a6347b6867f2edeb282eacd38b3f2cfafcc7c6aa79f45899fe2" },
+    { url = "https://github.com/pdomain/pdomain-ops/releases/download/v0.7.1/pdomain_ops-0.7.1-py3-none-any.whl", hash = "sha256:c31ad37b22b4a1339b3b1a83e07774f06d603c03d69f8290fdb8e8be7817f866" },
 ]
 
 [[package]]
