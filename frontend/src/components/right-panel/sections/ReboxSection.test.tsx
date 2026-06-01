@@ -1,4 +1,5 @@
 // ReboxSection.test.tsx — Tests for P3.b Rebox mini-canvas (Gap 35).
+// Covers: B-RIGHT-009
 // Spec: docs/plans/hifi-gaps-plan.md slice P3.b.
 //
 // The Konva-backed mini-canvas replaces the legacy WordRefineNudgeRows.

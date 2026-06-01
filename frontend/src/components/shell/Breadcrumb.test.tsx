@@ -1,4 +1,5 @@
 // Breadcrumb.test.tsx — Tests for the RightPanel breadcrumb header (Slice 14).
+// Covers: B-SHELL-002
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 14.
 
 import { describe, it, expect, beforeEach } from "vitest";

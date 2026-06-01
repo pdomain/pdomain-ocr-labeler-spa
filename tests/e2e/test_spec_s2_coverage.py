@@ -1,5 +1,9 @@
 """Comprehensive spec §2 driver-contract coverage tests.
 
+Covers: B-ACTIONS-006, B-ACTIONS-012, B-ACTIONS-013, B-ACTIONS-014, B-ACTIONS-015
+Covers: F-TOOLBAR-GRID-01, F-TOOLBAR-STYLE-ADD-01
+Covers: F-WORD-DIALOG-IMAGE-01, F-WORD-DIALOG-MUTATE-01
+
 Fills the gaps in the §2 testid catalogue not covered by the existing suite:
 
 SECT-2.2 : source-folder-dialog open/close interaction

@@ -1,4 +1,6 @@
 // ProjectPage.test.tsx — Vitest unit tests for the real ProjectPage shell.
+// Covers: B-PROJECT-001, B-PROJECT-004, B-PROJECT-005, B-PROJECT-006, B-PROJECT-007
+// Covers: B-DRIVER-003, B-ACTIONS-009
 //
 // Spec: specs/22-page-surface-wireup.md §3 (Layout), §4 (Data flow),
 //       §10 (Driver-contract preservation), §11 (Notifications), §12 (Acceptance).

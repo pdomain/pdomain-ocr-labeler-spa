@@ -1,4 +1,5 @@
 // BulkActions.test.tsx — Tests for Slice 23: bulk actions bar.
+// Covers: B-DRAWER-003, B-DRAWER-006
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 23.
 
 import { describe, it, expect, beforeEach, vi } from "vitest";

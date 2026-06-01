@@ -1,4 +1,5 @@
 // WordEditDialog.test.tsx — tests for dialog shell (#209)
+// Covers: B-ACTIONS-005, B-ACTIONS-014, B-ACTIONS-015, F-WORD-DIALOG-IMAGE-01, F-WORD-DIALOG-MUTATE-01
 // Spec: docs/specs/2026-05-12-word-edit-dialog-design.md
 // Acceptance:
 //   - open dialog; next → target shifts to word+1; dialog stays open

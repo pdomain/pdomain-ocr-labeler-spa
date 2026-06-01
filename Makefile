@@ -14,6 +14,7 @@ else
 
 .PHONY: help setup refresh-version install uninstall reset remove-venv lint fast-check format \
         pre-commit-check test integration e2e exercise-real build clean ci dev run \
+        behavior-coverage \
         frontend-install frontend-build frontend-dev frontend-test frontend-knip \
         frontend-lint frontend-format frontend-format-check \
         openapi-export update-pdomain-deps upgrade-pdomain-book-tools upgrade-deps upgrade-deps-local \
@@ -320,6 +321,9 @@ pre-commit-check: ## Run pre-commit on all files
 test: ## Run pytest (excludes e2e/ and slow/integration markers)
 	uv run pytest tests/ -v --ignore=tests/e2e -m "not slow and not integration" -n auto
 
+behavior-coverage: ## Regenerate behavior coverage.md + gate (declared vs cited IDs)
+	uv run python -m scripts.behavior_coverage
+
 integration: ## Run slow/integration tests (real DocTR OCR pipeline, ~10 min)
 	uv run pytest tests/ -v --ignore=tests/e2e -m "slow or integration"
 
@@ -419,7 +423,7 @@ pip-audit: ## Audit PyPI deps; print manifest of skipped non-PyPI packages (F-02
 pip-audit-no-dev: ## Audit runtime-only PyPI deps (excludes dev group)
 	@bash scripts/pip-audit-with-manifest.sh --no-dev
 
-ci: setup frontend-install pre-commit-check typecheck openapi-export frontend-build lint test frontend-format-check frontend-lint frontend-test frontend-knip ## Full CI pipeline
+ci: setup frontend-install pre-commit-check typecheck openapi-export frontend-build lint test behavior-coverage frontend-format-check frontend-lint frontend-test frontend-knip ## Full CI pipeline
 
 ci-slow: ci build ## Full pre-flight for releases (CI plus wheel build)
 

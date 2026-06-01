@@ -1,5 +1,7 @@
 """BUG-SMOKE-2 regression: GET /pages returns project-level generation; save checks page-level.
 
+Covers: B-ACTIONS-019, F-SAVE-LOAD-ROUNDTRIP-01
+
 Root cause: ``_page_payload`` stamped ``generation=project_state.generation``
 (the project-level monotone counter, e.g. 4 after load+nav) while
 ``save_page`` validated ``body.generation == pstate.generation`` (the

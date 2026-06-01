@@ -1,4 +1,5 @@
 // RootPage.test.tsx — Vitest unit tests for RootPage + EmptyProjectState.
+// Covers: B-ROOT-001, B-ROOT-002, B-ROOT-003, B-ROOT-004, B-ROOT-005, B-ROOT-006
 // Issue #84 (EmptyProjectState) + Issue #274 (RootPage + session-state fetch).
 // P5.h tests: hero band, search field, filter chips, project card redesign.
 // Spec: docs/specs/2026-05-12-root-page-design.md §Contract + P5.h (Gaps 59, 60)

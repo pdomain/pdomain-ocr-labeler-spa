@@ -1,4 +1,5 @@
 // App.test.tsx — Vitest tests for App shell routing.
+// Covers: B-DRIVER-004, B-DRIVER-006
 // Issue #240: React Router routes, QueryClient provider wiring.
 // Spec: docs/specs/2026-05-12-frontend-shell-design.md §Routing
 // Phase 2.4: AppShell + SuiteSiblingsProvider mocks added (#262).

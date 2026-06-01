@@ -1,4 +1,5 @@
 // PageActions.test.tsx — unit tests for the PageActions bar.
+// Covers: B-ACTIONS-008, B-ACTIONS-020, F-PAGE-ACTIONS-01, F-ROTATE-PAGE-01
 // Spec: docs/specs/2026-05-12-page-actions-design.md
 // Issue #214
 //

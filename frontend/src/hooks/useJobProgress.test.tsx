@@ -1,4 +1,5 @@
 // useJobProgress.test.tsx — unit tests for the useJobProgress SSE hook.
+// Covers: B-JOBS-001, B-ACTIONS-010, F-JOB-SSE-01
 // Spec: docs/specs/2026-05-12-frontend-shell-design.md §Hooks
 // Issue #192
 //

@@ -1,4 +1,5 @@
 // BulkGlyphMarkDialog.test.tsx — unit tests for the bulk glyph mark dialog.
+// Covers: B-GLYPH-004
 // Spec: specs/20-glyph-annotations.md §5.5
 // Issue #270
 

@@ -1,5 +1,7 @@
 """Viewport perf E2E benchmark — spec-21-C2 (#305).
 
+Covers: B-CANVAS-013
+
 Mounts the dev/test-only ``/__perf-test`` route (4 000 word rects rendered
 into the selection layer), drives a 1-second mouse drag across the
 viewport in Playwright headless Chromium, and counts

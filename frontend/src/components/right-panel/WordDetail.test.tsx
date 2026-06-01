@@ -1,4 +1,5 @@
 // WordDetail.test.tsx — Tests for Slice 16 word detail accordion scaffold.
+// Covers: B-RIGHT-001, B-RIGHT-005, B-RIGHT-006, B-RIGHT-007, B-RIGHT-008, B-RIGHT-010, B-RIGHT-011, B-RIGHT-012, B-RIGHT-013
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 16.
 //
 // WordDetail → CharFixerSection (P4.b) → CharFixerCanvas → react-konva, and

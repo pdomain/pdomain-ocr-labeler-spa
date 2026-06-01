@@ -1,4 +1,5 @@
 // PageImageCanvas.test.tsx — viewport canvas tests (#196, #197, #198, #297, #302)
+// Covers: B-CANVAS-001, B-CANVAS-002, B-CANVAS-003, B-CANVAS-005, B-CANVAS-006, B-CANVAS-010, B-CANVAS-011, B-CANVAS-012
 //
 // Pointer interaction is driven by pdomain-ui's onStagePointerDown/Move/Up slot
 // callbacks (replacing the former DOM event-capture overlay). Tests fire DOM

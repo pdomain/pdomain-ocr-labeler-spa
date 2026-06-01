@@ -1,4 +1,5 @@
 // PageActionsCompact.test.tsx — unit tests for the compact header action bar.
+// Covers: B-ACTIONS-002, B-ACTIONS-003, B-ACTIONS-008, F-PAGE-ACTIONS-01
 // P1.b (Gap 4, 7): Reload OCR | Rematch GT | ✓ Save page | Export ▾
 //
 // Tests:

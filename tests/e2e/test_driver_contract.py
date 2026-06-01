@@ -1,5 +1,7 @@
 """Driver-contract conformance E2E test.
 
+Covers: B-DRIVER-001, B-DRIVER-002, B-DRIVER-003, B-DRIVER-005
+
 Loads the tiny-fixture project, walks the full UI, and asserts that every
 testid catalogued in ``docs/architecture/13-driver-contract.md §2`` (or the spec doc
 ``docs/specs/2026-05-12-driver-contract-design.md §Testid catalogue``) is
@@ -231,6 +233,8 @@ def test_header_testids_present(live_server: LiveServer, page: Page) -> None:
 def test_new_contract_testids_present_on_project_page(live_server: LiveServer, page: Page) -> None:
     """New §2.1 testids (post-D-046) are present on a loaded project page.
 
+    Covers: B-DRIVER-001
+
     rail-hotkeys-button is rendered by Rail.tsx inside ProjectPage.
     page-actions-compact-export is rendered by PageActionsCompact on project routes.
     Both are real interactive elements (not stubs) per the updated contract.
@@ -258,6 +262,8 @@ def test_new_contract_testids_present_on_project_page(live_server: LiveServer, p
 def test_stub_testids_present(live_server: LiveServer, page: Page) -> None:
     """All stub testids (display:none, data-testid-stub=true) exist in DOM.
 
+    Covers: B-DRIVER-001
+
     Checks source-folder dialog stubs, OCR config stubs, and nav stubs that
     are rendered as hidden placeholder elements until full implementation.
     """
@@ -271,7 +277,10 @@ def test_stub_testids_present(live_server: LiveServer, page: Page) -> None:
 
 @pytest.mark.e2e
 def test_stub_testids_have_stub_attribute(live_server: LiveServer, page: Page) -> None:
-    """Stub testids carry data-testid-stub='true' so the driver can distinguish them."""
+    """Stub testids carry data-testid-stub='true' so the driver can distinguish them.
+
+    Covers: B-DRIVER-001
+    """
     page.goto(live_server.base_url, timeout=15_000)
     page.wait_for_selector("#root", timeout=10_000)
 
@@ -286,7 +295,10 @@ def test_stub_testids_have_stub_attribute(live_server: LiveServer, page: Page) -
 
 @pytest.mark.e2e
 def test_project_page_route_renders(live_server: LiveServer, page: Page) -> None:
-    """Navigating to /projects/{id}/pages/pageno/1 renders the project-page shell."""
+    """Navigating to /projects/{id}/pages/pageno/1 renders the project-page shell.
+
+    Covers: B-DRIVER-002
+    """
     _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
 
     url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"

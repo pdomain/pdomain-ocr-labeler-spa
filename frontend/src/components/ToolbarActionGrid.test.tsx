@@ -1,4 +1,5 @@
 // ToolbarActionGrid.test.tsx — tests for toolbar grid (#207)
+// Covers: B-ACTIONS-012, B-ACTIONS-013, F-TOOLBAR-GRID-01, F-TOOLBAR-STYLE-ADD-01
 // Spec: docs/specs/2026-05-12-toolbar-actions-design.md
 // Acceptance:
 //   - All 56 cells present (4 rows × 14 columns)

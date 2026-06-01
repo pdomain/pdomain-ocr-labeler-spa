@@ -21,7 +21,10 @@ from tests.e2e.test_driver_contract import _load_tiny_fixture
 
 @pytest.mark.e2e
 def test_project_page_loads_with_tiny_fixture(live_server: LiveServer, page: Page) -> None:
-    """Loading the tiny-fixture project page renders the assembled shell."""
+    """Loading the tiny-fixture project page renders the assembled shell.
+
+    Covers: B-PROJECT-001, B-CANVAS-001
+    """
     _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
 
     url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
@@ -41,7 +44,10 @@ def test_project_page_loads_with_tiny_fixture(live_server: LiveServer, page: Pag
 
 @pytest.mark.e2e
 def test_navigate_prev_next(live_server: LiveServer, page: Page) -> None:
-    """Click Next then Prev — the URL transitions to pageno/2 then pageno/1."""
+    """Click Next then Prev; the URL transitions to pageno/2 then pageno/1.
+
+    Covers: B-PROJECT-002
+    """
     _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
 
     start_url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
@@ -66,6 +72,8 @@ def test_navigate_prev_next(live_server: LiveServer, page: Page) -> None:
 @pytest.mark.e2e
 def test_open_ocr_config_dialog(live_server: LiveServer, page: Page) -> None:
     """Opening the OCR-config modal via the trigger button mounts the modal.
+
+    Covers: B-ACTIONS-001
 
     #405: ocr-config-trigger-button restored in PageActionsCompact (project-page
     context) after it was inadvertently removed by D-046 / #401.  The real button
@@ -94,6 +102,8 @@ def test_open_ocr_config_dialog(live_server: LiveServer, page: Page) -> None:
 @pytest.mark.e2e
 def test_word_edit_dialog_lifecycle(live_server: LiveServer, page: Page) -> None:
     """Open the word-edit dialog via the dialog store, then close it.
+
+    Covers: B-ACTIONS-005
 
     The fixture project has no pre-validated lines, but the dialog opens
     purely from the dialog store — `dialogStore.openWordEdit({...})` —

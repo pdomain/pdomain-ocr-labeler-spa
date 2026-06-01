@@ -1,4 +1,5 @@
 // SourceFolderDialog.test.tsx — unit tests for the file-browser-style source-folder dialog.
+// Covers: B-ACTIONS-006, F-SOURCE-ROOT-01
 // Issue #294 (spec 22 §10 / driver-contract 13 §2.2).
 //
 // Tests:

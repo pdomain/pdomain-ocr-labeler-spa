@@ -1,4 +1,7 @@
-"""v2.2 envelope round-trips with tri-state glyph_annotations preserved."""
+"""v2.2 envelope round-trips with tri-state glyph_annotations preserved.
+
+Covers: B-GLYPH-005
+"""
 
 from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
     parse_envelope,
