@@ -41,18 +41,6 @@ from ...core.page_state import (
     PageSource,
 )
 from ...core.persistence.ground_truth import find_ground_truth_text
-from ...core.persistence.user_page_envelope import (
-    USER_PAGE_SOURCE_LANE_CACHED,
-    OCRModelProvenance,
-    build_envelope,
-    cached_envelope_path,
-    envelope_to_dict,
-    labeled_envelope_path,
-    read_envelope_file,
-)
-from ...core.persistence.user_page_envelope import (
-    OCRProvenance as EnvelopeOCRProvenance,
-)
 from .base import OCRProvenance
 
 logger = logging.getLogger(__name__)
@@ -228,30 +216,12 @@ class LocalDoctrPageLoader:
     cache_root: Path | None = None
 
     def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
-        if self.data_root is None:
-            return None
-        path = labeled_envelope_path(self.data_root, self.project.project_id, page_index)
-        envelope = read_envelope_file(path)
-        if envelope is None:
-            return None
-        return PageLoadOutcome(
-            page_index=page_index,
-            source=PageSource.FILESYSTEM,
-            payload=envelope,
-        )
+        """STUB: labeled lane retired (M5b). Returns None — M8/M9 wires LabelerPageStore."""
+        return None
 
     def load_cached(self, page_index: int) -> PageLoadOutcome | None:
-        if self.cache_root is None:
-            return None
-        path = cached_envelope_path(self.cache_root, self.project.project_id, page_index)
-        envelope = read_envelope_file(path)
-        if envelope is None:
-            return None
-        return PageLoadOutcome(
-            page_index=page_index,
-            source=PageSource.CACHED_OCR,
-            payload=envelope,
-        )
+        """STUB: cached lane retired (M5b). Returns None — M8/M9 wires LabelerPageStore."""
+        return None
 
     def run_ocr(self, page_index: int) -> PageLoadOutcome:
         if page_index < 0 or page_index >= len(self.project.image_paths):
@@ -312,8 +282,7 @@ class LocalDoctrPageLoader:
         # log-and-swallowed (legacy lines 789-794): a write failure
         # must not turn a successful OCR into a 5xx — the in-memory
         # outcome is still returned to the caller.
-        if self.cache_root is not None:
-            self._write_cached_envelope(page_index, page_obj)
+        # STUB: cached-lane envelope write retired (M5b). M9 uses LabelerPageStore.
 
         return PageLoadOutcome(
             page_index=page_index,
@@ -323,61 +292,13 @@ class LocalDoctrPageLoader:
 
     # ── auto-cache-write helper ──────────────────────────────────────
 
-    def _build_ocr_provenance(self) -> EnvelopeOCRProvenance:
-        """Compose ``OCRProvenance`` from the loader's selected models.
-
-        Legacy parity: ``page_operations._resolve_ocr_provenance_for_save``
-        (line 1166). Records the detection + recognition keys + HF
-        revision so a re-read of the cached envelope can identify the
-        models that produced it.
-        """
-        models: list[OCRModelProvenance] = [
-            OCRModelProvenance(
-                name=self.detection_key,
-                version=self.hf_revision,
-            ),
-            OCRModelProvenance(
-                name=self.recognition_key,
-                version=self.hf_revision,
-            ),
-        ]
-        return EnvelopeOCRProvenance(engine="doctr", models=models)
+    def _build_ocr_provenance(self) -> None:
+        """STUB: EnvelopeOCRProvenance is retired (M5b). Provenance is in PageAggregate."""
+        return
 
     def _write_cached_envelope(self, page_index: int, page_obj: Any) -> None:
-        """Side-effect: write the cached-lane envelope JSON.
-
-        Failures log-and-swallow per legacy
-        ``project_state.py:789-794``. Distinct from the labeled lane:
-        cached writes use ``source_lane="cached"`` (slice 8b-v
-        override) and land at ``cached_envelope_path(...)`` — the
-        ``_envelope.json`` suffix avoids collision with legacy's plain
-        ``.json`` writes to the shared cache dir.
-        """
-        if self.cache_root is None:  # caller-checked; explicit raise survives -O
-            raise RuntimeError(
-                "_write_cached_envelope called with cache_root=None — caller contract violated"
-            )
-        try:
-            envelope = build_envelope(
-                page=page_obj,
-                project=self.project,
-                page_index=page_index,
-                ocr_provenance=self._build_ocr_provenance(),
-                source_lane=USER_PAGE_SOURCE_LANE_CACHED,
-            )
-            target = cached_envelope_path(self.cache_root, self.project.project_id, page_index)
-            _write_cached_envelope_text(target, json.dumps(envelope_to_dict(envelope), ensure_ascii=False))
-            logger.debug(
-                "auto-cache-write: wrote cached envelope index=%s path=%s",
-                page_index,
-                target,
-            )
-        except Exception as exc:  # pragma: no cover - exercised via injection
-            logger.debug(
-                "auto-cache-write: failed for index=%s: %s",
-                page_index,
-                exc,
-            )
+        """STUB: cached-lane envelope write retired (M5b). No-op."""
+        pass  # pragma: no cover
 
 
 __all__ = [

@@ -59,7 +59,7 @@ from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
-from ...core.exceptions import BoundingBoxGeometryError, IncompatibleEnvelopeError
+from ...core.exceptions import BoundingBoxGeometryError
 
 log = logging.getLogger(__name__)
 
@@ -129,24 +129,6 @@ def install_error_handlers(app: FastAPI) -> None:
             content=ApiError(
                 error="geometry_error",
                 message=str(exc) or exc.__class__.__name__,
-            ).model_dump(),
-        )
-
-    @app.exception_handler(IncompatibleEnvelopeError)
-    async def _incompatible_envelope(_request: Request, exc: IncompatibleEnvelopeError) -> JSONResponse:
-        # spec §11: unknown schema version → 422 incompatible_envelope.
-        # The details dict carries both the encountered version and the
-        # supported range so the SPA toast can show a meaningful message
-        # ("This page was saved by v{version}; upgrade to read it").
-        return JSONResponse(
-            status_code=422,
-            content=ApiError(
-                error="incompatible_envelope",
-                message=str(exc),
-                details={
-                    "version": exc.version,
-                    "supported": exc.supported,
-                },
             ).model_dump(),
         )
 

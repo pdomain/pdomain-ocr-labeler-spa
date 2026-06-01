@@ -54,15 +54,8 @@ from fastapi.responses import JSONResponse
 from pdomain_book_tools.ocr.page import Page
 from pydantic import BaseModel, Field, field_validator
 
-from ..core.envelope_lift import EnvelopeLiftError, lift_envelope_to_page
 from ..core.models import BBox, GlyphAnnotationsModel
 from ..core.persistence.config_yaml import AppConfig
-from ..core.persistence.lanes import LaneResolver
-from ..core.persistence.user_page_envelope import (
-    USER_PAGE_SOURCE_LANE_CACHED,
-    OCRProvenance,
-    build_envelope,
-)
 from ..core.project_state import PageState, ProjectState
 from ..settings import Settings
 from .dependencies import get_app_config, get_project_state, get_settings
@@ -325,14 +318,11 @@ def _resolve_page_object(pstate: PageState | None) -> Page | None:
         return None
 
     # Lift UserPageEnvelope → Page (labeled/cached lanes).
-    # Returns EnvelopeLiftError (never raises) on failure.
-    lift_result = lift_envelope_to_page(payload_obj)
-    if isinstance(lift_result, EnvelopeLiftError):
+    lift_result = None  # STUB: envelope_lift retired (M5b)
+    if lift_result is None:
         log.warning(
-            "_resolve_page_object: envelope→Page lift failed: %s"
+            "_resolve_page_object: envelope→Page lift retired (M5b)"
             " — returning None so caller maps to page_not_loaded",
-            lift_result.message,
-            exc_info=lift_result.cause,
         )
         return None
     # ``lift_envelope_to_page`` returns either the original ``Page``
@@ -377,27 +367,7 @@ def _write_cached_envelope_best_effort(
     project = project_state.loaded_project
     if project is None:
         return
-    try:
-        envelope = build_envelope(
-            page=page,
-            project=project,
-            page_index=page_index,
-            ocr_provenance=OCRProvenance(),
-            source_lane=USER_PAGE_SOURCE_LANE_CACHED,
-        )
-        resolver = LaneResolver(
-            data_root=settings.data_root,
-            cache_root=settings.cache_root,
-            project_id=project.project_id,
-        )
-        resolver.write_cached(page_index, envelope)
-    except Exception as exc:  # pragma: no cover - exercised via monkeypatch
-        log.warning(
-            "words: cached-envelope write failed project=%s page=%d: %s — continuing",
-            project.project_id,
-            page_index,
-            exc,
-        )
+    # STUB: cached-lane envelope write retired (M5b). No-op until M9 wires LabelerPageStore.
 
 
 def _refresh_payload_response(
@@ -459,12 +429,7 @@ def update_word_ground_truth(
             return _word_not_found(line_index, word_index)
         word.ground_truth_text = body.text
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        pass  # STUB: cached-lane retired (M5b)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -510,12 +475,7 @@ def apply_style(
             return _word_not_found(line_index, word_index)
         word.apply_style_scope(body.style, body.scope)
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        pass  # STUB: cached-lane retired (M5b)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -563,12 +523,7 @@ def apply_component(
             return _word_not_found(line_index, word_index)
         word.apply_component(body.component, enabled=body.enabled)
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        pass  # STUB: cached-lane retired (M5b)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -626,12 +581,7 @@ def toggle_validated(
         new_value = (not current) if body.validated is None else bool(body.validated)
         word.is_validated = new_value
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        pass  # STUB: cached-lane retired (M5b)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -688,12 +638,7 @@ def validate_batch(
         # the SPA as "I sent a validate-batch and got an updated
         # generation back".
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        pass  # STUB: cached-lane retired (M5b)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -778,12 +723,7 @@ def add_word(
         if not ok:
             return _mutation_failed(f"add_word_to_page rejected bbox=({x1}, {y1}, {x2}, {y2})")
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        pass  # STUB: cached-lane retired (M5b)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -835,12 +775,7 @@ def rebox_word(
                 f"rebox_word rejected line={line_index} word={word_index} bbox=({x1}, {y1}, {x2}, {y2})"
             )
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        pass  # STUB: cached-lane retired (M5b)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -901,12 +836,7 @@ def nudge_bbox(
                 f"deltas=({body.left}, {body.right}, {body.top}, {body.bottom})"
             )
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        pass  # STUB: cached-lane retired (M5b)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -964,12 +894,7 @@ def split_word(
                 f"split_word rejected line={line_index} word={word_index} fraction={body.x_fraction}"
             )
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        pass  # STUB: cached-lane retired (M5b)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -1026,12 +951,7 @@ def merge_words(
                 f"merge_word_{body.direction} rejected line={line_index} word={word_index}"
             )
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        pass  # STUB: cached-lane retired (M5b)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -1143,12 +1063,7 @@ def erase_pixels(
         if callable(finalize):
             finalize()
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        pass  # STUB: cached-lane retired (M5b)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -1245,12 +1160,7 @@ def set_char_ranges(
         pstate.char_ranges_map[sidecar_key] = range_dicts
 
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        pass  # STUB: cached-lane retired (M5b)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -1329,12 +1239,7 @@ def set_char_bboxes(
         pstate.char_bboxes_map[sidecar_key] = bbox_dicts
 
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        pass  # STUB: cached-lane retired (M5b)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -1405,12 +1310,7 @@ def set_glyph_annotations(
             _ = pstate.glyph_annotations_map.pop(sidecar_key, None)
 
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        pass  # STUB: cached-lane retired (M5b)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -1477,12 +1377,7 @@ def accept_glyph_prediction(
         pstate.glyph_annotations_map[sidecar_key] = confirmed
 
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        pass  # STUB: cached-lane retired (M5b)
 
     return _refresh_payload_response(
         project_id=project_id,

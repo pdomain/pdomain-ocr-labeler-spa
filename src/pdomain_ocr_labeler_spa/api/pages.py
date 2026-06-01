@@ -13,7 +13,6 @@ from pdomain_book_tools.ocr.page import Page
 from pydantic import BaseModel, Field
 
 from ..core import text_normalize
-from ..core.envelope_lift import EnvelopeLiftError, lift_envelope_to_page
 from ..core.glyph.bulk_mark import GlyphBulkMarkParams, apply_bulk_mark
 from ..core.ground_truth_matcher import rematch_page
 from ..core.jobs import JobRunner
@@ -22,12 +21,6 @@ from ..core.page_state import PageLoader, ensure_page_model, persist_page_to_fil
 from ..core.page_to_line_matches import page_to_line_matches
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.ground_truth import find_ground_truth_text
-from ..core.persistence.lanes import LaneResolver
-from ..core.persistence.user_page_envelope import (
-    USER_PAGE_SOURCE_LANE_CACHED,
-    OCRProvenance,
-    build_envelope,
-)
 from ..core.project_state import PageState, ProjectState
 from ..core.selection import SelectionMode, apply_selection
 from ..settings import Settings
@@ -261,37 +254,10 @@ def _write_cached_envelope_best_effort(
     page_index: int,
     settings: Settings,
 ) -> None:
-    """Write the cached-lane envelope; log + swallow on failure.
-
-    Spec 23 §12: cached-lane write is best-effort. ``LaneResolver.write_cached``
-    already swallows ``OSError``; we still wrap broad ``Exception`` here
-    so a misconfigured envelope (e.g. a stub Page whose ``to_dict``
-    raises) cannot turn a successful in-memory mutation into a 500.
-    """
-    project = project_state.loaded_project
-    if project is None:
-        return
-    try:
-        envelope = build_envelope(
-            page=page,
-            project=project,
-            page_index=page_index,
-            ocr_provenance=OCRProvenance(),
-            source_lane=USER_PAGE_SOURCE_LANE_CACHED,
-        )
-        resolver = LaneResolver(
-            data_root=settings.data_root,
-            cache_root=settings.cache_root,
-            project_id=project.project_id,
-        )
-        resolver.write_cached(page_index, envelope)
-    except Exception as exc:  # pragma: no cover - defensive
-        log.warning(
-            "pages: cached-envelope write failed project=%s page=%d: %s — continuing",
-            project.project_id,
-            page_index,
-            exc,
-        )
+    """STUB: cached-envelope lane retired (M5b). No-op until M9 wires LabelerPageStore."""
+    # The UserPageEnvelope + LaneResolver path is deleted (greenfield event-store adoption).
+    # M9 replaces this call with a LabelerPageStore.save_page() via save_page_to_store.
+    pass  # pragma: no cover
 
 
 # ── Adjacent-page prefetch — GAP-2 ───────────────────────────────────
@@ -349,58 +315,11 @@ def _prefetch_adjacent_pages(
 # ── Provenance summary — GAP-1 ───────────────────────────────────────
 
 
-def _build_provenance_summary(page_record: PageRecord) -> str | None:
-    """Assemble a human-readable provenance one-liner for the source badge tooltip.
-
-    Priority order: ``saved_provenance`` (from a labeled/cached envelope)
-    takes precedence over ``ocr_provenance`` (from a live OCR run) because
-    it carries the ``saved_at`` timestamp from when the page was last
-    written to disk.
-
-    Returns ``None`` when there is no meaningful information to show (all
-    fields are the ``UNKNOWN_METADATA_VALUE`` sentinel or absent).
-    """
-    from ..core.persistence.user_page_envelope import UNKNOWN_METADATA_VALUE
-
-    parts: list[str] = []
-
-    # ``saved_provenance`` is the raw dict parsed from the envelope's
-    # ``provenance`` block — used for labeled and cached lanes.
-    sp = page_record.saved_provenance
-    if sp and isinstance(sp, dict):
-        saved_at = sp.get("saved_at", "")
-        if saved_at and str(saved_at).strip():
-            parts.append(f"Saved: {str(saved_at)[:19]}")
-        app_block = sp.get("app", {})
-        if isinstance(app_block, dict):
-            app_ver = str(app_block.get("version", ""))
-            if app_ver and app_ver != UNKNOWN_METADATA_VALUE:
-                app_name = str(app_block.get("name", ""))
-                label = app_name if app_name else "App"
-                parts.append(f"{label} {app_ver}")
-        ocr_block = sp.get("ocr", {})
-        if isinstance(ocr_block, dict):
-            engine = str(ocr_block.get("engine", ""))
-            if engine and engine != UNKNOWN_METADATA_VALUE:
-                parts.append(f"Engine: {engine}")
-            raw_models = ocr_block.get("models", [])
-            if isinstance(raw_models, list) and raw_models:
-                names = [str(m.get("name", m) if isinstance(m, dict) else m) for m in raw_models[:2]]
-                parts.append(f"Models: {', '.join(names)}")
-
-    # Fall back to ``ocr_provenance`` (live OCR run) when saved_provenance
-    # is absent or yielded nothing useful.
-    if not parts:
-        prov = page_record.ocr_provenance
-        if prov is not None:
-            engine = str(prov.engine)
-            if engine and engine != UNKNOWN_METADATA_VALUE:
-                parts.append(f"Engine: {engine}")
-            if prov.models:
-                names = [m.name for m in prov.models[:2]]
-                parts.append(f"Models: {', '.join(names)}")
-
-    return " · ".join(parts) if parts else None
+def _build_provenance_summary(
+    page_record: Any,
+) -> str | None:
+    """STUB: replaced by ops build_provenance_summary in M6."""
+    return None
 
 
 # ── Payload assembly helpers — spec-23-A (issue #306) ─────────────────
@@ -564,22 +483,20 @@ def _page_payload(
             # Lift UserPageEnvelope → Page (labeled/cached lanes).
             # Plain Page objects (OCR lane) pass through unchanged.
             # Returns EnvelopeLiftError (never raises) on failure.
-            lift_result = lift_envelope_to_page(payload_obj)
-            if isinstance(lift_result, EnvelopeLiftError):
+            lift_result = None  # STUB
+            if lift_result is None:
                 log.warning(
-                    "_page_payload: envelope→Page lift failed for %s/%d: %s"
+                    "_page_payload: envelope→Page lift failed for %s/%d: stub"
                     " — stamping payload_error, line_matches will be empty",
                     project_id,
                     page_index,
-                    lift_result.message,
-                    exc_info=lift_result.cause,
                 )
                 page_record = PageRecord(
                     page_index=page_index,
                     page_number=page_index + 1,
                     image_path=image_path,
                     page_source=page_source,
-                    payload_error=lift_result.message,
+                    payload_error="envelope lift retired (M5b)",
                 )
                 # line_matches stays []
             else:
@@ -1388,8 +1305,10 @@ def _resolve_page_object_for_pages(pstate: PageState | None) -> Page | None:
     if payload_obj is None:
         return None
 
-    lift_result = lift_envelope_to_page(payload_obj)
-    if isinstance(lift_result, EnvelopeLiftError):
+    # STUB: envelope_lift retired (M5b). M6 replaces with blob-store read.
+    # For now return None to signal "page not available in store yet".
+    lift_result = None  # was: lift_envelope_to_page(payload_obj)
+    if True:  # STUB: envelope_lift retired (M5b)
         return None
     from typing import cast as _cast
 

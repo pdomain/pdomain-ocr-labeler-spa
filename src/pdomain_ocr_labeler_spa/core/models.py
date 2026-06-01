@@ -15,14 +15,10 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 from pdomain_ops.pages import RotationSource
 from pydantic import BaseModel, ConfigDict, Field
-
-from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
-    OCRProvenance,
-)  # kept until M5b removes PageRecord
 
 _MAX_DISPLAY_DIMENSION = 1200
 
@@ -111,16 +107,6 @@ class EncodedDims(BaseModel):
         )
 
 
-class CachedImageSet(BaseModel):
-    """Optional filenames for each cached image type."""
-
-    original: str | None = None
-    lines: str | None = None
-    paragraphs: str | None = None
-    words: str | None = None
-    matched_words: str | None = None
-
-
 class PageRecord(BaseModel):
     """Per-page metadata — spec §1 ``PageRecord``.
 
@@ -139,9 +125,6 @@ class PageRecord(BaseModel):
     image_path: Path
     page_source: PageSource = PageSource.OCR
     ocr_failed: bool = False
-    ocr_provenance: OCRProvenance | None = None
-    saved_provenance: dict[str, Any] | None = None
-    cached_images: CachedImageSet = Field(default_factory=CachedImageSet)
     # M9.1 rotation fields (issue #263 / spec §19)
     rotation_degrees: int = 0
     rotation_source: RotationSource = RotationSource.NONE
@@ -338,7 +321,6 @@ class Job(BaseModel):
 
 __all__ = [
     "BBox",
-    "CachedImageSet",
     "CharRange",
     "EncodedDims",
     "GlyphAnnotationsModel",
@@ -350,7 +332,6 @@ __all__ = [
     "LineFilter",
     "LineMatch",
     "MatchStatus",
-    "OCRProvenance",
     "PageRecord",
     "PageSource",
     "Project",
