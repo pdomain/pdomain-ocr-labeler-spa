@@ -20,3 +20,23 @@ Empty folders are intentional and tracked via `.gitkeep`.
 Active docs map to GitHub issues — see this repo's issue tracker for status.
 This layout is workspace-standard; see
 `/workspaces/ocr-container/docs/README.md` for the master.
+
+---
+
+## Active documents
+
+### runbooks/
+
+- [`runbooks/local-dev.md`](runbooks/local-dev.md) — local development setup and recipes
+- [`runbooks/release.md`](runbooks/release.md) — wheel build process, versioning, release workflow
+- [`runbooks/troubleshooting.md`](runbooks/troubleshooting.md) — common failure modes and fixes
+
+### usage/
+
+- [`usage/quickstart.md`](usage/quickstart.md) — end-user install and run guide
+
+### architecture/
+
+- [`architecture/module-map.md`](architecture/module-map.md) — source module layout
+- [`architecture/runtime-flows.md`](architecture/runtime-flows.md) — major data and control flows
+- `architecture/00-overview.md` through `architecture/28-palettes-pickers.md` — per-feature design reference
