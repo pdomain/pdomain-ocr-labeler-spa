@@ -30,7 +30,8 @@
 import { useHotkey } from "../hooks/useHotkey";
 import type { components } from "../api/types";
 
-type PageSource = components["schemas"]["PageSource"];
+/** ops PageRecord uses source: string; kept for label lookup */
+type PageSource = "ocr" | "cached_ocr" | "filesystem" | "fallback";
 type RotationSource = components["schemas"]["RotationSource"];
 
 /** Human-readable labels for each PageSource value. */

@@ -2147,22 +2147,6 @@ export interface components {
             height: number;
         };
         /**
-         * CachedImageSet
-         * @description Optional filenames for each cached image type.
-         */
-        CachedImageSet: {
-            /** Original */
-            original?: string | null;
-            /** Lines */
-            lines?: string | null;
-            /** Paragraphs */
-            paragraphs?: string | null;
-            /** Words */
-            words?: string | null;
-            /** Matched Words */
-            matched_words?: string | null;
-        };
-        /**
          * CharRange
          * @description A single positioned character range — FO-2.
          *
@@ -2222,6 +2206,26 @@ export interface components {
             project_id: string;
             /** Page Index */
             page_index: number;
+        };
+        /**
+         * DeadBranch
+         * @description A superseded path awaiting pruning (design spec §5 dead branches).
+         */
+        DeadBranch: {
+            /** Tip Id */
+            tip_id: string;
+            /** Forked From Id */
+            forked_from_id: string;
+            /**
+             * Superseded At
+             * Format: date-time
+             */
+            superseded_at: string;
+            /**
+             * Retain Until
+             * Format: date-time
+             */
+            retain_until: string;
         };
         /**
          * DeleteScopeRequest
@@ -2897,41 +2901,21 @@ export interface components {
             weights_id?: string | null;
         };
         /**
-         * OCRModelProvenance
-         * @description Per-model metadata inside ``provenance.ocr.models[]``.
+         * PageChangeEntry
+         * @description One entry in the per-page changelog — "git for pages" (design spec §7).
          *
-         *     Legacy ref: ``user_page_persistence.py:11-36``.
+         *     ``changes`` is a flexible list of typed dict events for now; it becomes a
+         *     discriminated union when proofreading ships (design spec §15).
          */
-        OCRModelProvenance: {
-            /** Name */
-            name: string;
-            /** Version */
-            version?: string | null;
-            /** Weights Id */
-            weights_id?: string | null;
-        };
-        /**
-         * OCRProvenance
-         * @description ``provenance.ocr`` block.
-         *
-         *     Legacy ref: ``user_page_persistence.py:38-80``. The
-         *     ``models`` list is permissive on read: dict entries become
-         *     ``OCRModelProvenance``; bare non-empty strings become
-         *     ``OCRModelProvenance(name=...)`` (legacy parity for very old
-         *     saves); everything else is silently dropped.
-         */
-        OCRProvenance: {
-            /**
-             * Engine
-             * @default unknown
-             */
-            engine: string;
-            /** Engine Version */
-            engine_version?: string | null;
-            /** Models */
-            models?: components["schemas"]["OCRModelProvenance"][];
-            /** Config Fingerprint */
-            config_fingerprint?: string | null;
+        PageChangeEntry: {
+            /** Provenance Node Id */
+            provenance_node_id: string;
+            /** Timestamp */
+            timestamp?: string | null;
+            /** Changes */
+            changes?: {
+                [key: string]: unknown;
+            }[];
         };
         /**
          * PagePayload
@@ -2973,40 +2957,38 @@ export interface components {
         };
         /**
          * PageRecord
-         * @description Per-page metadata — spec §1 ``PageRecord``.
+         * @description Durable, versioned record of a page's lifecycle metadata.
          *
-         *     The actual ``Page`` object lives in ``PageState`` in-memory and is
-         *     NOT serialised here. Wire shapes that need page contents use
-         *     ``PagePayload`` (defined in ``api/pages.py``).
+         *     ``page_id`` equals ``Page.page_id`` and ``PageAggregate.id`` — the stable
+         *     identity of the physical page entity, not a content version.
          *
-         *     v2.2 rotation fields (spec §19 / issue #263):
-         *     ``rotation_degrees`` tracks cumulative rotation applied since original
-         *     image; ``rotation_source`` distinguishes auto (OCR+GT best-match),
-         *     manual (user-initiated), and none (original orientation).
+         *     ``extensions`` is a namespaced dict for app-specific JSON-able state.
+         *     Each app claims a unique key (e.g. ``"labeler"``, ``"prep"``) and stores
+         *     a plain JSON-serialisable dict. Use ``get_extension``/``set_extension``
+         *     from ``pdomain_ops.pages.extensions`` for typed access. The field
+         *     serialises through ``_PageRecordTranscoding`` for free — no new
+         *     transcoding is required (design: page-server v2 §1).
          */
         PageRecord: {
+            /**
+             * Page Id
+             * Format: uuid
+             */
+            page_id: string;
             /** Page Index */
             page_index: number;
-            /** Page Number */
-            page_number: number;
+            /** Image Path */
+            image_path?: string | null;
             /**
-             * Image Path
-             * Format: path
+             * Source
+             * @default ocr
              */
-            image_path: string;
-            /** @default ocr */
-            page_source: components["schemas"]["PageSource"];
+            source: string;
             /**
              * Ocr Failed
              * @default false
              */
             ocr_failed: boolean;
-            ocr_provenance?: components["schemas"]["OCRProvenance"] | null;
-            /** Saved Provenance */
-            saved_provenance?: {
-                [key: string]: unknown;
-            } | null;
-            cached_images?: components["schemas"]["CachedImageSet"];
             /**
              * Rotation Degrees
              * @default 0
@@ -3014,17 +2996,18 @@ export interface components {
             rotation_degrees: number;
             /** @default none */
             rotation_source: components["schemas"]["RotationSource"];
+            provenance?: components["schemas"]["ProvenanceGraph"] | null;
             /** Provenance Summary */
             provenance_summary?: string | null;
-            /** Payload Error */
-            payload_error?: string | null;
+            /** Changelog */
+            changelog?: components["schemas"]["PageChangeEntry"][];
+            /** Extensions */
+            extensions?: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            };
         };
-        /**
-         * PageSource
-         * @description How a page's OCR data was sourced — spec §1 ``PageSource``.
-         * @enum {string}
-         */
-        PageSource: "ocr" | "cached_ocr" | "filesystem" | "fallback";
         /**
          * PatchParagraphRequest
          * @description ``PATCH .../paragraphs/{pi}`` body — FO-1 (layout-type save).
@@ -3113,6 +3096,57 @@ export interface components {
             project_root: string;
             /** Label */
             label: string;
+        };
+        /**
+         * ProvenanceGraph
+         * @description DAG of provenance nodes with an active head and head-history.
+         */
+        ProvenanceGraph: {
+            /** Nodes */
+            nodes?: {
+                [key: string]: components["schemas"]["ProvenanceNode"];
+            };
+            /**
+             * Head Id
+             * @default
+             */
+            head_id: string;
+            /** History */
+            history?: string[];
+            /** Dead Branches */
+            dead_branches?: components["schemas"]["DeadBranch"][];
+        };
+        /**
+         * ProvenanceNode
+         * @description One processing step in the provenance DAG.
+         */
+        ProvenanceNode: {
+            /** Id */
+            id: string;
+            /** Source */
+            source: string;
+            /** Tool */
+            tool?: string | null;
+            /** Tool Version */
+            tool_version?: string | null;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            } | null;
+            /** Timestamp */
+            timestamp?: string | null;
+            /** Input Hash */
+            input_hash?: string | null;
+            /** Output Hash */
+            output_hash?: string | null;
+            /** Blob Refs */
+            blob_refs?: string[];
+            /** Extra */
+            extra?: {
+                [key: string]: unknown;
+            } | null;
+            /** Parent Ids */
+            parent_ids?: string[];
         };
         /**
          * ReboxWordRequest
@@ -3267,10 +3301,7 @@ export interface components {
         };
         /**
          * RotationSource
-         * @description How a page's rotation was determined.
-         *
-         *     Spec: ``docs/specs/2026-05-12-auto-rotation-design.md §PageRecord`` /
-         *     issue #263 (M9.1).  Defaults to ``"none"`` (original orientation).
+         * @description How a page's rotation was determined (design spec §6).
          * @enum {string}
          */
         RotationSource: "none" | "auto" | "manual";

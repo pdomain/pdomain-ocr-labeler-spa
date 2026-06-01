@@ -593,7 +593,8 @@ export default function ProjectPage() {
       <PageActions
         isBusy={isMutating || activeJob !== null}
         hasEditedImage={false}
-        pageSource={pageRecord?.page_source}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        pageSource={pageRecord?.extensions?.["labeler"]?.["page_source"] as any}
         pageName={pageRecord?.image_path?.split("/").pop() ?? null}
         rotationDegrees={pageRecord?.rotation_degrees ?? 0}
         rotationSource={pageRecord?.rotation_source ?? null}
