@@ -14,7 +14,8 @@
   `frontend/src/hooks/useProject.ts`, `frontend/src/hooks/usePage.ts`,
   `frontend/src/lib/routes.ts`
 - **Backend / collaborators touched:** `GET /api/projects/{id}`,
-  `GET /api/projects/{id}/pages/{idx}`, session state, page image cache
+  `GET /api/projects/{id}/pages/{idx}`, session state, page image URL/blob
+  serving
 
 ## Behavior records
 
@@ -30,7 +31,8 @@
   visible.
 - **Backend / side-effects:** `GET /api/projects/{id}` and
   `GET /api/projects/{id}/pages/{idx}` return `ProjectPayload` and
-  `PagePayload`; page image is served from `/image-cache`; no save occurs.
+  `PagePayload`; page image is served from the payload `image_url`; no save
+  occurs.
 - **Bad-state / error:** Unknown project redirects to root through
   B-PROJECT-006; bad page index shows an inline page error where route parsing
   reaches the project page.
@@ -50,7 +52,7 @@
   the new page.
 - **Backend / side-effects:** Frontend fetches the target
   `GET /api/projects/{id}/pages/{idx}`; B-PROJECT-005 persists the current page
-  cursor; no page sidecar write occurs.
+  cursor; no page content persistence write occurs.
 - **Bad-state / error:** Prev is disabled on the first page and Next on the
   last page; out-of-range Go To keeps the user on the current valid page and
   shows/retains an error state without fetching an invalid payload.

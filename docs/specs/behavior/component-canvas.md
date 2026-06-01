@@ -26,8 +26,8 @@
 - **Preconditions:** Page image and encoded dimensions are available.
 - **Observable output:** `image-viewport` and canvas are visible; overlay
   layers reflect paragraph, line, word, and current selection visibility prefs.
-- **Backend / side-effects:** Page image loads from `/image-cache`; no mutation
-  occurs.
+- **Backend / side-effects:** Page image loads from the payload `image_url`;
+  no mutation occurs.
 - **Bad-state / error:** Missing image URL leaves the viewport empty/error
   state but the rest of the project page remains usable.
 - **Tier(s):** A
@@ -131,7 +131,7 @@
 - **Observable output:** Rebox preview appears; successful mutation updates the
   bbox and returns the viewport to select mode.
 - **Backend / side-effects:** `POST .../words/{line}/{word}/rebox` bumps page
-  generation and writes cached envelope best-effort.
+  generation and updates server page state.
 - **Bad-state / error:** Escape/cancel or tiny drag sends no POST; rejected bbox
   leaves prior bbox intact.
 - **Tier(s):** A+B
@@ -147,7 +147,7 @@
 - **Observable output:** New empty word appears in the nearest line/detail data;
   Add Word remains active for repeated additions where the component is wired.
 - **Backend / side-effects:** `POST .../words/add` with `{bbox, text: ""}`
-  bumps page generation and writes cached envelope best-effort.
+  bumps page generation and updates server page state.
 - **Bad-state / error:** Tiny drag sends no mutation; backend rejection shows a
   recoverable error and no new word.
 - **Tier(s):** A+B
@@ -164,8 +164,8 @@
 - **Observable output:** Erase preview appears during drag; page image/data
   refreshes after success.
 - **Backend / side-effects:** Current backend route is word-anchored
-  `POST .../words/{line}/{word}/erase-pixels`; page generation bumps and cached
-  envelope is written.
+  `POST .../words/{line}/{word}/erase-pixels`; page generation bumps and page
+  state is updated.
 - **Bad-state / error:** Missing image, bad word target, or rejected bbox shows
   a recoverable mutation error.
 - **Tier(s):** A+B

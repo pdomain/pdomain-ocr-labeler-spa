@@ -22,7 +22,7 @@ Run `make behavior-coverage` to regenerate.
 | B-ACTIONS-016 | no | test-written |
 | B-ACTIONS-017 | no | test-written |
 | B-ACTIONS-018 | no | test-written |
-| B-ACTIONS-019 | no | specified |
+| B-ACTIONS-019 | no | test-written |
 | B-ACTIONS-020 | no | test-written |
 | B-ACTIONS-021 | no | specified |
 | B-CANVAS-001 | no | test-written |
@@ -113,7 +113,7 @@ Run `make behavior-coverage` to regenerate.
 | F-PAGE-ACTIONS-01 | no | test-written |
 | F-PAGE-DESTRUCTIVE-01 | no | specified |
 | F-ROTATE-PAGE-01 | no | test-written |
-| F-SAVE-LOAD-ROUNDTRIP-01 | no | specified |
+| F-SAVE-LOAD-ROUNDTRIP-01 | no | test-written |
 | F-SOURCE-ROOT-01 | no | test-written |
 | F-TOOLBAR-GRID-01 | no | test-written |
 | F-TOOLBAR-STYLE-ADD-01 | no | test-written |

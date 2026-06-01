@@ -1,5 +1,7 @@
 """End-to-end persistence test: edit a word via API → reload from fresh store → assert persisted.
 
+Covers: B-ACTIONS-019, F-SAVE-LOAD-ROUNDTRIP-01
+
 Acceptance gate for the event-store wiring layer (M9 migration):
 - Mutation routes call save_page_to_store after every edit.
 - The event store (SQLite eventsourcing) durably records the change.

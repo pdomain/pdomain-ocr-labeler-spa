@@ -4,12 +4,12 @@
 - **Address:** glyph chips, `GlyphAnnotationPanel`, `BulkGlyphMarkDialog`
 - **UI definition:** none - implementation and tests define current behavior.
 - **Parent unit(s):** right panel, drawer word cells, page actions
-- **Child unit(s):** glyph annotation endpoints and envelope persistence
+- **Child unit(s):** glyph annotation endpoints and page-state persistence
 - **Shared unit:** yes
 - **Implementation:** `frontend/src/components/glyph/*`,
-  glyph backend endpoints, glyph envelope persistence/model tests
+  glyph backend endpoints, glyph page-state persistence/model tests
 - **Backend / collaborators touched:** glyph annotations, glyph predictions,
-  glyph bulk mark endpoint, page envelope sidecar
+  glyph bulk mark endpoint, page state/page payload
 
 ## Behavior records
 
@@ -87,9 +87,11 @@
 - **Observable output:** `WordMatch.glyph_annotations` preserves unreviewed
   null, reviewed empty, and populated states; header metrics can count reviewed
   words.
-- **Backend / side-effects:** Sidecar/envelope writes persist human review
-  state; predictions are not saved as accepted annotations unless user accepts.
-- **Bad-state / error:** Older v2.1 envelopes load as unreviewed/null.
+- **Backend / side-effects:** Page-state glyph annotation maps retain human
+  review state for refreshed page payloads within the loaded session;
+  predictions are not saved as accepted annotations unless user accepts.
+- **Bad-state / error:** Reload/process-boundary persistence under the new
+  event-store model still needs a dedicated behavior test.
 - **Tier(s):** A
 - **Regression:** no
 - **Test:** -

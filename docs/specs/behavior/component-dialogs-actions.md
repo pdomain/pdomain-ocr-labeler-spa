@@ -47,9 +47,9 @@
 - **Preconditions:** Page or project has dirty in-memory state.
 - **Observable output:** Save status/progress updates and then returns to idle;
   success notification appears.
-- **Backend / side-effects:** Save endpoint writes `UserPageEnvelope` sidecars
-  by atomic rename and updates generation/dirty flags; Save Project runs a job
-  that saves dirty pages.
+- **Backend / side-effects:** Save endpoint persists through the event-backed
+  page store when a page id/store is available, then updates
+  generation/dirty flags; Save Project runs a job that saves dirty pages.
 - **Bad-state / error:** Save failure leaves dirty state visible, shows an
   error notification, and does not partially mark failed pages clean.
 - **Tier(s):** A+B
@@ -100,8 +100,8 @@
 - **Observable output:** `word-edit-dialog` opens with previous/current/next
   preview columns; Apply updates the word without closing; Apply + Close closes.
 - **Backend / side-effects:** Dialog actions post word GT/style/component,
-  split/merge/delete, crop/refine, bbox nudge, and char sidecar mutations as
-  applicable; page cache is invalidated after success.
+  split/merge/delete, crop/refine, bbox nudge, and char-bbox mutations as
+  applicable; page data is invalidated/refetched after success.
 - **Bad-state / error:** First/last word disables invalid prev/next actions;
   failed mutation keeps dialog open with recoverable draft state.
 - **Tier(s):** A+B for image-refine/erase paths, A otherwise
@@ -319,17 +319,17 @@
 - **Regression:** no
 - **Test:** -
 
-### B-ACTIONS-019 - Save/load roundtrip preserves cache and sidecar precedence
+### B-ACTIONS-019 - Save/load roundtrip preserves event-store page state
 
 - **Flow(s):** F-SAVE-LOAD-ROUNDTRIP-01
 - **Composed by:** B-ACTIONS-002
-- **Trigger:** User saves, reloads page/project, or mutates a cached page.
+- **Trigger:** User saves, reloads page/project, or mutates a loaded page.
 - **Preconditions:** Page has generated/current dirty state.
-- **Observable output:** Save status and reloaded page data reflect labeled,
-  cache, and OCR precedence.
-- **Backend / side-effects:** Save generation conflict detection, cache autosave
-  after mutations, labeled sidecar writes, and Save Project partial failure
-  handling.
+- **Observable output:** Save status and reloaded page data reflect current
+  page-store state and page generation.
+- **Backend / side-effects:** Save generation conflict detection,
+  event-backed `LabelerEdited` persistence where page-store wiring is present,
+  and Save Project partial failure handling.
 - **Bad-state / error:** Generation conflict or partial save keeps affected page
   dirty and reports failure.
 - **Tier(s):** A+B

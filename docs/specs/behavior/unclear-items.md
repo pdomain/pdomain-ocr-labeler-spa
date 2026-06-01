@@ -54,10 +54,13 @@ implementation decisions before they can be treated as locked behavior.
 - BBox Refine/Crop and Rebox Snap currently collapse to simpler/manual rebox
   behavior. Decide whether to document current stubs or require real endpoints.
 - Erase lasso is sent as an axis-aligned rectangle, not a polygon fill.
-- CharFixer `char_bboxes` persistence is sidecar-only; downstream export or
-  consumer semantics are undefined.
-- Bulk glyph apply closes the dialog, but page-cache invalidation/refetch wiring
+- CharFixer `char_bboxes` are surfaced through refreshed page payloads, but
+  durable process-boundary persistence and downstream export/consumer semantics
+  are still undefined.
+- Bulk glyph apply closes the dialog, but page data invalidation/refetch wiring
   was not obvious.
+- Glyph annotation null/empty/populated state is modeled in the page payload,
+  but there is no behavior test proving it survives a fresh page-store reload.
 
 ## Actions, jobs, and persistence
 

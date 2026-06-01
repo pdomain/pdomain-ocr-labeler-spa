@@ -20,7 +20,7 @@
   5. B-ACTIONS-002 - save dirty page/project state.
   6. B-ACTIONS-004 - export the project.
 - **Expected end state (UI + backend):** Project page remains usable; edited
-  word data is persisted to the page sidecar; export artifacts and manifest
+  word data is persisted through the page store; export artifacts and manifest
   include the saved text/state.
 - **Bad-state / error:** Save failure blocks export confidence: dirty state
   remains visible and export should not be used as proof of persisted edits.
@@ -220,11 +220,11 @@
 
 ### F-SAVE-LOAD-ROUNDTRIP-01 - Save and reload persisted page state
 
-- **Units:** right panel/canvas -> save/load endpoints -> persistence lanes
+- **Units:** right panel/canvas -> save/load endpoints -> page store
 - **Steps (record IDs in order):**
   1. B-RIGHT-002 or B-CANVAS-008 - create dirty state.
   2. B-ACTIONS-002 - save state.
-  3. B-ACTIONS-019 - reload from sidecar/cache precedence.
+  3. B-ACTIONS-019 - reload from persisted page-store state.
 - **Expected end state (UI + backend):** Reloaded page reflects persisted data
   and generation state.
 - **Bad-state / error:** Generation conflicts preserve dirty state.
@@ -264,7 +264,7 @@
 - **Steps (record IDs in order):**
   1. B-GLYPH-001 - glyph state is visible.
   2. B-GLYPH-002, B-GLYPH-003, or B-GLYPH-004 - user reviews glyph data.
-  3. B-GLYPH-005 - side-channel persistence preserves review state.
+  3. B-GLYPH-005 - page-state persistence preserves review state.
 - **Expected end state (UI + backend):** Human glyph annotations survive reload
   with null/empty/populated states intact.
 - **Bad-state / error:** Production panel mount and frontend POST wiring remain

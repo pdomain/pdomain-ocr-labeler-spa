@@ -16,7 +16,7 @@
   `frontend/src/hooks/useWordMutations.ts`, `useLineMutations.ts`
 - **Backend / collaborators touched:** word GT/style/component/validate/delete
   endpoints, line validation/merge endpoints, paragraph patch endpoint, char
-  ranges/char bboxes sidecar endpoints
+  ranges/char bboxes mutation endpoints
 
 ## Behavior records
 
@@ -46,8 +46,8 @@
 - **Observable output:** Edited GT text or chip state updates after success;
   page dirty/save status indicates unsaved changes.
 - **Backend / side-effects:** Corresponding word mutation endpoint updates
-  server page state and returns/refetches `PagePayload`; no sidecar is written
-  until Save Page.
+  server page state, performs best-effort event-store persistence where wired,
+  and returns/refetches `PagePayload`.
 - **Bad-state / error:** Backend rejection leaves prior text/chip state visible
   or restores it after optimistic update; user sees an error state/toast.
 - **Tier(s):** A
@@ -64,7 +64,7 @@
 - **Observable output:** Apply buttons enable only when dirty; successful apply
   updates bbox/readout/canvas/chip display; reset restores current page data.
 - **Backend / side-effects:** Mutation posts to rebox, erase-pixels,
-  char-ranges, or char-bboxes endpoint; page cache is invalidated/refetched;
+  char-ranges, or char-bboxes endpoint; page data is invalidated/refetched;
   page remains dirty until Save Page.
 - **Bad-state / error:** Unavailable refine/erase displays the documented
   not-available message; failed mutation keeps the draft recoverable.
@@ -82,8 +82,8 @@
   merge, density, layout, and item-view controls update their local state and
   disabled/enabled labels as documented.
 - **Backend / side-effects:** Line actions call validate/merge endpoints;
-  block layout saves patch paragraph/layout state; page cache invalidates and
-  sidecars are only written on Save Page where applicable.
+  block layout saves patch paragraph/layout state; page data invalidates and
+  durable persistence is handled by Save Page where applicable.
 - **Bad-state / error:** First-line merge-prev and last-line merge-next are
   disabled; mutation errors render inline and do not corrupt selection.
 - **Tier(s):** A
@@ -220,7 +220,7 @@
 - **Observable output:** Mismatch cells, selected bbox detail, and dirty apply
   state update.
 - **Backend / side-effects:** GT posts through word GT mutation; char bbox apply
-  posts char-bboxes sidecar data.
+  posts char-bboxes mutation data that is surfaced on refreshed page payloads.
 - **Bad-state / error:** Empty OCR hides canvas; failed char-bbox save keeps
   Apply enabled and shows error.
 - **Tier(s):** A

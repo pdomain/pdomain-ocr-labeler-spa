@@ -46,8 +46,8 @@
 - **Observable output:** Browser navigates to
   `/projects/{project_id}/pages/pageno/1`; `project-page` becomes visible.
 - **Backend / side-effects:** `POST /api/projects/load` initializes
-  `ProjectState`, writes/restores session state, and leaves project page
-  sidecars unchanged.
+  `ProjectState`, writes/restores session state, and does not mutate page
+  content persistence records.
 - **Bad-state / error:** Missing or invalid path -> user stays on root; visible
   error is attached to the relevant project card or load control; no session
   state is advanced to that project.
