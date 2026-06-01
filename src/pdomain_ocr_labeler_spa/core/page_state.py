@@ -275,6 +275,41 @@ def persist_page_to_file(
     raise NotImplementedError("persist_page_to_file is retired — use save_page_to_store (M8b).")
 
 
+def save_page_to_store(
+    *,
+    page_id: Any,
+    changes: list[dict[str, Any]],
+    store: Any,  # LabelerPageStore — avoid circular import at runtime
+) -> None:
+    """Fire a ``LabelerEdited`` event on the PageAggregate and persist.
+
+    Replaces ``persist_page_to_file`` — the event store is the durable
+    form; the labeled lane is gone (M5b).
+
+    Parameters
+    ----------
+    page_id:
+        UUID of the page to save.
+    changes:
+        List of typed dict events describing the edits.
+    store:
+        The project's ``LabelerPageStore``.
+    """
+    from datetime import UTC, datetime
+
+    from pdomain_ops.pages import ProvenanceNode
+
+    agg = store.get_page(page_id)
+    prov_node = ProvenanceNode(
+        id=f"labeler-{datetime.now(UTC).isoformat()}",
+        source="labeler",
+        tool="labeler-spa",
+        timestamp=datetime.now(UTC),
+    )
+    agg.labeler_edited(provenance_node=prov_node, changes=changes)
+    store.save_page(agg)
+
+
 __all__ = [
     "PageImageNotFoundError",
     "PageIndexOutOfRangeError",
@@ -284,4 +319,5 @@ __all__ = [
     "_resolve_save_directory",
     "ensure_page_model",
     "persist_page_to_file",
+    "save_page_to_store",
 ]
