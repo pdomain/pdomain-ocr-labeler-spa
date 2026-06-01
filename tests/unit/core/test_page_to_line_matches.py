@@ -111,9 +111,9 @@ def test_none_page_returns_empty_line_matches() -> None:
     record, lms = page_to_line_matches(None, 0, _IMAGE)
     assert lms == []
     assert record.page_index == 0
-    assert record.page_number == 1
+    assert record.page_index + 1 == 1  # page_number was removed; use page_index+1
     assert record.image_path == _IMAGE
-    assert record.page_source == PageSource.OCR
+    assert record.source == PageSource.OCR.value  # ops PageRecord uses source: str
 
 
 def test_empty_page_returns_empty_line_matches() -> None:
@@ -178,8 +178,8 @@ def test_page_record_has_correct_page_index() -> None:
     page = _StubPage()
     record, _ = page_to_line_matches(page, 3, _IMAGE, source=PageSource.CACHED_OCR)
     assert record.page_index == 3
-    assert record.page_number == 4
-    assert record.page_source == PageSource.CACHED_OCR
+    assert record.page_index + 1 == 4  # page_number was removed; use page_index+1
+    assert record.source == PageSource.CACHED_OCR.value  # ops uses source: str
 
 
 def test_paragraph_index_populated() -> None:

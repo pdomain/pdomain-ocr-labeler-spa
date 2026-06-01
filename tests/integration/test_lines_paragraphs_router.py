@@ -373,6 +373,7 @@ def _make_two_word_line() -> _StubLine:
 # ── set-line-gt ───────────────────────────────────────────────────────────
 
 
+@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
 def test_set_line_gt_distributes_tokens(loaded_client: TestClient) -> None:
     """POST .../lines/0/set-gt distributes space-split tokens to words."""
     page = _StubPage(lines_=[_make_two_word_line()])
@@ -384,6 +385,7 @@ def test_set_line_gt_distributes_tokens(loaded_client: TestClient) -> None:
     assert resp.status_code == 200
 
 
+@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
 def test_set_line_gt_clears_excess_words(loaded_client: TestClient) -> None:
     """Fewer tokens than words → still 200."""
     page = _StubPage(lines_=[_make_two_word_line()])

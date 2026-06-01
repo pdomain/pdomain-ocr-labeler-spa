@@ -355,6 +355,7 @@ def test_get_job_by_id_returns_404_for_unknown(bare_client: TestClient) -> None:
     assert resp.status_code == 404
 
 
+@pytest.mark.skip(reason="envelope_lift retired in M5b")
 def test_get_page_stamps_payload_error_on_corrupt_envelope(
     tmp_path: Path,
     projects_root: Path,

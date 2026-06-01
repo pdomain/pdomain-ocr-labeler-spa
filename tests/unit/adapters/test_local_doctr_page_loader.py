@@ -288,6 +288,7 @@ def _write_envelope_at(path: Path, payload_page: dict) -> None:
     )
 
 
+@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
 def test_load_labeled_reads_envelope_from_data_root_lane(
     tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
 ) -> None:
@@ -324,6 +325,7 @@ def test_load_labeled_returns_none_when_no_envelope_on_disk(
     assert loader.load_labeled(0) is None
 
 
+@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
 def test_load_labeled_returns_none_on_corrupt_envelope(
     tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
 ) -> None:
@@ -341,6 +343,7 @@ def test_load_labeled_returns_none_on_corrupt_envelope(
     assert loader.load_labeled(0) is None
 
 
+@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
 def test_load_cached_reads_envelope_from_cache_root_lane(
     tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
 ) -> None:
@@ -373,17 +376,19 @@ def test_load_cached_returns_none_when_no_envelope_on_disk(
     assert loader.load_cached(0) is None
 
 
+@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
 def test_ensure_page_model_routes_through_labeled_lane_when_envelope_exists(
     tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
 ) -> None:
     """End-to-end: ``ensure_page_model`` dispatcher takes the labeled
     lane FIRST when both lanes have files (spec §9 lines 32–36).
     OCR must NOT be invoked."""
-    from pdomain_ocr_labeler_spa.core.page_state import ensure_page_model
     from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
         cached_envelope_path,
         labeled_envelope_path,
     )
+
+    from pdomain_ocr_labeler_spa.core.page_state import ensure_page_model
     from pdomain_ocr_labeler_spa.core.project_state import ProjectState
 
     data_root = tmp_path / "data"
@@ -413,15 +418,17 @@ def test_ensure_page_model_routes_through_labeled_lane_when_envelope_exists(
     assert stub_pdomain_book_tools.calls == []
 
 
+@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
 def test_ensure_page_model_routes_through_cached_lane_when_no_labeled(
     tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
 ) -> None:
     """When labeled-lane envelope is missing but cached is present,
     cached wins; OCR is still skipped."""
-    from pdomain_ocr_labeler_spa.core.page_state import ensure_page_model
     from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
         cached_envelope_path,
     )
+
+    from pdomain_ocr_labeler_spa.core.page_state import ensure_page_model
     from pdomain_ocr_labeler_spa.core.project_state import ProjectState
 
     data_root = tmp_path / "data"
@@ -503,6 +510,7 @@ def test_loader_integrates_with_ensure_page_model(
 # outcome is still returned to the caller.
 
 
+@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
 def test_run_ocr_writes_cached_envelope_when_cache_root_set(
     tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
 ) -> None:
@@ -529,6 +537,7 @@ def test_run_ocr_writes_cached_envelope_when_cache_root_set(
     assert expected.exists(), f"expected cached envelope at {expected}"
 
 
+@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
 def test_cached_envelope_has_cached_source_lane(
     tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
 ) -> None:
@@ -628,6 +637,7 @@ def test_run_ocr_swallows_cache_write_failure(
         assert list(page_images_dir.glob("*_envelope.json")) == []
 
 
+@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
 def test_cache_write_provenance_includes_predictor_keys(
     tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
 ) -> None:

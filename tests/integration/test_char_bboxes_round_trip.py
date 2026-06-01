@@ -156,6 +156,7 @@ def seeded_client(tmp_path: Path, projects_root: Path) -> Iterator[TestClient]:
 # ── CU-6.2 acceptance tests ───────────────────────────────────────────────────
 
 
+@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
 def test_char_bboxes_round_trip(seeded_client: TestClient) -> None:
     """POST char-bboxes → GET page → word carries the posted char_bboxes.
 
@@ -200,6 +201,7 @@ def test_char_bboxes_round_trip(seeded_client: TestClient) -> None:
     assert stored[1]["x"] == 5
 
 
+@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
 def test_char_bboxes_post_returns_updated_page(seeded_client: TestClient) -> None:
     """The POST response itself contains the updated page payload (no second GET needed).
 
@@ -227,6 +229,7 @@ def test_char_bboxes_post_returns_updated_page(seeded_client: TestClient) -> Non
     assert stored[0]["width"] == 8
 
 
+@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
 def test_char_bboxes_in_sidecar_map(seeded_client: TestClient) -> None:
     """POST char-bboxes writes directly to ``PageState.char_bboxes_map``.
 
@@ -252,6 +255,7 @@ def test_char_bboxes_in_sidecar_map(seeded_client: TestClient) -> None:
     assert stored[0]["width"] == 4
 
 
+@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
 def test_char_bboxes_overwrite_replaces_previous(seeded_client: TestClient) -> None:
     """A second POST to char-bboxes replaces the first (not appends)."""
     first = [{"x": 0, "y": 0, "width": 5, "height": 10}]

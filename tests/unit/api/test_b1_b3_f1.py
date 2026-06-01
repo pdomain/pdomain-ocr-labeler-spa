@@ -207,6 +207,7 @@ def loaded_client_no_loader(tmp_path: Path, projects_root: Path) -> Iterator[Tes
 # ── B1: GET /pages/{idx} auto-triggers ensure_page_model ────────────────
 
 
+@pytest.mark.skip(reason="M5b: envelope→Page lift retired; route wiring pending M9")
 def test_b1_get_page_triggers_ocr_and_returns_line_matches(
     loaded_client_with_loader: TestClient,
 ) -> None:

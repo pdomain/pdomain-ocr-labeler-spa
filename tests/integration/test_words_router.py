@@ -422,6 +422,7 @@ def test_erase_pixels_returns_400_when_page_not_loaded(loaded_client: TestClient
 # ── envelope lift failure ─────────────────────────────────────────────
 
 
+@pytest.mark.skip(reason="envelope_lift retired in M5b")
 def test_word_mutation_returns_400_on_corrupt_envelope(
     tmp_path: Path,
     projects_root: Path,

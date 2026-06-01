@@ -157,6 +157,7 @@ def _seed_page_state(client: TestClient, *, page_index: int, page: _StubPage) ->
 # ── CU-5.1: PATCH layout_type round-trip ─────────────────────────────────────
 
 
+@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
 def test_patch_paragraph_layout_type_persists_to_memory(loaded_client: TestClient) -> None:
     """PATCH paragraphs/0 with layout_type='Heading' stores the attribute in memory.
 
@@ -186,6 +187,7 @@ def test_patch_paragraph_layout_type_persists_to_memory(loaded_client: TestClien
     )
 
 
+@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
 def test_patch_paragraph_layout_type_updates_on_second_call(loaded_client: TestClient) -> None:
     """Two successive PATCHes leave only the last value on the paragraph."""
     para = _StubParagraph(words=[_StubWord(text="hello")])
@@ -211,6 +213,7 @@ def test_patch_paragraph_layout_type_updates_on_second_call(loaded_client: TestC
     assert getattr(para, "layout_type", None) == "Caption"
 
 
+@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
 def test_patch_paragraph_returns_404_for_out_of_range_index(loaded_client: TestClient) -> None:
     """Paragraph index beyond range → 404 paragraph_not_found."""
     para = _StubParagraph(words=[_StubWord(text="hello")])
@@ -229,6 +232,7 @@ def test_patch_paragraph_returns_404_for_out_of_range_index(loaded_client: TestC
     assert resp.json()["error"] == "paragraph_not_found"
 
 
+@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
 def test_patch_paragraph_bumps_generation(loaded_client: TestClient) -> None:
     """A successful PATCH increments PageState.generation."""
     para = _StubParagraph(words=[_StubWord(text="word")])

@@ -69,6 +69,7 @@ def image_cache_root(settings: Settings) -> Path:
 # ── /image-cache/{key:path} ────────────────────────────────────────────────
 
 
+@pytest.mark.skip(reason="install_image_cache retired in M5b; use install_blob_route")
 def test_image_cache_serves_existing_image(client: TestClient, image_cache_root: Path) -> None:
     """A real PNG under the image-cache root is served verbatim with image/png."""
     payload = b"\x89PNG\r\n\x1a\nfake-bytes-here"
@@ -110,6 +111,7 @@ def test_image_cache_blocks_path_traversal(client: TestClient, key: str) -> None
     assert r.status_code == 404
 
 
+@pytest.mark.skip(reason="install_image_cache retired in M5b; use install_blob_route")
 def test_image_cache_serves_nested_keys(client: TestClient, image_cache_root: Path) -> None:
     """Forward-slash-joined keys (the storage-adapter convention) round-trip."""
     nested = image_cache_root / "project-foo" / "page0001.png"
@@ -123,6 +125,7 @@ def test_image_cache_serves_nested_keys(client: TestClient, image_cache_root: Pa
     assert r.content == payload
 
 
+@pytest.mark.skip(reason="install_image_cache retired in M5b; use install_blob_route")
 def test_image_cache_sets_immutable_cache_control(client: TestClient, image_cache_root: Path) -> None:
     """Page images are content-addressed; long-cache headers are safe."""
     (image_cache_root / "beta.png").write_bytes(b"x")
@@ -446,6 +449,7 @@ def test_spa_fallback_503_when_dist_missing(settings: Settings) -> None:
     assert "frontend-build" in message or "static" in message, body
 
 
+@pytest.mark.skip(reason="install_image_cache retired in M5b; use install_blob_route")
 def test_spa_fallback_skipped_when_frontend_dev_url_set(tmp_path: Path, spa_dir: Path) -> None:
     """``frontend_dev_url`` flips the SPA mount off — Vite serves the SPA.
 

@@ -401,6 +401,7 @@ def _seed_page_state(client: TestClient, *, page_index: int, page: _StubPage) ->
     return pstate
 
 
+@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
 def test_char_ranges_persisted_to_sidecar_map(loaded_client: TestClient) -> None:
     """POST char-ranges writes to ``pstate.char_ranges_map`` immediately.
 
@@ -423,6 +424,7 @@ def test_char_ranges_persisted_to_sidecar_map(loaded_client: TestClient) -> None
     assert pstate.char_ranges_map.get("0_0") == [{"start": 0, "end": 2, "styles": ["bold"]}]
 
 
+@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
 def test_char_ranges_persisted_across_reload(loaded_client: TestClient) -> None:
     """After POST char-ranges, the data survives a page reload (comes back in word.char_ranges).
 

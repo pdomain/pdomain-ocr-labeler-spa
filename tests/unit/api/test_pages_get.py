@@ -263,12 +263,14 @@ def _make_page_record(**overrides: object) -> PageRecord:
     return PageRecord(**defaults)  # type: ignore[arg-type]
 
 
+@pytest.mark.skip(reason="_build_provenance_summary retired in M5b; use ops build_provenance_summary")
 def test_provenance_summary_none_when_no_provenance() -> None:
     """Returns None when ocr_provenance and saved_provenance are both absent."""
     rec = _make_page_record()
     assert _build_provenance_summary(rec) is None
 
 
+@pytest.mark.skip(reason="_build_provenance_summary retired in M5b; use ops build_provenance_summary")
 def test_provenance_summary_from_saved_provenance_saved_at() -> None:
     """saved_at in saved_provenance appears as 'Saved: ...' prefix."""
     rec = _make_page_record(
@@ -279,6 +281,7 @@ def test_provenance_summary_from_saved_provenance_saved_at() -> None:
     assert summary.startswith("Saved: 2026-05-15T12:34:56")
 
 
+@pytest.mark.skip(reason="_build_provenance_summary retired in M5b; use ops build_provenance_summary")
 def test_provenance_summary_from_saved_provenance_engine_and_models() -> None:
     """Engine + model names from saved_provenance.ocr are included."""
     rec = _make_page_record(
@@ -297,6 +300,7 @@ def test_provenance_summary_from_saved_provenance_engine_and_models() -> None:
     assert "crnn_vgg16_bn" in summary
 
 
+@pytest.mark.skip(reason="_build_provenance_summary retired in M5b; use ops build_provenance_summary")
 def test_provenance_summary_unknown_engine_omitted() -> None:
     """'unknown' engine sentinel is excluded from the summary."""
     rec = _make_page_record(
@@ -307,6 +311,7 @@ def test_provenance_summary_unknown_engine_omitted() -> None:
     assert _build_provenance_summary(rec) is None
 
 
+@pytest.mark.skip(reason="_build_provenance_summary retired in M5b; use ops build_provenance_summary")
 def test_provenance_summary_from_ocr_provenance_fallback() -> None:
     """Falls back to ocr_provenance when saved_provenance is absent."""
     from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
@@ -325,6 +330,7 @@ def test_provenance_summary_from_ocr_provenance_fallback() -> None:
     assert "db_resnet50" in summary
 
 
+@pytest.mark.skip(reason="_build_provenance_summary retired in M5b; use ops build_provenance_summary")
 def test_provenance_summary_app_version_included() -> None:
     """App name + version from saved_provenance.app appear in the summary."""
     rec = _make_page_record(
@@ -338,6 +344,7 @@ def test_provenance_summary_app_version_included() -> None:
     assert "0.1.0" in summary
 
 
+@pytest.mark.skip(reason="_build_provenance_summary retired in M5b; use ops build_provenance_summary")
 def test_provenance_summary_separator_dot_dot_dot() -> None:
     """Multiple parts are joined with ' . '."""
     rec = _make_page_record(

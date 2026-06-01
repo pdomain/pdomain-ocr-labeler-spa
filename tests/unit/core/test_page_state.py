@@ -353,15 +353,17 @@ def test_resolve_save_directory_does_not_create_dirs(tmp_path: Path) -> None:
     assert not result.exists()
 
 
+@pytest.mark.skip(reason="persist_page_to_file retired in M5b; use save_page_to_store")
 def test_persist_page_to_file_writes_labeled_envelope(tmp_path: Path) -> None:
     """persist_page_to_file writes a readable envelope to the labeled lane."""
     import json
 
-    from pdomain_ocr_labeler_spa.core.page_state import persist_page_to_file
     from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
         is_user_page_envelope,
         labeled_envelope_path,
     )
+
+    from pdomain_ocr_labeler_spa.core.page_state import persist_page_to_file
 
     # Build a minimal Page-stub that has to_dict().
     @dataclass
@@ -388,6 +390,7 @@ def test_persist_page_to_file_writes_labeled_envelope(tmp_path: Path) -> None:
     assert is_user_page_envelope(raw), "Written file is not a valid UserPageEnvelope"
 
 
+@pytest.mark.skip(reason="persist_page_to_file retired in M5b; use save_page_to_store")
 def test_persist_page_to_file_creates_parent_dirs(tmp_path: Path) -> None:
     """persist_page_to_file creates the labeled-projects/<pid>/ directory tree."""
 
@@ -408,6 +411,7 @@ def test_persist_page_to_file_creates_parent_dirs(tmp_path: Path) -> None:
     assert labeled_envelope_path(data_root, project.project_id, 0).exists()
 
 
+@pytest.mark.skip(reason="persist_page_to_file retired in M5b; use save_page_to_store")
 def test_persist_page_to_file_index_out_of_range_raises(tmp_path: Path) -> None:
     """persist_page_to_file raises IndexError for out-of-range page_index."""
 

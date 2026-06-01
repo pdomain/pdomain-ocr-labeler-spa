@@ -27,7 +27,6 @@ def test_openapi_schema_contains_all_spec_wire_shapes() -> None:
         "MatchStatus",
         "LineFilter",
         "PageRecord",
-        "CachedImageSet",
         "EncodedDims",
         "WordMatch",
         "LineMatch",
