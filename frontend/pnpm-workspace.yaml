@@ -15,4 +15,3 @@ minimumReleaseAgeExclude:
 overrides:
   react: ^19.0.0
   react-dom: ^19.0.0
-  "@pdomain/pdomain-ui": link:../../pdomain-ui

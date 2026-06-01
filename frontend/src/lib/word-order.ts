@@ -13,11 +13,11 @@ export interface WordOrder {
   next: WordMatch | null;
 }
 
-export function findLineByIndex(page: PagePayload, lineIndex: number): LineMatch | null {
+function findLineByIndex(page: PagePayload, lineIndex: number): LineMatch | null {
   return page.line_matches?.find((line) => line.line_index === lineIndex) ?? null;
 }
 
-export function sortedWordsByIndex(line: LineMatch | null): WordMatch[] {
+function sortedWordsByIndex(line: LineMatch | null): WordMatch[] {
   return (line?.word_matches ?? [])
     .filter((word) => typeof word.word_index === "number")
     .slice()
