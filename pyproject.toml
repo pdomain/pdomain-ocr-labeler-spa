@@ -284,6 +284,13 @@ filterwarnings = [
     "ignore::DeprecationWarning:websockets.*",
     "ignore:websockets.legacy is deprecated:DeprecationWarning",
     "ignore:websockets.server.WebSocketServerProtocol is deprecated:DeprecationWarning",
+    # defusedxml 0.7.1 (latest stable): `defusedxml.cElementTree` is a deprecated
+    # shim module that emits DeprecationWarning at import time. doctr imports it
+    # transitively via `doctr.io.elements.defuse_stdlib()` during predictor
+    # initialisation. We cannot upgrade defusedxml (0.7.1 is the latest stable;
+    # 0.8.0rc2 exists but is a pre-release) and cannot patch doctr. Ignore
+    # narrowly by module so any other DeprecationWarnings still surface.
+    "ignore::DeprecationWarning:defusedxml.*",
     # Add new ignores below as new warnings surface — each with a comment
     # explaining the package and why we tolerate it.
 ]
