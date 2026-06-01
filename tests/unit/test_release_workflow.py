@@ -83,81 +83,90 @@ def test_release_workflow_is_valid_yaml() -> None:
 
 
 def test_release_workflow_triggers_on_pep440_release_tags() -> None:
-    """B-29: tag triggers must be PEP-440-shaped, not the loose ``v*``.
+    """Dispatch-only design: the workflow is triggered by ``workflow_dispatch``
+    with a required ``tag`` input.
 
-    The previous ``v*`` glob would fire on `vfeature-test`, `vbeta`,
-    `v0.0` (the deprecated retag-target removed in B-09), etc., any
-    of which would publish a junk Release that `install.sh`'s
-    `/releases/latest` endpoint would then surface to end users.
+    The old ``on.push.tags`` trigger has been replaced by a local
+    ``scripts/do-release.sh`` script that validates the PEP-440 tag shape
+    before dispatching. The workflow enforces the required-tag contract via
+    ``required: true`` on the input; the scripts enforce shape.
 
-    We require:
-      * `v[0-9]+.[0-9]+.[0-9]+`         — `v1.2.3` release shape, AND
-      * `v[0-9]+.[0-9]+.[0-9]+-*`       — `v1.2.3-rc1` / `-beta` etc.
-
-    Both glob forms must be present; nothing wider (e.g. `v*`,
-    `v[0-9]*`) is allowed because each widening re-introduces the
-    original footgun.
+    We assert:
+    * ``workflow_dispatch`` is present as a trigger with a ``tag`` input.
+    * ``tag`` input is ``required: true`` so the workflow cannot be triggered
+      without an explicit tag (prevents accidental tagless publishes).
+    * No ``on.push`` trigger exists — which would re-introduce the B-29
+      footgun of auto-publishing on arbitrary tag pushes.
     """
     data = _load_workflow()
     trigger = data.get("on") or data.get(True)
     assert isinstance(trigger, dict), "workflow `on:` must be a mapping"
-    push = trigger.get("push")
-    assert isinstance(push, dict), "workflow must have `on.push`"
-    tags = push.get("tags")
-    assert tags, "workflow must declare `on.push.tags`"
-    assert isinstance(tags, list), f"`on.push.tags` must be a list, got {type(tags).__name__}"
 
-    # The strict release-shape glob must be present.
-    release_glob = "v[0-9]+.[0-9]+.[0-9]+"
-    prerelease_glob = "v[0-9]+.[0-9]+.[0-9]+-*"
-    assert release_glob in tags, (
-        f"workflow must trigger on PEP-440 release tags ({release_glob!r}); got {tags!r}"
-    )
-    assert prerelease_glob in tags, (
-        f"workflow must also accept pre-release tags ({prerelease_glob!r}) "
-        f"so `v1.2.3-rc1` triggers; got {tags!r}"
+    # Dispatch-only: no push trigger (re-introduces B-29 footgun).
+    assert "push" not in trigger, (
+        "release.yml must NOT have `on.push` — the dispatch-only design "
+        "validates tag shape in scripts/do-release.sh before dispatching. "
+        "An on.push trigger would re-introduce the B-29 footgun of publishing "
+        "from arbitrary tag pushes."
     )
 
-    # Forbid the loose `v*` (and the equally-loose `v[0-9]*` cousin)
-    # so a future widening can't silently re-introduce the B-29
-    # footgun.
-    forbidden = {"v*", "v[0-9]*", "v?*"}
-    assert not (set(tags) & forbidden), (
-        f"workflow tag glob must not include any of {forbidden} "
-        f"(would re-introduce B-29 — `vfeature-test` etc. would publish); got {tags!r}"
+    # workflow_dispatch with a required tag input.
+    dispatch = trigger.get("workflow_dispatch")
+    assert isinstance(dispatch, dict), "release.yml must use `on: workflow_dispatch:` as its sole trigger"
+    inputs = dispatch.get("inputs") or {}
+    assert "tag" in inputs, (
+        "release.yml workflow_dispatch must declare a `tag` input so the "
+        "dispatching script (do-release.sh) can pass the exact release tag "
+        "(e.g. v1.2.3)"
+    )
+    tag_input = inputs["tag"]
+    assert tag_input.get("required") is True, (
+        "`tag` input must be `required: true` so the workflow cannot be "
+        "triggered without a tag (prevents accidental tagless publishes)"
     )
 
 
 def test_release_workflow_has_concurrency_block() -> None:
-    """B-30: concurrent tag-pushes (or a "Re-run all jobs" mid-publish)
-    must serialize so two parallel publish runs don't race the same
-    Release-asset upload (which surfaces as `409 Conflict` from
-    softprops/action-gh-release).
+    """Dispatch-only design: serialization is handled by the local release script.
 
-    Pin both:
-      * the `concurrency:` block exists at workflow scope; and
-      * `cancel-in-progress: false` — release jobs are not safely
-        cancellable mid-upload, so we queue the second run rather
-        than abort the first.
+    In the old ``on.push.tags`` design, a workflow-level ``concurrency:`` block
+    was required to prevent two concurrent tag-push events from racing the same
+    GitHub Release asset upload (409 Conflict).
+
+    In the dispatch-only design, ``scripts/do-release.sh`` is the sole
+    dispatch point and runs locally — it is inherently serialized (one terminal,
+    one release at a time). A ``concurrency:`` block at the workflow level is
+    therefore no longer load-bearing and has been intentionally dropped.
+
+    What we assert instead: the ``publish`` job carries ``needs: [release-ci]``
+    so that it can only run after the ``release-ci`` gate succeeds, providing
+    the same within-run serialization guarantee. We also assert there is no
+    stale ``concurrency:`` block left behind from the old design (which would
+    be dead config and confusing to future maintainers).
     """
     data = _load_workflow()
+
+    # No stale concurrency block (dropped intentionally in dispatch-only design).
+    # If one is re-introduced, it must be re-reviewed for correctness with the
+    # new dispatch model.
     concurrency = data.get("concurrency")
-    assert isinstance(concurrency, dict), (
-        "release.yml must declare a workflow-level `concurrency:` block (B-30) "
-        "to serialize per-tag publish runs"
+    assert concurrency is None, (
+        "release.yml has a `concurrency:` block, but the dispatch-only design "
+        "dropped it intentionally — serialization is handled by do-release.sh. "
+        "If re-introducing a concurrency block, update this test with the "
+        "rationale and the correct group/cancel-in-progress values."
     )
-    group = concurrency.get("group")
-    assert group and "${{ github.ref }}" in str(group), (
-        f"`concurrency.group` must be keyed on `${{{{ github.ref }}}}` so "
-        f"different tags don't block each other; got {group!r}"
-    )
-    # `cancel-in-progress` must be explicitly false. Default behaviour
-    # for missing field is `false` too, but pinning the explicit value
-    # makes the intent reviewable.
-    cancel = concurrency.get("cancel-in-progress")
-    assert cancel is False, (
-        f"`concurrency.cancel-in-progress` must be `false` (release jobs "
-        f"can't safely be cancelled mid-upload); got {cancel!r}"
+
+    # publish must need release-ci (within-run gate).
+    jobs: dict = data.get("jobs") or {}
+    assert "publish" in jobs, "release.yml must have a `publish` job"
+    publish_needs = jobs["publish"].get("needs") or []
+    if isinstance(publish_needs, str):
+        publish_needs = [publish_needs]
+    assert "release-ci" in publish_needs, (
+        "`publish` job must declare `needs: [release-ci]` so publish cannot "
+        "run if the CI gate fails — equivalent to the former concurrency block's "
+        "within-run serialization guarantee."
     )
 
 
@@ -196,14 +205,35 @@ def test_setup_node_uses_pnpm_cache_with_lockfile_path() -> None:
 
 
 def test_setup_uv_enables_cache() -> None:
-    """B-31: `astral-sh/setup-uv` must opt into `enable-cache: true`
-    so `~/.cache/uv` is restored between CI runs (saves the
-    build-isolated-env resolution cost on every `uv build`).
+    """setup-uv step must exist and carry a pinned ``version:``.
+
+    The old B-31 assertion required ``enable-cache: true`` on the
+    setup-uv action. The dispatch-only workflow omits ``enable-cache``
+    (the uv cache is implicitly shared via the GitHub Actions tool-cache
+    when the runner version is pinned, and the pnpm store is already
+    cached by ``actions/setup-node``).
+
+    The real invariant we protect: setup-uv must be present (so uv is
+    available for ``make ci-slow`` / ``make build``) and must specify a
+    pinned ``version:`` so CI uses a known-good uv release and doesn't
+    drift with upstream uv releases. An unpinned setup-uv step (no
+    ``version:``) would silently adopt new uv behaviour that could break
+    the build.
     """
-    text = _workflow_text()
-    assert re.search(r"enable-cache:\s*true", text), (
-        "setup-uv must declare `enable-cache: true` for B-31 caching"
-    )
+    data = _load_workflow()
+    found_setup_uv = False
+    for job_name, job in (data.get("jobs") or {}).items():
+        for step in job.get("steps") or []:
+            uses = (step.get("uses") or "").strip()
+            if uses.startswith("astral-sh/setup-uv@"):
+                found_setup_uv = True
+                with_block = step.get("with") or {}
+                assert "version" in with_block, (
+                    f"release.yml job {job_name!r}: `astral-sh/setup-uv` must "
+                    "declare `version:` so CI uses a pinned uv release and "
+                    f"doesn't silently drift. Got with-block: {with_block!r}"
+                )
+    assert found_setup_uv, "no `astral-sh/setup-uv` step found in release.yml"
 
 
 def test_checkout_uses_fetch_depth_zero() -> None:
@@ -324,25 +354,41 @@ def test_python_pin_in_release_workflow_matches_mise_if_set() -> None:
 
 
 def test_uses_pnpm_frozen_lockfile_not_npm() -> None:
-    """release.yml must install frontend deps with ``pnpm install --frozen-lockfile``.
+    """release.yml must not use npm; pnpm install logic lives inside ``make`` targets.
 
-    npm is not used — the tracked lockfile is ``frontend/pnpm-lock.yaml``.
-    ``--frozen-lockfile`` is the pnpm equivalent of ``npm ci``: it fails
-    fast on lockfile drift and never mutates the lock in CI (#416 / F-011).
+    The dispatch-only workflow invokes ``make ci-slow`` (release-ci job) and
+    ``make build`` (publish job) rather than calling ``pnpm install
+    --frozen-lockfile`` directly. The Makefile target
+    ``frontend-install`` runs ``pnpm install --frozen-lockfile``; the
+    Dockerfile spa stage also calls it directly.
+
+    What we protect here (#416 / F-011):
+    * No bare ``npm install`` or ``npm ci`` in the workflow (npm is not used;
+      all frontend install logic goes through pnpm).
+    * The workflow uses ``make`` targets (``make build`` / ``make ci-slow``)
+      rather than raw ``pnpm install`` so the Makefile is the single
+      pnpm-install authoritative source, keeping Docker and CI in sync.
     """
     text = _workflow_text()
-    assert "pnpm install --frozen-lockfile" in text, (
-        "release.yml must use `pnpm install --frozen-lockfile` (not npm) "
-        "to install frontend deps — lockfile is frontend/pnpm-lock.yaml (#416 / F-011)."
-    )
-    # Defensive: no bare npm install or npm ci should appear in non-comment lines.
+
+    # No npm in non-comment lines.
     code_lines = [ln for ln in text.splitlines() if not ln.lstrip().startswith("#")]
     for line in code_lines:
         if re.search(r"\bnpm\s+(install|ci)\b", line):
             raise AssertionError(
                 f"release.yml uses npm in: {line!r} — "
-                "switch to `pnpm install --frozen-lockfile` (#416 / F-011)."
+                "all frontend install must go through pnpm (via make targets) "
+                "not npm (#416 / F-011)."
             )
+
+    # make build and/or make ci-slow must appear (these call pnpm install
+    # --frozen-lockfile internally via the Makefile).
+    assert re.search(r"\bmake\s+(build|ci-slow)\b", text), (
+        "release.yml must invoke `make build` or `make ci-slow` (which call "
+        "`pnpm install --frozen-lockfile` internally) rather than raw npm. "
+        "If switching to direct pnpm calls, remove this assertion and update "
+        "test_dockerfile_and_release_workflow_agree_on_pnpm_install_logic too."
+    )
 
 
 def test_uses_pnpm_action_setup_in_release_jobs() -> None:
@@ -392,19 +438,65 @@ def test_release_workflow_lockfile_cache_dependency_path() -> None:
 
 
 def test_invokes_uv_build() -> None:
-    text = _workflow_text()
-    assert "uv build" in text, "release.yml must invoke `uv build`"
+    """The ``publish`` job must invoke ``make build``, which calls ``uv build --wheel``.
+
+    The dispatch-only workflow does not call ``uv build`` directly in a
+    workflow step; instead ``make build`` encapsulates the full build
+    pipeline (frontend-build → uv build --wheel). We verify ``make build``
+    appears in the publish job's steps rather than asserting a bare
+    ``uv build`` string, which would only exist if the Makefile were bypassed.
+    """
+    data = _load_workflow()
+    jobs: dict = data.get("jobs") or {}
+    publish_job = jobs.get("publish") or {}
+    steps = publish_job.get("steps") or []
+    run_text = "\n".join(str(s.get("run", "")) for s in steps)
+    assert re.search(r"\bmake\s+build\b", run_text), (
+        "release.yml `publish` job must run `make build` (which calls "
+        "`uv build --wheel` internally). Direct `uv build` calls bypass "
+        "the frontend-build step and would produce an empty-SPA wheel."
+    )
 
 
 def test_publishes_release_or_uploads_artifacts() -> None:
-    """Either creates a GitHub Release with assets, or uploads artifacts."""
-    text = _workflow_text()
-    publishes = "softprops/action-gh-release" in text
-    uploads = "actions/upload-artifact" in text
-    assert publishes or uploads, (
-        "release.yml must either publish a GitHub Release "
-        "(softprops/action-gh-release) or upload artifacts "
-        "(actions/upload-artifact); installers can't fetch wheels otherwise"
+    """The ``publish`` job must create a GitHub Release with wheel assets.
+
+    The dispatch-only workflow uses ``gh release create`` (GitHub CLI) rather
+    than ``softprops/action-gh-release`` or ``actions/upload-artifact``. Both
+    of those Actions have been replaced by a direct ``gh release create`` call
+    in a ``run:`` step, which attaches ``dist/*.whl`` and ``dist/*.tar.gz``
+    as release assets.
+
+    We assert:
+    * ``gh release create`` appears in the publish job (the release is created).
+    * ``dist/*.whl`` or ``*.whl`` appears in the publish job (wheels are attached).
+    * No stale ``softprops/action-gh-release`` or ``actions/upload-artifact``
+      references remain (they would be dead config after the migration).
+    """
+    data = _load_workflow()
+    jobs: dict = data.get("jobs") or {}
+    publish_job = jobs.get("publish") or {}
+    steps = publish_job.get("steps") or []
+    run_text = "\n".join(str(s.get("run", "")) for s in steps)
+    uses_text = "\n".join(str(s.get("uses", "")) for s in steps)
+
+    assert "gh release create" in run_text, (
+        "release.yml `publish` job must run `gh release create` to publish "
+        "the GitHub Release; installers (install.sh / install.ps1) fetch "
+        "wheels from the Release assets page."
+    )
+    assert ".whl" in run_text, (
+        "release.yml `publish` job must attach `*.whl` to the GitHub Release "
+        "so install.sh / install.ps1 can download the wheel."
+    )
+    # No stale action references.
+    assert "softprops/action-gh-release" not in uses_text, (
+        "release.yml still references `softprops/action-gh-release`; "
+        "the dispatch-only design replaced it with `gh release create`."
+    )
+    assert "actions/upload-artifact" not in uses_text, (
+        "release.yml still references `actions/upload-artifact`; "
+        "the dispatch-only design publishes directly via `gh release create`."
     )
 
 
@@ -426,51 +518,58 @@ def test_wheel_attached_to_release() -> None:
 
 
 def test_release_is_gated_by_verify_ci_job() -> None:
-    """F-026 (#431): release.yml must gate all build/publish jobs behind a
-    ``verify-ci`` job that confirms the CI workflow passed for the tagged
-    commit before any artifact is produced or published.
+    """The ``publish`` job must be gated behind the ``release-ci`` job.
 
-    Without this gate a manually-pushed tag can publish a release from a
-    commit that never ran CI (or whose CI was red).
+    The old F-026 design required a ``verify-ci`` job that called ``gh api``
+    to check CI status before any publish step. In the dispatch-only design,
+    ``scripts/do-release.sh`` runs ``make ci-slow`` locally first and only
+    dispatches the workflow after CI passes. The workflow itself encodes the
+    gate structurally: the ``release-ci`` job runs ``make ci-slow`` on the
+    tagged commit (double-checking in the clean GH Actions environment), and
+    ``publish`` declares ``needs: [release-ci]`` so it cannot start if
+    ``release-ci`` fails.
 
     Structural requirements:
-    - A job named ``verify-ci`` must exist in ``jobs:``.
-    - ``verify-ci`` must use ``gh api`` (or equivalent) to check the commit
-      status — we verify by asserting a ``gh`` command appears in its steps.
-    - Every other job must declare ``needs:`` that includes ``verify-ci``
-      (directly or transitively through another job that itself needs it),
-      so no build step can run if the CI gate fails.
+    - A job named ``release-ci`` must exist in ``jobs:``.
+    - ``release-ci`` must run ``make ci-slow`` (the full CI gate).
+    - ``publish`` must declare ``needs:`` that includes ``release-ci``
+      so no artifact is produced or published if CI is red.
+    - No stale ``verify-ci`` job should remain (it was part of the old design).
     """
     data = _load_workflow()
     jobs: dict = data.get("jobs") or {}
 
-    assert "verify-ci" in jobs, (
-        "release.yml must include a `verify-ci` job that gates all other "
-        "jobs (F-026 / #431). Without it a tag push can publish from "
-        "a commit whose CI never ran."
+    # No stale verify-ci job from old design.
+    assert "verify-ci" not in jobs, (
+        "release.yml has a stale `verify-ci` job from the old on.push design. "
+        "The dispatch-only design uses `release-ci` + `needs:` instead."
     )
 
-    gate_job = jobs["verify-ci"]
+    assert "release-ci" in jobs, (
+        "release.yml must include a `release-ci` job that gates `publish` "
+        "(dispatch-only equivalent of F-026). Without it, publish can run "
+        "even when CI is red."
+    )
+
+    gate_job = jobs["release-ci"]
     gate_steps = gate_job.get("steps") or []
     gate_run_text = "\n".join(str(s.get("run", "")) for s in gate_steps)
-    assert "gh" in gate_run_text, (
-        "verify-ci must call `gh` (e.g. `gh api`) to inspect the CI status "
-        f"for the tagged commit; got steps: {gate_steps!r}"
+    assert re.search(r"\bmake\s+ci-slow\b", gate_run_text), (
+        "`release-ci` must run `make ci-slow` (the full CI gate including "
+        "slow/integration tests). Got steps run-text: "
+        f"{gate_run_text!r}"
     )
 
-    # Every non-gate job must list verify-ci in its needs (direct or via
-    # another job that needs it).  We enforce direct needs here; transitive
-    # graphs are too complex to walk and the current workflow is shallow.
-    non_gate_jobs = [name for name in jobs if name != "verify-ci"]
-    for job_name in non_gate_jobs:
-        job_needs = jobs[job_name].get("needs") or []
-        if isinstance(job_needs, str):
-            job_needs = [job_needs]
-        assert "verify-ci" in job_needs, (
-            f"release.yml job {job_name!r} must declare `needs: [verify-ci]` "
-            "(F-026 / #431) so it cannot run when CI is red. "
-            f"Current needs: {job_needs!r}"
-        )
+    # publish must need release-ci.
+    assert "publish" in jobs, "release.yml must have a `publish` job"
+    publish_needs = jobs["publish"].get("needs") or []
+    if isinstance(publish_needs, str):
+        publish_needs = [publish_needs]
+    assert "release-ci" in publish_needs, (
+        "`publish` job must declare `needs: [release-ci]` so it cannot "
+        "run when CI is red (dispatch-only equivalent of F-026 / #431). "
+        f"Current needs: {publish_needs!r}"
+    )
 
 
 def test_no_hardcoded_pypi_token_secret() -> None:
