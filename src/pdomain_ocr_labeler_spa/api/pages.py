@@ -554,12 +554,25 @@ def _page_payload(
                     project_id,
                     page_index,
                 )
+                # Build ops PageRecord for the degraded-path case
                 page_record = PageRecord(
+                    page_id=__import__("uuid").uuid4(),
                     page_index=page_index,
-                    page_number=page_index + 1,
                     image_path=image_path,
-                    page_source=page_source,
-                    payload_error="envelope lift retired (M5b)",
+                    source=page_source.value if hasattr(page_source, "value") else str(page_source),
+                )
+                from pdomain_ops.pages import set_extension as _set_ext
+
+                from ..core.labeler_extension import LabelerPageExtension
+
+                _set_ext(
+                    page_record,
+                    "labeler",
+                    LabelerPageExtension(
+                        page_number=page_index + 1,
+                        page_source=page_source.value if hasattr(page_source, "value") else str(page_source),
+                        payload_error="envelope lift retired (M5b)",
+                    ),
                 )
                 # line_matches stays []
             else:

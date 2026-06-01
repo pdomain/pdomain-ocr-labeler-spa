@@ -17,7 +17,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
-from pdomain_ops.pages import RotationSource
+from pdomain_ops.pages import PageRecord, RotationSource
 from pydantic import BaseModel, ConfigDict, Field
 
 _MAX_DISPLAY_DIMENSION = 1200
@@ -105,37 +105,6 @@ class EncodedDims(BaseModel):
             display_height=display_height,
             scale=scale,
         )
-
-
-class PageRecord(BaseModel):
-    """Per-page metadata — spec §1 ``PageRecord``.
-
-    The actual ``Page`` object lives in ``PageState`` in-memory and is
-    NOT serialised here. Wire shapes that need page contents use
-    ``PagePayload`` (defined in ``api/pages.py``).
-
-    v2.2 rotation fields (spec §19 / issue #263):
-    ``rotation_degrees`` tracks cumulative rotation applied since original
-    image; ``rotation_source`` distinguishes auto (OCR+GT best-match),
-    manual (user-initiated), and none (original orientation).
-    """
-
-    page_index: int
-    page_number: int
-    image_path: Path
-    page_source: PageSource = PageSource.OCR
-    ocr_failed: bool = False
-    # M9.1 rotation fields (issue #263 / spec §19)
-    rotation_degrees: int = 0
-    rotation_source: RotationSource = RotationSource.NONE
-    # GAP-1: human-readable provenance one-liner for the source badge tooltip.
-    # Assembled by api/pages.py::_build_provenance_summary at payload-build time.
-    # None when no meaningful provenance data is available.
-    provenance_summary: str | None = None
-    # payload_error: set by api/pages.py when the envelope→Page lift fails.
-    # None on clean pages. Gives the frontend a machine-readable signal so it
-    # can show a "corrupt saved data" banner instead of a blank lines pane.
-    payload_error: str | None = None
 
 
 class CharRange(BaseModel):

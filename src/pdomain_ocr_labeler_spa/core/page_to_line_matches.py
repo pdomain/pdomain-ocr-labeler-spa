@@ -429,11 +429,13 @@ def page_to_line_matches(
         ``PageRecord`` holds page-level metadata.
         ``list[LineMatch]`` is empty when *page* has no lines or is ``None``.
     """
+    from uuid import uuid4 as _uuid4
+
     record = PageRecord(
+        page_id=_uuid4(),
         page_index=page_index,
-        page_number=page_index + 1,
         image_path=image_path,
-        page_source=source,
+        source=source.value if hasattr(source, "value") else str(source),
     )
 
     if page is None:

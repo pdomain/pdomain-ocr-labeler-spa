@@ -139,8 +139,8 @@ def test_rotate_out_of_range_page_returns_404(loaded_client: TestClient) -> None
 def test_page_record_has_rotation_fields() -> None:
     """PageRecord model has rotation_degrees and rotation_source fields."""
     record = PageRecord(
+        page_id=__import__("uuid").uuid4(),
         page_index=0,
-        page_number=1,
         image_path=Path("001.png"),
     )
     assert record.rotation_degrees == 0
@@ -151,8 +151,8 @@ def test_page_record_rotation_source_values() -> None:
     """PageRecord accepts all three RotationSource values."""
     for source in (RotationSource.NONE, RotationSource.AUTO, RotationSource.MANUAL):
         record = PageRecord(
+            page_id=__import__("uuid").uuid4(),
             page_index=0,
-            page_number=1,
             image_path=Path("001.png"),
             rotation_degrees=90,
             rotation_source=source,
