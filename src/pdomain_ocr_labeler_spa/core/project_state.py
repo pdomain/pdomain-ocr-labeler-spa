@@ -70,6 +70,7 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from .models import Project, Selection
 
@@ -112,6 +113,8 @@ class PageState:
     page_record: PageLoadOutcome | None = field(default=None)
     generation: int = 0
     last_saved_generation: int = 0
+    page_id: UUID | None = field(default=None)
+    """page_id of PageAggregate in LabelerPageStore. Set after OCR/load."""
     # Per-page UI selection (spec-23-E §10). Mutated by
     # ``POST /api/projects/{id}/pages/{idx}/selection`` via
     # ``core.selection.apply_selection``. Default is empty — both
