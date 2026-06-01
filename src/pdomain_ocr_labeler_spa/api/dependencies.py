@@ -32,6 +32,7 @@ from ..core.jobs import JobEventBroker, JobRunner
 from ..core.notifications import NotificationQueue
 from ..core.ocr_config_state import OCRConfigCarrier
 from ..core.persistence.config_yaml import AppConfig
+from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import ProjectState
 from ..core.source_root_state import SourceRootCarrier
 from ..settings import Settings
@@ -246,6 +247,19 @@ def get_source_root_carrier(request: Request) -> SourceRootCarrier:
     return carrier
 
 
+def get_page_store(request: Request) -> LabelerPageStore:
+    """The project-scoped ``LabelerPageStore`` — M9 wiring.
+
+    Returns ``None`` → 503 when no project is loaded (page_store not stashed yet).
+    """
+    from fastapi import HTTPException
+
+    store = getattr(request.app.state, "page_store", None)
+    if store is None:
+        raise HTTPException(status_code=503, detail="no project loaded — page_store not available")
+    return store  # type: ignore[return-value]
+
+
 __all__ = [
     "get_active_project",
     "get_active_project_carrier",
@@ -257,6 +271,7 @@ __all__ = [
     "get_notification_queue",
     "get_ocr_config_carrier",
     "get_ocr_engine",
+    "get_page_store",
     "get_project_state",
     "get_settings",
     "get_source_root_carrier",

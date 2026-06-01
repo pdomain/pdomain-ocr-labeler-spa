@@ -69,6 +69,7 @@ from .core.ocr.weights_resolver import build_weights_resolver
 from .core.ocr_config_state import OCRConfigCarrier
 from .core.persistence.config_yaml import load_config
 from .core.persistence.ocr_config import load_ocr_config
+from .core.persistence.page_store import LabelerPageStore
 from .core.persistence.pidfile import check_and_write_pidfile, release_pidfile
 from .core.persistence.session_state import load_session_state
 from .core.project_state import ProjectState
@@ -328,6 +329,11 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # global, so multiple ``build_app(...)`` calls in the same test
     # process get isolated state.
     app.state.project_state = ProjectState()
+
+    # M9: LabelerPageStore factory — creates a per-project store when called.
+    # Route handlers call this when a project is loaded to create the store
+    # and stash it on app.state.page_store.
+    app.state.page_store_factory = LabelerPageStore
 
     # M3 slice 8c-iv-a + 8c-iv-b: ``OCRConfigCarrier`` holds the
     # user-selected OCR detection + recognition model keys +
