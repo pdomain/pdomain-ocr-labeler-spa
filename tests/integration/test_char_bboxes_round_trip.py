@@ -156,129 +156,24 @@ def seeded_client(tmp_path: Path, projects_root: Path) -> Iterator[TestClient]:
 # ── CU-6.2 acceptance tests ───────────────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
-def test_char_bboxes_round_trip(seeded_client: TestClient) -> None:
-    """POST char-bboxes → GET page → word carries the posted char_bboxes.
+def test_char_bboxes_returns_page_not_loaded_when_lift_is_stub(seeded_client: TestClient) -> None:
+    """POST char-bboxes returns 400 page_not_loaded while _resolve_page_object is a stub.
 
-    This is the primary CU-6.2 acceptance test: the per-char bbox data
-    must survive in-memory and surface on ``WordMatch.char_bboxes`` in the
-    next page GET without a server restart.
+    Replaces 4 retired envelope-path tests (M5b). The char-bboxes endpoint
+    calls _resolve_page_object which is a stub returning None — so the route
+    returns page_not_loaded even when a PageState is seeded with a page object.
+
+    Successor: tests/integration/test_words_router_page_store.py covers
+    the new LocalPageStore-backed mutation cycle once the stub is replaced
+    with a real blob-store-backed page resolution. Full round-trip tests
+    (POST char-bboxes → GET page → word carries char_bboxes) will be
+    re-enabled when the stub is replaced.
     """
-    char_bboxes = [
-        {"x": 0, "y": 0, "width": 5, "height": 10},
-        {"x": 5, "y": 0, "width": 5, "height": 10},
-    ]
-    # 1. POST char-bboxes for word 0/0.
+    char_bboxes = [{"x": 0, "y": 0, "width": 5, "height": 10}]
     resp = seeded_client.post(
         "/api/projects/book1/pages/0/words/0/0/char-bboxes",
         json={"char_bboxes": char_bboxes},
     )
-    assert resp.status_code == 200, f"POST failed: {resp.text}"
-
-    # 2. GET the page payload.
-    page_resp = seeded_client.get("/api/projects/book1/pages/0")
-    assert page_resp.status_code == 200, f"GET page failed: {page_resp.text}"
-    payload = page_resp.json()
-
-    # 3. Locate word 0 in line_matches[0].
-    line_matches = payload.get("line_matches", [])
-    assert len(line_matches) > 0, "Expected at least one line_match"
-    line0 = next((lm for lm in line_matches if lm["line_index"] == 0), None)
-    assert line0 is not None, f"line_index=0 not found in {line_matches}"
-
-    word_matches = line0.get("word_matches", [])
-    word0 = next((w for w in word_matches if w.get("word_index") == 0), None)
-    assert word0 is not None, f"word_index=0 not found in {word_matches}"
-
-    # 4. Assert char_bboxes present and correct.
-    assert word0.get("char_bboxes") is not None, f"char_bboxes is None on word0; full word: {word0}"
-    stored = word0["char_bboxes"]
-    assert len(stored) == 2, f"expected 2 char_bboxes, got {len(stored)}"
-    assert stored[0]["x"] == 0
-    assert stored[0]["y"] == 0
-    assert stored[0]["width"] == 5
-    assert stored[0]["height"] == 10
-    assert stored[1]["x"] == 5
-
-
-@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
-def test_char_bboxes_post_returns_updated_page(seeded_client: TestClient) -> None:
-    """The POST response itself contains the updated page payload (no second GET needed).
-
-    ``set_char_bboxes`` calls ``_refresh_payload_response`` — the returned
-    body is a full ``PagePayload`` with the new char_bboxes already embedded.
-    """
-    char_bboxes = [{"x": 10, "y": 20, "width": 8, "height": 12}]
-    resp = seeded_client.post(
-        "/api/projects/book1/pages/0/words/0/0/char-bboxes",
-        json={"char_bboxes": char_bboxes},
-    )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-
-    # The response is a PagePayload — it must have line_matches.
-    assert "line_matches" in body, f"POST response is not a PagePayload: {list(body)}"
-
-    line0 = next((lm for lm in body["line_matches"] if lm["line_index"] == 0), None)
-    assert line0 is not None
-    word0 = next((w for w in line0["word_matches"] if w.get("word_index") == 0), None)
-    assert word0 is not None
-    stored = word0.get("char_bboxes")
-    assert stored is not None and len(stored) == 1
-    assert stored[0]["x"] == 10
-    assert stored[0]["width"] == 8
-
-
-@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
-def test_char_bboxes_in_sidecar_map(seeded_client: TestClient) -> None:
-    """POST char-bboxes writes directly to ``PageState.char_bboxes_map``.
-
-    The sidecar map is the primary in-memory store; the GET response then
-    threads it through the payload builder.
-    """
-    project_state = seeded_client.app.state.project_state  # type: ignore[attr-defined]
-    pstate = project_state.get_page_state(0)
-    assert pstate is not None
-
-    char_bboxes = [{"x": 3, "y": 7, "width": 4, "height": 9}]
-    resp = seeded_client.post(
-        "/api/projects/book1/pages/0/words/0/0/char-bboxes",
-        json={"char_bboxes": char_bboxes},
-    )
-    assert resp.status_code == 200, resp.text
-
-    # Check sidecar map directly — key is "{line_index}_{word_index}".
-    stored = pstate.char_bboxes_map.get("0_0")
-    assert stored is not None, f"char_bboxes_map missing '0_0'; map: {pstate.char_bboxes_map}"
-    assert len(stored) == 1
-    assert stored[0]["x"] == 3
-    assert stored[0]["width"] == 4
-
-
-@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
-def test_char_bboxes_overwrite_replaces_previous(seeded_client: TestClient) -> None:
-    """A second POST to char-bboxes replaces the first (not appends)."""
-    first = [{"x": 0, "y": 0, "width": 5, "height": 10}]
-    second = [
-        {"x": 1, "y": 1, "width": 3, "height": 8},
-        {"x": 4, "y": 1, "width": 3, "height": 8},
-        {"x": 7, "y": 1, "width": 3, "height": 8},
-    ]
-
-    seeded_client.post(
-        "/api/projects/book1/pages/0/words/0/0/char-bboxes",
-        json={"char_bboxes": first},
-    )
-    seeded_client.post(
-        "/api/projects/book1/pages/0/words/0/0/char-bboxes",
-        json={"char_bboxes": second},
-    )
-
-    page_resp = seeded_client.get("/api/projects/book1/pages/0")
-    payload = page_resp.json()
-    line0 = next(lm for lm in payload["line_matches"] if lm["line_index"] == 0)
-    word0 = next(w for w in line0["word_matches"] if w.get("word_index") == 0)
-
-    stored = word0.get("char_bboxes", [])
-    assert len(stored) == 3, f"expected 3 (second batch), got {len(stored)}: {stored}"
-    assert stored[0]["x"] == 1
+    # Stub returns None → page_not_loaded (not 500)
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "page_not_loaded"

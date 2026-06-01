@@ -69,17 +69,33 @@ def image_cache_root(settings: Settings) -> Path:
 # ── /image-cache/{key:path} ────────────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="install_image_cache retired in M5b; use install_blob_route")
-def test_image_cache_serves_existing_image(client: TestClient, image_cache_root: Path) -> None:
-    """A real PNG under the image-cache root is served verbatim with image/png."""
-    payload = b"\x89PNG\r\n\x1a\nfake-bytes-here"
-    (image_cache_root / "alpha.png").write_bytes(payload)
+def test_blob_route_serves_existing_blob(tmp_path: Path) -> None:
+    """``GET /api/blobs/{hash}`` serves the stored bytes when the blob exists.
 
-    r = client.get("/image-cache/alpha.png")
+    Replaces install_image_cache test (retired M5b). The blob route is the
+    successor: content-addressed, accessed via SHA-256 hash, served from the
+    project BlobStore rather than IStorage.
+    """
+    from pdomain_ocr_labeler_spa.core.persistence.page_store import LabelerPageStore
+
+    s = Settings(
+        config_root=tmp_path / "config",
+        data_root=tmp_path / "data",
+        cache_root=tmp_path / "cache",
+        mode="normal",
+    )
+    store = LabelerPageStore(project_dir=tmp_path / "proj1")
+    payload = b"\x89PNG\r\n\x1a\nfake-png"
+    blob_hash = store.blobs.write(payload)
+
+    app = build_app(s)
+    app.state.page_store = store
+    with TestClient(app) as c:
+        r = c.get(f"/api/blobs/{blob_hash}")
 
     assert r.status_code == 200
     assert r.content == payload
-    assert r.headers["content-type"] == "image/png"
+    assert "image" in r.headers.get("content-type", "")
 
 
 def test_image_cache_404_on_missing_key(client: TestClient, image_cache_root: Path) -> None:
@@ -111,29 +127,55 @@ def test_image_cache_blocks_path_traversal(client: TestClient, key: str) -> None
     assert r.status_code == 404
 
 
-@pytest.mark.skip(reason="install_image_cache retired in M5b; use install_blob_route")
-def test_image_cache_serves_nested_keys(client: TestClient, image_cache_root: Path) -> None:
-    """Forward-slash-joined keys (the storage-adapter convention) round-trip."""
-    nested = image_cache_root / "project-foo" / "page0001.png"
-    nested.parent.mkdir(parents=True, exist_ok=True)
-    payload = b"nested-png-bytes"
-    nested.write_bytes(payload)
+def test_blob_route_404_on_unknown_hash(tmp_path: Path) -> None:
+    """``GET /api/blobs/{hash}`` returns 404 when the hash doesn't exist in the store.
 
-    r = client.get("/image-cache/project-foo/page0001.png")
+    Replaces install_image_cache nested-key test (retired M5b).
+    Successor verifies that blobs not in the store surface as 404 (not 500).
+    """
+    from pdomain_ocr_labeler_spa.core.persistence.page_store import LabelerPageStore
 
-    assert r.status_code == 200
-    assert r.content == payload
+    s = Settings(
+        config_root=tmp_path / "config",
+        data_root=tmp_path / "data",
+        cache_root=tmp_path / "cache",
+        mode="normal",
+    )
+    store = LabelerPageStore(project_dir=tmp_path / "proj1")
+
+    app = build_app(s)
+    app.state.page_store = store
+    with TestClient(app) as c:
+        r = c.get("/api/blobs/nonexistent-sha256-hash")
+
+    assert r.status_code == 404
 
 
-@pytest.mark.skip(reason="install_image_cache retired in M5b; use install_blob_route")
-def test_image_cache_sets_immutable_cache_control(client: TestClient, image_cache_root: Path) -> None:
-    """Page images are content-addressed; long-cache headers are safe."""
-    (image_cache_root / "beta.png").write_bytes(b"x")
-    r = client.get("/image-cache/beta.png")
+def test_blob_route_sets_cache_control(tmp_path: Path) -> None:
+    """``GET /api/blobs/{hash}`` response carries a long-lived Cache-Control header.
+
+    Replaces install_image_cache cache-control test (retired M5b).
+    Blobs are content-addressed (SHA-256) so a long cache is safe.
+    """
+    from pdomain_ocr_labeler_spa.core.persistence.page_store import LabelerPageStore
+
+    s = Settings(
+        config_root=tmp_path / "config",
+        data_root=tmp_path / "data",
+        cache_root=tmp_path / "cache",
+        mode="normal",
+    )
+    store = LabelerPageStore(project_dir=tmp_path / "proj1")
+    blob_hash = store.blobs.write(b"test-png-content")
+
+    app = build_app(s)
+    app.state.page_store = store
+    with TestClient(app) as c:
+        r = c.get(f"/api/blobs/{blob_hash}")
+
     assert r.status_code == 200
     cc = r.headers.get("cache-control", "")
     assert "max-age" in cc
-    assert "immutable" in cc
 
 
 @pytest.mark.parametrize(
@@ -449,15 +491,17 @@ def test_spa_fallback_503_when_dist_missing(settings: Settings) -> None:
     assert "frontend-build" in message or "static" in message, body
 
 
-@pytest.mark.skip(reason="install_image_cache retired in M5b; use install_blob_route")
 def test_spa_fallback_skipped_when_frontend_dev_url_set(tmp_path: Path, spa_dir: Path) -> None:
-    """``frontend_dev_url`` flips the SPA mount off — Vite serves the SPA.
+    """``frontend_dev_url`` flips the SPA catch-all off — Vite serves the SPA.
 
-    The backend then only handles ``/api/*`` + ``/healthz`` + ``/env.js``
-    + ``/image-cache``. A bare ``/`` should NOT return the bundled
-    index.html — it should 404 (FastAPI default for unmounted routes).
+    The backend then only handles ``/api/*`` + ``/healthz`` + ``/env.js``.
+    A bare ``/`` should NOT return the bundled index.html — it should 404
+    (FastAPI default for unmounted routes).
+
+    Rewritten from install_image_cache form (retired M5b): checks for
+    ``/api/blobs/{blob_hash}`` instead of ``/image-cache/{key:path}``.
     """
-    del spa_dir  # bundle present, but we expect the route NOT to mount
+    del spa_dir  # bundle present, but we expect the catch-all NOT to mount
     s = Settings(
         config_root=tmp_path / "config",
         data_root=tmp_path / "data",
@@ -467,12 +511,13 @@ def test_spa_fallback_skipped_when_frontend_dev_url_set(tmp_path: Path, spa_dir:
     )
     app = build_app(s)
     paths = {route.path for route in app.routes if hasattr(route, "path")}  # pyright: ignore[reportAttributeAccessIssue]
-    # The catch-all is NOT registered.
+    # The SPA catch-all is NOT registered.
     assert "/{full_path:path}" not in paths
-    # /healthz, /env.js, /image-cache ARE still registered.
+    # Core routes ARE still registered.
     assert "/healthz" in paths
     assert "/env.js" in paths
-    assert "/image-cache/{key:path}" in paths
+    # Blob route is an API route — present regardless of SPA mode.
+    assert "/api/blobs/{blob_hash}" in paths
 
 
 def test_spa_fallback_blocks_path_traversal_into_assets(settings: Settings, spa_dir: Path) -> None:

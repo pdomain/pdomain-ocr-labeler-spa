@@ -31,7 +31,7 @@ from pdomain_ocr_labeler_spa.api.pages import (
     _render_plaintext,
 )
 from pdomain_ocr_labeler_spa.bootstrap import build_app
-from pdomain_ocr_labeler_spa.core.models import EncodedDims, PageRecord, PageSource
+from pdomain_ocr_labeler_spa.core.models import EncodedDims
 from pdomain_ocr_labeler_spa.settings import Settings
 
 # Path to the tiny-fixture project shipped under tests/e2e/fixtures —
@@ -249,110 +249,111 @@ def test_page_payload_helper_returns_payload_for_loaded_project(
 
 
 # ── _build_provenance_summary (GAP-1) ────────────────────────────────
+#
+# The local _build_provenance_summary in api/pages.py is a stub that
+# always returns None (GAP-1 deferred). The rich provenance rendering
+# is now ops.build_provenance_summary(ProvenanceGraph).
+#
+# Tests below:
+# 1. Verify the local stub always returns None (no regressions on the stub).
+# 2. Test ops.build_provenance_summary directly with ProvenanceGraph inputs —
+#    this is the canonical successor to the old saved_provenance / ocr_provenance
+#    fields that were on the legacy PageRecord.
 
 
-def _make_page_record(**overrides: object) -> PageRecord:
-    """Minimal PageRecord for provenance-summary tests."""
-    defaults: dict = {
-        "page_index": 0,
-        "page_number": 1,
-        "image_path": Path("/fake/001.png"),
-        "page_source": PageSource.OCR,
-    }
-    defaults.update(overrides)
-    return PageRecord(**defaults)  # type: ignore[arg-type]
+def test_build_provenance_summary_stub_always_returns_none() -> None:
+    """The local _build_provenance_summary stub in api/pages.py returns None.
+
+    This is intentional (GAP-1 deferred). The ops provenance summary is tested
+    separately below. Successor to the 7 retired saved_provenance tests.
+    """
+    assert _build_provenance_summary(None) is None
+    assert _build_provenance_summary("anything") is None  # type: ignore[arg-type]
+    assert _build_provenance_summary({"ocr": {"engine": "doctr"}}) is None  # type: ignore[arg-type]
 
 
-@pytest.mark.skip(reason="_build_provenance_summary retired in M5b; use ops build_provenance_summary")
-def test_provenance_summary_none_when_no_provenance() -> None:
-    """Returns None when ocr_provenance and saved_provenance are both absent."""
-    rec = _make_page_record()
-    assert _build_provenance_summary(rec) is None
+# ── ops.build_provenance_summary — new-contract coverage ─────────────────────
+#
+# These tests exercise the ops function that _assemble_page_payload calls.
+# They replace the 7 skip-marked tests that used legacy saved_provenance fields.
 
 
-@pytest.mark.skip(reason="_build_provenance_summary retired in M5b; use ops build_provenance_summary")
-def test_provenance_summary_from_saved_provenance_saved_at() -> None:
-    """saved_at in saved_provenance appears as 'Saved: ...' prefix."""
-    rec = _make_page_record(
-        saved_provenance={"saved_at": "2026-05-15T12:34:56.789"},
-    )
-    summary = _build_provenance_summary(rec)
-    assert summary is not None
-    assert summary.startswith("Saved: 2026-05-15T12:34:56")
+def _make_prov_graph(nodes: dict, head_id: str = "", history: list | None = None):
+    """Build a minimal ProvenanceGraph for tests."""
+    from pdomain_ops.pages import ProvenanceGraph, ProvenanceNode
 
-
-@pytest.mark.skip(reason="_build_provenance_summary retired in M5b; use ops build_provenance_summary")
-def test_provenance_summary_from_saved_provenance_engine_and_models() -> None:
-    """Engine + model names from saved_provenance.ocr are included."""
-    rec = _make_page_record(
-        saved_provenance={
-            "saved_at": "2026-05-15T10:00:00",
-            "ocr": {
-                "engine": "doctr",
-                "models": [{"name": "db_resnet50"}, {"name": "crnn_vgg16_bn"}],
-            },
-        },
-    )
-    summary = _build_provenance_summary(rec)
-    assert summary is not None
-    assert "Engine: doctr" in summary
-    assert "db_resnet50" in summary
-    assert "crnn_vgg16_bn" in summary
-
-
-@pytest.mark.skip(reason="_build_provenance_summary retired in M5b; use ops build_provenance_summary")
-def test_provenance_summary_unknown_engine_omitted() -> None:
-    """'unknown' engine sentinel is excluded from the summary."""
-    rec = _make_page_record(
-        saved_provenance={
-            "ocr": {"engine": "unknown"},
-        },
-    )
-    assert _build_provenance_summary(rec) is None
-
-
-@pytest.mark.skip(reason="_build_provenance_summary retired in M5b; use ops build_provenance_summary")
-def test_provenance_summary_from_ocr_provenance_fallback() -> None:
-    """Falls back to ocr_provenance when saved_provenance is absent."""
-    from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
-        OCRModelProvenance,
-        OCRProvenance,
+    built_nodes = {}
+    for nid, nd in nodes.items():
+        built_nodes[nid] = ProvenanceNode(
+            id=nid,
+            source=nd.get("source", "test"),
+            tool=nd.get("tool"),
+        )
+    return ProvenanceGraph(
+        nodes=built_nodes,
+        head_id=head_id or (next(iter(built_nodes)) if built_nodes else ""),
+        history=history or [],
     )
 
-    prov = OCRProvenance(
-        engine="doctr",
-        models=[OCRModelProvenance(name="db_resnet50")],
+
+def test_ops_provenance_summary_none_graph_returns_sentinel() -> None:
+    """ops.build_provenance_summary(None) returns the 'no provenance' sentinel."""
+    from pdomain_ops.pages import build_provenance_summary as ops_build
+
+    assert ops_build(None) == "no provenance"
+
+
+def test_ops_provenance_summary_single_node_no_tool() -> None:
+    """A single OCR node with no tool shows just the source."""
+    from pdomain_ops.pages import build_provenance_summary as ops_build
+
+    graph = _make_prov_graph({"ocr-1": {"source": "ocr"}}, head_id="ocr-1")
+    summary = ops_build(graph)
+    assert "ocr" in summary
+    assert "no provenance" not in summary
+
+
+def test_ops_provenance_summary_single_node_with_tool() -> None:
+    """A node with source + tool shows 'source(tool)'."""
+    from pdomain_ops.pages import build_provenance_summary as ops_build
+
+    graph = _make_prov_graph({"n1": {"source": "ocr", "tool": "doctr"}}, head_id="n1")
+    assert "ocr(doctr)" in ops_build(graph)
+
+
+def test_ops_provenance_summary_chain_via_history() -> None:
+    """History list is walked in order: node1 → node2."""
+    from pdomain_ops.pages import build_provenance_summary as ops_build
+
+    graph = _make_prov_graph(
+        {"n1": {"source": "ingest"}, "n2": {"source": "labeler"}},
+        head_id="n2",
+        history=["n1", "n2"],
     )
-    rec = _make_page_record(ocr_provenance=prov)
-    summary = _build_provenance_summary(rec)
-    assert summary is not None
-    assert "Engine: doctr" in summary
-    assert "db_resnet50" in summary
+    result = ops_build(graph)
+    assert "ingest" in result
+    assert "labeler" in result
+    # History order preserved
+    assert result.index("ingest") < result.index("labeler")
 
 
-@pytest.mark.skip(reason="_build_provenance_summary retired in M5b; use ops build_provenance_summary")
-def test_provenance_summary_app_version_included() -> None:
-    """App name + version from saved_provenance.app appear in the summary."""
-    rec = _make_page_record(
-        saved_provenance={
-            "app": {"name": "pdomain_ocr_labeler_spa", "version": "0.1.0"},
-        },
+def test_ops_provenance_summary_empty_nodes_returns_sentinel() -> None:
+    """Empty node dict → 'no provenance'."""
+    from pdomain_ops.pages import ProvenanceGraph
+    from pdomain_ops.pages import build_provenance_summary as ops_build
+
+    empty = ProvenanceGraph()
+    assert ops_build(empty) == "no provenance"
+
+
+def test_ops_provenance_summary_head_fallback_when_no_history() -> None:
+    """When history is empty, falls back to head_id node."""
+    from pdomain_ops.pages import build_provenance_summary as ops_build
+
+    graph = _make_prov_graph(
+        {"h1": {"source": "ocr", "tool": "doctr"}},
+        head_id="h1",
+        history=[],
     )
-    summary = _build_provenance_summary(rec)
-    assert summary is not None
-    assert "pdomain_ocr_labeler_spa" in summary
-    assert "0.1.0" in summary
-
-
-@pytest.mark.skip(reason="_build_provenance_summary retired in M5b; use ops build_provenance_summary")
-def test_provenance_summary_separator_dot_dot_dot() -> None:
-    """Multiple parts are joined with ' . '."""
-    rec = _make_page_record(
-        saved_provenance={
-            "saved_at": "2026-05-15T09:00:00",
-            "ocr": {"engine": "doctr"},
-        },
-    )
-    summary = _build_provenance_summary(rec)
-    assert summary is not None
-    assert " · " in summary
+    result = ops_build(graph)
+    assert "ocr(doctr)" in result

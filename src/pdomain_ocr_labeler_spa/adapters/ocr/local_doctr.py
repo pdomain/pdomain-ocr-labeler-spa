@@ -239,11 +239,14 @@ class LocalDoctrPageLoader:
         # Lazy import — keeps test collection torch-free; matches the
         # pattern in core/ocr/predictor._build.
         document_module = importlib.import_module("pdomain_book_tools.ocr.document")
-        doc = document_module.Document.from_image_ocr_via_doctr(
+        # pdomain-book-tools ≥0.17.1 returns (Document, rotation_degrees) as a
+        # tuple; older versions returned Document directly. Unpack defensively.
+        ocr_result = document_module.Document.from_image_ocr_via_doctr(
             image_path,
             source_identifier=image_path.name,
             predictor=predictor,
         )
+        doc = ocr_result[0] if isinstance(ocr_result, tuple) else ocr_result
         # Legacy parity (ocr_service.py:80, page_operations.py:351):
         # ``Document`` produced from a single image has exactly one
         # ``Page`` at ``pages[0]``.

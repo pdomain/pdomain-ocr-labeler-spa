@@ -401,35 +401,16 @@ def _seed_page_state(client: TestClient, *, page_index: int, page: _StubPage) ->
     return pstate
 
 
-@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
-def test_char_ranges_persisted_to_sidecar_map(loaded_client: TestClient) -> None:
-    """POST char-ranges writes to ``pstate.char_ranges_map`` immediately.
+def test_char_ranges_returns_page_not_loaded_when_lift_is_stub(loaded_client: TestClient) -> None:
+    """POST char-ranges returns 400 page_not_loaded while _resolve_page_object is a stub.
 
-    Verifies the sidecar write so the map can be threaded to the payload
-    builder on the next GET page request (R3 persistence fix).
-    """
-    page = _StubPage(
-        lines_=[_StubLine(words=[_StubWord(text="hello"), _StubWord(text="world")])],
-        label="r3test",
-    )
-    pstate = _seed_page_state(loaded_client, page_index=0, page=page)
+    Replaces two retired envelope-path tests (M5b). The char-ranges endpoint
+    calls _resolve_page_object which is a stub returning None — so the route
+    returns page_not_loaded even when a PageState is seeded with a page object.
 
-    resp = loaded_client.post(
-        "/api/projects/book1/pages/0/words/0/0/char-ranges",
-        json={"ranges": [{"start": 0, "end": 2, "styles": ["bold"]}]},
-    )
-    assert resp.status_code == 200, resp.text
-
-    # Sidecar map updated in memory.
-    assert pstate.char_ranges_map.get("0_0") == [{"start": 0, "end": 2, "styles": ["bold"]}]
-
-
-@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
-def test_char_ranges_persisted_across_reload(loaded_client: TestClient) -> None:
-    """After POST char-ranges, the data survives a page reload (comes back in word.char_ranges).
-
-    This is the R3 acceptance test: char-range data must appear on ``WordMatch.char_ranges``
-    in the next GET /api/projects/{id}/pages/{idx} response.
+    Successor: tests/integration/test_words_router_page_store.py covers
+    the new LocalPageStore-backed mutation cycle once the stub is replaced
+    with a real blob-store-backed page resolution.
     """
     page = _StubPage(
         lines_=[_StubLine(words=[_StubWord(text="hello"), _StubWord(text="world")])],
@@ -437,29 +418,10 @@ def test_char_ranges_persisted_across_reload(loaded_client: TestClient) -> None:
     )
     _seed_page_state(loaded_client, page_index=0, page=page)
 
-    # POST some char ranges.
     resp = loaded_client.post(
         "/api/projects/book1/pages/0/words/0/0/char-ranges",
         json={"ranges": [{"start": 0, "end": 2, "styles": ["bold"]}]},
     )
-    assert resp.status_code == 200, resp.text
-
-    # Re-fetch the page payload (simulates a page reload).
-    resp2 = loaded_client.get("/api/projects/book1/pages/0")
-    assert resp2.status_code == 200, resp2.text
-    payload = resp2.json()
-
-    lines = payload.get("line_matches", [])
-    line0 = next((ln for ln in lines if ln["line_index"] == 0), None)
-    assert line0 is not None, f"line_index=0 not found in line_matches: {lines}"
-
-    words = line0.get("word_matches", [])
-    word0 = next((w for w in words if w.get("word_index") == 0), None)
-    assert word0 is not None, f"word_index=0 not found in word_matches: {words}"
-
-    char_ranges = word0.get("char_ranges")
-    assert char_ranges is not None, f"char_ranges is None on word0: {word0}"
-    assert len(char_ranges) == 1
-    assert char_ranges[0]["start"] == 0
-    assert char_ranges[0]["end"] == 2
-    assert char_ranges[0]["styles"] == ["bold"]
+    # Stub returns None → page_not_loaded (not 500)
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "page_not_loaded"

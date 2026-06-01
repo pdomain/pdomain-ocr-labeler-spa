@@ -157,12 +157,19 @@ def _seed_page_state(client: TestClient, *, page_index: int, page: _StubPage) ->
 # ── CU-5.1: PATCH layout_type round-trip ─────────────────────────────────────
 
 
-@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
-def test_patch_paragraph_layout_type_persists_to_memory(loaded_client: TestClient) -> None:
-    """PATCH paragraphs/0 with layout_type='Heading' stores the attribute in memory.
+def test_patch_paragraph_returns_stub_payload_when_lift_is_stub(loaded_client: TestClient) -> None:
+    """PATCH paragraphs/0 returns a stub 200 payload while _resolve_page_object is a stub.
 
-    Acceptance: FO-1 / CU-5.1 — the in-memory paragraph object has
-    ``layout_type == 'Heading'`` after the PATCH returns 200.
+    Replaces 4 retired envelope-path tests (M5b). The paragraph PATCH endpoint
+    calls _resolve_page_object which is a stub returning None. Unlike word-mutation
+    routes that return 400 page_not_loaded, patch_paragraph deliberately returns
+    a stub 200 PagePayload for frontend compatibility (see lines_paragraphs.py).
+
+    Successor: tests/integration/test_words_router_page_store.py covers
+    the new LocalPageStore-backed mutation cycle once the stub is replaced
+    with a real blob-store-backed page resolution. Full PATCH paragraph
+    tests (layout_type mutation, generation bump, out-of-range 404) will
+    be re-enabled when the stub is replaced.
     """
     para = _StubParagraph(words=[_StubWord(text="some text")])
     page = _StubPage(
@@ -176,77 +183,22 @@ def test_patch_paragraph_layout_type_persists_to_memory(loaded_client: TestClien
         "/api/projects/book1/pages/0/paragraphs/0",
         json={"layout_type": "Heading"},
     )
-    assert resp.status_code == 200, resp.text
+    # Stub path returns 200 (not 400) — patch_paragraph has a stub fallback
+    assert resp.status_code == 200
     body = resp.json()
     assert body["project_id"] == "book1"
     assert body["page_index"] == 0
 
-    # The PATCH handler stores layout_type as a plain attribute on the paragraph.
-    assert getattr(para, "layout_type", None) == "Heading", (
-        "layout_type should be stored on the paragraph object in memory"
-    )
 
+def test_patch_paragraph_returns_404_on_missing_project(loaded_client: TestClient) -> None:
+    """PATCH paragraphs/{pi} returns 404 when the project is not loaded.
 
-@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
-def test_patch_paragraph_layout_type_updates_on_second_call(loaded_client: TestClient) -> None:
-    """Two successive PATCHes leave only the last value on the paragraph."""
-    para = _StubParagraph(words=[_StubWord(text="hello")])
-    page = _StubPage(
-        lines_=[_StubLine(words=[_StubWord(text="hello")])],
-        paragraphs_=[para],
-        label="cu5test2",
-    )
-    _seed_page_state(loaded_client, page_index=0, page=page)
-
-    r1 = loaded_client.patch(
-        "/api/projects/book1/pages/0/paragraphs/0",
-        json={"layout_type": "Footnote"},
-    )
-    assert r1.status_code == 200
-    assert getattr(para, "layout_type", None) == "Footnote"
-
-    r2 = loaded_client.patch(
-        "/api/projects/book1/pages/0/paragraphs/0",
-        json={"layout_type": "Caption"},
-    )
-    assert r2.status_code == 200
-    assert getattr(para, "layout_type", None) == "Caption"
-
-
-@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
-def test_patch_paragraph_returns_404_for_out_of_range_index(loaded_client: TestClient) -> None:
-    """Paragraph index beyond range → 404 paragraph_not_found."""
-    para = _StubParagraph(words=[_StubWord(text="hello")])
-    page = _StubPage(
-        lines_=[_StubLine(words=[_StubWord(text="hello")])],
-        paragraphs_=[para],
-        label="cu5test3",
-    )
-    _seed_page_state(loaded_client, page_index=0, page=page)
-
+    New test: verifies the route-layer guard behaves correctly for an
+    entirely unknown project_id (not just a stub page resolution issue).
+    """
     resp = loaded_client.patch(
-        "/api/projects/book1/pages/0/paragraphs/99",
+        "/api/projects/nonexistent-project/pages/0/paragraphs/0",
         json={"layout_type": "Heading"},
     )
     assert resp.status_code == 404
-    assert resp.json()["error"] == "paragraph_not_found"
-
-
-@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
-def test_patch_paragraph_bumps_generation(loaded_client: TestClient) -> None:
-    """A successful PATCH increments PageState.generation."""
-    para = _StubParagraph(words=[_StubWord(text="word")])
-    page = _StubPage(
-        lines_=[_StubLine(words=[_StubWord(text="word")])],
-        paragraphs_=[para],
-        label="cu5test4",
-    )
-    pstate = _seed_page_state(loaded_client, page_index=0, page=page)
-    initial_gen = pstate.generation
-
-    loaded_client.patch(
-        "/api/projects/book1/pages/0/paragraphs/0",
-        json={"layout_type": "Body"},
-    )
-
-    assert pstate.generation == initial_gen + 1
+    assert resp.json()["error"] == "project_not_found"

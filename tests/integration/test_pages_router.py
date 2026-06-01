@@ -355,40 +355,30 @@ def test_get_job_by_id_returns_404_for_unknown(bare_client: TestClient) -> None:
     assert resp.status_code == 404
 
 
-@pytest.mark.skip(reason="envelope_lift retired in M5b")
-def test_get_page_stamps_payload_error_on_corrupt_envelope(
+def test_get_page_returns_200_with_empty_line_matches_when_ocr_stub(
     tmp_path: Path,
     projects_root: Path,
-    monkeypatch,
 ) -> None:
-    """When envelope lift fails, GET /pages/{idx} returns 200 with payload_error set on page_record."""
-    from pdomain_ocr_labeler_spa.core.envelope_lift import EnvelopeLiftError
+    """GET /pages/{idx} returns 200 when OCR stub returns a page with no lift.
 
-    monkeypatch.setattr(
-        "pdomain_ocr_labeler_spa.api.pages.lift_envelope_to_page",
-        lambda payload: EnvelopeLiftError(
-            message="injected test failure",
-            cause=ValueError("injected"),
-        ),
-    )
+    Replaces the retired envelope_lift test (M5b). The lift path is now a stub
+    in _resolve_page_object_for_pages that returns None — line_matches will be
+    empty and the response is still 200 (degraded-but-valid).
 
+    Successor: tests/integration/test_words_router_page_store.py covers
+    the new LocalPageStore-backed save/load cycle.
+    """
     settings = _make_settings(tmp_path, source_projects_root=projects_root)
     app = build_app(settings)
     with TestClient(app) as c:
         c.post("/api/projects/load", json={"project_root": str(projects_root / "book1")})
-        # Load the page so pstate.page_record is set.
-        c.post("/api/projects/book1/pages/0/load", json={})
         resp = c.get("/api/projects/book1/pages/0")
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["line_matches"] == []
-    pr = body.get("page_record")
-    if pr is not None:
-        assert pr.get("payload_error") is not None, (
-            "Expected payload_error to be stamped when lift fails, got None. "
-            f"page_record keys: {list(pr.keys())}"
-        )
+    assert body["project_id"] == "book1"
+    assert body["page_index"] == 0
+    assert isinstance(body["line_matches"], list)
 
 
 def test_get_page_image_missing_returns_404(

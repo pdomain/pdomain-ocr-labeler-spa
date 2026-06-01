@@ -288,31 +288,19 @@ def _write_envelope_at(path: Path, payload_page: dict) -> None:
     )
 
 
-@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
-def test_load_labeled_reads_envelope_from_data_root_lane(
+def test_load_labeled_is_a_no_op_stub(
     tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
 ) -> None:
-    """When the on-disk labeled-lane envelope exists for this page, the
-    loader returns a ``PageLoadOutcome(source=FILESYSTEM, payload=
-    UserPageEnvelope)``. Spec §1 lane 2 + §9 lines 32–40."""
-    from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
-        UserPageEnvelope,
-        labeled_envelope_path,
-    )
+    """load_labeled always returns None — the labeled lane is retired (M5b).
 
+    Replaces retired envelope-lane test. The labeled lane was removed as part
+    of the greenfield event-store adoption. The successor path is the
+    LocalPageStore blob-store ingestion: tests/unit/adapters/test_local_doctr_page_store.py.
+    """
     data_root = tmp_path / "data"
     loader = _make_loader_with_persistence(tmp_path, stub_predictor_cache, data_root=data_root)
-    project_id = loader.project.project_id
-
-    envelope_path = labeled_envelope_path(data_root, project_id, page_index=0)
-    _write_envelope_at(envelope_path, {"index": 0, "name": "page_000.png"})
-
-    outcome = loader.load_labeled(0)
-    assert outcome is not None
-    assert outcome.page_index == 0
-    assert outcome.source == PageSource.FILESYSTEM
-    assert isinstance(outcome.payload, UserPageEnvelope)
-    assert outcome.payload.payload.page == {"index": 0, "name": "page_000.png"}
+    # No envelope on disk and no event store — load_labeled must return None
+    assert loader.load_labeled(0) is None
 
 
 def test_load_labeled_returns_none_when_no_envelope_on_disk(
@@ -325,47 +313,36 @@ def test_load_labeled_returns_none_when_no_envelope_on_disk(
     assert loader.load_labeled(0) is None
 
 
-@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
-def test_load_labeled_returns_none_on_corrupt_envelope(
+def test_load_labeled_always_returns_none_regardless_of_disk_state(
     tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
 ) -> None:
-    """Corrupt JSON at the expected path → ``None`` (spec §9 lines
-    32–40 — fall through, never crash)."""
-    from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
-        labeled_envelope_path,
-    )
+    """load_labeled returns None even when the old envelope path has content.
 
+    Replaces retired corrupt-envelope test. The labeled lane is retired (M5b);
+    any on-disk legacy envelope files are ignored. The stub always returns None.
+    """
     data_root = tmp_path / "data"
     loader = _make_loader_with_persistence(tmp_path, stub_predictor_cache, data_root=data_root)
-    p = labeled_envelope_path(data_root, loader.project.project_id, page_index=0)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text("{corrupt}")
+    # Write something at the old labeled-lane path — must still be ignored
+    legacy_dir = data_root / "labeled-projects" / loader.project.project_id
+    legacy_dir.mkdir(parents=True, exist_ok=True)
+    (legacy_dir / "page_000_NNN.json").write_text('{"some": "legacy_data"}')
     assert loader.load_labeled(0) is None
 
 
-@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
-def test_load_cached_reads_envelope_from_cache_root_lane(
+def test_load_cached_is_a_no_op_stub(
     tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
 ) -> None:
-    """When the on-disk cached-lane envelope exists, the loader returns
-    ``PageLoadOutcome(source=CACHED_OCR, payload=UserPageEnvelope)``.
-    Spec §1 lane 3 + §9 lines 32–40."""
-    from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
-        UserPageEnvelope,
-        cached_envelope_path,
-    )
+    """load_cached always returns None — the cached lane is retired (M5b).
 
+    Replaces retired cached-envelope-lane test. The cached lane was removed
+    as part of the greenfield event-store adoption. The successor path is
+    the LocalPageStore blob-store ingestion:
+    tests/unit/adapters/test_local_doctr_page_store.py.
+    """
     cache_root = tmp_path / "cache"
     loader = _make_loader_with_persistence(tmp_path, stub_predictor_cache, cache_root=cache_root)
-
-    envelope_path = cached_envelope_path(cache_root, loader.project.project_id, 0)
-    _write_envelope_at(envelope_path, {"index": 0})
-
-    outcome = loader.load_cached(0)
-    assert outcome is not None
-    assert outcome.page_index == 0
-    assert outcome.source == PageSource.CACHED_OCR
-    assert isinstance(outcome.payload, UserPageEnvelope)
+    assert loader.load_cached(0) is None
 
 
 def test_load_cached_returns_none_when_no_envelope_on_disk(
@@ -376,77 +353,33 @@ def test_load_cached_returns_none_when_no_envelope_on_disk(
     assert loader.load_cached(0) is None
 
 
-@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
-def test_ensure_page_model_routes_through_labeled_lane_when_envelope_exists(
+def test_ensure_page_model_falls_through_to_ocr_when_no_lanes(
     tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
 ) -> None:
-    """End-to-end: ``ensure_page_model`` dispatcher takes the labeled
-    lane FIRST when both lanes have files (spec §9 lines 32–36).
-    OCR must NOT be invoked."""
-    from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
-        cached_envelope_path,
-        labeled_envelope_path,
-    )
+    """ensure_page_model calls run_ocr when both load_labeled and load_cached return None.
 
+    Replaces 2 retired envelope-lane routing tests (M5b). With labeled and cached
+    lanes retired, ensure_page_model always takes the OCR path. Verifies the
+    remaining lane precedence logic: labeled→None, cached→None, OCR→outcome.
+    """
     from pdomain_ocr_labeler_spa.core.page_state import ensure_page_model
     from pdomain_ocr_labeler_spa.core.project_state import ProjectState
 
-    data_root = tmp_path / "data"
-    cache_root = tmp_path / "cache"
-    loader = _make_loader_with_persistence(
-        tmp_path, stub_predictor_cache, data_root=data_root, cache_root=cache_root
-    )
-    project_id = loader.project.project_id
-
-    _write_envelope_at(
-        labeled_envelope_path(data_root, project_id, 0),
-        {"index": 0, "name": "labeled-marker"},
-    )
-    _write_envelope_at(
-        cached_envelope_path(cache_root, project_id, 0),
-        {"index": 0, "name": "cached-marker"},
-    )
-
+    project = _make_project(tmp_path)
     state = ProjectState()
-    state.set_loaded_project(loader.project)
+    state.set_loaded_project(project)
+    loader = LocalDoctrPageLoader(
+        project=project,
+        predictor_cache=stub_predictor_cache,
+        detection_key="stock",
+        recognition_key="stock",
+        hf_revision=None,
+    )
     outcome = ensure_page_model(state, 0, loader=loader)
     assert outcome is not None
-    assert outcome.source == PageSource.FILESYSTEM
-    # Labeled-lane envelope wins over cached-lane envelope.
-    assert outcome.payload.payload.page["name"] == "labeled-marker"
-    # OCR was NOT invoked.
-    assert stub_pdomain_book_tools.calls == []
-
-
-@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
-def test_ensure_page_model_routes_through_cached_lane_when_no_labeled(
-    tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
-) -> None:
-    """When labeled-lane envelope is missing but cached is present,
-    cached wins; OCR is still skipped."""
-    from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
-        cached_envelope_path,
-    )
-
-    from pdomain_ocr_labeler_spa.core.page_state import ensure_page_model
-    from pdomain_ocr_labeler_spa.core.project_state import ProjectState
-
-    data_root = tmp_path / "data"
-    cache_root = tmp_path / "cache"
-    loader = _make_loader_with_persistence(
-        tmp_path, stub_predictor_cache, data_root=data_root, cache_root=cache_root
-    )
-    _write_envelope_at(
-        cached_envelope_path(cache_root, loader.project.project_id, 0),
-        {"index": 0, "name": "cached-only"},
-    )
-
-    state = ProjectState()
-    state.set_loaded_project(loader.project)
-    outcome = ensure_page_model(state, 0, loader=loader)
-    assert outcome is not None
-    assert outcome.source == PageSource.CACHED_OCR
-    assert stub_pdomain_book_tools.calls == []
+    assert outcome.source == PageSource.OCR
+    # OCR was invoked (only path available after lanes retired)
+    assert len(stub_pdomain_book_tools.calls) >= 1
 
 
 def test_loader_conforms_to_page_loader_protocol(
@@ -510,16 +443,16 @@ def test_loader_integrates_with_ensure_page_model(
 # outcome is still returned to the caller.
 
 
-@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
-def test_run_ocr_writes_cached_envelope_when_cache_root_set(
+def test_run_ocr_does_not_write_cached_envelope_file(
     tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
 ) -> None:
-    """After run_ocr succeeds, a cached envelope file appears at
-    cached_envelope_path(cache_root, project_id, page_index)."""
-    from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
-        cached_envelope_path,
-    )
+    """After run_ocr, NO UserPageEnvelope JSON file is written to disk.
 
+    Replaces 2 retired cached-envelope-write tests (M5b). The auto-cache-write
+    side effect was removed when the UserPageEnvelope lane was retired.
+    The successor path writes to the LocalPageStore blob store instead:
+    tests/unit/adapters/test_local_doctr_page_store.py.
+    """
     project = _make_project(tmp_path)
     cache_root = tmp_path / "cache"
     loader = LocalDoctrPageLoader(
@@ -530,48 +463,14 @@ def test_run_ocr_writes_cached_envelope_when_cache_root_set(
         hf_revision=None,
         cache_root=cache_root,
     )
-
     loader.run_ocr(0)
 
-    expected = cached_envelope_path(cache_root, "proj1", 0)
-    assert expected.exists(), f"expected cached envelope at {expected}"
-
-
-@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
-def test_cached_envelope_has_cached_source_lane(
-    tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
-) -> None:
-    """Auto-cache-write must set ``provenance.source_lane='cached'``
-    so a future read can distinguish a cache write from a labeled save.
-    Pinned via build_envelope's source_lane override (slice 8b-v)."""
-    import json
-
-    from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
-        cached_envelope_path,
-    )
-
-    project = _make_project(tmp_path)
-    cache_root = tmp_path / "cache"
-    loader = LocalDoctrPageLoader(
-        project=project,
-        predictor_cache=stub_predictor_cache,
-        detection_key="stock",
-        recognition_key="stock",
-        hf_revision=None,
-        cache_root=cache_root,
-    )
-    loader.run_ocr(2)
-
-    raw = json.loads(cached_envelope_path(cache_root, "proj1", 2).read_text())
-    assert raw["provenance"]["source_lane"] == "cached"
-    assert raw["source"]["page_index"] == 2
-    assert raw["source"]["page_number"] == 3
-    assert raw["source"]["image_path"] == "page_002.png"
-    # Page dict was placed in payload.page verbatim from to_dict.
-    assert raw["payload"]["page"] == {
-        "type": "Page",
-        "source_identifier": "page_002.png",
-    }
+    # No envelope JSON files should exist (old cached-lane path retired)
+    if cache_root.exists():
+        envelope_files = list(cache_root.rglob("*_envelope.json"))
+        assert envelope_files == [], f"unexpected envelope files: {envelope_files}"
+        json_files = list(cache_root.rglob("*.json"))
+        assert json_files == [], f"unexpected JSON files: {json_files}"
 
 
 def test_run_ocr_skips_cache_write_when_cache_root_none(
@@ -637,37 +536,27 @@ def test_run_ocr_swallows_cache_write_failure(
         assert list(page_images_dir.glob("*_envelope.json")) == []
 
 
-@pytest.mark.skip(reason="envelope/lane behavior retired in M5b")
-def test_cache_write_provenance_includes_predictor_keys(
+def test_run_ocr_outcome_carries_detection_and_recognition_keys(
     tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
 ) -> None:
-    """OCRProvenance.models reflects the loader's detection + recognition
-    keys so a re-read of the cached envelope can tell which models
-    produced it. Legacy parity: ``_resolve_ocr_provenance_for_save`` at
-    page_operations.py:1166 carries the predictor identity."""
-    import json
+    """run_ocr returns a PageLoadOutcome with source=OCR regardless of predictor keys.
 
-    from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
-        cached_envelope_path,
-    )
-
+    Replaces retired cache-write provenance test (M5b). The provenance is now
+    tracked in the LocalPageStore blob-store via PageAggregate events.
+    Successor: tests/unit/adapters/test_local_doctr_page_store.py verifies
+    the ops PageAggregate carries detection/recognition identity.
+    """
     project = _make_project(tmp_path)
-    cache_root = tmp_path / "cache"
     loader = LocalDoctrPageLoader(
         project=project,
         predictor_cache=stub_predictor_cache,
         detection_key="my-det",
         recognition_key="my-reco",
         hf_revision="abc1234",
-        cache_root=cache_root,
     )
-    loader.run_ocr(0)
-
-    raw = json.loads(cached_envelope_path(cache_root, "proj1", 0).read_text())
-    models = raw["provenance"]["ocr"]["models"]
-    model_names = [m["name"] for m in models]
-    assert "my-det" in model_names
-    assert "my-reco" in model_names
+    outcome = loader.run_ocr(0)
+    assert outcome is not None
+    assert outcome.source == PageSource.OCR
 
 
 # ── Ground-truth injection on Page after OCR ─────────────────────────────

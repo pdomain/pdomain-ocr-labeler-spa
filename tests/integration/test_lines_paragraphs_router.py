@@ -373,28 +373,25 @@ def _make_two_word_line() -> _StubLine:
 # ── set-line-gt ───────────────────────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
-def test_set_line_gt_distributes_tokens(loaded_client: TestClient) -> None:
-    """POST .../lines/0/set-gt distributes space-split tokens to words."""
+def test_set_line_gt_returns_page_not_loaded_when_lift_is_stub(loaded_client: TestClient) -> None:
+    """POST .../lines/0/set-gt returns 400 page_not_loaded while _resolve_page_object is a stub.
+
+    Replaces 2 retired envelope-path tests (M5b). The set-gt endpoint calls
+    _resolve_page_object which is a stub returning None — so the route returns
+    page_not_loaded even when a PageState is seeded with a page object.
+
+    Successor: tests/integration/test_words_router_page_store.py covers
+    the new LocalPageStore-backed mutation cycle once the stub is replaced.
+    """
     page = _StubPage(lines_=[_make_two_word_line()])
     _seed_page_state(loaded_client, page_index=0, page=page)
     resp = loaded_client.post(
         "/api/projects/book1/pages/0/lines/0/set-gt",
         json={"text": "hello world"},
     )
-    assert resp.status_code == 200
-
-
-@pytest.mark.skip(reason="envelope path retired in M5b; route wiring pending M9")
-def test_set_line_gt_clears_excess_words(loaded_client: TestClient) -> None:
-    """Fewer tokens than words → still 200."""
-    page = _StubPage(lines_=[_make_two_word_line()])
-    _seed_page_state(loaded_client, page_index=0, page=page)
-    resp = loaded_client.post(
-        "/api/projects/book1/pages/0/lines/0/set-gt",
-        json={"text": "only"},
-    )
-    assert resp.status_code == 200
+    # Stub returns None → page_not_loaded (not 500)
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "page_not_loaded"
 
 
 def test_set_line_gt_rejects_ligatures(bare_client: TestClient) -> None:

@@ -353,75 +353,15 @@ def test_resolve_save_directory_does_not_create_dirs(tmp_path: Path) -> None:
     assert not result.exists()
 
 
-@pytest.mark.skip(reason="persist_page_to_file retired in M5b; use save_page_to_store")
-def test_persist_page_to_file_writes_labeled_envelope(tmp_path: Path) -> None:
-    """persist_page_to_file writes a readable envelope to the labeled lane."""
-    import json
+def test_persist_page_to_file_raises_not_implemented(tmp_path: Path) -> None:
+    """persist_page_to_file raises NotImplementedError — use save_page_to_store instead.
 
-    from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import (
-        is_user_page_envelope,
-        labeled_envelope_path,
-    )
-
-    from pdomain_ocr_labeler_spa.core.page_state import persist_page_to_file
-
-    # Build a minimal Page-stub that has to_dict().
-    @dataclass
-    class _StubPage:
-        words: list = field(default_factory=list)
-
-        def to_dict(self) -> dict:
-            return {"words": [], "paragraphs": [], "lines": [], "source_identifier": "001.png"}
-
-    project = _make_project(total_pages=3)
-    page = _StubPage()
-    data_root = tmp_path / "data"
-
-    persist_page_to_file(
-        page=page,
-        project=project,
-        page_index=0,
-        data_root=data_root,
-    )
-
-    expected_path = labeled_envelope_path(data_root, project.project_id, 0)
-    assert expected_path.exists(), f"Labeled envelope not written to {expected_path}"
-    raw = json.loads(expected_path.read_text())
-    assert is_user_page_envelope(raw), "Written file is not a valid UserPageEnvelope"
-
-
-@pytest.mark.skip(reason="persist_page_to_file retired in M5b; use save_page_to_store")
-def test_persist_page_to_file_creates_parent_dirs(tmp_path: Path) -> None:
-    """persist_page_to_file creates the labeled-projects/<pid>/ directory tree."""
-
-    @dataclass
-    class _MinimalPage:
-        def to_dict(self) -> dict:
-            return {"words": [], "paragraphs": [], "lines": [], "source_identifier": "001.png"}
-
-    from pdomain_ocr_labeler_spa.core.page_state import persist_page_to_file
-
-    project = _make_project(total_pages=1)
-    data_root = tmp_path / "data"
-    # Parent does not exist yet.
-    assert not data_root.exists()
-    persist_page_to_file(page=_MinimalPage(), project=project, page_index=0, data_root=data_root)
-    from pdomain_ocr_labeler_spa.core.persistence.user_page_envelope import labeled_envelope_path
-
-    assert labeled_envelope_path(data_root, project.project_id, 0).exists()
-
-
-@pytest.mark.skip(reason="persist_page_to_file retired in M5b; use save_page_to_store")
-def test_persist_page_to_file_index_out_of_range_raises(tmp_path: Path) -> None:
-    """persist_page_to_file raises IndexError for out-of-range page_index."""
-
-    @dataclass
-    class _MinimalPage:
-        def to_dict(self) -> dict:
-            return {}
-
+    The UserPageEnvelope lane was retired in M5b.  The function is kept
+    to give callers a loud failure so they can be migrated to save_page_to_store.
+    Successor: tests/unit/core/test_save_via_labeler_edited.py.
+    """
     from pdomain_ocr_labeler_spa.core.page_state import persist_page_to_file
 
     project = _make_project(total_pages=2)
-    with pytest.raises(IndexError):
-        persist_page_to_file(page=_MinimalPage(), project=project, page_index=5, data_root=tmp_path)
+    with pytest.raises(NotImplementedError):
+        persist_page_to_file(page=object(), project=project, page_index=0, data_root=tmp_path)
