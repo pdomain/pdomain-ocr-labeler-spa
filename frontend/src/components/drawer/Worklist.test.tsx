@@ -1,4 +1,5 @@
 // Worklist.test.tsx — Tests for the Worklist drawer tab (Slice 11, P5.a, P5.b).
+// Covers: B-DRAWER-001, B-DRAWER-004, B-DRAWER-005
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 11, Gap 19, Gap 20.
 // Phase 2.3: pdomain-ui <WordList> uses react-virtuoso internally.  In jsdom there
 //   is no scroll area so Virtuoso renders zero items.  We mock the pdomain-ui worklist

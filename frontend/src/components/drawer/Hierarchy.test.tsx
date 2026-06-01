@@ -1,4 +1,5 @@
 // Hierarchy.test.tsx — Tests for the Hierarchy drawer tab (Slice 12, P5.c).
+// Covers: B-DRAWER-002, B-DRAWER-007, B-DRAWER-008, B-DRAWER-009
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 12, Gaps 21, 22.
 
 import { describe, it, expect, beforeEach } from "vitest";

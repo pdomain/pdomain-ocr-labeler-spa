@@ -1,4 +1,5 @@
 // Rail.test.tsx — Tests for the Rail target/mode selector panel.
+// Covers: B-SHELL-001, B-SHELL-006, B-SHELL-007, B-SHELL-008
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 10.
 // Hi-fi gaps P1.d (Gaps 10,11,12), P1.e (Gaps 11,13,15), P1.f (Gap 14).
 

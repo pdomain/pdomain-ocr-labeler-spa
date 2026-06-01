@@ -1,4 +1,5 @@
 // GlyphAnnotationPanel.test.tsx — unit tests for the GlyphAnnotationPanel component.
+// Covers: B-GLYPH-002, B-GLYPH-003
 // Spec: specs/20-glyph-annotations.md §5.1
 // Issue #269
 

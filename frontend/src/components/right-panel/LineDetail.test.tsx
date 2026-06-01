@@ -1,4 +1,5 @@
 // LineDetail.test.tsx — Tests for LineDetail: Slice 21 + P5.e + P5.f.
+// Covers: B-RIGHT-004, B-RIGHT-014
 // Spec: docs/plans/hifi-gaps-plan.md P5.e (Gaps 42, 43), P5.f (Gaps 44, 45).
 
 import { describe, it, expect, beforeEach } from "vitest";

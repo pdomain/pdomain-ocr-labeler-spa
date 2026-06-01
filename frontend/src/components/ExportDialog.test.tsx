@@ -1,4 +1,5 @@
 // ExportDialog.test.tsx — Export dialog (#227)
+// Covers: B-ACTIONS-004, B-ACTIONS-018, F-EXPORT-OPTIONS-01
 // Spec: docs/specs/2026-05-12-export-design.md
 // driver-contract: docs/architecture/13-driver-contract.md §2.12
 //

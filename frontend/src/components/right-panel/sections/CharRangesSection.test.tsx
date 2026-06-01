@@ -1,4 +1,5 @@
 // CharRangesSection.test.tsx — Tests for Slice 19 char-range editor + P4.a hi-fi additions.
+// Covers: B-RIGHT-003, B-RIGHT-012
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 19.
 // P4.a (Gap 38): per-char glyph editor rows, overlap markers, STYLE/COMPONENT kind switcher.
 

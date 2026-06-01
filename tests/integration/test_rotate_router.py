@@ -1,5 +1,7 @@
 """Integration tests for POST /api/projects/{id}/pages/{idx}/rotate.
 
+Covers: B-ACTIONS-020, F-ROTATE-PAGE-01
+
 Spec: docs/specs/2026-05-12-auto-rotation-design.md §Manual rotate (M9.1)
 Issue #263
 

@@ -1,4 +1,5 @@
 // Drawer.test.tsx — Tests for the Drawer shell (Slice 11).
+// Covers: B-SHELL-003, B-SHELL-011
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 11.
 
 import { describe, it, expect, beforeEach } from "vitest";

@@ -1,4 +1,5 @@
 // QuickSearch.test.tsx — unit tests for the header ⌘K search field.
+// Covers: B-SHELL-004, B-SHELL-010, B-ACTIONS-007
 // P1.c (Gap 6): placeholder input + keycap chip that opens the hotkey overlay.
 //
 // Tests:

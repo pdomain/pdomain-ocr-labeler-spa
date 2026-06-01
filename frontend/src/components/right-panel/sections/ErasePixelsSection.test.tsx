@@ -1,4 +1,5 @@
 // ErasePixelsSection.test.tsx — Tests for P3.c hi-fi rebuild (Gap 36).
+// Covers: B-RIGHT-010
 // Spec: docs/plans/hifi-gaps-plan.md Slice P3.c.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";

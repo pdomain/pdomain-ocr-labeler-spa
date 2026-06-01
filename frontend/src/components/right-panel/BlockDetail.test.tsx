@@ -1,4 +1,5 @@
 // BlockDetail.test.tsx — Tests for Slice 22 + P5.g redesign.
+// Covers: B-RIGHT-015
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 22 + hifi-gaps-plan P5.g.
 // Gaps tested: 47 (glyph cards), 48 (model-suggest callout), 49 (preview),
 //              50 (Items View sub-toggle), 51 (Para layout tab).

@@ -1,4 +1,5 @@
 // GlyphChip.test.tsx — unit tests for the GlyphChip pill component.
+// Covers: B-GLYPH-001
 // Spec: specs/20-glyph-annotations.md §5.2
 // Issue #269
 

@@ -269,7 +269,10 @@ def test_click_word_bbox_on_image_opens_word_detail(
     click_server: ClickServer,
     page: Page,
 ) -> None:
-    """Click the word's bbox on the canvas image; WordDetail opens for that word."""
+    """Click the word's bbox on the canvas image; WordDetail opens for that word.
+
+    Covers: B-CANVAS-002, B-RIGHT-001
+    """
     # Confirm the payload carries the pixel bbox we planted (guards against a
     # future page_to_line_matches change that would zero it out again).
     resp = httpx.get(
@@ -333,7 +336,10 @@ def test_click_word_in_hierarchy_opens_word_detail_without_blank_page(
     click_server: ClickServer,
     page: Page,
 ) -> None:
-    """Click the hierarchy word picker; the page must not crash or go blank."""
+    """Click the hierarchy word picker; the page must not crash or go blank.
+
+    Covers: B-DRAWER-002
+    """
     page_errors: list[str] = []
     page.on("pageerror", lambda exc: page_errors.append(str(exc)))
 

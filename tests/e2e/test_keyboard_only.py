@@ -1,5 +1,7 @@
 """Keyboard-only E2E tests — every core labeling action reachable without a mouse.
 
+Covers: B-SHELL-008, B-SHELL-009, B-ACTIONS-007, F-HOTKEY-HELP-01
+
 Verifies M9.5 acceptance gate: the full labeling workflow is navigable
 exclusively via keyboard shortcuts defined in ``frontend/src/lib/hotkeyMap.ts``.
 

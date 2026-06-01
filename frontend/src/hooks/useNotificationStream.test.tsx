@@ -1,4 +1,5 @@
 // useNotificationStream.test.tsx — unit tests for the SSE notification hook.
+// Covers: B-JOBS-002, B-ACTIONS-011, F-NOTIFICATIONS-01
 // Spec: docs/specs/2026-05-12-notifications-design.md §useNotificationStream hook
 // Issue #231
 

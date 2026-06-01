@@ -1,4 +1,5 @@
 // OCRConfigModal.test.tsx — tests for OCR config modal with normalize section (#261)
+// Covers: B-ACTIONS-001, B-ACTIONS-016, B-ACTIONS-017, F-OCR-CONFIG-01, F-OCR-CONFIG-NORMALIZE-ROTATE-01
 // Spec: docs/specs/2026-05-12-text-normalization-design.md §Toggle UI
 // Issue #447: POST /api/ocr-config/auto-rotate failures must be surfaced to the user.
 

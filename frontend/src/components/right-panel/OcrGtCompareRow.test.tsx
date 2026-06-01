@@ -1,4 +1,5 @@
 // OcrGtCompareRow.test.tsx — P2.c tests for the OCR/GT compare row.
+// Covers: B-RIGHT-002
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";

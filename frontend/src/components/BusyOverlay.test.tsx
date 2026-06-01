@@ -1,4 +1,5 @@
 // BusyOverlay.test.tsx — unit tests for BusyOverlay and ProjectLoadingOverlay.
+// Covers: B-JOBS-003
 // Spec: docs/specs/2026-05-12-notifications-design.md §BusyOverlay logic
 // Issue #232
 
