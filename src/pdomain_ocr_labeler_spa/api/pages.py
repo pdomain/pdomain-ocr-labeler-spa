@@ -10,17 +10,21 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import JSONResponse, Response
 from pdomain_book_tools.ocr.page import Page
+from pdomain_ops.pages import PagePayload as OpsPagePayload
+from pdomain_ops.pages import build_provenance_summary as ops_build_provenance_summary
 from pydantic import BaseModel, Field
 
 from ..core import text_normalize
 from ..core.glyph.bulk_mark import GlyphBulkMarkParams, apply_bulk_mark
 from ..core.ground_truth_matcher import rematch_page
 from ..core.jobs import JobRunner
+from ..core.labeler_extension import LabelerPageExtension
 from ..core.models import EncodedDims, LineFilter, LineMatch, PageRecord, PageSource, Selection
 from ..core.page_state import PageLoader, ensure_page_model, persist_page_to_file
 from ..core.page_to_line_matches import page_to_line_matches
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.ground_truth import find_ground_truth_text
+from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import PageState, ProjectState
 from ..core.selection import SelectionMode, apply_selection
 from ..settings import Settings
@@ -394,6 +398,65 @@ def _render_plaintext(
     if normalize_tabs and text:
         text = text_normalize.normalize_string(text)
     return text
+
+
+def _assemble_page_payload(
+    *,
+    project_id: str,
+    page_index: int,
+    page_id: Any,
+    store: LabelerPageStore,
+    image_url: str,
+    dims: tuple[int, int] | None,
+) -> OpsPagePayload:
+    """Load PageAggregate from store; assemble ops PagePayload.
+
+    Stamps ``provenance_summary`` via ``build_provenance_summary`` from ops.
+    Stamps ``extensions["labeler"]`` if not already set.
+    """
+    import json as _json
+
+    from pdomain_ops.pages import get_extension, set_extension
+
+    agg = store.get_page(page_id)
+    record = agg.record
+
+    # Ensure labeler extension exists
+    if get_extension(record, "labeler", LabelerPageExtension) is None:
+        set_extension(
+            record,
+            "labeler",
+            LabelerPageExtension(
+                page_number=page_index + 1,
+                page_source="ocr",
+            ),
+        )
+
+    # Stamp provenance summary if graph is present
+    if record.provenance is not None:
+        summary = ops_build_provenance_summary(record.provenance)
+        if summary:
+            record = record.model_copy(update={"provenance_summary": summary})
+
+    # Load Page content from blob store
+    content: dict[str, Any] = {}
+    if record.provenance is not None:
+        head = record.provenance.nodes.get(record.provenance.head_id)
+        if head is not None and head.blob_refs:
+            try:
+                page_json_bytes = store.blobs.read(head.blob_refs[0])
+                content = _json.loads(page_json_bytes.decode("utf-8"))
+            except Exception:  # pragma: no cover - defensive
+                log.debug("_assemble_page_payload: blob read failed for page_id=%s", page_id)
+
+    return OpsPagePayload(
+        page_id=page_id,
+        page_index=page_index,
+        record=record,
+        content=content,
+        image_url=image_url,
+        dims=dims,
+    )
 
 
 def _page_payload(
