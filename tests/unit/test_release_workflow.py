@@ -175,8 +175,8 @@ def test_setup_node_uses_pnpm_cache_with_lockfile_path() -> None:
     ``actions/setup-node@v4`` must declare ``cache: "pnpm"`` and
     ``cache-dependency-path: frontend/pnpm-lock.yaml``.
 
-    ``pnpm/action-setup`` must precede ``actions/setup-node`` in each
-    job so pnpm is on PATH when setup-node primes the cache.
+    A pinned Corepack activation step must follow ``actions/setup-node`` in
+    each job so pnpm is on PATH before make targets install frontend deps.
 
     (Replaces the former B-37 assertion that forbade ``cache:`` while
     ``package-lock.json`` was absent. Now that the tracked lockfile is
@@ -391,31 +391,52 @@ def test_uses_pnpm_frozen_lockfile_not_npm() -> None:
     )
 
 
-def test_uses_pnpm_action_setup_in_release_jobs() -> None:
-    """Jobs that install frontend deps must set up pnpm via ``pnpm/action-setup``
-    before the Node setup so ``actions/setup-node`` can cache the pnpm store.
+def test_enables_pinned_pnpm_via_corepack_in_release_jobs() -> None:
+    """Jobs that install frontend deps must set up pnpm through Corepack.
 
-    The ``cache: pnpm`` key in ``actions/setup-node`` only works when
-    pnpm is already on ``PATH`` (provided by ``pnpm/action-setup``)
-    and ``cache-dependency-path`` points at the tracked lockfile (#416).
+    The workflow intentionally avoids ``pnpm/action-setup``. A pinned Corepack
+    activation step must run after ``actions/setup-node`` and before make
+    targets can invoke ``pnpm install --frozen-lockfile`` (#416).
 
     Gate/utility jobs (e.g. ``verify-ci``) that run only shell/API commands
     and do not install Node deps are exempt — they have no pnpm steps by design.
-    We detect frontend jobs as those containing a ``pnpm install`` run step.
+    We detect frontend jobs as those containing make targets that install
+    frontend dependencies.
     """
     data = _load_workflow()
     for job_name, job in data.get("jobs", {}).items():
         steps = job.get("steps", []) or []
         # Determine whether this job does any frontend / pnpm work.
         run_text = "\n".join(str(s.get("run", "")) for s in steps)
-        if "pnpm install" not in run_text:
-            # Pure gate or non-frontend job — no pnpm/action-setup required.
+        if not re.search(r"\bmake\s+(build|ci-slow)\b", run_text):
+            # Pure gate or non-frontend job — no Corepack pnpm setup required.
             continue
-        uses_list = [s.get("uses", "") for s in steps]
-        has_pnpm_setup = any("pnpm/action-setup" in u for u in uses_list)
-        assert has_pnpm_setup, (
-            f"release.yml job {job_name!r} must include `pnpm/action-setup` "
+        corepack_index = next(
+            (
+                i
+                for i, step in enumerate(steps)
+                if step.get("run") == "corepack enable && corepack prepare pnpm@11.3.0 --activate"
+            ),
+            None,
+        )
+        setup_node_index = next(
+            (
+                i
+                for i, step in enumerate(steps)
+                if str(step.get("uses", "")).startswith("actions/setup-node@")
+            ),
+            None,
+        )
+        assert setup_node_index is not None, (
+            f"release.yml job {job_name!r} must include `actions/setup-node` "
+            "before enabling pnpm via Corepack (#416 / F-011)."
+        )
+        assert corepack_index is not None, (
+            f"release.yml job {job_name!r} must enable pinned pnpm with Corepack "
             "so pnpm is available for `pnpm install --frozen-lockfile` (#416 / F-011)."
+        )
+        assert setup_node_index < corepack_index, (
+            f"release.yml job {job_name!r} must run the Corepack pnpm activation after `actions/setup-node`."
         )
 
 
