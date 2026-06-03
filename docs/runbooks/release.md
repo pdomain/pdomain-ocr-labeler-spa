@@ -147,6 +147,6 @@ Expected output: one line containing `pdomain_ocr_labeler_spa/static/index.html`
 ## Publication target
 
 Wheels are published to GitHub Releases and indexed by
-`ConcaveTrillion/pdomain-index-pip` (self-hosted PEP 503 index on GitHub
+`pdomain/pdomain-index-pip` (self-hosted PEP 503 index on GitHub
 Pages). Do not use `pip`/`twine` to push to PyPI - the release pipeline does
 not target PyPI.
