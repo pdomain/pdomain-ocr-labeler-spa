@@ -474,7 +474,7 @@ define _docker
 endef
 
 docker-build: frontend-build ## Build the production Docker image
-	@$(call _docker,build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .)
+	@$(call _docker,build --build-arg VERSION=$$(git describe --tags --always --dirty) -t $(DOCKER_IMAGE):$(DOCKER_TAG) .)
 
 docker-run: ## Run the built image (host:container port $(DOCKER_PORT):8080)
 	@$(call _docker,run --rm -it -p $(DOCKER_PORT):8080 $(DOCKER_IMAGE):$(DOCKER_TAG))
