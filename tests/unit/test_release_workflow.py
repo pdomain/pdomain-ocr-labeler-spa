@@ -170,17 +170,13 @@ def test_release_workflow_has_concurrency_block() -> None:
     )
 
 
-def test_setup_node_uses_pnpm_cache_with_lockfile_path() -> None:
-    """F-011 / #416: now that ``frontend/pnpm-lock.yaml`` is committed,
-    ``actions/setup-node@v4`` must declare ``cache: "pnpm"`` and
-    ``cache-dependency-path: frontend/pnpm-lock.yaml``.
+def test_setup_node_does_not_use_pnpm_cache_before_corepack() -> None:
+    """``actions/setup-node`` must not request pnpm caching before Corepack.
 
-    A pinned Corepack activation step must follow ``actions/setup-node`` in
-    each job so pnpm is on PATH before make targets install frontend deps.
-
-    (Replaces the former B-37 assertion that forbade ``cache:`` while
-    ``package-lock.json`` was absent. Now that the tracked lockfile is
-    ``pnpm-lock.yaml`` the cache key is valid and cache: pnpm is correct.)
+    Pinned setup-node versions may resolve the pnpm store path while restoring
+    the cache. In this workflow pnpm is activated by a later pinned Corepack
+    step, so setup-node must preserve only ``node-version`` and avoid
+    ``cache: pnpm`` / ``cache-dependency-path``.
     """
     data = _load_workflow()
     found_setup_node = False
@@ -190,16 +186,17 @@ def test_setup_node_uses_pnpm_cache_with_lockfile_path() -> None:
             if uses.startswith("actions/setup-node@"):
                 found_setup_node = True
                 with_block = step.get("with") or {}
-                assert with_block.get("cache") == "pnpm", (
-                    f"release.yml job {job_name!r}: `actions/setup-node` must set "
-                    "`cache: pnpm` so the pnpm store is cached between runs (#416 / F-011). "
-                    f"Got: {with_block!r}"
+                assert with_block.get("node-version") == "24", (
+                    f"release.yml job {job_name!r}: `actions/setup-node` must preserve "
+                    f"`node-version: 24`. Got: {with_block!r}"
                 )
-                dep_path = with_block.get("cache-dependency-path", "")
-                assert "pnpm-lock.yaml" in dep_path, (
-                    f"release.yml job {job_name!r}: `actions/setup-node` must set "
-                    "`cache-dependency-path` to `frontend/pnpm-lock.yaml` so the "
-                    f"cache key is invalidated on lockfile changes (#416). Got: {dep_path!r}"
+                assert "cache" not in with_block, (
+                    f"release.yml job {job_name!r}: `actions/setup-node` must not set "
+                    f"`cache: pnpm` before Corepack activates pnpm. Got: {with_block!r}"
+                )
+                assert "cache-dependency-path" not in with_block, (
+                    f"release.yml job {job_name!r}: `actions/setup-node` must not set "
+                    f"`cache-dependency-path` without pnpm caching. Got: {with_block!r}"
                 )
     assert found_setup_node, "no `actions/setup-node` step found in release.yml"
 
@@ -210,8 +207,7 @@ def test_setup_uv_enables_cache() -> None:
     The old B-31 assertion required ``enable-cache: true`` on the
     setup-uv action. The dispatch-only workflow omits ``enable-cache``
     (the uv cache is implicitly shared via the GitHub Actions tool-cache
-    when the runner version is pinned, and the pnpm store is already
-    cached by ``actions/setup-node``).
+    when the runner version is pinned).
 
     The real invariant we protect: setup-uv must be present (so uv is
     available for ``make ci-slow`` / ``make build``) and must specify a
@@ -440,22 +436,22 @@ def test_enables_pinned_pnpm_via_corepack_in_release_jobs() -> None:
         )
 
 
-def test_release_workflow_lockfile_cache_dependency_path() -> None:
-    """``actions/setup-node`` steps that enable ``cache: pnpm`` must point
-    ``cache-dependency-path`` at ``frontend/pnpm-lock.yaml`` so cache
-    keys are invalidated on lockfile changes (#416 / F-011).
-    """
+def test_release_workflow_does_not_configure_pnpm_cache() -> None:
+    """``actions/setup-node`` must not configure pnpm cache before Corepack."""
     data = _load_workflow()
     for job_name, job in data.get("jobs", {}).items():
         for step in job.get("steps", []) or []:
+            if not str(step.get("uses", "")).startswith("actions/setup-node@"):
+                continue
             with_block = step.get("with") or {}
-            if with_block.get("cache") == "pnpm":
-                dep_path = with_block.get("cache-dependency-path", "")
-                assert "pnpm-lock.yaml" in dep_path, (
-                    f"release.yml job {job_name!r}: `actions/setup-node` with "
-                    f"`cache: pnpm` must set `cache-dependency-path` to the pnpm "
-                    f"lockfile (`frontend/pnpm-lock.yaml`); got: {dep_path!r} (#416)."
-                )
+            assert with_block.get("cache") != "pnpm", (
+                f"release.yml job {job_name!r}: `actions/setup-node` must not set "
+                "`cache: pnpm` before Corepack activates pnpm."
+            )
+            assert "cache-dependency-path" not in with_block, (
+                f"release.yml job {job_name!r}: `actions/setup-node` must not set "
+                "`cache-dependency-path` without pnpm caching."
+            )
 
 
 def test_invokes_uv_build() -> None:
