@@ -311,7 +311,9 @@ make docker-run          # docker run -p 8080:8080 -v ~/data:/data pdomain-ocr-l
 
 ## 7. CI
 
-`.github/workflows/release.yml` mirrors pgdp-prep (`release.yml:24-145`):
+Push and pull request CI runs in `.github/workflows/ci.yml`. Releases run in
+`.github/workflows/release.yml`, but only by workflow dispatch from the local
+`make release-patch`, `make release-minor`, or `make release-major` targets:
 
 | Job | Trigger | Required for green PR? |
 |---|---|---|
@@ -321,8 +323,8 @@ make docker-run          # docker run -p 8080:8080 -v ~/data:/data pdomain-ocr-l
 | `test-e2e` | every push + PR | Yes |
 | `openapi-drift` | every push + PR | Yes |
 | `build-wheel` | every push + PR | Yes (asserts static/index.html in wheel) |
-| `build-container` | tag push only | No |
-| `release` | tag push only | No (uploads wheel + container to GitHub Release) |
+| `release-ci` | workflow dispatch | No (reruns `make ci-slow` from the exact tag) |
+| `publish` | workflow dispatch after `release-ci` | No (uploads one `dist/*.whl` asset to the GitHub Release and dispatches `pdomain-index-pip`) |
 
 `UV_PYTHON: "3.13"` is pinned because uv-discovered 3.14 has a known
 anyio/SQLite teardown segfault (same fix as pgdp-prep `release.yml:33`).

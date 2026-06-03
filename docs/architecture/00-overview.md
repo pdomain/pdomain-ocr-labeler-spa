@@ -113,7 +113,7 @@ then jump to the per-area spec for whatever you're implementing.
 | Format | `ruff format` + `prettier`. |
 | Type-check | TypeScript `strict`; **`pyright`** added (closes pgdp-prep's gap). |
 | Pre-commit | Same hooks as pgdp-prep + ESLint. |
-| CI | Single `release.yml` mirroring pgdp-prep: lint → test → frontend-build → wheel-build (with SPA assertion) → on tag, attach wheel to GitHub Release. |
+| CI | `ci.yml` runs push/PR lint, tests, frontend build, and wheel checks. `release.yml` is workflow-dispatch only, reruns release CI from the exact tag, uploads one wheel to the GitHub Release, and dispatches `pdomain-index-pip`. |
 | Versions | `mise.toml` pinning Node 24 + Python 3.13. |
 
 ---
