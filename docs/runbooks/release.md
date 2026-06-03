@@ -115,12 +115,13 @@ Runs two jobs:
    `ubuntu-latest`. This re-verifies the build including wheel assembly.
    (`.github/workflows/release.yml`, verified 2026-06-01)
 
-2. **`publish`** - builds release artifacts via `make build`, creates a
-   GitHub Release with auto-generated notes, attaches `dist/*.whl` and
-   `dist/*.tar.gz`, then dispatches to `pdomain-index-pip` so the
-   self-hosted PEP 503 index picks up the new wheel.
-   The dispatch uses secret `PDOMAIN_INDEX_DISPATCH`; if unset, the index
-   catches up via its daily cron.
+2. **`publish`** - builds release artifacts via `make build` and creates a
+   GitHub Release with auto-generated notes.
+
+The release workflow builds a wheel with `make build` and attaches `dist/*.whl` to the
+GitHub Release. It does not attach an sdist unless `make build` is changed to produce one.
+After release creation, the workflow dispatches `pdomain-index-pip`; if dispatch fails,
+the index scheduled regen is the fallback.
 
 ---
 
