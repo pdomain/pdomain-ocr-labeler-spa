@@ -317,6 +317,61 @@ def save_page_to_store(
     store.save_page(agg)
 
 
+def save_page_content_to_store(
+    *,
+    page_id: Any,
+    page: Any,
+    store: Any,  # LabelerPageStore — avoid circular import at runtime
+    changes: list[dict[str, Any]] | None = None,
+) -> str:
+    """Persist edited page *content* so it survives a fresh-store reload.
+
+    ``save_page_to_store`` only records a changelog diff on the aggregate; the
+    edited ``Page`` object itself is never re-serialized, so a fresh store
+    reading the head provenance node's content blob would return the original
+    OCR content and silently drop every edit (the #1 audit finding).
+
+    This function closes that gap: it serializes ``page.to_dict()`` to a new
+    content-addressed blob and fires a ``LabelerEdited`` event whose provenance
+    node carries that blob as its ``blob_refs``. Because the labeler node becomes
+    the aggregate's new provenance head, ``load_page_from_store`` (which reads
+    ``head.blob_refs[0]``) returns the edited content after reload.
+
+    Parameters
+    ----------
+    page_id:
+        UUID of the page aggregate to update.
+    page:
+        The edited ``pdomain_book_tools.ocr.page.Page`` (must expose ``to_dict``).
+    store:
+        The project's ``LabelerPageStore``.
+    changes:
+        Optional typed-dict edit log appended to the aggregate's changelog.
+
+    Returns
+    -------
+    str
+        The content blob hash now referenced by the head provenance node.
+    """
+    import json
+    from datetime import UTC, datetime
+
+    from pdomain_ops.pages import ProvenanceNode
+
+    agg = store.get_page(page_id)
+    content_hash = store.blobs.write(json.dumps(page.to_dict()).encode("utf-8"))
+    prov_node = ProvenanceNode(
+        id=f"labeler-{datetime.now(UTC).isoformat()}",
+        source="labeler",
+        tool="labeler-spa",
+        timestamp=datetime.now(UTC),
+        blob_refs=[content_hash],
+    )
+    agg.labeler_edited(provenance_node=prov_node, changes=changes or [])
+    store.save_page(agg)
+    return content_hash
+
+
 __all__ = [
     "PageImageNotFoundError",
     "PageIndexOutOfRangeError",
@@ -326,5 +381,6 @@ __all__ = [
     "_resolve_save_directory",
     "ensure_page_model",
     "persist_page_to_file",
+    "save_page_content_to_store",
     "save_page_to_store",
 ]

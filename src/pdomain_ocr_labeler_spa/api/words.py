@@ -347,22 +347,32 @@ def _save_to_store_best_effort(
     store: Any,  # LabelerPageStore | None
     changes: list[dict[str, Any]],
 ) -> None:
-    """Fire ``save_page_to_store`` for a word-mutation event; swallow errors.
+    """Persist a word-mutation event to the store; swallow errors.
 
-    Best-effort: a store write failure must not turn a successful
-    in-memory mutation into a 500.  Logs at WARNING so problems are
-    visible without being fatal.
+    Persists the edited page *content* (so the edit survives a fresh-store
+    reload — the #1 audit finding) when the resolved page exposes ``to_dict``;
+    otherwise falls back to recording only the changelog entry. The page
+    content must be re-serialized, not just diffed, or a fresh store would
+    replay the original OCR content and silently drop the edit.
+
+    Best-effort: a store write failure must not turn a successful in-memory
+    mutation into a 500.  Logs at WARNING so problems are visible without
+    being fatal.
 
     ``store=None`` is a no-op (test environments without a wired store).
-    ``pstate.page_id=None`` is also a no-op (page not yet registered in
-    the event store — e.g. the fake-loader test path).
+    ``pstate.page_id=None`` is also a no-op (page not yet registered in the
+    event store — e.g. the fake-loader test path).
     """
     if store is None or pstate.page_id is None:
         return
     try:
-        from ..core.page_state import save_page_to_store
+        from ..core.page_state import save_page_content_to_store, save_page_to_store
 
-        save_page_to_store(page_id=pstate.page_id, changes=changes, store=store)
+        page = _resolve_page_object(pstate)
+        if page is not None and callable(getattr(page, "to_dict", None)):
+            save_page_content_to_store(page_id=pstate.page_id, page=page, store=store, changes=changes)
+        else:
+            save_page_to_store(page_id=pstate.page_id, changes=changes, store=store)
     except Exception as exc:  # pragma: no cover - defensive
         log.warning("_save_to_store_best_effort: failed page_id=%s: %s", pstate.page_id, exc)
 
