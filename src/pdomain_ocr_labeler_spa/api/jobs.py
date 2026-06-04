@@ -37,7 +37,7 @@ def _job_not_found(job_id: str) -> JSONResponse:
 
 def _job_snapshot(job: RunnerJob) -> dict[str, object]:
     ev_type = job.status.value if job.status in _TERMINAL else "progress"
-    return {
+    snapshot: dict[str, object] = {
         "type": ev_type,
         "status": job.status.value,
         "current": job.progress_current,
@@ -45,6 +45,11 @@ def _job_snapshot(job: RunnerJob) -> dict[str, object]:
         "message": job.message,
         "error": job.error_message,
     }
+    # Merge any structured result (e.g. export stats) so a late subscriber
+    # that arrives after the job completed still sees the breakdown.
+    if job.result:
+        snapshot.update(job.result)
+    return snapshot
 
 
 def _sse_line(event: str, data: dict[str, object]) -> str:

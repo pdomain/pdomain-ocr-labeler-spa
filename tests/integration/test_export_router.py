@@ -350,3 +350,99 @@ def test_export_surfaces_skipped_pages(tmp_path: Path, monkeypatch: pytest.Monke
     assert "skip" in terminal_message.lower(), (
         f"Expected 'skip' in completion message, got: {terminal_message!r}"
     )
+
+
+# ── Export stats breakdown in terminal SSE event (Lane E3) ───────────────────
+
+
+def test_export_terminal_event_carries_stats(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The terminal SSE event carries detection/recognition/skipped stats.
+
+    Lane E3 (plan docs/plans/2026-06-03-labeler-spa-legacy-parity.md): legacy
+    returns detection/recognition word counts + skipped-not-validated; SPA
+    logged counts only. Assert the structured fields appear on the terminal
+    event so the dialog can render them.
+    """
+    from unittest.mock import MagicMock
+
+    import pdomain_ocr_labeler_spa.core.jobs.handlers.export as _export_mod
+
+    data_root = tmp_path / "data"
+    proj_dir = data_root / "labeled-projects" / "stats-project"
+    proj_dir.mkdir(parents=True)
+    # Two pages: one fully validated, one not validated (skipped).
+    good_json = proj_dir / "stats-project_000.json"
+    bad_json = proj_dir / "stats-project_001.json"
+    good_json.write_text("{}", encoding="utf-8")
+    bad_json.write_text("{}", encoding="utf-8")
+    img = proj_dir / "img.png"
+    img.write_bytes(b"")
+
+    validated_page = _stats_page([_stats_word(True, "alpha", True), _stats_word(True, "beta", True)])
+    not_validated_page = _stats_page([_stats_word(False, "gamma", True)])
+
+    def fake_load(path):
+        return validated_page if path == good_json else not_validated_page
+
+    monkeypatch.setattr(_export_mod, "_scan_labeled_pages", lambda dr, pid: [good_json, bad_json])
+    monkeypatch.setattr(_export_mod, "_resolve_image_path", lambda p: img)
+    monkeypatch.setattr(_export_mod, "_load_page_from_envelope_file", fake_load)
+    # Avoid cv2 / book-tools export I/O — we only assert stats accounting.
+    monkeypatch.setattr(_export_mod, "_export_page", lambda *a, **k: None)
+
+    settings = _make_settings(tmp_path)
+    settings.__dict__["data_root"] = data_root  # type: ignore[index]
+    app = build_app(settings)
+
+    terminal_data: dict | None = None
+    terminal_events = {"complete", "error", "cancelled"}
+
+    with TestClient(app) as c:
+        # Point the runner's settings at our data_root.
+        c.app.state.settings.__dict__["data_root"] = data_root  # type: ignore[attr-defined]
+        c.app.state.job_runner.context["settings"] = MagicMock(data_root=data_root)  # type: ignore[attr-defined]
+
+        resp = c.post("/api/projects/stats-project/export", json={"scope": "all_validated"})
+        assert resp.status_code == 202, resp.text
+        job_id = resp.json()["job_id"]
+
+        with c.stream("GET", f"/api/jobs/{job_id}/events") as sse_resp:
+            assert sse_resp.status_code == 200
+            raw = b""
+            for chunk in sse_resp.iter_raw():
+                raw += chunk
+                parsed = _parse_sse_events(raw)
+                terminal = [e for e in parsed if e["event"] in terminal_events]
+                if terminal:
+                    terminal_data = terminal[0]["data"]
+                    break
+
+    assert terminal_data is not None, "no terminal event received"
+    assert terminal_data["status"] == "complete", terminal_data
+    # Two validated words exported for detection and recognition; one page skipped.
+    assert terminal_data.get("words_exported_detection") == 2, terminal_data
+    assert terminal_data.get("words_exported_recognition") == 2, terminal_data
+    assert terminal_data.get("pages_skipped_not_validated") == 1, terminal_data
+
+
+def _stats_word(validated: bool, text: str, has_bbox: bool):
+    """Build a MagicMock word for the Lane E3 stats accounting test."""
+    from unittest.mock import MagicMock
+
+    w = MagicMock()
+    w.word_labels = ["validated"] if validated else []
+    w.ground_truth_text = text
+    w.text = text
+    w.text_style_labels = []
+    w.word_components = []
+    w.bounding_box = object() if has_bbox else None
+    return w
+
+
+def _stats_page(words):
+    """Build a MagicMock page with the given words (Lane E3 stats test)."""
+    from unittest.mock import MagicMock
+
+    p = MagicMock()
+    p.words = words
+    return p

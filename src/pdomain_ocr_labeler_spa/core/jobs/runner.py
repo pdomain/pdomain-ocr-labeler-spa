@@ -51,6 +51,9 @@ class Job(BaseModel):
     progress_total: int = 0
     message: str = ""
     error_message: str = ""
+    # Optional structured result payload merged into the terminal SSE event
+    # (e.g. export stats breakdown). Empty for non-terminal / statless jobs.
+    result: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     started_at: datetime | None = None
     completed_at: datetime | None = None
@@ -163,8 +166,14 @@ class JobRunner:
         current: int,
         total: int,
         message: str = "",
+        result: dict[str, Any] | None = None,
     ) -> None:
-        """Update progress counters and broadcast a progress event."""
+        """Update progress counters and broadcast a progress event.
+
+        ``result`` (optional) attaches a structured payload to the job that is
+        merged into every subsequent emitted event — used by handlers (e.g.
+        export) to surface stats on the terminal event.
+        """
         job = self._jobs.get(job_id)
         if job is None:
             return
@@ -173,6 +182,7 @@ class JobRunner:
                 "progress_current": current,
                 "progress_total": total,
                 "message": message or job.message,
+                "result": result if result is not None else job.result,
             }
         )
         self._jobs[job_id] = updated
@@ -181,17 +191,17 @@ class JobRunner:
     async def _emit(self, job: Job) -> None:
         terminal = {JobStatus.COMPLETE, JobStatus.ERROR, JobStatus.CANCELLED}
         ev_type = job.status.value if job.status in terminal else "progress"
-        await self._broker.publish(
-            job.job_id,
-            {
-                "type": ev_type,
-                "status": job.status.value,
-                "current": job.progress_current,
-                "total": job.progress_total,
-                "message": job.message,
-                "error": job.error_message,
-            },
-        )
+        event = {
+            "type": ev_type,
+            "status": job.status.value,
+            "current": job.progress_current,
+            "total": job.progress_total,
+            "message": job.message,
+            "error": job.error_message,
+        }
+        if job.result:
+            event.update(job.result)
+        await self._broker.publish(job.job_id, event)
         if job.status in terminal:
             await self._broker.close(job.job_id)
 

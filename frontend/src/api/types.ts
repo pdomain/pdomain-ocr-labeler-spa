@@ -769,16 +769,18 @@ export interface paths {
          * List Export Styles
          * @description ``GET /api/projects/{id}/export/styles`` — distinct style labels.
          *
-         *     Spec: ``docs/specs/2026-05-12-export-design.md §Decision``
-         *     ("Switching to 'All Validated Pages' fires GET .../export/styles").
+         *     Spec: ``docs/archive/specs/2026-05-12-export-design.md`` lines 43-44, 119-120
+         *     ("Switching to 'All Validated Pages' fires GET .../export/styles" to
+         *     enumerate distinct style labels across saved validated pages, querying
+         *     only saved page envelopes — not in-memory state).
          *
          *     Returns a JSON array of distinct style label strings present in
-         *     saved validated pages for this project.  Until the export handler
-         *     writes manifests (and until the labeled-lane reader is wired), this
-         *     returns an empty list — callers should render the "All (no style
-         *     filter)" option as the sole available choice.
+         *     saved validated pages for this project, sorted alphabetically.  When
+         *     no labeled pages exist (or none are fully validated) the array is
+         *     empty and callers render only the "All (no style filter)" option.
          *
          *     Issue #225 acceptance: route registered, returns 200 JSON array.
+         *     Lane E1: array is populated from the saved pages' word style labels.
          */
         get: operations["list_export_styles_api_projects__project_id__export_styles_get"];
         put?: never;

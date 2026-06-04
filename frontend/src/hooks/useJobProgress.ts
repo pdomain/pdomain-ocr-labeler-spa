@@ -22,6 +22,11 @@ export interface JobProgressEvent {
   status: JobStatus;
   progress: JobProgress;
   error_message?: string | null;
+  // Export stats breakdown (Lane E3) — present on the terminal event of an
+  // export job. Flat top-level fields, matching the backend SSE wire format.
+  words_exported_detection?: number;
+  words_exported_recognition?: number;
+  pages_skipped_not_validated?: number;
 }
 
 const TERMINAL: ReadonlySet<JobStatus> = new Set(["complete", "error"]);

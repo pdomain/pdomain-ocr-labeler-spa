@@ -163,6 +163,42 @@ describe("ExportDialog", () => {
     });
   });
 
+  it("renders export stats breakdown on complete (Lane E3)", async () => {
+    server.use(
+      http.post(`${BASE_URL}/export`, () =>
+        HttpResponse.json({ job_id: "job-stats" }, { status: 202 }),
+      ),
+    );
+
+    mockUseJobProgress.mockReturnValue(null);
+    const { rerender } = render(
+      <ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("export-button"));
+    });
+
+    // Simulate a terminal complete event carrying the stats breakdown.
+    mockUseJobProgress.mockReturnValue({
+      job_id: "job-stats",
+      status: "complete",
+      progress: { current: 5, total: 5, current_page: 4, message: "done" },
+      words_exported_detection: 42,
+      words_exported_recognition: 40,
+      pages_skipped_not_validated: 2,
+    });
+
+    rerender(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("export-stats-detection-job-stats")).toBeTruthy();
+    });
+    expect(screen.getByTestId("export-stats-detection-job-stats").textContent).toContain("42");
+    expect(screen.getByTestId("export-stats-recognition-job-stats").textContent).toContain("40");
+    expect(screen.getByTestId("export-stats-skipped-job-stats").textContent).toContain("2");
+  });
+
   it("Close button calls onClose", () => {
     const onClose = vi.fn();
     render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={onClose} />);

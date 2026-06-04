@@ -48,6 +48,12 @@ interface RunHistoryEntry {
   styleFilters: string[];
   pagesExported: number;
   timestamp: string;
+  // Stats breakdown from the terminal SSE event (Lane E3). Undefined for
+  // older events that predate the breakdown. Explicit ``| undefined`` so the
+  // tsconfig's exactOptionalPropertyTypes accepts a missing-stat assignment.
+  wordsDetection?: number | undefined;
+  wordsRecognition?: number | undefined;
+  pagesSkippedNotValidated?: number | undefined;
 }
 
 interface ExportDialogProps {
@@ -149,6 +155,9 @@ export function ExportDialog({
           styleFilters: selectedStyles,
           pagesExported: progress.progress?.total ?? 0,
           timestamp: new Date().toLocaleTimeString(),
+          wordsDetection: progress.words_exported_detection,
+          wordsRecognition: progress.words_exported_recognition,
+          pagesSkippedNotValidated: progress.pages_skipped_not_validated,
         },
       ]);
       setJobId(null);
@@ -432,6 +441,31 @@ export function ExportDialog({
                       </span>
                     )}
                     <span className="ml-2 text-ink-4">{entry.pagesExported} pages</span>
+                    {entry.wordsDetection !== undefined && (
+                      <span
+                        className="ml-2 text-ink-4"
+                        data-testid={`export-stats-detection-${entry.id}`}
+                      >
+                        det: {entry.wordsDetection} words
+                      </span>
+                    )}
+                    {entry.wordsRecognition !== undefined && (
+                      <span
+                        className="ml-2 text-ink-4"
+                        data-testid={`export-stats-recognition-${entry.id}`}
+                      >
+                        rec: {entry.wordsRecognition} words
+                      </span>
+                    )}
+                    {entry.pagesSkippedNotValidated !== undefined &&
+                      entry.pagesSkippedNotValidated > 0 && (
+                        <span
+                          className="ml-2 text-status-fuzzy"
+                          data-testid={`export-stats-skipped-${entry.id}`}
+                        >
+                          {entry.pagesSkippedNotValidated} skipped (not validated)
+                        </span>
+                      )}
                     <span className="ml-2 text-ink-4">{entry.timestamp}</span>
                   </div>
                 ))}

@@ -301,6 +301,42 @@ def _classification_label_formatter(word: Any) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Stats accounting (Lane E3)
+# ---------------------------------------------------------------------------
+
+
+def _word_has_bbox(word: Any) -> bool:
+    """True when a word carries a usable bounding box for detection export."""
+    gt_bbox = getattr(word, "ground_truth_bounding_box", None)
+    return gt_bbox is not None or getattr(word, "bounding_box", None) is not None
+
+
+def _word_has_text(word: Any) -> bool:
+    """True when a word carries non-empty ground-truth/text for recognition export."""
+    text = getattr(word, "ground_truth_text", None) or getattr(word, "text", None) or ""
+    return bool(str(text).strip())
+
+
+def _count_exported_words(page: Any, word_filter: WordFilter | None) -> tuple[int, int]:
+    """Return ``(detection_words, recognition_words)`` for a page+filter.
+
+    Mirrors the per-word inclusion the DocTR training-set generators apply:
+    detection needs a bounding box, recognition needs non-empty text. Words
+    are filtered by ``word_filter`` first (``None`` matches all).
+    """
+    detection_words = 0
+    recognition_words = 0
+    for word in getattr(page, "words", []) or []:
+        if word_filter is not None and not word_filter.matches(word):
+            continue
+        if _word_has_bbox(word):
+            detection_words += 1
+        if _word_has_text(word):
+            recognition_words += 1
+    return detection_words, recognition_words
+
+
+# ---------------------------------------------------------------------------
 # Main async handler
 # ---------------------------------------------------------------------------
 
@@ -363,6 +399,9 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
     # --- iterate pages ---
     exported_count = 0
     skipped_count = 0
+    words_exported_detection = 0
+    words_exported_recognition = 0
+    pages_skipped_not_validated = 0
     for page_num, (json_path, image_path) in enumerate(pages_to_export):
         # Cooperative cancel check.
         current_job = runner._jobs.get(job.job_id)
@@ -382,6 +421,7 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
         # Validation gate for all_validated scope.
         if scope != "current" and not _page_is_validated(page):
             log.debug("export: skipping non-validated page %s", json_path.name)
+            pages_skipped_not_validated += 1
             continue
 
         # Export to each subfolder.
@@ -403,6 +443,12 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
                 prefix=json_path.stem,
             )
 
+            det_words, rec_words = _count_exported_words(page, wf)
+            if detection:
+                words_exported_detection += det_words
+            if recognition:
+                words_exported_recognition += rec_words
+
         exported_count += 1
 
         await runner.update_progress(
@@ -415,15 +461,22 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
         await asyncio.sleep(0)
 
     log.info(
-        "export complete: project=%s pages_exported=%d skipped=%d total=%d",
+        "export complete: project=%s pages_exported=%d skipped=%d total=%d "
+        "words_detection=%d words_recognition=%d pages_skipped_not_validated=%d",
         project_id,
         exported_count,
         skipped_count,
         total_pages,
+        words_exported_detection,
+        words_exported_recognition,
+        pages_skipped_not_validated,
     )
 
     # Emit the terminal progress update so the completion message is surfaced
     # in the SSE "complete" event (runner reads job.message when emitting).
+    # ``result`` carries the structured stats breakdown (Lane E3) so the
+    # export dialog can render detection/recognition word counts and the
+    # number of pages skipped because they were not fully validated.
     if skipped_count > 0:
         terminal_msg = f"Exported {exported_count} pages ({skipped_count} skipped due to load errors)"
     else:
@@ -434,6 +487,11 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
         current=total_pages,
         total=total_pages,
         message=terminal_msg,
+        result={
+            "words_exported_detection": words_exported_detection,
+            "words_exported_recognition": words_exported_recognition,
+            "pages_skipped_not_validated": pages_skipped_not_validated,
+        },
     )
 
 
