@@ -127,7 +127,7 @@ describe("CharRangesSection (Slice 19)", () => {
     await user.click(screen.getByTestId("char-cell-0"));
     await user.click(screen.getByTestId("char-cell-2"));
 
-    const italic = screen.getByTestId("char-ranges-chip-italic");
+    const italic = screen.getByTestId("char-ranges-chip-italics");
     expect(italic).toHaveAttribute("data-tristate-value", "off");
     await user.click(italic);
     expect(italic).toHaveAttribute("data-tristate-value", "on");
@@ -139,14 +139,14 @@ describe("CharRangesSection (Slice 19)", () => {
 
     await user.click(screen.getByTestId("char-cell-1"));
     await user.click(screen.getByTestId("char-cell-3"));
-    await user.click(screen.getByTestId("char-ranges-chip-italic"));
+    await user.click(screen.getByTestId("char-ranges-chip-italics"));
     await user.click(screen.getByTestId("char-ranges-add-button"));
 
     // Compat row appears (sr-only hidden div)
     expect(screen.getByTestId("char-ranges-row-0")).toBeInTheDocument();
     expect(screen.getByTestId("char-ranges-row-0")).toHaveTextContent("1");
     expect(screen.getByTestId("char-ranges-row-0")).toHaveTextContent("3");
-    expect(screen.getByTestId("char-ranges-row-0")).toHaveTextContent(/italic/i);
+    expect(screen.getByTestId("char-ranges-row-0")).toHaveTextContent(/italics/i);
   });
 
   it("delete button removes a row", async () => {
@@ -177,13 +177,13 @@ describe("CharRangesSection (Slice 19)", () => {
 
     await user.click(screen.getByTestId("char-cell-0"));
     await user.click(screen.getByTestId("char-cell-2"));
-    await user.click(screen.getByTestId("char-ranges-chip-italic"));
+    await user.click(screen.getByTestId("char-ranges-chip-italics"));
     await user.click(screen.getByTestId("char-ranges-add-button"));
 
     await waitFor(() => expect(handler).toHaveBeenCalled());
 
     expect(capturedBody).toMatchObject({
-      ranges: [{ start: 0, end: 2, styles: ["italic"] }],
+      ranges: [{ start: 0, end: 2, styles: ["italics"] }],
     });
   });
 
@@ -466,5 +466,86 @@ describe("CharRangesSection F-037 — existing-range edits persist and component
     expect(lastBody).toMatchObject({
       ranges: [{ start: 0, end: 2 }],
     });
+  });
+});
+
+// ---- E: canonical pending-panel key round-trip (Q-B2) -----------------------
+
+describe("CharRangesSection E — canonical pending-panel style keys (Q-B2)", () => {
+  it("pending chip for 'italics' (canonical) has testid char-ranges-chip-italics", async () => {
+    const user = userEvent.setup();
+    renderSection(makeWord("Hello"));
+
+    await user.click(screen.getByTestId("char-cell-0"));
+    await user.click(screen.getByTestId("char-cell-2"));
+
+    // Canonical key "italics" — testid must match.
+    expect(screen.getByTestId("char-ranges-chip-italics")).toBeInTheDocument();
+  });
+
+  it("pending chip for 'subscript' (canonical) has testid char-ranges-chip-subscript", async () => {
+    const user = userEvent.setup();
+    renderSection(makeWord("Hello"));
+
+    await user.click(screen.getByTestId("char-cell-0"));
+    await user.click(screen.getByTestId("char-cell-2"));
+
+    expect(screen.getByTestId("char-ranges-chip-subscript")).toBeInTheDocument();
+  });
+
+  it("pending chip for 'superscript' (canonical) has testid char-ranges-chip-superscript", async () => {
+    const user = userEvent.setup();
+    renderSection(makeWord("Hello"));
+
+    await user.click(screen.getByTestId("char-cell-0"));
+    await user.click(screen.getByTestId("char-cell-2"));
+
+    expect(screen.getByTestId("char-ranges-chip-superscript")).toBeInTheDocument();
+  });
+
+  it("pending chip for 'drop cap' (canonical) has testid char-ranges-chip-drop cap", async () => {
+    const user = userEvent.setup();
+    renderSection(makeWord("Hello"));
+
+    await user.click(screen.getByTestId("char-cell-0"));
+    await user.click(screen.getByTestId("char-cell-2"));
+
+    expect(screen.getByTestId("char-ranges-chip-drop cap")).toBeInTheDocument();
+  });
+
+  it("pending panel POST sends canonical 'italics' (not 'italic') in styles array", async () => {
+    let capturedBody: unknown = null;
+    const handler = vi.fn(async (info: { request: Request }) => {
+      capturedBody = await info.request.json();
+      return HttpResponse.json(makePageResponse("Hello"));
+    });
+    server.use(http.post("/api/projects/p1/pages/0/words/0/0/char-ranges", handler));
+
+    const user = userEvent.setup();
+    renderSection(makeWord("Hello"));
+
+    await user.click(screen.getByTestId("char-cell-0"));
+    await user.click(screen.getByTestId("char-cell-2"));
+    await user.click(screen.getByTestId("char-ranges-chip-italics"));
+    await user.click(screen.getByTestId("char-ranges-add-button"));
+
+    await waitFor(() => expect(handler).toHaveBeenCalled());
+    expect(capturedBody).toMatchObject({
+      ranges: [{ start: 0, end: 2, styles: ["italics"] }],
+    });
+  });
+
+  it("fromApiCharRange round-trip: server 'italics' → pending chip active", () => {
+    // Server stores "italics" (canonical). On load, fromApiCharRange should set
+    // the "italics" key to "on", not fail to match "italic".
+    const word = makeWord({
+      text: "Hi",
+      char_ranges: [{ start: 0, end: 1, styles: ["italics"] }],
+    });
+    renderSection(word);
+    // The chip testid uses canonical key "italics".
+    // The compat row should show "italics" in its content.
+    const compatRow = screen.getByTestId("char-ranges-row-0");
+    expect(compatRow).toHaveTextContent(/italics/i);
   });
 });

@@ -48,7 +48,10 @@ import type { components } from "../../../api/types";
 type WordMatch = components["schemas"]["WordMatch"];
 
 // Style label keys used in the pending panel (tristate mode).
-const PENDING_STYLE_KEYS = ["italic", "bold", "sub", "super", "drop-cap"] as const;
+// Q-B2: use canonical book-tools label strings so the pending-panel styles
+// round-trip correctly through the char-ranges sidecar and display as expected.
+// Previous non-canonical keys: "italic", "sub", "super", "drop-cap".
+const PENDING_STYLE_KEYS = ["italics", "bold", "subscript", "superscript", "drop cap"] as const;
 type PendingStyleKey = (typeof PENDING_STYLE_KEYS)[number];
 
 type RangeKind = "style" | "component";
@@ -66,11 +69,11 @@ interface CharRange {
 
 function emptyStyles(): Record<PendingStyleKey, TristateValue> {
   return {
-    italic: "off",
+    italics: "off",
     bold: "off",
-    sub: "off",
-    super: "off",
-    "drop-cap": "off",
+    subscript: "off",
+    superscript: "off",
+    "drop cap": "off",
   };
 }
 
