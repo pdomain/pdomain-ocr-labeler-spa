@@ -211,6 +211,43 @@ export function useSetLineGt(projectId: string, pageIndex: number) {
   });
 }
 
+// ─── Page-scope + word-batch mutations (Lane D / D3) ──────────────────────
+
+/** Validate / unvalidate every word on the page via validate-batch scope=page. */
+export function useValidatePage(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, { validated: boolean }>({
+    mutationFn: ({ validated }) => {
+      const body: ValidateBatchRequest = {
+        scope: "page",
+        line_indices: [],
+        paragraph_indices: [],
+        word_indices: [],
+        validated,
+      };
+      return apiPost<unknown>(`${pageBase(projectId, pageIndex)}/words/validate-batch`, body);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+/** Delete a set of words via the words/delete-batch route (Lane A2). */
+export function useDeleteWordsBatch(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { wordIndices: [number, number][] }>({
+    mutationFn: ({ wordIndices }) =>
+      apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/words/delete-batch`, {
+        scope: "word",
+        word_indices: wordIndices,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
 // ─── Line split mutations (Lane D / D2) ───────────────────────────────────
 
 /** Split a line after the given word boundary. */

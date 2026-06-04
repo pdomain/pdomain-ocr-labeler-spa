@@ -95,6 +95,7 @@ import {
 } from "../components/ImageTabsHeader";
 import { Drawer } from "../components/shell/Drawer";
 import { ToolbarActionGrid } from "../components/ToolbarActionGrid";
+import { BulkWordActions } from "../components/BulkWordActions";
 import { BusyOverlay, ProjectLoadingOverlay } from "../components/BusyOverlay";
 import PageImageCanvas from "../components/PageImageCanvas";
 import { OcrFailedBanner, ImageDriftBanner } from "../components/InlineBanners";
@@ -815,6 +816,10 @@ export default function ProjectPage() {
     <div className="flex flex-col h-full min-h-0">
       {topToolbarSlot}
       {imageTabsHeaderSlot}
+      {/* D3: page validate-all/unvalidate-all + multi-select word bulk ops. */}
+      <div className="shrink-0 border-b border-border-1 bg-bg-surface">
+        <BulkWordActions projectId={pid} pageIndex={idx0} />
+      </div>
       <div data-testid="image-pane" className="relative flex-1 min-h-0">
         <BusyOverlay activeJob={activeJob} isMutating={isMutating} />
         <PageImageCanvas

@@ -183,7 +183,8 @@ describe("ProjectPage — style / component / add-word wiring (Lane B / B2)", ()
       expect(selectionStore.getState().selectedWords).toEqual([[0, 0]]);
     });
 
-    fireEvent.change(screen.getByTestId("apply-style-select"), { target: { value: "italic" } });
+    // Q-B2-STYLE-LABELS: the canonical book-tools label is the plural "italics".
+    fireEvent.change(screen.getByTestId("apply-style-select"), { target: { value: "italics" } });
     fireEvent.change(screen.getByTestId("scope-select"), { target: { value: "whole" } });
     fireEvent.click(screen.getByTestId("apply-style-button"));
 
@@ -191,7 +192,7 @@ describe("ProjectPage — style / component / add-word wiring (Lane B / B2)", ()
       expect(calls.length).toBeGreaterThanOrEqual(1);
     });
     expect(calls[0].url).toContain("/words/0/0/style");
-    expect(calls[0].body).toEqual(expect.objectContaining({ style: "italic", scope: "whole" }));
+    expect(calls[0].body).toEqual(expect.objectContaining({ style: "italics", scope: "whole" }));
   });
 
   it("clear-style-button clears the style on the selected word", async () => {
