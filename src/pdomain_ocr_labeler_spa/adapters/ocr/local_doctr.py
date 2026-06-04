@@ -30,6 +30,7 @@ import importlib
 import json
 import logging
 import tempfile
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -56,18 +57,87 @@ def _write_cached_envelope_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+# Stable namespace for deriving a project's ``ProjectAggregate`` UUID from its
+# string ``project_id``. The labeler keys a project by a human/string id
+# (URLs, directories), but the ops ``ProjectAggregate`` is keyed by a UUID.
+# ``uuid5(NAMESPACE, project_id)`` gives a deterministic, collision-free,
+# restart-stable mapping with no persisted side-table — exactly what a
+# name-based UUID is for. This is the canonical project-UUID resolution used by
+# both the OCR write path (project registration) and the restart read path
+# (``load_labeled``). Do not change this constant: it is the cross-restart
+# identity anchor; changing it would orphan every previously-stored project.
+_PROJECT_UUID_NAMESPACE = uuid.UUID("6f3c3d2a-1b4e-5a6c-8d7e-9f0a1b2c3d4e")
+
+
+def _project_uuid_for(project_id: str) -> uuid.UUID:
+    """Map a labeler string ``project_id`` to its stable ``ProjectAggregate`` UUID.
+
+    Deterministic across processes (``uuid5``) so a fresh process resolves the
+    same project aggregate that the OCR write path created. No side-table.
+    """
+    return uuid.uuid5(_PROJECT_UUID_NAMESPACE, project_id)
+
+
+def _register_page_in_project(
+    *,
+    store: Any,  # LabelerPageStore
+    project_id: str,
+    page_id: uuid.UUID,
+    page_index: int,
+) -> None:
+    """Create-or-update the ProjectAggregate so ``page_ids[page_index] == page_id``.
+
+    Builds the index→page_id map a fresh ``load_labeled`` needs. Idempotent:
+    re-OCR of the same index replaces that slot rather than appending a
+    duplicate, and the page-id list is padded as needed so ``page_index`` is a
+    valid slot. Best-effort caller wraps this — a failure here must not turn a
+    good OCR into a 5xx.
+    """
+    from eventsourcing.application import AggregateNotFoundError
+    from pdomain_ops.page_aggregate import ProjectAggregate
+    from pdomain_ops.pages import ProjectRecord
+
+    proj_uuid = _project_uuid_for(project_id)
+    try:
+        proj_agg = store.get_project(proj_uuid)
+    except AggregateNotFoundError:
+        proj_agg = ProjectAggregate(ProjectRecord(project_id=proj_uuid, name=project_id))
+
+    page_ids = list(proj_agg.record.page_ids)
+    if page_index < len(page_ids):
+        if page_ids[page_index] == page_id:
+            return  # already registered at this slot — nothing to do
+        page_ids[page_index] = page_id
+        proj_agg.reorder_pages(page_ids)
+    elif page_index == len(page_ids):
+        proj_agg.add_page(page_id=page_id, page_index=page_index)
+    else:
+        # Sparse index: pad intervening slots up to page_index, then set target.
+        # reorder_pages replaces the whole ordering atomically.
+        while len(page_ids) < page_index:
+            page_ids.append(page_id)
+        page_ids.append(page_id)
+        proj_agg.reorder_pages(page_ids)
+    store.save_project(proj_agg)
+
+
 def _ingest_ocr_result(
     *,
     page: Any,
     image_bytes: bytes,
     page_index: int,
     store: Any,  # LabelerPageStore — TYPE_CHECKING import avoids circular dep
+    project: Any = None,  # Project — its project_id keys the ProjectAggregate
 ) -> Any:  # PageAggregate
     """Fire OcrCompleted on a new PageAggregate and persist via LabelerPageStore.
 
     This is the new event-store write path replacing ``build_envelope``. Called
-    from ``run_ocr`` when a ``LabelerPageStore`` is available. Falls back to
-    the legacy envelope write when ``store`` is ``None``.
+    from ``run_ocr`` when a ``LabelerPageStore`` is available.
+
+    When ``project`` is supplied, the page is ALSO registered into the project's
+    ``ProjectAggregate`` (index→page_id map) so a fresh process can resolve which
+    page_id sits at ``page_index`` on the restart read path (``load_labeled``).
+    Registration is idempotent: re-OCR of the same index replaces the slot.
 
     Parameters
     ----------
@@ -80,6 +150,10 @@ def _ingest_ocr_result(
         0-based index within the project.
     store:
         The project's ``LabelerPageStore``.
+    project:
+        The ``Project`` whose ``project_id`` keys the ``ProjectAggregate``. When
+        ``None``, only the ``PageAggregate`` is written (no index→page_id map);
+        the restart read path then cannot resolve this page.
 
     Returns
     -------
@@ -128,6 +202,25 @@ def _ingest_ocr_result(
         blob_refs=[content_hash, image_hash],
     )
     store.save_page(agg)
+
+    # Register into the project aggregate so the restart read path can resolve
+    # page_index → page_id. Best-effort: a project-write failure must not lose
+    # the (already-saved) page aggregate.
+    if project is not None:
+        try:
+            _register_page_in_project(
+                store=store,
+                project_id=project.project_id,
+                page_id=page_id,
+                page_index=page_index,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(
+                "run_ocr: project-aggregate registration failed for page=%d: %s",
+                page_index,
+                exc,
+            )
+
     return agg
 
 
@@ -186,17 +279,14 @@ class LocalDoctrPageLoader:
       can keep the previous shape; the route layer that builds the
       loader passes the real Settings paths.
 
-    **Payload divergence between lanes** (intentional): ``run_ocr``'s
-    payload is a ``pdomain_book_tools.ocr.page.Page`` (the live OCR result);
-    ``load_labeled`` / ``load_cached`` payloads are
-    ``UserPageEnvelope`` instances (the deserialised on-disk shape, NOT
-    yet lifted to a ``Page``). The route layer (M3-proper
-    ``api/pages.py::get_page``) is responsible for lifting
-    ``envelope.payload.page`` (a ``dict``) into a ``Page`` via
-    ``pdomain_book_tools.ocr.page.Page.from_dict``. This keeps the loader
-    pdomain_book_tools-import-free on the labeled/cached lanes — important
-    because reading a saved envelope must work even when DocTR isn't
-    installed (B-46 IOCREngine vs PageLoader split).
+    **Lane payloads** (post event-store adoption): every lane that returns
+    a payload returns a ``pdomain_book_tools.ocr.page.Page``. ``run_ocr`` returns
+    the freshly-OCR'd page; ``load_labeled`` returns the page reconstructed from
+    the event store (``Page.from_dict`` over the head content blob), which
+    carries any persisted labeler edits because a save advances the aggregate's
+    provenance head to the edited content blob. The reconstructed page is
+    stamped with ``_labeler_page_id`` so the route layer can route subsequent
+    mutations to the right aggregate.
 
     Failure modes:
     - ``run_ocr`` raises ``PageImageNotFoundError`` if the on-disk
@@ -204,8 +294,9 @@ class LocalDoctrPageLoader:
       range. OCR engine errors propagate verbatim (page-state cache
       *does not* cache the failure — next call retries).
     - ``load_labeled`` / ``load_cached`` return ``None`` on ANY read
-      failure (missing file, unparsable JSON, schema-name mismatch).
-      Never raise — the dispatcher needs fall-through semantics.
+      failure (no store, no project aggregate, index out of range,
+      missing/corrupt blob). Never raise — the dispatcher needs
+      fall-through semantics so a miss falls through to ``run_ocr``.
     """
 
     project: Project
@@ -218,11 +309,64 @@ class LocalDoctrPageLoader:
     store: Any = None  # LabelerPageStore | None — write OCR result to event store
 
     def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
-        """STUB: labeled lane retired (M5b). Returns None — M8/M9 wires LabelerPageStore."""
-        return None
+        """Reload a stored page from the event store (the restart read path).
+
+        Resolves the project's ``ProjectAggregate`` (keyed by the stable
+        ``uuid5`` derived from ``project.project_id``), looks up the ``page_id``
+        registered at ``page_index``, reads that page's head content blob, and
+        reconstructs the ``Page``. The reconstructed ``Page`` carries the
+        edits that were persisted via ``save_page_content_to_store`` because the
+        labeler edit advances the aggregate's provenance head to the edited
+        content blob.
+
+        This is what makes labeler edits survive a process restart: a fresh
+        process resolves the stored, edited content here instead of falling
+        through to ``run_ocr`` (which would discard every edit).
+
+        Returns
+        -------
+        PageLoadOutcome | None
+            ``PageLoadOutcome(source=FILESYSTEM, payload=Page)`` on a hit, with
+            ``_labeler_page_id`` stamped on the ``Page`` so subsequent mutations
+            target the same aggregate. ``None`` on ANY failure or missing data
+            (no store, no project aggregate, index out of range, missing/corrupt
+            blob) — never raises, so ``ensure_page_model`` falls through to
+            ``run_ocr`` cleanly.
+        """
+        if self.store is None:
+            return None
+        try:
+            from ...api._page_content import load_page_from_store as _load_page_from_store
+
+            proj_uuid = _project_uuid_for(self.project.project_id)
+            proj_agg = self.store.get_project(proj_uuid)
+            page_ids = proj_agg.record.page_ids
+            if page_index < 0 or page_index >= len(page_ids):
+                return None
+            page_id = page_ids[page_index]
+
+            page_obj = _load_page_from_store(self.store, page_id)
+            if page_obj is None:
+                return None
+
+            # Stamp the page_id so subsequent event-store mutations (saves,
+            # refines) target this aggregate without a fresh lookup.
+            object.__setattr__(page_obj, "_labeler_page_id", page_id)
+            return PageLoadOutcome(
+                page_index=page_index,
+                source=PageSource.FILESYSTEM,
+                payload=page_obj,
+            )
+        except Exception as exc:  # pragma: no cover - defensive fall-through
+            logger.debug(
+                "load_labeled: store reload failed for index=%s: %s — falling through",
+                page_index,
+                exc,
+            )
+            return None
 
     def load_cached(self, page_index: int) -> PageLoadOutcome | None:
-        """STUB: cached lane retired (M5b). Returns None — M8/M9 wires LabelerPageStore."""
+        """STUB: cached lane retired (M5b). Returns None — labeled lane handles reload."""
         return None
 
     def run_ocr(self, page_index: int, *, edited_image_bytes: bytes | None = None) -> PageLoadOutcome:
@@ -339,6 +483,7 @@ class LocalDoctrPageLoader:
                     image_bytes=image_bytes,
                     page_index=page_index,
                     store=self.store,
+                    project=self.project,
                 )
                 # Stamp the page_id from the aggregate onto the page object
                 # so callers can transfer it to PageState.page_id.
