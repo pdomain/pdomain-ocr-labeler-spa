@@ -35,7 +35,11 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from ...notifications import NotificationKind, NotificationQueue
-from ...page_state import persist_page_to_file, save_page_to_store
+from ...page_state import (
+    persist_page_to_file,
+    save_page_content_to_store,
+    save_page_to_store,
+)
 from ...project_state import ProjectState
 
 if TYPE_CHECKING:
@@ -134,16 +138,40 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
         pstate = project_state.page_states.get(page_index)
         if pstate is None or pstate.page_record is None:  # pragma: no cover - race-defense
             continue
-        # Event-store save path: fire LabelerEdited on each dirty page.
+        # Event-store save path: persist each dirty page to the store.
         # Skip pages without a registered page_id (not yet in the store —
         # no-op is safe; they'll be saved when OCR writes them to the store).
         if page_store is not None and pstate.page_id is not None:
             try:
-                save_page_to_store(
-                    page_id=pstate.page_id,
-                    changes=[{"type": "save_project", "page_index": page_index}],
-                    store=page_store,
-                )
+                changes = [{"type": "save_project", "page_index": page_index}]
+                # Prefer save_page_content_to_store so the edited Page is
+                # re-serialized into a content blob.  save_page_to_store only
+                # records a changelog entry (no blob_refs), which causes
+                # load_page_from_store to return None after a fresh-store
+                # reload — the #1 audit finding.  Fall back to
+                # save_page_to_store only when no live Page object is
+                # available (e.g. the page was marked dirty by a changelog-
+                # only path with no cached payload).
+                payload = pstate.page_record.payload if pstate.page_record is not None else None
+                if payload is not None and callable(getattr(payload, "to_dict", None)):
+                    save_page_content_to_store(
+                        page_id=pstate.page_id,
+                        page=payload,
+                        store=page_store,
+                        changes=changes,
+                    )
+                else:
+                    # No live Page to re-serialize — record changelog only.
+                    log.debug(
+                        "save_project: page %d has no serializable payload — "
+                        "falling back to changelog-only store write",
+                        page_index,
+                    )
+                    save_page_to_store(
+                        page_id=pstate.page_id,
+                        changes=changes,
+                        store=page_store,
+                    )
             except Exception as exc:
                 log.warning(
                     "save_project: store persist failed page=%d project=%s: %s",
