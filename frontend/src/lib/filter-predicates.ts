@@ -26,17 +26,19 @@ export type LineMatch = components["schemas"]["LineMatch"];
  */
 function hasUnvalidatedWord(line: LineMatch): boolean {
   const words = line.word_matches ?? [];
-  // Authoritative when word data is present: any word not validated → keep.
-  if (words.length > 0 && words.some((w) => !w.is_validated)) return true;
-  // Otherwise defer to the line-level flag (explicit signal); when that's
-  // absent, fall back to the validated/total counts.
+  // Word data is authoritative in BOTH directions when present. If we have
+  // words, derive the answer directly from their validation state — this stays
+  // correct even when the line-level is_fully_validated flag is stale/missing.
+  if (words.length > 0) return words.some((w) => !w.is_validated);
+  // No word data: fall back to the line-level flag (explicit signal), then the
+  // validated/total counts.
   if (line.is_fully_validated !== undefined && line.is_fully_validated !== null) {
     return !line.is_fully_validated;
   }
   if (line.total_word_count !== undefined && line.validated_word_count !== undefined) {
     return line.validated_word_count < line.total_word_count;
   }
-  return words.some((w) => !w.is_validated);
+  return false;
 }
 
 function linePassesFilter(line: LineMatch, filter: MatchFilter): boolean {

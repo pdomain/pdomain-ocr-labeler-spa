@@ -84,4 +84,23 @@ describe("filterLines — unvalidated (D4)", () => {
     const lines = [line({ line_index: 0 }), line({ line_index: 1, is_fully_validated: true })];
     expect(filterLines(lines, "all").length).toBe(2);
   });
+
+  // D fix: word data must be authoritative in BOTH directions, not just for the
+  // "has unvalidated" early-return. A line whose words are ALL validated but
+  // whose is_fully_validated flag is stale-false must be EXCLUDED from
+  // "unvalidated" results.
+  it("excludes a line whose words are all validated even when is_fully_validated is stale-false", () => {
+    const lines = [
+      line({
+        line_index: 0,
+        // Stale flag says not validated — but the words themselves say otherwise.
+        is_fully_validated: false,
+        word_matches: [word({ is_validated: true }), word({ word_index: 1, is_validated: true })],
+        validated_word_count: 2,
+        total_word_count: 2,
+      }),
+    ];
+    // Words are all validated → must NOT appear in "unvalidated" results.
+    expect(filterLines(lines, "unvalidated")).toEqual([]);
+  });
 });
