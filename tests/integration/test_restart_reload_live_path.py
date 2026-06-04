@@ -245,6 +245,112 @@ def test_project_uuid_is_deterministic() -> None:
     assert _project_uuid_for("book1") != _project_uuid_for("book2")
 
 
+def _make_multipage_project(project_dir: Path, *, total: int, project_id: str = "book1") -> Project:
+    return Project(
+        project_id=project_id,
+        project_root=project_dir,
+        image_paths=[project_dir / f"{i:03d}.png" for i in range(total)],
+        ground_truth_map={},
+        total_pages=total,
+    )
+
+
+@pytest.mark.integration
+def test_sparse_index_does_not_return_wrong_page(tmp_path: Path) -> None:
+    """OCR'ing a HIGHER index first must not make lower indices resolve to it.
+
+    The labeler allows non-sequential navigation: a user can open page 2 (via
+    page-tabs / worklist) and OCR it BEFORE pages 0-1 exist. The project's
+    index→page_id list must NOT pad the gap slots with the just-OCR'd page's
+    real UUID — otherwise ``load_labeled(0)`` would resolve ``page_ids[0]`` to
+    page 2's UUID and hand back PAGE 2's CONTENT stamped as page_index 0
+    (visible data corruption).
+
+    A gap slot is "not present" and ``load_labeled`` must return ``None`` for
+    it so ``ensure_page_model`` falls through to ``run_ocr`` cleanly.
+    """
+    project_dir = tmp_path / "book1"
+    project_dir.mkdir()
+    store = LabelerPageStore(project_dir=project_dir)
+    try:
+        project = _make_multipage_project(project_dir, total=3, project_id="book1")
+        # OCR index 2 FIRST while indices 0-1 are unregistered.
+        agg2 = _ingest_ocr_result(
+            page=_make_page(),
+            image_bytes=b"page-two-bytes",
+            page_index=2,
+            store=store,
+            project=project,
+        )
+    finally:
+        store.close()
+
+    # Fresh process reads page 0 — must NOT get page 2's content.
+    reopened = LabelerPageStore(project_dir=project_dir)
+    try:
+        fresh_project = _make_multipage_project(project_dir, total=3, project_id="book1")
+        loader = _fresh_loader(fresh_project, reopened)
+
+        outcome0 = loader.load_labeled(0)
+        assert outcome0 is None, (
+            "load_labeled(0) returned content for an unregistered gap slot — "
+            "the gap was padded with page 2's real UUID, so page 0 would resolve "
+            f"to page 2's content. Got {outcome0!r}"
+        )
+        outcome1 = loader.load_labeled(1)
+        assert outcome1 is None, (
+            f"load_labeled(1) returned content for an unregistered gap slot: {outcome1!r}"
+        )
+
+        # The page actually OCR'd (index 2) must still resolve to its own content.
+        outcome2 = loader.load_labeled(2)
+        assert outcome2 is not None, "load_labeled(2) lost the page that was actually OCR'd"
+        assert getattr(outcome2.payload, "_labeler_page_id", None) == agg2.record.page_id
+    finally:
+        reopened.close()
+
+
+@pytest.mark.integration
+def test_sparse_gap_slot_resolves_after_later_ocr(tmp_path: Path) -> None:
+    """A gap slot, once its index is later OCR'd, resolves to the right content.
+
+    After ``test_sparse_index_does_not_return_wrong_page`` proves gap slots are
+    nil-padded, this proves the nil pad is later REPLACED with the real page_id
+    when that index is finally OCR'd — ``load_labeled`` then returns that page.
+    """
+    project_dir = tmp_path / "book1"
+    project_dir.mkdir()
+    store = LabelerPageStore(project_dir=project_dir)
+    try:
+        project = _make_multipage_project(project_dir, total=3, project_id="book1")
+        # OCR index 2 first (creates nil gaps at 0, 1).
+        _ingest_ocr_result(page=_make_page(), image_bytes=b"p2", page_index=2, store=store, project=project)
+        # Now OCR index 0 — the previously-nil slot must take the real page_id.
+        agg0 = _ingest_ocr_result(
+            page=_make_page(), image_bytes=b"p0", page_index=0, store=store, project=project
+        )
+        proj_agg = store.get_project(_project_uuid_for("book1"))
+        assert proj_agg.record.page_ids[0] == agg0.record.page_id
+        # Index 1 is still an unfilled gap.
+        from uuid import UUID as _UUID
+
+        assert proj_agg.record.page_ids[1] == _UUID(int=0)
+    finally:
+        store.close()
+
+    reopened = LabelerPageStore(project_dir=project_dir)
+    try:
+        fresh_project = _make_multipage_project(project_dir, total=3, project_id="book1")
+        loader = _fresh_loader(fresh_project, reopened)
+        outcome0 = loader.load_labeled(0)
+        assert outcome0 is not None, "newly-OCR'd index 0 did not resolve after replacing a gap"
+        assert getattr(outcome0.payload, "_labeler_page_id", None) == agg0.record.page_id
+        # Index 1 remains a gap → None.
+        assert loader.load_labeled(1) is None
+    finally:
+        reopened.close()
+
+
 @pytest.mark.integration
 def test_ingest_ocr_idempotent_on_reocr(tmp_path: Path) -> None:
     """Re-OCR of the same index must not duplicate or corrupt the project map.

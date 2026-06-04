@@ -68,6 +68,14 @@ def _write_cached_envelope_text(path: Path, text: str) -> None:
 # identity anchor; changing it would orphan every previously-stored project.
 _PROJECT_UUID_NAMESPACE = uuid.UUID("6f3c3d2a-1b4e-5a6c-8d7e-9f0a1b2c3d4e")
 
+# Sentinel for a project index→page_id slot that is reserved but not yet OCR'd.
+# When the user OCRs a higher page index before the lower ones exist, the gap
+# slots are padded with this NIL uuid so the restart read path treats them as
+# "not present" (returns None → falls through to run_ocr) rather than resolving
+# them to some other page's real content. Replaced with the real page_id when
+# that index is finally OCR'd.
+_NIL_PAGE_ID = uuid.UUID(int=0)
+
 
 def _project_uuid_for(project_id: str) -> uuid.UUID:
     """Map a labeler string ``project_id`` to its stable ``ProjectAggregate`` UUID.
@@ -90,8 +98,12 @@ def _register_page_in_project(
     Builds the index→page_id map a fresh ``load_labeled`` needs. Idempotent:
     re-OCR of the same index replaces that slot rather than appending a
     duplicate, and the page-id list is padded as needed so ``page_index`` is a
-    valid slot. Best-effort caller wraps this — a failure here must not turn a
-    good OCR into a 5xx.
+    valid slot. When ``page_index`` is beyond the current end (a higher index
+    OCR'd before the lower ones — non-sequential navigation), the intervening
+    gap slots are padded with the NIL uuid (``_NIL_PAGE_ID``), never this page's
+    real id, so the restart read path cannot resolve a gap index to the wrong
+    page's content. Best-effort caller wraps this — a failure here must not turn
+    a good OCR into a 5xx.
     """
     from eventsourcing.application import AggregateNotFoundError
     from pdomain_ops.page_aggregate import ProjectAggregate
@@ -112,10 +124,14 @@ def _register_page_in_project(
     elif page_index == len(page_ids):
         proj_agg.add_page(page_id=page_id, page_index=page_index)
     else:
-        # Sparse index: pad intervening slots up to page_index, then set target.
+        # Sparse index: the user OCR'd a higher index before the intervening
+        # ones exist (non-sequential navigation is allowed). Pad gap slots with
+        # the NIL uuid — NOT this page's real id — so a later ``load_labeled``
+        # of a gap index resolves to "not present" and falls through to run_ocr,
+        # instead of handing back THIS page's content stamped at the wrong index.
         # reorder_pages replaces the whole ordering atomically.
         while len(page_ids) < page_index:
-            page_ids.append(page_id)
+            page_ids.append(_NIL_PAGE_ID)
         page_ids.append(page_id)
         proj_agg.reorder_pages(page_ids)
     store.save_project(proj_agg)
@@ -344,6 +360,10 @@ class LocalDoctrPageLoader:
             if page_index < 0 or page_index >= len(page_ids):
                 return None
             page_id = page_ids[page_index]
+            if page_id == _NIL_PAGE_ID:
+                # Reserved gap slot (a higher index was OCR'd first); this index
+                # has no stored page yet — fall through to run_ocr.
+                return None
 
             page_obj = _load_page_from_store(self.store, page_id)
             if page_obj is None:

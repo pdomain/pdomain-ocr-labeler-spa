@@ -535,9 +535,10 @@ def _page_payload(
     pstate = project_state.get_page_state(page_index)
 
     # Page record + line matches: lifted from the cached PageState outcome.
-    # ``PageLoadOutcome.payload`` divergence between lanes:
-    # - run_ocr → payload is a ``pdomain_book_tools.ocr.page.Page``
-    # - load_labeled / load_cached → payload is a ``UserPageEnvelope``
+    # ``PageLoadOutcome.payload`` across lanes (M5b event-store adoption):
+    # both the OCR lane (``run_ocr``) and the restart read lane
+    # (``load_labeled``) now put a ``pdomain_book_tools.ocr.page.Page`` in
+    # ``payload``. (``load_cached`` is retired and always returns None.)
     #
     # For the OCR lane (``source == PageSource.OCR``), we call
     # ``page_to_line_matches`` to lift the live ``Page`` object into
