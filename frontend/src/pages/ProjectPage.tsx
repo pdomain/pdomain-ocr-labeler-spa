@@ -69,6 +69,7 @@ import {
   useMergeLines,
 } from "../hooks/useLineMutations";
 import { useGlobalHotkeys } from "../hooks/useGlobalHotkeys";
+import { useToolbarDispatch } from "../hooks/useToolbarDispatch";
 import { useMatchesHotkeys } from "../hooks/useMatchesHotkeys";
 import { useUiPrefs, type DrawerTab, type MatchFilter } from "../stores/ui-prefs";
 import { dialogStore, useDialogStore } from "../stores/dialog-store";
@@ -452,6 +453,9 @@ export default function ProjectPage() {
     ],
   );
   const toolbarPageData: PageData = useMemo(() => toToolbarPageData(pagePayload), [pagePayload]);
+  // B1: resolve grid cell clicks → real mutations against the scope-batch
+  // routes (Lane A) + existing validate/style/component routes.
+  const dispatchToolbarAction = useToolbarDispatch(pid, idx0, toolbarSelection);
   const [addWordActive, setAddWordActive] = useState(false);
 
   // WordEditDialog `target` requires both line/word indices; default to 0/0
@@ -555,15 +559,12 @@ export default function ProjectPage() {
     dialogStore.open("export");
   }
 
-  function handleToolbarAction(_key: keyof ButtonStates) {
-    // Spec 22 §2 (non-goals): wireup-only. Toolbar action POSTs are wired
-    // by the per-scope mutation hooks listed in spec 22 §4 — those are
-    // either shipped (line mutations, page mutations) or pending (paragraph
-    // batch, word-scope batch). Hooking them up belongs to follow-up slices
-    // that already track each row individually. For now the buttons fire
-    // this callback but invalidate the page so any out-of-band server-side
-    // mutation that lands during the click is reflected.
-    invalidatePage();
+  function handleToolbarAction(key: keyof ButtonStates) {
+    // B1 (Lane B): dispatch the real mutation for the clicked grid cell.
+    // useToolbarDispatch resolves the route + body from toolbarMapping +
+    // the current selection, fires the POST, invalidates the page on
+    // success, and surfaces errors via toast.
+    dispatchToolbarAction(key);
   }
   function handleApplyStyle() {
     invalidatePage();
