@@ -532,4 +532,52 @@ describe("ImageTabsHeader (#196)", () => {
     expect(line.style.background).toBe("var(--layer-line)");
     expect(word.style.background).toBe("var(--layer-word)");
   });
+
+  // ── Lane D / D5: add-word affordance outside the grid ───────────────────────
+
+  it("D5: renders add-word-button", () => {
+    render(
+      <ImageTabsHeader
+        layerVisibility={defaultVisibility}
+        selectionMode="paragraph"
+        eraseActive={false}
+        onLayerToggle={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onEraseToggle={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("add-word-button")).toBeInTheDocument();
+  });
+
+  it("D5: add-word-button fires onAddWordToggle when clicked", () => {
+    const onAddWordToggle = vi.fn();
+    render(
+      <ImageTabsHeader
+        layerVisibility={defaultVisibility}
+        selectionMode="paragraph"
+        eraseActive={false}
+        onLayerToggle={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onEraseToggle={vi.fn()}
+        onAddWordToggle={onAddWordToggle}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("add-word-button"));
+    expect(onAddWordToggle).toHaveBeenCalledOnce();
+  });
+
+  it("D5: add-word-button reflects active state via aria-pressed", () => {
+    render(
+      <ImageTabsHeader
+        layerVisibility={defaultVisibility}
+        selectionMode="paragraph"
+        eraseActive={false}
+        onLayerToggle={vi.fn()}
+        onSelectionModeChange={vi.fn()}
+        onEraseToggle={vi.fn()}
+        addWordActive={true}
+      />,
+    );
+    expect(screen.getByTestId("add-word-button")).toHaveAttribute("aria-pressed", "true");
+  });
 });

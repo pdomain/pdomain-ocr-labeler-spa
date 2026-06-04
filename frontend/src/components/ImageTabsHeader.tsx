@@ -47,6 +47,14 @@ interface ImageTabsHeaderProps {
   matchFilterMode?: "all" | "mismatches_only";
   /** Called when the Mismatches-only toggle is clicked — Issue #295. */
   onMatchFilterModeToggle?: () => void;
+  /** Whether add-word draw mode is active (Lane D / D5). */
+  addWordActive?: boolean;
+  /**
+   * Called when the Add Word button is clicked (Lane D / D5).
+   * Reuses Lane B's viewportStore `toggleAddWordMode()` wiring at the call
+   * site — this button only signals the toggle, no mutation lives here.
+   */
+  onAddWordToggle?: () => void;
 }
 
 /**
@@ -66,6 +74,8 @@ export function ImageTabsHeader({
   onZoom100,
   matchFilterMode = "all",
   onMatchFilterModeToggle,
+  addWordActive = false,
+  onAddWordToggle,
 }: ImageTabsHeaderProps) {
   return (
     <div
@@ -185,6 +195,24 @@ export function ImageTabsHeader({
         ].join(" ")}
       >
         Erase
+      </button>
+
+      {/* Add Word draw-mode toggle (Lane D / D5) — reuses Lane B's
+          toggleAddWordMode wiring via onAddWordToggle at the call site. */}
+      <button
+        data-testid="add-word-button"
+        type="button"
+        aria-pressed={addWordActive}
+        onClick={onAddWordToggle}
+        title="Add Word mode — draw a box on the page to add a word"
+        className={[
+          "px-2 py-0.5 text-xs rounded border transition-colors",
+          addWordActive
+            ? "bg-accent text-ink-1 border-accent hover:opacity-90"
+            : "bg-bg-raised text-ink-2 border-border-2 hover:bg-bg-raised/80",
+        ].join(" ")}
+      >
+        + Word
       </button>
 
       {/* Mismatches-only bbox overlay toggle (Issue #295, Option C) */}

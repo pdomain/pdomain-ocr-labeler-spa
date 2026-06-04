@@ -809,6 +809,11 @@ export default function ProjectPage() {
         );
         notifyUiPrefs();
       }}
+      // D5: add-word affordance outside the grid. Reuses Lane B's wiring —
+      // handleAddWordToggle calls viewportStore.toggleAddWordMode(), and the
+      // draw→words/add handler (handleAddWord) is already bound on the canvas.
+      addWordActive={addWordActive}
+      onAddWordToggle={handleAddWordToggle}
     />
   );
 
