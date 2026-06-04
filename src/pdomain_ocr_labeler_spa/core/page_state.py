@@ -246,9 +246,13 @@ def ensure_page_model(
         # Stamp page_id from OCR result if available (M9 event-store wiring).
         # The loader stamps _labeler_page_id on the Page object during run_ocr
         # when a LabelerPageStore is available.
+        # Always overwrite (no "if None" guard): a forced re-OCR produces a NEW
+        # page_id (Page.page_id is uuid4); keeping the stale id means subsequent
+        # saves target the old aggregate while the ProjectAggregate now points at
+        # the new one — post-re-OCR edits are silently lost on restart.
         payload_obj = getattr(outcome, "payload", None)
         labeler_page_id = getattr(payload_obj, "_labeler_page_id", None)
-        if labeler_page_id is not None and existing.page_id is None:
+        if labeler_page_id is not None:
             existing.page_id = labeler_page_id
         state._generation += 1
         return outcome

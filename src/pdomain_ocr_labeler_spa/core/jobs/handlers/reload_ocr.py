@@ -267,9 +267,13 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
         existing.page_record = outcome
         # Stamp page_id from the OCR result onto PageState so subsequent
         # mutation routes can fire event-store saves (M9 wiring).
+        # Always overwrite (no "if None" guard): forced re-OCR produces a NEW
+        # page_id (Page.page_id is uuid4); keeping the stale id means saves after
+        # re-OCR target the old aggregate while the ProjectAggregate now points
+        # at the new one — post-re-OCR edits are silently lost on restart.
         page_payload_obj = getattr(outcome, "payload", None)
         labeler_page_id = getattr(page_payload_obj, "_labeler_page_id", None)
-        if labeler_page_id is not None and existing.page_id is None:
+        if labeler_page_id is not None:
             existing.page_id = labeler_page_id
             log.debug("reload_ocr: stamped page_id=%s on pstate page=%d", labeler_page_id, page_index)
         # Per-page generation bump (spec-23-B2 / spec §4 + §8): mark the
