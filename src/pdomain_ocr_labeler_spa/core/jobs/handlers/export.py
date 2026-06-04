@@ -443,11 +443,14 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
                 prefix=json_path.stem,
             )
 
-            det_words, rec_words = _count_exported_words(page, wf)
-            if detection:
-                words_exported_detection += det_words
-            if recognition:
-                words_exported_recognition += rec_words
+        # Count each page ONCE (not once per subfolder) — use None filter so
+        # the total reflects all exported words on the page, independent of
+        # how many style subfolders were selected.
+        det_words, rec_words = _count_exported_words(page, None)
+        if detection:
+            words_exported_detection += det_words
+        if recognition:
+            words_exported_recognition += rec_words
 
         exported_count += 1
 

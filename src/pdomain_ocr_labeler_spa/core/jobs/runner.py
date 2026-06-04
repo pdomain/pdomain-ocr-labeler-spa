@@ -172,7 +172,9 @@ class JobRunner:
 
         ``result`` (optional) attaches a structured payload to the job that is
         merged into every subsequent emitted event — used by handlers (e.g.
-        export) to surface stats on the terminal event.
+        export) to surface stats on the terminal event.  Handlers should set
+        ``result`` only on the terminal ``update_progress`` call (the one whose
+        ``current == total``), not on intermediate progress updates.
         """
         job = self._jobs.get(job_id)
         if job is None:

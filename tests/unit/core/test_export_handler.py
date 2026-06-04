@@ -355,3 +355,93 @@ async def test_handle_export_two_styles_two_subfolders(tmp_path: Path) -> None:
     # Each subfolder is scoped to exactly its own style — not a combined filter.
     assert seen["italics"] == frozenset({"italics"})
     assert seen["small caps"] == frozenset({"small caps"})
+
+
+# ---------------------------------------------------------------------------
+# Lane E3 stats — double-count bug regression (two-style export)
+# ---------------------------------------------------------------------------
+
+
+def _make_stats_word(validated: bool = True, text: str = "hello") -> MagicMock:
+    """Build a mock word with bbox + text that passes _word_has_bbox/_word_has_text."""
+    w = MagicMock()
+    w.word_labels = ["validated"] if validated else []
+    w.text = text
+    w.ground_truth_text = text
+    w.text_style_labels = []
+    w.word_components = []
+    w.bounding_box = object()  # non-None → _word_has_bbox returns True
+    w.ground_truth_bounding_box = None
+    return w
+
+
+def _make_page_with_stats_words(word_mocks: list) -> MagicMock:
+    """Build a mock page whose .words list carries stats-capable word mocks."""
+    page = MagicMock()
+    page.words = word_mocks
+    return page
+
+
+@pytest.mark.asyncio
+async def test_export_stats_not_doubled_for_two_style_export(tmp_path: Path) -> None:
+    """E3 stats: a two-style export counts each page ONCE, not once per subfolder.
+
+    Regression guard for the double-count bug: when ``style_filters`` has two
+    entries the per-subfolder loop ran ``_count_exported_words`` per subfolder,
+    inflating the terminal stats by the subfolder count.  After the fix, a
+    single page with two validated+bbox+text words must yield
+    ``words_exported_detection == 2`` and ``words_exported_recognition == 2``
+    even when two style subfolders are selected.
+    """
+    from datetime import UTC, datetime
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.export import handle_export
+    from pdomain_ocr_labeler_spa.core.jobs.runner import Job
+
+    data_root = tmp_path / "data"
+    proj_dir = data_root / "labeled-projects" / "proj_e3_stats"
+    proj_dir.mkdir(parents=True)
+    _write_envelope(proj_dir / "proj_e3_stats_000.json", validated=True)
+    (proj_dir / "proj_e3_stats_000.png").write_bytes(b"\x00")
+
+    # One page with 2 words that both have bbox and text.
+    page = _make_page_with_stats_words(
+        [
+            _make_stats_word(validated=True, text="alpha"),
+            _make_stats_word(validated=True, text="beta"),
+        ]
+    )
+
+    runner, _settings = _make_runner_with_settings(tmp_path)
+    runner.context["settings"] = MagicMock(data_root=data_root)
+
+    with (
+        patch("pdomain_ocr_labeler_spa.core.jobs.handlers.export._export_page"),
+        patch("pdomain_ocr_labeler_spa.core.jobs.handlers.export._load_page_from_envelope_file") as mock_load,
+    ):
+        mock_load.return_value = page
+
+        job = Job(
+            job_id="je3_stats",
+            job_type="export",
+            project_id="proj_e3_stats",
+            # Two style subfolders — previously doubled the stats.
+            payload={"scope": "all_validated", "style_filters": ["italics", "small caps"]},
+            created_at=datetime.now(UTC),
+        )
+        runner._jobs["je3_stats"] = job
+        await handle_export(runner, job)
+
+    # Retrieve the last update_progress result (terminal call carries result dict).
+    final_job = runner._jobs["je3_stats"]
+    result = final_job.result
+
+    # Exactly 2 detection words and 2 recognition words — NOT 4 (2 x 2 subfolders).
+    assert result.get("words_exported_detection") == 2, (
+        f"Expected 2, got {result.get('words_exported_detection')} — "
+        "likely the double-count bug (counted once per style subfolder)"
+    )
+    assert result.get("words_exported_recognition") == 2, (
+        f"Expected 2, got {result.get('words_exported_recognition')} — "
+        "likely the double-count bug (counted once per style subfolder)"
+    )
