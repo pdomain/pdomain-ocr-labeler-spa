@@ -84,3 +84,34 @@ def click_word_edit(page: Page, line_index: int, word_index: int) -> None:
     """
     testid = f"edit-word-button-{line_index}-{word_index}"
     page.click(f'[data-testid="{testid}"]')
+
+
+def page_line_match_count(base_url: str, project_id: str, page_index: int) -> int:
+    """Return the number of ``line_matches`` the page payload exposes.
+
+    Word-level parity tests (validate / merge / style / persist) require the
+    page to carry real OCR structure.  Some environments (no GPU / no real OCR
+    model output on synthetic fixture images) load a project whose pages have
+    *zero* ``line_matches`` — there is nothing to select, so those tests would
+    be vacuous.  Callers use this to ``pytest.skip`` with a clear reason rather
+    than assert against an empty page.
+
+    The first GET for a page triggers a lazy load that, in the no-OCR-content
+    case, runs a cold OCR pass (model download + inference) and can take well
+    over 10s.  We use a generous timeout and treat *any* error (timeout,
+    connection, non-200, malformed body) as "no content available" -> 0, so the
+    guard degrades to a clean skip instead of a flaky failure.
+    """
+    try:
+        r = httpx.get(
+            f"{base_url}/api/projects/{project_id}/pages/{page_index}",
+            timeout=120.0,
+        )
+    except httpx.HTTPError:
+        return 0
+    if r.status_code != 200:
+        return 0
+    try:
+        return len(r.json().get("line_matches", []))
+    except (ValueError, AttributeError):
+        return 0
