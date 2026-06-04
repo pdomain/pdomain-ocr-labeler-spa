@@ -134,8 +134,7 @@ export const toolbarMapping: ToolbarMappingRecord = {
     method: "POST",
   },
   "line-split-selected": {
-    endpoint:
-      "/api/projects/{projectId}/pages/{pageIndex}/lines/{lineIndex}/split-with-selected-words",
+    endpoint: "/api/projects/{projectId}/pages/{pageIndex}/lines/{lineIndex}/split-with-selected",
     method: "POST",
   },
   "line-word-to-line": null, // disabled
@@ -190,8 +189,7 @@ export const toolbarMapping: ToolbarMappingRecord = {
   "word-split-after": null, // disabled
   "word-split-selected": null, // disabled
   "word-word-to-line": {
-    endpoint:
-      "/api/projects/{projectId}/pages/{pageIndex}/lines/{lineIndex}/split-with-selected-words",
+    endpoint: "/api/projects/{projectId}/pages/{pageIndex}/lines/{lineIndex}/split-with-selected",
     method: "POST",
     body: { mode: "extract_to_new" },
   },

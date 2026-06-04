@@ -52,4 +52,16 @@ describe("toolbarMapping", () => {
       expect(["GET", "POST", "DELETE", "PUT"]).toContain(mapping.method);
     }
   });
+
+  // S1-1 carry-forward: the backend route is `lines/{line_index}/split-with-selected`
+  // (no `-words` suffix). The earlier mapping pointed at `split-with-selected-words`
+  // which 404s. Guard the correct suffix so the typo can't reappear.
+  it("uses the real split-with-selected route (no -words suffix)", () => {
+    const splitSelected = toolbarMapping["line-split-selected"];
+    const wordToLine = toolbarMapping["word-word-to-line"];
+    expect(splitSelected?.endpoint).toContain("/lines/{lineIndex}/split-with-selected");
+    expect(splitSelected?.endpoint).not.toContain("split-with-selected-words");
+    expect(wordToLine?.endpoint).toContain("/lines/{lineIndex}/split-with-selected");
+    expect(wordToLine?.endpoint).not.toContain("split-with-selected-words");
+  });
 });
