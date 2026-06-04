@@ -53,6 +53,9 @@ export default function ProjectLoadControls({ projectName }: ProjectLoadControls
   const [projects, setProjects] = useState<ProjectKey[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [isMutating, setIsMutating] = useState(false);
+  // C4: resolved source-projects-root reported by GET /api/projects. Legacy
+  // showed the configured source root in the header; this surfaces parity.
+  const [projectsRoot, setProjectsRoot] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +63,7 @@ export default function ProjectLoadControls({ projectName }: ProjectLoadControls
       .then((data) => {
         if (cancelled) return;
         setProjects(data.projects);
+        setProjectsRoot(typeof data.projects_root === "string" ? data.projects_root : null);
         if (data.selected) {
           setSelectedId(data.selected);
         }
@@ -176,6 +180,20 @@ export default function ProjectLoadControls({ projectName }: ProjectLoadControls
         {/* FolderIcon placeholder */}
         &#128193;
       </button>
+
+      {/* C4: resolved source-projects-root label (Lane C / Task C4) — legacy
+          parity. Always in the DOM; shows "(no source root)" when the backend
+          reports an empty sentinel path. Hidden in breadcrumb mode (the
+          project name already provides location context there). */}
+      <span
+        data-testid="source-root-label"
+        className={
+          isBreadcrumbMode ? "sr-only" : "text-[11px] text-ink-3 font-mono truncate max-w-[260px]"
+        }
+        title={projectsRoot ?? undefined}
+      >
+        {projectsRoot && projectsRoot !== "" ? projectsRoot : "(no source root)"}
+      </span>
       {/*
        * Note: `ocr-config-trigger-button` moved to HeaderBar (spec 22 §6,
        * issue #309). All dialog-trigger buttons live on the HeaderBar now.

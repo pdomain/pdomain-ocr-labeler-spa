@@ -37,6 +37,36 @@ beforeEach(() => {
   dialogStore.reset();
 });
 
+// ─── Lane C / Task C4: resolved source-root label ───────────────────────────
+
+function mockProjectsWithRoot(root: string) {
+  server.use(
+    http.get("/api/projects", () =>
+      HttpResponse.json({
+        projects: [],
+        selected: null,
+        projects_root: root,
+        config_source: "default",
+      }),
+    ),
+  );
+}
+
+describe("ProjectLoadControls: source-root label (Lane C / C4)", () => {
+  it("shows source-root-label with the path from the projects endpoint", async () => {
+    mockProjectsWithRoot("/srv/scans/books");
+    renderControls();
+    const label = await screen.findByTestId("source-root-label");
+    expect(label).toHaveTextContent("/srv/scans/books");
+  });
+
+  it("source-root-label is present even when the root is empty (sentinel)", async () => {
+    mockProjectsWithRoot("");
+    renderControls();
+    expect(await screen.findByTestId("source-root-label")).toBeInTheDocument();
+  });
+});
+
 describe("ProjectLoadControls: source-folder-button", () => {
   it("renders the source-folder-button", async () => {
     mockEmptyProjects();
