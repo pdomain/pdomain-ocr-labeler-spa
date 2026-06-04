@@ -68,6 +68,12 @@ import {
   useDeleteLine,
   useMergeLines,
 } from "../hooks/useLineMutations";
+import { useApplyStyle, useApplyComponent, useAddWord } from "../hooks/useWordMutations";
+// Lane D reuses `toggleAddWordMode` / `exitToSelectMode` (viewport-store
+// helpers) + the `handleAddWord` handler below to add an add-word button
+// outside the toolbar grid without duplicating the mutation wiring.
+import { viewportStore, toggleAddWordMode } from "../stores/viewport-store";
+import { displayToSrc } from "../lib/coords";
 import { useGlobalHotkeys } from "../hooks/useGlobalHotkeys";
 import { useToolbarDispatch } from "../hooks/useToolbarDispatch";
 import { useMatchesHotkeys } from "../hooks/useMatchesHotkeys";
@@ -163,6 +169,18 @@ function getSelectionSnapshot(): SelectionState {
   return selectionStore.getState();
 }
 
+// ─── viewport add-word mode subscriber (B2) ─────────────────────────────────
+// `addWordActive` is derived from viewportStore.mode so the grid toggle, the
+// Rail annotate button, and any Lane D add-word button share one source of
+// truth. The canvas already drives its draw behaviour from viewportStore.
+
+function subscribeViewportMode(cb: () => void): () => void {
+  return viewportStore.subscribe(cb);
+}
+function getAddWordActiveSnapshot(): boolean {
+  return viewportStore.getState().mode === "add-word";
+}
+
 // ─── Derived data helpers ───────────────────────────────────────────────────
 
 /** Build the `PageData` shape needed by ToolbarActionGrid from a payload.
@@ -233,6 +251,12 @@ export default function ProjectPage() {
     () => selectionStore.getState().level,
     () => "none" as const,
   );
+  // B2: add-word mode mirrors viewportStore (single source of truth).
+  const addWordActive = useSyncExternalStore(
+    subscribeViewportMode,
+    getAddWordActiveSnapshot,
+    getAddWordActiveSnapshot,
+  );
   const wordEditState = useDialogStore((s) => s.wordEdit);
   const confirmState = useDialogStore((s) => s.confirm);
 
@@ -269,6 +293,11 @@ export default function ProjectPage() {
   const copyLineGt = useCopyLineGt(pid, idx0);
   const deleteLine = useDeleteLine(pid, idx0);
   const mergeLines = useMergeLines(pid, idx0);
+
+  // ── Word mutations for the Apply-Style / Component / Add-Word controls (B2) ─
+  const applyStyle = useApplyStyle(pid, idx0);
+  const applyComponent = useApplyComponent(pid, idx0);
+  const addWord = useAddWord(pid, idx0);
 
   // ── Derived view state ─────────────────────────────────────────────────
   const pagePayload = pageQ.data ?? null;
@@ -456,7 +485,6 @@ export default function ProjectPage() {
   // B1: resolve grid cell clicks → real mutations against the scope-batch
   // routes (Lane A) + existing validate/style/component routes.
   const dispatchToolbarAction = useToolbarDispatch(pid, idx0, toolbarSelection);
-  const [addWordActive, setAddWordActive] = useState(false);
 
   // WordEditDialog `target` requires both line/word indices; default to 0/0
   // when the store hasn't been populated (dialog is closed in that case).
@@ -566,14 +594,77 @@ export default function ProjectPage() {
     // success, and surfaces errors via toast.
     dispatchToolbarAction(key);
   }
-  function handleApplyStyle() {
-    invalidatePage();
+  // B2: style / component apply over the current word selection. Each is a
+  // per-word route (`words/{li}/{wi}/style|component`); we fire one mutation
+  // per selected word. Falls back to the breadcrumb word path when the
+  // multi-select array is empty but a single word is the active selection.
+  function selectedWordTargets(): [number, number][] {
+    const fromArray = selection.selectedWords;
+    if (fromArray.length > 0) return fromArray;
+    const wp = selection.path.wordId;
+    return wp ? [wp] : [];
   }
-  function handleClearStyle() {
-    invalidatePage();
+
+  function handleApplyStyle(style: string, scope: string) {
+    if (!style) return;
+    const targets = selectedWordTargets();
+    if (targets.length === 0) {
+      toast.warn("Select one or more words before applying a style.");
+      return;
+    }
+    const applyScope = scope === "part" ? "part" : "whole";
+    for (const [lineIndex, wordIndex] of targets) {
+      applyStyle.mutate({ lineIndex, wordIndex, style, scope: applyScope });
+    }
   }
+  // Clearing a style maps to applying the "regular" style — pdomain-book-tools'
+  // `apply_style_scope` discards "regular", so the word reverts to plain text.
+  function handleClearStyle(_style: string, scope: string) {
+    const targets = selectedWordTargets();
+    if (targets.length === 0) {
+      toast.warn("Select one or more words before clearing a style.");
+      return;
+    }
+    const applyScope = scope === "part" ? "part" : "whole";
+    for (const [lineIndex, wordIndex] of targets) {
+      applyStyle.mutate({ lineIndex, wordIndex, style: "regular", scope: applyScope });
+    }
+  }
+  function handleApplyComponent(component: string) {
+    if (!component) return;
+    const targets = selectedWordTargets();
+    if (targets.length === 0) {
+      toast.warn("Select one or more words before setting a component.");
+      return;
+    }
+    for (const [lineIndex, wordIndex] of targets) {
+      applyComponent.mutate({ lineIndex, wordIndex, component, enabled: true });
+    }
+  }
+  function handleClearComponent(component: string) {
+    if (!component) return;
+    const targets = selectedWordTargets();
+    if (targets.length === 0) {
+      toast.warn("Select one or more words before clearing a component.");
+      return;
+    }
+    for (const [lineIndex, wordIndex] of targets) {
+      applyComponent.mutate({ lineIndex, wordIndex, component, enabled: false });
+    }
+  }
+  // B2: toggle add-word mode through viewportStore so the canvas, Rail, and
+  // any Lane D add-word button stay in sync. Lane D's button calls the same
+  // toggle + clear handler (handleClearAddWord).
   function handleAddWordToggle() {
-    setAddWordActive((v) => !v);
+    toggleAddWordMode();
+  }
+  // B2: a completed add-word draw. `rect` is in display (page-space) pixels;
+  // convert to source pixels with the encoded scale before POSTing. Lane D
+  // reuses this handler via the same `onAddWord` canvas prop.
+  function handleAddWord(rect: { x: number; y: number; width: number; height: number }) {
+    const scale = pagePayload?.encoded_dims?.scale ?? 1;
+    const srcBbox = displayToSrc(rect, scale);
+    addWord.mutate({ bbox: srcBbox });
   }
 
   // ── Render ─────────────────────────────────────────────────────────────
@@ -680,6 +771,7 @@ export default function ProjectPage() {
           page={pagePayload}
           projectId={projectId}
           pageIndex={idx0}
+          onAddWord={handleAddWord}
         />
       </div>
       <div data-testid="inline-banners" className="flex flex-col gap-1 p-1">
@@ -704,6 +796,8 @@ export default function ProjectPage() {
           onAction={handleToolbarAction}
           onApplyStyle={handleApplyStyle}
           onClearStyle={handleClearStyle}
+          onApplyComponent={handleApplyComponent}
+          onClearComponent={handleClearComponent}
           addWordActive={addWordActive}
           onAddWordToggle={handleAddWordToggle}
         />

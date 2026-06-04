@@ -11,6 +11,8 @@
 //   apply-style-button, apply-component-button, clear-component-button
 // Add Word row (driver-contract §2.10): word-add-button
 
+import { useState } from "react";
+
 import {
   useToolbarButtonStates,
   type ButtonStates,
@@ -153,12 +155,14 @@ export interface ToolbarActionGridProps {
   buttonStatesOverride?: Partial<ButtonStates>;
   /** Called when a non-stub, non-disabled action cell is clicked. */
   onAction: (key: keyof ButtonStates) => void;
-  onApplyStyle: () => void;
-  onClearStyle: () => void;
+  /** Apply the chosen text style with the chosen scope to the selection. */
+  onApplyStyle: (style: string, scope: string) => void;
+  /** Clear the chosen text style (with the chosen scope) on the selection. */
+  onClearStyle: (style: string, scope: string) => void;
   /** Called when Apply Component is clicked (driver-contract §2.10). */
-  onApplyComponent?: (() => void) | undefined;
+  onApplyComponent?: ((component: string) => void) | undefined;
   /** Called when Clear Component is clicked (driver-contract §2.10). */
-  onClearComponent?: (() => void) | undefined;
+  onClearComponent?: ((component: string) => void) | undefined;
   addWordActive: boolean;
   onAddWordToggle: () => void;
 }
@@ -187,6 +191,12 @@ export function ToolbarActionGrid({
 }: ToolbarActionGridProps) {
   const computed = useToolbarButtonStates(selection, pageData);
   const states: ButtonStates = { ...computed, ...buttonStatesOverride };
+
+  // B2: controlled select state so Apply/Clear callbacks receive the chosen
+  // style / scope / component. Defaults match the previous defaultValues.
+  const [styleValue, setStyleValue] = useState("");
+  const [scopeValue, setScopeValue] = useState("whole");
+  const [componentValue, setComponentValue] = useState("");
 
   const ROWS: RowScope[] = ["page", "para", "line", "word"];
 
@@ -262,7 +272,10 @@ export function ToolbarActionGrid({
           data-testid="apply-style-select"
           className="text-xs border border-border-2 rounded px-1 py-0.5 bg-bg-sunk"
           aria-label="Text style"
-          defaultValue=""
+          value={styleValue}
+          onChange={(e) => {
+            setStyleValue(e.target.value);
+          }}
         >
           <option value="" disabled>
             Style…
@@ -278,7 +291,10 @@ export function ToolbarActionGrid({
           data-testid="scope-select"
           className="text-xs border border-border-2 rounded px-1 py-0.5 bg-bg-sunk"
           aria-label="Apply scope"
-          defaultValue="whole"
+          value={scopeValue}
+          onChange={(e) => {
+            setScopeValue(e.target.value);
+          }}
         >
           <option value="whole">whole</option>
           <option value="part">part</option>
@@ -288,7 +304,10 @@ export function ToolbarActionGrid({
           data-testid="apply-component-select"
           className="text-xs border border-border-2 rounded px-1 py-0.5 bg-bg-sunk"
           aria-label="Word component"
-          defaultValue=""
+          value={componentValue}
+          onChange={(e) => {
+            setComponentValue(e.target.value);
+          }}
         >
           <option value="" disabled>
             Component…
@@ -302,7 +321,9 @@ export function ToolbarActionGrid({
 
         <button
           data-testid="apply-style-button"
-          onClick={onApplyStyle}
+          onClick={() => {
+            onApplyStyle(styleValue, scopeValue);
+          }}
           className="px-2 py-0.5 text-xs rounded border border-border-2 bg-bg-surface hover:bg-bg-raised hover:border-accent text-ink-2 transition-colors"
         >
           Apply
@@ -310,7 +331,9 @@ export function ToolbarActionGrid({
 
         <button
           data-testid="clear-style-button"
-          onClick={onClearStyle}
+          onClick={() => {
+            onClearStyle(styleValue, scopeValue);
+          }}
           className="px-2 py-0.5 text-xs rounded border border-border-2 bg-bg-surface hover:bg-bg-raised hover:border-status-mismatch text-ink-2 transition-colors"
         >
           Clear
@@ -318,7 +341,9 @@ export function ToolbarActionGrid({
 
         <button
           data-testid="apply-component-button"
-          onClick={onApplyComponent}
+          onClick={() => {
+            onApplyComponent?.(componentValue);
+          }}
           className="px-2 py-0.5 text-xs rounded border border-border-2 bg-bg-surface hover:bg-bg-raised hover:border-accent text-ink-2 transition-colors"
         >
           Set
@@ -326,7 +351,9 @@ export function ToolbarActionGrid({
 
         <button
           data-testid="clear-component-button"
-          onClick={onClearComponent}
+          onClick={() => {
+            onClearComponent?.(componentValue);
+          }}
           className="px-2 py-0.5 text-xs rounded border border-border-2 bg-bg-surface hover:bg-bg-raised hover:border-status-mismatch text-ink-2 transition-colors"
         >
           Clear

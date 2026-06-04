@@ -18,6 +18,7 @@ type MergeWordsRequest = components["schemas"]["MergeWordsRequest"];
 type SplitWordRequest = components["schemas"]["SplitWordRequest"];
 type ApplyStyleRequest = components["schemas"]["ApplyStyleRequest"];
 type ApplyComponentRequest = components["schemas"]["ApplyComponentRequest"];
+type AddWordRequest = components["schemas"]["AddWordRequest"];
 type UpdateWordGroundTruthRequest = components["schemas"]["UpdateWordGroundTruthRequest"];
 type SetCharRangesRequest = components["schemas"]["SetCharRangesRequest"];
 type CharRange = components["schemas"]["CharRange-Input"];
@@ -319,6 +320,36 @@ export function useErasePixels(projectId: string, pageIndex: number) {
         }
         await apiPost<unknown>(base, { bbox, fill_value: 255, shape });
       }
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+// ─── useAddWord (Lane B / B2) ────────────────────────────────────────────────
+
+/**
+ * Add a new word to the page from a drawn bounding box.
+ *
+ * Endpoint: ``POST /api/projects/{pid}/pages/{idx}/words/add``
+ * Body: ``AddWordRequest { line_index?, bbox, text }``
+ *
+ * The caller passes a source-pixel ``bbox`` (display→source conversion is
+ * done at the call site, since only the page component knows the encoded
+ * scale). ``line_index`` is optional — the backend assigns the word to the
+ * nearest line when omitted. Mode stays in "add-word" so the user can add
+ * several words in a row; Lane D reuses this hook from its add-word button.
+ */
+export function useAddWord(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { bbox: BBox; lineIndex?: number | null; text?: string }>({
+    mutationFn: ({ bbox, lineIndex = null, text = "" }) => {
+      const body: AddWordRequest = { bbox, line_index: lineIndex, text };
+      return apiPost<PagePayload>(
+        `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}/words/add`,
+        body,
+      );
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
