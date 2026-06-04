@@ -17,14 +17,32 @@ export type LineMatch = components["schemas"]["LineMatch"];
  *
  * Mirrors legacy `pd-ocr-labeler` filter values
  * (`word_match_renderer.py:_filter_lines_for_display`):
- *   - "unvalidated" → only lines where `!is_fully_validated`
+ *   - "unvalidated" → only lines with >=1 unvalidated word (D4). Derived from
+ *     the words' validation state so it stays correct even when the line-level
+ *     `is_fully_validated` flag is stale/missing; falls back to the
+ *     validated/total counts, then the flag, when word data isn't present.
  *   - "mismatched"  → only lines containing any non-exact word match
  *   - "all"         → no filtering
  */
+function hasUnvalidatedWord(line: LineMatch): boolean {
+  const words = line.word_matches ?? [];
+  // Authoritative when word data is present: any word not validated → keep.
+  if (words.length > 0 && words.some((w) => !w.is_validated)) return true;
+  // Otherwise defer to the line-level flag (explicit signal); when that's
+  // absent, fall back to the validated/total counts.
+  if (line.is_fully_validated !== undefined && line.is_fully_validated !== null) {
+    return !line.is_fully_validated;
+  }
+  if (line.total_word_count !== undefined && line.validated_word_count !== undefined) {
+    return line.validated_word_count < line.total_word_count;
+  }
+  return words.some((w) => !w.is_validated);
+}
+
 function linePassesFilter(line: LineMatch, filter: MatchFilter): boolean {
   switch (filter) {
     case "unvalidated":
-      return !line.is_fully_validated;
+      return hasUnvalidatedWord(line);
     case "mismatched":
       return line.mismatch_count > 0 || line.unmatched_gt_count > 0 || line.unmatched_ocr_count > 0;
     case "all":
