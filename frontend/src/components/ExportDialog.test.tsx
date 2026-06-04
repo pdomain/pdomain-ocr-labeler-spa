@@ -11,15 +11,27 @@
 //   - Export button -> POST -> running state shows Cancel
 //   - Run history row appended on complete; not on cancel
 //   - Close button calls onClose
+//   - Component filter options sourced from canonical useLabelVocabulary wordComponents
 
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React from "react";
 import { ExportDialog } from "./ExportDialog";
 import { server } from "../test/server";
 import { http, HttpResponse } from "msw";
 
 const PROJECT_ID = "test-proj";
 const BASE_URL = `/api/projects/${PROJECT_ID}`;
+
+function makeWrapper() {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(QueryClientProvider, { client: qc }, children);
+  };
+}
 
 // Mock useJobProgress to avoid EventSource setup in tests
 vi.mock("../hooks/useJobProgress", () => ({
@@ -48,17 +60,22 @@ describe("ExportDialog", () => {
   it("renders nothing when closed", () => {
     const { container } = render(
       <ExportDialog open={false} projectId={PROJECT_ID} onClose={vi.fn()} />,
+      { wrapper: makeWrapper() },
     );
     expect(container.firstChild).toBeNull();
   });
 
   it("renders export-dialog testid when open", async () => {
-    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
     expect(screen.getByTestId("export-dialog")).toBeTruthy();
   });
 
   it("scope radios exist and default to all_validated", async () => {
-    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
     const allRadio = screen.getByTestId("export-scope-all");
     const currentRadio = screen.getByTestId("export-scope-current");
     expect(allRadio.checked).toBe(true);
@@ -66,14 +83,18 @@ describe("ExportDialog", () => {
   });
 
   it("switching scope to current hides style checkboxes", async () => {
-    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
     fireEvent.click(screen.getByTestId("export-scope-current"));
     // Style checkboxes only show for all_validated
     expect(screen.queryByTestId("export-style-all-checkbox")).toBeNull();
   });
 
   it("style checkboxes render after fetching styles", async () => {
-    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
     await waitFor(() => {
       expect(screen.getByTestId("export-style-all-checkbox")).toBeTruthy();
       expect(screen.getByTestId("export-style-checkbox-italic")).toBeTruthy();
@@ -81,7 +102,9 @@ describe("ExportDialog", () => {
   });
 
   it("clicking individual style unchecks All", async () => {
-    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
     await waitFor(() => screen.getByTestId("export-style-checkbox-italic"));
     const allCheckbox = screen.getByTestId("export-style-all-checkbox");
     const italicCheckbox = screen.getByTestId("export-style-checkbox-italic");
@@ -96,7 +119,9 @@ describe("ExportDialog", () => {
   });
 
   it("clicking All unchecks individual styles", async () => {
-    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
     await waitFor(() => screen.getByTestId("export-style-checkbox-italic"));
 
     // Select italic first
@@ -110,7 +135,9 @@ describe("ExportDialog", () => {
   });
 
   it("export-button present when not running", async () => {
-    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
     expect(screen.getByTestId("export-button")).toBeTruthy();
   });
 
@@ -123,7 +150,9 @@ describe("ExportDialog", () => {
       }),
     );
 
-    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
 
     await act(async () => {
       fireEvent.click(screen.getByTestId("export-button"));
@@ -143,6 +172,7 @@ describe("ExportDialog", () => {
     mockUseJobProgress.mockReturnValue(null);
     const { rerender } = render(
       <ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />,
+      { wrapper: makeWrapper() },
     );
 
     await act(async () => {
@@ -173,6 +203,7 @@ describe("ExportDialog", () => {
     mockUseJobProgress.mockReturnValue(null);
     const { rerender } = render(
       <ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />,
+      { wrapper: makeWrapper() },
     );
 
     await act(async () => {
@@ -201,10 +232,94 @@ describe("ExportDialog", () => {
 
   it("Close button calls onClose", () => {
     const onClose = vi.fn();
-    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={onClose} />);
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={onClose} />, {
+      wrapper: makeWrapper(),
+    });
     // Click the footer close button (last one)
     const closeButtons = screen.getAllByTestId("export-close-button");
     fireEvent.click(closeButtons[closeButtons.length - 1]);
     expect(onClose).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Component filter — canonical vocab (fix for hardcoded non-canonical list)
+// ---------------------------------------------------------------------------
+describe("ExportDialog — component filter sourced from canonical vocab", () => {
+  beforeEach(() => {
+    mockUseJobProgress.mockReturnValue(null);
+    // Register default style list handler
+    server.use(
+      http.get(`${BASE_URL}/export/styles`, () => {
+        return HttpResponse.json(["italic", "bold"]);
+      }),
+    );
+    // Override label-vocabulary to return known canonical components
+    server.use(
+      http.get("/api/label-vocabulary", () =>
+        HttpResponse.json({
+          text_style_labels: ["italics", "bold"],
+          word_components: [
+            "drop cap",
+            "drop cap unrecovered",
+            "footnote marker",
+            "subscript",
+            "superscript",
+          ],
+        }),
+      ),
+    );
+  });
+
+  afterEach(() => {
+    server.resetHandlers();
+    vi.clearAllMocks();
+  });
+
+  it("renders canonical word_components as options in #export-component-filter", async () => {
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
+
+    // Wait for the vocabulary query to resolve and options to appear
+    await waitFor(() => {
+      const select = document.getElementById("export-component-filter") as HTMLSelectElement;
+      expect(select).toBeTruthy();
+      const values = Array.from(select.options).map((o) => o.value);
+      expect(values).toContain("drop cap");
+    });
+
+    const select = document.getElementById("export-component-filter") as HTMLSelectElement;
+    const values = Array.from(select.options).map((o) => o.value);
+    // Canonical values must be present
+    expect(values).toContain("drop cap");
+    expect(values).toContain("footnote marker");
+    expect(values).toContain("superscript");
+    // Empty option (none) must still be present
+    expect(values).toContain("");
+  });
+
+  it("does NOT render non-canonical underscored options in #export-component-filter", async () => {
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => {
+      const select = document.getElementById("export-component-filter") as HTMLSelectElement;
+      expect(select).toBeTruthy();
+      const values = Array.from(select.options).map((o) => o.value);
+      // Must not contain the old hardcoded non-canonical values
+      expect(values).not.toContain("drop_cap");
+    });
+
+    const select = document.getElementById("export-component-filter") as HTMLSelectElement;
+    const values = Array.from(select.options).map((o) => o.value);
+    expect(values).not.toContain("drop_cap");
+    expect(values).not.toContain("footnote_marker");
+    expect(values).not.toContain("page_number");
+    expect(values).not.toContain("sidenote");
+    expect(values).not.toContain("caption");
+    expect(values).not.toContain("header");
+    expect(values).not.toContain("footer");
   });
 });

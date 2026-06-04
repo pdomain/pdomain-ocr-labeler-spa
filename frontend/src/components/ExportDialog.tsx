@@ -26,6 +26,7 @@
 
 import { useEffect, useState } from "react";
 import { useJobProgress } from "../hooks/useJobProgress";
+import { useLabelVocabulary } from "../hooks/useLabelVocabulary";
 import type { components } from "../api/types";
 import {
   Dialog,
@@ -68,22 +69,6 @@ interface ExportDialogProps {
 }
 
 // ---------------------------------------------------------------------------
-// Component constants
-// ---------------------------------------------------------------------------
-
-const DEFAULT_COMPONENTS = [
-  "",
-  "footnote",
-  "footnote_marker",
-  "drop_cap",
-  "sidenote",
-  "caption",
-  "header",
-  "footer",
-  "page_number",
-];
-
-// ---------------------------------------------------------------------------
 // ExportDialog
 // ---------------------------------------------------------------------------
 
@@ -93,6 +78,9 @@ export function ExportDialog({
   currentPageIndex = 0,
   onClose,
 }: ExportDialogProps) {
+  // --- Canonical word-component vocabulary from the backend ---
+  const { wordComponents } = useLabelVocabulary();
+
   // --- Scope ---
   const [scope, setScope] = useState<ExportScope>("all_validated");
 
@@ -361,9 +349,12 @@ export function ExportDialog({
               }}
               className="text-sm border border-border-1 rounded px-2 py-1 bg-bg-sunk text-ink-2"
             >
-              {DEFAULT_COMPONENTS.map((c) => (
+              <option key="" value="">
+                (none)
+              </option>
+              {wordComponents.map((c) => (
                 <option key={c} value={c}>
-                  {c || "(none)"}
+                  {c}
                 </option>
               ))}
             </select>
