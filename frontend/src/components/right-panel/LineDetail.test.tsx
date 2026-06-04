@@ -383,6 +383,94 @@ describe("LineDetail Q5: bulk bar validate/skip calls validate-batch (scope=word
   });
 });
 
+// ─── D2: line-scope action buttons ──────────────────────────────────────────
+
+describe("LineDetail D2: line-scope copy + split buttons", () => {
+  beforeEach(() => {
+    clearSelection();
+
+    useUiPrefs.setState({ lineWordsDensity: "cards" } as any);
+  });
+
+  it("renders all four line-scope action buttons", () => {
+    selectLine(3);
+    renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    for (const id of [
+      "line-copy-gt-to-ocr",
+      "line-copy-ocr-to-gt",
+      "line-split-after-word",
+      "line-split-by-words",
+    ]) {
+      expect(screen.getByTestId(id)).toBeInTheDocument();
+    }
+  });
+
+  it("line-copy-gt-to-ocr POSTs lines/{li}/copy-gt with direction gt_to_ocr", async () => {
+    const user = userEvent.setup();
+    let body: { direction: string } | undefined;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/lines/:li/copy-gt", async ({ request }) => {
+        body = (await request.json()) as typeof body;
+        return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
+      }),
+    );
+    selectLine(3);
+    renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    await user.click(screen.getByTestId("line-copy-gt-to-ocr"));
+    await waitFor(() => expect(body).toBeDefined());
+    expect(body!.direction).toBe("gt_to_ocr");
+  });
+
+  it("line-copy-ocr-to-gt POSTs lines/{li}/copy-gt with direction ocr_to_gt", async () => {
+    const user = userEvent.setup();
+    let body: { direction: string } | undefined;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/lines/:li/copy-gt", async ({ request }) => {
+        body = (await request.json()) as typeof body;
+        return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
+      }),
+    );
+    selectLine(3);
+    renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    await user.click(screen.getByTestId("line-copy-ocr-to-gt"));
+    await waitFor(() => expect(body).toBeDefined());
+    expect(body!.direction).toBe("ocr_to_gt");
+  });
+
+  it("line-split-after-word POSTs lines/{li}/split-after-word", async () => {
+    const user = userEvent.setup();
+    let body: { word_index: number } | undefined;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/lines/:li/split-after-word", async ({ request }) => {
+        body = (await request.json()) as typeof body;
+        return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
+      }),
+    );
+    selectLine(3);
+    renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    await user.click(screen.getByTestId("line-split-after-word"));
+    await waitFor(() => expect(body).toBeDefined());
+    expect(typeof body!.word_index).toBe("number");
+  });
+
+  it("line-split-by-words POSTs lines/split-by-words with word_keys", async () => {
+    const user = userEvent.setup();
+    let body: { word_keys: [number, number][] } | undefined;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/lines/split-by-words", async ({ request }) => {
+        body = (await request.json()) as typeof body;
+        return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
+      }),
+    );
+    selectLine(3);
+    renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    await user.click(screen.getByTestId("line-split-by-words"));
+    await waitFor(() => expect(body).toBeDefined());
+    expect(body!.word_keys.length).toBeGreaterThan(0);
+    expect(body!.word_keys[0][0]).toBe(3);
+  });
+});
+
 // ─── GTRow commit behaviour (Task 3) ────────────────────────────────────────
 
 describe("LineDetail GTRow: blur-commit and Escape revert (Task 3)", () => {

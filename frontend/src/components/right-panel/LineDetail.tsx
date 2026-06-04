@@ -34,6 +34,9 @@ import {
   useValidateLine,
   useSetLineGt,
   useValidateWords,
+  useCopyLineGt,
+  useSplitLineAfterWord,
+  useSplitLineByWords,
 } from "../../hooks/useLineMutations";
 import type { components } from "../../api/types";
 
@@ -221,6 +224,10 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
   const validateLine = useValidateLine(projectId, pageIndex);
   const mergeLines = useMergeLines(projectId, pageIndex);
   const validateWords = useValidateWords(projectId, pageIndex);
+  // D2: line-scope copy + split actions.
+  const copyLineGt = useCopyLineGt(projectId, pageIndex);
+  const splitAfterWord = useSplitLineAfterWord(projectId, pageIndex);
+  const splitByWords = useSplitLineByWords(projectId, pageIndex);
 
   function toggleDensity() {
     const next: WordDensity = densityPref === "cards" ? "rows" : "cards";
@@ -322,6 +329,58 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
                 Merge failed. Try again.
               </p>
             )}
+
+            {/* D2: line-scope copy + split actions (backend routes already exist). */}
+            <div className="px-3 pb-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                data-testid="line-copy-gt-to-ocr"
+                className="text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+                disabled={copyLineGt.isPending}
+                title="Copy ground truth → OCR for every word in this line"
+                onClick={() => {
+                  copyLineGt.mutate({ lineIndex: line.line_index, direction: "gt_to_ocr" });
+                }}
+              >
+                Copy GT → OCR
+              </button>
+              <button
+                type="button"
+                data-testid="line-copy-ocr-to-gt"
+                className="text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+                disabled={copyLineGt.isPending}
+                title="Copy OCR → ground truth for every word in this line"
+                onClick={() => {
+                  copyLineGt.mutate({ lineIndex: line.line_index, direction: "ocr_to_gt" });
+                }}
+              >
+                Copy OCR → GT
+              </button>
+              <button
+                type="button"
+                data-testid="line-split-after-word"
+                className="text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+                disabled={splitAfterWord.isPending || line.word_matches.length < 2}
+                title="Split this line after its first word"
+                onClick={() => {
+                  splitAfterWord.mutate({ lineIndex: line.line_index, wordIndex: 0 });
+                }}
+              >
+                Split after word
+              </button>
+              <button
+                type="button"
+                data-testid="line-split-by-words"
+                className="text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+                disabled={splitByWords.isPending || line.word_matches.length < 2}
+                title="Extract this line's first word into a new line"
+                onClick={() => {
+                  splitByWords.mutate({ wordKeys: [[line.line_index, 0]] });
+                }}
+              >
+                Split by words
+              </button>
+            </div>
           </div>
         </TabsContent>
 

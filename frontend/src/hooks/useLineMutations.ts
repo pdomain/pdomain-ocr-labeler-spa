@@ -211,6 +211,37 @@ export function useSetLineGt(projectId: string, pageIndex: number) {
   });
 }
 
+// ─── Line split mutations (Lane D / D2) ───────────────────────────────────
+
+/** Split a line after the given word boundary. */
+export function useSplitLineAfterWord(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { lineIndex: number; wordIndex: number }>({
+    mutationFn: ({ lineIndex, wordIndex }) =>
+      apiPost<PagePayload>(
+        `${pageBase(projectId, pageIndex)}/lines/${encodeURIComponent(String(lineIndex))}/split-after-word`,
+        { word_index: wordIndex },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+/** Extract selected words into a new line via the collective split-by-words route. */
+export function useSplitLineByWords(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { wordKeys: [number, number][] }>({
+    mutationFn: ({ wordKeys }) =>
+      apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/lines/split-by-words`, {
+        word_keys: wordKeys,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
 // ─── Paragraph-scope mutations (Lane D / D1) ──────────────────────────────
 //
 // Endpoints (all real per api/lines_paragraphs.py):
