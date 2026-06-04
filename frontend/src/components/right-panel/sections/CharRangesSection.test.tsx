@@ -441,8 +441,9 @@ describe("CharRangesSection F-037 — existing-range edits persist and component
     await user.click(screen.getByTestId("char-range-0-component-chip-drop-cap"));
 
     await waitFor(() => expect(handler).toHaveBeenCalledTimes(2));
+    // Q-B2-STYLE-LABELS: canonical component label is "drop cap" (with space).
     expect(lastBody).toMatchObject({
-      ranges: [{ start: 0, end: 2, styles: expect.arrayContaining(["drop-cap"]) }],
+      ranges: [{ start: 0, end: 2, styles: expect.arrayContaining(["drop cap"]) }],
     });
   });
 

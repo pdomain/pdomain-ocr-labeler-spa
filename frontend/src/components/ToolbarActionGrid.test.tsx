@@ -13,6 +13,34 @@ import { describe, it, expect, vi } from "vitest";
 import { ToolbarActionGrid } from "./ToolbarActionGrid";
 import type { ButtonStates, PageData, Selection } from "../hooks/useToolbarButtonStates";
 
+// Mock useLabelVocabulary — ToolbarActionGrid sources vocab from it.
+// Mock returns canonical book-tools sets so tests can assert the correct values.
+vi.mock("../hooks/useLabelVocabulary", () => ({
+  useLabelVocabulary: () => ({
+    textStyleLabels: [
+      "all caps",
+      "blackletter",
+      "bold",
+      "handwritten",
+      "italics",
+      "monospace",
+      "regular",
+      "small caps",
+      "strikethrough",
+      "underline",
+    ],
+    wordComponents: [
+      "drop cap",
+      "drop cap unrecovered",
+      "footnote marker",
+      "subscript",
+      "superscript",
+    ],
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 const emptySelection: Selection = {
   selection_mode: "word",
   selected_paragraphs: [],
@@ -65,9 +93,8 @@ describe("ToolbarActionGrid — structure", () => {
     expect(btn).toBeDisabled();
   });
 
-  // Q-B2-STYLE-LABELS carry-forward: book-tools' normalize_text_style_label
-  // only accepts the canonical "italics" (plural). The singular "italic" 500s
-  // on apply. Pin the canonical value so the typo can't reappear.
+  // Q-B2-STYLE-LABELS RESOLVED (option b): style labels now sourced from backend.
+  // Guard: only canonical book-tools ALLOWED_TEXT_STYLE_LABELS appear in the style select.
   it("uses canonical book-tools style label 'italics' (not 'italic')", () => {
     render(<ToolbarActionGrid {...defaultProps} />);
     const select = screen.getByTestId("apply-style-select");
@@ -76,6 +103,67 @@ describe("ToolbarActionGrid — structure", () => {
     );
     expect(values).toContain("italics");
     expect(values).not.toContain("italic");
+  });
+
+  it("style select does NOT contain superscript (it is a component)", () => {
+    render(<ToolbarActionGrid {...defaultProps} />);
+    const select = screen.getByTestId("apply-style-select");
+    const values = Array.from(select.querySelectorAll("option")).map(
+      (o) => (o as HTMLOptionElement).value,
+    );
+    expect(values).not.toContain("superscript");
+    expect(values).not.toContain("subscript");
+  });
+
+  it("component select contains superscript and subscript (they are components)", () => {
+    render(<ToolbarActionGrid {...defaultProps} />);
+    const select = screen.getByTestId("apply-component-select");
+    const values = Array.from(select.querySelectorAll("option")).map(
+      (o) => (o as HTMLOptionElement).value,
+    );
+    expect(values).toContain("superscript");
+    expect(values).toContain("subscript");
+  });
+
+  it("style select contains only canonical ALLOWED_TEXT_STYLE_LABELS (no unknown values)", () => {
+    const canonicalStyles = new Set([
+      "all caps",
+      "blackletter",
+      "bold",
+      "handwritten",
+      "italics",
+      "monospace",
+      "regular",
+      "small caps",
+      "strikethrough",
+      "underline",
+    ]);
+    render(<ToolbarActionGrid {...defaultProps} />);
+    const select = screen.getByTestId("apply-style-select");
+    const values = Array.from(select.querySelectorAll("option"))
+      .map((o) => (o as HTMLOptionElement).value)
+      .filter((v) => v !== ""); // skip the placeholder ""
+    for (const v of values) {
+      expect(canonicalStyles.has(v)).toBe(true);
+    }
+  });
+
+  it("component select contains only canonical ALLOWED_COMPONENTS (no unknown values)", () => {
+    const canonicalComponents = new Set([
+      "drop cap",
+      "drop cap unrecovered",
+      "footnote marker",
+      "subscript",
+      "superscript",
+    ]);
+    render(<ToolbarActionGrid {...defaultProps} />);
+    const select = screen.getByTestId("apply-component-select");
+    const values = Array.from(select.querySelectorAll("option"))
+      .map((o) => (o as HTMLOptionElement).value)
+      .filter((v) => v !== ""); // skip the placeholder ""
+    for (const v of values) {
+      expect(canonicalComponents.has(v)).toBe(true);
+    }
   });
 
   it("renders apply-style-select", () => {

@@ -13,6 +13,24 @@ Active (unanswered) questions live in [`../OPEN_QUESTIONS.md`](../OPEN_QUESTIONS
 
 ---
 
+## Q-B2-STYLE-LABELS — Toolbar style/component labels don't match book-tools
+
+**Q:** The toolbar Apply-Style row hardcodes `TEXT_STYLE_LABELS` / `WORD_COMPONENT_LABELS` that
+diverge from book-tools' canonical vocabulary, causing 500s when mismatched labels are sent.
+
+**Resolution.** 2026-06-04 — Option **(b)** implemented: `GET /api/label-vocabulary` sources
+`ALLOWED_TEXT_STYLE_LABELS` and `ALLOWED_COMPONENTS` directly from
+`pdomain_book_tools.ocr.label_normalization` (no re-hardcoding). Frontend hook
+`useLabelVocabulary` (TanStack Query, `staleTime: Infinity`) feeds the fetched lists into
+`StylePalette`, `ComponentPalette`, and `ToolbarActionGrid`. Canonical fallback lists are
+used before the query resolves so the UI never renders an empty palette.
+`superscript` / `subscript` are moved to the component surface (they are book-tools
+`ALLOWED_COMPONENTS`, not styles). Applied values are always canonical strings (e.g.
+`"small caps"`, `"footnote marker"`, `"drop cap"`). Backend test asserts the endpoint
+returns exactly the book-tools sets. OpenAPI regenerated.
+
+---
+
 ## Q-A5 — Does the legacy labeler tolerate a v2.2 `UserPageEnvelope` (with `glyph_annotations`)?
 
 **Resolution.** 2026-05-11 — Option **(A)**: SPA writes v2.2 freely. The legacy
@@ -277,6 +295,7 @@ Decisions live in [`../specs/17-decisions.md`](../specs/17-decisions.md).
 | Q-A5 | Legacy `UserPageEnvelope` v2.2 tolerance | (A) SPA writes v2.2 freely — legacy `from_dict` silently ignores extras (resolved 2026-05-11) | gh#56 |
 | Q-A6 | Predictions-overlay ghost color | Tailwind `blue-500` at 40% opacity, exposed as `--predictions-ghost-color` CSS var (resolved 2026-05-11) | gh#57 + spec 20 §5.6 |
 | Q-A7 | Per-mark provenance granularity | (A) object-level — one `source` string per `GlyphAnnotations` dict; per-char deferred to v2.3 (resolved 2026-05-16) | [D-044](../specs/17-decisions.md) |
+| Q-B2-STYLE-LABELS | Toolbar style/component labels sourced from backend | (b) `GET /api/label-vocabulary` sources `ALLOWED_TEXT_STYLE_LABELS` + `ALLOWED_COMPONENTS` from book-tools; hook `useLabelVocabulary`; superscript/subscript moved to component surface (resolved 2026-06-04) | this commit |
 
 ### Delegations to peer-repo agents (2026-05-06)
 

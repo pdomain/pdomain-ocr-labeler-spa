@@ -44,6 +44,7 @@ from .api.export import install_export_router
 from .api.fs import install_fs_router
 from .api.healthz import install_healthz
 from .api.jobs import install_jobs_router
+from .api.label_vocabulary import install_label_vocabulary_router
 from .api.lines_paragraphs import install_lines_paragraphs_router
 from .api.middleware.error_handler import install_error_handlers
 from .api.middleware.request_id import RequestIdMiddleware
@@ -436,6 +437,11 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # GET /api/normalize/available — probe for pdomain_book_tools.text.normalize.
     # Used by OCRConfigModal to gate normalize UI toggles. Issue #261.
     install_normalize_router(app)
+
+    # GET /api/label-vocabulary — canonical text-style + word-component vocab
+    # sourced from pdomain_book_tools so the frontend can never drift.
+    # Q-B2-STYLE-LABELS option (b). Issue resolved in this slice.
+    install_label_vocabulary_router(app)
 
     # Per docs/architecture/02-backend.md §2 step 12: /env.js, /image-cache, and the
     # SPA fallback only land in non-api_only modes. api_only is the

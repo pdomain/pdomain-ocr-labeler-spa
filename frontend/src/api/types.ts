@@ -2174,6 +2174,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/label-vocabulary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Label Vocabulary
+         * @description Return the canonical text-style and word-component label vocabulary.
+         *
+         *     Values are sourced directly from ``pdomain_book_tools.ocr.label_normalization``
+         *     so the frontend can never drift from the backend's validation logic.
+         *
+         *     The response is static (no request-time computation) and suitable for
+         *     aggressive client-side caching (staleTime = Infinity is fine).
+         */
+        get: operations["get_label_vocabulary_api_label_vocabulary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2845,6 +2871,21 @@ export interface components {
          * @enum {string}
          */
         JobType: "refine_bboxes_page" | "expand_refine_bboxes_page" | "reload_ocr_page" | "export" | "save_project" | "refine_bboxes_project";
+        /**
+         * LabelVocabularyResponse
+         * @description Canonical label vocabulary sourced from pdomain_book_tools.
+         *
+         *     text_style_labels — values accepted by ``normalize_text_style_label``.
+         *     word_components   — values accepted by ``normalize_word_component``.
+         *
+         *     Both lists are sorted for deterministic ordering.
+         */
+        LabelVocabularyResponse: {
+            /** Text Style Labels */
+            text_style_labels: string[];
+            /** Word Components */
+            word_components: string[];
+        };
         /**
          * LigatureMarkModel
          * @description One ligature occurrence within a word — spec ``specs/20-glyph-annotations.md`` §3.
@@ -6646,6 +6687,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NormalizeAvailableResponse"];
+                };
+            };
+        };
+    };
+    get_label_vocabulary_api_label_vocabulary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabelVocabularyResponse"];
                 };
             };
         };

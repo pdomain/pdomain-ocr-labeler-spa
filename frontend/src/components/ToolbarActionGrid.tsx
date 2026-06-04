@@ -19,6 +19,7 @@ import {
   type PageData,
   type Selection,
 } from "../hooks/useToolbarButtonStates";
+import { useLabelVocabulary } from "../hooks/useLabelVocabulary";
 
 // ─── Grid layout constants ────────────────────────────────────────────────
 
@@ -124,31 +125,12 @@ const ACTION_LABELS: Record<ActionKey, string> = {
   reserved: "—",
 };
 
-// Text-style labels (would come from pdomain-book-tools; hardcoded here until API exposes them)
-// Q-B2-STYLE-LABELS: values must match book-tools' canonical ALLOWED_TEXT_STYLE_LABELS
-// (label_normalization.py) or apply-style 500s. "italics" is plural — the
-// singular "italic" is rejected. The broader "source these from the backend"
-// redesign remains an open question (OPEN_QUESTIONS.md Q-B2-STYLE-LABELS).
-const TEXT_STYLE_LABELS = [
-  "italics",
-  "bold",
-  "small_caps",
-  "superscript",
-  "subscript",
-  "underline",
-  "strikethrough",
-];
-
-// Word component labels (same)
-const WORD_COMPONENT_LABELS = [
-  "footnote_marker",
-  "footnote_text",
-  "drop_cap",
-  "header",
-  "footer",
-  "page_number",
-  "running_title",
-];
+// Q-B2-STYLE-LABELS option (b) — RESOLVED:
+// TEXT_STYLE_LABELS and WORD_COMPONENT_LABELS are now sourced from the backend
+// via useLabelVocabulary() so they can never drift from book-tools' canonical
+// ALLOWED_TEXT_STYLE_LABELS / ALLOWED_COMPONENTS. The hardcoded arrays are gone.
+// superscript / subscript are COMPONENTS, not styles — they now appear only in
+// the component select, not the style select.
 
 // ─── Component ────────────────────────────────────────────────────────────
 
@@ -195,6 +177,9 @@ export function ToolbarActionGrid({
 }: ToolbarActionGridProps) {
   const computed = useToolbarButtonStates(selection, pageData);
   const states: ButtonStates = { ...computed, ...buttonStatesOverride };
+
+  // Q-B2-STYLE-LABELS option (b): source canonical vocabulary from backend.
+  const { textStyleLabels, wordComponents } = useLabelVocabulary();
 
   // B2: controlled select state so Apply/Clear callbacks receive the chosen
   // style / scope / component. Defaults match the previous defaultValues.
@@ -284,7 +269,7 @@ export function ToolbarActionGrid({
           <option value="" disabled>
             Style…
           </option>
-          {TEXT_STYLE_LABELS.map((s) => (
+          {textStyleLabels.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
@@ -316,7 +301,7 @@ export function ToolbarActionGrid({
           <option value="" disabled>
             Component…
           </option>
-          {WORD_COMPONENT_LABELS.map((c) => (
+          {wordComponents.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>

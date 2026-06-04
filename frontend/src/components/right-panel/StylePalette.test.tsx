@@ -1,26 +1,96 @@
 // StylePalette.test.tsx — P2.d tests for the style chip palette.
+//
+// Q-B2-STYLE-LABELS option (b): StylePalette now sources labels from
+// useLabelVocabulary (mocked here). Canonical keys from book-tools' ALLOWED_TEXT_STYLE_LABELS.
+// superscript / subscript are COMPONENTS and must NOT appear in StylePalette.
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StylePalette, ChipPalette } from "./StylePalette";
 import type { TristateValue } from "../ui/Chip";
 
-describe("StylePalette (P2.d)", () => {
+// Mock useLabelVocabulary so StylePalette renders the canonical set in tests
+// without needing a real QueryClient + MSW.
+vi.mock("../../hooks/useLabelVocabulary", () => ({
+  useLabelVocabulary: () => ({
+    textStyleLabels: [
+      "all caps",
+      "blackletter",
+      "bold",
+      "handwritten",
+      "italics",
+      "monospace",
+      "regular",
+      "small caps",
+      "strikethrough",
+      "underline",
+    ],
+    wordComponents: [
+      "drop cap",
+      "drop cap unrecovered",
+      "footnote marker",
+      "subscript",
+      "superscript",
+    ],
+    isLoading: false,
+    isError: false,
+  }),
+  FALLBACK_STYLES: [
+    "all caps",
+    "blackletter",
+    "bold",
+    "handwritten",
+    "italics",
+    "monospace",
+    "regular",
+    "small caps",
+    "strikethrough",
+    "underline",
+  ],
+  FALLBACK_COMPONENTS: [
+    "drop cap",
+    "drop cap unrecovered",
+    "footnote marker",
+    "subscript",
+    "superscript",
+  ],
+}));
+
+describe("StylePalette (P2.d + Q-B2-STYLE-LABELS)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("renders the palette container", () => {
     render(<StylePalette activeStyles={[]} onStyleChange={vi.fn()} />);
     expect(screen.getByTestId("style-palette")).toBeInTheDocument();
   });
 
-  it("renders chips for all 7 style types", () => {
+  it("renders chips for all 10 canonical style types (ALLOWED_TEXT_STYLE_LABELS)", () => {
     render(<StylePalette activeStyles={[]} onStyleChange={vi.fn()} />);
     expect(screen.getByTestId("style-chip-bold")).toBeInTheDocument();
     expect(screen.getByTestId("style-chip-italics")).toBeInTheDocument();
     expect(screen.getByTestId("style-chip-small-caps")).toBeInTheDocument();
-    expect(screen.getByTestId("style-chip-superscript")).toBeInTheDocument();
-    expect(screen.getByTestId("style-chip-subscript")).toBeInTheDocument();
-    expect(screen.getByTestId("style-chip-strikethrough")).toBeInTheDocument();
     expect(screen.getByTestId("style-chip-underline")).toBeInTheDocument();
+    expect(screen.getByTestId("style-chip-strikethrough")).toBeInTheDocument();
+    expect(screen.getByTestId("style-chip-regular")).toBeInTheDocument();
+    expect(screen.getByTestId("style-chip-all-caps")).toBeInTheDocument();
+    expect(screen.getByTestId("style-chip-blackletter")).toBeInTheDocument();
+    expect(screen.getByTestId("style-chip-handwritten")).toBeInTheDocument();
+    expect(screen.getByTestId("style-chip-monospace")).toBeInTheDocument();
+  });
+
+  // Q-B2-STYLE-LABELS guard: superscript and subscript are COMPONENTS, not styles.
+  // They must NOT appear in StylePalette.
+  it("does NOT render superscript chip in StylePalette (it is a component)", () => {
+    render(<StylePalette activeStyles={[]} onStyleChange={vi.fn()} />);
+    expect(screen.queryByTestId("style-chip-superscript")).not.toBeInTheDocument();
+  });
+
+  it("does NOT render subscript chip in StylePalette (it is a component)", () => {
+    render(<StylePalette activeStyles={[]} onStyleChange={vi.fn()} />);
+    expect(screen.queryByTestId("style-chip-subscript")).not.toBeInTheDocument();
   });
 
   it("shows bold chip as 'on' when bold is in activeStyles", () => {
@@ -33,7 +103,7 @@ describe("StylePalette (P2.d)", () => {
     expect(screen.getByTestId("style-chip-italics")).toHaveAttribute("data-tristate-value", "off");
   });
 
-  it("calls onStyleChange when a chip is clicked", async () => {
+  it("calls onStyleChange with canonical key when a chip is clicked", async () => {
     const onStyleChange = vi.fn();
     render(<StylePalette activeStyles={[]} onStyleChange={onStyleChange} />);
     await userEvent.click(screen.getByTestId("style-chip-bold"));
@@ -45,6 +115,21 @@ describe("StylePalette (P2.d)", () => {
     render(<StylePalette activeStyles={["bold"]} onStyleChange={onStyleChange} />);
     await userEvent.click(screen.getByTestId("style-chip-bold"));
     expect(onStyleChange).toHaveBeenCalledWith("bold", "mixed");
+  });
+
+  it("calls onStyleChange with canonical 'small caps' (with space) when clicked", async () => {
+    const onStyleChange = vi.fn();
+    render(<StylePalette activeStyles={[]} onStyleChange={onStyleChange} />);
+    await userEvent.click(screen.getByTestId("style-chip-small-caps"));
+    // Applied value must be the canonical "small caps" (with space), not "small-caps"
+    expect(onStyleChange).toHaveBeenCalledWith("small caps", "on");
+  });
+
+  it("calls onStyleChange with canonical 'italics' (plural) when clicked", async () => {
+    const onStyleChange = vi.fn();
+    render(<StylePalette activeStyles={[]} onStyleChange={onStyleChange} />);
+    await userEvent.click(screen.getByTestId("style-chip-italics"));
+    expect(onStyleChange).toHaveBeenCalledWith("italics", "on");
   });
 });
 

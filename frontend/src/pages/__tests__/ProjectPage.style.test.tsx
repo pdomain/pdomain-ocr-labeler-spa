@@ -161,6 +161,30 @@ describe("ProjectPage — style / component / add-word wiring (Lane B / B2)", ()
       http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
       http.get("/api/projects/:pid/pages/:idx", () => HttpResponse.json(pageFixture())),
       http.post("/api/projects/:pid/current-page-index", () => HttpResponse.json({})),
+      // Q-B2-STYLE-LABELS: label vocabulary endpoint (canonical values from book-tools).
+      http.get("/api/label-vocabulary", () =>
+        HttpResponse.json({
+          text_style_labels: [
+            "all caps",
+            "blackletter",
+            "bold",
+            "handwritten",
+            "italics",
+            "monospace",
+            "regular",
+            "small caps",
+            "strikethrough",
+            "underline",
+          ],
+          word_components: [
+            "drop cap",
+            "drop cap unrecovered",
+            "footnote marker",
+            "subscript",
+            "superscript",
+          ],
+        }),
+      ),
     );
   });
 
@@ -236,8 +260,9 @@ describe("ProjectPage — style / component / add-word wiring (Lane B / B2)", ()
       expect(selectionStore.getState().selectedWords).toEqual([[0, 0]]);
     });
 
+    // Q-B2-STYLE-LABELS: canonical component label is "footnote marker" (with space).
     fireEvent.change(screen.getByTestId("apply-component-select"), {
-      target: { value: "footnote_marker" },
+      target: { value: "footnote marker" },
     });
     fireEvent.click(screen.getByTestId("apply-component-button"));
 
@@ -245,7 +270,7 @@ describe("ProjectPage — style / component / add-word wiring (Lane B / B2)", ()
       expect(calls.length).toBeGreaterThanOrEqual(1);
     });
     expect(calls[0]).toEqual(
-      expect.objectContaining({ component: "footnote_marker", enabled: true }),
+      expect.objectContaining({ component: "footnote marker", enabled: true }),
     );
   });
 
@@ -265,8 +290,9 @@ describe("ProjectPage — style / component / add-word wiring (Lane B / B2)", ()
       expect(selectionStore.getState().selectedWords).toEqual([[0, 0]]);
     });
 
+    // Q-B2-STYLE-LABELS: canonical component label is "footnote marker" (with space).
     fireEvent.change(screen.getByTestId("apply-component-select"), {
-      target: { value: "footnote_marker" },
+      target: { value: "footnote marker" },
     });
     fireEvent.click(screen.getByTestId("clear-component-button"));
 
@@ -274,7 +300,7 @@ describe("ProjectPage — style / component / add-word wiring (Lane B / B2)", ()
       expect(calls.length).toBeGreaterThanOrEqual(1);
     });
     expect(calls[0]).toEqual(
-      expect.objectContaining({ component: "footnote_marker", enabled: false }),
+      expect.objectContaining({ component: "footnote marker", enabled: false }),
     );
   });
 

@@ -22,4 +22,32 @@ export const handlers: RequestHandler[] = [
       config_source: "default",
     }),
   ),
+
+  // GET /api/label-vocabulary — Q-B2-STYLE-LABELS option (b).
+  // Default returns the canonical book-tools vocabulary so tests that render
+  // ToolbarActionGrid / StylePalette / ComponentPalette do not receive MSW
+  // "unhandled request" errors. Per-test overrides use server.use().
+  http.get("/api/label-vocabulary", () =>
+    HttpResponse.json({
+      text_style_labels: [
+        "all caps",
+        "blackletter",
+        "bold",
+        "handwritten",
+        "italics",
+        "monospace",
+        "regular",
+        "small caps",
+        "strikethrough",
+        "underline",
+      ],
+      word_components: [
+        "drop cap",
+        "drop cap unrecovered",
+        "footnote marker",
+        "subscript",
+        "superscript",
+      ],
+    }),
+  ),
 ];
