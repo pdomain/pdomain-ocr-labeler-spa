@@ -162,7 +162,15 @@ class PageLoader(Protocol):
 
     def load_labeled(self, page_index: int) -> PageLoadOutcome | None: ...
     def load_cached(self, page_index: int) -> PageLoadOutcome | None: ...
-    def run_ocr(self, page_index: int) -> PageLoadOutcome: ...
+    def run_ocr(self, page_index: int, *, edited_image_bytes: bytes | None = ...) -> PageLoadOutcome:
+        """Run OCR for ``page_index``.
+
+        ``edited_image_bytes`` (Lane A / Task A4): when supplied, OCR runs
+        against those raw image bytes (the post-erase edited page image)
+        instead of the pristine on-disk source. ``None`` / omitted uses the
+        on-disk file. Implementations may accept the keyword and ignore it.
+        """
+        ...
 
 
 def ensure_page_model(

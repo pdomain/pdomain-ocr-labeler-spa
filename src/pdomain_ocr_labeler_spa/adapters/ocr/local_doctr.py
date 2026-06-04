@@ -29,6 +29,7 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -224,15 +225,40 @@ class LocalDoctrPageLoader:
         """STUB: cached lane retired (M5b). Returns None — M8/M9 wires LabelerPageStore."""
         return None
 
-    def run_ocr(self, page_index: int) -> PageLoadOutcome:
+    def run_ocr(self, page_index: int, *, edited_image_bytes: bytes | None = None) -> PageLoadOutcome:
         if page_index < 0 or page_index >= len(self.project.image_paths):
             raise IndexError(
                 f"page_index {page_index} out of range (total_pages={len(self.project.image_paths)})"
             )
-        image_path = self.project.image_paths[page_index]
-        if not image_path.exists():
-            raise PageImageNotFoundError(f"Page image not found on disk: {image_path}")
+        source_path = self.project.image_paths[page_index]
 
+        # Lane A / Task A4: when the caller supplies the post-erase edited image
+        # bytes (legacy "Reload OCR (Edited)"), OCR against those instead of the
+        # pristine on-disk source. The bytes are materialised to a temp file
+        # alongside the source so the source_identifier / filename is preserved.
+        _tmp_dir: tempfile.TemporaryDirectory[str] | None = None
+        if edited_image_bytes is not None:
+            _tmp_dir = tempfile.TemporaryDirectory()
+            image_path = Path(_tmp_dir.name) / source_path.name
+            image_path.write_bytes(edited_image_bytes)
+        else:
+            image_path = source_path
+            if not image_path.exists():
+                raise PageImageNotFoundError(f"Page image not found on disk: {image_path}")
+
+        try:
+            return self._run_ocr_on_path(page_index, image_path)
+        finally:
+            if _tmp_dir is not None:
+                _tmp_dir.cleanup()
+
+    def _run_ocr_on_path(self, page_index: int, image_path: Path) -> PageLoadOutcome:
+        """Run OCR against a concrete on-disk image path (Lane A / A4 seam).
+
+        Split out of ``run_ocr`` so the edited-image temp-file path and the
+        pristine source path share one code path; ``run_ocr`` owns the temp
+        directory lifecycle.
+        """
         predictor = self.predictor_cache.get_or_create(
             self.detection_key, self.recognition_key, self.hf_revision
         )

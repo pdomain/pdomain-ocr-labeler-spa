@@ -107,9 +107,16 @@ class SaveProjectResponse(BaseModel):
 
 
 class ReloadOCRRequest(BaseModel):
-    """Body for ``POST .../reload-ocr`` — spec §5.3."""
+    """Body for ``POST .../reload-ocr`` — spec §5.3.
+
+    ``use_edited_image`` (Lane A / Task A4): when ``True`` the handler re-runs
+    OCR against the persisted post-erase edited page image (the blob written by
+    the erase-pixels route) instead of the pristine on-disk source file. This
+    is the SPA equivalent of legacy "Reload OCR (Edited)".
+    """
 
     force: bool = False
+    use_edited_image: bool = False
 
 
 class ReloadOCRResponse(BaseModel):
@@ -914,7 +921,11 @@ def reload_ocr(
     job_id = runner.submit(
         "reload_ocr",
         project_id=project_id,
-        payload={"page_index": page_index},
+        payload={
+            "page_index": page_index,
+            "force": body.force,
+            "use_edited_image": body.use_edited_image,
+        },
     )
     return JSONResponse(status_code=202, content={"job_id": job_id})
 

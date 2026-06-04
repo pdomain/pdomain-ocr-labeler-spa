@@ -143,6 +143,12 @@ class PageState:
     # Written by the ``IGlyphPredictor`` adapter when predictions are available.
     # Predictions are NOT persisted; this sidecar is rebuilt on each page load.
     glyph_predictions_map: dict[str, object] = field(default_factory=dict)
+    # Content-addressed blob hash of the post-erase edited page image (Lane A /
+    # Task A4). Written by ``POST .../words/{li}/{wi}/erase-pixels`` after a
+    # pixel edit; read by the ``reload_ocr`` handler when the request carries
+    # ``use_edited_image=True`` so OCR re-runs against the erased image instead
+    # of the pristine on-disk source file. ``None`` until the first erase.
+    edited_image_blob: str | None = field(default=None)
 
 
 class ProjectState:

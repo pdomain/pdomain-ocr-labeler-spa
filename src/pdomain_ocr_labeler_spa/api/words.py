@@ -408,6 +408,36 @@ def _refresh_payload_response(
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
+def _persist_edited_image_blob(
+    *,
+    pstate: PageState,
+    store: Any,  # LabelerPageStore | None
+    image: Any,  # numpy ndarray (cv2 BGR)
+) -> None:
+    """Encode the post-erase page image to PNG and store it as a blob.
+
+    Lane A / Task A4. Records the resulting content hash on
+    ``pstate.edited_image_blob`` so the ``reload_ocr`` handler can re-OCR the
+    erased image when the SPA requests "Reload OCR (Edited)". Best-effort: a
+    failure here must not turn a successful in-memory erase into a 500.
+
+    No-op when no store is wired or no ``page_id`` is registered.
+    """
+    if store is None or pstate.page_id is None or image is None:
+        return
+    try:
+        import cv2
+
+        ok, buf = cv2.imencode(".png", image)
+        if not ok:
+            log.warning("_persist_edited_image_blob: cv2.imencode failed")
+            return
+        blob_hash = store.blobs.write(buf.tobytes())
+        pstate.edited_image_blob = blob_hash
+    except Exception as exc:  # pragma: no cover - best-effort persistence
+        log.warning("_persist_edited_image_blob: failed page_id=%s: %s", pstate.page_id, exc)
+
+
 def _write_cached_envelope_best_effort(
     *,
     page: Any,
@@ -1267,6 +1297,9 @@ def erase_pixels(
         if callable(finalize):
             finalize()
         pstate.generation += 1
+        # Persist the post-erase image as a blob so "Reload OCR (Edited)" can
+        # re-OCR the erased pixels (Lane A / Task A4).
+        _persist_edited_image_blob(pstate=pstate, store=store, image=image)
         _save_to_store_best_effort(
             pstate=pstate,
             store=store,

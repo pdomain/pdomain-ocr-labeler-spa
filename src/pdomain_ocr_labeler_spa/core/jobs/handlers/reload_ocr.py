@@ -156,6 +156,32 @@ def _get_page_loader(
     )
 
 
+def _read_edited_image_blob(
+    runner: JobRunner,
+    project_state: ProjectState,
+    page_index: int,
+) -> bytes | None:
+    """Read the persisted post-erase edited-image blob bytes, or ``None``.
+
+    Lane A / Task A4. The erase-pixels route stores the edited PNG bytes in the
+    project's ``LabelerPageStore`` blob store and records the content hash on
+    ``PageState.edited_image_blob``. This reads that blob back. Returns ``None``
+    when no edit has been persisted, no store is wired, or the read fails.
+    """
+    pstate = project_state.get_page_state(page_index)
+    blob_hash = getattr(pstate, "edited_image_blob", None) if pstate is not None else None
+    if not blob_hash:
+        return None
+    store = runner.context.get("page_store")
+    if store is None:
+        return None
+    try:
+        return store.blobs.read(blob_hash)
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("reload_ocr: failed to read edited-image blob %s: %s", blob_hash, exc)
+        return None
+
+
 async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
     """Run OCR for a single page and store the outcome on ``ProjectState``.
 
@@ -166,6 +192,7 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
     payload: dict[str, Any] = job.payload
     page_index: int = int(payload.get("page_index", 0))
     project_id: str = job.project_id or str(payload.get("project_id", ""))
+    use_edited_image: bool = bool(payload.get("use_edited_image", False))
 
     project_state, notification_queue = _get_required_context(runner)
     settings = runner.context.get("settings")
@@ -192,8 +219,26 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
     current, message = _PROGRESS_STAGES[1]
     await runner.update_progress(job.job_id, current=current, total=_PROGRESS_TOTAL, message=message)
 
+    # Lane A / Task A4: when the caller asks to re-OCR the edited image, read
+    # the persisted post-erase blob and hand its bytes to the loader so OCR
+    # runs against the erased pixels rather than the pristine on-disk file.
+    edited_image_bytes: bytes | None = None
+    if use_edited_image:
+        edited_image_bytes = _read_edited_image_blob(runner, project_state, page_index)
+        if edited_image_bytes is None:
+            log.info(
+                "reload_ocr: use_edited_image=True but no edited-image blob for page=%d; "
+                "falling back to the on-disk source image",
+                page_index,
+            )
+
     try:
-        outcome: PageLoadOutcome = await asyncio.to_thread(loader.run_ocr, page_index)
+        if edited_image_bytes is not None:
+            outcome: PageLoadOutcome = await asyncio.to_thread(
+                loader.run_ocr, page_index, edited_image_bytes=edited_image_bytes
+            )
+        else:
+            outcome = await asyncio.to_thread(loader.run_ocr, page_index)
     except Exception as exc:
         # Spec §6: ``ocr_failed`` notification on exception. Queue first,
         # then re-raise so the runner records the error on the job.

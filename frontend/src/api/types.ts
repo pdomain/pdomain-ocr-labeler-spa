@@ -1390,7 +1390,8 @@ export interface paths {
          * @description ``POST .../lines/{li}/delete`` — remove the line from the page.
          *
          *     Spec §9 row 15: ``page.delete_line(l)`` → ``Page.delete_lines([l])``
-         *     (pdomain-book-tools exposes only the batch variant).
+         *     (pdomain-book-tools exposes only the batch variant). Structural edit:
+         *     triggers GT auto-rematch + content persistence (A3).
          */
         post: operations["delete_line_api_projects__project_id__pages__page_index__lines__line_index__delete_post"];
         delete?: never;
@@ -1414,7 +1415,8 @@ export interface paths {
          *
          *     Spec §9 row 17: ``line.split_after_word(w)`` →
          *     ``Page.split_line_after_word(li, wi)`` (lives on Page because it
-         *     reorganizes line ordering).
+         *     reorganizes line ordering). Structural edit: triggers GT auto-rematch +
+         *     content persistence (A3).
          */
         post: operations["split_line_after_word_d1_api_projects__project_id__pages__page_index__lines__line_index__split_after_word_post"];
         delete?: never;
@@ -1463,7 +1465,8 @@ export interface paths {
          *
          *     Spec §9 row 16: ``page.merge_lines(targets)`` →
          *     ``Page.merge_lines(line_indices)`` (``pdomain_book_tools/ocr/page.py:1575``).
-         *     pdomain-book-tools requires at least two distinct indices.
+         *     pdomain-book-tools requires at least two distinct indices. Structural edit:
+         *     triggers GT auto-rematch + content persistence (A3).
          */
         post: operations["merge_lines_api_projects__project_id__pages__page_index__lines_merge_post"];
         delete?: never;
@@ -1487,7 +1490,8 @@ export interface paths {
          *
          *     Spec §9 row 18: ``page.split_line_by_words(targets)`` →
          *     ``Page.split_line_with_selected_words(word_keys)``
-         *     (``pdomain_book_tools/ocr/page.py:2217``).
+         *     (``pdomain_book_tools/ocr/page.py:2217``). Structural edit: triggers GT
+         *     auto-rematch + content persistence (A3).
          */
         post: operations["split_by_words_api_projects__project_id__pages__page_index__lines_split_by_words_post"];
         delete?: never;
@@ -1717,7 +1721,8 @@ export interface paths {
          *
          *     Spec §9: pdomain-book-tools exposes only the batch variant
          *     ``Page.delete_paragraphs(indices)`` (``pdomain_book_tools/ocr/page.py:1040``),
-         *     mirroring the line-delete pattern.
+         *     mirroring the line-delete pattern. Structural edit: triggers GT
+         *     auto-rematch + content persistence (A3).
          */
         post: operations["delete_paragraph_api_projects__project_id__pages__page_index__paragraphs__paragraph_index__delete_post"];
         delete?: never;
@@ -1741,7 +1746,8 @@ export interface paths {
          *
          *     Spec §9: ``Page.merge_paragraphs(paragraph_indices)``
          *     (``pdomain_book_tools/ocr/page.py:980``). pdomain-book-tools requires at least
-         *     two distinct indices.
+         *     two distinct indices. Structural edit: triggers GT auto-rematch +
+         *     content persistence (A3).
          */
         post: operations["merge_paragraphs_api_projects__project_id__pages__page_index__paragraphs_merge_post"];
         delete?: never;
@@ -3497,6 +3503,11 @@ export interface components {
         /**
          * ReloadOCRRequest
          * @description Body for ``POST .../reload-ocr`` — spec §5.3.
+         *
+         *     ``use_edited_image`` (Lane A / Task A4): when ``True`` the handler re-runs
+         *     OCR against the persisted post-erase edited page image (the blob written by
+         *     the erase-pixels route) instead of the pristine on-disk source file. This
+         *     is the SPA equivalent of legacy "Reload OCR (Edited)".
          */
         ReloadOCRRequest: {
             /**
@@ -3504,6 +3515,11 @@ export interface components {
              * @default false
              */
             force: boolean;
+            /**
+             * Use Edited Image
+             * @default false
+             */
+            use_edited_image: boolean;
         };
         /**
          * ReloadOCRResponse
