@@ -22,6 +22,7 @@ import { Breadcrumb } from "./Breadcrumb";
 import { selectionStore, type SelectionLevel } from "../../stores/selection-store";
 import { LineDetail } from "../right-panel/LineDetail";
 import { BlockDetail } from "../right-panel/BlockDetail";
+import { ParagraphDetail } from "../right-panel/ParagraphDetail";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -108,7 +109,11 @@ export function RightPanel({ page, projectId, pageIndex, wordSlot, onCollapse }:
         ) : level === "block" && page && projectId !== undefined && pageIndex !== undefined ? (
           <BlockDetail page={page} projectId={projectId} pageIndex={pageIndex} level="block" />
         ) : level === "para" && page && projectId !== undefined && pageIndex !== undefined ? (
-          <BlockDetail page={page} projectId={projectId} pageIndex={pageIndex} level="para" />
+          <div className="flex flex-col">
+            {/* D1: paragraph-scope actions panel above the items overview. */}
+            <ParagraphDetail page={page} projectId={projectId} pageIndex={pageIndex} />
+            <BlockDetail page={page} projectId={projectId} pageIndex={pageIndex} level="para" />
+          </div>
         ) : (
           <div className="p-3">
             <Placeholder level={level} />

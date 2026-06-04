@@ -211,6 +211,100 @@ export function useSetLineGt(projectId: string, pageIndex: number) {
   });
 }
 
+// ─── Paragraph-scope mutations (Lane D / D1) ──────────────────────────────
+//
+// Endpoints (all real per api/lines_paragraphs.py):
+//   POST .../paragraphs/merge                          → PagePayload
+//   POST .../paragraphs/{pi}/delete                    → PagePayload
+//   POST .../paragraphs/{pi}/split-after-line          → PagePayload
+//   POST .../paragraphs/{pi}/copy-gt-to-ocr|copy-ocr-to-gt → PagePayload
+//   POST .../words/validate-batch  scope=paragraph     → ValidateBatchResponse
+
+/** Merge a paragraph with the next one. Sends a two-element index array. */
+export function useMergeParagraphs(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { paragraphIndices: number[] }>({
+    mutationFn: ({ paragraphIndices }) =>
+      apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/paragraphs/merge`, {
+        paragraph_indices: paragraphIndices,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+/** Delete a single paragraph from the page. */
+export function useDeleteParagraph(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { paragraphIndex: number }>({
+    mutationFn: ({ paragraphIndex }) =>
+      apiPost<PagePayload>(
+        `${pageBase(projectId, pageIndex)}/paragraphs/${encodeURIComponent(String(paragraphIndex))}/delete`,
+        {},
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+/** Split a paragraph after the given within-paragraph line index. */
+export function useSplitParagraphAfterLine(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { paragraphIndex: number; afterLineIndex: number }>({
+    mutationFn: ({ paragraphIndex, afterLineIndex }) =>
+      apiPost<PagePayload>(
+        `${pageBase(projectId, pageIndex)}/paragraphs/${encodeURIComponent(String(paragraphIndex))}/split-after-line`,
+        { paragraph_index: paragraphIndex, after_line_index: afterLineIndex },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+/** Copy GT↔OCR for every word in a paragraph (direction selects the way). */
+export function useCopyParagraphGt(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<
+    PagePayload,
+    Error,
+    { paragraphIndex: number; direction: "gt_to_ocr" | "ocr_to_gt" }
+  >({
+    mutationFn: ({ paragraphIndex, direction }) => {
+      const verb = direction === "gt_to_ocr" ? "copy-gt-to-ocr" : "copy-ocr-to-gt";
+      return apiPost<PagePayload>(
+        `${pageBase(projectId, pageIndex)}/paragraphs/${encodeURIComponent(String(paragraphIndex))}/${verb}`,
+        {},
+      );
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+/** Validate / unvalidate every word in a paragraph via validate-batch scope=paragraph. */
+export function useValidateParagraph(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, { paragraphIndex: number; validated: boolean }>({
+    mutationFn: ({ paragraphIndex, validated }) => {
+      const body: ValidateBatchRequest = {
+        scope: "paragraph",
+        line_indices: [],
+        paragraph_indices: [paragraphIndex],
+        word_indices: [],
+        validated,
+      };
+      return apiPost<unknown>(`${pageBase(projectId, pageIndex)}/words/validate-batch`, body);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
 // ─── useValidateWords (Q5) ────────────────────────────────────────────────
 
 /**
