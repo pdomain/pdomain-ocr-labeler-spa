@@ -289,12 +289,25 @@ async def _handle_auto_rotate_all(runner: JobRunner, job: Job) -> None:
     await handle_auto_rotate_all(runner, job)
 
 
+async def _handle_refine_bboxes(runner: JobRunner, job: Job) -> None:
+    """Refine-bboxes handler — delegates to ``core/jobs/handlers/refine``.
+
+    Lane A / Task A1: expand/refine word bounding boxes for the requested
+    scope. The handler body is synchronous (no OCR engine call) so it is
+    invoked directly (no ``asyncio.to_thread``).
+    """
+    from .handlers.refine import handle_refine_bboxes  # lazy import
+
+    handle_refine_bboxes(runner, job)
+
+
 _HANDLERS: dict[str, Handler] = {
     "reload_ocr": _handle_reload_ocr,
     "save_project": _handle_save_project,
     "export": _handle_export,
     "rotate_page": _handle_rotate_page,
     "auto_rotate_all": _handle_auto_rotate_all,
+    "refine_bboxes": _handle_refine_bboxes,
 }
 
 

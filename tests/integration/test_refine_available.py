@@ -75,18 +75,17 @@ def test_refine_available_returns_capability_flags(client: TestClient) -> None:
     assert isinstance(body["reason"], str)
 
 
-def test_refine_available_currently_returns_false(client: TestClient) -> None:
-    """Until the OCR engine is wired (M3-proper), the probe returns false.
+def test_refine_available_returns_true(client: TestClient) -> None:
+    """Lane A / Task A1: the refine_bboxes handler is now registered, so the
+    capability probe reports ``available=True`` with an empty reason.
 
-    This is the expected state until M3-proper wires the OCR adapter;
-    the test documents the current value so a regression is immediately visible
-    when the wiring lands.
+    Before A1 this returned ``False`` (handler unregistered). Flipping the
+    probe lets ``ErasePixelsSection`` enable its Apply button (FO-9).
     """
     resp = client.get("/api/refine/available")
     body = resp.json()
-    # Currently always false — update this assertion when M3-proper lands.
-    assert body["available"] is False
-    assert body["reason"] != "", "reason should explain why unavailable"
+    assert body["available"] is True
+    assert body["reason"] == "", f"reason should be empty when available; got {body['reason']!r}"
 
 
 def test_refine_available_no_project_required(client: TestClient) -> None:

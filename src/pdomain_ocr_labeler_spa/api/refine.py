@@ -46,14 +46,14 @@ probe_router = APIRouter(prefix="/api/refine", tags=["refine"])
 class RefineAvailableResponse(BaseModel):
     """Response for ``GET /api/refine/available`` — FO-9 capability probe.
 
-    ``available`` is ``True`` when a wired OCR engine supports bbox refinement.
-    Currently always ``False`` (M3-proper OCR adapter not yet wired).
-    ``reason`` is empty when ``available=True``; otherwise a human-readable
-    explanation of why the feature is not available.
+    ``available`` is ``True`` when the refine engine is wired. As of Lane A
+    Task A1 the ``refine_bboxes`` job handler is registered, so this is
+    ``True``. ``reason`` is empty when ``available=True``; otherwise a
+    human-readable explanation of why the feature is not available.
     """
 
-    available: bool = False
-    reason: str = "OCR engine not wired (pending M3-proper)"
+    available: bool = True
+    reason: str = ""
 
 
 class RefineScopeRequest(BaseModel):
@@ -147,11 +147,10 @@ def refine_scope(
 def refine_available() -> RefineAvailableResponse:
     """``GET /api/refine/available`` — capability probe (FO-9).
 
-    Returns immediately without requiring a project to be loaded.
-    Currently always returns ``available=False`` because the full OCR bbox
-    refinement engine (M3-proper) is not yet wired. When the OCR adapter
-    is connected, this probe will check ``IOCREngine.supports_refine()``
-    and return ``available=True`` with ``reason=""``.
+    Returns immediately without requiring a project to be loaded. As of
+    Lane A Task A1 the ``refine_bboxes`` job handler is registered and the
+    DocTR loader attaches the cv2 image, so this returns ``available=True``
+    with ``reason=""``.
 
     The ``ErasePixelsSection`` frontend component calls this on mount
     and uses the result to decide whether to enable the Apply button.

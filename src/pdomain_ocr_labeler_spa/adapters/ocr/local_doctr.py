@@ -253,6 +253,28 @@ class LocalDoctrPageLoader:
         # ``Page`` at ``pages[0]``.
         page_obj: Page = doc.pages[0]
 
+        # Attach the cv2 image + reorganize the page (Lane A / Task A1,
+        # legacy parity: operations/ocr/page_operations.py:305-355). Without
+        # the image attached, ``word.refine_bbox(page.cv2_numpy_page_image)``
+        # has nothing to refine against. ``reorganize_page`` re-derives the
+        # paragraph/line/word hierarchy from the freshly OCR'd boxes.
+        try:
+            import cv2
+
+            cv2_image = cv2.imread(str(image_path))
+            if cv2_image is not None:
+                object.__setattr__(page_obj, "cv2_numpy_page_image", cv2_image)
+            reorganize = getattr(page_obj, "reorganize_page", None)
+            if callable(reorganize):
+                reorganize()
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(
+                "cv2 image attach / reorganize failed for index=%s name=%s: %s",
+                page_index,
+                image_path.name,
+                exc,
+            )
+
         # Ground-truth injection (legacy parity:
         # pd-ocr-labeler/operations/ocr/page_operations.py:363-364 +
         # state/project_state.py:709-719). Look up GT for the image
