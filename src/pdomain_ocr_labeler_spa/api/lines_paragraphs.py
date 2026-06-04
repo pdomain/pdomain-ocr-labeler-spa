@@ -115,7 +115,6 @@ from .words import (
     _page_not_loaded,
     _refresh_payload_response,
     _resolve_page_object,
-    _write_cached_envelope_best_effort,
 )
 
 log = logging.getLogger(__name__)
@@ -502,7 +501,25 @@ def _finalize_structural_edit(
     _auto_rematch_preserving_edits(page=page, project_state=project_state, page_index=page_index)
 
     pstate.generation += 1
+    _persist_content_best_effort(page=page, pstate=pstate, store=store, changes=changes)
 
+
+def _persist_content_best_effort(
+    *,
+    page: Any,
+    pstate: Any,  # PageState
+    store: LabelerPageStore | None,
+    changes: list[dict[str, Any]],
+) -> None:
+    """Persist edited page *content* so it survives a fresh-store reload.
+
+    Mirrors ``api/words.py::_save_to_store_best_effort`` — closes the gap where
+    ``lines_paragraphs.py`` previously saved through the no-op
+    ``_write_cached_envelope_best_effort`` stub. Used by both structural
+    mutations (via ``_finalize_structural_edit``) and the per-line/paragraph
+    content edits (copy-gt / validate / set-gt / layout). No-op when there is
+    no store, no ``page_id``, or the page can't serialise.
+    """
     if store is None or getattr(pstate, "page_id", None) is None:
         return
     if not callable(getattr(page, "to_dict", None)):
@@ -512,7 +529,7 @@ def _finalize_structural_edit(
 
         save_page_content_to_store(page_id=pstate.page_id, page=page, store=store, changes=changes)
     except Exception as exc:  # pragma: no cover - best-effort persistence
-        log.warning("_finalize_structural_edit: store write failed page_id=%s: %s", pstate.page_id, exc)
+        log.warning("_persist_content_best_effort: store write failed page_id=%s: %s", pstate.page_id, exc)
 
 
 def _auto_rematch_preserving_edits(
@@ -583,11 +600,19 @@ def _line_mutation_handler(
     settings: Settings,
     mutate: Any,
     mutation_label: str,
+    store: LabelerPageStore | None = None,
+    structural: bool = False,
 ) -> JSONResponse:
-    """Shared core: guard → resolve → lock → mutate → cache → refresh.
+    """Shared core: guard → resolve → lock → mutate → persist → refresh.
 
     ``mutate(page, line)`` is invoked under the page lock; it must return
     ``True`` on success and ``False`` to surface ``mutation_failed``.
+
+    When ``structural`` is True the edit changes the page hierarchy
+    (delete / split): it runs through ``_finalize_structural_edit`` which
+    re-matches GT and persists content. Otherwise (content edits — copy-gt /
+    validate / set-gt) it bumps the generation and persists content without a
+    GT rematch (rematch would clobber a just-applied copy-gt / validate).
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -608,13 +633,19 @@ def _line_mutation_handler(
             return _mutation_failed(
                 f"{mutation_label} rejected line={line_index}",
             )
-        pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        changes = [{"type": mutation_label, "line": line_index}]
+        if structural:
+            _finalize_structural_edit(
+                page=page,
+                pstate=pstate,
+                project_state=project_state,
+                page_index=page_index,
+                store=store,
+                changes=changes,
+            )
+        else:
+            pstate.generation += 1
+            _persist_content_best_effort(page=page, pstate=pstate, store=store, changes=changes)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -635,6 +666,7 @@ def copy_line_gt_to_ocr(
     body: EmptyBody | None = None,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../lines/{li}/copy-gt-to-ocr`` — copy GT→OCR for every word.
 
@@ -657,6 +689,7 @@ def copy_line_gt_to_ocr(
         settings=settings,
         mutate=_mutate,
         mutation_label="copy_gt_to_ocr",
+        store=store,
     )
 
 
@@ -671,6 +704,7 @@ def copy_line_ocr_to_gt(
     body: EmptyBody | None = None,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../lines/{li}/copy-ocr-to-gt`` — copy OCR→GT for every word.
 
@@ -690,6 +724,7 @@ def copy_line_ocr_to_gt(
         settings=settings,
         mutate=_mutate,
         mutation_label="copy_ocr_to_gt",
+        store=store,
     )
 
 
@@ -704,6 +739,7 @@ def validate_line(
     body: ValidateLineRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../lines/{li}/validate`` — set the line's validated flag.
 
@@ -739,6 +775,7 @@ def validate_line(
         settings=settings,
         mutate=_mutate,
         mutation_label="validate_line",
+        store=store,
     )
 
 
@@ -753,11 +790,13 @@ def delete_line(
     body: EmptyBody | None = None,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../lines/{li}/delete`` — remove the line from the page.
 
     Spec §9 row 15: ``page.delete_line(l)`` → ``Page.delete_lines([l])``
-    (pdomain-book-tools exposes only the batch variant).
+    (pdomain-book-tools exposes only the batch variant). Structural edit:
+    triggers GT auto-rematch + content persistence (A3).
     """
 
     def _mutate(page: Any, _line: Any) -> bool:
@@ -771,6 +810,8 @@ def delete_line(
         settings=settings,
         mutate=_mutate,
         mutation_label="delete_line",
+        store=store,
+        structural=True,
     )
 
 
@@ -785,12 +826,14 @@ def split_line_after_word_d1(
     body: SplitLineAfterWordRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../lines/{li}/split-after-word`` — split a line after a word boundary.
 
     Spec §9 row 17: ``line.split_after_word(w)`` →
     ``Page.split_line_after_word(li, wi)`` (lives on Page because it
-    reorganizes line ordering).
+    reorganizes line ordering). Structural edit: triggers GT auto-rematch +
+    content persistence (A3).
     """
 
     wi = body.effective_word_index()
@@ -821,6 +864,8 @@ def split_line_after_word_d1(
         settings=settings,
         mutate=_mutate,
         mutation_label="split_line_after_word",
+        store=store,
+        structural=True,
     )
 
 
@@ -835,6 +880,7 @@ def set_line_gt(
     body: SetLineGtRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../lines/{li}/set-gt`` — set line GT by distributing tokens.
 
@@ -867,6 +913,7 @@ def set_line_gt(
         settings=settings,
         mutate=_mutate,
         mutation_label="set_line_gt",
+        store=store,
     )
 
 
@@ -883,12 +930,14 @@ def merge_lines(
     body: MergeLinesRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../lines/merge`` — merge selected lines into the first.
 
     Spec §9 row 16: ``page.merge_lines(targets)`` →
     ``Page.merge_lines(line_indices)`` (``pdomain_book_tools/ocr/page.py:1575``).
-    pdomain-book-tools requires at least two distinct indices.
+    pdomain-book-tools requires at least two distinct indices. Structural edit:
+    triggers GT auto-rematch + content persistence (A3).
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -899,19 +948,21 @@ def merge_lines(
     if pstate is None or page is None:
         return _page_not_loaded(page_index)
 
+    line_indices = list(body.line_indices)
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
-        ok = bool(page.merge_lines(list(body.line_indices)))
+        ok = bool(page.merge_lines(line_indices))
         if not ok:
             return _mutation_failed(
-                f"merge_lines rejected indices={list(body.line_indices)}",
+                f"merge_lines rejected indices={line_indices}",
             )
-        pstate.generation += 1
-        _write_cached_envelope_best_effort(
+        _finalize_structural_edit(
             page=page,
+            pstate=pstate,
             project_state=project_state,
             page_index=page_index,
-            settings=settings,
+            store=store,
+            changes=[{"type": "merge_lines", "line_indices": line_indices}],
         )
 
     return _refresh_payload_response(
@@ -932,12 +983,14 @@ def split_by_words(
     body: SplitByWordsRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../lines/split-by-words`` — extract selected words into a new line.
 
     Spec §9 row 18: ``page.split_line_by_words(targets)`` →
     ``Page.split_line_with_selected_words(word_keys)``
-    (``pdomain_book_tools/ocr/page.py:2217``).
+    (``pdomain_book_tools/ocr/page.py:2217``). Structural edit: triggers GT
+    auto-rematch + content persistence (A3).
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -960,12 +1013,13 @@ def split_by_words(
             return _mutation_failed(
                 f"split_line_with_selected_words rejected keys={word_keys}",
             )
-        pstate.generation += 1
-        _write_cached_envelope_best_effort(
+        _finalize_structural_edit(
             page=page,
+            pstate=pstate,
             project_state=project_state,
             page_index=page_index,
-            settings=settings,
+            store=store,
+            changes=[{"type": "split_by_words", "word_keys": word_keys}],
         )
 
     return _refresh_payload_response(
@@ -1315,13 +1369,19 @@ def _paragraph_mutation_handler(
     settings: Settings,
     mutate: Any,
     mutation_label: str,
+    store: LabelerPageStore | None = None,
+    structural: bool = False,
 ) -> JSONResponse:
     """Shared core for per-paragraph mutations.
 
     Mirrors ``_line_mutation_handler``: guard → resolve paragraph → lock
-    → mutate → cache → refresh. ``mutate(page, paragraph)`` is invoked
+    → mutate → persist → refresh. ``mutate(page, paragraph)`` is invoked
     under the page lock; it must return ``True`` on success and ``False``
     to surface ``mutation_failed``.
+
+    ``structural`` selects ``_finalize_structural_edit`` (GT rematch +
+    content persist) vs. ``_persist_content_best_effort`` (content persist
+    only — for copy-gt / validate content edits).
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -1342,13 +1402,19 @@ def _paragraph_mutation_handler(
             return _mutation_failed(
                 f"{mutation_label} rejected paragraph={paragraph_index}",
             )
-        pstate.generation += 1
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        changes = [{"type": mutation_label, "paragraph": paragraph_index}]
+        if structural:
+            _finalize_structural_edit(
+                page=page,
+                pstate=pstate,
+                project_state=project_state,
+                page_index=page_index,
+                store=store,
+                changes=changes,
+            )
+        else:
+            pstate.generation += 1
+            _persist_content_best_effort(page=page, pstate=pstate, store=store, changes=changes)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -1369,6 +1435,7 @@ def copy_paragraph_gt_to_ocr(
     body: EmptyBody | None = None,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../paragraphs/{pi}/copy-gt-to-ocr`` — copy GT→OCR for every word.
 
@@ -1391,6 +1458,7 @@ def copy_paragraph_gt_to_ocr(
         settings=settings,
         mutate=_mutate,
         mutation_label="paragraph_copy_gt_to_ocr",
+        store=store,
     )
 
 
@@ -1405,6 +1473,7 @@ def copy_paragraph_ocr_to_gt(
     body: EmptyBody | None = None,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../paragraphs/{pi}/copy-ocr-to-gt`` — copy OCR→GT for every word.
 
@@ -1424,6 +1493,7 @@ def copy_paragraph_ocr_to_gt(
         settings=settings,
         mutate=_mutate,
         mutation_label="paragraph_copy_ocr_to_gt",
+        store=store,
     )
 
 
@@ -1438,6 +1508,7 @@ def validate_paragraph(
     body: ValidateParagraphRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../paragraphs/{pi}/validate`` — set the paragraph's validated flag.
 
@@ -1472,6 +1543,7 @@ def validate_paragraph(
         settings=settings,
         mutate=_mutate,
         mutation_label="validate_paragraph",
+        store=store,
     )
 
 
@@ -1486,12 +1558,14 @@ def delete_paragraph(
     body: EmptyBody | None = None,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../paragraphs/{pi}/delete`` — remove the paragraph from the page.
 
     Spec §9: pdomain-book-tools exposes only the batch variant
     ``Page.delete_paragraphs(indices)`` (``pdomain_book_tools/ocr/page.py:1040``),
-    mirroring the line-delete pattern.
+    mirroring the line-delete pattern. Structural edit: triggers GT
+    auto-rematch + content persistence (A3).
     """
 
     def _mutate(page: Any, _paragraph: Any) -> bool:
@@ -1505,6 +1579,8 @@ def delete_paragraph(
         settings=settings,
         mutate=_mutate,
         mutation_label="delete_paragraph",
+        store=store,
+        structural=True,
     )
 
 
@@ -1518,12 +1594,14 @@ def merge_paragraphs(
     body: MergeParagraphsRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../paragraphs/merge`` — merge selected paragraphs into the first.
 
     Spec §9: ``Page.merge_paragraphs(paragraph_indices)``
     (``pdomain_book_tools/ocr/page.py:980``). pdomain-book-tools requires at least
-    two distinct indices.
+    two distinct indices. Structural edit: triggers GT auto-rematch +
+    content persistence (A3).
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -1534,19 +1612,21 @@ def merge_paragraphs(
     if pstate is None or page is None:
         return _page_not_loaded(page_index)
 
+    paragraph_indices = list(body.paragraph_indices)
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
-        ok = bool(page.merge_paragraphs(list(body.paragraph_indices)))
+        ok = bool(page.merge_paragraphs(paragraph_indices))
         if not ok:
             return _mutation_failed(
-                f"merge_paragraphs rejected indices={list(body.paragraph_indices)}",
+                f"merge_paragraphs rejected indices={paragraph_indices}",
             )
-        pstate.generation += 1
-        _write_cached_envelope_best_effort(
+        _finalize_structural_edit(
             page=page,
+            pstate=pstate,
             project_state=project_state,
             page_index=page_index,
-            settings=settings,
+            store=store,
+            changes=[{"type": "merge_paragraphs", "paragraph_indices": paragraph_indices}],
         )
 
     return _refresh_payload_response(
@@ -1568,6 +1648,7 @@ def patch_paragraph(
     body: PatchParagraphRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``PATCH .../paragraphs/{pi}`` — update paragraph-level attributes (FO-1).
 
@@ -1600,11 +1681,17 @@ def patch_paragraph(
         # Store as a plain Python attribute (lost on round-trip — documented).
         paragraph.layout_type = body.layout_type
         pstate.generation += 1
-        _write_cached_envelope_best_effort(
+        _persist_content_best_effort(
             page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
+            pstate=pstate,
+            store=store,
+            changes=[
+                {
+                    "type": "patch_paragraph_layout",
+                    "paragraph": paragraph_index,
+                    "layout_type": body.layout_type,
+                }
+            ],
         )
 
     return _refresh_payload_response(
@@ -1718,6 +1805,7 @@ def split_paragraph_after_line(
     body: SplitParagraphAfterLineRequest,
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../paragraphs/{pi}/split-after-line`` — split paragraph after a line.
 
@@ -1782,12 +1870,19 @@ def split_paragraph_after_line(
                 f"split_paragraph_after_line rejected paragraph={paragraph_index} "
                 f"page_line_index={page_line_index}",
             )
-        pstate.generation += 1
-        _write_cached_envelope_best_effort(
+        _finalize_structural_edit(
             page=page,
+            pstate=pstate,
             project_state=project_state,
             page_index=page_index,
-            settings=settings,
+            store=store,
+            changes=[
+                {
+                    "type": "split_paragraph_after_line",
+                    "paragraph": paragraph_index,
+                    "page_line": page_line_index,
+                }
+            ],
         )
 
     return _refresh_payload_response(

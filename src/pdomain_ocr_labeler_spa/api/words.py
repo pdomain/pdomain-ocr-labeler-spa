@@ -861,9 +861,13 @@ def add_word(
         ok = page.add_word_to_page(x1, y1, x2, y2, body.text)
         if not ok:
             return _mutation_failed(f"add_word_to_page rejected bbox=({x1}, {y1}, {x2}, {y2})")
-        pstate.generation += 1
-        _save_to_store_best_effort(
+        from .lines_paragraphs import _finalize_structural_edit
+
+        _finalize_structural_edit(
+            page=page,
             pstate=pstate,
+            project_state=project_state,
+            page_index=page_index,
             store=store,
             changes=[{"type": "word_add", "bbox": [x1, y1, x2, y2], "text": body.text}],
         )
@@ -1061,9 +1065,13 @@ def split_word(
             return _mutation_failed(
                 f"split_word rejected line={line_index} word={word_index} fraction={body.x_fraction}"
             )
-        pstate.generation += 1
-        _save_to_store_best_effort(
+        from .lines_paragraphs import _finalize_structural_edit
+
+        _finalize_structural_edit(
+            page=page,
             pstate=pstate,
+            project_state=project_state,
+            page_index=page_index,
             store=store,
             changes=[
                 {
@@ -1130,9 +1138,13 @@ def merge_words(
             return _mutation_failed(
                 f"merge_word_{body.direction} rejected line={line_index} word={word_index}"
             )
-        pstate.generation += 1
-        _save_to_store_best_effort(
+        from .lines_paragraphs import _finalize_structural_edit
+
+        _finalize_structural_edit(
+            page=page,
             pstate=pstate,
+            project_state=project_state,
+            page_index=page_index,
             store=store,
             changes=[
                 {
