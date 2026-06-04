@@ -296,3 +296,62 @@ async def test_handle_export_cancel_removes_partial_output(tmp_path: Path) -> No
 
     # Partial output directory must have been removed.
     assert not partial_dir.exists()
+
+
+# ---------------------------------------------------------------------------
+# Lane E2 — per-style separate-subfolder export
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_handle_export_two_styles_two_subfolders(tmp_path: Path) -> None:
+    """Two selected styles produce two separate subfolders in one run.
+
+    Lane E2 (plan docs/plans/2026-06-03-labeler-spa-legacy-parity.md): legacy
+    runs one export per selected style into separate subfolders. Each
+    subfolder must receive a WordFilter scoped to exactly that style.
+    """
+    data_root = tmp_path / "data"
+    proj_dir = data_root / "labeled-projects" / "proj_e2"
+    proj_dir.mkdir(parents=True)
+    _write_envelope(proj_dir / "proj_e2_000.json", validated=True)
+    (proj_dir / "proj_e2_000.png").write_bytes(b"\x00")
+
+    from datetime import UTC, datetime
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.export import handle_export
+    from pdomain_ocr_labeler_spa.core.jobs.runner import Job
+
+    runner, _settings = _make_runner_with_settings(tmp_path)
+    runner.context["settings"] = MagicMock(data_root=data_root)
+
+    with (
+        patch("pdomain_ocr_labeler_spa.core.jobs.handlers.export._export_page") as mock_ep,
+        patch("pdomain_ocr_labeler_spa.core.jobs.handlers.export._load_page_from_envelope_file") as mock_load,
+    ):
+        mock_load.return_value = _make_page([["validated"]])
+
+        job = Job(
+            job_id="je2",
+            job_type="export",
+            project_id="proj_e2",
+            payload={"scope": "all_validated", "style_filters": ["italics", "small caps"]},
+            created_at=datetime.now(UTC),
+        )
+        runner._jobs["je2"] = job
+        await handle_export(runner, job)
+
+    # Two _export_page calls (one page x two style subfolders).
+    assert mock_ep.call_count == 2
+
+    # Collect (subfolder_path, word_filter_styles) for each call.
+    seen: dict[str, frozenset[str]] = {}
+    for call in mock_ep.call_args_list:
+        output_dir = call.args[2]
+        wf = call.kwargs["word_filter"]
+        seen[output_dir.name] = wf.style_labels if wf is not None else frozenset()
+
+    assert set(seen) == {"italics", "small caps"}
+    # Each subfolder is scoped to exactly its own style — not a combined filter.
+    assert seen["italics"] == frozenset({"italics"})
+    assert seen["small caps"] == frozenset({"small caps"})
