@@ -6,8 +6,10 @@
 //   - Apply&Close fires onApply; × fires onClose
 //   - data-testids: dialog-header-label, dialog-apply-close-button, dialog-close-button
 
+import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // WordEditDialog now embeds a Konva Stage — mock react-konva to avoid canvas errors in jsdom.
 vi.mock("react-konva", () => ({
@@ -57,8 +59,23 @@ import { WordEditDialog } from "./WordEditDialog";
 const baseTarget = { lineIndex: 2, wordIndex: 1 };
 const lineWords = ["alpha", "beta", "gamma", "delta"];
 
+// WordTagRow (rendered inside WordEditDialog) calls useLabelVocabulary() which
+// requires a QueryClientProvider. All renders that open the dialog need one.
+function makeWrapper() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(QueryClientProvider, { client: qc }, children);
+  };
+}
+
+function renderWithQC(ui: React.ReactElement) {
+  return render(ui, { wrapper: makeWrapper() });
+}
+
 describe("WordEditDialog", () => {
   it("renders nothing when closed", () => {
+    // open=false: Radix Dialog does not render DialogContent, so WordTagRow
+    // is never mounted and no QueryClientProvider is needed.
     render(
       <WordEditDialog
         open={false}
@@ -74,7 +91,7 @@ describe("WordEditDialog", () => {
   });
 
   it("renders header label with correct line/word numbers", () => {
-    render(
+    renderWithQC(
       <WordEditDialog
         open={true}
         target={{ lineIndex: 3, wordIndex: 2 }}
@@ -90,7 +107,7 @@ describe("WordEditDialog", () => {
   });
 
   it("renders apply-close and close buttons", () => {
-    render(
+    renderWithQC(
       <WordEditDialog
         open={true}
         target={baseTarget}
@@ -107,7 +124,7 @@ describe("WordEditDialog", () => {
   it("Apply&Close button calls onApply then onClose", () => {
     const onApply = vi.fn();
     const onClose = vi.fn();
-    render(
+    renderWithQC(
       <WordEditDialog
         open={true}
         target={baseTarget}
@@ -125,7 +142,7 @@ describe("WordEditDialog", () => {
   it("× close button calls only onClose (no apply)", () => {
     const onApply = vi.fn();
     const onClose = vi.fn();
-    render(
+    renderWithQC(
       <WordEditDialog
         open={true}
         target={baseTarget}
@@ -142,7 +159,7 @@ describe("WordEditDialog", () => {
 
   it("Next button calls onNavigate with wordIndex+1; dialog stays open", () => {
     const onNavigate = vi.fn();
-    render(
+    renderWithQC(
       <WordEditDialog
         open={true}
         target={{ lineIndex: 2, wordIndex: 1 }}
@@ -160,7 +177,7 @@ describe("WordEditDialog", () => {
 
   it("Prev button calls onNavigate with wordIndex-1", () => {
     const onNavigate = vi.fn();
-    render(
+    renderWithQC(
       <WordEditDialog
         open={true}
         target={{ lineIndex: 2, wordIndex: 2 }}
@@ -175,7 +192,7 @@ describe("WordEditDialog", () => {
   });
 
   it("Prev disabled at word 0", () => {
-    render(
+    renderWithQC(
       <WordEditDialog
         open={true}
         target={{ lineIndex: 2, wordIndex: 0 }}
@@ -189,7 +206,7 @@ describe("WordEditDialog", () => {
   });
 
   it("Next disabled at last word", () => {
-    render(
+    renderWithQC(
       <WordEditDialog
         open={true}
         target={{ lineIndex: 2, wordIndex: lineWords.length - 1 }}
@@ -203,7 +220,7 @@ describe("WordEditDialog", () => {
   });
 
   it("shows 3-column preview: prev word, current word (highlighted), next word", () => {
-    render(
+    renderWithQC(
       <WordEditDialog
         open={true}
         target={{ lineIndex: 2, wordIndex: 1 }}
@@ -223,7 +240,7 @@ describe("WordEditDialog", () => {
   // wrapper div). Radix Dialog's native Escape + overlay-click behaviour is tested in
   // the pdomain-ui primitives package and doesn't need re-testing here.
   it("dialog-backdrop testid is present and queryable on the overlay", () => {
-    render(
+    renderWithQC(
       <WordEditDialog
         open={true}
         target={baseTarget}

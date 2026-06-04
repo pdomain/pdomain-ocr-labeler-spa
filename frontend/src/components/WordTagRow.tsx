@@ -5,6 +5,11 @@
 // Style select + Scope select -> Apply Style.
 // Component select -> Apply Component + Clear Component.
 //
+// Label vocab is sourced from useLabelVocabulary() (canonical book-tools values)
+// so this component can never POST a non-canonical label to the backend.
+// Explicit styleOptions/componentOptions props override the hook (for tests /
+// call sites that already hold a resolved list).
+//
 // driver-contract testids:
 //   dialog-style-select           — style label selector
 //   dialog-scope-select           — scope selector ("whole" | "part")
@@ -14,15 +19,22 @@
 //   dialog-clear-component-button — POST .../component {enabled:false}
 
 import { useState } from "react";
+import {
+  useLabelVocabulary,
+  FALLBACK_STYLES,
+  FALLBACK_COMPONENTS,
+} from "../hooks/useLabelVocabulary";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 interface WordTagRowProps {
-  /** Available style labels (from backend metadata). */
+  /** Available style labels (from backend metadata). When omitted, the
+   *  canonical list from useLabelVocabulary() is used. */
   styleOptions?: string[] | undefined;
-  /** Available component labels. */
+  /** Available component labels. When omitted, the canonical list from
+   *  useLabelVocabulary() is used. */
   componentOptions?: string[] | undefined;
   /** Called with style + scope when Apply Style is clicked. */
   onApplyStyle?: ((style: string, scope: "whole" | "part") => Promise<void>) | undefined;
@@ -31,46 +43,29 @@ interface WordTagRowProps {
 }
 
 // ---------------------------------------------------------------------------
-// Constants — default label lists matching legacy spec §3.3
-// ---------------------------------------------------------------------------
-
-const DEFAULT_STYLES = [
-  "italic",
-  "bold",
-  "small_caps",
-  "bold_italic",
-  "antiqua",
-  "gesperrt",
-  "blackletter",
-  "handwritten",
-];
-
-const DEFAULT_COMPONENTS = [
-  "footnote",
-  "footnote_marker",
-  "drop_cap",
-  "sidenote",
-  "caption",
-  "header",
-  "footer",
-  "page_number",
-  "catchword",
-  "signature",
-];
-
-// ---------------------------------------------------------------------------
 // WordTagRow
 // ---------------------------------------------------------------------------
 
 export function WordTagRow({
-  styleOptions = DEFAULT_STYLES,
-  componentOptions = DEFAULT_COMPONENTS,
+  styleOptions,
+  componentOptions,
   onApplyStyle,
   onApplyComponent,
 }: WordTagRowProps) {
-  const [style, setStyle] = useState<string>(styleOptions[0] ?? "italic");
+  // Source canonical vocab from the backend (or its FALLBACK_* lists).
+  // When explicit props are provided they take priority over the hook's values.
+  const vocab = useLabelVocabulary();
+  const resolvedStyles = styleOptions ?? vocab.textStyleLabels;
+  const resolvedComponents = componentOptions ?? vocab.wordComponents;
+
+  // Default selected values must be canonical.  Use the first element of the
+  // resolved list; fall back to a known-canonical literal so the initializer
+  // is always a valid value even before the hook has populated the list.
+  const [style, setStyle] = useState<string>(resolvedStyles[0] ?? FALLBACK_STYLES[0] ?? "italics");
   const [scope, setScope] = useState<"whole" | "part">("whole");
-  const [component, setComponent] = useState<string>(componentOptions[0] ?? "footnote");
+  const [component, setComponent] = useState<string>(
+    resolvedComponents[0] ?? FALLBACK_COMPONENTS[0] ?? "drop cap",
+  );
 
   return (
     <div className="flex flex-col gap-1.5 w-full pt-1 border-t border-border-1">
@@ -85,7 +80,7 @@ export function WordTagRow({
           }}
           className="text-xs border border-border-2 rounded px-1 py-0.5 bg-bg-surface text-ink-1"
         >
-          {styleOptions.map((s) => (
+          {resolvedStyles.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
@@ -124,7 +119,7 @@ export function WordTagRow({
           }}
           className="text-xs border border-border-2 rounded px-1 py-0.5 bg-bg-surface text-ink-1"
         >
-          {componentOptions.map((c) => (
+          {resolvedComponents.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
