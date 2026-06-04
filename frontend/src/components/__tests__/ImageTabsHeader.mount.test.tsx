@@ -151,6 +151,11 @@ describe("ImageTabsHeader mount (Lane C / C1)", () => {
     await waitFor(() => {
       expect(useUiPrefs.getState().layerVisibility.word).toBe(false);
     });
+    // DOM assertion: the checkbox itself must reflect the updated state so that
+    // a missing notifyUiPrefs() bridge (which prevents re-render) would fail here.
+    await waitFor(() => {
+      expect(wordsCb).not.toBeChecked();
+    });
   });
 
   it("erase button reflects viewport-store erase mode (single source of truth)", async () => {

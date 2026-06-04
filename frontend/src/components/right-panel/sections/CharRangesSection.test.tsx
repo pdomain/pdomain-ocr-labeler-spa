@@ -417,11 +417,11 @@ describe("CharRangesSection F-037 — existing-range edits persist and component
     renderSection(makeWord({ text: "Hello", char_ranges: [{ start: 0, end: 2, styles: [] }] }));
 
     // Toggle italic chip on the existing range card.
-    await user.click(screen.getByTestId("char-range-0-style-chip-italic"));
+    await user.click(screen.getByTestId("char-range-0-style-chip-italics"));
 
     await waitFor(() => expect(handler).toHaveBeenCalled());
     expect(lastBody).toMatchObject({
-      ranges: [{ start: 0, end: 2, styles: expect.arrayContaining(["italic"]) }],
+      ranges: [{ start: 0, end: 2, styles: expect.arrayContaining(["italics"]) }],
     });
   });
 

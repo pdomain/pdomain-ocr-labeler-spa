@@ -15,7 +15,7 @@ describe("StylePalette (P2.d)", () => {
   it("renders chips for all 7 style types", () => {
     render(<StylePalette activeStyles={[]} onStyleChange={vi.fn()} />);
     expect(screen.getByTestId("style-chip-bold")).toBeInTheDocument();
-    expect(screen.getByTestId("style-chip-italic")).toBeInTheDocument();
+    expect(screen.getByTestId("style-chip-italics")).toBeInTheDocument();
     expect(screen.getByTestId("style-chip-small-caps")).toBeInTheDocument();
     expect(screen.getByTestId("style-chip-superscript")).toBeInTheDocument();
     expect(screen.getByTestId("style-chip-subscript")).toBeInTheDocument();
@@ -30,7 +30,7 @@ describe("StylePalette (P2.d)", () => {
 
   it("shows italic chip as 'off' when not in activeStyles", () => {
     render(<StylePalette activeStyles={["bold"]} onStyleChange={vi.fn()} />);
-    expect(screen.getByTestId("style-chip-italic")).toHaveAttribute("data-tristate-value", "off");
+    expect(screen.getByTestId("style-chip-italics")).toHaveAttribute("data-tristate-value", "off");
   });
 
   it("calls onStyleChange when a chip is clicked", async () => {

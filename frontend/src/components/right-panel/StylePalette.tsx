@@ -23,7 +23,7 @@ export interface StyleItem {
 // Full list of supported style labels (spec §2 / WordMatch.text_style_labels)
 export const STYLE_ITEMS: StyleItem[] = [
   { key: "bold", label: "B" },
-  { key: "italic", label: "I" },
+  { key: "italics", label: "I" },
   { key: "small-caps", label: "Sc" },
   { key: "superscript", label: "Sup" },
   { key: "subscript", label: "Sub" },
