@@ -93,12 +93,19 @@ class _ExplodingLoader(LocalDoctrPageLoader):
 
     Used to prove the restart read came from the event store: if
     ``load_labeled`` resolves the stored edits, ``run_ocr`` must never fire.
+
+    The call counter is INSTANCE-level so tests are safe under pytest-xdist
+    parallelism (``-n auto``). Each test constructs its own loader via
+    ``_fresh_loader`` and reads ``loader.run_ocr_calls`` on that instance —
+    no shared class state, no cross-worker contamination.
     """
 
-    run_ocr_calls: int = 0
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.run_ocr_calls: int = 0
 
     def run_ocr(self, page_index: int, *, edited_image_bytes: bytes | None = None) -> Any:
-        type(self).run_ocr_calls += 1
+        self.run_ocr_calls += 1
         raise AssertionError(
             f"run_ocr was called for page {page_index} on the restart read path — "
             "edits should have been reloaded from the event store, not re-OCR'd."
@@ -134,7 +141,6 @@ def test_edits_reload_via_ensure_page_model_after_restart(tmp_path: Path) -> Non
     4. ``ensure_page_model`` (the live path) must resolve the stored, edited
        page WITHOUT calling ``run_ocr``.
     """
-    _ExplodingLoader.run_ocr_calls = 0
     project_dir = tmp_path / "book1"
     project_dir.mkdir()
 
@@ -176,7 +182,8 @@ def test_edits_reload_via_ensure_page_model_after_restart(tmp_path: Path) -> Non
         # ── Phase 4: live path must reload stored edits, NOT re-OCR ──
         outcome = ensure_page_model(fresh_state, 0, loader=loader)
 
-        assert _ExplodingLoader.run_ocr_calls == 0, (
+        # Counter is instance-level: safe under xdist parallelism.
+        assert loader.run_ocr_calls == 0, (
             "run_ocr was called on the restart read path — the stub load_labeled "
             "fell through to a re-OCR instead of reading the event store."
         )
