@@ -378,8 +378,12 @@ class LocalDoctrPageLoader:
                 payload=page_obj,
             )
         except Exception as exc:  # pragma: no cover - defensive fall-through
-            logger.debug(
-                "load_labeled: store reload failed for index=%s: %s — falling through",
+            # WARNING not DEBUG: in production (INFO default), a corrupt/truncated
+            # blob or deserialization error must be visible so operators can
+            # distinguish a cache miss from silent data loss.  Fall-through to
+            # re-OCR is still correct; only the silence was the problem.
+            logger.warning(
+                "load_labeled: store reload failed for index=%s: %s — falling through to re-OCR",
                 page_index,
                 exc,
             )
