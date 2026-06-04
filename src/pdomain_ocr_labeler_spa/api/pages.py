@@ -20,7 +20,7 @@ from ..core.ground_truth_matcher import rematch_page
 from ..core.jobs import JobRunner
 from ..core.labeler_extension import LabelerPageExtension
 from ..core.models import EncodedDims, LineFilter, LineMatch, PageRecord, PageSource, Selection
-from ..core.page_state import PageLoader, ensure_page_model, save_page_to_store
+from ..core.page_state import PageLoader, ensure_page_model, save_page_content_to_store, save_page_to_store
 from ..core.page_to_line_matches import page_to_line_matches
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.ground_truth import find_ground_truth_text
@@ -824,16 +824,38 @@ def save_page(
     if project is None:  # _check_project_and_page guarantees; explicit to survive -O
         raise RuntimeError("project is None after _check_project_and_page passed — invariant violated")
 
-    # Event-store save: fire a LabelerEdited event on the page aggregate.
-    # When store is None (no project loaded or test env without store wiring),
-    # treat it as a no-op (page may be editable in-memory without store).
+    # Event-store save: persist the edited Page as a content blob so a
+    # fresh-store reload returns the edited content (not the original OCR).
+    # save_page_to_store only records a changelog entry with no blob_refs;
+    # load_page_from_store then returns None on restart — the M0 data-loss
+    # class.  Mirror the save_project handler: prefer save_page_content_to_store
+    # so the Page is re-serialized into a content blob whose hash becomes the
+    # head provenance node's blob_refs.  Fall back to save_page_to_store only
+    # when no live serializable Page object is available.
+    # When store is None (test env without store wiring), treat as a no-op.
     if store is not None and pstate.page_id is not None:
         try:
-            save_page_to_store(
-                page_id=pstate.page_id,
-                changes=[{"type": "save_page", "page_index": page_index}],
-                store=store,
-            )
+            changes = [{"type": "save_page", "page_index": page_index}]
+            payload = pstate.page_record.payload if pstate.page_record is not None else None
+            if payload is not None and callable(getattr(payload, "to_dict", None)):
+                save_page_content_to_store(
+                    page_id=pstate.page_id,
+                    page=payload,
+                    store=store,
+                    changes=changes,
+                )
+            else:
+                # No live Page to re-serialize — record changelog only.
+                log.debug(
+                    "save_page: page %d has no serializable payload — "
+                    "falling back to changelog-only store write",
+                    page_index,
+                )
+                save_page_to_store(
+                    page_id=pstate.page_id,
+                    changes=changes,
+                    store=store,
+                )
         except Exception as exc:
             log.exception("save_page: store persist failed project=%s page=%d", project_id, page_index)
             return JSONResponse(
