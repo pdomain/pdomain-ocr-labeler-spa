@@ -24,13 +24,15 @@ from __future__ import annotations
 
 import enum
 import re
+from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator, model_validator
 
 from ..core.jobs import JobRunner
-from .dependencies import get_job_runner
+from ..settings import Settings
+from .dependencies import get_job_runner, get_settings
 
 router = APIRouter(prefix="/api/projects", tags=["export"])
 
@@ -188,22 +190,57 @@ def start_export(
     )
 
 
+def _collect_style_labels(data_root: Path, project_id: str) -> list[str]:
+    """Return the distinct style labels across saved, fully-validated pages.
+
+    Reads the saved (labeled) page envelopes from disk only — never
+    in-memory state — so the style list is stable across page loads
+    (spec: ``docs/archive/specs/2026-05-12-export-design.md`` lines 119-120).
+    Reuses the export handler's envelope-loading and validation helpers so
+    the scope of "validated page" matches the export pipeline exactly.
+    """
+    # Imported lazily to mirror the handler's deferred ``pdomain_book_tools``
+    # import and to keep this module importable in stubbed test envs.
+    from ..core.jobs.handlers.export import (
+        _load_page_from_envelope_file,
+        _page_is_validated,
+        _scan_labeled_pages,
+    )
+
+    labels: set[str] = set()
+    for json_path in _scan_labeled_pages(data_root, project_id):
+        page = _load_page_from_envelope_file(json_path)
+        if page is None or not _page_is_validated(page):
+            continue
+        for word in getattr(page, "words", []) or []:
+            for label in getattr(word, "text_style_labels", None) or []:
+                if isinstance(label, str) and label:
+                    labels.add(label)
+    return sorted(labels)
+
+
 @router.get("/{project_id}/export/styles", response_model=list[str])
-def list_export_styles(project_id: str) -> JSONResponse:
+def list_export_styles(
+    project_id: str,
+    settings: Settings = Depends(get_settings),
+) -> JSONResponse:
     """``GET /api/projects/{id}/export/styles`` — distinct style labels.
 
-    Spec: ``docs/specs/2026-05-12-export-design.md §Decision``
-    ("Switching to 'All Validated Pages' fires GET .../export/styles").
+    Spec: ``docs/archive/specs/2026-05-12-export-design.md`` lines 43-44, 119-120
+    ("Switching to 'All Validated Pages' fires GET .../export/styles" to
+    enumerate distinct style labels across saved validated pages, querying
+    only saved page envelopes — not in-memory state).
 
     Returns a JSON array of distinct style label strings present in
-    saved validated pages for this project.  Until the export handler
-    writes manifests (and until the labeled-lane reader is wired), this
-    returns an empty list — callers should render the "All (no style
-    filter)" option as the sole available choice.
+    saved validated pages for this project, sorted alphabetically.  When
+    no labeled pages exist (or none are fully validated) the array is
+    empty and callers render only the "All (no style filter)" option.
 
     Issue #225 acceptance: route registered, returns 200 JSON array.
+    Lane E1: array is populated from the saved pages' word style labels.
     """
-    return JSONResponse(status_code=200, content=[])
+    data_root = Path(settings.data_root)
+    return JSONResponse(status_code=200, content=_collect_style_labels(data_root, project_id))
 
 
 @router.get("/{project_id}/exports", response_model=list[ExportManifest])
