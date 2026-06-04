@@ -72,7 +72,12 @@ import { useApplyStyle, useApplyComponent, useAddWord } from "../hooks/useWordMu
 // Lane D reuses `toggleAddWordMode` / `exitToSelectMode` (viewport-store
 // helpers) + the `handleAddWord` handler below to add an add-word button
 // outside the toolbar grid without duplicating the mutation wiring.
-import { viewportStore, toggleAddWordMode } from "../stores/viewport-store";
+import {
+  viewportStore,
+  toggleAddWordMode,
+  toggleEraseMode,
+  setCanvasZoom,
+} from "../stores/viewport-store";
 import { displayToSrc } from "../lib/coords";
 import { useGlobalHotkeys } from "../hooks/useGlobalHotkeys";
 import { useToolbarDispatch } from "../hooks/useToolbarDispatch";
@@ -88,7 +93,6 @@ import {
   ImageTabsHeader,
   type LayerVisibility as HeaderLayerVisibility,
 } from "../components/ImageTabsHeader";
-import { viewportStore, toggleEraseMode, setCanvasZoom } from "../stores/viewport-store";
 import { Drawer } from "../components/shell/Drawer";
 import { ToolbarActionGrid } from "../components/ToolbarActionGrid";
 import { BusyOverlay, ProjectLoadingOverlay } from "../components/BusyOverlay";
