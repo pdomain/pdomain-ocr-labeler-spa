@@ -91,7 +91,7 @@ interface ResolvedRequest {
  * entry, or when a required selection index is missing for a route that
  * templates `{lineIndex}` / `{paragraphIndex}`.
  */
-export function resolveToolbarRequest(
+function resolveToolbarRequest(
   stateKey: keyof ButtonStates,
   projectId: string,
   pageIndex: number,
