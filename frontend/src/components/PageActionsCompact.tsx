@@ -11,7 +11,15 @@
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useReloadOcr, useSavePage, useRematchGt } from "../hooks/usePageMutations";
+import {
+  useReloadOcr,
+  useReloadOcrEdited,
+  useSavePage,
+  useSaveProject,
+  useLoadPage,
+  useRematchGt,
+} from "../hooks/usePageMutations";
+import { usePage } from "../hooks/usePage";
 import { useJobProgress } from "../hooks/useJobProgress";
 import { useJobCompletionInvalidation } from "../hooks/useJobCompletionInvalidation";
 import { dialogStore } from "../stores/dialog-store";
@@ -28,7 +36,17 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
 
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [bulkGlyphOpen, setBulkGlyphOpen] = useState(false);
+  const [overflowOpen, setOverflowOpen] = useState(false);
   const jobProgress = useJobProgress(activeJobId);
+
+  // C2: read the page payload so the restored "Reload OCR (Edited)" button can
+  // be gated on the real edited-image signal (labeler extension flag set by the
+  // erase-pixels path / Lane A4) and the source badge can show provenance.
+  const pageQ = usePage(projectId || undefined, projectId ? pageIndex : undefined);
+  const labelerExt = (pageQ.data?.page_record?.extensions?.["labeler"] ?? null) as {
+    has_edited_image?: boolean;
+  } | null;
+  const hasEditedImage = labelerExt?.has_edited_image === true;
 
   // Toast lifecycle: react to OCR job progress transitions.
   // Rematch GT is synchronous (no SSE job) so it uses onSuccess/onError directly.
@@ -55,12 +73,18 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   });
 
   const reloadOcr = useReloadOcr(projectId, pageIndex);
+  const reloadOcrEdited = useReloadOcrEdited(projectId, pageIndex);
   const savePage = useSavePage(projectId, pageIndex);
+  const saveProject = useSaveProject(projectId);
+  const loadPage = useLoadPage(projectId, pageIndex);
   const rematchGt = useRematchGt(projectId, pageIndex);
 
   const isBusy =
     reloadOcr.isPending ||
+    reloadOcrEdited.isPending ||
     savePage.isPending ||
+    saveProject.isPending ||
+    loadPage.isPending ||
     rematchGt.isPending ||
     (jobProgress !== null && jobProgress.status !== "complete" && jobProgress.status !== "error");
 
@@ -109,6 +133,63 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       },
       onError: () => {
         toast.error("Rematch GT failed");
+      },
+    });
+  }
+
+  // C2: restored "Reload OCR (Edited)" — re-runs OCR against the persisted
+  // post-erase image (use_edited_image: true; the field exists in types.ts from
+  // Lane A4). Same SSE/job lifecycle as a plain reload.
+  function handleReloadOcrEdited() {
+    setOverflowOpen(false);
+    reloadOcrEdited.mutate(undefined, {
+      onSuccess: (data) => {
+        if (data?.job_id) {
+          setActiveJobId(data.job_id);
+          void import("sonner").then(({ toast: sonnerToast }) => {
+            sonnerToast.loading("Running OCR (edited)…", { id: data.job_id });
+          });
+        }
+      },
+      onError: () => {
+        toast.error("Failed to start OCR (edited)");
+      },
+    });
+  }
+
+  // C2: restored "Save Project" — persists every page (202 + job_id).
+  function handleSaveProject() {
+    setOverflowOpen(false);
+    saveProject.mutate(undefined, {
+      onSuccess: (data) => {
+        if (data?.job_id) {
+          setActiveJobId(data.job_id);
+          void import("sonner").then(({ toast: sonnerToast }) => {
+            sonnerToast.loading("Saving project…", { id: data.job_id });
+          });
+        } else {
+          toast.success("Project saved");
+        }
+      },
+      onError: () => {
+        toast.error("Save project failed");
+      },
+    });
+  }
+
+  // C2: restored "Load Page" — reloads the page from the last saved state,
+  // discarding unsaved in-memory edits.
+  function handleLoadPage() {
+    setOverflowOpen(false);
+    loadPage.mutate(undefined, {
+      onSuccess: () => {
+        toast.success("Page loaded");
+      },
+      onError: () => {
+        toast.error("Load page failed");
+      },
+      onSettled: () => {
+        void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
       },
     });
   }
@@ -225,6 +306,67 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       >
         OCR Config
       </button>
+
+      {/* C2: overflow menu restores the action buttons dropped from the compact
+          bar — Reload OCR (Edited), Save Project, Load Page. These previously
+          lived only in the hidden full PageActions bar. */}
+      <div className="relative">
+        <button
+          type="button"
+          data-testid="page-actions-compact-overflow"
+          aria-label="More page actions"
+          aria-haspopup="menu"
+          aria-expanded={overflowOpen}
+          disabled={!projectId}
+          onClick={() => setOverflowOpen((v) => !v)}
+          title="More actions"
+          className={`${base} ${normal}`}
+        >
+          <span aria-hidden="true">⋯</span>
+        </button>
+
+        {overflowOpen && (
+          <div
+            role="menu"
+            data-testid="page-actions-compact-overflow-menu"
+            className="absolute right-0 z-50 mt-1 flex min-w-[12rem] flex-col gap-0.5 rounded border border-border-2 bg-bg-surface p-1 shadow-lg"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="reload-ocr-edited-button"
+              disabled={disabled || !hasEditedImage}
+              onClick={handleReloadOcrEdited}
+              title={hasEditedImage ? "Reload OCR using edited image" : "No edited image available"}
+              className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-ink-2 hover:bg-bg-raised hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Reload OCR (Edited)
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="save-project-button"
+              disabled={disabled}
+              onClick={handleSaveProject}
+              title="Save Project"
+              className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-ink-2 hover:bg-bg-raised hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Save Project
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="load-page-button"
+              disabled={disabled}
+              onClick={handleLoadPage}
+              title="Load Page from last saved state"
+              className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-ink-2 hover:bg-bg-raised hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Load Page
+            </button>
+          </div>
+        )}
+      </div>
 
       <button
         type="button"

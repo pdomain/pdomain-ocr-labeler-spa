@@ -33,6 +33,13 @@ class LabelerPageExtension(BaseModel):
     """Set when the page content load fails. None on clean pages.
     Frontend shows 'corrupt saved data' banner when set."""
 
+    has_edited_image: bool = False
+    """True when an edited (post-erase) page image has been persisted as a blob
+    for this page (Lane A / Task A4 writes ``PageState.edited_image_blob`` from
+    the erase-pixels route). The frontend binds the "Reload OCR (Edited)" button's
+    enabled state to this flag (Lane C / Task C2); it stays False until an erase
+    actually persists an edited image."""
+
     # Per-session UI state (not persisted between sessions; defaults on reload)
     selection_mode: Literal["paragraph", "line", "word"] = "word"
     line_filter: Literal["unvalidated", "mismatched", "all"] = "all"

@@ -72,6 +72,11 @@ function stubJobNoop() {
 beforeEach(() => {
   dialogStore.reset();
   stubJobNoop();
+  // Default page GET so the C2 usePage fetch resolves cleanly in every test
+  // (per-test handlers registered after this override it via msw LIFO).
+  server.use(
+    http.get("/api/projects/:pid/pages/:idx", () => HttpResponse.json(pagePayload(false))),
+  );
   vi.clearAllMocks();
 });
 
@@ -177,6 +182,131 @@ describe("PageActionsCompact: mutation wiring (P1.b smoke)", () => {
 
     await user.click(screen.getByTestId("page-actions-compact-save-page"));
     await waitFor(() => expect(saveSpy).toHaveBeenCalled());
+  });
+});
+
+// ─── Lane C / Task C2: restored dropped action buttons ───────────────────────
+// Reload OCR (Edited), Save Project, Load Page were previously only in the
+// hidden full PageActions bar. C2 restores them in the compact bar (overflow
+// menu). hasEditedImage is bound to the page payload's labeler extension flag.
+
+function pagePayload(hasEditedImage = false) {
+  return {
+    project_id: "proj-1",
+    page_index: 0,
+    page_record: {
+      page_index: 0,
+      image_path: "/data/proj-1/page_001.png",
+      source: "ocr",
+      provenance_summary: "OCR via DocTR",
+      extensions: {
+        labeler: {
+          page_number: 1,
+          page_source: "ocr",
+          has_edited_image: hasEditedImage,
+        },
+      },
+    },
+    line_matches: [],
+    selection: {
+      selection_mode: "word",
+      selected_paragraphs: [],
+      selected_lines: [],
+      selected_words: [],
+    },
+    encoded_dims: null,
+    line_filter: "all",
+    image_url: "/api/projects/proj-1/image/0",
+    generation: 1,
+    page_text_ocr: "",
+    page_text_gt: "",
+    extra: {},
+  };
+}
+
+function stubPage(hasEditedImage = false) {
+  server.use(
+    http.get("/api/projects/:pid/pages/:idx", () => HttpResponse.json(pagePayload(hasEditedImage))),
+  );
+}
+
+describe("PageActionsCompact: restored dropped buttons (Lane C / C2)", () => {
+  it("renders save-project, load-page, and reload-ocr-edited buttons", async () => {
+    stubPage(true);
+    renderCompact();
+    // The dropped buttons live in an overflow menu; open it first.
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    expect(await screen.findByTestId("save-project-button")).toBeInTheDocument();
+    expect(screen.getByTestId("load-page-button")).toBeInTheDocument();
+    expect(screen.getByTestId("reload-ocr-edited-button")).toBeInTheDocument();
+  });
+
+  it("save-project and load-page are enabled with a real project", async () => {
+    stubPage(true);
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    expect(await screen.findByTestId("save-project-button")).not.toBeDisabled();
+    expect(screen.getByTestId("load-page-button")).not.toBeDisabled();
+  });
+
+  it("reload-ocr-edited is enabled when the page has an edited image", async () => {
+    stubPage(true);
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await waitFor(() => {
+      expect(screen.getByTestId("reload-ocr-edited-button")).not.toBeDisabled();
+    });
+  });
+
+  it("reload-ocr-edited is disabled when the page has no edited image", async () => {
+    stubPage(false);
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await waitFor(() => {
+      expect(screen.getByTestId("reload-ocr-edited-button")).toBeDisabled();
+    });
+  });
+
+  it("clicking Save Project POSTs save-all", async () => {
+    stubPage(true);
+    const saveAllSpy = vi.fn(() => HttpResponse.json({ job_id: "j-save-all" }, { status: 202 }));
+    server.use(http.post("/api/projects/proj-1/save-all", saveAllSpy));
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("save-project-button"));
+    await waitFor(() => expect(saveAllSpy).toHaveBeenCalled());
+  });
+
+  it("clicking Load Page POSTs the load endpoint", async () => {
+    stubPage(true);
+    const loadSpy = vi.fn(() => HttpResponse.json(pagePayload(true)));
+    server.use(http.post("/api/projects/proj-1/pages/0/load", loadSpy));
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("load-page-button"));
+    await waitFor(() => expect(loadSpy).toHaveBeenCalled());
+  });
+
+  it("clicking Reload OCR (Edited) POSTs reload-ocr with use_edited_image=true", async () => {
+    stubPage(true);
+    let bodySeen: unknown = null;
+    const reloadSpy = vi.fn(async ({ request }: { request: Request }) => {
+      bodySeen = await request.json();
+      return HttpResponse.json({ job_id: "j-edited" }, { status: 202 });
+    });
+    server.use(http.post("/api/projects/proj-1/pages/0/reload-ocr", reloadSpy));
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("reload-ocr-edited-button"));
+    await waitFor(() => expect(reloadSpy).toHaveBeenCalled());
+    expect(bodySeen).toMatchObject({ use_edited_image: true });
   });
 });
 

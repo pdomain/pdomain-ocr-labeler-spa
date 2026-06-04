@@ -16,6 +16,18 @@ def test_labeler_extension_defaults() -> None:
     assert ext.payload_error is None
     assert ext.selection_mode == "word"
     assert ext.line_filter == "all"
+    # Lane C / Task C2: edited-image presence indicator defaults to False so
+    # the frontend "Reload OCR (Edited)" button stays disabled until an erase
+    # has actually persisted an edited-image blob.
+    assert ext.has_edited_image is False
+
+
+def test_labeler_extension_has_edited_image_round_trip() -> None:
+    record = _make_record()
+    set_extension(record, "labeler", LabelerPageExtension(has_edited_image=True))
+    recovered = get_extension(record, "labeler", LabelerPageExtension)
+    assert recovered is not None
+    assert recovered.has_edited_image is True
 
 
 def test_labeler_extension_round_trip_via_page_record() -> None:

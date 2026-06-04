@@ -698,9 +698,14 @@ export default function ProjectPage() {
     <div style={{ display: "none" }} data-testid-stub="page-actions-hidden">
       <PageActions
         isBusy={isMutating || activeJob !== null}
-        hasEditedImage={false}
+        // C2: bind to the real edited-image signal (labeler extension flag set
+        // by the erase-pixels path / Lane A4) instead of the hardcoded false.
+        hasEditedImage={pageRecord?.extensions?.["labeler"]?.["has_edited_image"] === true}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         pageSource={pageRecord?.extensions?.["labeler"]?.["page_source"] as any}
+        // C2: surface the backend-assembled provenance one-liner so the source
+        // badge tooltip is no longer blank (audit row 26).
+        provenanceSummary={pageRecord?.provenance_summary ?? null}
         pageName={pageRecord?.image_path?.split("/").pop() ?? null}
         rotationDegrees={pageRecord?.rotation_degrees ?? 0}
         rotationSource={pageRecord?.rotation_source ?? null}

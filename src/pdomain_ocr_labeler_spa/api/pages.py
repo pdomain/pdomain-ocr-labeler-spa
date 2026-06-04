@@ -622,6 +622,26 @@ def _page_payload(
         if summary is not None:
             page_record = page_record.model_copy(update={"provenance_summary": summary})
 
+    # Lane C / Task C2: surface whether a persisted edited-image blob exists
+    # (Lane A4 erase-pixels path writes ``pstate.edited_image_blob``) onto the
+    # labeler extension so the frontend can truthfully enable the
+    # "Reload OCR (Edited)" button. We only flip the flag to True; the default
+    # (False) already covers the no-edit case.
+    if page_record is not None and pstate is not None:
+        has_edited = getattr(pstate, "edited_image_blob", None) is not None
+        if has_edited:
+            from pdomain_ops.pages import get_extension as _get_ext
+            from pdomain_ops.pages import set_extension as _set_ext
+
+            from ..core.labeler_extension import LabelerPageExtension as _LabelerExt
+
+            existing = _get_ext(page_record, "labeler", _LabelerExt) or _LabelerExt()
+            _set_ext(
+                page_record,
+                "labeler",
+                existing.model_copy(update={"has_edited_image": True}),
+            )
+
     # Encoded dims from on-disk image.  None when PIL can't open the
     # bytes; the URL builder degrades gracefully.
     encoded_dims: EncodedDims | None = None

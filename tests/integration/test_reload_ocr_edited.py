@@ -179,3 +179,59 @@ def test_reload_ocr_use_edited_image_ocrs_erased_pixels(tmp_path: Path) -> None:
         edited_img = np.array(Image.open(io.BytesIO(loader.edited_bytes_seen)).convert("RGB"))
         # The erased rectangle (rows 5..17, cols 5..24) should be white.
         assert int(edited_img[10, 10, 0]) == 255, "erased region is not white in the reloaded image"
+
+
+@pytest.mark.integration
+def test_page_payload_exposes_has_edited_image_after_erase(tmp_path: Path) -> None:
+    """Lane C / Task C2: the page payload's labeler extension must surface
+    ``has_edited_image=True`` after an erase persists an edited-image blob, so
+    the frontend can truthfully enable the "Reload OCR (Edited)" button.
+    """
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    proj_dir = projects_root / "book1"
+    proj_dir.mkdir()
+    Image.new("RGB", (60, 40), color=(0, 0, 0)).save(proj_dir / "001.png")
+
+    settings = _make_settings(tmp_path, projects_root=proj_dir.parent)
+    app = build_app(settings)
+
+    with TestClient(app) as c:
+        loader = _RecordingLoader()
+        c.app.state.job_runner.context["page_loader"] = loader  # type: ignore[attr-defined]
+
+        resp = c.post("/api/projects/load", json={"project_root": str(proj_dir)})
+        assert resp.status_code == 200, resp.text
+
+        live_store: LabelerPageStore = c.app.state.page_store  # type: ignore[attr-defined]
+        page = _make_page()
+        page.cv2_numpy_page_image = np.zeros((40, 60, 3), dtype=np.uint8)
+
+        page_id = uuid4()
+        live_store.save_page(PageAggregate(PageRecord(page_id=page_id, page_index=0, source="ocr")))
+
+        project_state = c.app.state.project_state  # type: ignore[attr-defined]
+        outcome = PageLoadOutcome(page_index=0, source=PageSource.OCR, payload=page)
+        pstate = PageState(page_index=0, page_record=outcome)
+        pstate.page_id = page_id
+        project_state._page_states[0] = pstate
+
+        # Before any erase: the labeler extension reports no edited image.
+        resp = c.get("/api/projects/book1/pages/0")
+        assert resp.status_code == 200, resp.text
+        ext_before = (resp.json().get("page_record") or {}).get("extensions", {}).get("labeler", {})
+        assert ext_before.get("has_edited_image") in (False, None), ext_before
+
+        # Erase a rectangle → persists an edited-image blob.
+        resp = c.post(
+            "/api/projects/book1/pages/0/words/0/0/erase-pixels",
+            json={"bbox": {"x": 5, "y": 5, "width": 20, "height": 13}, "fill_value": 255},
+        )
+        assert resp.status_code == 200, resp.text
+        assert pstate.edited_image_blob is not None
+
+        # After the erase: the payload surfaces has_edited_image=True.
+        resp = c.get("/api/projects/book1/pages/0")
+        assert resp.status_code == 200, resp.text
+        ext_after = (resp.json().get("page_record") or {}).get("extensions", {}).get("labeler", {})
+        assert ext_after.get("has_edited_image") is True, ext_after
