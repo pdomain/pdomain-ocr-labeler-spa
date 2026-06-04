@@ -1,6 +1,7 @@
 // BulkWordActions.test.tsx — Lane D / Task D3.
 // Page-scope validate-all / unvalidate-all + multi-select word delete +
 // multi-select apply style / component.
+// Q-B2 vocab fix: component and style lists sourced from useLabelVocabulary().
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -157,5 +158,66 @@ describe("BulkWordActions (Lane D / D3)", () => {
     await user.click(screen.getByTestId("bulk-word-component-apply"));
     await waitFor(() => expect(hits.length).toBe(1));
     expect(hits[0]).toBe("2/3:footnote marker:true");
+  });
+});
+
+// Q-B2 vocab-sourcing tests — these assert the component and style lists come
+// from the backend vocabulary (useLabelVocabulary) so the component select
+// includes "drop cap unrecovered" and styles include the canonical set.
+describe("BulkWordActions — canonical vocab from useLabelVocabulary (Q-B2)", () => {
+  beforeEach(() => {
+    clearSelection();
+    // Seed words so the multi-select controls are visible.
+    selectWords([[0, 0]]);
+  });
+
+  it("component select offers 'drop cap unrecovered' (canonical component missing in old hardcoded list)", async () => {
+    // MSW default handler returns the canonical vocab including "drop cap unrecovered".
+    renderWithQuery(<BulkWordActions projectId="p1" pageIndex={0} />);
+    const select = screen.getByTestId("bulk-word-component-select");
+    // Wait for vocab to resolve (query is async).
+    await waitFor(() => {
+      const options = Array.from((select as HTMLSelectElement).options).map((o) => o.value);
+      expect(options).toContain("drop cap unrecovered");
+    });
+  });
+
+  it("style select offers canonical 'italics' (not 'italic') and excludes 'regular'", async () => {
+    renderWithQuery(<BulkWordActions projectId="p1" pageIndex={0} />);
+    const select = screen.getByTestId("bulk-word-style-select");
+    await waitFor(() => {
+      const options = Array.from((select as HTMLSelectElement).options).map((o) => o.value);
+      // Canonical style name.
+      expect(options).toContain("italics");
+      // "regular" = clear-style; should be excluded from the bulk-apply dropdown.
+      expect(options).not.toContain("regular");
+    });
+  });
+
+  it("component select offers all canonical components from the backend vocab", async () => {
+    server.use(
+      http.get("/api/label-vocabulary", () =>
+        HttpResponse.json({
+          text_style_labels: ["bold", "italics"],
+          word_components: [
+            "drop cap",
+            "drop cap unrecovered",
+            "footnote marker",
+            "subscript",
+            "superscript",
+          ],
+        }),
+      ),
+    );
+    renderWithQuery(<BulkWordActions projectId="p1" pageIndex={0} />);
+    const select = screen.getByTestId("bulk-word-component-select");
+    await waitFor(() => {
+      const options = Array.from((select as HTMLSelectElement).options).map((o) => o.value);
+      expect(options).toContain("drop cap unrecovered");
+      expect(options).toContain("superscript");
+      expect(options).toContain("subscript");
+      expect(options).toContain("footnote marker");
+      expect(options).toContain("drop cap");
+    });
   });
 });

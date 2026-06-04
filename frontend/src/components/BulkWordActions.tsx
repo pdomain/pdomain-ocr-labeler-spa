@@ -20,23 +20,7 @@ import { useState, useSyncExternalStore } from "react";
 import { selectionStore } from "../stores/selection-store";
 import { useValidatePage, useDeleteWordsBatch } from "../hooks/useLineMutations";
 import { useApplyStyle, useApplyComponent } from "../hooks/useWordMutations";
-
-// Canonical book-tools vocabularies (label_normalization.py).
-// Q-B2-STYLE-LABELS: these must match ALLOWED_TEXT_STYLE_LABELS /
-// ALLOWED_COMPONENTS or the apply route 500s. Sourcing them from the backend
-// remains an open question (OPEN_QUESTIONS.md Q-B2-STYLE-LABELS).
-const STYLE_LABELS = [
-  "italics",
-  "bold",
-  "small caps",
-  "all caps",
-  "underline",
-  "strikethrough",
-  "monospace",
-  "blackletter",
-  "handwritten",
-];
-const COMPONENT_LABELS = ["superscript", "subscript", "footnote marker", "drop cap"];
+import { useLabelVocabulary } from "../hooks/useLabelVocabulary";
 
 function subscribeSelection(cb: () => void): () => void {
   return selectionStore.subscribe(() => {
@@ -64,6 +48,12 @@ export function BulkWordActions({ projectId, pageIndex }: BulkWordActionsProps) 
   const deleteWords = useDeleteWordsBatch(projectId, pageIndex);
   const applyStyle = useApplyStyle(projectId, pageIndex);
   const applyComponent = useApplyComponent(projectId, pageIndex);
+
+  // Q-B2: source label vocab from backend so we never drift from book-tools'
+  // canonical ALLOWED_TEXT_STYLE_LABELS / ALLOWED_COMPONENTS sets.
+  // "regular" = clear-style sentinel — not a meaningful bulk-apply target, omit.
+  const { textStyleLabels, wordComponents } = useLabelVocabulary();
+  const styleLabels = textStyleLabels.filter((s) => s !== "regular");
 
   const [style, setStyle] = useState("");
   const [component, setComponent] = useState("");
@@ -140,7 +130,7 @@ export function BulkWordActions({ projectId, pageIndex }: BulkWordActionsProps) 
               <option value="" disabled>
                 Style…
               </option>
-              {STYLE_LABELS.map((s) => (
+              {styleLabels.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
@@ -177,7 +167,7 @@ export function BulkWordActions({ projectId, pageIndex }: BulkWordActionsProps) 
               <option value="" disabled>
                 Component…
               </option>
-              {COMPONENT_LABELS.map((c) => (
+              {wordComponents.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
