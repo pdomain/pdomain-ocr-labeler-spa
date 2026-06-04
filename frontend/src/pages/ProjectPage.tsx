@@ -789,9 +789,17 @@ export default function ProjectPage() {
             [layer]: !prefs.layerVisibility[layer],
           },
         }));
+        // The page's `uiPrefs` snapshot is bridged through the local
+        // `notifyUiPrefs` listener set (see top of file), not the store's
+        // native subscribe. Without this notify the controlled checkbox
+        // `checked={layerVisibility[layer]}` never re-renders. (M-Final V4.)
+        notifyUiPrefs();
       }}
       onSelectionModeChange={(mode) => {
         useUiPrefs.setState({ selectionMode: mode });
+        // Same bridge as onLayerToggle: notify so the selection-mode radio
+        // re-renders to reflect the new mode. (M-Final V4.)
+        notifyUiPrefs();
       }}
       onEraseToggle={() => {
         toggleEraseMode();
