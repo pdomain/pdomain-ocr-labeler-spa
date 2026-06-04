@@ -17,10 +17,12 @@
 //          normalize-plaintext-checkbox, normalize-profile-select,
 //          auto-rotate-checkbox, auto-rotate-method-select,
 //          ocr-config-close-button, ocr-config-done-button,
-//          ocr-config-save-error (error banner when POST /api/ocr-config/auto-rotate fails)
-//          (stub: ocr-detection-model-select, ocr-recognition-model-select,
-//           ocr-hf-revision-input, ocr-rescan-models-button,
-//           ocr-config-cancel-button, ocr-config-apply-button)
+//          ocr-config-save-error (error banner when a POST fails)
+//          OCR models (Lane C / Task C3 — real controls, no longer stubbed):
+//            ocr-detection-model-select, ocr-recognition-model-select,
+//            ocr-hf-revision-input, ocr-rescan-models-button, ocr-config-apply-button.
+//          ocr-config-cancel-button remains a closed-modal reachability stub in
+//          HeaderBar (the modal commits via Apply / dismisses via Done/Close).
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -44,11 +46,28 @@ async function fetchNormalizeAvailable(): Promise<boolean> {
   return Boolean(data.available);
 }
 
-async function fetchOcrConfig(): Promise<{
+/** One detection/recognition model option from ``GET /api/ocr-config``. */
+interface OcrModelOption {
+  key: string;
+  label: string;
+  source: string;
+  is_default: boolean;
+}
+
+interface OcrConfigSnapshot {
   auto_rotate_available: boolean;
   auto_rotate_on_load: boolean;
   auto_rotate_method: AutoRotateMethod;
-} | null> {
+  // C3: model-selection fields. Absent in some mocked responses → degrade to
+  // empty option lists / "stock" defaults so the selects render without error.
+  detection_options: OcrModelOption[];
+  recognition_options: OcrModelOption[];
+  selected_detection: string;
+  selected_recognition: string;
+  hf_pinned_revision: string | null;
+}
+
+async function fetchOcrConfig(): Promise<OcrConfigSnapshot | null> {
   const resp = await fetch("/api/ocr-config");
   if (!resp.ok) return null;
   const data = await resp.json();
@@ -56,7 +75,46 @@ async function fetchOcrConfig(): Promise<{
     auto_rotate_available: Boolean(data.auto_rotate_available),
     auto_rotate_on_load: Boolean(data.auto_rotate_on_load ?? true),
     auto_rotate_method: (data.auto_rotate_method ?? "auto") as AutoRotateMethod,
+    detection_options: Array.isArray(data.detection_options)
+      ? (data.detection_options as OcrModelOption[])
+      : [],
+    recognition_options: Array.isArray(data.recognition_options)
+      ? (data.recognition_options as OcrModelOption[])
+      : [],
+    selected_detection:
+      typeof data.selected_detection === "string" ? data.selected_detection : "stock",
+    selected_recognition:
+      typeof data.selected_recognition === "string" ? data.selected_recognition : "stock",
+    hf_pinned_revision:
+      typeof data.hf_pinned_revision === "string" ? data.hf_pinned_revision : null,
   };
+}
+
+// C3: POST helpers for model selection + rescan. Both throw on !ok with the
+// server-provided message so failures can be surfaced via the existing
+// ocr-config-save-error banner.
+async function postOcrModels(body: {
+  detection_key: string;
+  recognition_key: string;
+  hf_pinned_revision: string | null;
+}): Promise<void> {
+  const resp = await fetch("/api/ocr-config/models", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(text || `Server error ${resp.status.toString()}`);
+  }
+}
+
+async function postOcrRescan(): Promise<void> {
+  const resp = await fetch("/api/ocr-config/rescan", { method: "POST" });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(text || `Server error ${resp.status.toString()}`);
+  }
 }
 
 // Fix #447: check response.ok and throw with server text on failure.
@@ -143,6 +201,57 @@ export function OCRConfigModal({
   const autoRotateAvailable = ocrConfig?.auto_rotate_available ?? false;
   const autoRotateOnLoad = ocrConfig?.auto_rotate_on_load ?? true;
   const autoRotateMethod: AutoRotateMethod = ocrConfig?.auto_rotate_method ?? "auto";
+
+  // C3: model-selection state. Pending values are local so the user can pick a
+  // model + revision and commit with Apply. They re-sync to the server snapshot
+  // whenever the config query resolves/refetches.
+  const detectionOptions = ocrConfig?.detection_options ?? [];
+  const recognitionOptions = ocrConfig?.recognition_options ?? [];
+  const [pendingDetection, setPendingDetection] = useState<string | null>(null);
+  const [pendingRecognition, setPendingRecognition] = useState<string | null>(null);
+  const [pendingRevision, setPendingRevision] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
+
+  const detectionValue = pendingDetection ?? ocrConfig?.selected_detection ?? "stock";
+  const recognitionValue = pendingRecognition ?? ocrConfig?.selected_recognition ?? "stock";
+  const revisionValue = pendingRevision ?? ocrConfig?.hf_pinned_revision ?? "";
+
+  async function handleApplyModels() {
+    setSaveError(null);
+    setApplying(true);
+    try {
+      await postOcrModels({
+        detection_key: detectionValue,
+        recognition_key: recognitionValue,
+        hf_pinned_revision: revisionValue.trim() === "" ? null : revisionValue.trim(),
+      });
+      setPendingDetection(null);
+      setPendingRecognition(null);
+      setPendingRevision(null);
+      void refetchOcrConfig();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to apply model selection.");
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  async function handleRescanModels() {
+    setSaveError(null);
+    setRescanning(true);
+    try {
+      await postOcrRescan();
+      setPendingDetection(null);
+      setPendingRecognition(null);
+      setPendingRevision(null);
+      void refetchOcrConfig();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to rescan models.");
+    } finally {
+      setRescanning(false);
+    }
+  }
 
   async function handleAutoRotateOnLoadChange(e: React.ChangeEvent<HTMLInputElement>) {
     setSaveError(null);
@@ -397,46 +506,119 @@ export function OCRConfigModal({
               </div>
             </div>
           </section>
-        </div>
 
-        {/* Stub elements for driver-contract §2.3 — model selection not yet implemented */}
-        <div style={{ display: "none" }}>
-          <select
-            data-testid="ocr-detection-model-select"
-            data-testid-stub="true"
-            aria-label="Detection model (stub)"
-          />
-          <select
-            data-testid="ocr-recognition-model-select"
-            data-testid-stub="true"
-            aria-label="Recognition model (stub)"
-          />
-          <input
-            data-testid="ocr-hf-revision-input"
-            data-testid-stub="true"
-            aria-label="HF revision (stub)"
-          />
-          <button
-            data-testid="ocr-rescan-models-button"
-            data-testid-stub="true"
-            aria-label="Rescan models (stub)"
-          >
-            Rescan
-          </button>
-          <button
-            data-testid="ocr-config-cancel-button"
-            data-testid-stub="true"
-            aria-label="Cancel (stub)"
-          >
-            Cancel
-          </button>
-          <button
-            data-testid="ocr-config-apply-button"
-            data-testid-stub="true"
-            aria-label="Apply (stub)"
-          >
-            Apply
-          </button>
+          {/* OCR model selection section — Lane C / Task C3.
+              Real detection/recognition selects + HF revision input + Apply /
+              Rescan, bound to GET /api/ocr-config, POST /api/ocr-config/models,
+              POST /api/ocr-config/rescan. (Was a display:none stub.) */}
+          <section aria-labelledby="ocr-models-section-heading" className="mt-4">
+            <h3 id="ocr-models-section-heading" className="text-sm font-medium text-ink-2 mb-2">
+              OCR models
+            </h3>
+
+            <div className="space-y-2">
+              {/* Detection model select */}
+              <div className="flex items-center gap-2 text-sm text-ink-1">
+                <label htmlFor="ocr-detection-model-select" className="shrink-0 w-28">
+                  Detection:
+                </label>
+                <select
+                  id="ocr-detection-model-select"
+                  data-testid="ocr-detection-model-select"
+                  value={detectionValue}
+                  onChange={(e) => {
+                    setPendingDetection(e.target.value);
+                  }}
+                  className="border border-border-1 rounded text-xs px-1 py-0.5 bg-bg-sunk flex-1"
+                  aria-label="Detection model"
+                >
+                  {detectionOptions.length === 0 ? (
+                    <option value={detectionValue}>{detectionValue}</option>
+                  ) : (
+                    detectionOptions.map((opt) => (
+                      <option key={opt.key} value={opt.key}>
+                        {opt.label}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {/* Recognition model select */}
+              <div className="flex items-center gap-2 text-sm text-ink-1">
+                <label htmlFor="ocr-recognition-model-select" className="shrink-0 w-28">
+                  Recognition:
+                </label>
+                <select
+                  id="ocr-recognition-model-select"
+                  data-testid="ocr-recognition-model-select"
+                  value={recognitionValue}
+                  onChange={(e) => {
+                    setPendingRecognition(e.target.value);
+                  }}
+                  className="border border-border-1 rounded text-xs px-1 py-0.5 bg-bg-sunk flex-1"
+                  aria-label="Recognition model"
+                >
+                  {recognitionOptions.length === 0 ? (
+                    <option value={recognitionValue}>{recognitionValue}</option>
+                  ) : (
+                    recognitionOptions.map((opt) => (
+                      <option key={opt.key} value={opt.key}>
+                        {opt.label}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {/* HF pinned-revision input */}
+              <div className="flex items-center gap-2 text-sm text-ink-1">
+                <label htmlFor="ocr-hf-revision-input" className="shrink-0 w-28">
+                  HF revision:
+                </label>
+                <input
+                  id="ocr-hf-revision-input"
+                  data-testid="ocr-hf-revision-input"
+                  type="text"
+                  value={revisionValue}
+                  placeholder="(latest)"
+                  onChange={(e) => {
+                    setPendingRevision(e.target.value);
+                  }}
+                  className="border border-border-1 rounded text-xs px-1 py-0.5 bg-bg-sunk flex-1"
+                  aria-label="Hugging Face pinned revision"
+                />
+              </div>
+
+              {/* Apply + Rescan */}
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  data-testid="ocr-config-apply-button"
+                  disabled={applying}
+                  onClick={() => {
+                    void handleApplyModels();
+                  }}
+                  className="px-3 py-1 text-xs rounded border border-border-2 bg-bg-raised text-accent hover:border-accent disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Apply OCR model selection"
+                >
+                  Apply
+                </button>
+                <button
+                  type="button"
+                  data-testid="ocr-rescan-models-button"
+                  disabled={rescanning}
+                  onClick={() => {
+                    void handleRescanModels();
+                  }}
+                  className="px-3 py-1 text-xs rounded border border-border-2 bg-bg-raised text-ink-2 hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Rescan available OCR models"
+                >
+                  Rescan
+                </button>
+              </div>
+            </div>
+          </section>
         </div>
 
         {/* Footer */}

@@ -204,6 +204,94 @@ describe("OCRConfigModal — close behaviour", () => {
   // primitives package and doesn't need re-testing here.
 });
 
+// ─── Lane C / Task C3: real OCR model selection (un-stub the modal) ──────────
+describe("OCRConfigModal — model selection (Lane C / C3)", () => {
+  const fullConfig = {
+    detection_options: [
+      { key: "stock", label: "Stock (bundled DocTR)", source: "stock", is_default: true },
+      {
+        key: "hf-latest",
+        label: "Hugging Face (latest)",
+        source: "huggingface",
+        is_default: false,
+      },
+    ],
+    recognition_options: [
+      { key: "stock", label: "Stock (bundled DocTR)", source: "stock", is_default: true },
+      {
+        key: "hf-latest",
+        label: "Hugging Face (latest)",
+        source: "huggingface",
+        is_default: false,
+      },
+    ],
+    selected_detection: "stock",
+    selected_recognition: "stock",
+    hf_pinned_revision: null,
+    selection_reason: "stock-fallback",
+    auto_rotate_available: false,
+    auto_rotate_on_load: true,
+    auto_rotate_method: "auto",
+  };
+
+  beforeEach(() => {
+    server.use(http.get("/api/ocr-config", () => HttpResponse.json(fullConfig)));
+  });
+
+  it("detection/recognition selects are visible and populated from GET", async () => {
+    renderModal();
+    const detSel = (await screen.findByTestId("ocr-detection-model-select")) as HTMLSelectElement;
+    const recoSel = screen.getByTestId("ocr-recognition-model-select") as HTMLSelectElement;
+    // Visible (not a display:none stub).
+    expect(detSel.closest('[style*="display: none"]')).toBeNull();
+    await waitFor(() => {
+      expect(detSel.querySelectorAll("option").length).toBeGreaterThanOrEqual(2);
+    });
+    expect(recoSel.querySelectorAll("option").length).toBeGreaterThanOrEqual(2);
+    // Selected value reflects the GET response.
+    expect(detSel.value).toBe("stock");
+    expect(recoSel.value).toBe("stock");
+  });
+
+  it("renders the HF revision input and Apply / Rescan buttons (no stub attr)", async () => {
+    renderModal();
+    expect(await screen.findByTestId("ocr-hf-revision-input")).not.toHaveAttribute(
+      "data-testid-stub",
+    );
+    expect(screen.getByTestId("ocr-config-apply-button")).not.toHaveAttribute("data-testid-stub");
+    expect(screen.getByTestId("ocr-rescan-models-button")).not.toHaveAttribute("data-testid-stub");
+  });
+
+  it("choosing a model + Apply POSTs /api/ocr-config/models", async () => {
+    let bodySeen: unknown = null;
+    const modelsSpy = vi.fn(async ({ request }: { request: Request }) => {
+      bodySeen = await request.json();
+      return HttpResponse.json(fullConfig);
+    });
+    server.use(http.post("/api/ocr-config/models", modelsSpy));
+
+    renderModal();
+    const detSel = (await screen.findByTestId("ocr-detection-model-select")) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(detSel.querySelectorAll("option").length).toBeGreaterThanOrEqual(2);
+    });
+    fireEvent.change(detSel, { target: { value: "hf-latest" } });
+    fireEvent.click(screen.getByTestId("ocr-config-apply-button"));
+
+    await waitFor(() => expect(modelsSpy).toHaveBeenCalled());
+    expect(bodySeen).toMatchObject({ detection_key: "hf-latest", recognition_key: "stock" });
+  });
+
+  it("Rescan POSTs /api/ocr-config/rescan", async () => {
+    const rescanSpy = vi.fn(() => HttpResponse.json(fullConfig));
+    server.use(http.post("/api/ocr-config/rescan", rescanSpy));
+
+    renderModal();
+    fireEvent.click(await screen.findByTestId("ocr-rescan-models-button"));
+    await waitFor(() => expect(rescanSpy).toHaveBeenCalled());
+  });
+});
+
 // ─── Issue #447: POST /api/ocr-config/auto-rotate HTTP failure surfacing ─────
 describe("OCRConfigModal — auto-rotate POST failure surfacing (#447)", () => {
   beforeEach(() => {
