@@ -17,7 +17,21 @@ import React from "react";
 import { server } from "../test/server";
 import { useLabelVocabulary, FALLBACK_STYLES, FALLBACK_COMPONENTS } from "./useLabelVocabulary";
 
-// Canonical sets from book-tools (must stay in sync):
+// Canonical sets from book-tools — frontend-local mirror.
+//
+// These are a COPY of book-tools' ALLOWED_TEXT_STYLE_LABELS and ALLOWED_COMPONENTS
+// (pdomain_book_tools.ocr.label_normalization). The frontend cannot import Python
+// source, so this mirror cannot be derived at build time.
+//
+// AUTHORITATIVE DRIFT GUARD: the backend route test
+//   tests/integration/test_label_vocabulary_router.py
+// imports ALLOWED_TEXT_STYLE_LABELS / ALLOWED_COMPONENTS live from book-tools and
+// asserts the /api/label-vocabulary route returns EXACTLY those sets. That test
+// catches any book-tools change before this file does.
+//
+// If book-tools changes its allowed sets, the backend route test fails first.
+// When that happens, update BOTH these mirrors AND the FALLBACK_* arrays in
+// useLabelVocabulary.ts to match the new canonical sets.
 const CANONICAL_STYLES = new Set([
   "all caps",
   "blackletter",
