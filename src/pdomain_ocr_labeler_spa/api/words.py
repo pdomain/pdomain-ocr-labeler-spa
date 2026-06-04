@@ -135,6 +135,18 @@ class ValidateBatchRequest(BaseModel):
     validated: bool
 
 
+class DeleteWordsBatchRequest(BaseModel):
+    """Body for ``POST .../words/delete-batch`` — Lane A / Task A2.
+
+    Matches the ``word-delete`` entry in ``frontend/src/lib/toolbarMapping.ts``
+    (``{ scope: "word" }`` plus the selected ``word_indices``). Deletes every
+    ``(line, word)`` pair in ``word_indices`` atomically.
+    """
+
+    scope: Literal["word"] = "word"
+    word_indices: list[tuple[int, int]] = []
+
+
 class AddWordRequest(BaseModel):
     """Spec §2 lines 308-311."""
 
@@ -755,6 +767,61 @@ def _collect_validate_batch_targets(page: Any, body: ValidateBatchRequest) -> li
         if w is not None:
             targets.append(w)
     return targets
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/words/delete-batch",
+    response_model=PagePayload,
+)
+def delete_words_batch(
+    project_id: str,
+    page_index: int,
+    body: DeleteWordsBatchRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
+) -> JSONResponse:
+    """``POST .../words/delete-batch`` — delete selected words (Lane A / A2).
+
+    Thin scope-resolver over ``Page.delete_words(word_keys)``. Atomic: one
+    structural mutation + one event per request. Matches the
+    ``word-delete`` toolbarMapping entry.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    word_keys: list[tuple[int, int]] = [(int(li), int(wi)) for li, wi in body.word_indices]
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        ok = bool(page.delete_words(word_keys))
+        if not ok:
+            return _mutation_failed(f"delete_words rejected keys={word_keys}")
+        from .lines_paragraphs import _finalize_structural_edit
+
+        _finalize_structural_edit(
+            page=page,
+            pstate=pstate,
+            project_state=project_state,
+            page_index=page_index,
+            store=store,
+            changes=[{"type": "words_delete_batch", "word_indices": word_keys}],
+        )
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+    )
 
 
 @router.post(
@@ -1534,6 +1601,7 @@ __all__ = [
     "ApplyComponentRequest",
     "ApplyStyleRequest",
     "CharRange",
+    "DeleteWordsBatchRequest",
     "ErasePixelsRequest",
     "MergeWordsRequest",
     "NudgeBboxRequest",

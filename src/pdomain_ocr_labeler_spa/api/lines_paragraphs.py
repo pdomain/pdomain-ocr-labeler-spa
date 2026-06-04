@@ -96,9 +96,17 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
 from ..core.jobs import JobRunner
+from ..core.persistence.config_yaml import AppConfig
+from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import ProjectState
 from ..settings import Settings
-from .dependencies import get_job_runner, get_project_state, get_settings
+from .dependencies import (
+    get_app_config,
+    get_job_runner,
+    get_page_store_optional,
+    get_project_state,
+    get_settings,
+)
 from .middleware.error_handler import ApiError
 from .pages import PagePayload
 from .refine import RefineJobResponse
@@ -139,6 +147,58 @@ class MergeScopeRequest(BaseModel):
     scope: Literal["paragraph", "line"]
     paragraph_indices: list[int] = []
     line_indices: list[int] = []
+
+
+class CopyGtBatchRequest(BaseModel):
+    """Body for ``POST .../lines/copy-gt-batch`` — Lane A / Task A2.
+
+    Matches the ``*-gt-to-ocr`` / ``*-ocr-to-gt`` toolbarMapping entries for
+    every scope. ``direction`` chooses which way to copy; the scope selects
+    which words are affected (page / paragraph / line / word).
+    """
+
+    scope: Literal["page", "paragraph", "line", "word"]
+    direction: Literal["gt_to_ocr", "ocr_to_gt"]
+    paragraph_indices: list[int] = []
+    line_indices: list[int] = []
+    word_indices: list[tuple[int, int]] = []
+
+
+class DeleteParagraphsBatchRequest(BaseModel):
+    """Body for ``POST .../paragraphs/delete-batch`` — Lane A / Task A2."""
+
+    scope: Literal["paragraph"] = "paragraph"
+    paragraph_indices: list[int] = []
+
+
+class DeleteLinesBatchRequest(BaseModel):
+    """Body for ``POST .../lines/delete-batch`` — Lane A / Task A2."""
+
+    scope: Literal["line"] = "line"
+    line_indices: list[int] = []
+
+
+class SplitSelectedParagraphsRequest(BaseModel):
+    """Body for ``POST .../paragraphs/split-selected`` — Lane A / Task A2.
+
+    Splits each selected paragraph into one paragraph per line
+    (``Page.split_paragraphs``).
+    """
+
+    paragraph_indices: list[int] = []
+
+
+class GroupSelectedWordsIntoParagraphRequest(BaseModel):
+    """Body for ``POST .../paragraphs/group-selected-words`` — Lane A / Task A2.
+
+    Moves the selected words into a new paragraph
+    (``Page.group_selected_words_into_new_paragraph``). ``scope`` is accepted
+    (the toolbarMapping line-scope entry sends ``{ scope: "line" }``) but the
+    operation is driven entirely by ``word_indices``.
+    """
+
+    word_indices: list[tuple[int, int]] = []
+    scope: str | None = None
 
 
 class SplitParagraphAfterLineRequest(BaseModel):
@@ -410,6 +470,105 @@ def _stub_page_payload(project_id: str, page_index: int) -> JSONResponse:
     """
     payload = PagePayload(project_id=project_id, page_index=page_index)
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
+
+
+def _finalize_structural_edit(
+    *,
+    page: Any,
+    pstate: Any,  # PageState
+    project_state: ProjectState,
+    page_index: int,
+    store: LabelerPageStore | None,
+    changes: list[dict[str, Any]],
+) -> None:
+    """Finalize a structural mutation: rematch GT, bump generation, persist.
+
+    Lane A / Task A3. Called by every line/paragraph (and word) structural
+    mutation route after a successful in-memory edit. Three steps:
+
+    1. **Auto-rematch GT** (``core/ground_truth_matcher.rematch_page``) so
+       per-word GT mapping tracks the new structure — but explicit per-word
+       GT edits are preserved (rematch only fills words whose GT the user
+       did not type). Best-effort: no GT source / unmatchable page is a no-op.
+    2. **Bump** ``pstate.generation`` so SSE consumers see the new state.
+    3. **Persist edited content** via ``save_page_content_to_store`` so the
+       structural change survives a fresh-store reload — closing the gap
+       where ``lines_paragraphs.py`` previously saved through the no-op
+       ``_write_cached_envelope_best_effort`` stub (word routes already
+       persist via ``api/words.py::_save_to_store_best_effort``).
+
+    Must be invoked inside the page lock.
+    """
+    _auto_rematch_preserving_edits(page=page, project_state=project_state, page_index=page_index)
+
+    pstate.generation += 1
+
+    if store is None or getattr(pstate, "page_id", None) is None:
+        return
+    if not callable(getattr(page, "to_dict", None)):
+        return
+    try:
+        from ..core.page_state import save_page_content_to_store
+
+        save_page_content_to_store(page_id=pstate.page_id, page=page, store=store, changes=changes)
+    except Exception as exc:  # pragma: no cover - best-effort persistence
+        log.warning("_finalize_structural_edit: store write failed page_id=%s: %s", pstate.page_id, exc)
+
+
+def _auto_rematch_preserving_edits(
+    *,
+    page: Any,
+    project_state: ProjectState,
+    page_index: int,
+) -> None:
+    """Re-run page-level GT matching after a structural edit, preserving
+    explicit per-word GT edits.
+
+    ``core/ground_truth_matcher.rematch_page`` wipes *all* per-word GT before
+    re-matching (that is the explicit "Rematch GT" button semantics). For an
+    automatic post-structural-edit rematch we instead want the legacy
+    ``_finalize_structural_edit`` behaviour: surviving per-word GT edits are
+    preserved, and only words the matcher fills get fresh GT. We achieve this
+    by snapshotting non-empty per-word GT by object identity before the
+    rematch and restoring it afterward.
+
+    No-op (silently) when there is no GT source text for the page, or when the
+    page object lacks the matcher method pair — never raises.
+    """
+    from ..core.ground_truth_matcher import rematch_page
+    from ..core.persistence.ground_truth import find_ground_truth_text
+
+    project = project_state.loaded_project
+    if project is None:
+        return
+    image_paths = getattr(project, "image_paths", None) or []
+    image_name = image_paths[page_index].name if 0 <= page_index < len(image_paths) else ""
+    gt_text = find_ground_truth_text(image_name, getattr(project, "ground_truth_map", {}) or {})
+    if not gt_text:
+        return
+
+    # Snapshot non-empty per-word GT by id() so user edits survive the wipe.
+    snapshot: dict[int, str] = {}
+    for line in getattr(page, "lines", []) or []:
+        for word in getattr(line, "words", []) or []:
+            gt = str(getattr(word, "ground_truth_text", "") or "")
+            if gt:
+                snapshot[id(word)] = gt
+
+    ok = rematch_page(page, gt_text)
+    if not ok:
+        return
+
+    # Restore explicit edits: any surviving word whose pre-edit GT was
+    # non-empty keeps that GT (rematch only fills unedited words).
+    for line in getattr(page, "lines", []) or []:
+        for word in getattr(line, "words", []) or []:
+            preserved = snapshot.get(id(word))
+            if preserved:
+                try:
+                    word.ground_truth_text = preserved
+                except Exception:  # pragma: no cover - frozen-word defense
+                    log.debug("auto-rematch: could not restore GT on word")
 
 
 # ── Spec-23-D1 line endpoints ──────────────────────────────────────────
@@ -855,6 +1014,293 @@ def refine_lines_batch(
         },
     )
     return JSONResponse(status_code=202, content={"job_id": job_id})
+
+
+# ── Lane A / Task A2: scope-batch routes (toolbarMapping contract) ─────
+
+
+def _collect_copy_gt_targets(page: Any, body: CopyGtBatchRequest) -> list[Any]:
+    """Resolve the requested scope to a flat list of target words.
+
+    Out-of-range indices are silently skipped (best-effort batch).
+    """
+    targets: list[Any] = []
+    scope = body.scope
+    if scope == "page":
+        targets.extend(getattr(page, "words", []) or [])
+        return targets
+    if scope == "paragraph":
+        paragraphs = getattr(page, "paragraphs", None) or []
+        for pi in body.paragraph_indices:
+            if 0 <= pi < len(paragraphs):
+                targets.extend(getattr(paragraphs[pi], "words", []) or [])
+        return targets
+    if scope == "line":
+        lines = getattr(page, "lines", None) or []
+        for li in body.line_indices:
+            if 0 <= li < len(lines):
+                targets.extend(getattr(lines[li], "words", []) or [])
+        return targets
+    # Remaining branch: word scope.
+    lines = getattr(page, "lines", None) or []
+    for li, wi in body.word_indices:
+        if 0 <= li < len(lines):
+            words = getattr(lines[li], "words", None) or []
+            if 0 <= wi < len(words):
+                targets.append(words[wi])
+    return targets
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/lines/copy-gt-batch",
+    response_model=PagePayload,
+)
+def copy_gt_batch(
+    project_id: str,
+    page_index: int,
+    body: CopyGtBatchRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
+) -> JSONResponse:
+    """``POST .../lines/copy-gt-batch`` — copy GT↔OCR over a scope (A2).
+
+    Thin scope-resolver over the per-word ``copy_ground_truth_to_ocr`` /
+    ``copy_ocr_to_ground_truth`` operations. Atomic: one event per request.
+    This is a content edit (not structural) — it does not trigger GT rematch.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        targets = _collect_copy_gt_targets(page, body)
+        for word in targets:
+            if body.direction == "gt_to_ocr":
+                word.copy_ground_truth_to_ocr()
+            else:
+                word.copy_ocr_to_ground_truth()
+        pstate.generation += 1
+        # Persist edited content (matches words.py best-effort save path).
+        if (
+            store is not None
+            and getattr(pstate, "page_id", None) is not None
+            and callable(getattr(page, "to_dict", None))
+        ):
+            try:
+                from ..core.page_state import save_page_content_to_store
+
+                save_page_content_to_store(
+                    page_id=pstate.page_id,
+                    page=page,
+                    store=store,
+                    changes=[{"type": "copy_gt_batch", "scope": body.scope, "direction": body.direction}],
+                )
+            except Exception as exc:  # pragma: no cover - best-effort
+                log.warning("copy_gt_batch: store write failed page_id=%s: %s", pstate.page_id, exc)
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+    )
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/lines/delete-batch",
+    response_model=PagePayload,
+)
+def delete_lines_batch(
+    project_id: str,
+    page_index: int,
+    body: DeleteLinesBatchRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
+) -> JSONResponse:
+    """``POST .../lines/delete-batch`` — delete selected lines (A2)."""
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    line_indices = list(body.line_indices)
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        ok = bool(page.delete_lines(line_indices))
+        if not ok:
+            return _mutation_failed(f"delete_lines rejected indices={line_indices}")
+        _finalize_structural_edit(
+            page=page,
+            pstate=pstate,
+            project_state=project_state,
+            page_index=page_index,
+            store=store,
+            changes=[{"type": "lines_delete_batch", "line_indices": line_indices}],
+        )
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+    )
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/paragraphs/delete-batch",
+    response_model=PagePayload,
+)
+def delete_paragraphs_batch(
+    project_id: str,
+    page_index: int,
+    body: DeleteParagraphsBatchRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
+) -> JSONResponse:
+    """``POST .../paragraphs/delete-batch`` — delete selected paragraphs (A2)."""
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    paragraph_indices = list(body.paragraph_indices)
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        ok = bool(page.delete_paragraphs(paragraph_indices))
+        if not ok:
+            return _mutation_failed(f"delete_paragraphs rejected indices={paragraph_indices}")
+        _finalize_structural_edit(
+            page=page,
+            pstate=pstate,
+            project_state=project_state,
+            page_index=page_index,
+            store=store,
+            changes=[{"type": "paragraphs_delete_batch", "paragraph_indices": paragraph_indices}],
+        )
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+    )
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/paragraphs/split-selected",
+    response_model=PagePayload,
+)
+def split_selected_paragraphs(
+    project_id: str,
+    page_index: int,
+    body: SplitSelectedParagraphsRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
+) -> JSONResponse:
+    """``POST .../paragraphs/split-selected`` — split paragraphs into one per line (A2)."""
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    paragraph_indices = list(body.paragraph_indices)
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        ok = bool(page.split_paragraphs(paragraph_indices))
+        if not ok:
+            return _mutation_failed(f"split_paragraphs rejected indices={paragraph_indices}")
+        _finalize_structural_edit(
+            page=page,
+            pstate=pstate,
+            project_state=project_state,
+            page_index=page_index,
+            store=store,
+            changes=[{"type": "paragraphs_split_selected", "paragraph_indices": paragraph_indices}],
+        )
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+    )
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/paragraphs/group-selected-words",
+    response_model=PagePayload,
+)
+def group_selected_words_into_paragraph(
+    project_id: str,
+    page_index: int,
+    body: GroupSelectedWordsIntoParagraphRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
+) -> JSONResponse:
+    """``POST .../paragraphs/group-selected-words`` — group words into a new paragraph (A2)."""
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    word_keys: list[tuple[int, int]] = [(int(li), int(wi)) for li, wi in body.word_indices]
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        ok = bool(page.group_selected_words_into_new_paragraph(word_keys))
+        if not ok:
+            return _mutation_failed(f"group_selected_words rejected keys={word_keys}")
+        _finalize_structural_edit(
+            page=page,
+            pstate=pstate,
+            project_state=project_state,
+            page_index=page_index,
+            store=store,
+            changes=[{"type": "group_selected_words", "word_indices": word_keys}],
+        )
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+    )
 
 
 # ── Spec-23-D2 paragraph endpoints ─────────────────────────────────────
@@ -1400,10 +1846,14 @@ def install_lines_paragraphs_router(app) -> None:  # type: ignore[no-untyped-def
 
 
 __all__ = [
+    "CopyGtBatchRequest",
     "CopyLineGtRequest",
+    "DeleteLinesBatchRequest",
+    "DeleteParagraphsBatchRequest",
     "DeleteScopeRequest",
     "EmptyBody",
     "GroupSelectedWordsIntoNewParagraphRequest",
+    "GroupSelectedWordsIntoParagraphRequest",
     "MergeLinesRequest",
     "MergeParagraphsRequest",
     "MergeScopeRequest",
@@ -1415,6 +1865,7 @@ __all__ = [
     "SplitLineAfterWordRequest",
     "SplitLineWithSelectedWordsRequest",
     "SplitParagraphAfterLineRequest",
+    "SplitSelectedParagraphsRequest",
     "ValidateLineRequest",
     "ValidateParagraphRequest",
     "install_lines_paragraphs_router",

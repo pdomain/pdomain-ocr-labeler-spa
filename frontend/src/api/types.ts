@@ -850,11 +850,10 @@ export interface paths {
          * Refine Available
          * @description ``GET /api/refine/available`` — capability probe (FO-9).
          *
-         *     Returns immediately without requiring a project to be loaded.
-         *     Currently always returns ``available=False`` because the full OCR bbox
-         *     refinement engine (M3-proper) is not yet wired. When the OCR adapter
-         *     is connected, this probe will check ``IOCREngine.supports_refine()``
-         *     and return ``available=True`` with ``reason=""``.
+         *     Returns immediately without requiring a project to be loaded. As of
+         *     Lane A Task A1 the ``refine_bboxes`` job handler is registered and the
+         *     DocTR loader attaches the cv2 image, so this returns ``available=True``
+         *     with ``reason=""``.
          *
          *     The ``ErasePixelsSection`` frontend component calls this on mount
          *     and uses the result to decide whether to enable the Apply button.
@@ -1002,6 +1001,30 @@ export interface paths {
          *     user-observable mutation event); one event-store write.
          */
         post: operations["validate_batch_api_projects__project_id__pages__page_index__words_validate_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/words/delete-batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete Words Batch
+         * @description ``POST .../words/delete-batch`` — delete selected words (Lane A / A2).
+         *
+         *     Thin scope-resolver over ``Page.delete_words(word_keys)``. Atomic: one
+         *     structural mutation + one event per request. Matches the
+         *     ``word-delete`` toolbarMapping entry.
+         */
+        post: operations["delete_words_batch_api_projects__project_id__pages__page_index__words_delete_batch_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1493,6 +1516,110 @@ export interface paths {
          *     ``GET /api/jobs/{id}/events`` (SSE) for the terminal ``complete`` event.
          */
         post: operations["refine_lines_batch_api_projects__project_id__pages__page_index__lines_refine_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/lines/copy-gt-batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Gt Batch
+         * @description ``POST .../lines/copy-gt-batch`` — copy GT↔OCR over a scope (A2).
+         *
+         *     Thin scope-resolver over the per-word ``copy_ground_truth_to_ocr`` /
+         *     ``copy_ocr_to_ground_truth`` operations. Atomic: one event per request.
+         *     This is a content edit (not structural) — it does not trigger GT rematch.
+         */
+        post: operations["copy_gt_batch_api_projects__project_id__pages__page_index__lines_copy_gt_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/lines/delete-batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete Lines Batch
+         * @description ``POST .../lines/delete-batch`` — delete selected lines (A2).
+         */
+        post: operations["delete_lines_batch_api_projects__project_id__pages__page_index__lines_delete_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/paragraphs/delete-batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete Paragraphs Batch
+         * @description ``POST .../paragraphs/delete-batch`` — delete selected paragraphs (A2).
+         */
+        post: operations["delete_paragraphs_batch_api_projects__project_id__pages__page_index__paragraphs_delete_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/paragraphs/split-selected": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Split Selected Paragraphs
+         * @description ``POST .../paragraphs/split-selected`` — split paragraphs into one per line (A2).
+         */
+        post: operations["split_selected_paragraphs_api_projects__project_id__pages__page_index__paragraphs_split_selected_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/paragraphs/group-selected-words": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Group Selected Words Into Paragraph
+         * @description ``POST .../paragraphs/group-selected-words`` — group words into a new paragraph (A2).
+         */
+        post: operations["group_selected_words_into_paragraph_api_projects__project_id__pages__page_index__paragraphs_group_selected_words_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2187,6 +2314,44 @@ export interface components {
             styles: string[];
         };
         /**
+         * CopyGtBatchRequest
+         * @description Body for ``POST .../lines/copy-gt-batch`` — Lane A / Task A2.
+         *
+         *     Matches the ``*-gt-to-ocr`` / ``*-ocr-to-gt`` toolbarMapping entries for
+         *     every scope. ``direction`` chooses which way to copy; the scope selects
+         *     which words are affected (page / paragraph / line / word).
+         */
+        CopyGtBatchRequest: {
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "page" | "paragraph" | "line" | "word";
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "gt_to_ocr" | "ocr_to_gt";
+            /**
+             * Paragraph Indices
+             * @default []
+             */
+            paragraph_indices: number[];
+            /**
+             * Line Indices
+             * @default []
+             */
+            line_indices: number[];
+            /**
+             * Word Indices
+             * @default []
+             */
+            word_indices: [
+                number,
+                number
+            ][];
+        };
+        /**
          * CopyLineGtRequest
          * @description Legacy ``/lines/{li}/copy-gt`` body — kept for frontend compat.
          */
@@ -2228,6 +2393,40 @@ export interface components {
             retain_until: string;
         };
         /**
+         * DeleteLinesBatchRequest
+         * @description Body for ``POST .../lines/delete-batch`` — Lane A / Task A2.
+         */
+        DeleteLinesBatchRequest: {
+            /**
+             * Scope
+             * @default line
+             * @constant
+             */
+            scope: "line";
+            /**
+             * Line Indices
+             * @default []
+             */
+            line_indices: number[];
+        };
+        /**
+         * DeleteParagraphsBatchRequest
+         * @description Body for ``POST .../paragraphs/delete-batch`` — Lane A / Task A2.
+         */
+        DeleteParagraphsBatchRequest: {
+            /**
+             * Scope
+             * @default paragraph
+             * @constant
+             */
+            scope: "paragraph";
+            /**
+             * Paragraph Indices
+             * @default []
+             */
+            paragraph_indices: number[];
+        };
+        /**
          * DeleteScopeRequest
          * @description Legacy ``/delete`` page-scope batch body.
          */
@@ -2247,6 +2446,30 @@ export interface components {
              * @default []
              */
             line_indices: number[];
+            /**
+             * Word Indices
+             * @default []
+             */
+            word_indices: [
+                number,
+                number
+            ][];
+        };
+        /**
+         * DeleteWordsBatchRequest
+         * @description Body for ``POST .../words/delete-batch`` — Lane A / Task A2.
+         *
+         *     Matches the ``word-delete`` entry in ``frontend/src/lib/toolbarMapping.ts``
+         *     (``{ scope: "word" }`` plus the selected ``word_indices``). Deletes every
+         *     ``(line, word)`` pair in ``word_indices`` atomically.
+         */
+        DeleteWordsBatchRequest: {
+            /**
+             * Scope
+             * @default word
+             * @constant
+             */
+            scope: "word";
             /**
              * Word Indices
              * @default []
@@ -2527,6 +2750,27 @@ export interface components {
                 number,
                 number
             ][];
+        };
+        /**
+         * GroupSelectedWordsIntoParagraphRequest
+         * @description Body for ``POST .../paragraphs/group-selected-words`` — Lane A / Task A2.
+         *
+         *     Moves the selected words into a new paragraph
+         *     (``Page.group_selected_words_into_new_paragraph``). ``scope`` is accepted
+         *     (the toolbarMapping line-scope entry sends ``{ scope: "line" }``) but the
+         *     operation is driven entirely by ``word_indices``.
+         */
+        GroupSelectedWordsIntoParagraphRequest: {
+            /**
+             * Word Indices
+             * @default []
+             */
+            word_indices: [
+                number,
+                number
+            ][];
+            /** Scope */
+            scope?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3159,20 +3403,20 @@ export interface components {
          * RefineAvailableResponse
          * @description Response for ``GET /api/refine/available`` — FO-9 capability probe.
          *
-         *     ``available`` is ``True`` when a wired OCR engine supports bbox refinement.
-         *     Currently always ``False`` (M3-proper OCR adapter not yet wired).
-         *     ``reason`` is empty when ``available=True``; otherwise a human-readable
-         *     explanation of why the feature is not available.
+         *     ``available`` is ``True`` when the refine engine is wired. As of Lane A
+         *     Task A1 the ``refine_bboxes`` job handler is registered, so this is
+         *     ``True``. ``reason`` is empty when ``available=True``; otherwise a
+         *     human-readable explanation of why the feature is not available.
          */
         RefineAvailableResponse: {
             /**
              * Available
-             * @default false
+             * @default true
              */
             available: boolean;
             /**
              * Reason
-             * @default OCR engine not wired (pending M3-proper)
+             * @default
              */
             reason: string;
         };
@@ -3571,6 +3815,20 @@ export interface components {
             paragraph_index: number;
             /** After Line Index */
             after_line_index: number;
+        };
+        /**
+         * SplitSelectedParagraphsRequest
+         * @description Body for ``POST .../paragraphs/split-selected`` — Lane A / Task A2.
+         *
+         *     Splits each selected paragraph into one paragraph per line
+         *     (``Page.split_paragraphs``).
+         */
+        SplitSelectedParagraphsRequest: {
+            /**
+             * Paragraph Indices
+             * @default []
+             */
+            paragraph_indices: number[];
         };
         /**
          * SplitWordRequest
@@ -4817,6 +5075,42 @@ export interface operations {
             };
         };
     };
+    delete_words_batch_api_projects__project_id__pages__page_index__words_delete_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteWordsBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     add_word_api_projects__project_id__pages__page_index__words_add_post: {
         parameters: {
             query?: never;
@@ -5512,6 +5806,186 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RefineJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copy_gt_batch_api_projects__project_id__pages__page_index__lines_copy_gt_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CopyGtBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_lines_batch_api_projects__project_id__pages__page_index__lines_delete_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteLinesBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_paragraphs_batch_api_projects__project_id__pages__page_index__paragraphs_delete_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteParagraphsBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    split_selected_paragraphs_api_projects__project_id__pages__page_index__paragraphs_split_selected_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SplitSelectedParagraphsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    group_selected_words_into_paragraph_api_projects__project_id__pages__page_index__paragraphs_group_selected_words_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupSelectedWordsIntoParagraphRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
                 };
             };
             /** @description Validation Error */
