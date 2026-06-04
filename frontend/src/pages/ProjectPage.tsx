@@ -84,6 +84,11 @@ import { worklistStore } from "../stores/worklist-store";
 import { pageNoUrl } from "../lib/routes";
 
 import { PageActions } from "../components/PageActions";
+import {
+  ImageTabsHeader,
+  type LayerVisibility as HeaderLayerVisibility,
+} from "../components/ImageTabsHeader";
+import { viewportStore, toggleEraseMode, setCanvasZoom } from "../stores/viewport-store";
 import { Drawer } from "../components/shell/Drawer";
 import { ToolbarActionGrid } from "../components/ToolbarActionGrid";
 import { BusyOverlay, ProjectLoadingOverlay } from "../components/BusyOverlay";
@@ -256,6 +261,15 @@ export default function ProjectPage() {
     subscribeViewportMode,
     getAddWordActiveSnapshot,
     getAddWordActiveSnapshot,
+  );
+  // C1: viewport interaction mode — drives the ImageTabsHeader Erase toggle's
+  // active state so the header and the Rail stay in sync on one source of truth
+  // (viewportStore). The Rail's "erase" mode is mirrored into viewportStore by
+  // PageImageCanvas; reading it here keeps both chrome surfaces consistent.
+  const viewportMode = useSyncExternalStore(
+    viewportStore.subscribe,
+    () => viewportStore.getState().mode,
+    () => "select" as const,
   );
   const wordEditState = useDialogStore((s) => s.wordEdit);
   const confirmState = useDialogStore((s) => s.confirm);
@@ -729,27 +743,9 @@ export default function ProjectPage() {
       role="toolbar"
       aria-label="Page toolbar"
     >
-      <div className="flex items-center gap-2">
-        <button
-          data-testid="mismatches-only-toggle"
-          aria-pressed={uiPrefs.matchFilterMode === "mismatches_only"}
-          onClick={() => {
-            useUiPrefs.setMatchFilterMode(
-              uiPrefs.matchFilterMode === "all" ? "mismatches_only" : "all",
-            );
-            notifyUiPrefs();
-          }}
-          title="Dim exact and validated word bboxes"
-          className={[
-            "px-2 py-0.5 text-xs rounded border transition-colors",
-            uiPrefs.matchFilterMode === "mismatches_only"
-              ? "bg-accent text-ink-1 border-accent hover:opacity-90"
-              : "bg-bg-raised text-ink-2 border-border-2 hover:bg-bg-raised/80",
-          ].join(" ")}
-        >
-          Mismatches
-        </button>
-      </div>
+      {/* C1: the mismatches-only toggle now lives in ImageTabsHeader (single
+          source of truth); this slot keeps only the page indicator. */}
+      <div className="flex items-center gap-2" />
       <div className="text-[11px] tabular-nums text-ink-3" data-testid="project-toolbar-page">
         Page {currentPageNo} / {Math.max(totalPages, 1)}
       </div>
@@ -760,9 +756,56 @@ export default function ProjectPage() {
   // ToolbarActionGrid, Splitter, TextTabs, WordMatchView removed from visible
   // canvas. TextTabs/WordMatchView and ToolbarActionGrid kept as hidden stubs
   // to preserve driver-contract testids (§2.7, §2.8, §2.9, §2.10).
+  // C1: ImageTabsHeader viewport chrome — layer toggles, selection-mode radios,
+  // Erase Pixels toggle, color legend, mismatches-only toggle, zoom buttons.
+  // Bound to the SAME useUiPrefs (layer visibility + selection mode) and
+  // viewportStore (erase mode) the Rail uses so the two chrome surfaces share
+  // a single source of truth. (Previously built but never mounted — only
+  // commented out at the top of this file.)
+  const headerLayerVisibility: HeaderLayerVisibility = {
+    paragraph: uiPrefs.layerVisibility.paragraph,
+    line: uiPrefs.layerVisibility.line,
+    word: uiPrefs.layerVisibility.word,
+  };
+  const imageTabsHeaderSlot = (
+    <ImageTabsHeader
+      layerVisibility={headerLayerVisibility}
+      selectionMode={uiPrefs.selectionMode}
+      eraseActive={viewportMode === "erase"}
+      onLayerToggle={(layer) => {
+        useUiPrefs.setState((prefs) => ({
+          layerVisibility: {
+            ...prefs.layerVisibility,
+            [layer]: !prefs.layerVisibility[layer],
+          },
+        }));
+      }}
+      onSelectionModeChange={(mode) => {
+        useUiPrefs.setState({ selectionMode: mode });
+      }}
+      onEraseToggle={() => {
+        toggleEraseMode();
+      }}
+      onZoomFit={() => {
+        setCanvasZoom(0);
+      }}
+      onZoom100={() => {
+        setCanvasZoom(1);
+      }}
+      matchFilterMode={uiPrefs.matchFilterMode}
+      onMatchFilterModeToggle={() => {
+        useUiPrefs.setMatchFilterMode(
+          uiPrefs.matchFilterMode === "all" ? "mismatches_only" : "all",
+        );
+        notifyUiPrefs();
+      }}
+    />
+  );
+
   const canvasSlot = (
     <div className="flex flex-col h-full min-h-0">
       {topToolbarSlot}
+      {imageTabsHeaderSlot}
       <div data-testid="image-pane" className="relative flex-1 min-h-0">
         <BusyOverlay activeJob={activeJob} isMutating={isMutating} />
         <PageImageCanvas

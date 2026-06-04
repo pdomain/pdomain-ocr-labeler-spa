@@ -69,6 +69,7 @@ export function ImageTabsHeader({
 }: ImageTabsHeaderProps) {
   return (
     <div
+      data-testid="image-tabs-header"
       className="flex items-center gap-3 px-2 py-1 bg-bg-surface border-b border-border-1 flex-wrap text-xs"
       aria-label="Viewport controls"
     >

@@ -306,19 +306,22 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     expect(screen.queryByTestId("splitter")).toBeNull();
   });
 
-  it("uses a top toolbar without duplicate layer, target, erase, or zoom controls", async () => {
+  it("C1: mounts ImageTabsHeader chrome (layers, selection mode, erase, zoom) with a single mismatches-only toggle", async () => {
     renderProjectPage();
     expect(await screen.findByTestId("project-top-toolbar")).toBeInTheDocument();
-    expect(screen.queryByTestId("layer-paragraphs-checkbox")).toBeNull();
-    expect(screen.queryByTestId("layer-lines-checkbox")).toBeNull();
-    expect(screen.queryByTestId("layer-words-checkbox")).toBeNull();
-    expect(screen.queryByTestId("selection-mode-paragraph")).toBeNull();
-    expect(screen.queryByTestId("selection-mode-line")).toBeNull();
-    expect(screen.queryByTestId("selection-mode-word")).toBeNull();
-    expect(screen.queryByTestId("erase-pixels-button")).toBeNull();
-    expect(screen.queryByTestId("zoom-fit-button")).toBeNull();
-    expect(screen.queryByTestId("zoom-100-button")).toBeNull();
-    expect(screen.getByTestId("mismatches-only-toggle")).toBeInTheDocument();
+    // C1: ImageTabsHeader is now mounted above the canvas (was unmounted in IS-4).
+    expect(screen.getByTestId("image-tabs-header")).toBeInTheDocument();
+    expect(screen.getByTestId("layer-paragraphs-checkbox")).toBeInTheDocument();
+    expect(screen.getByTestId("layer-lines-checkbox")).toBeInTheDocument();
+    expect(screen.getByTestId("layer-words-checkbox")).toBeInTheDocument();
+    expect(screen.getByTestId("selection-mode-paragraph")).toBeInTheDocument();
+    expect(screen.getByTestId("selection-mode-line")).toBeInTheDocument();
+    expect(screen.getByTestId("selection-mode-word")).toBeInTheDocument();
+    expect(screen.getByTestId("erase-pixels-button")).toBeInTheDocument();
+    expect(screen.getByTestId("zoom-fit-button")).toBeInTheDocument();
+    expect(screen.getByTestId("zoom-100-button")).toBeInTheDocument();
+    // The mismatches-only toggle moved into the header — still exactly one in the DOM.
+    expect(screen.getAllByTestId("mismatches-only-toggle")).toHaveLength(1);
     expect(screen.getByTestId("image-pane")).toBeInTheDocument();
   });
 
