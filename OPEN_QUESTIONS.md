@@ -45,3 +45,12 @@ Lane C. Either way the label list belongs to a follow-up, not Lane B's wireup.
 
 **Blocks:** nothing hard — the grid is in a hidden stub today. Surfacing it
 (Lane C / D) should resolve this first so the visible control can't 500.
+
+**Update (Lane D, 2026-06-04):** Applied the minimal stopgap (option a) for the
+named `italic` → `italics` typo only — the grid's `TEXT_STYLE_LABELS` now uses
+the canonical plural so apply-style no longer 500s on italics. A guard test in
+`ToolbarActionGrid.test.tsx` pins this. The broader question — sourcing the full
+label/component vocabulary from the backend (option b) so the grid can't drift —
+remains OPEN. Note also `superscript` / `subscript` in `TEXT_STYLE_LABELS` are
+actually book-tools *components*, not text styles, and would still 500 if applied
+as styles; left untouched here as part of the same open redesign.

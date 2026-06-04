@@ -65,6 +65,19 @@ describe("ToolbarActionGrid — structure", () => {
     expect(btn).toBeDisabled();
   });
 
+  // Q-B2-STYLE-LABELS carry-forward: book-tools' normalize_text_style_label
+  // only accepts the canonical "italics" (plural). The singular "italic" 500s
+  // on apply. Pin the canonical value so the typo can't reappear.
+  it("uses canonical book-tools style label 'italics' (not 'italic')", () => {
+    render(<ToolbarActionGrid {...defaultProps} />);
+    const select = screen.getByTestId("apply-style-select");
+    const values = Array.from(select.querySelectorAll("option")).map(
+      (o) => (o as HTMLOptionElement).value,
+    );
+    expect(values).toContain("italics");
+    expect(values).not.toContain("italic");
+  });
+
   it("renders apply-style-select", () => {
     render(<ToolbarActionGrid {...defaultProps} />);
     expect(screen.getByTestId("apply-style-select")).toBeTruthy();

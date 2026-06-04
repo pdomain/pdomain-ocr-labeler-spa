@@ -125,8 +125,12 @@ const ACTION_LABELS: Record<ActionKey, string> = {
 };
 
 // Text-style labels (would come from pdomain-book-tools; hardcoded here until API exposes them)
+// Q-B2-STYLE-LABELS: values must match book-tools' canonical ALLOWED_TEXT_STYLE_LABELS
+// (label_normalization.py) or apply-style 500s. "italics" is plural — the
+// singular "italic" is rejected. The broader "source these from the backend"
+// redesign remains an open question (OPEN_QUESTIONS.md Q-B2-STYLE-LABELS).
 const TEXT_STYLE_LABELS = [
-  "italic",
+  "italics",
   "bold",
   "small_caps",
   "superscript",
