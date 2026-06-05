@@ -568,6 +568,131 @@ def test_spa_fallback_blocks_path_traversal_into_assets(settings: Settings, spa_
         assert r.content == expected_index
 
 
+# ── Security: percent-encoded path traversal ──────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "url_path",
+    [
+        "/..%2fsecret.txt",
+        "/sub/..%2f..%2fsecret.txt",
+        "/..%2F..%2Fsecret.txt",
+        "/%2e%2e%2fsecret.txt",
+    ],
+    ids=[
+        "single-dot-slash-encoded",
+        "nested-double-dot-slash-encoded",
+        "uppercase-F-encoded",
+        "dot-also-encoded",
+    ],
+)
+def test_spa_fallback_percent_encoded_traversal_does_not_serve_outside_dir(
+    settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    url_path: str,
+) -> None:
+    """SEC: %2f-encoded path traversal MUST NOT serve files outside static/.
+
+    Starlette/FastAPI percent-decode %2f to / and %2e to .
+    BEFORE the path-converter populates full_path, so a request like
+    GET /..%2fsecret.txt reaches the handler with
+    full_path == "../secret.txt".  Without an explicit containment
+    check the naive static_dir / full_path construction resolves
+    *outside* static_dir and would serve an arbitrary file.
+
+    Protection: the SPA catch-all calls .resolve() on the candidate
+    path and then candidate.relative_to(static_dir.resolve()), which
+    raises ValueError for any path that escapes the frontend dir.
+    That ValueError is caught and re-raised as HTTPException(404).
+
+    This test pins the protection end-to-end:
+
+    1. A real file is placed OUTSIDE static_dir (at the same level).
+    2. The client sends each %2f-encoded traversal variant.
+    3. Assertions confirm the outside file is NEVER served — the secret
+       content must not appear in the response body.
+
+    The test would FAIL (AssertionError) against a naive handler that
+    omits the relative_to containment guard, confirming the
+    regression contract is load-bearing.
+    """
+    import pdomain_ocr_labeler_spa.api.static_mounts as sm
+
+    # Build an isolated static dir under tmp_path with a known index.html.
+    static_dir = tmp_path / "static"
+    static_dir.mkdir()
+    index_content = b"<!doctype html><div id=root></div>"
+    (static_dir / "index.html").write_bytes(index_content)
+
+    # Place a "secret" file OUTSIDE static_dir — one level up.
+    # All traversal variants resolve to this file (or its parent level).
+    secret = tmp_path / "secret.txt"
+    secret.write_bytes(b"SECRET_CONTENT_OUTSIDE_FRONTEND_DIR")
+
+    # Point the SPA fallback at our controlled static_dir.
+    monkeypatch.setattr(sm, "_resolve_static_dir", lambda: static_dir)
+
+    app = build_app(settings)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.get(url_path)
+
+    # The secret file must NEVER appear in the response body.
+    assert b"SECRET_CONTENT_OUTSIDE_FRONTEND_DIR" not in r.content, (
+        f"Path traversal via {url_path!r} leaked content from outside "
+        f"the frontend directory. Response status={r.status_code}, "
+        f"content={r.content[:200]!r}"
+    )
+    # A 200 is valid only if the path resolved inside static_dir to a
+    # nonexistent file (falls through to index.html) — the secret-content
+    # assertion above is the primary load-bearing check.
+    if r.status_code == 200:
+        assert r.content == index_content, (
+            f"200 response for {url_path!r} must be the SPA shell, not "
+            f"outside-dir content: {r.content[:200]!r}"
+        )
+
+
+def test_spa_fallback_symlink_inside_static_pointing_outside_blocked(
+    settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SEC: a symlink inside static/ pointing outside MUST NOT leak the target.
+
+    .resolve() follows symlinks before the relative_to containment
+    check, so a symlink whose target is outside static_dir is caught by
+    the same guard as a ..-traversal — the resolved path escapes the
+    frontend dir and relative_to raises ValueError.
+    """
+    import os
+
+    import pdomain_ocr_labeler_spa.api.static_mounts as sm
+
+    static_dir = tmp_path / "static"
+    static_dir.mkdir()
+    (static_dir / "index.html").write_bytes(b"<!doctype html>")
+
+    # Create a secret file outside static_dir.
+    secret = tmp_path / "secret.txt"
+    secret.write_bytes(b"SECRET_SYMLINK_TARGET_OUTSIDE_FRONTEND")
+
+    # Create a symlink INSIDE static_dir that points at the outside secret.
+    evil_link = static_dir / "evil_link"
+    os.symlink(secret, evil_link)
+
+    monkeypatch.setattr(sm, "_resolve_static_dir", lambda: static_dir)
+
+    app = build_app(settings)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.get("/evil_link")
+
+    assert b"SECRET_SYMLINK_TARGET_OUTSIDE_FRONTEND" not in r.content, (
+        f"Symlink inside static/ leaked target content from outside the dir. "
+        f"status={r.status_code}, content={r.content[:200]!r}"
+    )
+
+
 # ── B-59: zip-imported wheel resolution ────────────────────────────────────
 
 
