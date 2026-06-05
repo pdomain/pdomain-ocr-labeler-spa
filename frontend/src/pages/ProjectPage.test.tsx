@@ -29,6 +29,7 @@ import { ROUTES } from "../lib/routes";
 import { dialogStore } from "../stores/dialog-store";
 import { useUiPrefs } from "../stores/ui-prefs";
 import { railStore } from "../stores/rail-store";
+import { clearSelection, selectLine } from "../stores/selection-store";
 
 // ─── IS-1: mock useNavigate ──────────────────────────────────────────────────
 const mockNavigate = vi.fn();
@@ -290,14 +291,17 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     expect(screen.getByTestId("save-project-button")).toBeInTheDocument();
   });
 
-  it("IS-4: ToolbarActionGrid is in hidden stubs (not visible canvas)", async () => {
+  it("GRID-1: ToolbarActionGrid is visible (not inside display:none subtree)", async () => {
+    // GRID-1: After Slice C the grid must be visible in the canvas column, not
+    // hidden inside the canvas-hidden-stubs wrapper.
     renderProjectPage();
-    // ToolbarActionGrid is kept in a hidden stub div for driver-contract §2.9.
     expect(await screen.findByTestId("toolbar-action-grid")).toBeInTheDocument();
-    // Confirm it is inside the hidden stubs container.
-    const stub = screen.getByTestId("toolbar-action-grid");
-    const stubContainer = stub.closest("[data-testid-stub='canvas-hidden-stubs']");
-    expect(stubContainer).not.toBeNull();
+    // Must NOT be inside the old canvas-hidden-stubs container.
+    const grid = screen.getByTestId("toolbar-action-grid");
+    const hiddenContainer = grid.closest("[data-testid-stub='canvas-hidden-stubs']");
+    expect(hiddenContainer, "grid must not be inside display:none stub container").toBeNull();
+    // The collapse toggle must be present.
+    expect(screen.getByTestId("toolbar-grid-collapse")).toBeInTheDocument();
   });
 
   it("IS-4: Splitter is removed from visible canvas", async () => {
@@ -675,6 +679,175 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       await waitFor(() => {
         expect(wl.getState().selectedLineIndex).toBe(0);
       });
+    });
+  });
+
+  // ── GRID-1/2/3: ToolbarActionGrid collapsible canvas bar (Slice C) ─────────
+
+  describe("GRID-1/2/3: ToolbarActionGrid visible collapsible bar", () => {
+    // Page fixture with one unvalidated line so cells can be enabled.
+    function gridPageFixture() {
+      return {
+        project_id: "p1",
+        page_index: 0,
+        page_record: {
+          page_index: 0,
+          page_number: 1,
+          image_path: "/data/p1/page_001.png",
+          page_source: "ocr",
+          ocr_failed: false,
+          rotation_degrees: 0,
+          rotation_source: null,
+        },
+        line_matches: [
+          {
+            line_index: 0,
+            paragraph_index: 0,
+            bbox: { x: 10, y: 10, width: 100, height: 20 },
+            overall_match_status: "mismatch",
+            is_fully_validated: false,
+            validated_word_count: 0,
+            total_word_count: 1,
+            word_matches: [
+              {
+                line_index: 0,
+                word_index: 0,
+                bbox: { x: 10, y: 10, width: 100, height: 20 },
+                ocr_text: "Hello",
+                gt_text: "Hello",
+                match_status: "exact",
+                is_validated: false,
+              },
+            ],
+          },
+        ],
+        selection: {
+          selection_mode: "line",
+          selected_paragraphs: [],
+          selected_lines: [],
+          selected_words: [],
+        },
+        encoded_dims: {
+          src_width: 1600,
+          src_height: 1200,
+          display_width: 800,
+          display_height: 600,
+          scale: 0.5,
+        },
+        line_filter: "all",
+        image_url: "/api/projects/p1/image/0",
+        generation: 1,
+        page_text_ocr: "Hello",
+        page_text_gt: "Hello",
+        extra: {},
+      };
+    }
+
+    beforeEach(() => {
+      clearSelection();
+      useUiPrefs.setState({
+        drawerOpen: true,
+        rightPanelOpen: true,
+        selectionMode: "line",
+        // Ensure collapsed flag is reset to default (expanded).
+        toolbarGridCollapsed: false,
+      } as Parameters<typeof useUiPrefs.setState>[0]);
+      server.use(
+        http.get("/api/projects/:pid", () =>
+          HttpResponse.json({
+            project: {
+              project_id: "p1",
+              project_root: "/data/p1",
+              image_paths: ["page_001.png"],
+              ground_truth_map: {},
+            },
+            current_page_index: 0,
+            generation: 1,
+          }),
+        ),
+        http.get("/api/projects/:pid/pages/:idx", () => HttpResponse.json(gridPageFixture())),
+        http.post("/api/projects/:pid/current-page-index", () => HttpResponse.json({})),
+      );
+    });
+
+    it("GRID-1: grid renders outside any display:none subtree and collapse toggle exists", async () => {
+      renderProjectPage();
+      await screen.findByTestId("project-page");
+      const grid = await screen.findByTestId("toolbar-action-grid");
+
+      // Must NOT be inside the old canvas-hidden-stubs container.
+      const hiddenContainer = grid.closest("[data-testid-stub='canvas-hidden-stubs']");
+      expect(hiddenContainer, "grid must not be inside hidden-stubs wrapper").toBeNull();
+
+      // Collapse toggle must be present.
+      expect(screen.getByTestId("toolbar-grid-collapse")).toBeInTheDocument();
+    });
+
+    it("GRID-2: clicking toolbar-grid-collapse toggles grid visibility", async () => {
+      renderProjectPage();
+      await screen.findByTestId("toolbar-action-grid");
+
+      // Default: expanded — grid is visible (not hidden by CSS).
+      const grid = screen.getByTestId("toolbar-action-grid");
+      // The grid must not have display:none on itself or a direct ancestor inside
+      // the collapsible container. We check the parent collapse-body wrapper.
+      const collapseBody = document.querySelector("[data-testid='toolbar-grid-body']");
+      // Before collapsing, the body wrapper should be present and not hidden.
+      expect(collapseBody).not.toBeNull();
+      expect(collapseBody).toBeVisible();
+      expect(grid).toBeVisible();
+
+      // Click collapse toggle to hide the grid.
+      fireEvent.click(screen.getByTestId("toolbar-grid-collapse"));
+      await waitFor(() => {
+        // After collapsing, the body is hidden (display:none or not rendered).
+        const body = document.querySelector("[data-testid='toolbar-grid-body']");
+        // Either removed from DOM or hidden.
+        if (body) {
+          expect(body).not.toBeVisible();
+        } else {
+          // Conditionally rendered — acceptable.
+          expect(body).toBeNull();
+        }
+      });
+
+      // Click again to expand.
+      fireEvent.click(screen.getByTestId("toolbar-grid-collapse"));
+      await waitFor(() => {
+        expect(screen.getByTestId("toolbar-action-grid")).toBeVisible();
+      });
+    });
+
+    it("GRID-3: clicking an enabled grid cell dispatches its mutation (grid now visible)", async () => {
+      const calls: { url: string; body: unknown }[] = [];
+      server.use(
+        http.post("/api/projects/:pid/pages/:idx/words/validate-batch", async ({ request }) => {
+          calls.push({ url: request.url, body: await request.json() });
+          return HttpResponse.json(gridPageFixture());
+        }),
+      );
+
+      renderProjectPage();
+      await screen.findByTestId("project-page");
+      // Wait for page data to settle so line_matches feed the grid.
+      await screen.findByTestId("toolbar-line-validate");
+
+      // Select line 0 so the line/validate cell becomes enabled.
+      selectLine(0);
+      await waitFor(() => {
+        // The cell should now be enabled (not disabled).
+        const cell = screen.getByTestId("toolbar-line-validate");
+        expect(cell).not.toBeDisabled();
+      });
+
+      // Grid is now visible — both fireEvent and userEvent would work.
+      fireEvent.click(screen.getByTestId("toolbar-line-validate"));
+
+      await waitFor(() => {
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+      });
+      expect(calls[0]!.url).toContain("/words/validate-batch");
+      expect(calls[0]!.body).toEqual(expect.objectContaining({ scope: "line", validated: true }));
     });
   });
 });

@@ -92,6 +92,11 @@ export interface UiPrefsState {
    * Default: "all" (no filtering).
    */
   matchFilterMode: "all" | "mismatches_only";
+  /**
+   * GRID-1 (Slice C): whether the ToolbarActionGrid collapsible bar is
+   * collapsed. Default: false (expanded/visible so CT sees it immediately).
+   */
+  toolbarGridCollapsed: boolean;
 }
 
 /** Clamp the splitter ratio to the spec-22 §9 range [0.2, 0.8]. */
@@ -181,6 +186,8 @@ const INITIAL_PREFS: UiPrefsState = {
   rightPanelOpen: true,
   theme: readPersistedTheme(),
   matchFilterMode: "all",
+  // GRID-1: default expanded so CT sees the grid immediately on first load.
+  toolbarGridCollapsed: false,
 };
 
 const _store = createStore<UiPrefsState>(() => ({ ...INITIAL_PREFS }));

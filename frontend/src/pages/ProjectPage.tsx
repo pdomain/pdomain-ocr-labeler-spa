@@ -898,27 +898,84 @@ export default function ProjectPage() {
       </div>
 
       {/*
+       * GRID-1 (Slice C): ToolbarActionGrid — visible collapsible bar.
+       *
+       * Previously hidden inside canvas-hidden-stubs. Now mounted visibly
+       * above the image-pane. All existing data-testids are preserved per
+       * driver-contract §2.9/§2.10. Collapsed state persisted in uiPrefs
+       * (toolbarGridCollapsed, default = false = expanded).
+       */}
+      <div className="shrink-0 border-b border-border-1 bg-bg-surface">
+        <div className="flex items-center justify-between px-2 py-0.5">
+          <span className="text-[11px] font-medium text-ink-2">Actions</span>
+          <button
+            data-testid="toolbar-grid-collapse"
+            aria-label={uiPrefs.toolbarGridCollapsed ? "Expand actions" : "Collapse actions"}
+            aria-expanded={!uiPrefs.toolbarGridCollapsed}
+            className="flex items-center justify-center rounded p-0.5 text-ink-3 hover:bg-bg-1 hover:text-ink-1"
+            onClick={() => {
+              useUiPrefs.setState({ toolbarGridCollapsed: !uiPrefs.toolbarGridCollapsed });
+              notifyUiPrefs();
+            }}
+          >
+            {uiPrefs.toolbarGridCollapsed ? (
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            ) : (
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <polyline points="18 15 12 9 6 15" />
+              </svg>
+            )}
+          </button>
+        </div>
+        {!uiPrefs.toolbarGridCollapsed && (
+          <div data-testid="toolbar-grid-body" className="px-1 pb-1">
+            <ToolbarActionGrid
+              selection={toolbarSelection}
+              pageData={toolbarPageData}
+              onAction={handleToolbarAction}
+              onApplyStyle={handleApplyStyle}
+              onClearStyle={handleClearStyle}
+              onApplyComponent={handleApplyComponent}
+              onClearComponent={handleClearComponent}
+              addWordActive={addWordActive}
+              onAddWordToggle={handleAddWordToggle}
+            />
+          </div>
+        )}
+      </div>
+
+      {/*
        * IS-4: Driver-contract testid preservation stubs.
        *
-       * §2.9/§2.10: ToolbarActionGrid testids (toolbar-{scope}-{action},
-       *   apply-style-select, etc.) must remain in DOM.
        * §2.7: TextTabs testids (text-tab-*, match-filter-*) must remain.
        * §2.8: WordMatchView per-line/per-word testids must remain.
        *
-       * All kept hidden; drivers select by data-testid not visibility.
+       * ToolbarActionGrid (§2.9/§2.10) is now visible above — no longer
+       * needs to live in this hidden container.
        */}
       <div style={{ display: "none" }} data-testid-stub="canvas-hidden-stubs">
-        <ToolbarActionGrid
-          selection={toolbarSelection}
-          pageData={toolbarPageData}
-          onAction={handleToolbarAction}
-          onApplyStyle={handleApplyStyle}
-          onClearStyle={handleClearStyle}
-          onApplyComponent={handleApplyComponent}
-          onClearComponent={handleClearComponent}
-          addWordActive={addWordActive}
-          onAddWordToggle={handleAddWordToggle}
-        />
         <div data-testid="text-pane">
           <TextTabs
             pageTextGt={pagePayload?.page_text_gt}
