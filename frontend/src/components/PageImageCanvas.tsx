@@ -85,7 +85,7 @@ import {
   selectBlock,
   selectPara,
   selectLine,
-  selectWord,
+  toggleWord,
 } from "../stores/selection-store";
 import {
   viewportStore,
@@ -565,8 +565,10 @@ export default function PageImageCanvas({
         } else if (railTarget === "line") {
           selectLine(Number(hit.id));
         } else {
+          // SEL-4/SEL-5: word clicks use modifier-aware toggleWord so
+          // Ctrl/Cmd accumulates across blocks and Shift removes.
           const parts = hit.id.split("-").map(Number);
-          selectWord(parts[0]!, parts[1]!);
+          toggleWord(parts[0]!, parts[1]!, modifier);
         }
         useUiPrefs.setState({ rightPanelOpen: true });
       }

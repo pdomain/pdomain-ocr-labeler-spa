@@ -87,7 +87,12 @@ import { useToolbarDispatch } from "../hooks/useToolbarDispatch";
 import { useMatchesHotkeys } from "../hooks/useMatchesHotkeys";
 import { useUiPrefs, type DrawerTab, type MatchFilter } from "../stores/ui-prefs";
 import { dialogStore, useDialogStore } from "../stores/dialog-store";
-import { selectionStore, clearSelection, type SelectionState } from "../stores/selection-store";
+import {
+  selectionStore,
+  clearSelection,
+  toggleWord,
+  type SelectionState,
+} from "../stores/selection-store";
 import { worklistStore } from "../stores/worklist-store";
 import { pageNoUrl } from "../lib/routes";
 
@@ -677,7 +682,10 @@ export default function ProjectPage() {
   // SEL-2: drag-box select handler. Receives the drag rect (display pixels)
   // from PageImageCanvas after a non-trivial drag in select mode. Computes
   // which words intersect the rect and sets selectedWords in selectionStore
-  // with REPLACE semantics (toggle/remove are Slice B).
+  // SEL-2 / Slice B: onBoxSelect with modifier-aware accumulation.
+  // replace → set all intersecting words (discard prior selection).
+  // toggle  → add words not yet selected, remove words already selected.
+  // remove  → remove all intersecting words from current selection.
   function handleBoxSelect(
     rect: { x: number; y: number; width: number; height: number },
     modifier: SelectionModifier,
@@ -685,21 +693,23 @@ export default function ProjectPage() {
     if (!pagePayload) return;
     const words = applyBoxSelect(pagePayload, rect, modifier);
     if (words.length === 0) {
-      clearSelection();
+      if (modifier === "replace") clearSelection();
       return;
     }
-    // REPLACE semantics: set all intersecting words at once.
-    // Use the first word as the primary path reference; multi-word
-    // accumulation (toggle/remove) is Slice B.
-    const [firstLine, firstWord] = words[0]!;
-    selectionStore.setState({
-      selectedParagraphs: [],
-      selectedLines: [],
-      selectedWords: words,
-      dragRect: null,
-      level: "word",
-      path: { lineId: firstLine, wordId: [firstLine, firstWord] },
-    });
+    // Apply toggleWord per word so accumulation logic is consistent with
+    // single-click (SEL-4/SEL-5 uses the same toggleWord primitive).
+    if (modifier === "replace") {
+      // First word replaces, subsequent words toggle-in (all new → add).
+      const [firstLine, firstWord] = words[0]!;
+      toggleWord(firstLine, firstWord, "replace");
+      for (let i = 1; i < words.length; i++) {
+        toggleWord(words[i]![0], words[i]![1], "toggle");
+      }
+    } else {
+      for (const [lineIdx, wordIdx] of words) {
+        toggleWord(lineIdx, wordIdx, modifier);
+      }
+    }
     useUiPrefs.setState({ rightPanelOpen: true });
   }
 
