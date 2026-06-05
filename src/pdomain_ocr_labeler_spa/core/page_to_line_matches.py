@@ -222,10 +222,16 @@ def _word_to_word_match(
         # ``is_validated`` — Word doesn't have a first-class field today;
         # falls back to the per-page ``validated_words`` sidecar map
         # maintained by the SPA's word-mutation layer (spec-23-C1).
-        # Here we just read the word_labels "validated" tag as the legacy
-        # labeler does (``pd_ocr_labeler/viewmodels/.../word_match_view_model.py:241``).
+        # Priority: (1) ``word.is_validated`` attribute set by toggle_validated
+        # (spec-23-C1 in-memory mutation path); (2) ``word_labels`` "validated"
+        # tag (legacy labeler path, pd_ocr_labeler/viewmodels/.../word_match_view_model.py:241).
+        # The attribute takes priority so toggle_validated changes are reflected
+        # immediately in the refreshed PayLoad without a round-trip to the store.
         word_labels: set[str] = set(getattr(word_obj, "word_labels", []) or [])
-        is_validated = "validated" in word_labels
+        _is_validated_attr = getattr(word_obj, "is_validated", None)
+        is_validated = (
+            bool(_is_validated_attr) if _is_validated_attr is not None else ("validated" in word_labels)
+        )
 
         text_style_labels: list[str] = list(getattr(word_obj, "text_style_labels", []) or [])
         word_components: list[str] = list(getattr(word_obj, "word_components", []) or [])

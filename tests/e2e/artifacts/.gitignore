@@ -1,0 +1,5 @@
+# Runtime screenshot artifacts from browser verification e2e tests.
+# These are generated locally by test_selection_operations_parity.py and
+# similar tests; do not commit.
+*
+!.gitignore
