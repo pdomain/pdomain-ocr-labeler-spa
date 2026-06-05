@@ -83,11 +83,24 @@ pdomain-ops = { index = "pdomain-index-pip" }
 [tool.hatch.version]
 source = "vcs"
 
+[tool.hatch.build]
+# Include the gitignored Vite build output in BOTH the sdist and the wheel.
+# The static/ directory is in .gitignore (generated artefact), so hatchling's
+# default VCS-based file selection would silently omit it. Setting `artifacts`
+# globally (not just in the wheel target) ensures:
+#   1. The sdist contains src/pdomain_ocr_labeler_spa/static/ (the built SPA).
+#   2. The wheel built from that sdist also includes the static files.
+# Without this, `uv build` (default: sdist then wheel-from-sdist) produces a
+# wheel with 0 frontend files even when artifacts is set only in the wheel
+# target, because hatchling builds the wheel in a non-git temp dir from the
+# sdist and applies the per-target artifact spec against that dir.
+artifacts = ["src/pdomain_ocr_labeler_spa/static/**/*"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/pdomain_ocr_labeler_spa"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/pdomain_ocr_labeler_spa/static" = "pdomain_ocr_labeler_spa/static"
+# The global `artifacts` above also covers this target; no additional per-wheel
+# force-include needed. force-include is intentionally omitted to avoid
+# duplicate-path ValueError (global artifacts + same-path force-include).
 
 # Local guard mirroring the CI check in `.github/workflows/release.yml`:
 # fail `uv build` / `hatch build` if the SPA bundle is missing, so the

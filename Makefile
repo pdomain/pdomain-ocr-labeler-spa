@@ -393,12 +393,16 @@ run: ## Build SPA if missing, then serve via pdomain-ocr-labeler-ui (production-
 	fi
 	uv run pdomain-ocr-labeler-ui
 
-build: frontend-build ## Build the wheel (with frontend bundled)
-	# `--wheel` skips the sdist step. The build hook in
-	# build_hooks/spa_check.py refuses to build a wheel without
-	# src/pdomain_ocr_labeler_spa/static/index.html, and that directory is
-	# .gitignore'd — so the default `uv build` (sdist -> wheel-from-sdist)
-	# fails because the unpacked sdist has no SPA. Wheel-only is supported.
+build: frontend-build ## Build the wheel and sdist (with frontend bundled)
+	# Build sdist and wheel as separate explicit commands — NOT bare `uv build`.
+	# Bare `uv build` (default) builds the wheel from the sdist in a temporary
+	# non-git directory. In that path, hatchling only honours `artifacts` set at
+	# the global [tool.hatch.build] table; a wheel-target-only artifacts spec is
+	# silently dropped, producing a wheel with 0 frontend files. Explicitly
+	# building both from the source tree avoids this failure mode entirely.
+	# The sdist also ships the built SPA (via global artifacts) so that
+	# downstream pipelines using wheel-from-sdist still work.
+	uv build --sdist
 	uv build --wheel
 
 clean: ## Clean cache + build artifacts
