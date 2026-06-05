@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RightPanel } from "./RightPanel";
 import {
   clearSelection,
@@ -13,6 +14,17 @@ import {
   selectWord,
 } from "../../stores/selection-store";
 import type { components } from "../../api/types";
+
+function makeQueryClient() {
+  return new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+}
+
+function renderWithQuery(ui: React.ReactElement) {
+  const qc = makeQueryClient();
+  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+}
 
 type PagePayload = components["schemas"]["PagePayload"];
 
@@ -80,20 +92,18 @@ describe("RightPanel (Slice 14)", () => {
     expect(screen.getByTestId("right-panel-body")).toHaveAttribute("data-level", "block");
   });
 
-  it("body data-level=para shows 'Coming soon' placeholder", () => {
+  it("body data-level=para has correct data-level attribute", () => {
     selectPara(0);
     render(<RightPanel page={makePage()} />);
     const body = screen.getByTestId("right-panel-body");
     expect(body).toHaveAttribute("data-level", "para");
-    expect(body).toHaveTextContent(/coming soon/i);
   });
 
-  it("body data-level=line shows 'Coming soon' placeholder", () => {
+  it("body data-level=line has correct data-level attribute", () => {
     selectLine(0);
     render(<RightPanel page={makePage()} />);
     const body = screen.getByTestId("right-panel-body");
     expect(body).toHaveAttribute("data-level", "line");
-    expect(body).toHaveTextContent(/coming soon/i);
   });
 
   it("body data-level=word renders the word slot when provided", () => {
@@ -109,12 +119,11 @@ describe("RightPanel (Slice 14)", () => {
     expect(screen.getByTestId("word-detail-stub")).toBeInTheDocument();
   });
 
-  it("body data-level=word with no slot falls back to placeholder", () => {
+  it("body data-level=word has correct data-level attribute", () => {
     selectWord(0, 0);
     render(<RightPanel page={makePage()} />);
     const body = screen.getByTestId("right-panel-body");
     expect(body).toHaveAttribute("data-level", "word");
-    expect(body).toHaveTextContent(/coming soon|word/i);
   });
 
   it("collapse button calls onCollapse when clicked", async () => {
@@ -123,5 +132,53 @@ describe("RightPanel (Slice 14)", () => {
     render(<RightPanel page={makePage()} onCollapse={onCollapse} />);
     await user.click(screen.getByTestId("right-panel-collapse"));
     expect(onCollapse).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── STB-5: No placeholder for implemented levels ────────────────────────────
+
+describe("STB-5: RightPanel never shows placeholder for implemented levels", () => {
+  beforeEach(() => {
+    clearSelection();
+  });
+
+  it("level=none still shows the placeholder", () => {
+    renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
+    expect(screen.getByTestId("right-panel-placeholder")).toBeInTheDocument();
+  });
+
+  it("level=line does NOT show the placeholder (renders LineDetail)", () => {
+    selectLine(0);
+    renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
+    expect(screen.queryByTestId("right-panel-placeholder")).toBeNull();
+    expect(screen.getByTestId("line-detail")).toBeInTheDocument();
+  });
+
+  it("level=block does NOT show the placeholder (renders BlockDetail)", () => {
+    selectBlock("b1");
+    renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
+    expect(screen.queryByTestId("right-panel-placeholder")).toBeNull();
+    expect(screen.getByTestId("block-detail")).toBeInTheDocument();
+  });
+
+  it("level=para does NOT show the placeholder (renders ParagraphDetail)", () => {
+    selectPara(0);
+    renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
+    expect(screen.queryByTestId("right-panel-placeholder")).toBeNull();
+    expect(screen.getByTestId("paragraph-detail")).toBeInTheDocument();
+  });
+
+  it("level=word with wordSlot does NOT show the placeholder", () => {
+    selectWord(0, 0);
+    renderWithQuery(
+      <RightPanel
+        page={makePage()}
+        projectId="p1"
+        pageIndex={0}
+        wordSlot={<div data-testid="word-slot-stub">word content</div>}
+      />,
+    );
+    expect(screen.queryByTestId("right-panel-placeholder")).toBeNull();
+    expect(screen.getByTestId("word-slot-stub")).toBeInTheDocument();
   });
 });

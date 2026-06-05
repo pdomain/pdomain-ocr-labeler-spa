@@ -6,11 +6,12 @@
 //   barrel to provide a test-friendly WordList that renders all items
 //   synchronously, identical to the react-konva mocking pattern.
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Worklist } from "./Worklist";
 import { worklistStore } from "../../stores/worklist-store";
+import { useUiPrefs } from "../../stores/ui-prefs";
 import type { components } from "../../api/types";
 import type { WordRowProps } from "@pdomain/pdomain-ui/worklist";
 
@@ -424,5 +425,48 @@ describe("WorklistRow bridge", () => {
     render(<Worklist lineMatches={lineMatches} projectId="proj-1" pageIndex={0} />);
     await user.click(screen.getByTestId("worklist-row-checkbox-5"));
     expect(selectLine).not.toHaveBeenCalled();
+  });
+});
+
+// ─── STB-4: row click opens right panel ──────────────────────────────────────
+
+describe("STB-4: Worklist row click sets rightPanelOpen=true", () => {
+  beforeEach(() => {
+    worklistStore.reset();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    // Restore default so other tests are not affected.
+    useUiPrefs.setState({ rightPanelOpen: true });
+  });
+
+  it("clicking a row sets useUiPrefs.rightPanelOpen=true even when it was false", async () => {
+    // Collapse the panel first.
+    useUiPrefs.setState({ rightPanelOpen: false });
+    expect(useUiPrefs.getState().rightPanelOpen).toBe(false);
+
+    const user = userEvent.setup();
+    const lines = makeLines([{ line_index: 0, is_fully_validated: false }]);
+    render(<Worklist lineMatches={lines} projectId="proj-1" pageIndex={0} />);
+
+    worklistStore.setActiveFilter("all");
+    // Re-render with updated filter
+    render(<Worklist lineMatches={lines} projectId="proj-1" pageIndex={0} />);
+
+    await user.click(screen.getAllByTestId("worklist-row-0")[0]);
+    expect(useUiPrefs.getState().rightPanelOpen).toBe(true);
+  });
+
+  it("clicking a row keeps rightPanelOpen=true when already open", async () => {
+    useUiPrefs.setState({ rightPanelOpen: true });
+
+    const user = userEvent.setup();
+    const lines = makeLines([{ line_index: 0, is_fully_validated: false }]);
+    worklistStore.setActiveFilter("all");
+    render(<Worklist lineMatches={lines} projectId="proj-1" pageIndex={0} />);
+
+    await user.click(screen.getByTestId("worklist-row-0"));
+    expect(useUiPrefs.getState().rightPanelOpen).toBe(true);
   });
 });

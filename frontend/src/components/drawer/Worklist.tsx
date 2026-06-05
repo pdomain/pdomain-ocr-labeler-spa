@@ -25,6 +25,7 @@ import type { components } from "../../api/types";
 import { cn } from "@/lib/utils";
 import { worklistStore, type MatchFilter, type WorklistSort } from "../../stores/worklist-store";
 import { selectLine } from "../../stores/selection-store";
+import { useUiPrefs } from "../../stores/ui-prefs";
 import { filterLines } from "../../lib/filter-predicates";
 import { StatusPip } from "../ui/StatusPip";
 import { BulkActions } from "./BulkActions";
@@ -423,6 +424,8 @@ export function Worklist({ lineMatches = [], projectId, pageIndex }: WorklistPro
               if (!item) return;
               worklistStore.setSelectedLineIndex(item._lineMatch.line_index);
               selectLine(item._lineMatch.line_index);
+              // STB-4: reveal the right panel when collapsed so operations are visible.
+              useUiPrefs.setState({ rightPanelOpen: true });
             }}
             aria-label="Line worklist queue"
             className="h-full"
