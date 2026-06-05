@@ -18,7 +18,8 @@ describe("ui-prefs store", () => {
         word: true,
       },
       splitterRatio: 0.5,
-      selectionMode: "paragraph",
+      // SEL-3: default is "word" to match railStore.target default.
+      selectionMode: "word",
       matchFilter: "unvalidated",
     });
   });
@@ -34,7 +35,8 @@ describe("ui-prefs store", () => {
         word: true,
       });
       expect(store.splitterRatio).toBe(0.5);
-      expect(store.selectionMode).toBe("paragraph");
+      // SEL-3: selectionMode default is "word" (matches railStore.target default).
+      expect(store.selectionMode).toBe("word");
       expect(store.matchFilter).toBe("unvalidated");
     });
   });
@@ -206,8 +208,8 @@ describe("ui-prefs store", () => {
       expect(useUiPrefs.getState().selectionMode).toBe("word");
     });
 
-    it("defaults to paragraph mode", () => {
-      expect(useUiPrefs.getState().selectionMode).toBe("paragraph");
+    it("defaults to word mode (SEL-3: matches railStore.target default)", () => {
+      expect(useUiPrefs.getState().selectionMode).toBe("word");
     });
   });
 

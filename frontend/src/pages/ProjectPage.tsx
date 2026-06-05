@@ -81,6 +81,7 @@ import {
 import { displayToSrc } from "../lib/coords";
 import { applyBoxSelect } from "../lib/box-select-handler";
 import type { SelectionModifier } from "../components/PageImageCanvas";
+import { railStore } from "../stores/rail-store";
 import { useGlobalHotkeys } from "../hooks/useGlobalHotkeys";
 import { useToolbarDispatch } from "../hooks/useToolbarDispatch";
 import { useMatchesHotkeys } from "../hooks/useMatchesHotkeys";
@@ -828,6 +829,11 @@ export default function ProjectPage() {
       }}
       onSelectionModeChange={(mode) => {
         useUiPrefs.setState({ selectionMode: mode });
+        // SEL-3: keep railStore.target in sync so the canvas reads the same
+        // granularity as the header radios. "paragraph" maps to "para" since
+        // the rail uses the canonical RailTarget names.
+        const railTarget = mode === "paragraph" ? "para" : (mode as "line" | "word");
+        railStore.getState().setTarget(railTarget);
         // Same bridge as onLayerToggle: notify so the selection-mode radio
         // re-renders to reflect the new mode. (M-Final V4.)
         notifyUiPrefs();

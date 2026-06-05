@@ -172,7 +172,9 @@ const INITIAL_PREFS: UiPrefsState = {
     word: true,
   },
   splitterRatio: 0.5,
-  selectionMode: "paragraph",
+  // SEL-3: default matches railStore.target default ("word") so both
+  // controls agree on the initial granularity without localStorage reads.
+  selectionMode: "word",
   matchFilter: "unvalidated",
   drawerOpen: true,
   drawerTab: "worklist",

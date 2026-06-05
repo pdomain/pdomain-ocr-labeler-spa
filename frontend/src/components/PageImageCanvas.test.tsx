@@ -435,7 +435,8 @@ afterEach(() => {
     lineFilter: null,
     layerVisibility: { block: true, paragraph: true, line: true, word: true },
     splitterRatio: 0.5,
-    selectionMode: "paragraph",
+    // SEL-3: default is "word" (matches railStore.target default).
+    selectionMode: "word",
     matchFilter: "unvalidated",
     rightPanelOpen: false,
   });

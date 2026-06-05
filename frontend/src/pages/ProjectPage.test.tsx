@@ -28,6 +28,7 @@ import { server } from "../test/server";
 import { ROUTES } from "../lib/routes";
 import { dialogStore } from "../stores/dialog-store";
 import { useUiPrefs } from "../stores/ui-prefs";
+import { railStore } from "../stores/rail-store";
 
 // ─── IS-1: mock useNavigate ──────────────────────────────────────────────────
 const mockNavigate = vi.fn();
@@ -594,6 +595,53 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
         expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
       });
       expect(rematchCalls.length).toBe(0);
+    });
+  });
+
+  // ── SEL-3: selection-mode radios set railStore.target (single source of truth) ─
+
+  describe("SEL-3: header selection-mode radios set railStore.target", () => {
+    beforeEach(() => {
+      // Reset rail store and uiPrefs to defaults before each SEL-3 test.
+      railStore.reset();
+      localStorage.clear();
+      useUiPrefs.setState({ selectionMode: "word" });
+    });
+
+    it("uiPrefs.selectionMode default is 'word' (matches railStore.target default)", () => {
+      // Both stores must agree on the default so the UI is consistent at load.
+      expect(useUiPrefs.getState().selectionMode).toBe("word");
+      expect(railStore.getState().target).toBe("word");
+    });
+
+    it("clicking selection-mode-line radio sets railStore.target to 'line'", async () => {
+      renderProjectPage();
+      await screen.findByTestId("selection-mode-line");
+
+      fireEvent.click(screen.getByTestId("selection-mode-line"));
+
+      expect(railStore.getState().target).toBe("line");
+    });
+
+    it("clicking selection-mode-paragraph radio sets railStore.target to 'para'", async () => {
+      renderProjectPage();
+      await screen.findByTestId("selection-mode-paragraph");
+
+      fireEvent.click(screen.getByTestId("selection-mode-paragraph"));
+
+      expect(railStore.getState().target).toBe("para");
+    });
+
+    it("clicking selection-mode-word radio sets railStore.target to 'word'", async () => {
+      // Start from "line" selection mode to confirm clicking word changes target.
+      // (Clicking an already-checked radio does not re-fire onChange in jsdom.)
+      useUiPrefs.setState({ selectionMode: "line" });
+      renderProjectPage();
+      await screen.findByTestId("selection-mode-word");
+
+      fireEvent.click(screen.getByTestId("selection-mode-word"));
+
+      expect(railStore.getState().target).toBe("word");
     });
   });
 
