@@ -1002,20 +1002,21 @@ describe("PageImageCanvas — selection layer rendering (spec-21-A5, #300)", () 
   });
 
   it("selected line populates bbox-overlay-selection-lines with item-count=1 and a Rect with stroke width 3 (acceptance criterion)", () => {
-    const page = makePage(
-      [
-        makeLine(0, 0, [
-          { x: 10, y: 20, width: 30, height: 5 },
-          { x: 45, y: 20, width: 20, height: 5 },
-        ]),
-      ],
-      {
-        selection_mode: "line",
-        selected_paragraphs: [],
-        selected_lines: [0],
-        selected_words: [],
-      },
-    );
+    // SEL-1: highlight derives from selectionStore, not page.selection.
+    const page = makePage([
+      makeLine(0, 0, [
+        { x: 10, y: 20, width: 30, height: 5 },
+        { x: 45, y: 20, width: 20, height: 5 },
+      ]),
+    ]);
+    selectionStore.setState({
+      selectedParagraphs: [],
+      selectedLines: [0],
+      selectedWords: [],
+      dragRect: null,
+      level: "line",
+      path: { lineId: 0 },
+    });
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
 
     const sidecar = screen.getByTestId("bbox-overlay-selection-lines");
@@ -1031,11 +1032,15 @@ describe("PageImageCanvas — selection layer rendering (spec-21-A5, #300)", () 
   });
 
   it("selected word populates bbox-overlay-selection-words with item-count=1", () => {
-    const page = makePage([makeLine(0, 0, [{ x: 10, y: 20, width: 30, height: 5 }])], {
-      selection_mode: "word",
-      selected_paragraphs: [],
-      selected_lines: [],
-      selected_words: [[0, 0]],
+    // SEL-1: highlight derives from selectionStore, not page.selection.
+    const page = makePage([makeLine(0, 0, [{ x: 10, y: 20, width: 30, height: 5 }])]);
+    selectionStore.setState({
+      selectedParagraphs: [],
+      selectedLines: [],
+      selectedWords: [[0, 0]],
+      dragRect: null,
+      level: "word",
+      path: { lineId: 0, wordId: [0, 0] },
     });
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
     expect(screen.getByTestId("bbox-overlay-selection-words").getAttribute("data-item-count")).toBe(
@@ -1044,11 +1049,15 @@ describe("PageImageCanvas — selection layer rendering (spec-21-A5, #300)", () 
   });
 
   it("selected paragraph populates bbox-overlay-selection-paragraphs with item-count=1", () => {
-    const page = makePage([makeLine(0, 0, [{ x: 10, y: 20, width: 30, height: 5 }])], {
-      selection_mode: "paragraph",
-      selected_paragraphs: [0],
-      selected_lines: [],
-      selected_words: [],
+    // SEL-1: highlight derives from selectionStore, not page.selection.
+    const page = makePage([makeLine(0, 0, [{ x: 10, y: 20, width: 30, height: 5 }])]);
+    selectionStore.setState({
+      selectedParagraphs: [0],
+      selectedLines: [],
+      selectedWords: [],
+      dragRect: null,
+      level: "para",
+      path: { paraId: 0 },
     });
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
     expect(
@@ -1357,5 +1366,87 @@ describe("PageImageCanvas — zoom controls (P5.d)", () => {
   it("zoom controls are not rendered in empty-state viewport", () => {
     render(<PageImageCanvas imageUrl="" encoded={null} />);
     expect(screen.queryByTestId("canvas-zoom-controls")).toBeNull();
+  });
+});
+
+// ── SEL-1: Selection highlight derives from selectionStore, not page.selection ─
+//
+// The canvas must derive the selection-highlight overlay from the local
+// selectionStore (selectedWords/Lines/Paragraphs) rather than from
+// page.selection (the server round-trip field). Clicking a word sets the
+// store synchronously → highlight must appear with zero network calls.
+
+describe("PageImageCanvas — SEL-1: highlight derived from selectionStore not page.selection", () => {
+  it("word selected in selectionStore renders selection-words overlay (count=1) even when page.selection is absent", () => {
+    const line = makeLine(0, 0, [{ x: 10, y: 20, width: 30, height: 5 }]);
+    const page = makePage([line], undefined);
+
+    // Store has word selected; page.selection is absent.
+    selectionStore.setState({
+      selectedParagraphs: [],
+      selectedLines: [],
+      selectedWords: [[0, 0]],
+      dragRect: null,
+      level: "word",
+      path: { lineId: 0, wordId: [0, 0] },
+    });
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+
+    expect(screen.getByTestId("bbox-overlay-selection-words").getAttribute("data-item-count")).toBe(
+      "1",
+    );
+    // paragraphs and lines must be empty
+    expect(
+      screen.getByTestId("bbox-overlay-selection-paragraphs").getAttribute("data-item-count"),
+    ).toBe("0");
+    expect(screen.getByTestId("bbox-overlay-selection-lines").getAttribute("data-item-count")).toBe(
+      "0",
+    );
+  });
+
+  it("line selected in selectionStore renders selection-lines overlay (count=1) with no page.selection", () => {
+    const line = makeLine(0, 0, [
+      { x: 10, y: 20, width: 30, height: 5 },
+      { x: 45, y: 20, width: 20, height: 5 },
+    ]);
+    const page = makePage([line], undefined);
+
+    selectionStore.setState({
+      selectedParagraphs: [],
+      selectedLines: [0],
+      selectedWords: [],
+      dragRect: null,
+      level: "line",
+      path: { lineId: 0 },
+    });
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+
+    expect(screen.getByTestId("bbox-overlay-selection-lines").getAttribute("data-item-count")).toBe(
+      "1",
+    );
+    expect(screen.getByTestId("bbox-overlay-selection-words").getAttribute("data-item-count")).toBe(
+      "0",
+    );
+  });
+
+  it("page.selection fields are ignored: setting page.selection without store shows NO highlight", () => {
+    // page.selection has a word selected, but selectionStore is empty.
+    // After SEL-1 the overlay must be empty.
+    const page = makePage([makeLine(0, 0, [{ x: 10, y: 20, width: 30, height: 5 }])], {
+      selection_mode: "word",
+      selected_paragraphs: [],
+      selected_lines: [],
+      selected_words: [[0, 0]],
+    });
+
+    // selectionStore is already reset to empty by afterEach.
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+
+    expect(screen.getByTestId("bbox-overlay-selection-words").getAttribute("data-item-count")).toBe(
+      "0",
+    );
   });
 });

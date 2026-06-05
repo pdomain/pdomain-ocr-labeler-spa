@@ -52,6 +52,37 @@ function unionBBoxes(bboxes: readonly BBox[]): BBox | null {
 }
 
 /**
+ * Expand selection-store state (selectedWords/Lines/Paragraphs) into BBoxItem
+ * arrays for each overlay layer — the SEL-1 replacement for `expandSelection`.
+ *
+ * Unlike `expandSelection` which reads from `page.selection` (server state),
+ * this reads from the local selectionStore so highlights appear with no
+ * network round-trip.
+ *
+ * Pure: no DOM, no React, no side effects other than `console.warn`.
+ */
+export function expandFromStore(
+  storeState: {
+    selectedParagraphs: number[];
+    selectedLines: number[];
+    selectedWords: [number, number][];
+  },
+  page: PagePayload,
+): ExpandedSelection {
+  // Build a synthetic selection object that matches the shape expandSelection reads.
+  const syntheticPage: PagePayload = {
+    ...page,
+    selection: {
+      selection_mode: "word",
+      selected_paragraphs: storeState.selectedParagraphs,
+      selected_lines: storeState.selectedLines,
+      selected_words: storeState.selectedWords,
+    },
+  };
+  return expandSelection(syntheticPage);
+}
+
+/**
  * Expand a `PagePayload.selection` into BBoxItem arrays for each overlay layer.
  *
  * Pure: no DOM, no React, no side effects other than `console.warn` for

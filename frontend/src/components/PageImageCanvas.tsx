@@ -74,7 +74,7 @@ import {
 import type { components } from "../api/types";
 import { getStageDimensions, type EncodedDims } from "../lib/canvas-utils";
 import type { BBox } from "../lib/coords";
-import { expandSelection } from "../lib/selection-expand";
+import { expandFromStore } from "../lib/selection-expand";
 import { BBoxOverlay, type BBoxItem } from "./BBoxOverlay";
 import { scheduleDragUpdate } from "../lib/rafSchedule";
 import { readCssToken, hexToRgba } from "../hooks/useLayerColors";
@@ -357,13 +357,24 @@ export default function PageImageCanvas({
     return unsub;
   }, []);
 
-  // Track selected word count for bulk-actions strip (P5.d).
-  const [selectedWordCount, setSelectedWordCount] = useState(
-    () => selectionStore.getState().selectedWords.length,
-  );
+  // SEL-1: Subscribe to selectionStore for both bulk-action count and highlight overlay.
+  const [selectionState, setSelectionState] = useState(() => {
+    const s = selectionStore.getState();
+    return {
+      selectedWords: s.selectedWords,
+      selectedLines: s.selectedLines,
+      selectedParagraphs: s.selectedParagraphs,
+    };
+  });
+  // Derived for backward-compat callers that still use selectedWordCount.
+  const selectedWordCount = selectionState.selectedWords.length;
   useEffect(() => {
     return selectionStore.subscribe((s) => {
-      setSelectedWordCount(s.selectedWords.length);
+      setSelectionState({
+        selectedWords: s.selectedWords,
+        selectedLines: s.selectedLines,
+        selectedParagraphs: s.selectedParagraphs,
+      });
     });
   }, []);
 
@@ -387,17 +398,18 @@ export default function PageImageCanvas({
     });
   }, []);
 
-  // Spec §4/§8 (spec-21-A5, #300): expand PagePayload.selection into
-  // per-layer BBoxItem arrays for the `selection` Konva layer.
+  // SEL-1: Derive selection highlight overlay from selectionStore (local state),
+  // not from page.selection (server round-trip). Clicking a word sets the store
+  // synchronously → highlight appears with no network round-trip.
   const expandedSelection = useMemo(() => {
     if (!page) return { paragraphs: [], lines: [], words: [] };
-    const e = expandSelection(page);
+    const e = expandFromStore(selectionState, page);
     return {
       paragraphs: markSelected(itemsToDisplay(e.paragraphs, encoded)),
       lines: markSelected(itemsToDisplay(e.lines, encoded)),
       words: markSelected(itemsToDisplay(e.words, encoded)),
     };
-  }, [page, encoded]);
+  }, [page, encoded, selectionState]);
 
   // Issue #295: Word bbox overlay items for the overlay-words layer.
   const wordOverlayItems = useMemo<BBoxItem[]>(() => {
