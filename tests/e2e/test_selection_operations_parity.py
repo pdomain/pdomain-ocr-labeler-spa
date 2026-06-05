@@ -20,6 +20,7 @@ Spec reference: docs/specs/2026-06-05-selection-operations-parity.md
 
 from __future__ import annotations
 
+import contextlib
 import json
 import socket
 import struct
@@ -372,6 +373,83 @@ def _save_screenshot(page: Page, name: str) -> Path:
     return path
 
 
+def _fetch_encoded_dims(base_url: str) -> tuple[float, float]:
+    """Return (display_width, scale) from the encoded_dims of page 0."""
+    r = httpx.get(f"{base_url}/api/projects/{_PROJECT_ID}/pages/0", timeout=10)
+    assert r.status_code == 200
+    encoded = r.json().get("encoded_dims")
+    assert encoded is not None, (
+        "page payload must carry encoded_dims — check EncodedDims.from_source_dims in the pages endpoint"
+    )
+    return float(encoded["display_width"]), float(encoded["scale"])
+
+
+def _assert_multi_word_detail(
+    page: Page,
+    *,
+    ox0: float,
+    oy0: float,
+    ox1: float,
+    oy1: float,
+    pre_box: dict,
+    post_box: dict,
+    bbox0: dict,
+    bbox1: dict,
+    scale: float,
+    display_width: float,
+    lm0: dict,
+    lm1: dict,
+    line0_text: str,
+    line1_text: str,
+) -> None:
+    """Assert MultiWordDetail is visible; fail with a precise BUG report if not."""
+    multi = page.locator('[data-testid="multi-word-detail"]').first
+    try:
+        multi.wait_for(state="visible", timeout=8_000)
+    except Exception:
+        current_html = ""
+        with contextlib.suppress(Exception):
+            current_html = page.locator('[data-testid="right-panel-body"]').inner_html(timeout=2_000)
+        selected_words_count = page.evaluate(
+            """() => {
+                const el = document.querySelector('[data-testid^="multi-word-"]');
+                return el ? 'multi-word present but not visible' : 'no multi-word element';
+            }"""
+        )
+        pytest.fail(
+            "MUL BUG: Ctrl-click word 1 did NOT produce multi-word-detail.\n"
+            f"  Word 0 click: offset ({ox0:.1f}, {oy0:.1f}) in pre_box={pre_box}, bbox0={bbox0}.\n"
+            f"  Word 1 Ctrl-click: offset ({ox1:.1f}, {oy1:.1f}) in post_box={post_box}, bbox1={bbox1}.\n"
+            f"  scale={scale}, display_width={display_width}.\n"
+            f"  RightPanel body HTML: {current_html[:400]!r}\n"
+            f"  multi-word probe: {selected_words_count}\n"
+            "  Suspected cause: modifier not passed to Konva event, or "
+            "additive toggleWord not accumulating across blocks in production build.\n"
+            "  Check: PageImageCanvas.tsx resolveModifier (ctrlKey path), "
+            "selection-store.ts toggleWord mode='toggle'."
+        )
+
+    block_groups = page.locator('[data-testid^="multi-word-block-"]')
+    block_count = block_groups.count()
+    assert block_count >= 2, (
+        f"multi-word-detail should show >=2 block groups, got {block_count}. "
+        f"block_index of lm0={lm0.get('block_index')}, lm1={lm1.get('block_index')}. "
+        "MultiWordDetail.tsx may not be grouping by block_index correctly."
+    )
+
+    panel_text = multi.inner_text()
+
+    def _text_in(needle: str, haystack: str) -> bool:
+        return needle in haystack or (len(needle) > 5 and needle[:15] in haystack)
+
+    assert _text_in(line0_text, panel_text), (
+        f"ocr_line_text {line0_text!r} not found in multi-word-detail.\nPanel text: {panel_text!r}"
+    )
+    assert _text_in(line1_text, panel_text), (
+        f"ocr_line_text {line1_text!r} not found in multi-word-detail.\nPanel text: {panel_text!r}"
+    )
+
+
 # ─── Tests ────────────────────────────────────────────────────────────────────
 
 pytestmark = pytest.mark.e2e
@@ -426,85 +504,106 @@ def test_mul1_2_cross_block_multi_select_shows_both_blocks(
     sel_server: SelServer,
     page: Page,
 ) -> None:
-    """MUL-1/2: selecting words from two different blocks shows both block groups
-    in multi-word-detail, each with their line's ocr_line_text.
+    """MUL-1/2: real Ctrl-click cross-block multi-select shows both block groups.
 
-    Strategy: inject a two-word cross-block selection directly via the Zustand
-    store API (window.__ZUSTAND_STORES__.selection.getState().toggleWord) if
-    available.  If the store bridge isn't exposed, fall back to directly
-    manipulating the React fiber tree.  If neither is available, skip with a
-    clear reason (the multi-word view IS verified by unit tests).
+    Acceptance bar (CT requirement):
+    - "when I select words that roll up to different blocks I should SEE them all"
+    - "include the line"
+
+    Strategy: drive REAL user-path clicks on the Konva image canvas.
+      1. Plain-click word 0 (block 0) → toggleWord(li0, wi0, "replace").
+      2. Ctrl-click word 1 (block 1) → toggleWord(li1, wi1, "toggle").
+      3. selectedWords.length > 1 → RightPanel renders MultiWordDetail.
+      4. Assert multi-word-detail, >=2 block groups, both ocr_line_text values.
+
+    Coordinate math mirrors test_image_click_selection.py:
+      fit_scale = konvajs_content_box["width"] / encoded["display_width"]
+      offset_x = (bbox["x"] * scale + bbox["width"] * scale / 2) * fit_scale
+      offset_y = (bbox["y"] * scale + bbox["height"] * scale / 2) * fit_scale
+
+    For step 1 we use page.mouse.click(abs_x, abs_y); for step 2 we re-read
+    konvajs-content box (layout shifts after right panel opens) and use
+    locator.click(position=..., modifiers=['Control']) — the only Playwright
+    API that reliably delivers ctrlKey=True to the Konva container div in
+    headless Chromium.
+
+    If the plain-click or Ctrl-click does NOT produce multi-word-detail, the test
+    fails with a precise BUG report rather than claiming success.
     """
+    # ── API: confirm two-block fixture and fetch encoded_dims ─────────────────
     lm0, lm1 = _verify_fixture_two_blocks(sel_server.base_url)
-    w0 = lm0["word_matches"][0]
-    w1 = lm1["word_matches"][0]
-    li0, wi0 = w0["line_index"], w0["word_index"]
-    li1, wi1 = w1["line_index"], w1["word_index"]
+    display_width, scale = _fetch_encoded_dims(sel_server.base_url)
     line0_text = lm0.get("ocr_line_text", "")
     line1_text = lm1.get("ocr_line_text", "")
+    bbox0 = lm0["word_matches"][0]["bbox"]
+    bbox1 = lm1["word_matches"][0]["bbox"]
 
     _goto_project_page(page, sel_server.project_url)
 
-    # Try to inject the two-word selection via the Zustand store dev bridge.
-    result = page.evaluate(
-        """([li0, wi0, li1, wi1]) => {
-            // Attempt 1: __ZUSTAND_STORES__ bridge (Vite dev mode).
-            const stores = window.__ZUSTAND_STORES__;
-            if (stores && stores.selection) {
-                const s = stores.selection.getState();
-                if (typeof s.toggleWord === 'function') {
-                    s.toggleWord(li0, wi0, 'replace');
-                    s.toggleWord(li1, wi1, 'toggle');
-                    return 'via-zustand';
-                }
-            }
-            // Attempt 2: walk React DevTools hook.
-            // In production builds there's no easy bridge; skip gracefully.
-            return 'not-found';
-        }""",
-        [li0, wi0, li1, wi1],
-    )
+    # ── Locate the Konva container div (Konva event-binding target) ───────────
+    # Playwright's locator.click(modifiers=[...]) dispatches a PointerEvent with
+    # ctrlKey=True on this element; page.keyboard.down("Control") + mouse.click()
+    # produces ZERO events (browser intercepts Ctrl+click at the OS layer).
+    konva_content = page.locator(".konvajs-content").first
+    konva_content.wait_for(state="visible", timeout=10_000)
 
-    if result != "via-zustand":
-        # The store bridge is not available in this build configuration.
-        # The multi-word view functionality is verified by Vitest unit tests.
-        # Document the limitation and skip.
-        pytest.skip(
-            "MUL-1/2: Zustand store bridge not available in this build configuration "
-            "(window.__ZUSTAND_STORES__ not set by Vite production bundle). "
-            "Multi-word-detail unit tests cover the view; "
-            "to manually verify: open the app in dev mode and Ctrl+click words from 2 blocks."
+    # Capture bounding box BEFORE step 1.  Step 1 opens the right panel, narrowing
+    # the canvas, so we re-read the box after step 1 for the Ctrl-click offset.
+    pre_box = konva_content.bounding_box()
+    assert pre_box is not None, "konvajs-content must have an on-screen bounding box"
+
+    def _word_offset(elem_box: dict, bbox: dict) -> tuple[float, float]:
+        """Return (offset_x, offset_y) within elem_box for the bbox center."""
+        fs = elem_box["width"] / display_width
+        return (
+            (bbox["x"] * scale + bbox["width"] * scale / 2) * fs,
+            (bbox["y"] * scale + bbox["height"] * scale / 2) * fs,
         )
 
-    # Wait for RightPanel to re-render with multi-word-detail.
-    time.sleep(0.3)
+    ox0, oy0 = _word_offset(pre_box, bbox0)
 
-    multi = page.locator('[data-testid="multi-word-detail"]').first
-    multi.wait_for(state="visible", timeout=5_000)
+    # ── STEP 1: plain-click word 0 (block 0) ─────────────────────────────────
+    page.mouse.click(pre_box["x"] + ox0, pre_box["y"] + oy0)
+    time.sleep(0.5)  # Let React re-render + right panel open
 
-    # MUL-1: >=2 block groups must be shown.
-    block_groups = page.locator('[data-testid^="multi-word-block-"]')
-    block_count = block_groups.count()
-    assert block_count >= 2, (
-        f"multi-word-detail should show >=2 block groups, got {block_count}. "
-        f"block_indices in payload: {lm0.get('block_index')}, {lm1.get('block_index')}"
+    if (
+        not page.locator('[data-testid="word-header-id"]').count()
+        and not page.locator('[data-testid="multi-word-detail"]').count()
+    ):
+        pytest.fail(
+            "MUL BUG (step 1): plain-click on word 0 did NOT open WordDetail.\n"
+            f"  offset ({ox0:.1f}, {oy0:.1f}), bbox0={bbox0}, scale={scale}, pre_box={pre_box}."
+        )
+
+    # ── STEP 2: Ctrl-click word 1 (block 1) ──────────────────────────────────
+    # Re-read konvajs-content box after layout shift, compute word-1 offset fresh.
+    post_box = konva_content.bounding_box()
+    assert post_box is not None, "konvajs-content must still have a bounding box after step 1"
+    ox1, oy1 = _word_offset(post_box, bbox1)
+    konva_content.click(position={"x": ox1, "y": oy1}, modifiers=["Control"])
+    time.sleep(0.5)
+
+    # ── STEPS 3-5: assert MultiWordDetail with both block groups ─────────────
+    _assert_multi_word_detail(
+        page,
+        ox0=ox0,
+        oy0=oy0,
+        ox1=ox1,
+        oy1=oy1,
+        pre_box=pre_box,
+        post_box=post_box,
+        bbox0=bbox0,
+        bbox1=bbox1,
+        scale=scale,
+        display_width=display_width,
+        lm0=lm0,
+        lm1=lm1,
+        line0_text=line0_text,
+        line1_text=line1_text,
     )
 
-    # MUL-2: both line texts must appear in the panel.
-    panel_text = multi.inner_text()
-
-    # Match on first ~15 chars in case line text is truncated.
-    def _text_in(needle: str, haystack: str) -> bool:
-        return needle in haystack or (len(needle) > 5 and needle[:15] in haystack)
-
-    assert _text_in(line0_text, panel_text), (
-        f"ocr_line_text {line0_text!r} not found in multi-word-detail. Panel text: {panel_text!r}"
-    )
-    assert _text_in(line1_text, panel_text), (
-        f"ocr_line_text {line1_text!r} not found in multi-word-detail. Panel text: {panel_text!r}"
-    )
-
-    _save_screenshot(page, "mul1_2_multi_word_two_blocks")
+    # ── STEP 6: screenshot proof ──────────────────────────────────────────────
+    _save_screenshot(page, "mul_cross_block_multiselect")
 
 
 @pytest.mark.e2e
