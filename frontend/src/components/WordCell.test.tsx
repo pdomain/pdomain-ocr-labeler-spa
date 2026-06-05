@@ -231,4 +231,74 @@ describe("WordCell", () => {
     render(<WordCell word={word} />);
     expect(screen.queryByTestId("word-glyph-chip-row-0-0")).toBeNull();
   });
+
+  // STB-1: word-validate-button wires to onValidate
+  describe("STB-1: word-validate-button onClick", () => {
+    it("calls onValidate(lineIdx, wordIdx, !is_validated) when clicked (unvalidated→validate)", () => {
+      const onValidate = vi.fn();
+      const word = makeWordMatch({ line_index: 1, word_index: 3, is_validated: false });
+      render(<WordCell word={word} onValidate={onValidate} />);
+      fireEvent.click(screen.getByTestId("word-validate-button-1-3"));
+      expect(onValidate).toHaveBeenCalledOnce();
+      expect(onValidate).toHaveBeenCalledWith(1, 3, true);
+    });
+
+    it("calls onValidate(lineIdx, wordIdx, false) when word is already validated", () => {
+      const onValidate = vi.fn();
+      const word = makeWordMatch({ line_index: 0, word_index: 2, is_validated: true });
+      render(<WordCell word={word} onValidate={onValidate} />);
+      fireEvent.click(screen.getByTestId("word-validate-button-0-2"));
+      expect(onValidate).toHaveBeenCalledWith(0, 2, false);
+    });
+
+    it("does not throw when onValidate is not provided", () => {
+      const word = makeWordMatch({ line_index: 0, word_index: 0 });
+      render(<WordCell word={word} />);
+      expect(() => fireEvent.click(screen.getByTestId("word-validate-button-0-0"))).not.toThrow();
+    });
+  });
+
+  // STB-2: word-tag-clear-button wires to onClearTag
+  describe("STB-2: word-tag-clear-button onClick", () => {
+    it("calls onClearTag(lineIdx, wordIdx, label, 'style') when style chip × is clicked", () => {
+      const onClearTag = vi.fn();
+      const word = makeWordMatch({
+        line_index: 2,
+        word_index: 1,
+        text_style_labels: ["bold"],
+        word_components: [],
+      });
+      render(<WordCell word={word} onClearTag={onClearTag} />);
+      fireEvent.click(screen.getByTestId("word-tag-clear-button-2-1-bold"));
+      expect(onClearTag).toHaveBeenCalledOnce();
+      expect(onClearTag).toHaveBeenCalledWith(2, 1, "bold", "style");
+    });
+
+    it("calls onClearTag(lineIdx, wordIdx, comp, 'component') when component chip × is clicked", () => {
+      const onClearTag = vi.fn();
+      const word = makeWordMatch({
+        line_index: 0,
+        word_index: 0,
+        text_style_labels: [],
+        word_components: ["header"],
+      });
+      render(<WordCell word={word} onClearTag={onClearTag} />);
+      fireEvent.click(screen.getByTestId("word-tag-clear-button-0-0-header"));
+      expect(onClearTag).toHaveBeenCalledOnce();
+      expect(onClearTag).toHaveBeenCalledWith(0, 0, "header", "component");
+    });
+
+    it("does not throw when onClearTag is not provided and chip × is clicked", () => {
+      const word = makeWordMatch({
+        line_index: 0,
+        word_index: 0,
+        text_style_labels: ["italic"],
+        word_components: [],
+      });
+      render(<WordCell word={word} />);
+      expect(() =>
+        fireEvent.click(screen.getByTestId("word-tag-clear-button-0-0-italic")),
+      ).not.toThrow();
+    });
+  });
 });

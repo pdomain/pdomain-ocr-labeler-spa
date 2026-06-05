@@ -67,6 +67,20 @@ export interface WordCellProps {
    * Should select the word in the selection store and open the right panel.
    */
   onEditWord?: ((lineIndex: number, wordIndex: number) => void) | undefined;
+  /**
+   * Called when the per-word validate toggle (✔) is clicked.
+   * Signature: (lineIndex, wordIndex, validated) => void
+   * STB-1: wires the validate button to the caller's mutation.
+   */
+  onValidate?: ((lineIndex: number, wordIndex: number, validated: boolean) => void) | undefined;
+  /**
+   * Called when a style/component tag chip × is clicked.
+   * Signature: (lineIndex, wordIndex, label, kind) => void
+   * STB-2: wires the clear-tag button to the caller's mutation.
+   */
+  onClearTag?:
+    | ((lineIndex: number, wordIndex: number, label: string, kind: "style" | "component") => void)
+    | undefined;
 }
 
 /**
@@ -75,7 +89,7 @@ export interface WordCellProps {
  * Uses `word_id` as the React key discriminator and testid anchor.
  * Falls back to `${line_index}-${word_index}` when `word_id` is absent.
  */
-export function WordCell({ word, onCommitGt, onEditWord }: WordCellProps) {
+export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag }: WordCellProps) {
   const wordId = word.word_id ?? `${word.line_index}-${word.word_index}`;
   const [gtValue, setGtValue] = useState(word.ground_truth_text);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -164,12 +178,13 @@ export function WordCell({ word, onCommitGt, onEditWord }: WordCellProps) {
           </span>
         </div>
         <div className="flex items-center gap-0.5">
-          {/* Per-word validate toggle (driver-contract §2.8) */}
+          {/* Per-word validate toggle (driver-contract §2.8) — STB-1 */}
           <button
             data-testid={`word-validate-button-${l}-${w}`}
             aria-label={`${word.is_validated ? "Unvalidate" : "Validate"} word ${w} in line ${l}`}
             className={`text-[10px] px-0.5 leading-none ${word.is_validated ? "text-status-exact" : "text-ink-4 hover:text-status-exact"}`}
             title={word.is_validated ? "Unvalidate word" : "Validate word"}
+            onClick={() => onValidate?.(l, w, !word.is_validated)}
           >
             ✔
           </button>
@@ -207,11 +222,13 @@ export function WordCell({ word, onCommitGt, onEditWord }: WordCellProps) {
               title={`Style: ${label}`}
             >
               {label}
+              {/* STB-2: clear style tag */}
               <button
                 data-testid={`word-tag-clear-button-${l}-${w}-${label}`}
                 className="word-tag-clear-button text-[8px] text-ink-3 hover:text-ink-1 leading-none"
                 aria-label={`Remove style ${label}`}
                 title={`Remove style ${label}`}
+                onClick={() => onClearTag?.(l, w, label, "style")}
               >
                 ×
               </button>
@@ -228,11 +245,13 @@ export function WordCell({ word, onCommitGt, onEditWord }: WordCellProps) {
               title={`Component: ${comp}`}
             >
               {comp}
+              {/* STB-2: clear component tag */}
               <button
                 data-testid={`word-tag-clear-button-${l}-${w}-${comp}`}
                 className="word-tag-clear-button text-[8px] text-ink-3 hover:text-ink-1 leading-none"
                 aria-label={`Remove component ${comp}`}
                 title={`Remove component ${comp}`}
+                onClick={() => onClearTag?.(l, w, comp, "component")}
               >
                 ×
               </button>

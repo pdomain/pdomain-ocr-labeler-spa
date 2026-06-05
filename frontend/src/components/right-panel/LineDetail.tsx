@@ -27,7 +27,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { LineCard } from "../LineCard";
 import { StatusPip } from "../ui/StatusPip";
 import { LineWordsCard } from "./LineWordsCard";
-import { selectionStore } from "../../stores/selection-store";
+import { selectionStore, selectWord } from "../../stores/selection-store";
 import { useUiPrefs } from "../../stores/ui-prefs";
 import {
   useMergeLines,
@@ -37,6 +37,7 @@ import {
   useCopyLineGt,
   useSplitLineAfterWord,
   useSplitLineByWords,
+  useDeleteLine,
 } from "../../hooks/useLineMutations";
 import type { components } from "../../api/types";
 
@@ -228,6 +229,8 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
   const copyLineGt = useCopyLineGt(projectId, pageIndex);
   const splitAfterWord = useSplitLineAfterWord(projectId, pageIndex);
   const splitByWords = useSplitLineByWords(projectId, pageIndex);
+  // STB-3: delete action for the embedded LineCard.
+  const deleteLine = useDeleteLine(projectId, pageIndex);
 
   function toggleDensity() {
     const next: WordDensity = densityPref === "cards" ? "rows" : "cards";
@@ -269,12 +272,24 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
           {/* P5.e: consolidated GT row */}
           <GTRow line={line} projectId={projectId} pageIndex={pageIndex} />
 
-          {/* Existing line content */}
+          {/* Existing line content — STB-3: pass all action handlers */}
           <div className="flex-1 overflow-auto">
             <LineCard
               line={line}
               onValidate={(li, validated) => {
                 validateLine.mutate({ lineIndex: li, validated });
+              }}
+              onCopyGtToOcr={(li) => {
+                copyLineGt.mutate({ lineIndex: li, direction: "gt_to_ocr" });
+              }}
+              onCopyOcrToGt={(li) => {
+                copyLineGt.mutate({ lineIndex: li, direction: "ocr_to_gt" });
+              }}
+              onDelete={(li) => {
+                deleteLine.mutate({ lineIndex: li });
+              }}
+              onEditWord={(li, wi) => {
+                selectWord(li, wi);
               }}
             />
           </div>

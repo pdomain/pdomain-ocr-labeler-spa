@@ -552,3 +552,62 @@ describe("LineDetail GTRow: blur-commit and Escape revert (Task 3)", () => {
     expect(postCount).toBe(0);
   });
 });
+
+// ─── STB-3: LineCard inside LineDetail has wired action buttons ───────────────
+
+describe("STB-3: LineDetail LineCard action buttons perform their mutations", () => {
+  beforeEach(() => {
+    clearSelection();
+    useUiPrefs.setState({ lineWordsDensity: "cards" } as any);
+  });
+
+  it("line-validate-button in embedded LineCard calls validate mutation", async () => {
+    let validateCalled = false;
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/validate-batch", async () => {
+        validateCalled = true;
+        return HttpResponse.json(makePage());
+      }),
+    );
+    const user = userEvent.setup();
+    selectLine(3);
+    renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    await user.click(screen.getByTestId("line-validate-button-3"));
+    await waitFor(() => expect(validateCalled).toBe(true));
+  });
+
+  it("line-gt-to-ocr-button in embedded LineCard calls copy mutation (non-exact line)", async () => {
+    let copyCalled = false;
+    server.use(
+      http.post("/api/projects/p1/pages/0/lines/3/copy-gt", async () => {
+        copyCalled = true;
+        return HttpResponse.json(makePage());
+      }),
+    );
+
+    // Use a mismatch-status line so the GT→OCR button is visible
+    const page = makePage();
+    page.line_matches![0].overall_match_status = "mismatch";
+
+    const user = userEvent.setup();
+    selectLine(3);
+    renderWithQuery(<LineDetail page={page} projectId="p1" pageIndex={0} />);
+    await user.click(screen.getByTestId("line-gt-to-ocr-button-3"));
+    await waitFor(() => expect(copyCalled).toBe(true));
+  });
+
+  it("line-delete-button in embedded LineCard calls delete mutation", async () => {
+    let deleteCalled = false;
+    server.use(
+      http.post("/api/projects/p1/pages/0/delete", async () => {
+        deleteCalled = true;
+        return HttpResponse.json(makePage());
+      }),
+    );
+    const user = userEvent.setup();
+    selectLine(3);
+    renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    await user.click(screen.getByTestId("line-delete-button-3"));
+    await waitFor(() => expect(deleteCalled).toBe(true));
+  });
+});

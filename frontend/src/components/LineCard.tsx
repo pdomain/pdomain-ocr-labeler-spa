@@ -101,6 +101,20 @@ export interface LineCardProps {
    * Forwarded to WordCell for optional crop thumbnail display.
    */
   imageBaseUrl?: string | undefined;
+  /**
+   * Called when a per-word validate toggle (✔) is clicked.
+   * Signature: (lineIndex, wordIndex, validated) => void
+   * STB-1: forwarded to each WordCell.
+   */
+  onValidateWord?: ((lineIndex: number, wordIndex: number, validated: boolean) => void) | undefined;
+  /**
+   * Called when a style/component tag chip × is clicked.
+   * Signature: (lineIndex, wordIndex, label, kind) => void
+   * STB-2: forwarded to each WordCell.
+   */
+  onClearWordTag?:
+    | ((lineIndex: number, wordIndex: number, label: string, kind: "style" | "component") => void)
+    | undefined;
 }
 
 /**
@@ -120,6 +134,8 @@ export function LineCard({
   onCommitGt,
   onEditWord,
   imageBaseUrl,
+  onValidateWord,
+  onClearWordTag,
 }: LineCardProps) {
   const bgStyle = STATUS_BG_STYLE[line.overall_match_status] ?? { background: "var(--bg-raised)" };
   const isExact = line.overall_match_status === "exact";
@@ -256,6 +272,8 @@ export function LineCard({
               onCommitGt={onCommitGt}
               onEditWord={onEditWord}
               imageBaseUrl={imageBaseUrl}
+              onValidate={onValidateWord}
+              onClearTag={onClearWordTag}
             />
           ))}
         </div>
