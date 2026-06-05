@@ -79,12 +79,14 @@ import {
   setCanvasZoom,
 } from "../stores/viewport-store";
 import { displayToSrc } from "../lib/coords";
+import { applyBoxSelect } from "../lib/box-select-handler";
+import type { SelectionModifier } from "../components/PageImageCanvas";
 import { useGlobalHotkeys } from "../hooks/useGlobalHotkeys";
 import { useToolbarDispatch } from "../hooks/useToolbarDispatch";
 import { useMatchesHotkeys } from "../hooks/useMatchesHotkeys";
 import { useUiPrefs, type DrawerTab, type MatchFilter } from "../stores/ui-prefs";
 import { dialogStore, useDialogStore } from "../stores/dialog-store";
-import { selectionStore, type SelectionState } from "../stores/selection-store";
+import { selectionStore, clearSelection, type SelectionState } from "../stores/selection-store";
 import { worklistStore } from "../stores/worklist-store";
 import { pageNoUrl } from "../lib/routes";
 
@@ -671,6 +673,35 @@ export default function ProjectPage() {
       applyComponent.mutate({ lineIndex, wordIndex, component, enabled: false });
     }
   }
+  // SEL-2: drag-box select handler. Receives the drag rect (display pixels)
+  // from PageImageCanvas after a non-trivial drag in select mode. Computes
+  // which words intersect the rect and sets selectedWords in selectionStore
+  // with REPLACE semantics (toggle/remove are Slice B).
+  function handleBoxSelect(
+    rect: { x: number; y: number; width: number; height: number },
+    modifier: SelectionModifier,
+  ) {
+    if (!pagePayload) return;
+    const words = applyBoxSelect(pagePayload, rect, modifier);
+    if (words.length === 0) {
+      clearSelection();
+      return;
+    }
+    // REPLACE semantics: set all intersecting words at once.
+    // Use the first word as the primary path reference; multi-word
+    // accumulation (toggle/remove) is Slice B.
+    const [firstLine, firstWord] = words[0]!;
+    selectionStore.setState({
+      selectedParagraphs: [],
+      selectedLines: [],
+      selectedWords: words,
+      dragRect: null,
+      level: "word",
+      path: { lineId: firstLine, wordId: [firstLine, firstWord] },
+    });
+    useUiPrefs.setState({ rightPanelOpen: true });
+  }
+
   // B2: toggle add-word mode through viewportStore so the canvas, Rail, and
   // any Lane D add-word button stay in sync. Lane D's button calls the same
   // toggle + clear handler (handleClearAddWord).
@@ -841,6 +872,7 @@ export default function ProjectPage() {
           page={pagePayload}
           projectId={projectId}
           pageIndex={idx0}
+          onBoxSelect={handleBoxSelect}
           onAddWord={handleAddWord}
         />
       </div>
