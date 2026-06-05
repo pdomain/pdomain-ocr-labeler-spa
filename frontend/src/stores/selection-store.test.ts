@@ -1,5 +1,6 @@
 // selection-store.test.ts — Tests for the hierarchical selection layer (Slice 15).
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 15.
+// Slice B: toggleWord (SEL-4, SEL-5) — additive multi-select across blocks.
 
 import { describe, it, expect, beforeEach } from "vitest";
 import {
@@ -9,6 +10,7 @@ import {
   selectPara,
   selectLine,
   selectWord,
+  toggleWord,
   walkSibling,
   walkLevel,
 } from "./selection-store";
@@ -238,5 +240,91 @@ describe("selection-store hierarchical layer", () => {
     selectionStore.setState((p) => ({ ...p, dragRect: { x: 0, y: 0, w: 10, h: 10 } }));
     selectLine(0);
     expect(selectionStore.getState().dragRect).toEqual({ x: 0, y: 0, w: 10, h: 10 });
+  });
+});
+
+// ─── SEL-4/SEL-5: toggleWord additive multi-select ─────────────────────────
+describe("toggleWord (SEL-4, SEL-5 — Slice B additive multi-select)", () => {
+  beforeEach(() => {
+    clearSelection();
+  });
+
+  it("replace mode: single word replaces entire selection, sets level=word", () => {
+    toggleWord(0, 1, "replace");
+    const s = selectionStore.getState();
+    expect(s.selectedWords).toEqual([[0, 1]]);
+    expect(s.level).toBe("word");
+  });
+
+  it("replace mode after prior multi-select: discards prior words", () => {
+    toggleWord(0, 0, "replace");
+    toggleWord(1, 0, "replace");
+    // second replace should drop the first
+    const s = selectionStore.getState();
+    expect(s.selectedWords).toEqual([[1, 0]]);
+  });
+
+  it("toggle mode: adds word not currently selected (SEL-4 cross-block additive)", () => {
+    toggleWord(0, 0, "replace");
+    toggleWord(1, 0, "toggle"); // different line
+    const s = selectionStore.getState();
+    expect(s.selectedWords).toHaveLength(2);
+    expect(s.selectedWords).toContainEqual([0, 0]);
+    expect(s.selectedWords).toContainEqual([1, 0]);
+    expect(s.level).toBe("word");
+  });
+
+  it("toggle mode: removes word that is already selected (deselect)", () => {
+    toggleWord(0, 0, "replace");
+    toggleWord(1, 0, "toggle");
+    toggleWord(0, 0, "toggle"); // remove first word
+    const s = selectionStore.getState();
+    expect(s.selectedWords).toEqual([[1, 0]]);
+    expect(s.level).toBe("word");
+  });
+
+  it("toggle mode: removes last word → level drops to none", () => {
+    toggleWord(0, 0, "replace");
+    toggleWord(0, 0, "toggle"); // remove the only word
+    const s = selectionStore.getState();
+    expect(s.selectedWords).toEqual([]);
+    expect(s.level).toBe("none");
+  });
+
+  it("remove mode: removes a word from selection (SEL-5 shift-click)", () => {
+    toggleWord(0, 0, "replace");
+    toggleWord(1, 0, "toggle");
+    toggleWord(0, 0, "remove"); // shift-click to remove
+    const s = selectionStore.getState();
+    expect(s.selectedWords).toEqual([[1, 0]]);
+  });
+
+  it("remove mode: no-op if word was not selected", () => {
+    toggleWord(0, 0, "replace");
+    toggleWord(2, 0, "remove"); // word not in selection
+    const s = selectionStore.getState();
+    expect(s.selectedWords).toEqual([[0, 0]]);
+  });
+
+  it("preserves other state (dragRect, selectedLines) when in replace mode", () => {
+    selectionStore.setState((p) => ({ ...p, dragRect: { x: 1, y: 2, width: 3, height: 4 } }));
+    selectLine(5);
+    toggleWord(0, 0, "replace");
+    const s = selectionStore.getState();
+    // word-level: line arrays cleared
+    expect(s.selectedLines).toEqual([]);
+    // dragRect preserved
+    expect(s.dragRect).toEqual({ x: 1, y: 2, width: 3, height: 4 });
+  });
+
+  it("three-word cross-block selection accumulates via toggle mode", () => {
+    toggleWord(0, 0, "replace");
+    toggleWord(1, 0, "toggle");
+    toggleWord(2, 0, "toggle"); // third word from yet another line
+    const s = selectionStore.getState();
+    expect(s.selectedWords).toHaveLength(3);
+    expect(s.selectedWords).toContainEqual([0, 0]);
+    expect(s.selectedWords).toContainEqual([1, 0]);
+    expect(s.selectedWords).toContainEqual([2, 0]);
   });
 });

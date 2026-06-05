@@ -190,5 +190,54 @@ export function walkLevel(direction: "up" | "down", page: PagePayload): void {
   });
 }
 
+// ─── SEL-4 / SEL-5: Additive multi-select ────────────────────────────────────
+
+/**
+ * Add, remove, or toggle a word in the multi-select set.
+ *
+ * mode="replace" — discard prior selection, set this word as the sole selection.
+ * mode="toggle"  — if the word is already selected, remove it; otherwise add it.
+ *                  Enables cross-block accumulation (Ctrl/Cmd-click, SEL-4).
+ * mode="remove"  — remove this word from the selection (Shift-click, SEL-5).
+ *
+ * level is always "word" while words are selected; drops to "none" when the
+ * set becomes empty.
+ */
+export function toggleWord(
+  lineIdx: number,
+  wordIdx: number,
+  mode: "replace" | "toggle" | "remove",
+): void {
+  selectionStore.setState((s) => {
+    const tuple: [number, number] = [lineIdx, wordIdx];
+    const isPresent = s.selectedWords.some(([l, w]) => l === lineIdx && w === wordIdx);
+
+    let next: [number, number][];
+    if (mode === "replace") {
+      next = [tuple];
+    } else if (mode === "toggle") {
+      next = isPresent
+        ? s.selectedWords.filter(([l, w]) => !(l === lineIdx && w === wordIdx))
+        : [...s.selectedWords, tuple];
+    } else {
+      // remove
+      next = s.selectedWords.filter(([l, w]) => !(l === lineIdx && w === wordIdx));
+    }
+
+    const newLevel: SelectionLevel = next.length > 0 ? "word" : "none";
+    // path: keep the most-recently-touched word, or clear if empty.
+    const newPath: SelectionPath = next.length > 0 ? { lineId: lineIdx, wordId: tuple } : {};
+
+    return {
+      ...s,
+      selectedParagraphs: [],
+      selectedLines: [],
+      selectedWords: next,
+      level: newLevel,
+      path: newPath,
+    };
+  });
+}
+
 // Re-export shared types so consumers can import them from one place.
 export type { SelectionLevel, SelectionPath, WalkDirection };
