@@ -23,6 +23,7 @@ import { selectionStore, type SelectionLevel } from "../../stores/selection-stor
 import { LineDetail } from "../right-panel/LineDetail";
 import { BlockDetail } from "../right-panel/BlockDetail";
 import { ParagraphDetail } from "../right-panel/ParagraphDetail";
+import { MultiWordDetail } from "../right-panel/MultiWordDetail";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -102,7 +103,17 @@ export function RightPanel({ page, projectId, pageIndex, wordSlot, onCollapse }:
         data-level={level}
         className="flex-1 min-h-0 overflow-auto text-sm text-ink-2"
       >
-        {level === "word" && wordSlot ? (
+        {state.selectedWords.length > 1 &&
+        page &&
+        projectId !== undefined &&
+        pageIndex !== undefined ? (
+          <MultiWordDetail
+            page={page}
+            projectId={projectId}
+            pageIndex={pageIndex}
+            selectedWords={state.selectedWords}
+          />
+        ) : level === "word" && wordSlot ? (
           <div className="p-3">{wordSlot}</div>
         ) : level === "line" && page && projectId !== undefined && pageIndex !== undefined ? (
           <LineDetail page={page} projectId={projectId} pageIndex={pageIndex} />
