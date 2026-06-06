@@ -21,8 +21,9 @@
 //          OCR models (Lane C / Task C3 — real controls, no longer stubbed):
 //            ocr-detection-model-select, ocr-recognition-model-select,
 //            ocr-hf-revision-input, ocr-rescan-models-button, ocr-config-apply-button.
-//          ocr-config-cancel-button remains a closed-modal reachability stub in
-//          HeaderBar (the modal commits via Apply / dismisses via Done/Close).
+//          ocr-config-cancel-button — footer button that discards pending
+//          (un-applied) changes and closes. Model picks commit via Apply;
+//          auto-rotate commits via Done. Every close path clears pending state.
 
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -220,6 +221,12 @@ export function OCRConfigModal({
     if (!open) {
       setPendingAutoRotate(null);
       setSaveError(null);
+      // Discard un-applied model selections on every close path (Cancel,
+      // Done, Close, Escape) so a reopen reflects the server snapshot, not a
+      // stale pending pick the user never committed via Apply.
+      setPendingDetection(null);
+      setPendingRecognition(null);
+      setPendingRevision(null);
     }
     prevOpenRef.current = open;
   }, [open, ocrConfig]);

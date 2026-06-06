@@ -426,7 +426,10 @@ function ImageLayer({ url, width, height, cropBBox, encodedScale }: ImageLayerPr
   let fillPatternProps: Record<string, unknown> = {};
   if (hasImg) {
     const imgEl = imgRef.current!;
-    if (cropBBox && encodedScale) {
+    // Guard against a zero/negative-dimension bbox (malformed OCR data): a
+    // 0-width/height crop yields Infinity scale and Konva renders nothing.
+    // Fall back to the full-image stretch in that case.
+    if (cropBBox && encodedScale && cropBBox.width > 0 && cropBBox.height > 0) {
       // Convert source-pixel bbox to display-pixel bbox.
       const dispX = cropBBox.x * encodedScale;
       const dispY = cropBBox.y * encodedScale;

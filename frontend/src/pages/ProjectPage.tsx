@@ -346,6 +346,13 @@ export default function ProjectPage() {
   const nudgeWord = useNudgeWord(pid, idx0);
   const updateGtWord = useUpdateWordGroundTruth(pid, idx0);
 
+  // Refine/nudge raises on the backend when the page image is not loaded
+  // (spec 2026-06-06-word-edit-dialog-wiring §WED-7) — surface it instead of
+  // failing silently.
+  const surfaceRefineError = (err: unknown) => {
+    toast.warn(err instanceof Error ? err.message : "Refine failed — load the page image first.");
+  };
+
   // ── Derived view state ─────────────────────────────────────────────────
   const pagePayload = pageQ.data ?? null;
   const pageRecord = pagePayload?.page_record ?? null;
@@ -1176,6 +1183,7 @@ export default function ProjectPage() {
               refineAfter: true,
             })
             .then(() => {})
+            .catch(surfaceRefineError)
         }
         onExpandRefine={() =>
           nudgeWord
@@ -1189,6 +1197,7 @@ export default function ProjectPage() {
               refineAfter: true,
             })
             .then(() => {})
+            .catch(surfaceRefineError)
         }
         onApplyNudge={(n, refineAfter) =>
           nudgeWord
@@ -1202,6 +1211,7 @@ export default function ProjectPage() {
               refineAfter,
             })
             .then(() => {})
+            .catch(surfaceRefineError)
         }
         onApplyStyle={(style, scope) =>
           applyStyle

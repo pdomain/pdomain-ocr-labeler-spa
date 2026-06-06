@@ -72,6 +72,20 @@ describe("WordImageCanvas cropBBox prop (WED-10, S1.3)", () => {
     expect(screen.getByTestId("dialog-word-stage")).toBeInTheDocument();
   });
 
+  it("renders without error when cropBBox has zero width/height (guarded)", () => {
+    // A zero-dimension bbox would yield Infinity fillPattern scale and break
+    // Konva; the component must fall back to the full-image stretch instead.
+    expect(() => {
+      render(
+        <WordImageCanvas
+          imageUrl="/api/projects/p1/image/0"
+          cropBBox={{ x: 10, y: 20, width: 0, height: 0 }}
+        />,
+      );
+    }).not.toThrow();
+    expect(screen.getByTestId("dialog-word-stage")).toBeInTheDocument();
+  });
+
   it("exposes cropBBox as a typed prop (static check: TypeScript accepts it)", () => {
     // Verify the component signature accepts cropBBox without a type error.
     // The render itself serves as the type check in tsconfig-checked builds.

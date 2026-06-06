@@ -290,6 +290,36 @@ describe("OCRConfigModal — model selection (Lane C / C3)", () => {
     fireEvent.click(await screen.findByTestId("ocr-rescan-models-button"));
     await waitFor(() => expect(rescanSpy).toHaveBeenCalled());
   });
+
+  it("discards an un-applied model pick when closed and reopened", async () => {
+    // Regression: closing without Apply must reset pending model state so a
+    // reopen shows the server snapshot, not a stale uncommitted pick.
+    const qc = createQueryClient();
+    const StableWrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const { rerender } = render(<OCRConfigModal open onClose={vi.fn()} />, {
+      wrapper: StableWrapper,
+    });
+
+    const detSel = (await screen.findByTestId("ocr-detection-model-select")) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(detSel.querySelectorAll("option").length).toBeGreaterThanOrEqual(2);
+    });
+    fireEvent.change(detSel, { target: { value: "hf-latest" } });
+    expect(detSel.value).toBe("hf-latest");
+
+    // Close without Apply, then reopen.
+    rerender(<OCRConfigModal open={false} onClose={vi.fn()} />);
+    rerender(<OCRConfigModal open onClose={vi.fn()} />);
+
+    const detSel2 = (await screen.findByTestId("ocr-detection-model-select")) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(detSel2.querySelectorAll("option").length).toBeGreaterThanOrEqual(2);
+    });
+    // Pending pick was discarded → back to the server snapshot ("stock").
+    expect(detSel2.value).toBe("stock");
+  });
 });
 
 // ─── Issue #447: POST /api/ocr-config/auto-rotate HTTP failure surfacing ─────

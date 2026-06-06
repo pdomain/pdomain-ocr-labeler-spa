@@ -16,6 +16,7 @@ import { server } from "../test/server";
 import { ROUTES } from "../lib/routes";
 import { dialogStore } from "../stores/dialog-store";
 import { useUiPrefs } from "../stores/ui-prefs";
+import { toast } from "../lib/toast";
 
 // ─── Mocks (must mirror ProjectPage.test.tsx) ────────────────────────────────
 
@@ -348,5 +349,31 @@ describe("ProjectPage — WordEditDialog mutation wiring (S1.2)", () => {
     await waitFor(() => {
       expect(capturedBody).toMatchObject({ style: "bold" });
     });
+  });
+
+  it("surfaces a toast when Refine fails (e.g. page image absent)", async () => {
+    // Spec WED-7: refine raises on the backend when the page image is not
+    // loaded — it must be surfaced, not swallowed silently.
+    const warnSpy = vi.spyOn(toast, "warn").mockImplementation(() => "");
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/words/:li/:wi/nudge", () =>
+        HttpResponse.json({ detail: "page image not loaded" }, { status: 400 }),
+      ),
+    );
+
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+
+    act(() => {
+      dialogStore.openWordEdit({ lineIdx: 0, wordIdx: 0 });
+    });
+    await screen.findByTestId("word-edit-dialog");
+
+    fireEvent.click(screen.getByTestId("dialog-refine-button"));
+
+    await waitFor(() => {
+      expect(warnSpy).toHaveBeenCalled();
+    });
+    warnSpy.mockRestore();
   });
 });
