@@ -346,6 +346,19 @@ describe("App: routing shell", () => {
   });
 });
 
+// ─── S6.4: QuickSearch mounted in App header ─────────────────────────────────
+describe("App: S6.4 QuickSearch in header", () => {
+  it("quick-search input is present in the App header on the root route", async () => {
+    withNoSession();
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByTestId("header-bar")).toBeInTheDocument();
+    });
+    // S6.4: QuickSearch must be mounted and its input present.
+    expect(screen.queryByTestId("quick-search-input")).not.toBeNull();
+  });
+});
+
 // ─── S6.3(a): OCR config trigger on root route ────────────────────────────────
 describe("App: S6.3(a) OCR config trigger on root route", () => {
   it("ocr-config-trigger-button is present on the root route", async () => {

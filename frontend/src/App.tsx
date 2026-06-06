@@ -23,7 +23,7 @@ import { BrowserRouter, Routes, Route, Navigate, useParams, useMatch } from "rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useRef } from "react";
 import {
   AppShell,
   SuiteSiblingsProvider,
@@ -57,6 +57,8 @@ import { useNotificationStream } from "./hooks/useNotificationStream";
 import { OCRConfigModal } from "./components/OCRConfigModal";
 import { ExportDialog } from "./components/ExportDialog";
 import { HotkeyHelpModal } from "./components/HotkeyHelpModal";
+import { QuickSearch, type QuickSearchHandle } from "./components/shell/QuickSearch";
+import { useHotkey } from "./hooks/useHotkey";
 import { SourceFolderDialog } from "./components/SourceFolderDialog";
 import { dialogStore, useDialogStore } from "./stores/dialog-store";
 
@@ -124,6 +126,14 @@ function useRouteProjectContext(): { projectId: string | null; pageIndex: number
 /** Inner component so hooks (useNotificationStream) run inside providers. */
 function AppInner() {
   useNotificationStream();
+
+  // S6.4: ref to QuickSearch handle so Mod+K can focus the search input.
+  const quickSearchRef = useRef<QuickSearchHandle>(null);
+  // S6.4: global Mod+K focuses the search input (not opens hotkey help — that's ?).
+  // enableOnFormTags: false (default) means Mod+K doesn't re-fire when already in an input.
+  useHotkey("mod+k", () => {
+    quickSearchRef.current?.focusInput();
+  });
 
   // Dialog open-state slices — re-render only when these change.
   const ocrConfigOpen = useDialogStore((s) => s.ocrConfig.open);
@@ -197,6 +207,10 @@ function AppInner() {
         header={
           <>
             <HeaderBar
+              searchSlot={
+                /* S6.4: QuickSearch always rendered so Mod+K can focus it on any route */
+                <QuickSearch ref={quickSearchRef} />
+              }
               navSlot={
                 onProjectRoute ? (
                   <ProjectNavigationControls projectId={projectId} pageNo={pageNo} />

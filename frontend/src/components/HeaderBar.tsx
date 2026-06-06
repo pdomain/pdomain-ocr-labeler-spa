@@ -104,6 +104,11 @@ export interface HeaderBarProps {
    * the project breadcrumb on project routes. Only rendered when non-null/truthy.
    */
   projectRoot?: string | null;
+  /**
+   * S6.4: Optional search widget slot (QuickSearch) rendered in the center of
+   * the header bar (before actionsSlot). Always mounted so Mod+K can focus it.
+   */
+  searchSlot?: React.ReactNode;
 }
 
 export default function HeaderBar({
@@ -112,6 +117,7 @@ export default function HeaderBar({
   projectName,
   pageMetrics,
   projectRoot,
+  searchSlot,
 }: HeaderBarProps = {}) {
   return (
     <header
@@ -174,6 +180,9 @@ export default function HeaderBar({
 
       {/* Spacer */}
       <div className="flex-1 min-w-0" />
+
+      {/* S6.4: search slot — QuickSearch widget, always rendered (Mod+K focuses it) */}
+      {searchSlot}
 
       {/* Center-right: actions slot (project route only) */}
       {actionsSlot}
