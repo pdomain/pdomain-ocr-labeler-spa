@@ -25,9 +25,16 @@ export interface OcrGtCompareRowProps {
   ocrText: string;
   gtText: string;
   onCommitGt: (text: string) => void;
+  /**
+   * S2.1: Called when the user presses Tab (dir="next") or Shift+Tab
+   * (dir="prev") while focused on the GT input. The current GT value is
+   * committed before this callback fires. When omitted, Tab falls through
+   * to default browser behavior.
+   */
+  onTab?: ((dir: "next" | "prev") => void) | undefined;
 }
 
-export function OcrGtCompareRow({ ocrText, gtText, onCommitGt }: OcrGtCompareRowProps) {
+export function OcrGtCompareRow({ ocrText, gtText, onCommitGt, onTab }: OcrGtCompareRowProps) {
   const [localGt, setLocalGt] = useState(gtText);
   const [pickerOpen, setPickerOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -37,9 +44,22 @@ export function OcrGtCompareRow({ ocrText, gtText, onCommitGt }: OcrGtCompareRow
     setLocalGt(gtText);
   }
 
-  function handleBlur() {
+  /** Persist the current GT value if it has changed. */
+  function commitGt() {
     if (localGt !== gtText) {
       onCommitGt(localGt);
+    }
+  }
+
+  function handleBlur() {
+    commitGt();
+  }
+
+  function handleGtKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Tab" && onTab) {
+      e.preventDefault();
+      commitGt();
+      onTab(e.shiftKey ? "prev" : "next");
     }
   }
 
@@ -127,6 +147,7 @@ export function OcrGtCompareRow({ ocrText, gtText, onCommitGt }: OcrGtCompareRow
             }}
             onBlur={handleBlur}
             onKeyDown={(e) => {
+              handleGtKeyDown(e);
               if (e.key === "Enter") {
                 e.preventDefault();
                 inputRef.current?.blur();

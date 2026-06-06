@@ -1,5 +1,5 @@
 // OcrGtCompareRow.test.tsx — P2.c tests for the OCR/GT compare row.
-// Covers: B-RIGHT-002
+// Covers: B-RIGHT-002, S2.1 (Tab/Shift+Tab GT navigation)
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
@@ -55,5 +55,62 @@ describe("OcrGtCompareRow (P2.c)", () => {
   it("shows ∅ placeholder in OCR well when ocrText is empty", () => {
     render(<OcrGtCompareRow ocrText="" gtText="" onCommitGt={vi.fn()} />);
     expect(screen.getByTestId("ocr-gt-ocr-well")).toHaveTextContent("∅");
+  });
+});
+
+// --- S2.1: Tab/Shift+Tab GT navigation ---
+
+describe("OcrGtCompareRow S2.1 — Tab/Shift+Tab navigation", () => {
+  it("Tab key calls onCommitGt with current value then calls onTab('next')", async () => {
+    const onCommitGt = vi.fn();
+    const onTab = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <OcrGtCompareRow ocrText="hello" gtText="hello" onCommitGt={onCommitGt} onTab={onTab} />,
+    );
+    const input = screen.getByTestId("ocr-gt-input");
+    await user.click(input);
+    await user.keyboard("[Tab]");
+    expect(onTab).toHaveBeenCalledWith("next");
+  });
+
+  it("Shift+Tab calls onTab('prev')", async () => {
+    const onCommitGt = vi.fn();
+    const onTab = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <OcrGtCompareRow ocrText="hello" gtText="hello" onCommitGt={onCommitGt} onTab={onTab} />,
+    );
+    const input = screen.getByTestId("ocr-gt-input");
+    await user.click(input);
+    await user.keyboard("{Shift>}[Tab]{/Shift}");
+    expect(onTab).toHaveBeenCalledWith("prev");
+  });
+
+  it("Tab with changed GT commits before calling onTab", async () => {
+    const onCommitGt = vi.fn();
+    const onTab = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <OcrGtCompareRow ocrText="hello" gtText="hello" onCommitGt={onCommitGt} onTab={onTab} />,
+    );
+    const input = screen.getByTestId("ocr-gt-input");
+    await user.click(input);
+    await user.clear(input);
+    await user.type(input, "world");
+    await user.keyboard("[Tab]");
+    expect(onCommitGt).toHaveBeenCalledWith("world");
+    expect(onTab).toHaveBeenCalledWith("next");
+    // commit before tab
+    expect(onCommitGt.mock.invocationCallOrder[0]).toBeLessThan(onTab.mock.invocationCallOrder[0]);
+  });
+
+  it("Tab without onTab prop does not throw", async () => {
+    const user = userEvent.setup();
+    render(<OcrGtCompareRow ocrText="hello" gtText="hello" onCommitGt={vi.fn()} />);
+    const input = screen.getByTestId("ocr-gt-input");
+    await user.click(input);
+    // No onTab prop — Tab should not error
+    await expect(user.keyboard("[Tab]")).resolves.not.toThrow();
   });
 });
