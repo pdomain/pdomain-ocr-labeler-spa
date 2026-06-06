@@ -112,6 +112,31 @@ async def _run_save_project(runner: JobRunner, job: Job) -> None:
     await handle_save_project(runner, job)
 
 
+def _make_runner_with_store(
+    project_dir: Path,
+    store: LabelerPageStore,
+    project_id: str = "test-project",
+) -> tuple[JobRunner, ProjectState]:
+    """Return a (runner, project_state) pair with a store-backed project seeded."""
+    project_state = ProjectState()
+    project = _make_fake_project(project_dir, project_id)
+    project_state.set_loaded_project(project)
+
+    broker = JobEventBroker()
+    notification_queue = NotificationQueue()
+    settings = object()
+    runner = JobRunner(
+        broker,
+        context={
+            "project_state": project_state,
+            "notification_queue": notification_queue,
+            "settings": settings,
+            "page_store": store,
+        },
+    )
+    return runner, project_state
+
+
 # ── Acceptance test ───────────────────────────────────────────────────────────
 
 
@@ -200,3 +225,81 @@ def test_save_project_persists_page_content_for_fresh_store_reload(tmp_path: Pat
         assert "validated" in w.word_labels, f"'validated' label not persisted: word_labels={w.word_labels!r}"
     finally:
         reopened.close()
+
+
+# ── S5.1: Skipped-page tracking ───────────────────────────────────────────────
+
+
+@pytest.mark.integration
+def test_save_project_tracks_skipped_pages(tmp_path: Path) -> None:
+    """S5.1: A dirty page with page_id=None must be tracked as skipped.
+
+    The handler must stash job.payload["skipped_pages"] == 1 and
+    job.payload["skipped_indices"] == [page_index], and include the skip
+    count in the terminal notification message.
+
+    RED: before the fix, skipped pages are silently swallowed (debug log only);
+    job.payload has no "skipped_pages" key.
+
+    GREEN: after the fix, skipped_pages and skipped_indices are set on
+    job.payload, and the notification message mentions the skip.
+    """
+    project_dir = tmp_path / "book1"
+    project_dir.mkdir()
+
+    store = LabelerPageStore(project_dir=project_dir)
+    notification_queue = NotificationQueue()
+    try:
+        project_state = ProjectState()
+        project = _make_fake_project(project_dir)
+        project_state.set_loaded_project(project)
+
+        # Seed a dirty page with page_id=None (not yet registered in the store).
+        dirty_page = _make_page()
+        pstate = PageState(
+            page_index=0, page_record=PageLoadOutcome(page_index=0, source=PageSource.OCR, payload=dirty_page)
+        )
+        pstate.page_id = None  # explicitly unregistered
+        pstate.generation = 1
+        pstate.last_saved_generation = 0
+        project_state._page_states[0] = pstate
+
+        broker = JobEventBroker()
+        runner = JobRunner(
+            broker,
+            context={
+                "project_state": project_state,
+                "notification_queue": notification_queue,
+                "settings": object(),
+                "page_store": store,
+            },
+        )
+        job = _make_job()
+        runner._jobs[job.job_id] = job
+
+        asyncio.run(_run_save_project(runner, job))
+
+    finally:
+        store.close()
+
+    # Assertions — skipped-page info must be present on the job payload.
+    assert "skipped_pages" in job.payload, (
+        "job.payload missing 'skipped_pages'; skipped pages are silently dropped"
+    )
+    assert job.payload["skipped_pages"] == 1, (
+        f"expected skipped_pages==1, got {job.payload['skipped_pages']!r}"
+    )
+    assert "skipped_indices" in job.payload, "job.payload missing 'skipped_indices'"
+    assert job.payload["skipped_indices"] == [0], (
+        f"expected skipped_indices==[0], got {job.payload['skipped_indices']!r}"
+    )
+
+    # The notification queue must have received a message mentioning the skip.
+    notifications = list(notification_queue._ring)
+    assert notifications, "no notification was queued"
+    # The terminal notification (last one) must mention the skip.
+    last_notif = notifications[-1]
+    msg = last_notif.message
+    assert "unsaved" in msg.lower() or "skip" in msg.lower(), (
+        f"terminal notification does not mention skipped pages: {msg!r}"
+    )

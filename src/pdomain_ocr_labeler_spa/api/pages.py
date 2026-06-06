@@ -104,6 +104,8 @@ class SaveProjectResponse(BaseModel):
 
     job_id: str
     failures: list[SaveFailure] = Field(default_factory=list)
+    skipped_pages: int = 0
+    skipped_indices: list[int] = Field(default_factory=list)
 
 
 class ReloadOCRRequest(BaseModel):

@@ -723,9 +723,10 @@ def save_all(
     """``POST /api/projects/{pid}/save-all`` → ``202 {job_id}``.
 
     Spec §5.3: long-running save of all loaded pages. Returns 202 Accepted.
-    The job handler is a stub that immediately completes (M3 will wire
-    the real labeled-lane persistence). Callers track progress via
-    ``GET /api/jobs/{job_id}/events``.
+    Callers track progress via ``GET /api/jobs/{job_id}/events``.
+    On completion, ``GET /api/jobs/{job_id}`` exposes ``payload.skipped_pages``
+    and ``payload.skipped_indices`` for pages that could not be persisted
+    because they are not yet registered in the store (``page_id is None``).
     """
     project = project_state.loaded_project
     if project is None or project.project_id != project_id:

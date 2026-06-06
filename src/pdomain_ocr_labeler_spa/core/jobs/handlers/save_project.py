@@ -130,6 +130,7 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
         return
 
     failures: list[dict[str, Any]] = []
+    skipped: list[int] = []
     completed = 0
 
     await runner.update_progress(job.job_id, current=0, total=total, message=f"Saving {total} page(s)")
@@ -192,8 +193,9 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
             # No store available — treat as clean success (in-memory only session).
             log.debug("save_project: no page_store in context — skipping store write for page %d", page_index)
         else:
-            # page_id not set — page not yet registered in store, skip.
+            # page_id not set — page not yet registered in store; track as skipped.
             log.debug("save_project: page %d has no page_id — skipping store write", page_index)
+            skipped.append(page_index)
         pstate.last_saved_generation = pstate.generation
 
         completed += 1
@@ -205,11 +207,18 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
         )
 
     job.payload["failures"] = failures
+    job.payload["skipped_pages"] = len(skipped)
+    job.payload["skipped_indices"] = skipped
 
-    if failures:
+    if failures or skipped:
+        parts: list[str] = []
+        if failures:
+            parts.append(f"{len(failures)} failure(s)")
+        if skipped:
+            parts.append(f"{len(skipped)} unsaved (not registered): pages {skipped}")
         notification_queue.queue(
             NotificationKind.NEGATIVE,
-            f"Save complete with {len(failures)} failure(s).",
+            f"Save complete with {', '.join(parts)}.",
         )
     else:
         notification_queue.queue(
@@ -218,10 +227,11 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
         )
 
     log.info(
-        "save_project: complete project=%s saved=%d failed=%d job=%s",
+        "save_project: complete project=%s saved=%d failed=%d skipped=%d job=%s",
         project.project_id,
-        total - len(failures),
+        total - len(failures) - len(skipped),
         len(failures),
+        len(skipped),
         job.job_id,
     )
 
