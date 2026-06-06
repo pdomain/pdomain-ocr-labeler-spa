@@ -1073,6 +1073,13 @@ export default function ProjectPage() {
         target={dialogTarget}
         lineWords={dialogLineWords}
         wordImageUrl={pagePayload?.image_url ?? undefined}
+        wordBBox={
+          pagePayload
+            ? (findWordByIndex(pagePayload, dialogTarget.lineIndex, dialogTarget.wordIndex)?.bbox ??
+              undefined)
+            : undefined
+        }
+        encodedScale={pagePayload?.encoded_dims?.scale ?? undefined}
         gtText={
           pagePayload
             ? (findWordByIndex(pagePayload, dialogTarget.lineIndex, dialogTarget.wordIndex)

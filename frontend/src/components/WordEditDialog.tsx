@@ -41,7 +41,7 @@ import { useRef, useState, useEffect } from "react";
 import { WordActionRows } from "./WordActionRows";
 import type { WordActionCallbacks } from "./WordActionRows";
 import { WordImageCanvas } from "./WordImageCanvas";
-import type { EraseRect, MarkerPoint } from "./WordImageCanvas";
+import type { EraseRect, MarkerPoint, CropBBox } from "./WordImageCanvas";
 import { WordRefineNudgeRows } from "./WordRefineNudgeRows";
 import type { PendingNudge, WordRefineNudgeRowsHandle } from "./WordRefineNudgeRows";
 import { WordTagRow } from "./WordTagRow";
@@ -61,6 +61,16 @@ interface WordEditDialogProps extends WordActionCallbacks {
   lineWords: string[];
   /** URL of the current word's image slice (for the Konva canvas). */
   wordImageUrl?: string | undefined;
+  /**
+   * Bounding box (source-pixel coords) of the target word in the page image.
+   * When provided with `encodedScale`, `WordImageCanvas` crops to the word region.
+   */
+  wordBBox?: CropBBox | undefined;
+  /**
+   * Scale factor from source→display pixels (from PagePayload.encoded_dims.scale).
+   * Required to make `wordBBox` crop effective.
+   */
+  encodedScale?: number | undefined;
   /** Whether erase mode is active (toggles Konva drag-erase). */
   eraseMode?: boolean | undefined;
   /** Available style labels for the tag row. */
@@ -119,6 +129,8 @@ export function WordEditDialog({
   target,
   lineWords,
   wordImageUrl,
+  wordBBox,
+  encodedScale,
   eraseMode = false,
   styleOptions,
   componentOptions,
@@ -330,6 +342,8 @@ export function WordEditDialog({
           >
             <WordImageCanvas
               imageUrl={wordImageUrl}
+              cropBBox={wordBBox}
+              encodedScale={encodedScale}
               eraseMode={eraseMode}
               eraseRects={eraseRects}
               onEraseRectAdd={handleEraseRectAdd}

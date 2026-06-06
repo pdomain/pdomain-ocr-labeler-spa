@@ -45,6 +45,14 @@ export interface EraseRect {
   height: number;
 }
 
+/** Bounding box in source (unscaled) pixel coordinates. */
+export interface CropBBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 interface DragState {
   startX: number;
   startY: number;
@@ -53,6 +61,19 @@ interface DragState {
 interface WordImageCanvasProps {
   /** URL of the word image slice (PNG or JPEG). */
   imageUrl?: string | undefined;
+  /**
+   * Optional crop region in *source* pixel coordinates.
+   * When provided together with `encodedScale`, only the specified
+   * region of the page image is shown (the word bbox area).
+   * If omitted, the full image is scaled to fill the canvas.
+   */
+  cropBBox?: CropBBox | undefined;
+  /**
+   * Scale factor to convert source pixels to display pixels
+   * (display_width / src_width from EncodedDims).  Required for `cropBBox` to work;
+   * ignored when `cropBBox` is absent.
+   */
+  encodedScale?: number | undefined;
   /** Whether erase mode is currently active (from dialog state). */
   eraseMode?: boolean;
   /** External accumulator of erase rects — caller owns state and persists across navigations. */
@@ -91,6 +112,8 @@ function buildWordCanvasColors() {
 
 export function WordImageCanvas({
   imageUrl,
+  cropBBox,
+  encodedScale,
   eraseMode = false,
   eraseRects = [],
   onEraseRectAdd,
@@ -266,7 +289,13 @@ export function WordImageCanvas({
           <Layer>
             {/* Background — image or placeholder */}
             {imageUrl ? (
-              <ImageLayer url={imageUrl} width={imageWidth} height={imageHeight} />
+              <ImageLayer
+                url={imageUrl}
+                width={imageWidth}
+                height={imageHeight}
+                cropBBox={cropBBox}
+                encodedScale={encodedScale}
+              />
             ) : (
               /* Placeholder rect when no image URL provided */
               <Rect
@@ -362,10 +391,19 @@ interface ImageLayerProps {
   url: string;
   width: number;
   height: number;
+  /** Optional crop region in source pixel coordinates. */
+  cropBBox?: CropBBox | undefined;
+  /** Scale to convert source pixels → display pixels (from EncodedDims). */
+  encodedScale?: number | undefined;
 }
 
-/** Loads an image URL and renders it. Falls back to a placeholder on error. */
-function ImageLayer({ url, width, height }: ImageLayerProps) {
+/** Loads an image URL and renders it. Falls back to a placeholder on error.
+ *
+ * When `cropBBox` + `encodedScale` are provided, uses Konva `fillPattern*`
+ * offset + scale to show only the word-region of the page image. Without
+ * them the full image is stretched to fill the canvas (legacy behaviour).
+ */
+function ImageLayer({ url, width, height, cropBBox, encodedScale }: ImageLayerProps) {
   // Use a native img element for loading; Konva will receive it.
   // In jsdom tests this renders nothing (Konva Image needs HTMLImageElement).
   // The Konva mock in tests renders a div stub, so we just provide the rect.
@@ -382,6 +420,38 @@ function ImageLayer({ url, width, height }: ImageLayerProps) {
   }
 
   const hasImg = loaded && imgRef.current != null;
+
+  // Compute Konva fillPattern* props for cropping.
+  // If cropBBox + encodedScale are provided, show only the word region.
+  let fillPatternProps: Record<string, unknown> = {};
+  if (hasImg) {
+    const imgEl = imgRef.current!;
+    if (cropBBox && encodedScale) {
+      // Convert source-pixel bbox to display-pixel bbox.
+      const dispX = cropBBox.x * encodedScale;
+      const dispY = cropBBox.y * encodedScale;
+      const dispW = cropBBox.width * encodedScale;
+      const dispH = cropBBox.height * encodedScale;
+      // Scale so the word region fills the canvas width × height.
+      const scaleX = width / dispW;
+      const scaleY = height / dispH;
+      fillPatternProps = {
+        fillPatternImage: imgEl,
+        fillPatternOffsetX: dispX,
+        fillPatternOffsetY: dispY,
+        fillPatternScaleX: scaleX,
+        fillPatternScaleY: scaleY,
+      };
+    } else {
+      // No crop: stretch full image to fill canvas.
+      fillPatternProps = {
+        fillPatternImage: imgEl,
+        fillPatternScaleX: width / imgEl.naturalWidth,
+        fillPatternScaleY: height / imgEl.naturalHeight,
+      };
+    }
+  }
+
   return (
     <Rect
       x={0}
@@ -389,13 +459,7 @@ function ImageLayer({ url, width, height }: ImageLayerProps) {
       width={width}
       height={height}
       {...(!loaded ? { fill: readCssToken("--bg-raised", "#1d1d24") } : {})}
-      {...(hasImg
-        ? {
-            fillPatternImage: imgRef.current!,
-            fillPatternScaleX: width / imgRef.current!.naturalWidth,
-            fillPatternScaleY: height / imgRef.current!.naturalHeight,
-          }
-        : {})}
+      {...fillPatternProps}
     />
   );
 }
