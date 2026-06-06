@@ -206,9 +206,14 @@ class SplitParagraphAfterLineRequest(BaseModel):
 
 
 class SplitLineWithSelectedWordsRequest(BaseModel):
-    line_index: int
-    word_indices: list[int]
-    mode: Literal["extract_to_new", "split_into_two"]
+    """``POST .../lines/{li}/split-with-selected`` body — spec §9 row 18b.
+
+    ``word_keys`` is a list of ``(line_index, word_index)`` tuples passed through to
+    ``Page.split_line_with_selected_words`` (same semantic as ``SplitByWordsRequest``
+    used by the collective ``/lines/split-by-words`` route).
+    """
+
+    word_keys: list[tuple[int, int]]
 
 
 class GroupSelectedWordsIntoNewParagraphRequest(BaseModel):
@@ -1903,16 +1908,55 @@ def split_line_with_selected_words(
     line_index: int,
     body: SplitLineWithSelectedWordsRequest,
     project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
-    """``POST .../lines/{li}/split-with-selected`` — legacy stub.
+    """``POST .../lines/{li}/split-with-selected`` — extract selected words into a new line.
 
-    Frontend prefers the D1 ``/lines/split-by-words`` collective route.
-    Kept stub-shaped for integration-test parity.
+    Spec §9 row 18b: per-line variant of ``/lines/split-by-words``.
+    Calls ``Page.split_line_with_selected_words(word_keys)``
+    (``pdomain_book_tools/ocr/page.py:2217``). Structural edit: triggers GT
+    auto-rematch + content persistence (A3).
+
+    ``line_index`` in the URL is accepted for routing but ``word_keys`` in the
+    body govern which words are extracted (same semantic as
+    ``SplitByWordsRequest``). The ``line_index`` path param is not forwarded
+    to the page method because ``split_line_with_selected_words`` resolves the
+    source line from the first element of ``word_keys``.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
         return err
-    return _stub_page_payload(project_id, page_index)
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    word_keys: list[tuple[int, int]] = [(int(li), int(wi)) for li, wi in body.word_keys]
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        ok = bool(page.split_line_with_selected_words(word_keys))
+        if not ok:
+            return _mutation_failed(
+                f"split_line_with_selected_words rejected keys={word_keys}",
+            )
+        _finalize_structural_edit(
+            page=page,
+            pstate=pstate,
+            project_state=project_state,
+            page_index=page_index,
+            store=store,
+            changes=[{"type": "split_with_selected", "word_keys": word_keys}],
+        )
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+    )
 
 
 @router.post(

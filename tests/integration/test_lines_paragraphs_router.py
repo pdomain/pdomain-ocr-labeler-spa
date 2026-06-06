@@ -13,14 +13,57 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from pdomain_book_tools.ocr.page import Page
+from pdomain_ops.page_aggregate import PageAggregate
+from pdomain_ops.pages import PageRecord
 
 from pdomain_ocr_labeler_spa.bootstrap import build_app
 from pdomain_ocr_labeler_spa.core.page_state import PageLoadOutcome, PageSource
+from pdomain_ocr_labeler_spa.core.persistence.page_store import LabelerPageStore
 from pdomain_ocr_labeler_spa.core.project_state import PageState
 from pdomain_ocr_labeler_spa.settings import Settings
+
+# ── Page builder helpers (S4.1 mutation test) ────────────────────────────────
+
+
+def _s4_bbox(x0: int, y0: int, x1: int, y1: int) -> dict[str, object]:
+    return {"top_left": {"x": x0, "y": y0}, "bottom_right": {"x": x1, "y": y1}, "is_normalized": False}
+
+
+def _s4_word(text: str) -> dict[str, object]:
+    return {"type": "Word", "text": text, "ground_truth_text": text, "bounding_box": _s4_bbox(0, 0, 10, 10)}
+
+
+def _s4_make_page() -> Page:
+    """One paragraph, one line with 3 words — split-with-selected can extract 2 of them."""
+    page_dict = {
+        "width": 200,
+        "height": 300,
+        "page_index": 0,
+        "bounding_box": _s4_bbox(0, 0, 200, 300),
+        "items": [
+            {
+                "type": "Block",
+                "child_type": "BLOCKS",
+                "block_category": "PARAGRAPH",
+                "items": [
+                    {
+                        "type": "Block",
+                        "child_type": "WORDS",
+                        "block_category": "LINE",
+                        "items": [_s4_word("alpha"), _s4_word("beta"), _s4_word("gamma")],
+                        "bounding_box": _s4_bbox(0, 0, 100, 20),
+                    }
+                ],
+                "bounding_box": _s4_bbox(0, 0, 100, 40),
+            }
+        ],
+    }
+    return Page.from_dict(page_dict)
 
 
 def _make_settings(tmp_path: Path, **overrides: object) -> Settings:
@@ -240,7 +283,7 @@ def test_split_line_with_selected_returns_404_when_no_project(
 ) -> None:
     resp = bare_client.post(
         "/api/projects/book1/pages/0/lines/0/split-with-selected",
-        json={"line_index": 0, "word_indices": [1, 2], "mode": "extract_to_new"},
+        json={"word_keys": [[0, 1], [0, 2]]},
     )
     assert resp.status_code == 404
     assert resp.json()["error"] == "project_not_found"
@@ -251,22 +294,80 @@ def test_split_line_with_selected_returns_404_for_bad_page(
 ) -> None:
     resp = loaded_client.post(
         "/api/projects/book1/pages/99/lines/0/split-with-selected",
-        json={"line_index": 0, "word_indices": [1, 2], "mode": "extract_to_new"},
+        json={"word_keys": [[0, 1], [0, 2]]},
     )
     assert resp.status_code == 404
     assert resp.json()["error"] == "page_not_found"
 
 
-def test_split_line_with_selected_returns_200_for_valid_page(
+def test_split_line_with_selected_returns_400_when_page_not_loaded(
     loaded_client: TestClient,
 ) -> None:
+    # Project is loaded but no page content seeded — real route returns page_not_loaded.
     resp = loaded_client.post(
         "/api/projects/book1/pages/0/lines/0/split-with-selected",
-        json={"line_index": 0, "word_indices": [1, 2], "mode": "extract_to_new"},
+        json={"word_keys": [[0, 1], [0, 2]]},
     )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["project_id"] == "book1"
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "page_not_loaded"
+
+
+@pytest.mark.integration
+def test_split_with_selected_actually_splits(tmp_path: Path) -> None:
+    """S4.1 real-mutation test: extracting words into a new line increases line count.
+
+    Seeds a page with 1 line of 3 words; calls split-with-selected with
+    word_keys=[[0,1],[0,2]]; asserts line count increases from 1 to 2.
+    """
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    proj_dir = projects_root / "book1"
+    proj_dir.mkdir()
+    (proj_dir / "001.png").write_bytes(b"\x89PNG\r\n")
+
+    settings = Settings(  # type: ignore[call-arg]
+        host="127.0.0.1",
+        port=8080,
+        config_root=tmp_path / "config",
+        data_root=tmp_path / "data",
+        cache_root=tmp_path / "cache",
+        mode="api_only",
+        source_projects_root=projects_root,
+    )
+    app = build_app(settings)
+    page_id = uuid4()
+
+    with TestClient(app) as client:
+        resp = client.post("/api/projects/load", json={"project_root": str(proj_dir)})
+        assert resp.status_code == 200, resp.text
+
+        live_store: LabelerPageStore = client.app.state.page_store  # type: ignore[attr-defined]
+        live_store.save_page(PageAggregate(PageRecord(page_id=page_id, page_index=0, source="ocr")))
+
+        page = _s4_make_page()
+        baseline_line_count = len(list(page.lines))
+        assert baseline_line_count == 1
+
+        project_state = client.app.state.project_state  # type: ignore[attr-defined]
+        outcome = PageLoadOutcome(page_index=0, source=PageSource.OCR, payload=page)
+        pstate = PageState(page_index=0, page_record=outcome)
+        pstate.page_id = page_id
+        project_state._page_states[0] = pstate
+
+        # Extract words at (0,1) and (0,2) into a new line.
+        resp = client.post(
+            "/api/projects/book1/pages/0/lines/0/split-with-selected",
+            json={"word_keys": [[0, 1], [0, 2]]},
+        )
+        assert resp.status_code == 200, resp.text
+        payload = resp.json()
+        assert payload["project_id"] == "book1"
+        # The route performed a real structural edit: line count must increase.
+        after_line_count = len(list(page.lines))
+        expected = baseline_line_count + 1
+        assert after_line_count == expected, (
+            f"split_with_selected did not split: expected {expected} lines, got {after_line_count}"
+        )
 
 
 # ── group-into-paragraph ──────────────────────────────────────────────
