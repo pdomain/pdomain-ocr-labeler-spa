@@ -177,6 +177,28 @@ describe("ProjectNavigationControls: Prev / Next navigation", () => {
   });
 });
 
+// ─── S6.1: nav-goto-button must be visible (not sr-only) ────────────────────
+describe("ProjectNavigationControls: S6.1 visible Go-To button", () => {
+  it("nav-goto-button does NOT have sr-only class (must be visually rendered)", async () => {
+    mockProject("proj-1", 5);
+    renderControls({ projectId: "proj-1", totalPages: 5 });
+    const btn = await screen.findByTestId("nav-goto-button");
+    // sr-only hides visually; the button must be styled like the adjacent nav buttons
+    expect(btn.className).not.toContain("sr-only");
+  });
+
+  it("clicking nav-goto-button calls onGoTo (navigates)", async () => {
+    mockProject("proj-1", 10);
+    renderControls({ projectId: "proj-1", route: "/projects/proj-1/pages/pageno/2" });
+    const input = await screen.findByTestId("nav-page-input");
+    fireEvent.change(input, { target: { value: "5" } });
+    fireEvent.click(screen.getByTestId("nav-goto-button"));
+    await waitFor(() => {
+      expect(currentUrl()).toBe("/projects/proj-1/pages/pageno/5");
+    });
+  });
+});
+
 describe("ProjectNavigationControls: GoTo", () => {
   it("clicking nav-goto-button with valid input navigates to that page", async () => {
     mockProject("proj-1", 10);

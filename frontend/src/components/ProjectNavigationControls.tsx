@@ -146,13 +146,13 @@ export default function ProjectNavigationControls({
         / {totalPages}
       </span>
 
-      {/* nav-goto-button: driver-contract testid preserved; sr-only (Enter key triggers GoTo) */}
+      {/* nav-goto-button: driver-contract testid preserved; styled like adjacent nav buttons */}
       <button
         type="button"
         data-testid="nav-goto-button"
         aria-label="Go to page"
         onClick={onGoTo}
-        className="sr-only"
+        className={`${btnBase} px-1.5 text-[11px] w-auto min-w-[28px]`}
       >
         Go
       </button>
