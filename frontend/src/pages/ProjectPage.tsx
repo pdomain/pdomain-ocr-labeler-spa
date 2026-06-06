@@ -750,6 +750,17 @@ export default function ProjectPage() {
     addWord.mutate({ bbox: srcBbox });
   }
 
+  // S3: a completed rebox draw. `rect` is in display pixels; convert to source
+  // pixels before POSTing to .../words/{li}/{wi}/rebox. The pending target is
+  // read from viewportStore (set by WordDetail rebox accordion).
+  function handleRebox(rect: { x: number; y: number; width: number; height: number }) {
+    const t = viewportStore.getState().pendingReboxTarget;
+    if (!t) return;
+    const scale = pagePayload?.encoded_dims?.scale ?? 1;
+    const srcBbox = displayToSrc(rect, scale);
+    reboxWord.mutate({ lineIndex: t.lineIndex, wordIndex: t.wordIndex, bbox: srcBbox });
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────
 
   // ── Slot content ──────────────────────────────────────────────────────
@@ -912,6 +923,7 @@ export default function ProjectPage() {
           pageIndex={idx0}
           onBoxSelect={handleBoxSelect}
           onAddWord={handleAddWord}
+          onRebox={handleRebox}
         />
       </div>
       <div data-testid="inline-banners" className="flex flex-col gap-1 p-1">

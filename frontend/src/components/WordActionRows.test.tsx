@@ -56,11 +56,11 @@ describe("WordActionRows", () => {
     expect(onSplit).toHaveBeenCalledWith(0.3, "h");
   });
 
-  it("Split V calls onSplit(fraction, 'v')", async () => {
-    const onSplit = vi.fn().mockResolvedValue(undefined);
-    render(<WordActionRows hasPrev hasNext splitFraction={0.7} onSplit={onSplit} />);
-    fireEvent.click(screen.getByTestId("dialog-split-v-button"));
-    expect(onSplit).toHaveBeenCalledWith(0.7, "v");
+  it("Split V button is permanently disabled (backend returns 400 for vertical split)", () => {
+    render(<WordActionRows hasPrev hasNext splitFraction={0.7} />);
+    const btn = screen.getByTestId("dialog-split-v-button");
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute("title", "Vertical split not supported (horizontal only)");
   });
 
   it("Delete calls onDelete", async () => {
