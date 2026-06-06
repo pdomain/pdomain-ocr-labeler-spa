@@ -182,6 +182,45 @@ def _read_edited_image_blob(
         return None
 
 
+def _apply_reocr_outcome(
+    project_state: ProjectState,
+    page_index: int,
+    outcome: PageLoadOutcome,
+) -> None:
+    """Write an OCR outcome back to ``ProjectState`` in-place.
+
+    Shared by ``handle_reload_ocr`` and ``handle_rotate_page`` so neither
+    copies this lock+generation-bump block.  Holds ``project_state._lock``
+    for the write only; callers must have run OCR outside the lock.
+    """
+    with project_state._lock:
+        existing = project_state._page_states.get(page_index)
+        if existing is None:
+            existing = PageState(page_index=page_index)
+            project_state._page_states[page_index] = existing
+        existing.page_record = outcome
+        # Stamp page_id from the OCR result onto PageState so subsequent
+        # mutation routes can fire event-store saves (M9 wiring).
+        # Always overwrite (no "if None" guard): forced re-OCR produces a NEW
+        # page_id (Page.page_id is uuid4); keeping the stale id means saves after
+        # re-OCR target the old aggregate while the ProjectAggregate now points
+        # at the new one — post-re-OCR edits are silently lost on restart.
+        page_payload_obj = getattr(outcome, "payload", None)
+        labeler_page_id = getattr(page_payload_obj, "_labeler_page_id", None)
+        if labeler_page_id is not None:
+            existing.page_id = labeler_page_id
+            log.debug(
+                "_apply_reocr_outcome: stamped page_id=%s on pstate page=%d",
+                labeler_page_id,
+                page_index,
+            )
+        # Per-page generation bump (spec-23-B2 / spec §4 + §8): mark the
+        # page dirty so subsequent ``POST .../save`` or ``save_project``
+        # passes pick it up.
+        existing.generation += 1
+        project_state._generation += 1
+
+
 async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
     """Run OCR for a single page and store the outcome on ``ProjectState``.
 
@@ -253,36 +292,7 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
     current, message = _PROGRESS_STAGES[2]
     await runner.update_progress(job.job_id, current=current, total=_PROGRESS_TOTAL, message=message)
 
-    # Store on ProjectState. Mirrors ``core/page_state.ensure_page_model``'s
-    # post-load write: get-or-create the PageState row and stash the
-    # outcome on ``.page_record``. Holds the project lock for the
-    # mutation only (the OCR itself ran outside the lock on the worker
-    # thread — by design, OCR is the slow path and we don't want to
-    # serialize the whole runner on it).
-    with project_state._lock:
-        existing = project_state._page_states.get(page_index)
-        if existing is None:
-            existing = PageState(page_index=page_index)
-            project_state._page_states[page_index] = existing
-        existing.page_record = outcome
-        # Stamp page_id from the OCR result onto PageState so subsequent
-        # mutation routes can fire event-store saves (M9 wiring).
-        # Always overwrite (no "if None" guard): forced re-OCR produces a NEW
-        # page_id (Page.page_id is uuid4); keeping the stale id means saves after
-        # re-OCR target the old aggregate while the ProjectAggregate now points
-        # at the new one — post-re-OCR edits are silently lost on restart.
-        page_payload_obj = getattr(outcome, "payload", None)
-        labeler_page_id = getattr(page_payload_obj, "_labeler_page_id", None)
-        if labeler_page_id is not None:
-            existing.page_id = labeler_page_id
-            log.debug("reload_ocr: stamped page_id=%s on pstate page=%d", labeler_page_id, page_index)
-        # Per-page generation bump (spec-23-B2 / spec §4 + §8): mark the
-        # page dirty so subsequent ``POST .../save`` or ``save_project``
-        # passes pick it up. The pre-existing ``ProjectState._generation``
-        # bump is the project-wide counter; per-page tracking is the
-        # save-precondition.
-        existing.generation += 1
-        project_state._generation += 1
+    _apply_reocr_outcome(project_state, page_index, outcome)
 
     # Stage 4 — 1.0 / "Done".
     current, message = _PROGRESS_STAGES[3]
@@ -302,4 +312,4 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
     )
 
 
-__all__ = ["handle_reload_ocr"]
+__all__ = ["_apply_reocr_outcome", "_get_page_loader", "handle_reload_ocr"]
