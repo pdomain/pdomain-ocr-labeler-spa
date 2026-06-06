@@ -344,8 +344,6 @@ export default function ProjectPage() {
   const deleteWord = useDeleteWord(pid, idx0);
   const reboxWord = useReboxWord(pid, idx0);
   const nudgeWord = useNudgeWord(pid, idx0);
-  const applyStyleWord = useApplyStyle(pid, idx0);
-  const applyComponentWord = useApplyComponent(pid, idx0);
   const updateGtWord = useUpdateWordGroundTruth(pid, idx0);
 
   // ── Derived view state ─────────────────────────────────────────────────
@@ -1204,7 +1202,7 @@ export default function ProjectPage() {
             .then(() => {})
         }
         onApplyStyle={(style, scope) =>
-          applyStyleWord
+          applyStyle
             .mutateAsync({
               lineIndex: dialogTarget.lineIndex,
               wordIndex: dialogTarget.wordIndex,
@@ -1214,7 +1212,7 @@ export default function ProjectPage() {
             .then(() => {})
         }
         onApplyComponent={(component, enabled) =>
-          applyComponentWord
+          applyComponent
             .mutateAsync({
               lineIndex: dialogTarget.lineIndex,
               wordIndex: dialogTarget.wordIndex,
