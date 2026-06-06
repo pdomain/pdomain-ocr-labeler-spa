@@ -1,12 +1,15 @@
 // useWordMutations.ts — TanStack Query mutations for word-level actions.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 16 (BBoxSection).
 // FO-2: useSetCharRanges — positioned char-range styles endpoint.
+// S1.1: useDeleteWord + useNudgeWord (parity-gap-completion plan).
 //
 // Endpoints:
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/rebox         → PagePayload
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/merge         → PagePayload
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/split         → PagePayload
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/char-ranges   → PagePayload (FO-2)
+//   POST /api/projects/{pid}/pages/{idx}/delete                        → PagePayload (S1.1)
+//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/nudge         → PagePayload (S1.1)
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { components } from "../api/types";
@@ -22,6 +25,8 @@ type AddWordRequest = components["schemas"]["AddWordRequest"];
 type UpdateWordGroundTruthRequest = components["schemas"]["UpdateWordGroundTruthRequest"];
 type SetCharRangesRequest = components["schemas"]["SetCharRangesRequest"];
 type CharRange = components["schemas"]["CharRange-Input"];
+type DeleteScopeRequest = components["schemas"]["DeleteScopeRequest"];
+type NudgeBboxRequest = components["schemas"]["NudgeBboxRequest"];
 
 // ─── internal helpers ──────────────────────────────────────────────────────
 
@@ -379,6 +384,74 @@ export function useSetCharBboxes(projectId: string, pageIndex: number) {
       apiPost<PagePayload>(`${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/char-bboxes`, {
         char_bboxes: charBboxes,
       }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+// ─── useDeleteWord (S1.1) ─────────────────────────────────────────────────────
+
+/**
+ * Delete a single word from the page.
+ *
+ * Uses the generic ``POST .../delete`` endpoint with scope "word".
+ * Pattern mirrors the local ``useDeleteWord`` in ``WordFooter.tsx``.
+ *
+ * Endpoint: ``POST /api/projects/{pid}/pages/{idx}/delete``
+ * Body: ``DeleteScopeRequest { scope:"word", word_indices:[[li,wi]], line_indices:[], paragraph_indices:[] }``
+ */
+export function useDeleteWord(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { lineIndex: number; wordIndex: number }>({
+    mutationFn: ({ lineIndex, wordIndex }) => {
+      const body: DeleteScopeRequest = {
+        scope: "word",
+        word_indices: [[lineIndex, wordIndex]],
+        line_indices: [],
+        paragraph_indices: [],
+      };
+      return apiPost<PagePayload>(
+        `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}/delete`,
+        body,
+      );
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+// ─── useNudgeWord (S1.1) ──────────────────────────────────────────────────────
+
+/**
+ * Nudge a word's bounding box edges by pixel offsets.
+ *
+ * Endpoint: ``POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/nudge``
+ * Body: ``NudgeBboxRequest { left, right, top, bottom, refine_after }``
+ */
+export function useNudgeWord(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<
+    PagePayload,
+    Error,
+    {
+      lineIndex: number;
+      wordIndex: number;
+      left: number;
+      right: number;
+      top: number;
+      bottom: number;
+      refineAfter: boolean;
+    }
+  >({
+    mutationFn: ({ lineIndex, wordIndex, left, right, top, bottom, refineAfter }) => {
+      const body: NudgeBboxRequest = { left, right, top, bottom, refine_after: refineAfter };
+      return apiPost<PagePayload>(
+        `${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/nudge`,
+        body,
+      );
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
     },
