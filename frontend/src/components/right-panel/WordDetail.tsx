@@ -146,10 +146,12 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
       <WordImagePreview word={word} />
 
       {/* P2.c: OCR/GT compare row + inline Ω unicode picker */}
-      {/* S2.1: onTab walks to the next/prev word via walkSibling (DRY — reuses WordFooter's Skip path). */}
+      {/* S2.1: onTab walks to the next/prev word via walkSibling (DRY — reuses WordFooter's Skip path).
+               selectedWordKey triggers focus on the GT input when selection changes (Tab navigation). */}
       <OcrGtCompareRow
         ocrText={word.ocr_text}
         gtText={word.ground_truth_text}
+        selectedWordKey={`${lineIdx}-${wordIdx}`}
         onCommitGt={(text) => {
           updateGt.mutate({
             lineIndex: lineIdx,

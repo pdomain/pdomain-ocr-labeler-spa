@@ -17,7 +17,7 @@
 //   ocr-gt-omega-btn            — Ω chars toggle button
 //   ocr-gt-unicode-picker       — inline UnicodePicker wrapper (when open)
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Input } from "../ui/Input";
 import { UnicodePicker } from "./UnicodePicker";
 
@@ -32,9 +32,22 @@ export interface OcrGtCompareRowProps {
    * to default browser behavior.
    */
   onTab?: ((dir: "next" | "prev") => void) | undefined;
+  /**
+   * S2.1 focus-follows-selection: a stable key identifying the current word
+   * (e.g. `"${lineIdx}-${wordIdx}"`). When this value changes, the GT input
+   * receives focus so the user can start typing immediately without clicking.
+   * Not provided = no auto-focus behavior.
+   */
+  selectedWordKey?: string | undefined;
 }
 
-export function OcrGtCompareRow({ ocrText, gtText, onCommitGt, onTab }: OcrGtCompareRowProps) {
+export function OcrGtCompareRow({
+  ocrText,
+  gtText,
+  onCommitGt,
+  onTab,
+  selectedWordKey,
+}: OcrGtCompareRowProps) {
   const [localGt, setLocalGt] = useState(gtText);
   const [pickerOpen, setPickerOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -43,6 +56,21 @@ export function OcrGtCompareRow({ ocrText, gtText, onCommitGt, onTab }: OcrGtCom
   if (localGt !== gtText && document.activeElement !== inputRef.current) {
     setLocalGt(gtText);
   }
+
+  // S2.1: focus GT input when selection moves to this word via Tab navigation.
+  // The effect only fires when selectedWordKey *changes* (not on initial mount),
+  // so the input does not steal focus on a normal page load or panel open.
+  const prevKeyRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (
+      selectedWordKey !== undefined &&
+      prevKeyRef.current !== undefined &&
+      prevKeyRef.current !== selectedWordKey
+    ) {
+      inputRef.current?.focus();
+    }
+    prevKeyRef.current = selectedWordKey;
+  }, [selectedWordKey]);
 
   /** Persist the current GT value if it has changed. */
   function commitGt() {

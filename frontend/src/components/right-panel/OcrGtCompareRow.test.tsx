@@ -114,3 +114,26 @@ describe("OcrGtCompareRow S2.1 — Tab/Shift+Tab navigation", () => {
     await expect(user.keyboard("[Tab]")).resolves.not.toThrow();
   });
 });
+
+// --- S2.1 focus-follows-selection ---
+
+describe("OcrGtCompareRow S2.1 — focus follows selectedWordKey", () => {
+  it("focuses the GT input when selectedWordKey prop changes", () => {
+    const { rerender } = render(
+      <OcrGtCompareRow ocrText="hello" gtText="hello" onCommitGt={vi.fn()} selectedWordKey="0-0" />,
+    );
+    // Change selectedWordKey to simulate Tab-navigation landing on this word
+    rerender(
+      <OcrGtCompareRow ocrText="world" gtText="world" onCommitGt={vi.fn()} selectedWordKey="0-1" />,
+    );
+    expect(screen.getByTestId("ocr-gt-input")).toHaveFocus();
+  });
+
+  it("does not focus on initial render (no selection change)", () => {
+    render(
+      <OcrGtCompareRow ocrText="hello" gtText="hello" onCommitGt={vi.fn()} selectedWordKey="0-0" />,
+    );
+    // On first render, input should NOT steal focus automatically
+    expect(screen.getByTestId("ocr-gt-input")).not.toHaveFocus();
+  });
+});
