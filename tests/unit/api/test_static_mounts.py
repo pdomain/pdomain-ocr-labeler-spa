@@ -283,16 +283,38 @@ def spa_dir() -> Iterator[Path]:
             index_file.unlink()
 
 
-def test_spa_fallback_serves_index_for_unknown_route(settings: Settings, spa_dir: Path) -> None:
-    """A non-API path under ``/`` returns the SPA shell (``index.html``)."""
-    expected = (spa_dir / "index.html").read_bytes()
+def test_spa_fallback_serves_index_for_unknown_route(
+    settings: Settings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A non-API path under ``/`` returns the SPA shell (``index.html``).
+
+    Uses ``monkeypatch`` + ``tmp_path`` to isolate ``_resolve_static_dir``
+    from the real ``static/`` dir so the test is hermetic regardless of
+    whether ``make frontend-build`` has been run (ci-slow builds the
+    frontend before running tests; the previous ``spa_dir`` fixture wrote
+    a stub to the real ``static/`` but was then compared against what the
+    server served, which could be the real built index.html if the Path
+    resolution happened before the stub was written).
+
+    This is the pattern established by ``test_spa_fallback_503_when_dist_missing``
+    and the ``%2f``-traversal tests: monkeypatch ``_resolve_static_dir`` at the
+    module level so the route handler never touches the real ``static/`` dir.
+    """
+    import pdomain_ocr_labeler_spa.api.static_mounts as sm
+
+    fake_static = tmp_path / "static"
+    fake_static.mkdir()
+    fake_index_content = b"<!doctype html><div id=test-root></div>"
+    (fake_static / "index.html").write_bytes(fake_index_content)
+
+    monkeypatch.setattr(sm, "_resolve_static_dir", lambda: fake_static)
 
     app = build_app(settings)
     with TestClient(app) as client:
         r = client.get("/projects/some-project")
 
     assert r.status_code == 200
-    assert r.content == expected
+    assert r.content == fake_index_content
     assert "html" in r.headers.get("content-type", "")
 
 

@@ -138,11 +138,14 @@ def test_release_workflow_has_concurrency_block() -> None:
     one release at a time). A ``concurrency:`` block at the workflow level is
     therefore no longer load-bearing and has been intentionally dropped.
 
-    What we assert instead: the ``publish`` job carries ``needs: [release-ci]``
-    so that it can only run after the ``release-ci`` gate succeeds, providing
-    the same within-run serialization guarantee. We also assert there is no
-    stale ``concurrency:`` block left behind from the old design (which would
-    be dead config and confusing to future maintainers).
+    The workflow is now publish-only: no ``release-ci`` gate job, no ``needs:``
+    dependency. The CI gate runs as the local ``RELEASE_PREFLIGHT`` in
+    ``scripts/release-common.sh`` before the tag is created. We assert:
+
+    * No stale ``concurrency:`` block (dropped intentionally).
+    * No stale ``release-ci`` job (publish-only design has no gate job).
+    * The ``publish`` job exists and has no stale ``needs: [release-ci]``
+      dependency (the gate is local, not in-workflow).
     """
     data = _load_workflow()
 
@@ -157,16 +160,25 @@ def test_release_workflow_has_concurrency_block() -> None:
         "rationale and the correct group/cancel-in-progress values."
     )
 
-    # publish must need release-ci (within-run gate).
+    # Publish-only: no release-ci gate job in the workflow.
+    # The CI gate lives in scripts/release-common.sh (RELEASE_PREFLIGHT),
+    # not in the GitHub Actions workflow.
     jobs: dict = data.get("jobs") or {}
+    assert "release-ci" not in jobs, (
+        "release.yml has a `release-ci` job, but the publish-only design "
+        "dropped it — CI runs locally via scripts/release-common.sh "
+        "RELEASE_PREFLIGHT before the tag is created. Remove the job and "
+        "update this test if re-introducing a workflow-side CI gate."
+    )
     assert "publish" in jobs, "release.yml must have a `publish` job"
     publish_needs = jobs["publish"].get("needs") or []
     if isinstance(publish_needs, str):
         publish_needs = [publish_needs]
-    assert "release-ci" in publish_needs, (
-        "`publish` job must declare `needs: [release-ci]` so publish cannot "
-        "run if the CI gate fails — equivalent to the former concurrency block's "
-        "within-run serialization guarantee."
+    assert "release-ci" not in publish_needs, (
+        "`publish` job must NOT declare `needs: [release-ci]` — the "
+        "publish-only design has no in-workflow CI gate; the gate runs "
+        "locally via scripts/release-common.sh RELEASE_PREFLIGHT. "
+        f"Current needs: {publish_needs!r}"
     )
 
 
@@ -534,58 +546,63 @@ def test_wheel_attached_to_release() -> None:
     )
 
 
-def test_release_is_gated_by_verify_ci_job() -> None:
-    """The ``publish`` job must be gated behind the ``release-ci`` job.
+RELEASE_COMMON_PATH = REPO_ROOT / "scripts" / "release-common.sh"
 
-    The old F-026 design required a ``verify-ci`` job that called ``gh api``
-    to check CI status before any publish step. In the dispatch-only design,
-    ``scripts/do-release.sh`` runs ``make ci-slow`` locally first and only
-    dispatches the workflow after CI passes. The workflow itself encodes the
-    gate structurally: the ``release-ci`` job runs ``make ci-slow`` on the
-    tagged commit (double-checking in the clean GH Actions environment), and
-    ``publish`` declares ``needs: [release-ci]`` so it cannot start if
-    ``release-ci`` fails.
 
-    Structural requirements:
-    - A job named ``release-ci`` must exist in ``jobs:``.
-    - ``release-ci`` must run ``make ci-slow`` (the full CI gate).
-    - ``publish`` must declare ``needs:`` that includes ``release-ci``
-      so no artifact is produced or published if CI is red.
-    - No stale ``verify-ci`` job should remain (it was part of the old design).
+def test_release_is_gated_by_local_preflight() -> None:
+    """The release cannot be published if CI is red — gated via local preflight.
+
+    The old F-026 design required a ``verify-ci`` job or ``release-ci`` job in
+    the GitHub Actions workflow. The current design moves the gate to the local
+    release script: ``scripts/release-common.sh`` runs ``RELEASE_PREFLIGHT``
+    (defaults to ``make ci-slow``) before creating the git tag. If the preflight
+    fails, the script aborts with "Preflight failed. No tag created." and no
+    tag is pushed, so the workflow is never triggered.
+
+    This preserves the guarantee ("a release cannot be published if CI is red")
+    at the correct layer: locally, before the tag is created.
+
+    We assert:
+    - ``RELEASE_PREFLIGHT`` defaults to ``make ci-slow`` in release-common.sh.
+    - The script runs the preflight with ``sh -c "$RELEASE_PREFLIGHT"`` before
+      any ``git tag`` or ``git push`` command.
+    - On preflight failure, the script emits "Preflight failed. No tag created."
+      and exits, so no tag is ever pushed.
+    - No stale ``verify-ci`` or ``release-ci`` job exists in release.yml
+      (those were part of the old workflow-side gate design).
     """
+    script = RELEASE_COMMON_PATH.read_text()
+
+    # 1. RELEASE_PREFLIGHT defaults to `make ci-slow`.
+    assert re.search(r"RELEASE_PREFLIGHT\s*=\s*\$\{RELEASE_PREFLIGHT:-make\s+ci-slow\}", script), (
+        "scripts/release-common.sh must default RELEASE_PREFLIGHT to `make ci-slow` "
+        "via `RELEASE_PREFLIGHT=${RELEASE_PREFLIGHT:-make ci-slow}`. "
+        "This is the local CI gate that runs before tagging."
+    )
+
+    # 2. The preflight is executed (sh -c "$RELEASE_PREFLIGHT").
+    assert re.search(r'sh\s+-c\s+"\$RELEASE_PREFLIGHT"', script), (
+        "scripts/release-common.sh must invoke the preflight via "
+        '`sh -c "$RELEASE_PREFLIGHT"` so the local gate actually runs.'
+    )
+
+    # 3. On failure, the script aborts with the expected message before tagging.
+    assert "Preflight failed. No tag created." in script, (
+        "scripts/release-common.sh must emit 'Preflight failed. No tag created.' "
+        "when the preflight exits non-zero, confirming the abort is explicit."
+    )
+
+    # 4. No stale workflow-side gate jobs in release.yml.
     data = _load_workflow()
     jobs: dict = data.get("jobs") or {}
-
-    # No stale verify-ci job from old design.
     assert "verify-ci" not in jobs, (
         "release.yml has a stale `verify-ci` job from the old on.push design. "
-        "The dispatch-only design uses `release-ci` + `needs:` instead."
+        "The gate now lives in scripts/release-common.sh RELEASE_PREFLIGHT."
     )
-
-    assert "release-ci" in jobs, (
-        "release.yml must include a `release-ci` job that gates `publish` "
-        "(dispatch-only equivalent of F-026). Without it, publish can run "
-        "even when CI is red."
-    )
-
-    gate_job = jobs["release-ci"]
-    gate_steps = gate_job.get("steps") or []
-    gate_run_text = "\n".join(str(s.get("run", "")) for s in gate_steps)
-    assert re.search(r"\bmake\s+ci-slow\b", gate_run_text), (
-        "`release-ci` must run `make ci-slow` (the full CI gate including "
-        "slow/integration tests). Got steps run-text: "
-        f"{gate_run_text!r}"
-    )
-
-    # publish must need release-ci.
-    assert "publish" in jobs, "release.yml must have a `publish` job"
-    publish_needs = jobs["publish"].get("needs") or []
-    if isinstance(publish_needs, str):
-        publish_needs = [publish_needs]
-    assert "release-ci" in publish_needs, (
-        "`publish` job must declare `needs: [release-ci]` so it cannot "
-        "run when CI is red (dispatch-only equivalent of F-026 / #431). "
-        f"Current needs: {publish_needs!r}"
+    assert "release-ci" not in jobs, (
+        "release.yml has a stale `release-ci` job; the publish-only design "
+        "runs CI locally via scripts/release-common.sh RELEASE_PREFLIGHT "
+        "before the tag is created. Remove the job if re-introduced accidentally."
     )
 
 
