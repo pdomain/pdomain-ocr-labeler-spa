@@ -22,7 +22,7 @@ else
         local-setup-py local-frontend-install local-frontend-build local-frontend-test \
         mise-download mise-trust-worktrees mise-setup mise-doctor \
         docker-build docker-run docker-shell \
-        release-patch release-minor release-major _do-release ci-slow
+        release-patch release-minor release-major _do-release ci-slow ci-against-main
 
 # ---------------------------------------------------------------------------
 # Help / discovery
@@ -436,6 +436,9 @@ pip-audit-no-dev: ## Audit runtime-only PyPI deps (excludes dev group)
 ci: setup frontend-install pre-commit-check typecheck openapi-export frontend-build lint test behavior-coverage frontend-format-check frontend-lint frontend-test frontend-knip ## Full CI pipeline
 
 ci-slow: ci build ## Full pre-flight for releases (CI plus wheel build)
+
+ci-against-main: ## Validate against pd-* siblings' latest main, then revert (transient)
+	@./scripts/ci-against-main.sh
 
 # ---------------------------------------------------------------------------
 # Docker
