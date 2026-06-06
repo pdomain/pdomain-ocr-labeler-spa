@@ -30,6 +30,7 @@ interface RenderOpts {
   actionsSlot?: React.ReactNode;
   projectName?: string | null;
   pageMetrics?: PageMetrics | null;
+  projectRoot?: string | null;
 }
 
 function renderHeaderBar({
@@ -38,6 +39,7 @@ function renderHeaderBar({
   actionsSlot,
   projectName,
   pageMetrics,
+  projectRoot,
 }: RenderOpts = {}) {
   const qc = makeQueryClient();
   return render(
@@ -48,6 +50,7 @@ function renderHeaderBar({
           {...(actionsSlot !== undefined && { actionsSlot })}
           {...(projectName !== undefined && { projectName })}
           {...(pageMetrics !== undefined && { pageMetrics })}
+          {...(projectRoot !== undefined && { projectRoot })}
         />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -258,6 +261,33 @@ describe("HeaderBar: metrics strip", () => {
   it("does NOT render header-metrics-strip when pageMetrics is undefined", async () => {
     renderHeaderBar();
     expect(screen.queryByTestId("header-metrics-strip")).not.toBeInTheDocument();
+  });
+});
+
+// ─── S6.2: resolved project path label ────────────────────────────────────────
+
+describe("HeaderBar: S6.2 project-root-label", () => {
+  it("renders project-root-label when projectRoot is provided", () => {
+    renderHeaderBar({ projectName: "book1", projectRoot: "/srv/projects/book1" });
+    const label = screen.getByTestId("project-root-label");
+    expect(label).toBeInTheDocument();
+    expect(label).toHaveTextContent("/srv/projects/book1");
+  });
+
+  it("project-root-label is NOT sr-only (visually rendered)", () => {
+    renderHeaderBar({ projectName: "book1", projectRoot: "/srv/projects/book1" });
+    const label = screen.getByTestId("project-root-label");
+    expect(label.className).not.toContain("sr-only");
+  });
+
+  it("does NOT render project-root-label when projectRoot is null", () => {
+    renderHeaderBar({ projectName: "book1", projectRoot: null });
+    expect(screen.queryByTestId("project-root-label")).not.toBeInTheDocument();
+  });
+
+  it("does NOT render project-root-label on root route (no projectRoot)", () => {
+    renderHeaderBar();
+    expect(screen.queryByTestId("project-root-label")).not.toBeInTheDocument();
   });
 });
 

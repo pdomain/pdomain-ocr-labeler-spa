@@ -145,6 +145,8 @@ function AppInner() {
   // The ProjectResponse shape has no separate display-name field, so we
   // use project_id as the breadcrumb label for now.
   const headerProjectName: string | null = projectQ.data ? projectQ.data.project_id : null;
+  // S6.2: resolved project_root path for the header label (only on project routes)
+  const headerProjectRoot: string | null = projectQ.data?.project_root ?? null;
 
   const pageMetrics: PageMetrics | null = (() => {
     const lineMatches = pageQ.data?.line_matches ?? null;
@@ -206,6 +208,7 @@ function AppInner() {
                 ) : undefined
               }
               projectName={headerProjectName}
+              projectRoot={onProjectRoute ? headerProjectRoot : null}
               pageMetrics={pageMetrics}
             />
             {/*

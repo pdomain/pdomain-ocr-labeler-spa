@@ -99,6 +99,11 @@ export interface HeaderBarProps {
    * Only rendered when non-null and total > 0.
    */
   pageMetrics?: PageMetrics | null;
+  /**
+   * S6.2: Resolved project_root path, shown as a visible mono label next to
+   * the project breadcrumb on project routes. Only rendered when non-null/truthy.
+   */
+  projectRoot?: string | null;
 }
 
 export default function HeaderBar({
@@ -106,6 +111,7 @@ export default function HeaderBar({
   actionsSlot,
   projectName,
   pageMetrics,
+  projectRoot,
 }: HeaderBarProps = {}) {
   return (
     <header
@@ -150,6 +156,17 @@ export default function HeaderBar({
             {projectName}
           </span>
         </>
+      )}
+
+      {/* S6.2: resolved project_root path label — only on project routes */}
+      {projectRoot && (
+        <span
+          data-testid="project-root-label"
+          className="text-[11px] text-ink-3 font-mono truncate max-w-[260px] shrink-0"
+          title={projectRoot}
+        >
+          {projectRoot}
+        </span>
       )}
 
       {/* Center-left: navigation slot (project route only) */}
