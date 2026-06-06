@@ -31,15 +31,17 @@ def test_project_page_loads_with_tiny_fixture(live_server: LiveServer, page: Pag
     page.goto(url, timeout=15_000)
     wait_for_page_loaded(page, live_server.base_url, timeout=15_000)
 
-    # The assembled shell mounts the major panes.
-    # image-pane is directly visible inside the canvas slot.
+    # The assembled shell mounts the real ProjectPage layout (ProjectPage.tsx
+    # header §3): project-page root → project-workspace grid → the three
+    # columns, with image-pane / text-pane inside. StudioShell is defined but
+    # NEVER mounted by ProjectPage in production (ProjectPage.test.tsx asserts
+    # studio-shell is null), so we assert the real testids here.
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+    page.wait_for_selector('[data-testid="project-workspace"]', timeout=10_000)
+    # image-pane is directly visible inside the canvas column.
     page.wait_for_selector('[data-testid="image-pane"]', timeout=10_000)
-    # Phase 2: StudioShell replaces the legacy Splitter layout; use studio-shell-canvas.
-    page.wait_for_selector('[data-testid="studio-shell-canvas"]', timeout=10_000)
-    # text-pane and page-actions-bar live in display:none stub wrappers for
-    # driver-contract testid preservation (IS-4) — use state="attached".
+    # text-pane lives in the detail column; it may be collapsed/attached.
     page.wait_for_selector('[data-testid="text-pane"]', state="attached", timeout=10_000)
-    page.wait_for_selector('[data-testid="page-actions-bar"]', state="attached", timeout=10_000)
 
 
 @pytest.mark.e2e

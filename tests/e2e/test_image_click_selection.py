@@ -34,11 +34,18 @@ from pathlib import Path
 import httpx
 import pytest
 import uvicorn
+from pdomain_book_tools.ocr.page import Page as BookPage
 from PIL import Image
 from playwright.sync_api import Page
 
+from pdomain_ocr_labeler_spa.adapters.ocr.local_doctr import (
+    _ingest_ocr_result,
+    _register_page_in_project,
+)
 from pdomain_ocr_labeler_spa.bootstrap import build_app
+from pdomain_ocr_labeler_spa.core.persistence.page_store import LabelerPageStore
 from pdomain_ocr_labeler_spa.settings import Settings
+from tests.e2e.helpers import wait_for_project_ready
 
 _PROJECT_ID = "click-fixture"
 _IMAGE_W = 1200
@@ -221,13 +228,31 @@ def click_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[ClickServ
     # Source project: image + pages.json.
     dest = source_root / _PROJECT_ID
     dest.mkdir(parents=True)
-    (dest / "001.png").write_bytes(_make_png(_IMAGE_W, _IMAGE_H))
+    image_bytes = _make_png(_IMAGE_W, _IMAGE_H)
+    (dest / "001.png").write_bytes(image_bytes)
     (dest / "pages.json").write_text(json.dumps({"001.png": "Gutenberg"}))
 
-    # Pre-place the labeled-lane envelope so load_labeled opens it without OCR.
-    labeled = data_root / "labeled-projects" / _PROJECT_ID
-    labeled.mkdir(parents=True)
-    (labeled / f"{_PROJECT_ID}_001.json").write_text(json.dumps(_build_envelope()))
+    # Seed the event store so load_labeled reconstructs the page without OCR.
+    # (Writing the envelope into data_root/labeled-projects/ predates the
+    # event-store load_labeled lane (M5b) and silently no-ops — load_labeled
+    # resolves the project aggregate from the store, not flat JSON files.)
+    book_page = BookPage.from_dict(_build_envelope()["payload"]["page"])
+    store = LabelerPageStore(dest)
+    try:
+        _ingest_ocr_result(
+            page=book_page,
+            image_bytes=image_bytes,
+            page_index=0,
+            store=store,
+        )
+        _register_page_in_project(
+            store=store,
+            project_id=_PROJECT_ID,
+            page_id=book_page.page_id,
+            page_index=0,
+        )
+    finally:
+        store.close()
 
     port = _pick_free_port()
     settings = Settings(
@@ -295,6 +320,9 @@ def test_click_word_bbox_on_image_opens_word_detail(
         timeout=20_000,
     )
     page.wait_for_selector('[data-testid="project-page"]', timeout=20_000)
+    # Wait for the loading overlay to clear before clicking the canvas, or the
+    # fixed inset-0 overlay intercepts the mouse click under load.
+    wait_for_project_ready(page)
 
     viewport = page.locator('[data-testid="image-viewport"]').first
     viewport.wait_for(state="visible", timeout=10_000)
@@ -348,6 +376,9 @@ def test_click_word_in_hierarchy_opens_word_detail_without_blank_page(
         timeout=20_000,
     )
     page.wait_for_selector('[data-testid="project-page"]', timeout=20_000)
+    # Wait for the loading overlay to clear before clicking, or the fixed
+    # inset-0 overlay intercepts the drawer-tab click under load.
+    wait_for_project_ready(page)
 
     page.locator('[data-testid="drawer-tab-hierarchy"]').first.click()
     page.wait_for_selector('[data-testid="hierarchy"]', state="visible", timeout=10_000)

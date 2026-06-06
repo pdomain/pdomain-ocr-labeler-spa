@@ -1,6 +1,11 @@
 AI ?=
 LOG := .ci-ai.log
 
+# E2E worker count. Default 2: each worker runs uvicorn + chromium + cold OCR,
+# so higher counts starve a thermally constrained machine. Override per-run,
+# e.g. `make e2e PYTEST_N=1` (serial) or `make e2e PYTEST_N=auto`.
+PYTEST_N ?= 2
+
 ifdef AI
 _goals := $(or $(MAKECMDGOALS),ci)
 .PHONY: $(_goals)
@@ -328,7 +333,14 @@ integration: ## Run slow/integration tests (real DocTR OCR pipeline, ~10 min)
 	uv run pytest tests/ -v --ignore=tests/e2e -m "slow or integration"
 
 e2e: frontend-build ## Run Playwright E2E tests (requires `playwright install chromium`)
-	uv run --group e2e pytest tests/e2e -v -n auto
+	# Cap workers at 2. Each e2e worker boots its own uvicorn + chromium AND most
+	# project-page tests trigger a COLD OCR pass on the fixture images (the
+	# fixtures ship without pre-baked OCR words, so the first page fetch runs the
+	# detection/recognition models). Running many such loads at once on a
+	# thermally constrained machine starves the server: seeds hit ReadTimeout and
+	# page loads exceed the action timeout. `-n 2` keeps the suite parallel while
+	# leaving headroom for the cold-OCR work. Override with `make e2e PYTEST_N=…`.
+	uv run --group e2e pytest tests/e2e -v -n $(PYTEST_N)
 
 e2e-browser: frontend-build ## Run Playwright browser verification tests
 	uv run --group e2e pytest tests/e2e/test_browser_verification.py -m e2e -v --browser chromium

@@ -14,6 +14,22 @@ from __future__ import annotations
 import httpx
 from playwright.sync_api import Page
 
+# Generous per-request timeout for fixture seeding. Under parallel e2e
+# (multiple workers each booting uvicorn + chromium AND running cold OCR on the
+# fixture pages) the server can be slow to respond to the seed POST/GET; a short
+# 5s timeout spuriously raised ``httpx.ReadTimeout`` under contention. 60s lets
+# a slow-under-load seed complete without masking a genuinely hung server.
+SEED_TIMEOUT = 60.0
+
+# Timeout (ms) for the project-loading overlay to clear after navigation.
+# The FIRST page fetch lazily runs a cold OCR + upright-rotation pass on the
+# fixture image (see ``page_line_match_count`` — "can take well over 10s"),
+# so ``ProjectLoadingOverlay`` (driven by ``pageQ.isLoading``) legitimately
+# stays up far longer than a normal render. This is deliberately generous so
+# the overlay-wait never fires *before* the cold load completes; it is shorter
+# than the cold-OCR worst case only when the model is truly hung.
+OVERLAY_TIMEOUT = 90_000
+
 
 def wait_for_app_ready(base_url: str, timeout: float = 10.0) -> None:
     """Assert the server is healthy before the test starts.
@@ -55,26 +71,53 @@ def load_project(base_url: str, project_id: str) -> httpx.Response:
     # the project is named ``project_id``.
     #
     # Use GET /api/projects first to discover the full path.
-    list_resp = httpx.get(f"{base_url}/api/projects", timeout=5)
+    list_resp = httpx.get(f"{base_url}/api/projects", timeout=SEED_TIMEOUT)
     if list_resp.status_code != 200:
         return list_resp
     projects = list_resp.json().get("projects", [])
     match = next((p for p in projects if p.get("project_id") == project_id), None)
     if match is None:
         # Fallback: POST a plausible path and let the server error.
-        return httpx.post(url, json={"project_root": f"/nonexistent/{project_id}"}, timeout=5)
+        return httpx.post(url, json={"project_root": f"/nonexistent/{project_id}"}, timeout=SEED_TIMEOUT)
     project_path = match["source_path"]
-    return httpx.post(url, json={"project_root": project_path}, timeout=5)
+    return httpx.post(url, json={"project_root": project_path}, timeout=SEED_TIMEOUT)
+
+
+def wait_for_project_ready(page: Page, timeout: float = OVERLAY_TIMEOUT) -> None:
+    """Wait until the ``project-loading-overlay`` is gone.
+
+    ``ProjectLoadingOverlay`` (driven by ``pageQ.isLoading``) is a
+    ``fixed inset-0 z-50`` element that fully unmounts (returns ``null``) once
+    the page query settles. While it is up it covers the whole viewport, so any
+    click lands on the overlay — Playwright reports "project-loading-overlay
+    intercepts pointer events" and the action times out.
+
+    The first page fetch lazily runs a cold OCR/rotation pass, so the overlay
+    can stay up for tens of seconds on the very first navigation; the default
+    :data:`OVERLAY_TIMEOUT` is generous to accommodate that. Call this after
+    navigating to / seeding a project page so individual tests never click
+    through the overlay. ``state="hidden"`` matches both the detached
+    (unmounted) and CSS-hidden cases.
+    """
+    page.wait_for_selector(
+        '[data-testid="project-loading-overlay"]',
+        state="hidden",
+        timeout=timeout,
+    )
 
 
 def wait_for_page_loaded(page: Page, base_url: str, timeout: float = 10_000) -> None:
-    """Wait until the project page has rendered at least one line card or
-    the status banner indicates the page is loaded.
+    """Wait until the project page has rendered and the loading overlay is gone.
 
-    Driver-contract §2.8: ``[data-testid^="line-card-"]`` or
-    ``[data-testid="project-page"]`` must be visible within ``timeout`` ms.
+    Driver-contract §2.8: ``[data-testid="project-page"]`` must be visible
+    within ``timeout`` ms. We additionally wait for the
+    ``project-loading-overlay`` to detach (with the generous
+    :data:`OVERLAY_TIMEOUT`, independent of ``timeout``, since the first page
+    fetch runs cold OCR) so callers can click immediately without the overlay
+    intercepting pointer events (see :func:`wait_for_project_ready`).
     """
     page.wait_for_selector('[data-testid="project-page"]', timeout=timeout)
+    wait_for_project_ready(page)
 
 
 def click_word_edit(page: Page, line_index: int, word_index: int) -> None:

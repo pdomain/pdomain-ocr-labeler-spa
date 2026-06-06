@@ -28,7 +28,7 @@ import pytest
 from playwright.sync_api import Page
 
 from tests.e2e.conftest import LiveServer
-from tests.e2e.helpers import wait_for_app_ready
+from tests.e2e.helpers import SEED_TIMEOUT, wait_for_app_ready
 
 # Path to the axe-core bundle shipped with frontend devDeps.
 _AXE_BUNDLE = Path(__file__).resolve().parents[2] / "frontend" / "node_modules" / "axe-core" / "axe.min.js"
@@ -88,7 +88,7 @@ def _format_violations(violations: list[dict]) -> str:
 
 def _load_tiny_fixture(base_url: str) -> str:
     """Load the tiny-fixture project via the API; return its project_id."""
-    r = httpx.get(f"{base_url}/api/projects", timeout=5)
+    r = httpx.get(f"{base_url}/api/projects", timeout=SEED_TIMEOUT)
     r.raise_for_status()
     projects = r.json().get("projects", [])
     tiny = next((p for p in projects if p.get("project_id") == "tiny-fixture"), None)
@@ -98,7 +98,7 @@ def _load_tiny_fixture(base_url: str) -> str:
     load_r = httpx.post(
         f"{base_url}/api/projects/load",
         json={"project_root": tiny["project_root"], "initial_page_index": 0},
-        timeout=10,
+        timeout=SEED_TIMEOUT,
     )
     if load_r.status_code not in (200, 409):
         pytest.skip(f"Failed to load tiny-fixture: {load_r.status_code}")

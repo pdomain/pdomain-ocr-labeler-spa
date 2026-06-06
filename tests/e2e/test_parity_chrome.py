@@ -96,10 +96,15 @@ def test_paragraph_mode_selection_opens_paragraph_detail(exercise_server: Exerci
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
-    # Switch to the paragraph rail target → checks selection-mode-paragraph.
-    rail_para = page.locator('[data-testid="rail-target-para"]').first
-    rail_para.wait_for(state="visible", timeout=10_000)
-    rail_para.click()
+    # Enter paragraph selection mode via the canonical selection-mode radio.
+    # onSelectionModeChange also syncs railStore.target (ProjectPage), so the
+    # canvas hit-test resolves paragraphs and both controls agree. (The
+    # rail-target buttons set railStore.target but intentionally do NOT drive
+    # this radio — the rail also exposes a "block" target with no radio
+    # counterpart, so the sync is radio→rail only.)
+    para_radio = page.locator('[data-testid="selection-mode-paragraph"]')
+    para_radio.wait_for(state="visible", timeout=10_000)
+    para_radio.check()
     page.wait_for_selector(
         '[data-testid="selection-mode-paragraph"]:checked',
         timeout=10_000,

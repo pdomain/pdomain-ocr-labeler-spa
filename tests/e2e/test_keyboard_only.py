@@ -28,7 +28,7 @@ import pytest
 from playwright.sync_api import Page
 
 from tests.e2e.conftest import LiveServer
-from tests.e2e.helpers import wait_for_page_loaded
+from tests.e2e.helpers import SEED_TIMEOUT, wait_for_page_loaded
 
 
 def _load_tiny_fixture(base_url: str, source_root_path: str) -> None:
@@ -39,13 +39,13 @@ def _load_tiny_fixture(base_url: str, source_root_path: str) -> None:
     httpx.post(
         f"{base_url}/api/source-root",
         json={"path": source_root_path},
-        timeout=5,
+        timeout=SEED_TIMEOUT,
     )
     project_path = str(source_root_path) + "/tiny-fixture"
     resp = httpx.post(
         f"{base_url}/api/projects/load",
         json={"project_root": project_path},
-        timeout=5,
+        timeout=SEED_TIMEOUT,
     )
     assert resp.status_code == 200, f"load_project failed: {resp.status_code} {resp.text}"
 
