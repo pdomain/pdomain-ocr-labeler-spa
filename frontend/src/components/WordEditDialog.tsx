@@ -37,7 +37,7 @@
 //   dialog-style-select, dialog-scope-select, dialog-component-select
 //   dialog-apply-style-button, dialog-apply-component-button, dialog-clear-component-button
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { WordActionRows } from "./WordActionRows";
 import type { WordActionCallbacks } from "./WordActionRows";
 import { WordImageCanvas } from "./WordImageCanvas";
@@ -141,6 +141,12 @@ export function WordEditDialog({
   const [eraseRects, setEraseRects] = useState<EraseRect[]>([]);
   const [marker, setMarker] = useState<MarkerPoint | null>(null);
   const nudgeRef = useRef<WordRefineNudgeRowsHandle>(null);
+  // Local GT text — initialized from the prop and reset when the dialog target changes.
+  // This allows free typing without requiring the parent to manage controlled state.
+  const [localGtText, setLocalGtText] = useState<string>(gtText ?? "");
+  useEffect(() => {
+    setLocalGtText(gtText ?? "");
+  }, [gtText, target.lineIndex, target.wordIndex]);
 
   const { lineIndex, wordIndex } = target;
   const hasPrev = wordIndex > 0;
@@ -301,13 +307,14 @@ export function WordEditDialog({
             <input
               data-testid="dialog-gt-input"
               type="text"
-              value={gtText}
+              value={localGtText}
               onChange={(e) => {
+                setLocalGtText(e.target.value);
                 onGtChange?.(e.target.value);
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
-                  onGtCommit?.(gtText);
+                  onGtCommit?.(localGtText);
                 }
               }}
               className="w-full text-sm border border-border-2 rounded px-2 py-1 font-mono focus:outline-none focus:border-accent bg-bg-surface text-ink-1"

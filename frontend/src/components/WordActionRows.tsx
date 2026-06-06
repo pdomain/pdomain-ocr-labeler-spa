@@ -149,14 +149,16 @@ export function WordActionRows({
             void run("split-h", () => onSplit?.(splitFraction, "h") ?? Promise.resolve());
           }}
         />
-        <ActionBtn
-          testId="dialog-split-v-button"
-          label="V"
-          disabled={busy !== null}
-          onClick={() => {
-            void run("split-v", () => onSplit?.(splitFraction, "v") ?? Promise.resolve());
-          }}
-        />
+        {/* V-split always disabled: backend returns 400 for vertical split (words.py:1080).
+            Tooltip surfaces this constraint rather than silently no-oping. */}
+        <button
+          data-testid="dialog-split-v-button"
+          disabled
+          title="Vertical split not supported (horizontal only)"
+          className="px-2 py-1 text-xs rounded border border-border-1 bg-bg-raised text-ink-4 cursor-default"
+        >
+          V
+        </button>
         <span className="text-xs text-ink-4 ml-1">at {Math.round(splitFraction * 100)}%</span>
       </div>
 

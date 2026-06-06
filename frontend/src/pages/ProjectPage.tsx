@@ -68,7 +68,17 @@ import {
   useDeleteLine,
   useMergeLines,
 } from "../hooks/useLineMutations";
-import { useApplyStyle, useApplyComponent, useAddWord } from "../hooks/useWordMutations";
+import {
+  useApplyStyle,
+  useApplyComponent,
+  useAddWord,
+  useMergeWord,
+  useSplitWord,
+  useDeleteWord,
+  useReboxWord,
+  useNudgeWord,
+  useUpdateWordGroundTruth,
+} from "../hooks/useWordMutations";
 // Lane D reuses `toggleAddWordMode` / `exitToSelectMode` (viewport-store
 // helpers) + the `handleAddWord` handler below to add an add-word button
 // outside the toolbar grid without duplicating the mutation wiring.
@@ -80,6 +90,7 @@ import {
 } from "../stores/viewport-store";
 import { displayToSrc } from "../lib/coords";
 import { applyBoxSelect } from "../lib/box-select-handler";
+import { findWordByIndex } from "../lib/word-order";
 import type { SelectionModifier } from "../components/PageImageCanvas";
 import { railStore } from "../stores/rail-store";
 import { useGlobalHotkeys } from "../hooks/useGlobalHotkeys";
@@ -325,6 +336,17 @@ export default function ProjectPage() {
   const applyStyle = useApplyStyle(pid, idx0);
   const applyComponent = useApplyComponent(pid, idx0);
   const addWord = useAddWord(pid, idx0);
+
+  // ── Word mutations for WordEditDialog (S1.2 — dialog wiring) ──────────────
+  // These are also used by S3 (reboxWord shared for canvas rebox).
+  const mergeWord = useMergeWord(pid, idx0);
+  const splitWord = useSplitWord(pid, idx0);
+  const deleteWord = useDeleteWord(pid, idx0);
+  const reboxWord = useReboxWord(pid, idx0);
+  const nudgeWord = useNudgeWord(pid, idx0);
+  const applyStyleWord = useApplyStyle(pid, idx0);
+  const applyComponentWord = useApplyComponent(pid, idx0);
+  const updateGtWord = useUpdateWordGroundTruth(pid, idx0);
 
   // ── Derived view state ─────────────────────────────────────────────────
   const pagePayload = pageQ.data ?? null;
@@ -1044,12 +1066,144 @@ export default function ProjectPage() {
 
       {/* WordEditDialog — opens from per-word pencil click via dialogStore.
           Returns null when open=false, so the dialog testids only appear
-          when the user opens it. */}
+          when the user opens it.
+          S1.2: All mutation callbacks wired (WED-1..WED-9). */}
       <WordEditDialog
         open={wordEditState.open}
         target={dialogTarget}
         lineWords={dialogLineWords}
-        wordImageUrl={undefined}
+        wordImageUrl={pagePayload?.image_url ?? undefined}
+        gtText={
+          pagePayload
+            ? (findWordByIndex(pagePayload, dialogTarget.lineIndex, dialogTarget.wordIndex)
+                ?.ground_truth_text ?? "")
+            : ""
+        }
+        onGtChange={() => {}}
+        onGtCommit={(text) => {
+          updateGtWord.mutate({
+            lineIndex: dialogTarget.lineIndex,
+            wordIndex: dialogTarget.wordIndex,
+            text,
+          });
+        }}
+        onMerge={(dir) =>
+          mergeWord
+            .mutateAsync({
+              lineIndex: dialogTarget.lineIndex,
+              wordIndex: dialogTarget.wordIndex,
+              direction: dir === "prev" ? "left" : "right",
+            })
+            .then(() => {})
+        }
+        onSplit={(fraction, axis) => {
+          if (axis === "v") return Promise.resolve(); // backend returns 400 for v-split (words.py:1080)
+          return splitWord
+            .mutateAsync({
+              lineIndex: dialogTarget.lineIndex,
+              wordIndex: dialogTarget.wordIndex,
+              xFraction: fraction,
+              direction: "horizontal",
+            })
+            .then(() => {});
+        }}
+        onDelete={() =>
+          deleteWord
+            .mutateAsync({
+              lineIndex: dialogTarget.lineIndex,
+              wordIndex: dialogTarget.wordIndex,
+            })
+            .then(() => {
+              dialogStore.close("wordEdit");
+            })
+        }
+        onCrop={(dir, padding) => {
+          const w = pagePayload
+            ? findWordByIndex(pagePayload, dialogTarget.lineIndex, dialogTarget.wordIndex)
+            : null;
+          if (!w) return Promise.resolve();
+          const b = { ...w.bbox };
+          if (dir === "left") {
+            b.x += padding;
+            b.width -= padding;
+          }
+          if (dir === "right") {
+            b.width -= padding;
+          }
+          if (dir === "above") {
+            b.y += padding;
+            b.height -= padding;
+          }
+          if (dir === "below") {
+            b.height -= padding;
+          }
+          return reboxWord
+            .mutateAsync({
+              lineIndex: dialogTarget.lineIndex,
+              wordIndex: dialogTarget.wordIndex,
+              bbox: b,
+            })
+            .then(() => {});
+        }}
+        onRefine={() =>
+          nudgeWord
+            .mutateAsync({
+              lineIndex: dialogTarget.lineIndex,
+              wordIndex: dialogTarget.wordIndex,
+              left: 0,
+              right: 0,
+              top: 0,
+              bottom: 0,
+              refineAfter: true,
+            })
+            .then(() => {})
+        }
+        onExpandRefine={() =>
+          nudgeWord
+            .mutateAsync({
+              lineIndex: dialogTarget.lineIndex,
+              wordIndex: dialogTarget.wordIndex,
+              left: 4,
+              right: 4,
+              top: 4,
+              bottom: 4,
+              refineAfter: true,
+            })
+            .then(() => {})
+        }
+        onApplyNudge={(n, refineAfter) =>
+          nudgeWord
+            .mutateAsync({
+              lineIndex: dialogTarget.lineIndex,
+              wordIndex: dialogTarget.wordIndex,
+              left: n.left,
+              right: n.right,
+              top: n.top,
+              bottom: n.bottom,
+              refineAfter,
+            })
+            .then(() => {})
+        }
+        onApplyStyle={(style, scope) =>
+          applyStyleWord
+            .mutateAsync({
+              lineIndex: dialogTarget.lineIndex,
+              wordIndex: dialogTarget.wordIndex,
+              style,
+              scope,
+            })
+            .then(() => {})
+        }
+        onApplyComponent={(component, enabled) =>
+          applyComponentWord
+            .mutateAsync({
+              lineIndex: dialogTarget.lineIndex,
+              wordIndex: dialogTarget.wordIndex,
+              component,
+              enabled,
+            })
+            .then(() => {})
+        }
         onNavigate={(t) => {
           dialogStore.openWordEdit({ lineIdx: t.lineIndex, wordIdx: t.wordIndex });
         }}
