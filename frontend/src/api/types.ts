@@ -262,9 +262,10 @@ export interface paths {
          * @description ``POST /api/projects/{pid}/save-all`` → ``202 {job_id}``.
          *
          *     Spec §5.3: long-running save of all loaded pages. Returns 202 Accepted.
-         *     The job handler is a stub that immediately completes (M3 will wire
-         *     the real labeled-lane persistence). Callers track progress via
-         *     ``GET /api/jobs/{job_id}/events``.
+         *     Callers track progress via ``GET /api/jobs/{job_id}/events``.
+         *     On completion, ``GET /api/jobs/{job_id}`` exposes ``payload.skipped_pages``
+         *     and ``payload.skipped_indices`` for pages that could not be persisted
+         *     because they are not yet registered in the store (``page_id is None``).
          */
         post: operations["save_all_api_projects__project_id__save_all_post"];
         delete?: never;
@@ -3652,6 +3653,13 @@ export interface components {
             job_id: string;
             /** Failures */
             failures?: components["schemas"]["SaveFailure"][];
+            /**
+             * Skipped Pages
+             * @default 0
+             */
+            skipped_pages: number;
+            /** Skipped Indices */
+            skipped_indices?: number[];
         };
         /**
          * Selection

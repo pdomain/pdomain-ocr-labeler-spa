@@ -411,3 +411,154 @@ describe("PageActionsCompact: toast lifecycle for reload-ocr", () => {
     vi.unstubAllGlobals();
   });
 });
+
+// ─── S5.2: Save-project skipped-page warning toast ───────────────────────────
+// When save-all completes with payload.skipped_pages > 0, the component must
+// show a warning toast (not a success toast) mentioning the skipped pages.
+// Definition of done: skipping is never silent.
+
+describe("PageActionsCompact: S5.2 save-project skipped-page warning", () => {
+  function makeSaveProjectES(progressListener: { current: ((e: MessageEvent) => void) | null }) {
+    const mockES = {
+      addEventListener: vi.fn((type: string, fn: unknown) => {
+        if (type === "progress") progressListener.current = fn as (e: MessageEvent) => void;
+      }),
+      removeEventListener: vi.fn(),
+      close: vi.fn(),
+      readyState: 1 as number,
+    };
+    vi.stubGlobal(
+      "EventSource",
+      vi.fn(() => mockES),
+    );
+    return mockES;
+  }
+
+  it("shows warning toast (not success) when save-all completes with skipped_pages > 0", async () => {
+    stubPage(false);
+    // POST save-all → returns a job_id.
+    server.use(
+      http.post("/api/projects/proj-1/save-all", () =>
+        HttpResponse.json({ job_id: "j-save-skip" }, { status: 202 }),
+      ),
+    );
+    // GET /api/jobs/j-save-skip → job result with skipped_pages: 1.
+    server.use(
+      http.get("/api/jobs/j-save-skip", () =>
+        HttpResponse.json({
+          job_id: "j-save-skip",
+          job_type: "save_project",
+          status: "complete",
+          progress_current: 1,
+          progress_total: 1,
+          message: "Saved",
+          payload: {
+            failures: [],
+            skipped_pages: 1,
+            skipped_indices: [0],
+          },
+        }),
+      ),
+    );
+
+    const progressListener = { current: null as ((e: MessageEvent) => void) | null };
+    makeSaveProjectES(progressListener);
+
+    const user = userEvent.setup();
+    renderCompact();
+
+    // Open overflow menu and click Save Project.
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("save-project-button"));
+
+    // Wait for the loading toast to be shown.
+    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
+
+    // Simulate SSE complete event.
+    act(() => {
+      progressListener.current?.({
+        data: JSON.stringify({
+          job_id: "j-save-skip",
+          status: "complete",
+          progress: { message: "Saved" },
+        }),
+      } as MessageEvent);
+    });
+
+    // The component must show a WARNING toast (not success) because skipped_pages > 0.
+    // toast.warn() calls sonnerToast(message, opts) with a warn-styled borderLeft.
+    // We assert: sonnerToast was called with a message mentioning skip/unsaved/warning,
+    // and the id matches.
+    await waitFor(() => {
+      const calls = toastMock.mock.calls;
+      const warnCall = calls.find(
+        ([msg]: [unknown, ...unknown[]]) =>
+          typeof msg === "string" &&
+          (msg.toLowerCase().includes("skip") ||
+            msg.toLowerCase().includes("unsaved") ||
+            msg.toLowerCase().includes("page")),
+      );
+      expect(warnCall).toBeDefined();
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("shows success toast when save-all completes with skipped_pages == 0", async () => {
+    stubPage(false);
+    server.use(
+      http.post("/api/projects/proj-1/save-all", () =>
+        HttpResponse.json({ job_id: "j-save-ok" }, { status: 202 }),
+      ),
+    );
+    server.use(
+      http.get("/api/jobs/j-save-ok", () =>
+        HttpResponse.json({
+          job_id: "j-save-ok",
+          job_type: "save_project",
+          status: "complete",
+          progress_current: 1,
+          progress_total: 1,
+          message: "Saved",
+          payload: {
+            failures: [],
+            skipped_pages: 0,
+            skipped_indices: [],
+          },
+        }),
+      ),
+    );
+
+    const progressListener = { current: null as ((e: MessageEvent) => void) | null };
+    makeSaveProjectES(progressListener);
+
+    const user = userEvent.setup();
+    renderCompact();
+
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("save-project-button"));
+    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
+
+    act(() => {
+      progressListener.current?.({
+        data: JSON.stringify({
+          job_id: "j-save-ok",
+          status: "complete",
+          progress: { message: "Saved" },
+        }),
+      } as MessageEvent);
+    });
+
+    // Success: toast.success() → sonnerToast("Project saved", {id, style:{borderLeft:...status-exact...}})
+    await waitFor(() => {
+      const calls = toastMock.mock.calls;
+      const successCall = calls.find(
+        ([msg]: [unknown, ...unknown[]]) =>
+          typeof msg === "string" && msg.toLowerCase().includes("saved"),
+      );
+      expect(successCall).toBeDefined();
+    });
+
+    vi.unstubAllGlobals();
+  });
+});

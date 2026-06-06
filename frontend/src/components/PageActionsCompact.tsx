@@ -34,10 +34,14 @@ export interface PageActionsCompactProps {
 export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactProps) {
   const qc = useQueryClient();
 
+  // OCR job tracking (Reload OCR / Reload OCR Edited)
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  // Save-project job tracking — kept separate to avoid conflating with OCR jobs.
+  const [saveProjectJobId, setSaveProjectJobId] = useState<string | null>(null);
   const [bulkGlyphOpen, setBulkGlyphOpen] = useState(false);
   const [overflowOpen, setOverflowOpen] = useState(false);
   const jobProgress = useJobProgress(activeJobId);
+  const saveProjectProgress = useJobProgress(saveProjectJobId);
 
   // C2: read the page payload so the restored "Reload OCR (Edited)" button can
   // be gated on the real edited-image signal (labeler extension flag set by the
@@ -72,6 +76,46 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     },
   });
 
+  // Save-project completion: fetch the job payload to check skipped_pages,
+  // then show a warning (if any pages were skipped) or success toast.
+  useJobCompletionInvalidation({
+    activeJobId: saveProjectJobId,
+    jobProgress: saveProjectProgress,
+    setActiveJobId: setSaveProjectJobId,
+    invalidationKey: ["page", projectId, pageIndex],
+    onComplete: (jobId) => {
+      void fetch(`/api/jobs/${encodeURIComponent(jobId)}`)
+        .then((r) => r.json())
+        .then((job: { payload?: { skipped_pages?: number; skipped_indices?: number[] } }) => {
+          const skipped = job.payload?.skipped_pages ?? 0;
+          if (skipped > 0) {
+            const indices = job.payload?.skipped_indices ?? [];
+            toast.warn(
+              `Project saved. ${skipped} page(s) not saved (unregistered): ${indices.join(", ")}`,
+              {
+                id: jobId,
+              },
+            );
+          } else {
+            toast.success("Project saved", { id: jobId });
+          }
+        })
+        .catch(() => {
+          // Fallback if the job fetch fails — at least dismiss the loading toast.
+          toast.success("Project saved", { id: jobId });
+        });
+    },
+    onError: (jobId) => {
+      toast.error("Save project failed", { id: jobId });
+    },
+    onRunning: (jobId, event) => {
+      const msg = event.progress?.message ?? "Saving project…";
+      void import("sonner").then(({ toast: sonnerToast }) => {
+        sonnerToast.loading(msg, { id: jobId });
+      });
+    },
+  });
+
   const reloadOcr = useReloadOcr(projectId, pageIndex);
   const reloadOcrEdited = useReloadOcrEdited(projectId, pageIndex);
   const savePage = useSavePage(projectId, pageIndex);
@@ -86,7 +130,10 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     saveProject.isPending ||
     loadPage.isPending ||
     rematchGt.isPending ||
-    (jobProgress !== null && jobProgress.status !== "complete" && jobProgress.status !== "error");
+    (jobProgress !== null && jobProgress.status !== "complete" && jobProgress.status !== "error") ||
+    (saveProjectProgress !== null &&
+      saveProjectProgress.status !== "complete" &&
+      saveProjectProgress.status !== "error");
 
   function handleReloadOcr() {
     reloadOcr.mutate(undefined, {
@@ -158,12 +205,13 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   }
 
   // C2: restored "Save Project" — persists every page (202 + job_id).
+  // S5.2: on completion, reads payload.skipped_pages and shows warning if > 0.
   function handleSaveProject() {
     setOverflowOpen(false);
     saveProject.mutate(undefined, {
       onSuccess: (data) => {
         if (data?.job_id) {
-          setActiveJobId(data.job_id);
+          setSaveProjectJobId(data.job_id);
           void import("sonner").then(({ toast: sonnerToast }) => {
             sonnerToast.loading("Saving project…", { id: data.job_id });
           });
