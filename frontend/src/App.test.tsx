@@ -4,7 +4,7 @@
 // Spec: docs/specs/2026-05-12-frontend-shell-design.md §Routing
 // Phase 2.4: AppShell + SuiteSiblingsProvider mocks added (#262).
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { server } from "./test/server";
 import type * as React from "react";
@@ -343,5 +343,53 @@ describe("App: routing shell", () => {
     });
     // Root route — no compact actions
     expect(screen.queryByTestId("page-actions-compact")).toBeNull();
+  });
+});
+
+// ─── S6.3(a): OCR config trigger on root route ────────────────────────────────
+describe("App: S6.3(a) OCR config trigger on root route", () => {
+  it("ocr-config-trigger-button is present on the root route", async () => {
+    withNoSession();
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByTestId("header-bar")).toBeInTheDocument();
+    });
+    // S6.3(a): a non-stub ocr-config-trigger-button must be present on the root route.
+    const trigger = screen.queryByTestId("ocr-config-trigger-button");
+    expect(trigger).not.toBeNull();
+    // Must not be a stub (stubs have data-testid-stub="true")
+    expect(trigger?.getAttribute("data-testid-stub")).toBeNull();
+  });
+
+  it("clicking ocr-config-trigger-button on root route opens the ocr-config-modal", async () => {
+    withNoSession();
+    server.use(
+      http.get("/api/ocr-config", () =>
+        HttpResponse.json({
+          auto_rotate_available: false,
+          auto_rotate_on_load: true,
+          auto_rotate_method: "auto",
+          detection_options: [],
+          recognition_options: [],
+          selected_detection: "stock",
+          selected_recognition: "stock",
+          hf_pinned_revision: null,
+        }),
+      ),
+      http.get("/api/normalize/available", () => HttpResponse.json({ available: false })),
+    );
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByTestId("header-bar")).toBeInTheDocument();
+    });
+    // Modal must not be open before clicking
+    expect(screen.queryByTestId("ocr-config-modal")).toBeNull();
+    // Click the root-route trigger
+    const trigger = screen.getByTestId("ocr-config-trigger-button");
+    fireEvent.click(trigger);
+    // Modal must now open
+    await waitFor(() => {
+      expect(screen.getByTestId("ocr-config-modal")).toBeInTheDocument();
+    });
   });
 });

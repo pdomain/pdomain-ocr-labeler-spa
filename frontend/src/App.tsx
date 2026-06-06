@@ -205,7 +205,23 @@ function AppInner() {
               actionsSlot={
                 onProjectRoute ? (
                   <PageActionsCompact projectId={projectId} pageIndex={pageIndex} />
-                ) : undefined
+                ) : (
+                  /* S6.3(a): OCR config trigger on root route (#405).
+                   * PageActionsCompact owns this button on project routes; on the
+                   * root route a dedicated small trigger keeps the modal reachable
+                   * without touching PageActionsCompact (T-SAVE conflict boundary). */
+                  <button
+                    type="button"
+                    data-testid="ocr-config-trigger-button"
+                    aria-label="Open OCR configuration"
+                    onClick={() => {
+                      dialogStore.open("ocrConfig");
+                    }}
+                    className="px-2 py-1 text-xs border border-border-2 rounded bg-bg-raised text-ink-2 hover:text-ink-1 hover:border-accent transition-colors"
+                  >
+                    OCR Config
+                  </button>
+                )
               }
               projectName={headerProjectName}
               projectRoot={onProjectRoute ? headerProjectRoot : null}
