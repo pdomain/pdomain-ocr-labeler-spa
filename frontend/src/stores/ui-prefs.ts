@@ -58,7 +58,8 @@ export function nextMatchFilter(current: MatchFilter): MatchFilter {
   return MATCH_FILTER_CYCLE[nextIdx]!;
 }
 
-export type DrawerTab = "worklist" | "hierarchy";
+/** S2.2: "text" tab added for the visible full-page GT/OCR read-only view. */
+export type DrawerTab = "worklist" | "hierarchy" | "text";
 
 /** Slice 24 — theme preference. */
 export type ThemePreference = "dark" | "light" | "system";

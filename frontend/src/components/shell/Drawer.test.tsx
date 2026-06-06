@@ -1,5 +1,5 @@
 // Drawer.test.tsx — Tests for the Drawer shell (Slice 11).
-// Covers: B-SHELL-003, B-SHELL-011
+// Covers: B-SHELL-003, B-SHELL-011, S2.2 (visible Text tab with GT/OCR)
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 11.
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -162,5 +162,68 @@ describe("Drawer Gap 18 — tab icons + count badges", () => {
   it("renders collapse button with ChevronLeft", () => {
     render(<Drawer />);
     expect(screen.getByTestId("drawer-collapse-btn")).toBeInTheDocument();
+  });
+});
+
+// --- S2.2: Visible full-page GT/OCR text view in Drawer Text tab ---
+
+describe("Drawer S2.2 — Text tab visible GT/OCR view", () => {
+  beforeEach(() => {
+    useUiPrefs.setState({
+      drawerOpen: true,
+      drawerTab: "worklist",
+    });
+  });
+
+  it("renders the drawer-tab-text tab button", () => {
+    render(<Drawer pageTextGt="gt text" pageTextOcr="ocr text" />);
+    expect(screen.getByTestId("drawer-tab-text")).toBeInTheDocument();
+  });
+
+  it("clicking drawer-tab-text sets drawerTab to 'text'", async () => {
+    const user = userEvent.setup();
+    render(<Drawer pageTextGt="gt text" pageTextOcr="ocr text" />);
+    await user.click(screen.getByTestId("drawer-tab-text"));
+    expect(useUiPrefs.getState().drawerTab).toBe("text");
+  });
+
+  it("Text tab shows drawer-text-panel-ground-truth that is visible", async () => {
+    const user = userEvent.setup();
+    render(<Drawer pageTextGt="the gt content" pageTextOcr="the ocr content" />);
+    await user.click(screen.getByTestId("drawer-tab-text"));
+    const gtPanel = screen.getByTestId("drawer-text-panel-ground-truth");
+    expect(gtPanel).toBeVisible();
+  });
+
+  it("Text tab shows drawer-text-panel-ocr that is visible", async () => {
+    const user = userEvent.setup();
+    render(<Drawer pageTextGt="the gt content" pageTextOcr="the ocr content" />);
+    await user.click(screen.getByTestId("drawer-tab-text"));
+    const ocrPanel = screen.getByTestId("drawer-text-panel-ocr");
+    expect(ocrPanel).toBeVisible();
+  });
+
+  it("GT panel contains the page GT text", async () => {
+    const user = userEvent.setup();
+    render(<Drawer pageTextGt="hello ground truth" pageTextOcr="hello ocr" />);
+    await user.click(screen.getByTestId("drawer-tab-text"));
+    expect(screen.getByTestId("drawer-text-panel-ground-truth")).toHaveValue("hello ground truth");
+  });
+
+  it("OCR panel contains the page OCR text", async () => {
+    const user = userEvent.setup();
+    render(<Drawer pageTextGt="hello ground truth" pageTextOcr="hello ocr" />);
+    await user.click(screen.getByTestId("drawer-tab-text"));
+    expect(screen.getByTestId("drawer-text-panel-ocr")).toHaveValue("hello ocr");
+  });
+
+  it("Text tab panels are NOT visible on other tabs (no display:none stubs added)", async () => {
+    render(<Drawer pageTextGt="gt" pageTextOcr="ocr" />);
+    // worklist is active — text panels should not be in DOM yet (hidden via tab panel)
+    // (they render but within a hidden tabpanel — toBeVisible returns false)
+    const gtPanel = screen.queryByTestId("drawer-text-panel-ground-truth");
+    if (gtPanel) {
+      expect(gtPanel).not.toBeVisible();
+    }
   });
 });

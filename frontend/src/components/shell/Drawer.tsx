@@ -1,22 +1,24 @@
-// Drawer.tsx — 320px drawer panel with Worklist / Hierarchy tabs and collapse.
+// Drawer.tsx — 320px drawer panel with Worklist / Hierarchy / Text tabs and collapse.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 11–12.
 // Issue #324 (FO-8): use useUiPrefs.subscribe directly; no local bridge Set.
 // P5.i Gap 18: tab icons + count badges + collapse chevron.
+// S2.2: "Text" tab added — visible full-page GT/OCR read-only view.
 //
-// - Header: tab strip "Worklist" | "Hierarchy" + icons + count badges + collapse button.
-// - Body: mounts Worklist (Slice 11) or Hierarchy (Slice 12).
+// - Header: tab strip "Worklist" | "Hierarchy" | "Text" + icons + count badges + collapse button.
+// - Body: mounts Worklist (Slice 11), Hierarchy (Slice 12), or Text (S2.2).
 // - Collapse state persisted via useUiPrefs.drawerOpen.
 // - Active tab persisted via useUiPrefs.drawerTab.
 
 import { useSyncExternalStore } from "react";
 import { ChevronLeft, ChevronRight } from "@pdomain/pdomain-ui/icons";
-import { List, GitBranch } from "@/icons/local-shims";
+import { List, GitBranch, FileText } from "@/icons/local-shims";
 import { cn } from "@/lib/utils";
 import { useUiPrefs, type DrawerTab } from "../../stores/ui-prefs";
 import { Worklist } from "../drawer/Worklist";
 import type { WorklistProps } from "../drawer/Worklist";
 import { Hierarchy } from "../drawer/Hierarchy";
 import type { HierarchyProps } from "../drawer/Hierarchy";
+import { PlaintextGtOcrView } from "../PlaintextGtOcrView";
 
 // ─── Selectors (use useUiPrefs.subscribe directly — store already exposes it) ─
 
@@ -56,6 +58,13 @@ const TABS: TabConfig[] = [
     testid: "drawer-tab-hierarchy",
     icon: <GitBranch size={13} />,
   },
+  {
+    // S2.2: Visible full-page GT/OCR read-only text view.
+    id: "text",
+    label: "Text",
+    testid: "drawer-tab-text",
+    icon: <FileText size={13} />,
+  },
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -65,6 +74,10 @@ export interface DrawerProps extends WorklistProps, HierarchyProps {
   className?: string;
   /** Optional item counts per tab for count badge display (Gap 18). */
   tabCounts?: Partial<Record<DrawerTab, number>>;
+  /** S2.2: Full-page ground truth text for the Text tab. */
+  pageTextGt?: string | null | undefined;
+  /** S2.2: Full-page OCR text for the Text tab. */
+  pageTextOcr?: string | null | undefined;
 }
 
 export function Drawer({
@@ -74,6 +87,8 @@ export function Drawer({
   pageIndex,
   className,
   tabCounts,
+  pageTextGt,
+  pageTextOcr,
 }: DrawerProps) {
   const open = useSyncExternalStore(useUiPrefs.subscribe, getDrawerOpen, getDrawerOpen);
   const activeTab = useSyncExternalStore(useUiPrefs.subscribe, getDrawerTab, getDrawerTab);
@@ -158,8 +173,11 @@ export function Drawer({
           <div className="flex-1 min-h-0 overflow-hidden">
             {activeTab === "worklist" ? (
               <Worklist lineMatches={lineMatches} projectId={projectId} pageIndex={pageIndex} />
-            ) : (
+            ) : activeTab === "hierarchy" ? (
               <Hierarchy page={page} />
+            ) : (
+              /* S2.2: Visible full-page GT/OCR read-only text view */
+              <PlaintextGtOcrView pageTextGt={pageTextGt} pageTextOcr={pageTextOcr} />
             )}
           </div>
         </>

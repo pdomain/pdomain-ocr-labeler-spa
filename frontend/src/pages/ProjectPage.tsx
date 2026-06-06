@@ -816,6 +816,8 @@ export default function ProjectPage() {
       pageIndex={idx0}
       className="border-l border-r-0"
       tabCounts={drawerTabCounts}
+      pageTextGt={pagePayload?.page_text_gt}
+      pageTextOcr={pagePayload?.page_text_ocr}
     />
   );
 
