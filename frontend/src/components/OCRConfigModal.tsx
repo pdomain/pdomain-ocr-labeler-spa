@@ -24,7 +24,7 @@
 //          ocr-config-cancel-button remains a closed-modal reachability stub in
 //          HeaderBar (the modal commits via Apply / dismisses via Done/Close).
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
@@ -199,8 +199,56 @@ export function OCRConfigModal({
     enabled: open,
   });
   const autoRotateAvailable = ocrConfig?.auto_rotate_available ?? false;
-  const autoRotateOnLoad = ocrConfig?.auto_rotate_on_load ?? true;
-  const autoRotateMethod: AutoRotateMethod = ocrConfig?.auto_rotate_method ?? "auto";
+
+  // S6.3: Snapshot / pending state for auto-rotate settings.
+  // Changes are captured into pendingAutoRotate (not POSTed immediately);
+  // POST fires only on Done. Cancel discards and closes.
+  const [pendingAutoRotate, setPendingAutoRotate] = useState<{
+    auto_rotate_on_load: boolean;
+    auto_rotate_method: AutoRotateMethod;
+  } | null>(null);
+
+  // Capture snapshot when modal opens (open: false → true).
+  const prevOpenRef = useRef(open);
+  useEffect(() => {
+    if (open && !prevOpenRef.current && ocrConfig) {
+      setPendingAutoRotate({
+        auto_rotate_on_load: ocrConfig.auto_rotate_on_load,
+        auto_rotate_method: ocrConfig.auto_rotate_method,
+      });
+    }
+    if (!open) {
+      setPendingAutoRotate(null);
+      setSaveError(null);
+    }
+    prevOpenRef.current = open;
+  }, [open, ocrConfig]);
+
+  // Also capture snapshot once ocrConfig loads (if modal is already open
+  // before the query resolves).
+  const ocrConfigLoadedRef = useRef(false);
+  useEffect(() => {
+    if (open && ocrConfig && !ocrConfigLoadedRef.current) {
+      ocrConfigLoadedRef.current = true;
+      setPendingAutoRotate((prev) =>
+        prev === null
+          ? {
+              auto_rotate_on_load: ocrConfig.auto_rotate_on_load,
+              auto_rotate_method: ocrConfig.auto_rotate_method,
+            }
+          : prev,
+      );
+    }
+    if (!open) {
+      ocrConfigLoadedRef.current = false;
+    }
+  }, [open, ocrConfig]);
+
+  // Effective auto-rotate values (pending takes precedence over server snapshot).
+  const autoRotateOnLoad =
+    pendingAutoRotate?.auto_rotate_on_load ?? ocrConfig?.auto_rotate_on_load ?? true;
+  const autoRotateMethod: AutoRotateMethod =
+    pendingAutoRotate?.auto_rotate_method ?? ocrConfig?.auto_rotate_method ?? "auto";
 
   // C3: model-selection state. Pending values are local so the user can pick a
   // model + revision and commit with Apply. They re-sync to the server snapshot
@@ -253,30 +301,51 @@ export function OCRConfigModal({
     }
   }
 
-  async function handleAutoRotateOnLoadChange(e: React.ChangeEvent<HTMLInputElement>) {
+  // S6.3: onChange handlers update pending state only (no immediate POST).
+  function handleAutoRotateOnLoadChange(e: React.ChangeEvent<HTMLInputElement>) {
     setSaveError(null);
-    try {
-      await postAutoRotateConfig({
-        auto_rotate_on_load: e.target.checked,
-        auto_rotate_method: autoRotateMethod,
-      });
-      void refetchOcrConfig();
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Failed to save auto-rotate settings.");
-    }
+    setPendingAutoRotate((prev) => ({
+      auto_rotate_on_load: e.target.checked,
+      auto_rotate_method: prev?.auto_rotate_method ?? autoRotateMethod,
+    }));
   }
 
-  async function handleAutoRotateMethodChange(e: React.ChangeEvent<HTMLSelectElement>) {
+  function handleAutoRotateMethodChange(e: React.ChangeEvent<HTMLSelectElement>) {
     setSaveError(null);
-    try {
-      await postAutoRotateConfig({
-        auto_rotate_on_load: autoRotateOnLoad,
-        auto_rotate_method: e.target.value as AutoRotateMethod,
-      });
-      void refetchOcrConfig();
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Failed to save auto-rotate settings.");
+    setPendingAutoRotate((prev) => ({
+      auto_rotate_on_load: prev?.auto_rotate_on_load ?? autoRotateOnLoad,
+      auto_rotate_method: e.target.value as AutoRotateMethod,
+    }));
+  }
+
+  // S6.3: Cancel — discard pending state and close (no POST).
+  function handleCancel() {
+    setPendingAutoRotate(null);
+    setSaveError(null);
+    onClose();
+  }
+
+  // Determine whether auto-rotate settings changed from server snapshot.
+  const autoRotateDirty =
+    pendingAutoRotate !== null &&
+    (pendingAutoRotate.auto_rotate_on_load !== (ocrConfig?.auto_rotate_on_load ?? true) ||
+      pendingAutoRotate.auto_rotate_method !== (ocrConfig?.auto_rotate_method ?? "auto"));
+
+  // S6.3: Done — POST pending auto-rotate if dirty, then close.
+  function handleDone() {
+    if (!autoRotateDirty || !pendingAutoRotate) {
+      onClose();
+      return;
     }
+    setSaveError(null);
+    postAutoRotateConfig(pendingAutoRotate)
+      .then(() => {
+        void refetchOcrConfig();
+        onClose();
+      })
+      .catch((err: unknown) => {
+        setSaveError(err instanceof Error ? err.message : "Failed to save auto-rotate settings.");
+      });
   }
 
   function handleGtMatchingChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -471,9 +540,7 @@ export function OCRConfigModal({
                   data-testid="auto-rotate-checkbox"
                   checked={autoRotateOnLoad}
                   disabled={!autoRotateAvailable}
-                  onChange={(e) => {
-                    void handleAutoRotateOnLoadChange(e);
-                  }}
+                  onChange={handleAutoRotateOnLoadChange}
                   className="accent-accent"
                 />
                 Auto-rotate pages on load
@@ -493,9 +560,7 @@ export function OCRConfigModal({
                   data-testid="auto-rotate-method-select"
                   value={autoRotateMethod}
                   disabled={!autoRotateAvailable || !autoRotateOnLoad}
-                  onChange={(e) => {
-                    void handleAutoRotateMethodChange(e);
-                  }}
+                  onChange={handleAutoRotateMethodChange}
                   className="border border-border-1 rounded text-xs px-1 py-0.5 bg-bg-sunk"
                   aria-label="Auto-rotation method"
                 >
@@ -622,11 +687,20 @@ export function OCRConfigModal({
         </div>
 
         {/* Footer */}
-        <DialogFooter className="px-4 py-3 border-t border-border-1 flex justify-end">
+        <DialogFooter className="px-4 py-3 border-t border-border-1 flex items-center justify-end gap-2">
+          {/* S6.3: Cancel — discards pending changes and closes without POSTing */}
           <button
             type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 text-sm bg-bg-raised hover:opacity-80 rounded"
+            onClick={handleCancel}
+            className="px-4 py-1.5 text-sm border border-border-2 bg-bg-raised hover:opacity-80 rounded text-ink-2"
+            data-testid="ocr-config-cancel-button"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleDone}
+            className="px-4 py-1.5 text-sm bg-accent text-accent-ink hover:opacity-80 rounded"
             data-testid="ocr-config-done-button"
           >
             Done

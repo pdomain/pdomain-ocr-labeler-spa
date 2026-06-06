@@ -293,6 +293,8 @@ describe("OCRConfigModal — model selection (Lane C / C3)", () => {
 });
 
 // ─── Issue #447: POST /api/ocr-config/auto-rotate HTTP failure surfacing ─────
+// S6.3: auto-rotate POST now fires on Done (not immediately on change).
+// Tests updated to click Done after changing a control.
 describe("OCRConfigModal — auto-rotate POST failure surfacing (#447)", () => {
   beforeEach(() => {
     // Provide a working ocr-config GET so auto-rotate controls are rendered and enabled.
@@ -302,6 +304,11 @@ describe("OCRConfigModal — auto-rotate POST failure surfacing (#447)", () => {
           auto_rotate_available: true,
           auto_rotate_on_load: true,
           auto_rotate_method: "auto",
+          detection_options: [],
+          recognition_options: [],
+          selected_detection: "stock",
+          selected_recognition: "stock",
+          hf_pinned_revision: null,
         }),
       ),
     );
@@ -323,8 +330,9 @@ describe("OCRConfigModal — auto-rotate POST failure surfacing (#447)", () => {
       expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
     });
 
-    // Toggle the checkbox to trigger the POST.
+    // S6.3: toggle checkbox (captures pending state) then click Done to trigger POST.
     fireEvent.click(screen.getByTestId("auto-rotate-checkbox"));
+    fireEvent.click(screen.getByTestId("ocr-config-done-button"));
 
     // Error banner should appear.
     await waitFor(() => {
@@ -349,14 +357,16 @@ describe("OCRConfigModal — auto-rotate POST failure surfacing (#447)", () => {
       expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
     });
 
+    // S6.3: change then Done to trigger POST.
     fireEvent.click(screen.getByTestId("auto-rotate-checkbox"));
+    fireEvent.click(screen.getByTestId("ocr-config-done-button"));
 
     await waitFor(() => {
       expect(screen.getByTestId("ocr-config-save-error")).toBeInTheDocument();
     });
   });
 
-  it("clears error banner on a subsequent successful POST", async () => {
+  it("clears error banner on a subsequent successful Done", async () => {
     // First POST fails.
     server.use(
       http.post("/api/ocr-config/auto-rotate", () =>
@@ -370,8 +380,9 @@ describe("OCRConfigModal — auto-rotate POST failure surfacing (#447)", () => {
       expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
     });
 
-    // Trigger failure.
+    // S6.3: Trigger failure via Done.
     fireEvent.click(screen.getByTestId("auto-rotate-checkbox"));
+    fireEvent.click(screen.getByTestId("ocr-config-done-button"));
     await waitFor(() => {
       expect(screen.getByTestId("ocr-config-save-error")).toBeInTheDocument();
     });
@@ -379,14 +390,14 @@ describe("OCRConfigModal — auto-rotate POST failure surfacing (#447)", () => {
     // Now make POST succeed.
     server.use(http.post("/api/ocr-config/auto-rotate", () => HttpResponse.json({})));
 
-    // Trigger success.
-    fireEvent.click(screen.getByTestId("auto-rotate-checkbox"));
+    // Trigger success via Done again (checkbox still dirty from first click).
+    fireEvent.click(screen.getByTestId("ocr-config-done-button"));
     await waitFor(() => {
       expect(screen.queryByTestId("ocr-config-save-error")).toBeNull();
     });
   });
 
-  it("no error banner when POST succeeds", async () => {
+  it("no error banner when POST succeeds via Done", async () => {
     server.use(http.post("/api/ocr-config/auto-rotate", () => HttpResponse.json({})));
 
     renderModal();
@@ -395,11 +406,87 @@ describe("OCRConfigModal — auto-rotate POST failure surfacing (#447)", () => {
       expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
     });
 
+    // S6.3: change + Done (no error expected).
     fireEvent.click(screen.getByTestId("auto-rotate-checkbox"));
+    fireEvent.click(screen.getByTestId("ocr-config-done-button"));
 
     // Wait a tick and confirm no error banner appears.
     await waitFor(() => {
       expect(screen.queryByTestId("ocr-config-save-error")).toBeNull();
     });
+  });
+});
+
+// ─── S6.3: Cancel/snapshot semantics for OCRConfigModal ──────────────────────
+describe("OCRConfigModal — S6.3 Cancel/snapshot semantics", () => {
+  const configOn = {
+    auto_rotate_available: true,
+    auto_rotate_on_load: true,
+    auto_rotate_method: "auto",
+    detection_options: [],
+    recognition_options: [],
+    selected_detection: "stock",
+    selected_recognition: "stock",
+    hf_pinned_revision: null,
+  };
+
+  beforeEach(() => {
+    server.use(
+      http.get("/api/normalize/available", () => HttpResponse.json({ available: false })),
+      http.get("/api/ocr-config", () => HttpResponse.json(configOn)),
+    );
+  });
+
+  it("ocr-config-cancel-button is rendered when modal is open", async () => {
+    renderModal();
+    expect(await screen.findByTestId("ocr-config-cancel-button")).toBeInTheDocument();
+  });
+
+  it("Cancel closes without POSTing auto-rotate when checkbox was changed", async () => {
+    const postSpy = vi.fn(() => HttpResponse.json({}));
+    server.use(http.post("/api/ocr-config/auto-rotate", postSpy));
+
+    const onClose = vi.fn();
+    renderModal({ onClose });
+
+    // Wait for auto-rotate to be enabled
+    await waitFor(() => {
+      expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
+    });
+
+    // Change the checkbox (should be captured as pending, NOT posted yet)
+    fireEvent.click(screen.getByTestId("auto-rotate-checkbox"));
+
+    // Click Cancel
+    fireEvent.click(screen.getByTestId("ocr-config-cancel-button"));
+
+    // onClose was called
+    expect(onClose).toHaveBeenCalledOnce();
+
+    // POST must NOT have been called by the change
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  it("Done POSTs the pending auto-rotate config then calls onClose", async () => {
+    const postSpy = vi.fn(() => HttpResponse.json({}));
+    server.use(http.post("/api/ocr-config/auto-rotate", postSpy));
+
+    const onClose = vi.fn();
+    renderModal({ onClose });
+
+    // Wait for auto-rotate to be enabled
+    await waitFor(() => {
+      expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
+    });
+
+    // Change checkbox (pending, not posted yet)
+    fireEvent.click(screen.getByTestId("auto-rotate-checkbox"));
+
+    // Click Done
+    fireEvent.click(screen.getByTestId("ocr-config-done-button"));
+
+    // POST should have fired for Done
+    await waitFor(() => expect(postSpy).toHaveBeenCalled());
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });
