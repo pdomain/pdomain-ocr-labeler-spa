@@ -55,11 +55,18 @@ def _rotate_png_on_disk(src_path: Path, degrees: int) -> None:
     Uses ``pdomain_book_tools.ocr.rotation.rotate_image`` (np.rot90 under
     the hood) so the rotation is pixel-perfect and reversible.
 
+    ``degrees`` is normalised to {0, 90, 180, 270} before the call so that
+    negative values (e.g. -90 for CCW) do not raise a ValueError.
+
     Raises ``RuntimeError`` if cv2 cannot re-encode the result.
     """
     import cv2
     import numpy as np
     from pdomain_book_tools.ocr.rotation import rotate_image
+
+    # Belt-and-suspenders: normalise here too so this helper is safe to call
+    # directly from tests or other handlers with raw degree values.
+    degrees = degrees % 360
 
     raw = src_path.read_bytes()
     data = np.frombuffer(raw, dtype=np.uint8)
@@ -86,7 +93,11 @@ async def handle_rotate_page(runner: JobRunner, job: Job) -> None:
     payload: dict[str, Any] = job.payload
     project_id: str = str(payload.get("project_id", ""))
     page_index: int = int(payload.get("page_index", 0))
-    degrees: int = int(payload.get("degrees", 90))
+    # Normalise to a quarter-turn in {0, 90, 180, 270} so that negative
+    # values like -90 (CCW) are accepted by rotate_image (which only
+    # accepts {0, 90, 180, 270}).  The normalised value is the one actually
+    # applied and persisted — -90 % 360 == 270 (equivalent CCW rotation).
+    degrees: int = int(payload.get("degrees", 90)) % 360
     manual: bool = bool(payload.get("manual", True))
     source = "manual" if manual else "auto"
 

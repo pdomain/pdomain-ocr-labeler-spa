@@ -316,4 +316,92 @@ def test_rotate_path_traversal_rejected(
     assert terminal.get("type") == "error", f"expected error terminal for path-traversal, got {terminal}"
 
 
+def test_rotate_ccw_transposes_image_dimensions(
+    loaded_client_with_loader: tuple[TestClient, _FakePageLoader, list[dict[str, Any]], Path],
+) -> None:
+    """CCW rotation (degrees=-90) must succeed and transpose image dimensions.
+
+    Regression test for: rotate_image only accepts {0,90,180,270}; -90 raises
+    ValueError causing the job to terminate with an error event and leaving
+    the image unchanged.  After the fix, -90 must be normalised to 270
+    (equivalent CCW quarter-turn) before calling rotate_image.
+
+    Assertions:
+    - Terminal event is "complete" (no error).
+    - On-disk image dimensions are transposed (height/width swapped) — same
+      geometry as a CCW quarter-turn.
+    - page_record.rotation_degrees is the normalised value 270 (not -90).
+    """
+    c, _loader, events, image_path = loaded_client_with_loader
+
+    # Original: height=100, width=200
+    orig = cv2.imdecode(np.frombuffer(image_path.read_bytes(), np.uint8), cv2.IMREAD_UNCHANGED)
+    assert orig.shape[:2] == (100, 200), f"precondition: expected (100,200) got {orig.shape[:2]}"
+
+    resp = c.post(
+        "/api/projects/book1/pages/0/rotate",
+        json={"degrees": -90, "manual": True},
+    )
+    assert resp.status_code == 202, resp.text
+
+    _wait_for_terminal(events)
+    assert events[-1].get("type") == "complete", (
+        f"CCW rotate (-90) produced a terminal error — expected complete; last event={events[-1]}"
+    )
+
+    # After a CCW (270°) rotate: dims transposed to height=200, width=100
+    rotated = cv2.imdecode(np.frombuffer(image_path.read_bytes(), np.uint8), cv2.IMREAD_UNCHANGED)
+    assert rotated.shape[:2] == (200, 100), (
+        f"expected transposed (200,100) after CCW rotate (-90/270°), got {rotated.shape[:2]}"
+    )
+
+
+def test_rotate_ccw_persists_normalised_rotation_degrees(
+    tmp_path: Path,
+    projects_root: Path,
+) -> None:
+    """rotation_degrees persisted as 270 (not -90) after a CCW rotate job.
+
+    Uses _FakePageLoaderWithIngest so the aggregate path is exercised.
+    """
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    recorded: list[dict[str, Any]] = []
+
+    with TestClient(app) as c:
+        _wrap_broker_publish(c.app.state.job_events, recorded)  # type: ignore[attr-defined]
+        resp = c.post(
+            "/api/projects/load",
+            json={"project_root": str(projects_root / "book1")},
+        )
+        assert resp.status_code == 200, resp.text
+
+        project_state: ProjectState = c.app.state.project_state  # type: ignore[attr-defined]
+        page_store: LabelerPageStore = c.app.state.page_store  # type: ignore[attr-defined]
+        project = project_state.loaded_project
+        assert project is not None
+        loader_with_ingest = _FakePageLoaderWithIngest(store=page_store, project=project)
+        c.app.state.job_runner.context["page_loader"] = loader_with_ingest  # type: ignore[attr-defined]
+
+        resp2 = c.post(
+            "/api/projects/book1/pages/0/rotate",
+            json={"degrees": -90, "manual": True},
+        )
+        assert resp2.status_code == 202, resp2.text
+
+        _wait_for_terminal(recorded)
+        assert recorded[-1].get("type") == "complete", recorded[-1]
+
+        pstate = project_state.page_states.get(0)
+        assert pstate is not None
+        page_id: UUID | None = pstate.page_id
+        assert page_id is not None
+
+        agg = page_store.get_page(page_id)
+        assert agg.record.rotation_degrees == 270, (
+            f"expected normalised rotation_degrees=270 after CCW (-90) rotate, "
+            f"got {agg.record.rotation_degrees}"
+        )
+
+
 __all__: list[str] = []
