@@ -61,6 +61,7 @@ import {
   useSaveProject,
   useLoadPage,
   useRematchGt,
+  useRotatePage,
 } from "../hooks/usePageMutations";
 import {
   useValidateLine,
@@ -325,6 +326,7 @@ export default function ProjectPage() {
   const saveProject = useSaveProject(pid);
   const loadPage = useLoadPage(pid, idx0);
   const rematchGt = useRematchGt(pid, idx0);
+  const rotatePage = useRotatePage(pid, idx0);
 
   // ── Line mutations for useMatchesHotkeys (BUG-KBD-3) ──────────────────
   const validateLine = useValidateLine(pid, idx0);
@@ -497,7 +499,8 @@ export default function ProjectPage() {
     savePage.isPending ||
     saveProject.isPending ||
     loadPage.isPending ||
-    rematchGt.isPending;
+    rematchGt.isPending ||
+    rotatePage.isPending;
 
   // Pseudo-Job object for BusyOverlay. BusyOverlay accepts the full
   // `components.schemas.Job` shape but only branches on `type` / `status`;
@@ -639,6 +642,48 @@ export default function ProjectPage() {
   }
   function handleExport() {
     dialogStore.open("export");
+  }
+
+  function handleRotateCw() {
+    rotatePage.mutate(
+      { degrees: 90 },
+      {
+        onSuccess: (data) => {
+          trackJob(data);
+        },
+        onSettled: () => {
+          invalidatePage();
+        },
+      },
+    );
+  }
+
+  function handleRotateCcw() {
+    rotatePage.mutate(
+      { degrees: -90 },
+      {
+        onSuccess: (data) => {
+          trackJob(data);
+        },
+        onSettled: () => {
+          invalidatePage();
+        },
+      },
+    );
+  }
+
+  function handleRotate180() {
+    rotatePage.mutate(
+      { degrees: 180 },
+      {
+        onSuccess: (data) => {
+          trackJob(data);
+        },
+        onSettled: () => {
+          invalidatePage();
+        },
+      },
+    );
   }
 
   function handleToolbarAction(key: keyof ButtonStates) {
@@ -801,6 +846,9 @@ export default function ProjectPage() {
         onLoadPage={handleLoadPage}
         onRematchGt={handleRematchGt}
         onExport={handleExport}
+        onRotateCw={handleRotateCw}
+        onRotateCcw={handleRotateCcw}
+        onRotate180={handleRotate180}
       />
     </div>
   );

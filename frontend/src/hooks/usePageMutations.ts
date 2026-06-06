@@ -17,6 +17,7 @@ export type ReloadOCRResponse = components["schemas"]["ReloadOCRResponse"];
 export type SavePageResponse = components["schemas"]["SavePageResponse"];
 export type SaveProjectResponse = components["schemas"]["SaveProjectResponse"];
 export type PagePayload = components["schemas"]["PagePayload"];
+export type RotatePageResponse = components["schemas"]["RotatePageResponse"];
 
 // ─── internal helpers ──────────────────────────────────────────────────────
 
@@ -141,5 +142,23 @@ export function useRematchGt(projectId: string, pageIndex: number) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
     },
+  });
+}
+
+// ─── useRotatePage (S8.2 + S8.4) ─────────────────────────────────────────
+
+/**
+ * Rotate a page image by a given number of degrees.
+ *
+ * POST .../rotate with {degrees, manual: true} → 202 + job_id.
+ * Caller uses useJobProgress to track completion and then invalidate the page.
+ */
+export function useRotatePage(projectId: string, pageIndex: number) {
+  return useMutation<RotatePageResponse, Error, { degrees: number }>({
+    mutationFn: ({ degrees }) =>
+      apiPost<RotatePageResponse>(`${pageBase(projectId, pageIndex)}/rotate`, {
+        degrees,
+        manual: true,
+      }),
   });
 }

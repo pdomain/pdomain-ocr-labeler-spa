@@ -220,6 +220,32 @@ describe("PageActions", () => {
     });
   });
 
+  describe("rotate-180-button (S8.4)", () => {
+    it("rotate-180-button exists and is visible (not display:none)", () => {
+      render(<PageActions />);
+      const btn = screen.getByTestId("rotate-180-button");
+      expect(btn).toBeInTheDocument();
+      expect(btn).not.toHaveStyle({ display: "none" });
+    });
+
+    it("rotate-180-button fires onRotate180 on click", () => {
+      const onRotate180 = vi.fn();
+      render(<PageActions onRotate180={onRotate180} />);
+      fireEvent.click(screen.getByTestId("rotate-180-button"));
+      expect(onRotate180).toHaveBeenCalledOnce();
+    });
+
+    it("rotate-180-button is disabled while isBusy=true", () => {
+      render(<PageActions isBusy={true} />);
+      expect(screen.getByTestId("rotate-180-button")).toBeDisabled();
+    });
+
+    it("rotate-180-button is enabled while isBusy=false", () => {
+      render(<PageActions isBusy={false} />);
+      expect(screen.getByTestId("rotate-180-button")).not.toBeDisabled();
+    });
+  });
+
   describe("provenance tooltip on page-source-badge (GAP-1)", () => {
     it("page-source-badge has no title attribute when provenanceSummary is not provided", () => {
       render(<PageActions />);

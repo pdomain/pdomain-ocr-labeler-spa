@@ -25,7 +25,7 @@
 //   reload-ocr-button, reload-ocr-edited-button, save-page-button,
 //   save-project-button, load-page-button, rematch-gt-button, export-button,
 //   page-source-badge, page-name-label, rotation-badge,
-//   rotate-ccw-button, rotate-cw-button
+//   rotate-ccw-button, rotate-cw-button, rotate-180-button
 
 import { useHotkey } from "../hooks/useHotkey";
 import type { components } from "../api/types";
@@ -86,6 +86,8 @@ interface PageActionsProps {
   onRotateCw?: (() => void) | undefined;
   /** Callback: user clicked Rotate CCW (-90°). */
   onRotateCcw?: (() => void) | undefined;
+  /** Callback: user clicked Rotate 180°. */
+  onRotate180?: (() => void) | undefined;
   /** Callback: user clicked the rotation badge (revert auto rotation). */
   onRotateRevert?: (() => void) | undefined;
 }
@@ -114,6 +116,7 @@ export function PageActions({
   onExport,
   onRotateCw,
   onRotateCcw,
+  onRotate180,
   onRotateRevert,
 }: PageActionsProps) {
   const source: PageSource = pageSource ?? "ocr";
@@ -211,6 +214,15 @@ export function PageActions({
           aria-label="Rotate clockwise"
         >
           ↻
+        </ActionButton>
+        <ActionButton
+          testid="rotate-180-button"
+          disabled={isBusy}
+          onClick={onRotate180}
+          title="Rotate 180°"
+          aria-label="Rotate 180 degrees"
+        >
+          180°
         </ActionButton>
 
         <Separator />
