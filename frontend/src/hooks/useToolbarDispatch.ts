@@ -91,7 +91,8 @@ interface ResolvedRequest {
  * entry, or when a required selection index is missing for a route that
  * templates `{lineIndex}` / `{paragraphIndex}`.
  */
-function resolveToolbarRequest(
+/** Exported for unit-testing — not part of the public hook API. */
+export function resolveToolbarRequest(
   stateKey: keyof ButtonStates,
   projectId: string,
   pageIndex: number,
@@ -140,6 +141,13 @@ function resolveToolbarRequest(
       const afterWord = selection.selected_words[0];
       if (afterWord !== undefined) body["word_index"] = afterWord[1];
     }
+  }
+
+  // S4.2: word-word-to-line sends word_keys (list of [line_idx, word_idx] tuples)
+  // so the backend `split_line_with_selected_words` route can resolve the words.
+  // The static body in toolbarMapping is intentionally empty for this action.
+  if (mappingKey === "word-word-to-line") {
+    body["word_keys"] = selection.selected_words;
   }
 
   return { url, method: mapping.method, body };

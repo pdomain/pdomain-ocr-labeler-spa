@@ -64,4 +64,18 @@ describe("toolbarMapping", () => {
     expect(wordToLine?.endpoint).toContain("/lines/{lineIndex}/split-with-selected");
     expect(wordToLine?.endpoint).not.toContain("split-with-selected-words");
   });
+
+  // S4.2: word-word-to-line must NOT carry a static `mode` body — the backend
+  // now expects `word_keys` (injected by useToolbarDispatch from selection).
+  it("word-word-to-line has no static mode body (word_keys injected at dispatch)", () => {
+    const mapping = toolbarMapping["word-word-to-line"];
+    expect(mapping).not.toBeNull();
+    // The old stub body was { mode: "extract_to_new" } — must be absent.
+    // body may be undefined (no static body) or an object without mode.
+    if (mapping?.body !== undefined) {
+      expect(mapping.body).not.toHaveProperty("mode");
+    }
+    // Either way, mode must not be present.
+    expect((mapping?.body as Record<string, unknown> | undefined)?.["mode"]).toBeUndefined();
+  });
 });

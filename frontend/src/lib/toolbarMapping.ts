@@ -189,9 +189,10 @@ export const toolbarMapping: ToolbarMappingRecord = {
   "word-split-after": null, // disabled
   "word-split-selected": null, // disabled
   "word-word-to-line": {
+    // S4.2: body intentionally empty — useToolbarDispatch injects
+    // word_keys from selection.selected_words at dispatch time.
     endpoint: "/api/projects/{projectId}/pages/{pageIndex}/lines/{lineIndex}/split-with-selected",
     method: "POST",
-    body: { mode: "extract_to_new" },
   },
   "word-word-to-para": {
     endpoint: "/api/projects/{projectId}/pages/{pageIndex}/paragraphs/group-selected-words",
