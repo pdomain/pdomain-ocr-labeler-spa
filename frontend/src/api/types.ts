@@ -1910,10 +1910,18 @@ export interface paths {
         put?: never;
         /**
          * Split Line With Selected Words
-         * @description ``POST .../lines/{li}/split-with-selected`` — legacy stub.
+         * @description ``POST .../lines/{li}/split-with-selected`` — extract selected words into a new line.
          *
-         *     Frontend prefers the D1 ``/lines/split-by-words`` collective route.
-         *     Kept stub-shaped for integration-test parity.
+         *     Spec §9 row 18b: per-line variant of ``/lines/split-by-words``.
+         *     Calls ``Page.split_line_with_selected_words(word_keys)``
+         *     (``pdomain_book_tools/ocr/page.py:2217``). Structural edit: triggers GT
+         *     auto-rematch + content persistence (A3).
+         *
+         *     ``line_index`` in the URL is accepted for routing but ``word_keys`` in the
+         *     body govern which words are extracted (same semantic as
+         *     ``SplitByWordsRequest``). The ``line_index`` path param is not forwarded
+         *     to the page method because ``split_line_with_selected_words`` resolves the
+         *     source line from the first element of ``word_keys``.
          */
         post: operations["split_line_with_selected_words_api_projects__project_id__pages__page_index__lines__line_index__split_with_selected_post"];
         delete?: never;
@@ -3864,17 +3872,20 @@ export interface components {
             /** Line Index */
             line_index?: number | null;
         };
-        /** SplitLineWithSelectedWordsRequest */
+        /**
+         * SplitLineWithSelectedWordsRequest
+         * @description ``POST .../lines/{li}/split-with-selected`` body — spec §9 row 18b.
+         *
+         *     ``word_keys`` is a list of ``(line_index, word_index)`` tuples passed through to
+         *     ``Page.split_line_with_selected_words`` (same semantic as ``SplitByWordsRequest``
+         *     used by the collective ``/lines/split-by-words`` route).
+         */
         SplitLineWithSelectedWordsRequest: {
-            /** Line Index */
-            line_index: number;
-            /** Word Indices */
-            word_indices: number[];
-            /**
-             * Mode
-             * @enum {string}
-             */
-            mode: "extract_to_new" | "split_into_two";
+            /** Word Keys */
+            word_keys: [
+                number,
+                number
+            ][];
         };
         /** SplitParagraphAfterLineRequest */
         SplitParagraphAfterLineRequest: {
