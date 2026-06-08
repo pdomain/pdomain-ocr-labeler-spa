@@ -10,9 +10,14 @@
 //   r/R → mode=region
 //   a/A → mode=annotate
 //   e/E → mode=erase
+//
+// SEL-3: target hotkeys (2/3/4) also sync uiPrefs.selectionMode so the
+// ImageTabsHeader radio stays consistent. Key 1 (block) leaves selectionMode
+// unchanged — block has no radio counterpart.
 
 import { useEffect } from "react";
 import { railStore, type RailTarget, type RailMode } from "../stores/rail-store";
+import { useUiPrefs } from "../stores/ui-prefs";
 
 const TARGET_KEYS: Record<string, RailTarget> = {
   "1": "block",
@@ -53,6 +58,13 @@ export function useRailHotkeys() {
       if (target) {
         e.preventDefault();
         setTarget(target);
+        // SEL-3: sync selectionMode so the header radio stays consistent.
+        if (target === "para") {
+          useUiPrefs.setState({ selectionMode: "paragraph" });
+        } else if (target === "line" || target === "word") {
+          useUiPrefs.setState({ selectionMode: target });
+        }
+        // target === "block": no selectionMode update (no radio counterpart).
         return;
       }
 

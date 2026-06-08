@@ -11,6 +11,12 @@
 // Active target button: bg-bg-raised + 2px left accent stripe + layer-color glyph.
 // Active mode button: same active treatment.
 // Hotkeys: 1/2/3/4 (target), V/R/A/E (mode) — wired via useRailHotkeys.
+//
+// SEL-3 (bidirectional): rail-target buttons also drive uiPrefs.selectionMode
+// so both controls stay consistent. The "block" target has no radio counterpart
+// in ImageTabsHeader — clicking block leaves selectionMode unchanged (rather
+// than picking an arbitrary "nearest" value, which could confuse the user).
+// The three others map 1:1: para→"paragraph", line→"line", word→"word".
 
 import { useSyncExternalStore } from "react";
 import { Eye, Plus } from "@pdomain/pdomain-ui/icons";
@@ -217,6 +223,21 @@ export function Rail() {
     }));
   }
 
+  // SEL-3 (bidirectional sync, rail→radio): set railStore.target AND sync
+  // uiPrefs.selectionMode so the ImageTabsHeader radio stays consistent.
+  // "block" has no radio counterpart — leave selectionMode unchanged when
+  // the user picks block, so the radio continues to reflect the last
+  // word/line/para mode rather than going blank or picking arbitrarily.
+  function handleSetTarget(t: RailTarget) {
+    setTarget(t);
+    if (t === "para") {
+      useUiPrefs.setState({ selectionMode: "paragraph" });
+    } else if (t === "line" || t === "word") {
+      useUiPrefs.setState({ selectionMode: t });
+    }
+    // t === "block": no selectionMode update — block has no radio counterpart.
+  }
+
   return (
     <div
       data-testid="rail"
@@ -245,7 +266,7 @@ export function Rail() {
           active={target === "block"}
           swatchColor={layerColors.block}
           onClick={() => {
-            setTarget("block");
+            handleSetTarget("block");
           }}
         />
         <TargetCell
@@ -253,7 +274,7 @@ export function Rail() {
           active={target === "para"}
           swatchColor={layerColors.para}
           onClick={() => {
-            setTarget("para");
+            handleSetTarget("para");
           }}
         />
         <TargetCell
@@ -261,7 +282,7 @@ export function Rail() {
           active={target === "line"}
           swatchColor={layerColors.line}
           onClick={() => {
-            setTarget("line");
+            handleSetTarget("line");
           }}
         />
         <TargetCell
@@ -269,7 +290,7 @@ export function Rail() {
           active={target === "word"}
           swatchColor={layerColors.word}
           onClick={() => {
-            setTarget("word");
+            handleSetTarget("word");
           }}
         />
       </div>

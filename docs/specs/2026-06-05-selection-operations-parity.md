@@ -34,7 +34,7 @@ asserts *visible + enabled + effect*. A hidden stub fails this gate by construct
 |----|-----------|-------|---------|---------|-----------------------|---------|
 | SEL-1 | Click selects + highlights | word/line/para/block | Canvas | point-click | A visible highlight box draws around the clicked item immediately | ✗ no highlight |
 | SEL-2 | Drag-box select | word | Canvas | mouse drag | Words intersecting the rect become selected + highlighted | ✗ `onBoxSelect` unwired |
-| SEL-3 | Granularity governs click target | all | Rail TARGET + header radio | toggle | Changing granularity changes what a click selects; the two controls agree | ⚠ radios disconnected |
+| SEL-3 | Granularity governs click target | all | Rail TARGET + header radio | toggle | Changing granularity changes what a click selects; the two controls agree | ✓ bidirectional (block target leaves radio unchanged — no radio counterpart) |
 | SEL-4 | Additive select (cross-block) | word | Canvas/list | Ctrl/Cmd-click | Clicking a word in another block ADDS it; prior selection retained | ✗ resets each click |
 | SEL-5 | Range / remove from selection | word | Canvas | Shift-click / Shift-drag | Shift extends or removes from the current set | ✗ |
 | MUL-1 | Multi-block selection is fully visible | word | RightPanel | ≥2 words selected | Every selected word is listed, grouped by Block → Line, including words from different blocks | ✗ no multi view |
@@ -81,10 +81,13 @@ their tests under `frontend/src/**/__tests__` (mirror existing test layout).
   `onBoxSelect(rect, modifier)` computes intersecting words and sets `selectedWords` with
   replace semantics (toggle/remove deferred to Slice B). Acceptance: drag draws + selects.
 - Reconcile granularity: header selection-mode radios set `railStore.target` (single source of
-  truth the canvas reads); make the two defaults equal. Acceptance: SEL-3 row.
+  truth the canvas reads); rail-target buttons also update `uiPrefs.selectionMode` so both
+  controls agree (bidirectional). Block target has no radio counterpart — clicking block leaves
+  `selectionMode` unchanged. Acceptance: SEL-3 row. **DONE.**
 
 **TDD:** test highlight derives from store (mock store, assert overlay rects); test `onBoxSelect`
-intersection math; test radio→railStore.target wiring. Commit per capability.
+intersection math; test radio→railStore.target wiring; test rail→radio wiring (bidirectional).
+Commit per capability.
 
 ## Slice B — Additive multi-select + RightPanel multi-word view (SEL-4, SEL-5, MUL-1..3)
 

@@ -166,6 +166,45 @@ describe("Rail — target + mode selectors (Slice 10 / P1.d,e,f)", () => {
     expect(screen.getByTestId("rail-target-para").className).toContain("border-layer-para");
   });
 
+  // ── SEL-3 bidirectional sync: rail target → uiPrefs.selectionMode ─────────
+
+  it("clicking para target sets selectionMode to 'paragraph'", () => {
+    useUiPrefs.setState({ selectionMode: "word" });
+    render(<Rail />);
+    fireEvent.click(screen.getByTestId("rail-target-para"));
+    expect(useUiPrefs.getState().selectionMode).toBe("paragraph");
+  });
+
+  it("clicking line target sets selectionMode to 'line'", () => {
+    useUiPrefs.setState({ selectionMode: "word" });
+    render(<Rail />);
+    fireEvent.click(screen.getByTestId("rail-target-line"));
+    expect(useUiPrefs.getState().selectionMode).toBe("line");
+  });
+
+  it("clicking word target sets selectionMode to 'word'", () => {
+    useUiPrefs.setState({ selectionMode: "line" });
+    render(<Rail />);
+    fireEvent.click(screen.getByTestId("rail-target-word"));
+    expect(useUiPrefs.getState().selectionMode).toBe("word");
+  });
+
+  it("clicking block target leaves selectionMode unchanged (no radio counterpart)", () => {
+    useUiPrefs.setState({ selectionMode: "line" });
+    render(<Rail />);
+    fireEvent.click(screen.getByTestId("rail-target-block"));
+    // railStore.target changes to block
+    expect(railStore.getState().target).toBe("block");
+    // selectionMode is unchanged — "block" has no radio equivalent
+    expect(useUiPrefs.getState().selectionMode).toBe("line");
+  });
+
+  it("clicking block target still updates railStore target to block", () => {
+    render(<Rail />);
+    fireEvent.click(screen.getByTestId("rail-target-block"));
+    expect(railStore.getState().target).toBe("block");
+  });
+
   // ── LAYERS visibility toggles (P1.e — Gap 15) ────────────────────────────
 
   it("renders clickable layer toggles for Block, Para, Line, Word", () => {
