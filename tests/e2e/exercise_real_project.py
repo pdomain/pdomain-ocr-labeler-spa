@@ -50,7 +50,7 @@ from pdomain_ocr_labeler_spa.adapters.ocr.local_doctr import (
 from pdomain_ocr_labeler_spa.bootstrap import build_app
 from pdomain_ocr_labeler_spa.core.persistence.page_store import LabelerPageStore
 from pdomain_ocr_labeler_spa.settings import Settings
-from tests.e2e.helpers import SEED_TIMEOUT, wait_for_project_ready
+from tests.e2e.helpers import SEED_TIMEOUT, require_page_line_matches, wait_for_project_ready
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -276,6 +276,14 @@ def test_per_page_common_workflow(
     6. On the last page (8): verify the next-page button is disabled or
        that clicking it leaves the URL unchanged (navigation edge case).
     """
+    # Hard precondition on page 1: assert the exercise-fixture is seeded.
+    # The fixture is deterministically seeded via the event store (invariant
+    # since d0c1494); 0 line_matches here is a seeding regression.  We check
+    # only on pageno==1 — one API call is enough to catch a broken seed path
+    # before iterating all 8 pages.
+    if pageno == 1:
+        require_page_line_matches(exercise_server.base_url, _PROJECT_ID, 0)
+
     _goto_project_page(page, exercise_server.base_url, pageno)
 
     # 1. Image viewport present.
@@ -300,12 +308,17 @@ def test_per_page_common_workflow(
             btn.click()
             time.sleep(0.1)
 
-    # 4. Verify line cards appeared (labeled envelopes → real content).
+    # 4. Verify line cards appeared (seeded fixture → real content).
+    # This exercise keeps per-page tolerance (a single page UI failure does
+    # not abort the whole run) but the skip message is corrected — seeding is
+    # deterministic; 0 rows here means a UI rendering issue, not a missing
+    # OCR model.
     count = _wait_for_line_cards(page, min_count=1)
     if count == 0:
         pytest.skip(
-            f"Page {pageno}: no worklist rows — page has no OCR line matches in "
-            f"this environment (no real OCR model output on the fixture images)."
+            f"Page {pageno}: no worklist rows — seeded fixture returned no line "
+            f"cards for this page (possible UI rendering issue; seeding is "
+            f"deterministic via event store since d0c1494)."
         )
 
     # 5. Navigation edge case: on last page, next-page must be disabled.
@@ -480,8 +493,12 @@ def test_page1_inspect_word(exercise_server: ExerciseServer, page: Page) -> None
     """
     _goto_project_page(page, exercise_server.base_url, 1)
     count = _wait_for_line_cards(page)
-    if count == 0:
-        pytest.skip("No worklist rows — page has no OCR line matches in this environment")
+    # The exercise-fixture is deterministically seeded (invariant since d0c1494).
+    # 0 worklist rows means a UI rendering failure — assert, do not skip.
+    assert count > 0, (
+        "No worklist rows on exercise-fixture page 1 — "
+        "seeding invariant holds but the UI did not render line cards"
+    )
 
     # Click the first visible worklist row to select a line.
     first_row = page.locator('[data-testid^="worklist-row-"]').first

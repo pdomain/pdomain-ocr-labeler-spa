@@ -31,7 +31,7 @@ from tests.e2e.exercise_real_project import (
     _goto_project_page,
     _wait_for_line_cards,
 )
-from tests.e2e.helpers import page_line_match_count
+from tests.e2e.helpers import require_page_line_matches
 
 pytestmark = pytest.mark.e2e
 
@@ -85,23 +85,18 @@ def test_paragraph_mode_selection_opens_paragraph_detail(exercise_server: Exerci
     We then select a paragraph via the hierarchy tree — a deterministic DOM
     path — and assert ``paragraph-detail`` renders.
     """
-    # The hierarchy tree is built from line_matches; with no OCR word content
-    # there are no paragraph nodes to select, so skip cleanly (see helpers).
-    if page_line_match_count(exercise_server.base_url, _EXERCISE_ID, 0) == 0:
-        pytest.skip(
-            "page has 0 line_matches — fixture lacks OCR word content in this "
-            "environment; no paragraph nodes exist to select"
-        )
+    # The exercise-fixture is deterministically seeded via the event store
+    # (invariant since d0c1494). Content presence is asserted, not skipped —
+    # 0 line_matches means a seeding regression, which must fail loudly.
+    require_page_line_matches(exercise_server.base_url, _EXERCISE_ID, 0)
 
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
     # Enter paragraph selection mode via the canonical selection-mode radio.
-    # onSelectionModeChange also syncs railStore.target (ProjectPage), so the
-    # canvas hit-test resolves paragraphs and both controls agree. (The
-    # rail-target buttons set railStore.target but intentionally do NOT drive
-    # this radio — the rail also exposes a "block" target with no radio
-    # counterpart, so the sync is radio→rail only.)
+    # onSelectionModeChange syncs railStore.target (ProjectPage radio→rail),
+    # and rail-target buttons now also sync selectionMode back (rail→radio).
+    # Both controls are bidirectional so both always agree (SEL-3 complete).
     para_radio = page.locator('[data-testid="selection-mode-paragraph"]')
     para_radio.wait_for(state="visible", timeout=10_000)
     para_radio.check()

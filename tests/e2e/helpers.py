@@ -144,6 +144,10 @@ def page_line_match_count(base_url: str, project_id: str, page_index: int) -> in
     over 10s.  We use a generous timeout and treat *any* error (timeout,
     connection, non-200, malformed body) as "no content available" -> 0, so the
     guard degrades to a clean skip instead of a flaky failure.
+
+    **Do not use this for the exercise-fixture** — that fixture is deterministically
+    seeded via the event store (since d0c1494) and content is an invariant.  Use
+    :func:`require_page_line_matches` there so backend regressions fail loudly.
     """
     try:
         r = httpx.get(
@@ -158,3 +162,38 @@ def page_line_match_count(base_url: str, project_id: str, page_index: int) -> in
         return len(r.json().get("line_matches", []))
     except (ValueError, AttributeError):
         return 0
+
+
+def require_page_line_matches(base_url: str, project_id: str, page_index: int) -> int:
+    """Assert that the page has real OCR content and return the line-match count.
+
+    Use this for fixtures that are **deterministically seeded** via the event
+    store (e.g. ``exercise-fixture`` since d0c1494).  Content presence is an
+    invariant — a 0-count means the seeding path or the page endpoint has
+    regressed, not that the environment lacks an OCR model.
+
+    Unlike :func:`page_line_match_count` this helper does **not** swallow
+    errors.  A non-200 response or malformed body raises :class:`AssertionError`
+    immediately so CI fails loudly instead of silently skipping.
+
+    Raises:
+        AssertionError: if the response is not 200, the body is malformed,
+            or ``line_matches`` is empty.
+        httpx.HTTPError: propagated as-is on connection / timeout failures.
+    """
+    r = httpx.get(
+        f"{base_url}/api/projects/{project_id}/pages/{page_index}",
+        timeout=120.0,
+    )
+    assert r.status_code == 200, (
+        f"GET /api/projects/{project_id}/pages/{page_index} returned {r.status_code}: {r.text[:200]}"
+    )
+    try:
+        count = len(r.json().get("line_matches", []))
+    except (ValueError, AttributeError) as exc:
+        raise AssertionError(f"Malformed page response for {project_id}/pages/{page_index}: {exc}") from exc
+    assert count > 0, (
+        f"exercise-fixture page {page_index} has 0 line_matches — "
+        "event-store seeding invariant violated (check _ingest_ocr_result path)"
+    )
+    return count

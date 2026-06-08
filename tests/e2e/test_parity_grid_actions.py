@@ -30,7 +30,7 @@ from tests.e2e.exercise_real_project import (
     _goto_project_page,
     _wait_for_line_cards,
 )
-from tests.e2e.helpers import page_line_match_count
+from tests.e2e.helpers import require_page_line_matches
 from tests.e2e.test_ui_coverage import _select_first_word_via_hierarchy
 
 pytestmark = pytest.mark.e2e
@@ -39,21 +39,15 @@ _PROJECT_ID = "exercise-fixture"
 
 
 def _require_word_content(base_url: str, page_index: int = 0) -> None:
-    """Skip the test when the loaded page has no OCR line/word structure.
+    """Assert the loaded page has real OCR line/word structure.
 
-    See ``helpers.page_line_match_count`` — environments without real OCR
-    output on the synthetic fixture images load empty pages, where a word-level
-    parity assertion would be vacuous. We skip (honestly) rather than weaken
-    the assertion; the test still runs fully wherever the fixture carries
-    real word content (CI with seeded OCR / a GPU box).
+    The exercise-fixture is deterministically seeded via the event store
+    (invariant since d0c1494). A 0-count is a seeding regression that must
+    fail loudly — not a vacuous-test skip. Delegates to
+    ``helpers.require_page_line_matches`` which raises AssertionError on
+    any failure so CI does not silently go green on a broken fixture.
     """
-    n = page_line_match_count(base_url, _PROJECT_ID, page_index)
-    if n == 0:
-        pytest.skip(
-            "page has 0 line_matches — fixture lacks OCR word content in this "
-            "environment (no real OCR output on synthetic images); "
-            "word-level parity assertion would be vacuous"
-        )
+    require_page_line_matches(base_url, _PROJECT_ID, page_index)
 
 
 def _click_toolbar_cell(page: Page, testid: str) -> None:

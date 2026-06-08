@@ -26,7 +26,7 @@ from tests.e2e.exercise_real_project import (
     _goto_project_page,
     _wait_for_line_cards,
 )
-from tests.e2e.helpers import page_line_match_count
+from tests.e2e.helpers import require_page_line_matches
 from tests.e2e.test_ui_coverage import _select_first_word_via_hierarchy
 
 pytestmark = pytest.mark.e2e
@@ -49,14 +49,10 @@ def test_save_then_reload_persists_gt_validation_and_style(
     exercise_server: ExerciseServer, page: Page
 ) -> None:
     """Edit GT + validate + style → Save Page → reload → all three persist."""
-    # Word-level persistence is vacuous without OCR word content; skip cleanly
-    # when the environment's fixture loads an empty page (see helpers).
-    n = page_line_match_count(exercise_server.base_url, _PROJECT_ID, 0)
-    if n == 0:
-        pytest.skip(
-            "page has 0 line_matches — fixture lacks OCR word content in this "
-            "environment; the save→reload word round-trip would be vacuous"
-        )
+    # The exercise-fixture is deterministically seeded via the event store
+    # (invariant since d0c1494). Assert content presence — 0 line_matches is a
+    # seeding regression that must fail loudly, not a vacuous-test skip.
+    require_page_line_matches(exercise_server.base_url, _PROJECT_ID, 0)
 
     page_url = f"{exercise_server.base_url}/projects/{_PROJECT_ID}/pages/pageno/1"
 

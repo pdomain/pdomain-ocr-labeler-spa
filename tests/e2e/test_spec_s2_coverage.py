@@ -39,10 +39,12 @@ import pytest
 from playwright.sync_api import Page
 
 from tests.e2e.exercise_real_project import (
+    _PROJECT_ID,
     ExerciseServer,
     _goto_project_page,
     _wait_for_line_cards,
 )
+from tests.e2e.helpers import require_page_line_matches
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -315,11 +317,16 @@ def test_line_card_testids_attached(exercise_server: ExerciseServer, page: Page)
     The worklist (always visible) acts as the primary proxy for line data.
     We use the worklist-row count to verify data is available, then assert
     that the hidden WordMatchView's line-card testids exist in the DOM.
+
+    The exercise-fixture is deterministically seeded via the event store
+    (invariant since d0c1494), so 0 line_matches is a seeding regression,
+    not an absent OCR model.
     """
+    # Hard precondition: seeded fixture must have content.
+    require_page_line_matches(exercise_server.base_url, _PROJECT_ID, 0)
     _goto_project_page(page, exercise_server.base_url, 1)
     count = _wait_for_line_cards(page)
-    if count == 0:
-        pytest.skip("No worklist rows — page has no OCR line matches in this environment")
+    assert count > 0, "No worklist rows — exercise-fixture seeding invariant violated"
 
     # The WordMatchView renders line-card-{n} elements when its container is
     # mounted. Even in display:none, the first few cards may be rendered by the
