@@ -114,9 +114,13 @@ word-edit grids) over expanding lines to words into `MultiWordDetail`.
 
 ### Slice AG — adjacent confirmed gaps (same arc, separate commits)
 
-- [ ] AG-1: MultiWordDetail bulk bar — add Delete / Apply-style /
-      Apply-component (MUL-3 from the 2026-06-05 spec) if missing on current
-      main (re-check first; the stale-bundle validation flagged it).
+Fresh-bundle browser validation (2026-06-10, post-refactor tree) resolved
+the open conditions:
+
+- [ ] AG-1 (verify-only): MUL-3 bulk bar is CONFIRMED PRESENT on the current
+      tree (`multi-word-validate/-unvalidate/-delete/-style-apply/
+      -component-apply`); the earlier FAIL was a stale bundle. Just keep the
+      e2e regression in Slice BV.
 - [ ] AG-2: LineDetail Words-tab bulk bar — "Validate selected" fires
       validate mutations for checked words (today it only clears checkboxes);
       "Skip selected" either gets a real behavior or is removed (decide by
@@ -124,8 +128,24 @@ word-edit grids) over expanding lines to words into `MultiWordDetail`.
 - [ ] AG-3: Wire the empty Refine / Expand+Refine hotkey handlers in
       `ProjectPage.tsx` (~lines 406-411) to the same dispatch the toolbar
       grid's refine cells use.
-- [ ] AG-4: SEL-3 radio→rail direction — only if the fresh-bundle validation
-      shows the header radio and rail target still disagree.
+- [ ] AG-4 (CONFIRMED, root cause of the multi-line failure): selection
+      granularity has two disagreeing sources of truth. Observed on fresh
+      bundle: page LOADS with `rail-target-line` `data-active=true` while
+      `selection-mode-word` is checked; clicking rail targets never updates
+      the radio; and box-select drag routing follows the RADIO
+      (`selectionMode`), so "line mode" drags select WORDS. Fix: make one
+      store the single source of truth (rail target ⇄ selectionMode
+      reconciled on mount AND on every change, both directions), and make
+      `handleBoxSelect` route by that single value. Acceptance: fresh page
+      load shows rail and radio agreeing; toggling either updates the other;
+      a line-target drag selects lines (feeds ML-1).
+- [ ] AG-5 (NEW, regression vs 2026-06-05 SEL-4): Ctrl-click on a second
+      word REPLACES the selection instead of adding to it (drag-based
+      multi-word select works; click-modifier path is broken). Reproduce
+      first in a unit test on the canvas click handler (modifier → toggle
+      mode → `toggleWord`), then fix. Acceptance: Ctrl-click on a word in a
+      different block yields `multi-word-detail` with both words; Shift-click
+      removes.
 
 ### Slice BV — Browser Verification (MANDATORY, last)
 
