@@ -50,4 +50,13 @@ export const handlers: RequestHandler[] = [
       ],
     }),
   ),
+
+  // GET /api/suite/installed — default: no apps installed (trainer absent).
+  // Tests that need the trainer button visible override with server.use().
+  http.get("/api/suite/installed", () => HttpResponse.json([])),
+
+  // POST /api/suite/launch — default stub for the Send-to-trainer button.
+  http.post("/api/suite/launch", () =>
+    HttpResponse.json({ kind: "opened", url: "http://localhost:8090", spawned: true, pid: 0 }),
+  ),
 ];

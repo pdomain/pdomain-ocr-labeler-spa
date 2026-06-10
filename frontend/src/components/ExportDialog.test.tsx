@@ -323,3 +323,121 @@ describe("ExportDialog — component filter sourced from canonical vocab", () =>
     expect(values).not.toContain("footer");
   });
 });
+
+describe("Send-to-trainer affordance", () => {
+  beforeEach(() => {
+    mockUseJobProgress.mockReturnValue(null);
+    server.use(
+      http.get(`${BASE_URL}/export/styles`, () => {
+        return HttpResponse.json(["italic", "bold"]);
+      }),
+    );
+  });
+
+  afterEach(() => {
+    server.resetHandlers();
+    vi.clearAllMocks();
+  });
+
+  /**
+   * Helper: render ExportDialog, click Export to get a job started, then
+   * simulate a completed job so the run-history row appears.
+   */
+  async function renderWithCompletedExport(jobId: string) {
+    server.use(
+      http.post(`${BASE_URL}/export`, () => HttpResponse.json({ job_id: jobId }, { status: 202 })),
+    );
+
+    const { rerender } = render(
+      <ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />,
+      { wrapper: makeWrapper() },
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("export-button"));
+    });
+
+    // Simulate complete event so history row appears
+    mockUseJobProgress.mockReturnValue({
+      job_id: jobId,
+      status: "complete",
+      progress: { current: 1, total: 1, current_page: 0, message: "done" },
+      words_exported_detection: 5,
+      words_exported_recognition: 5,
+      pages_skipped_not_validated: 0,
+    });
+    rerender(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("export-results")).toBeTruthy();
+    });
+
+    return { rerender };
+  }
+
+  it("hides the button when trainer is not installed", async () => {
+    // Default handler returns [] (no trainer) — set by handlers.ts default
+    await renderWithCompletedExport("job-no-trainer");
+
+    // Wait for the trainer-installed fetch to resolve
+    await waitFor(() => {
+      // The button must not be in the DOM
+      expect(screen.queryByTestId("export-send-to-trainer")).toBeNull();
+    });
+  });
+
+  it("shows the button when trainer is installed", async () => {
+    server.use(
+      http.get("/api/suite/installed", () =>
+        HttpResponse.json([
+          { app_id: "pdomain-ocr-trainer-spa", display_name: "OCR Trainer", enabled: true },
+        ]),
+      ),
+    );
+
+    await renderWithCompletedExport("job-with-trainer");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("export-send-to-trainer")).toBeTruthy();
+    });
+  });
+
+  it("calls /api/suite/launch when button is clicked", async () => {
+    let launchCalled = false;
+    let launchedAppId = "";
+
+    server.use(
+      http.get("/api/suite/installed", () =>
+        HttpResponse.json([
+          { app_id: "pdomain-ocr-trainer-spa", display_name: "OCR Trainer", enabled: true },
+        ]),
+      ),
+      http.post("/api/suite/launch", ({ request }) => {
+        const url = new URL(request.url);
+        launchedAppId = url.searchParams.get("app_id") ?? "";
+        launchCalled = true;
+        return HttpResponse.json({
+          kind: "opened",
+          url: "http://localhost:8090",
+          spawned: true,
+          pid: 999,
+        });
+      }),
+    );
+
+    await renderWithCompletedExport("job-launch-trainer");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("export-send-to-trainer")).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("export-send-to-trainer"));
+    });
+
+    await waitFor(() => {
+      expect(launchCalled).toBe(true);
+    });
+    expect(launchedAppId).toBe("pdomain-ocr-trainer-spa");
+  });
+});
