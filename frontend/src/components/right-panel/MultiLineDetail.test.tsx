@@ -1,5 +1,5 @@
-// MultiLineDetail.test.tsx — TDD tests for ML-2, ML-3.
-// Spec: docs/specs/2026-06-10-multi-line-detail.md Slice ML-A.
+// MultiLineDetail.test.tsx — TDD tests for ML-2, ML-3, ML-4, ML-5.
+// Spec: docs/specs/2026-06-10-multi-line-detail.md Slices ML-A, ML-B.
 //
 // ML-2: level==="line" && selectedLines.length > 1 → multi-line-detail renders,
 //        line-detail absent, placeholder absent.
@@ -7,8 +7,11 @@
 //        ocr_line_text) and a word grid.
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { http, HttpResponse } from "msw";
+import { server } from "../../test/server";
 import { MultiLineDetail } from "./MultiLineDetail";
 import { clearSelection, applyLineSelection } from "../../stores/selection-store";
 import type { components } from "../../api/types";
@@ -151,5 +154,95 @@ describe("MultiLineDetail — ML-3: card content", () => {
     expect(screen.getByTestId("multi-line-bulk-unvalidate")).toBeInTheDocument();
     expect(screen.getByTestId("multi-line-bulk-copy-ocr-to-gt")).toBeInTheDocument();
     expect(screen.getByTestId("multi-line-bulk-delete")).toBeInTheDocument();
+  });
+});
+
+// ─── ML-4: GT input editing commits ──────────────────────────────────────────
+
+describe("MultiLineDetail — ML-4: GT input editing commits", () => {
+  beforeEach(() => {
+    clearSelection();
+  });
+
+  it("GT input shows the word's ground_truth_text initially", () => {
+    wrap(<MultiLineDetail page={makePage()} projectId="p1" pageIndex={0} selectedLines={[0, 1]} />);
+    const input = screen.getByTestId("gt-text-input-0-0") as HTMLInputElement;
+    expect(input.value).toBe("foo");
+  });
+
+  it("typing in a GT input updates local value", async () => {
+    const user = userEvent.setup();
+    wrap(<MultiLineDetail page={makePage()} projectId="p1" pageIndex={0} selectedLines={[0]} />);
+    const input = screen.getByTestId("gt-text-input-0-0") as HTMLInputElement;
+    await user.clear(input);
+    await user.type(input, "newval");
+    expect(input.value).toBe("newval");
+  });
+
+  it("pressing Enter on a GT input fires word-GT mutation (API call)", async () => {
+    let capturedBody: unknown = null;
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/0/0/gt", async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({
+          line_index: 0,
+          word_index: 0,
+          ocr_text: "foo",
+          ground_truth_text: "newval",
+          match_status: "exact",
+          normalized_match: false,
+          is_validated: false,
+          bbox: { x: 0, y: 0, width: 10, height: 10 },
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    wrap(<MultiLineDetail page={makePage()} projectId="p1" pageIndex={0} selectedLines={[0]} />);
+    const input = screen.getByTestId("gt-text-input-0-0") as HTMLInputElement;
+    await user.clear(input);
+    await user.type(input, "newval");
+    await user.keyboard("{Enter}");
+    // After Enter, the input blurs and commits — check API was called
+    expect(capturedBody).toEqual({ text: "newval" });
+  });
+
+  it("Escape on GT input reverts to original value", async () => {
+    const user = userEvent.setup();
+    wrap(<MultiLineDetail page={makePage()} projectId="p1" pageIndex={0} selectedLines={[0]} />);
+    const input = screen.getByTestId("gt-text-input-0-0") as HTMLInputElement;
+    await user.clear(input);
+    await user.type(input, "changed");
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(input.value).toBe("foo");
+  });
+});
+
+// ─── ML-5: Tab traversal crosses card boundaries ─────────────────────────────
+
+describe("MultiLineDetail — ML-5: Tab traversal across lines", () => {
+  beforeEach(() => {
+    clearSelection();
+  });
+
+  it("Tab from last word of line 0 focuses first word of line 1", async () => {
+    const user = userEvent.setup();
+    wrap(<MultiLineDetail page={makePage()} projectId="p1" pageIndex={0} selectedLines={[0, 1]} />);
+    // Line 0 has words 0,1 — focus word 1 (last), then Tab
+    const lastInLine0 = screen.getByTestId("gt-text-input-0-1");
+    const firstInLine1 = screen.getByTestId("gt-text-input-1-0");
+    lastInLine0.focus();
+    // Fire a Tab keydown on the last input — should move focus to firstInLine1
+    fireEvent.keyDown(lastInLine0, { key: "Tab", code: "Tab" });
+    expect(document.activeElement).toBe(firstInLine1);
+  });
+
+  it("Shift+Tab from first word of line 1 focuses last word of line 0", async () => {
+    const user = userEvent.setup();
+    wrap(<MultiLineDetail page={makePage()} projectId="p1" pageIndex={0} selectedLines={[0, 1]} />);
+    const firstInLine1 = screen.getByTestId("gt-text-input-1-0");
+    const lastInLine0 = screen.getByTestId("gt-text-input-0-1");
+    firstInLine1.focus();
+    fireEvent.keyDown(firstInLine1, { key: "Tab", code: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(lastInLine0);
   });
 });

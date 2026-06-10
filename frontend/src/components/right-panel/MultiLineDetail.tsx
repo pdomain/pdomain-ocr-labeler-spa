@@ -23,7 +23,7 @@
 //   line-ocr-to-gt-button-{lineIndex}
 //   line-delete-button-{lineIndex}
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { StatusPip } from "../ui/StatusPip";
 import {
   useValidateLine,
@@ -68,6 +68,10 @@ export function MultiLineDetail({
   const selectedLineMatches = sortedLineIds
     .map((id) => lineMatches.find((l) => l.line_index === id))
     .filter((l): l is LineMatch => l !== undefined);
+
+  // ML-5: flat ordered list of all GT inputs for cross-card Tab traversal.
+  // Each WordRow registers its input element here on mount.
+  const allInputsRef = useRef<HTMLInputElement[]>([]);
 
   // Bulk mutations
   const validateLine = useValidateLine(projectId, pageIndex);
@@ -177,7 +181,7 @@ export function MultiLineDetail({
             line={line}
             projectId={projectId}
             pageIndex={pageIndex}
-            allInputsRef={undefined}
+            allInputsRef={allInputsRef}
           />
         ))}
       </div>
@@ -191,11 +195,11 @@ interface LineCardProps {
   line: LineMatch;
   projectId: string;
   pageIndex: number;
-  // allInputsRef reserved for Tab traversal (ML-5, implemented in Slice ML-B).
-  allInputsRef: React.RefObject<HTMLInputElement[]> | undefined;
+  // ML-5: flat ordered list of all GT inputs across all cards for Tab traversal.
+  allInputsRef: React.RefObject<HTMLInputElement[]>;
 }
 
-function LineCard({ line, projectId, pageIndex }: LineCardProps) {
+function LineCard({ line, projectId, pageIndex, allInputsRef }: LineCardProps) {
   const validateLine = useValidateLine(projectId, pageIndex);
   const copyLineGt = useCopyLineGt(projectId, pageIndex);
   const deleteLineMut = useDeleteLine(projectId, pageIndex);
@@ -303,7 +307,7 @@ function LineCard({ line, projectId, pageIndex }: LineCardProps) {
         </div>
       )}
 
-      {/* Word grid (ML-3) */}
+      {/* Word grid (ML-3, ML-4, ML-5) */}
       <div className="flex flex-col gap-0.5 p-2">
         {line.word_matches.map((word) => (
           <WordRow
@@ -312,6 +316,7 @@ function LineCard({ line, projectId, pageIndex }: LineCardProps) {
             lineIndex={line.line_index}
             projectId={projectId}
             pageIndex={pageIndex}
+            allInputsRef={allInputsRef}
           />
         ))}
       </div>
@@ -326,19 +331,38 @@ interface WordRowProps {
   lineIndex: number;
   projectId: string;
   pageIndex: number;
+  /** ML-5: flat ordered list of all GT inputs for cross-card Tab traversal. */
+  allInputsRef: React.RefObject<HTMLInputElement[]>;
 }
 
-function WordRow({ word, lineIndex, projectId, pageIndex }: WordRowProps) {
+function WordRow({ word, lineIndex, projectId, pageIndex, allInputsRef }: WordRowProps) {
   const updateGt = useUpdateWordGt(projectId, pageIndex);
   const validateWords = useValidateWords(projectId, pageIndex);
 
   const [gtText, setGtText] = useState(word.ground_truth_text ?? "");
   const pip = pipStatus(word.match_status);
+  // ML-5: ref for this input — registered in allInputsRef on mount.
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Sync when server refreshes
   useEffect(() => {
     setGtText(word.ground_truth_text ?? "");
   }, [word.ground_truth_text]);
+
+  // ML-5: register/unregister this input in the flat traversal list.
+  useEffect(() => {
+    const el = inputRef.current;
+    const list = allInputsRef.current;
+    if (!el || !list) return;
+    // Append to the flat list (render order = DOM order since cards are sorted ascending).
+    list.push(el);
+    return () => {
+      const list2 = allInputsRef.current;
+      if (!list2) return;
+      const idx = list2.indexOf(el);
+      if (idx !== -1) list2.splice(idx, 1);
+    };
+  }, [allInputsRef]);
 
   const commit = useCallback(() => {
     const trimmed = gtText.trim();
@@ -350,6 +374,30 @@ function WordRow({ word, lineIndex, projectId, pageIndex }: WordRowProps) {
 
   const wordIdx = word.word_index ?? 0;
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.currentTarget.blur();
+      return;
+    }
+    if (e.key === "Escape") {
+      setGtText(word.ground_truth_text ?? "");
+      return;
+    }
+    // ML-5: intercept Tab/Shift-Tab to traverse across card boundaries.
+    if (e.key === "Tab") {
+      const inputs = allInputsRef.current;
+      if (!inputs) return;
+      const current = e.currentTarget;
+      const idx = inputs.indexOf(current);
+      if (idx === -1) return;
+      const target = e.shiftKey ? inputs[idx - 1] : inputs[idx + 1];
+      if (target) {
+        e.preventDefault();
+        target.focus();
+      }
+    }
+  }
+
   return (
     <div
       data-testid={`word-image-cell-${lineIndex}-${wordIdx}`}
@@ -358,7 +406,7 @@ function WordRow({ word, lineIndex, projectId, pageIndex }: WordRowProps) {
       {/* Status + OCR label */}
       <StatusPip status={pip} />
       <span
-        data-testid={`ocr-text-label`}
+        data-testid={`ocr-text-label-${lineIndex}-${wordIdx}`}
         className="text-[10px] font-mono text-ink-3 w-16 truncate flex-shrink-0"
         title={word.ocr_text ?? ""}
       >
@@ -367,6 +415,7 @@ function WordRow({ word, lineIndex, projectId, pageIndex }: WordRowProps) {
 
       {/* GT input (ML-4) */}
       <input
+        ref={inputRef}
         type="text"
         data-testid={`gt-text-input-${lineIndex}-${wordIdx}`}
         value={gtText}
@@ -374,14 +423,7 @@ function WordRow({ word, lineIndex, projectId, pageIndex }: WordRowProps) {
           setGtText(e.target.value);
         }}
         onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.currentTarget.blur();
-          }
-          if (e.key === "Escape") {
-            setGtText(word.ground_truth_text ?? "");
-          }
-        }}
+        onKeyDown={handleKeyDown}
         className="flex-1 min-w-0 text-[11px] font-mono bg-bg-surface border border-border-2 rounded px-1.5 py-0.5 text-ink-1 focus:outline-none focus:border-accent transition-colors"
         aria-label={`GT for word ${wordIdx + 1} in line ${lineIndex + 1}`}
       />
