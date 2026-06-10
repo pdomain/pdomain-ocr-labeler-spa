@@ -308,6 +308,7 @@ Hotkey: `Enter` on `dialog-gt-input` commits.
 | `export-button` | Export (the run button inside the dialog) |
 | `export-results` | Container for per-export results |
 | `export-close-button` | Close |
+| `export-send-to-trainer` | Send to Trainer button (only visible when trainer is installed) |
 
 ### 2.13 Notifications + busy
 
