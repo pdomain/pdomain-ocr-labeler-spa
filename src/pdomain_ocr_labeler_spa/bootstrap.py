@@ -37,10 +37,12 @@ import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pdomain_ops.suite.routes import mount_routes as mount_suite_routes
+from pdomain_ops.suite.shared_paths import publish_shared_path  # pyright: ignore[reportMissingImports]
 from pdomain_ops.suite.types import InstalledApp
 
 from .api.env_js import install_env_js
@@ -191,6 +193,20 @@ def _make_lifespan(
                         "initial_project_source": resolved.source,
                     },
                 )
+
+        # Track C: publish export root as a suite shared path so sibling
+        # apps (e.g. pdomain-ocr-trainer-spa) can discover labeled exports.
+        # Best-effort: a missing/unwritable suite dir must not abort startup.
+        _export_root = Path(settings.data_root) / "doctr-export"
+        try:
+            publish_shared_path(
+                "doctr-export-root",
+                _export_root,
+                app="pdomain-ocr-labeler-spa",
+            )
+            log.debug("published shared path: doctr-export-root → %s", _export_root)
+        except Exception:  # noqa: BLE001
+            log.warning("publish_shared_path failed; continuing startup", exc_info=True)
 
         runner_task = asyncio.create_task(runner.run_forever())
         try:
