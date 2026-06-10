@@ -327,15 +327,24 @@ export default function PageImageCanvas({
   }, []);
 
   // Subscribe to rail target changes (Slice 13 — target-scoped bbox opacity).
+  // AG-4: reconcile selectionMode from railStore.target on mount AND on every
+  // change so the two controls never disagree (even on first paint when the
+  // subscription hasn't fired yet but localStorage has a non-default target).
   useEffect(() => {
-    const unsub = railStore.subscribe(() => {
-      const nextTarget = railStore.getState().target;
-      setRailTarget(nextTarget);
-      if (nextTarget === "para") {
+    function syncFromRail(target: ReturnType<typeof railStore.getState>["target"]) {
+      setRailTarget(target);
+      if (target === "para") {
         useUiPrefs.setState({ selectionMode: "paragraph" });
-      } else if (nextTarget === "line" || nextTarget === "word") {
-        useUiPrefs.setState({ selectionMode: nextTarget });
+      } else if (target === "line" || target === "word") {
+        useUiPrefs.setState({ selectionMode: target });
       }
+      // target === "block": no selectionMode counterpart — leave unchanged.
+    }
+    // Initial sync on mount
+    syncFromRail(railStore.getState().target);
+    // Ongoing sync on changes
+    const unsub = railStore.subscribe(() => {
+      syncFromRail(railStore.getState().target);
     });
     return unsub;
   }, []);

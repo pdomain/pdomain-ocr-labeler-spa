@@ -1466,3 +1466,131 @@ describe("PageImageCanvas — SEL-1: highlight derived from selectionStore not p
     );
   });
 });
+
+// ── AG-5: Ctrl-click word accumulates selection (regression SEL-4) ─────────────
+//
+// Use a 3-word line so that selecting 2 of the 3 words does NOT trigger
+// promoteCompleteWordLines (which promotes a fully-selected line to line-level,
+// clearing selectedWords). This isolates the modifier path from the promotion logic.
+
+describe("PageImageCanvas — AG-5: Ctrl/Cmd-click word accumulates selection", () => {
+  it("plain click selects one word and leaves the other two unselected (baseline)", () => {
+    // 3 words so selecting 1 won't trigger line promotion
+    const page = makePage([
+      makeLine(0, 0, [
+        { x: 100, y: 100, width: 40, height: 20 },
+        { x: 160, y: 100, width: 40, height: 20 },
+        { x: 220, y: 100, width: 40, height: 20 },
+      ]),
+    ]);
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+    const overlay = getOverlay();
+    const p1 = sourceToDisplayPoint(120, 110);
+
+    fireEvent.mouseDown(overlay, { clientX: p1.x, clientY: p1.y });
+    fireEvent.mouseUp(overlay, { clientX: p1.x, clientY: p1.y });
+
+    const sel = selectionStore.getState();
+    expect(sel.selectedWords).toHaveLength(1);
+    expect(sel.selectedWords[0]).toEqual([0, 0]);
+  });
+
+  it("Ctrl-click on a second word ADDS to selection (not replace)", () => {
+    // 3 words: select words 0 and 1 only; promoteCompleteWordLines won't fire
+    // because word 2 remains unselected.
+    const page = makePage([
+      makeLine(0, 0, [
+        { x: 100, y: 100, width: 40, height: 20 },
+        { x: 160, y: 100, width: 40, height: 20 },
+        { x: 220, y: 100, width: 40, height: 20 },
+      ]),
+    ]);
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+    const overlay = getOverlay();
+
+    // First click: plain select word 0
+    const p1 = sourceToDisplayPoint(120, 110);
+    fireEvent.mouseDown(overlay, { clientX: p1.x, clientY: p1.y });
+    fireEvent.mouseUp(overlay, { clientX: p1.x, clientY: p1.y });
+
+    // Second click: Ctrl-click word 1 — should ADD, not replace
+    const p2 = sourceToDisplayPoint(180, 110);
+    fireEvent.mouseDown(overlay, { clientX: p2.x, clientY: p2.y, ctrlKey: true });
+    fireEvent.mouseUp(overlay, { clientX: p2.x, clientY: p2.y, ctrlKey: true });
+
+    const sel = selectionStore.getState();
+    expect(sel.selectedWords).toHaveLength(2);
+    expect(sel.selectedWords).toContainEqual([0, 0]);
+    expect(sel.selectedWords).toContainEqual([0, 1]);
+  });
+
+  it("Ctrl-click on an already-selected word DE-selects it (toggle semantics)", () => {
+    // Use 3-word line; pre-seed selection of words 0 and 1 via store,
+    // then Ctrl-click word 0 — should remove it, leaving only word 1.
+    const page = makePage([
+      makeLine(0, 0, [
+        { x: 100, y: 100, width: 40, height: 20 },
+        { x: 160, y: 100, width: 40, height: 20 },
+        { x: 220, y: 100, width: 40, height: 20 },
+      ]),
+    ]);
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+    const overlay = getOverlay();
+
+    // Pre-seed: words 0 and 1 selected (2 of 3 — no promotion)
+    selectionStore.setState({
+      ...selectionStore.getState(),
+      level: "word",
+      selectedWords: [
+        [0, 0],
+        [0, 1],
+      ] as [number, number][],
+    });
+
+    // Ctrl-click word 0 — should remove it (toggle)
+    const p1 = sourceToDisplayPoint(120, 110);
+    fireEvent.mouseDown(overlay, { clientX: p1.x, clientY: p1.y, ctrlKey: true });
+    fireEvent.mouseUp(overlay, { clientX: p1.x, clientY: p1.y, ctrlKey: true });
+
+    const sel = selectionStore.getState();
+    expect(sel.selectedWords).toHaveLength(1);
+    expect(sel.selectedWords).toContainEqual([0, 1]);
+    expect(sel.selectedWords).not.toContainEqual([0, 0]);
+  });
+
+  it("Shift-click on a selected word removes it (remove semantics)", () => {
+    const page = makePage([
+      makeLine(0, 0, [
+        { x: 100, y: 100, width: 40, height: 20 },
+        { x: 160, y: 100, width: 40, height: 20 },
+        { x: 220, y: 100, width: 40, height: 20 },
+      ]),
+    ]);
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+    const overlay = getOverlay();
+
+    // Pre-seed: words 0 and 1 selected (2 of 3)
+    selectionStore.setState({
+      ...selectionStore.getState(),
+      level: "word",
+      selectedWords: [
+        [0, 0],
+        [0, 1],
+      ] as [number, number][],
+    });
+
+    // Shift-click word 1 — should remove it
+    const p2 = sourceToDisplayPoint(180, 110);
+    fireEvent.mouseDown(overlay, { clientX: p2.x, clientY: p2.y, shiftKey: true });
+    fireEvent.mouseUp(overlay, { clientX: p2.x, clientY: p2.y, shiftKey: true });
+
+    const sel = selectionStore.getState();
+    expect(sel.selectedWords).toHaveLength(1);
+    expect(sel.selectedWords).toContainEqual([0, 0]);
+    expect(sel.selectedWords).not.toContainEqual([0, 1]);
+  });
+});
