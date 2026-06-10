@@ -2,7 +2,10 @@
 
 Covers:
 - Export API call triggers a job; manifest.json appears on disk.
-- "Send to trainer" button is absent when trainer not in installed list.
+- Export dialog opens in the browser; Export button fires a job; run-history
+  row (export-results) appears after the job completes.
+- "Send to trainer" button is absent (DOM count == 0) when trainer is not
+  in the suite registry.
 
 Prerequisite: ``make frontend-build`` (or ``make e2e``) must have run.
 
@@ -21,9 +24,10 @@ from pathlib import Path
 
 import httpx
 import pytest
+from playwright.sync_api import Page
 
 from tests.e2e.conftest import LiveServer
-from tests.e2e.helpers import wait_for_app_ready
+from tests.e2e.helpers import SEED_TIMEOUT, wait_for_app_ready
 
 pytestmark = pytest.mark.e2e
 
@@ -75,6 +79,23 @@ def _seed_validated_page(data_root: Path, project_id: str) -> None:
     }
     json_path = project_dir / f"{project_id}_000.json"
     json_path.write_text(json.dumps(envelope), encoding="utf-8")
+
+
+def _load_tiny_fixture(base_url: str, source_root_path: str) -> None:
+    """POST /api/source-root then POST /api/projects/load for tiny-fixture."""
+    httpx.post(
+        f"{base_url}/api/source-root",
+        json={"path": source_root_path},
+        timeout=SEED_TIMEOUT,
+    )
+    project_path = str(source_root_path) + "/tiny-fixture"
+    resp = httpx.post(
+        f"{base_url}/api/projects/load",
+        json={"project_root": project_path},
+        timeout=SEED_TIMEOUT,
+    )
+    # 200 = loaded; 409 = already loaded from a prior test in this session.
+    assert resp.status_code in (200, 409), f"load_project failed: {resp.status_code} {resp.text}"
 
 
 # ---------------------------------------------------------------------------
@@ -134,31 +155,123 @@ def test_export_manifest_created_on_server(live_server: LiveServer) -> None:
     )
 
 
-def test_send_to_trainer_hidden_when_not_installed(live_server: LiveServer) -> None:
-    """Send-to-trainer button absent when trainer not in suite registry.
+def test_send_to_trainer_hidden_when_not_installed(page: Page, live_server: LiveServer) -> None:
+    """Send-to-trainer button is absent (DOM count 0) when trainer not installed.
 
-    This test does not use Playwright; it asserts the installed-apps
-    endpoint returns no trainer, which is the server-side condition
-    for hiding the button.
+    Rewritten as a browser-DOM test per plan Task 9 Gap 1 requirements.
+
+    The send-to-trainer button is conditionally rendered by ExportDialog only
+    when ``trainerInstalled`` is true (polled from /api/suite/installed when
+    the dialog opens).  When the trainer is not registered, ``trainerInstalled``
+    stays false and no element with ``data-testid="export-send-to-trainer"``
+    is ever inserted into the DOM — the assertion is valid as soon as the
+    export dialog is open and the initial installed-apps fetch has settled.
     """
     wait_for_app_ready(live_server.base_url)
 
+    # Confirm server-side precondition: trainer not registered.
     installed_resp = httpx.get(
         f"{live_server.base_url}/api/suite/installed",
         timeout=5,
     )
     assert installed_resp.status_code == 200
     installed = installed_resp.json()
-
     trainer_present = any(a.get("app_id") == "pdomain-ocr-trainer-spa" for a in installed)
-
-    # In a CI / test environment the trainer is not registered.
-    # If it IS registered (developer machine), we skip — cannot hide the button.
     if trainer_present:
-        pytest.skip("trainer is registered in this environment — the 'hidden' assertion cannot be verified")
+        pytest.skip("trainer app is installed in this environment — cannot verify 'hidden' assertion")
 
-    # Trainer is absent from the registry: the frontend will not show the button.
-    # We verify the server-side condition rather than the browser DOM here,
-    # since a browser test would require a completed export first (which is
-    # already covered by test_export_manifest_created_on_server).
-    assert not trainer_present, "trainer must not be installed for this assertion"
+    # Load tiny-fixture so the route resolves (ExportDialog is only mounted
+    # by App.tsx when projectId != null from the URL match).
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    # Navigate to a project page.
+    page.goto(
+        f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1",
+        timeout=20_000,
+    )
+    page.locator("[data-testid='project-page']").wait_for(state="attached", timeout=20_000)
+
+    # Open the export dialog via the JS bridge.
+    page.evaluate("() => { window.__DIALOG_STORE_OPEN?.('export'); }")
+    page.locator("[data-testid='export-dialog']").wait_for(state="visible", timeout=10_000)
+
+    # Give the trainerInstalled fetch a moment to settle (it's an async useEffect
+    # that fires when `open` becomes true).
+    page.wait_for_timeout(1_500)
+
+    # The send-to-trainer button must not exist anywhere in the DOM.
+    # trainerInstalled is false → the button is never rendered, regardless of
+    # whether an export has run.
+    count = page.locator("[data-testid='export-send-to-trainer']").count()
+    assert count == 0, (
+        f"Expected export-send-to-trainer to be absent from the DOM "
+        f"when trainer is not installed, but found {count} element(s)"
+    )
+
+
+def test_export_dialog_opens_and_runs(page: Page, live_server: LiveServer) -> None:
+    """Navigate to a project page, open the export dialog, run an export.
+
+    Verifies the full browser flow:
+    1. Load the tiny-fixture project (registered in source_root by conftest).
+    2. Navigate to page 1.
+    3. Open the export dialog via the window.__DIALOG_STORE_OPEN JS bridge
+       (avoids any interaction with the project-loading overlay).
+    4. Click the Export run button inside the dialog.
+    5. Wait for the export-results element to appear (job started / completed).
+
+    Note: the project-loading overlay may stay up during cold OCR on the first
+    page visit.  We bypass it by using the JS bridge to open the dialog —
+    the Radix Dialog portal mounts above the overlay in the React tree, so
+    the dialog and its buttons remain interactive regardless of overlay state.
+    """
+    wait_for_app_ready(live_server.base_url)
+
+    # Seed validated page data for tiny-fixture so the export job has content.
+    # The tiny-fixture PNG images exist in source_root; we seed an envelope in
+    # data_root so the export handler can find validated words.
+    data_root = Path(str(live_server.settings.data_root))
+    _seed_validated_page(data_root, "tiny-fixture")
+
+    # Load the tiny-fixture project so the route resolves.
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    # Navigate directly to page 1 of tiny-fixture.
+    page.goto(
+        f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1",
+        timeout=20_000,
+    )
+    # Wait for the project-page root to attach (not necessarily fully loaded —
+    # the loading overlay may still be up while cold OCR runs, but the React
+    # shell including the dialog portal layer is already mounted).
+    page.locator("[data-testid='project-page']").wait_for(state="attached", timeout=20_000)
+
+    # Open the export dialog via the JS bridge so we don't need the overlay
+    # to clear first.  The bridge is installed by dialog-store.ts on every page.
+    page.evaluate("() => { window.__DIALOG_STORE_OPEN?.('export'); }")
+
+    # The export dialog mounts in a Radix portal above the overlay.
+    page.locator("[data-testid='export-dialog']").wait_for(state="visible", timeout=10_000)
+
+    # Click the Export run button inside the dialog via JS evaluation.
+    # Using evaluate() guarantees the click event reaches React regardless of any
+    # pointer-event-intercepting overlay (e.g. the project-loading overlay).
+    # Scoped to the dialog to avoid clicking the identically-named button in the
+    # hidden PageActions driver-contract bar.
+    page.evaluate(
+        """() => {
+            const dialog = document.querySelector("[data-testid='export-dialog']");
+            if (dialog) {
+                const btn = dialog.querySelector("[data-testid='export-button']");
+                if (btn) btn.click();
+            }
+        }"""
+    )
+
+    # Wait for the run-history / results element to appear.
+    # export-results is rendered once the job fires and produces its first
+    # progress event.  Allow up to 30 s for the job to start and produce output.
+    page.locator("[data-testid='export-results']").wait_for(state="visible", timeout=30_000)
+    assert page.locator("[data-testid='export-results']").is_visible(), (
+        "export-results element is not visible after export was triggered"
+    )
