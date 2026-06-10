@@ -152,4 +152,50 @@ describe("applyBoxSelect — SEL-2 intersection math", () => {
     expect(result.lines).toEqual([0]);
     expect(result.words).toEqual([]);
   });
+
+  // ML-D regression: drag across ≥2 lines with display-scale bboxes populates selectedLines
+  it("ML-D: line target drag across multiple lines yields all intersected line ids", () => {
+    // 3 lines stacked vertically; scale=1 so display = source coords
+    const page = makePage(
+      [
+        makeLine(0, [makeWord(0, 0, 50, 100, 200, 20), makeWord(0, 1, 260, 100, 100, 20)]),
+        makeLine(1, [makeWord(1, 0, 50, 140, 200, 20), makeWord(1, 1, 260, 140, 100, 20)]),
+        makeLine(2, [makeWord(2, 0, 50, 180, 200, 20), makeWord(2, 1, 260, 180, 100, 20)]),
+      ],
+      1, // scale = 1 so display == source
+    );
+
+    // Drag rect covers all three line bboxes (y: 95 → 205)
+    const result = applyBoxSelect(
+      page,
+      { x: 40, y: 95, width: 300, height: 115 },
+      "replace",
+      "line",
+    );
+
+    expect(result.lines).toEqual([0, 1, 2]);
+    expect(result.words).toEqual([]);
+    expect(result.paragraphs).toEqual([]);
+  });
+
+  it("ML-D: line target drag across exactly 2 of 3 lines yields only those 2", () => {
+    const page = makePage(
+      [
+        makeLine(0, [makeWord(0, 0, 50, 100, 200, 20)]),
+        makeLine(1, [makeWord(1, 0, 50, 200, 200, 20)]),
+        makeLine(2, [makeWord(2, 0, 50, 300, 200, 20)]),
+      ],
+      1,
+    );
+
+    // Drag covers line 0 (y:100-120) and line 1 (y:200-220), but not line 2 (y:300-320)
+    const result = applyBoxSelect(
+      page,
+      { x: 40, y: 95, width: 250, height: 135 },
+      "replace",
+      "line",
+    );
+
+    expect(result.lines).toEqual([0, 1]);
+  });
 });
