@@ -3,7 +3,7 @@
 // in .tsx files alongside components.
 
 /** App ID for the OCR trainer in the suite registry. */
-export const TRAINER_APP_ID = "pdomain-ocr-trainer-spa";
+const TRAINER_APP_ID = "pdomain-ocr-trainer-spa";
 
 /**
  * Fetch the list of installed suite apps and return whether the trainer

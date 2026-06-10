@@ -246,18 +246,24 @@ def _write_export_manifest(
         task_map: dict[str, DoctrExportTaskStats] = {
             ts.task: DoctrExportTaskStats(item_count=ts.item_count) for ts in task_stats
         }
+        # exported_at is an ISO-8601 string; DoctrExportProject expects a datetime.
+        exported_at_dt = datetime.fromisoformat(exported_at.replace("Z", "+00:00"))
         existing_projects[project_id] = DoctrExportProject(
-            exported_at=exported_at,
+            exported_at=exported_at_dt,
             page_count=page_count,
             tasks=task_map,
         )
 
-        manifest = DoctrExportManifest(
-            schema_id="pdomain.doctr-export-manifest",
-            version=1,
-            generated_at=datetime.now(UTC),
-            app="pdomain-ocr-labeler-spa",
-            projects=existing_projects,
+        # Construct via model_validate (dict) to avoid the alias/field-name
+        # ambiguity that strict pyright flags when schema_id is used as a kwarg.
+        manifest = DoctrExportManifest.model_validate(
+            {
+                "schema": "pdomain.doctr-export-manifest",
+                "version": 1,
+                "generated_at": datetime.now(UTC),
+                "app": "pdomain-ocr-labeler-spa",
+                "projects": existing_projects,
+            }
         )
         write_manifest(export_root, manifest)
         log.debug("manifest updated: %s/manifest.json (project=%s)", export_root, project_id)
