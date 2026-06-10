@@ -291,10 +291,16 @@ expectations. The runtime types are compatible.
   `pdomain_book_tools.text.normalize`.
 - `src/pdomain_ocr_labeler_spa/core/persistence/config_yaml.py:92, :128` —
   `import yaml`.
+- `src/pdomain_ocr_labeler_spa/bootstrap.py` —
+  `pdomain_ops.suite.shared_paths` (added after the released 0.9.0/0.10.0
+  ops; the guarded import degrades to `None` on any installed version that
+  predates the module).
 
 **Justification.** `pdomain_book_tools` is not installed in the basedpyright dev
 venv (stubs absent during type-checking only; works at runtime). `yaml`
 (`PyYAML`) is an optional dependency; its stubs are absent in the dev venv.
+`pdomain_ops.suite.shared_paths` exists only in unreleased ops; basedpyright
+sees it as missing because the installed version is 0.9.0.
 
 ---
 
@@ -308,6 +314,8 @@ venv (stubs absent during type-checking only; works at runtime). `yaml`
   `_AVAILABLE = False` reassigned in a `try/except` block.
 - `src/pdomain_ocr_labeler_spa/api/ocr_config.py:89` —
   `_AUTO_ROTATE_AVAILABLE = False` reassigned in a `try/except` block.
+- `src/pdomain_ocr_labeler_spa/bootstrap.py` —
+  `_SHARED_PATHS_AVAILABLE = False` reassigned in a `try/except` block.
 
 **Justification.** Module-level booleans are initialised as `False` then
 reassigned to `True` if the optional import succeeds. This is the standard
@@ -324,8 +332,10 @@ intentionally reassigned once.
 
 - `src/pdomain_ocr_labeler_spa/core/text_normalize.py:28` —
   `_pd_normalize = None` assigned to a callable-typed module-level name.
+- `src/pdomain_ocr_labeler_spa/bootstrap.py` —
+  `publish_shared_path = None` assigned to a callable-typed module-level name.
 
-**Justification.** `_pd_normalize` is `None` initially and replaced by the
+**Justification.** `_pd_normalize` / `publish_shared_path` are `None` initially and replaced by the
 real function if the optional import succeeds. The `None` sentinel type
 widens the declared type; the assignment suppression covers the initialisation.
 

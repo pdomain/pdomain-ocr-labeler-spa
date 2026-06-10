@@ -42,8 +42,20 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pdomain_ops.suite.routes import mount_routes as mount_suite_routes
-from pdomain_ops.suite.shared_paths import publish_shared_path  # pyright: ignore[reportMissingImports]
 from pdomain_ops.suite.types import InstalledApp
+
+# publish_shared_path was added in pdomain-ops after the 0.9.0/0.10.0 releases.
+# Guard the import so the app starts against any installed ops version; the
+# feature degrades gracefully (no shared-path advertisement) when absent.
+try:
+    from pdomain_ops.suite.shared_paths import (  # pyright: ignore[reportMissingImports]
+        publish_shared_path,
+    )
+
+    _SHARED_PATHS_AVAILABLE: bool = True
+except ImportError:
+    _SHARED_PATHS_AVAILABLE = False  # pyright: ignore[reportConstantRedefinition]
+    publish_shared_path = None  # type: ignore[assignment]
 
 from .api.env_js import install_env_js
 from .api.export import install_export_router
@@ -197,16 +209,22 @@ def _make_lifespan(
         # Track C: publish export root as a suite shared path so sibling
         # apps (e.g. pdomain-ocr-trainer-spa) can discover labeled exports.
         # Best-effort: a missing/unwritable suite dir must not abort startup.
+        # Guard: publish_shared_path is None when pdomain-ops < the version
+        # that introduced shared_paths (0.9.0/0.10.0 released; module added
+        # after those releases).  Degraded-mode: skip advertisement silently.
         _export_root = Path(settings.data_root) / "doctr-export"
-        try:
-            publish_shared_path(
-                "doctr-export-root",
-                _export_root,
-                app="pdomain-ocr-labeler-spa",
-            )
-            log.debug("published shared path: doctr-export-root → %s", _export_root)
-        except Exception:  # noqa: BLE001
-            log.warning("publish_shared_path failed; continuing startup", exc_info=True)
+        if publish_shared_path is not None:
+            try:
+                publish_shared_path(
+                    "doctr-export-root",
+                    _export_root,
+                    app="pdomain-ocr-labeler-spa",
+                )
+                log.debug("published shared path: doctr-export-root → %s", _export_root)
+            except Exception:  # noqa: BLE001
+                log.warning("publish_shared_path failed; continuing startup", exc_info=True)
+        else:
+            log.debug("pdomain_ops.suite.shared_paths not available; skipping export-root advertisement")
 
         runner_task = asyncio.create_task(runner.run_forever())
         try:
