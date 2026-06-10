@@ -27,6 +27,7 @@
 import { useEffect, useState } from "react";
 import { useJobProgress } from "../hooks/useJobProgress";
 import { useLabelVocabulary } from "../hooks/useLabelVocabulary";
+import { fetchTrainerInstalled, launchTrainer } from "./ExportDialogUtils";
 import type { components } from "../api/types";
 import {
   Dialog,
@@ -104,6 +105,16 @@ export function ExportDialog({
 
   // --- Run history (client-only) ---
   const [history, setHistory] = useState<RunHistoryEntry[]>([]);
+
+  // --- Trainer availability (polled once when the dialog opens) ---
+  const [trainerInstalled, setTrainerInstalled] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    fetchTrainerInstalled()
+      .then(setTrainerInstalled)
+      .catch(() => setTrainerInstalled(false));
+  }, [open]);
 
   // Fetch available styles when scope=all_validated and dialog is open
   useEffect(() => {
@@ -458,6 +469,21 @@ export function ExportDialog({
                         </span>
                       )}
                     <span className="ml-2 text-ink-4">{entry.timestamp}</span>
+                    {trainerInstalled && (
+                      <button
+                        data-testid="export-send-to-trainer"
+                        className="ml-3 px-2 py-0.5 text-xs rounded border border-accent text-accent hover:bg-accent hover:text-accent-ink transition-colors"
+                        onClick={() => {
+                          void launchTrainer().then((result) => {
+                            if (result?.kind === "opened" && result.url) {
+                              window.open(result.url, "_blank", "noopener");
+                            }
+                          });
+                        }}
+                      >
+                        Send to trainer
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
