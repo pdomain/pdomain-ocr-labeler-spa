@@ -10,9 +10,20 @@ Validates:
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
+
+# Evaluates at collection time without importing — safe in both mode A and mode B.
+_ops_available = importlib.util.find_spec("pdomain_ops.schemas.doctr_export") is not None
+
+_skip_without_ops = pytest.mark.skipif(
+    not _ops_available,
+    reason="requires pdomain-ops >= 0.11 (unreleased); runs in local-dev mode",
+)
 
 
 def _invoke_write_manifest(
@@ -36,6 +47,7 @@ def _invoke_write_manifest(
     )
 
 
+@_skip_without_ops
 def test_first_write_creates_manifest(tmp_path: Path) -> None:
     """A fresh export creates manifest.json at the doctr-export root."""
     export_root = tmp_path / "doctr-export"
@@ -65,6 +77,7 @@ def test_first_write_creates_manifest(tmp_path: Path) -> None:
     assert proj["tasks"]["recognition"]["item_count"] == 38
 
 
+@_skip_without_ops
 def test_re_export_replaces_project_preserves_others(tmp_path: Path) -> None:
     """Re-exporting project A replaces its entry; project B is untouched."""
     # First write: two projects
@@ -105,6 +118,7 @@ def test_re_export_replaces_project_preserves_others(tmp_path: Path) -> None:
     assert data["projects"]["proj-B"]["tasks"]["recognition"]["item_count"] == 100
 
 
+@_skip_without_ops
 def test_generated_at_refreshed_on_every_write(tmp_path: Path) -> None:
     """generated_at reflects the most recent write, not the oldest."""
     _invoke_write_manifest(

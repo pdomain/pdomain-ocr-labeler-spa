@@ -12,6 +12,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+# All tests in this file require pdomain_ops.schemas.doctr_export (Track C).
+# Skip when running against the released pdomain-ops 0.9.x; re-activate after
+# bumping the dep to pdomain-ops >= 0.11.
+pytest.importorskip(
+    "pdomain_ops.schemas.doctr_export",
+    reason="requires pdomain-ops >= 0.11 (unreleased); runs in local-dev mode",
+)
 from fastapi.testclient import TestClient
 
 from pdomain_ocr_labeler_spa.bootstrap import build_app
