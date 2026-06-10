@@ -194,6 +194,12 @@ def _write_export_manifest(
 ) -> None:
     """Merge-update the doctr-export manifest.json after a successful export.
 
+    ``export_root`` is the doctr-export ROOT DIRECTORY (e.g.
+    ``<data_root>/doctr-export/``).  Both ``read_manifest`` and
+    ``write_manifest`` from ``pdomain_ops.schemas.doctr_export`` accept
+    this directory and resolve ``<export_root>/manifest.json`` internally —
+    do NOT pass the manifest file path directly.
+
     Imports Track-B helpers at call time so the handler stays importable
     when pdomain_ops is absent (CI, stub environments).  Any failure is
     logged and swallowed — a manifest write must never abort an otherwise

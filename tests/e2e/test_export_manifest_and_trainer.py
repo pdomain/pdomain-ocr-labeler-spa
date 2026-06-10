@@ -24,7 +24,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from playwright.sync_api import Page
+from playwright.sync_api import Page, expect
 
 from tests.e2e.conftest import LiveServer
 from tests.e2e.helpers import SEED_TIMEOUT, wait_for_app_ready
@@ -195,18 +195,11 @@ def test_send_to_trainer_hidden_when_not_installed(page: Page, live_server: Live
     page.evaluate("() => { window.__DIALOG_STORE_OPEN?.('export'); }")
     page.locator("[data-testid='export-dialog']").wait_for(state="visible", timeout=10_000)
 
-    # Give the trainerInstalled fetch a moment to settle (it's an async useEffect
-    # that fires when `open` becomes true).
-    page.wait_for_timeout(1_500)
-
-    # The send-to-trainer button must not exist anywhere in the DOM.
-    # trainerInstalled is false → the button is never rendered, regardless of
-    # whether an export has run.
-    count = page.locator("[data-testid='export-send-to-trainer']").count()
-    assert count == 0, (
-        f"Expected export-send-to-trainer to be absent from the DOM "
-        f"when trainer is not installed, but found {count} element(s)"
-    )
+    # Wait until the send-to-trainer button is confirmed absent (count == 0).
+    # This replaces a fixed sleep: the condition resolves as soon as the
+    # trainerInstalled useEffect fetch has settled and React has committed the
+    # result.  Timeout of 3 s is generous for a single /api/suite/installed call.
+    expect(page.locator("[data-testid='export-send-to-trainer']")).to_have_count(0, timeout=3_000)
 
 
 def test_export_dialog_opens_and_runs(page: Page, live_server: LiveServer) -> None:

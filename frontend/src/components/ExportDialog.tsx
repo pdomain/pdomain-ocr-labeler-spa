@@ -474,6 +474,8 @@ export function ExportDialog({
                         data-testid="export-send-to-trainer"
                         className="ml-3 px-2 py-0.5 text-xs rounded border border-accent text-accent hover:bg-accent hover:text-accent-ink transition-colors"
                         onClick={() => {
+                          // Silent failure by design: launch errors are logged to
+                          // console.warn in ExportDialogUtils; no user-facing error toast.
                           void launchTrainer().then((result) => {
                             if (result?.kind === "opened" && result.url) {
                               window.open(result.url, "_blank", "noopener");
