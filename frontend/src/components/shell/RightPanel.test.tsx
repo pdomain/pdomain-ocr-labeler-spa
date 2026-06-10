@@ -12,6 +12,8 @@ import {
   selectPara,
   selectLine,
   selectWord,
+  applyLineSelection,
+  selectionStore,
 } from "../../stores/selection-store";
 import type { components } from "../../api/types";
 
@@ -46,6 +48,33 @@ function makePage(): PagePayload {
             word_index: 0,
             ocr_text: "hello",
             ground_truth_text: "hello",
+            match_status: "exact",
+            normalized_match: false,
+            is_validated: false,
+            bbox: { x: 0, y: 0, width: 0, height: 0 },
+          },
+        ],
+        overall_match_status: "exact",
+        exact_count: 1,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+        validated_word_count: 0,
+        total_word_count: 1,
+        is_fully_validated: false,
+      },
+      {
+        line_index: 1,
+        paragraph_index: 0,
+        ocr_line_text: "world",
+        ground_truth_line_text: "world",
+        word_matches: [
+          {
+            line_index: 1,
+            word_index: 0,
+            ocr_text: "world",
+            ground_truth_text: "world",
             match_status: "exact",
             normalized_match: false,
             is_validated: false,
@@ -180,5 +209,44 @@ describe("STB-5: RightPanel never shows placeholder for implemented levels", () 
     );
     expect(screen.queryByTestId("right-panel-placeholder")).toBeNull();
     expect(screen.getByTestId("word-slot-stub")).toBeInTheDocument();
+  });
+});
+
+// ─── ML-A routing: MultiLineDetail ───────────────────────────────────────────
+
+describe("ML-A: RightPanel multi-line routing", () => {
+  beforeEach(() => {
+    clearSelection();
+  });
+
+  it("2 lines selected → multi-line-detail renders, line-detail absent", () => {
+    applyLineSelection([0, 1], "replace");
+    renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
+    expect(screen.getByTestId("multi-line-detail")).toBeInTheDocument();
+    expect(screen.queryByTestId("line-detail")).toBeNull();
+    expect(screen.queryByTestId("right-panel-placeholder")).toBeNull();
+  });
+
+  it("1 line selected → LineDetail renders (single-line unchanged)", () => {
+    selectLine(0);
+    renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
+    expect(screen.queryByTestId("multi-line-detail")).toBeNull();
+    expect(screen.getByTestId("line-detail")).toBeInTheDocument();
+  });
+
+  it("multi-word (selectedWords.length > 1) still wins over multi-line", () => {
+    // Set up: selectedWords.length > 1 wins over selectedLines.length > 1
+    applyLineSelection([0, 1], "replace");
+    // Manually inject selectedWords to trigger multi-word branch
+    selectionStore.setState({
+      ...selectionStore.getState(),
+      selectedWords: [
+        [0, 0],
+        [1, 0],
+      ] as [number, number][],
+    });
+    renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
+    expect(screen.getByTestId("multi-word-detail")).toBeInTheDocument();
+    expect(screen.queryByTestId("multi-line-detail")).toBeNull();
   });
 });

@@ -24,6 +24,7 @@ import { LineDetail } from "../right-panel/LineDetail";
 import { BlockDetail } from "../right-panel/BlockDetail";
 import { ParagraphDetail } from "../right-panel/ParagraphDetail";
 import { MultiWordDetail } from "../right-panel/MultiWordDetail";
+import { MultiLineDetail } from "../right-panel/MultiLineDetail";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -113,6 +114,18 @@ export function RightPanel({ page, projectId, pageIndex, wordSlot, onCollapse }:
             projectId={projectId}
             pageIndex={pageIndex}
             selectedWords={state.selectedWords}
+          />
+        ) : /* ML-A: multi-line branch — after multi-word, before single-line */
+        level === "line" &&
+          state.selectedLines.length > 1 &&
+          page &&
+          projectId !== undefined &&
+          pageIndex !== undefined ? (
+          <MultiLineDetail
+            page={page}
+            projectId={projectId}
+            pageIndex={pageIndex}
+            selectedLines={state.selectedLines}
           />
         ) : /* STB-5: word level — slot takes priority, else "no word selected" */
         level === "word" ? (
