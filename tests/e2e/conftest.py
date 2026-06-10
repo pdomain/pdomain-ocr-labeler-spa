@@ -147,3 +147,7 @@ def live_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[LiveServer
 # can discover this module-scoped fixture without requiring
 # exercise_real_project.py to be collected in the same run.
 from tests.e2e.exercise_real_project import exercise_server as exercise_server
+
+# Re-export sel_server so test_multi_line_detail.py can reference it without
+# also importing from test_selection_operations_parity (which triggers F811).
+from tests.e2e.test_selection_operations_parity import sel_server as sel_server

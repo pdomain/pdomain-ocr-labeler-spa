@@ -34,8 +34,37 @@ switching to a separate dialog.
 
 ## 3. Component tree / layout
 
+### Routing priority (evaluated top-to-bottom in RightPanel)
+
+| Condition | Component rendered | testid |
+|---|---|---|
+| `selectedWords.length > 1` | `MultiWordDetail` | `multi-word-detail` |
+| `level === "line" && selectedLines.length > 1` | `MultiLineDetail` | `multi-line-detail` |
+| `level === "line" && selectedLines.length === 1` | `LineDetail` | `line-detail` |
+| `level === "word"` | `WordDetail` | `word-detail` |
+| `level === "block" \| "para"` | `BlockDetail` | `block-detail` |
+| `level === "none"` | placeholder | `right-panel-placeholder` |
+
 ```
 RightPanel (rendered inside StudioShell's "right" slot)
+├── [selectedWords.length > 1]
+│   └── MultiWordDetail             data-testid="multi-word-detail"
+│
+├── [level === "line" && selectedLines.length > 1]
+│   └── MultiLineDetail             data-testid="multi-line-detail"
+│       ├── LineCard (per selected line)  data-testid="multi-line-card-{lineIndex}"
+│       │   └── WordRow (per word)        data-testid="gt-text-input-{l}-{w}"
+│       └── BulkBar (sticky footer)   data-testid="multi-line-bulk-bar"
+│
+├── [level === "line" && selectedLines.length === 1]
+│   └── LineDetail                  data-testid="line-detail"
+│       └── Tabs
+│           ├── LineCard (in "line" tab)
+│           ├── GTRow (in "line" tab)
+│           ├── StructureBox (in "line" tab)
+│           └── WordCardsView / WordRowsView (in "words" tab)
+│               └── LineWordsCard (per word)
+│
 ├── [level === "word"]
 │   └── WordDetail                  data-testid="word-detail"
 │       ├── WordHeader              data-testid="word-header"
@@ -52,15 +81,6 @@ RightPanel (rendered inside StudioShell's "right" slot)
 │       │   ├── CharRangesSection
 │       │   └── CharFixerSection (Konva canvas)
 │       └── WordFooter              data-testid="word-footer"  (sticky bottom)
-│
-├── [level === "line"]
-│   └── LineDetail                  data-testid="line-detail"
-│       └── Tabs
-│           ├── LineCard (in "line" tab)
-│           ├── GTRow (in "line" tab)
-│           ├── StructureBox (in "line" tab)
-│           └── WordCardsView / WordRowsView (in "words" tab)
-│               └── LineWordsCard (per word)
 │
 └── [level === "block" | "para"]
     └── BlockDetail                 data-testid="block-detail"
@@ -344,6 +364,27 @@ to display. Renders an empty-state `"No word selected."` div when `level !==
 | `block-detail-para-scope-{pId\|"null"}` | button | Para scope button (Para Layout tab) |
 | `block-detail-line-card-{lineIndex}` | button | Clickable line card |
 | `block-detail-line-row-{lineIndex}` | button | Clickable line row (LineItemRow) |
+
+### MultiLineDetail (selectedLines.length > 1)
+
+Rendered when two or more lines are selected simultaneously.
+`{n}` is the 0-based `line_index` of each selected line.
+
+| testid | element | description |
+|---|---|---|
+| `multi-line-detail` | div | Outer container |
+| `multi-line-card-{n}` | div | Card for line `n` (`data-line-index={n}`) |
+| `multi-line-bulk-bar` | div | Sticky bulk-action bar (bottom of panel) |
+| `multi-line-bulk-validate` | button | Validate all words in all selected lines |
+| `multi-line-bulk-unvalidate` | button | Unvalidate all words in all selected lines |
+| `multi-line-bulk-copy-ocr-to-gt` | button | Copy OCR text to GT for all selected lines |
+| `multi-line-bulk-delete` | button | Delete all selected lines (routed through confirm dialog) |
+| `line-validate-button-{n}` | button | Per-line validate (shared with worklist convention) |
+| `line-gt-to-ocr-button-{n}` | button | GT→OCR for line `n` |
+| `line-ocr-to-gt-button-{n}` | button | OCR→GT for line `n` |
+| `line-delete-button-{n}` | button | Delete line `n` (routed through confirm dialog) |
+| `gt-text-input-{l}-{w}` | input | GT edit input for word `(l, w)` |
+| `word-validate-button-{l}-{w}` | button | Per-word validate for word `(l, w)` |
 
 ## 7. Keyboard shortcuts
 

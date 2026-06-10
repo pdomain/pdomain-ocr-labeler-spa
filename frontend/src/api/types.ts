@@ -2209,6 +2209,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/suite/installed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Installed */
+        get: operations["get_installed_api_suite_installed_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/suite/prefs/common": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Prefs Common */
+        put: operations["put_prefs_common_api_suite_prefs_common_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/suite/prefs/apps/{app_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Prefs App */
+        put: operations["put_prefs_app_api_suite_prefs_apps__app_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/suite/device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Device
+         * @description Return the current compute-target state.
+         */
+        get: operations["get_device_api_suite_device_get"];
+        /**
+         * Put Device
+         * @description Persist the compute-device preference and return the updated state.
+         */
+        put: operations["put_device_api_suite_device_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/suite/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Update */
+        get: operations["get_update_api_suite_update_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2355,6 +2447,42 @@ export interface components {
             end: number;
             /** Styles */
             styles: string[];
+        };
+        /**
+         * CommonUIPrefs
+         * @description Cross-app common UI preferences.
+         */
+        CommonUIPrefs: {
+            /**
+             * Theme
+             * @default dark
+             */
+            theme: string;
+            /**
+             * Density
+             * @default normal
+             */
+            density: string;
+            /**
+             * Accent
+             * @default #d6925a
+             */
+            accent: string;
+            /**
+             * Font Size Base
+             * @default 12
+             */
+            font_size_base: number;
+            /**
+             * Font Scale
+             * @default 1
+             */
+            font_scale: number;
+            /** Compute Device Default */
+            compute_device_default?: string | null;
+            /** Update Policy */
+            update_policy?: ("notify" | "auto" | "manual") | null;
+            layer_colors?: components["schemas"]["LayerColors"];
         };
         /**
          * CopyGtBatchRequest
@@ -2521,6 +2649,42 @@ export interface components {
                 number,
                 number
             ][];
+        };
+        /**
+         * DeviceInfo
+         * @description Response model for GET/PUT /api/suite/device.
+         */
+        DeviceInfo: {
+            /** Mode */
+            mode: string;
+            /**
+             * Available
+             * @default []
+             */
+            available: {
+                [key: string]: unknown;
+            }[];
+            /** Current */
+            current?: string | null;
+            /** Effective Source */
+            effective_source?: string | null;
+            /** Offload Target */
+            offload_target?: string | null;
+            /**
+             * Cuda Docs Url
+             * @default /docs/runbooks/cuda-setup.md
+             */
+            cuda_docs_url: string;
+        };
+        /**
+         * DevicePutBody
+         * @description Request body for PUT /api/suite/device.
+         */
+        DevicePutBody: {
+            /** Scope */
+            scope: string;
+            /** Device */
+            device: string;
         };
         /**
          * EmptyBody
@@ -2894,6 +3058,32 @@ export interface components {
             text_style_labels: string[];
             /** Word Components */
             word_components: string[];
+        };
+        /**
+         * LayerColors
+         * @description Hex color assignments for OCR layer overlays.
+         */
+        LayerColors: {
+            /**
+             * Word
+             * @default #4a9eff
+             */
+            word: string;
+            /**
+             * Line
+             * @default #ff9f4a
+             */
+            line: string;
+            /**
+             * Para
+             * @default #4aff9f
+             */
+            para: string;
+            /**
+             * Block
+             * @default #ff4a9f
+             */
+            block: string;
         };
         /**
          * LigatureMarkModel
@@ -3928,6 +4118,25 @@ export interface components {
         ToggleValidatedRequest: {
             /** Validated */
             validated?: boolean | null;
+        };
+        /**
+         * UpdateInfo
+         * @description Shape returned by GET /api/suite/update.
+         */
+        UpdateInfo: {
+            /** Current */
+            current: string;
+            /** Latest */
+            latest: string;
+            /** Update Available */
+            update_available: boolean;
+            /** Changelog Url */
+            changelog_url?: string | null;
+            /**
+             * Channel
+             * @default stable
+             */
+            channel: string;
         };
         /**
          * UpdateSelectionRequest
@@ -6726,6 +6935,161 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LabelVocabularyResponse"];
+                };
+            };
+        };
+    };
+    get_installed_api_suite_installed_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+        };
+    };
+    put_prefs_common_api_suite_prefs_common_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommonUIPrefs"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_prefs_app_api_suite_prefs_apps__app_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_device_api_suite_device_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceInfo"];
+                };
+            };
+        };
+    };
+    put_device_api_suite_device_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DevicePutBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_update_api_suite_update_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateInfo"];
                 };
             };
         };

@@ -374,6 +374,27 @@ The `{line}-{word}` suffix matches the legacy `gt-text-input-{l}-{w}` convention
 Parameterised testids above (`*-{line}-{word}`, `*-{kind}`, `*-{i}`) exist for
 specific values only; the conformance test asserts the static/trigger testids.
 
+### 2.16 MultiLineDetail (multi-line selection)
+
+Rendered in the right panel when `selectedLines.length > 1`.
+`{n}` is the 0-based `line_index` of each selected line.
+
+| Testid | What it is |
+|---|---|
+| `multi-line-detail` | Outer container |
+| `multi-line-card-{n}` | Card for line `n` (`data-line-index={n}`) |
+| `multi-line-bulk-bar` | Sticky bulk-action bar |
+| `multi-line-bulk-validate` | Validate all words in all selected lines |
+| `multi-line-bulk-unvalidate` | Unvalidate all words in all selected lines |
+| `multi-line-bulk-copy-ocr-to-gt` | Copy OCR→GT for all selected lines |
+| `multi-line-bulk-delete` | Delete all selected lines (with confirm dialog) |
+
+Per-line buttons within each card reuse existing driver-contract testids
+(`line-validate-button-{n}`, `line-gt-to-ocr-button-{n}`,
+`line-ocr-to-gt-button-{n}`, `line-delete-button-{n}`).
+Per-word inputs reuse `gt-text-input-{l}-{w}` and
+`word-validate-button-{l}-{w}`.
+
 ---
 
 ## 3. ARIA + accessible-name guarantees
