@@ -190,9 +190,10 @@ def test_mlb_gt_edit_persists_after_reload(
     test_input_testid = first_input.get_attribute("data-testid")
     assert test_input_testid is not None
 
-    # Triple-click to select all, type new value, press Enter.
+    # Select all + type new value, press Enter.
+    # Playwright 1.60 does not have .triple_click(); use .click(click_count=3).
     new_gt_value = "MLD_BV_TEST"
-    first_input.triple_click()
+    first_input.click(click_count=3)
     first_input.type(new_gt_value)
     first_input.press("Enter")
     time.sleep(0.8)  # Allow mutation to settle
