@@ -34,8 +34,7 @@ const LIGATURE_KINDS = ["ct", "st", "fi", "fl", "ff", "ffi", "ffl"] as const;
 
 /**
  * Panel section for viewing and editing glyph annotations for a single word.
- * Collapsible section rendered inside <WordEditDialog> as "Typography".
- * Also usable as a standalone popover anchored to a WordCell.
+ * Panel content for word-level typography editing.
  */
 export function GlyphAnnotationPanel({
   lineIndex,

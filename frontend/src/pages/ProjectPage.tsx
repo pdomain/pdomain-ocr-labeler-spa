@@ -28,7 +28,6 @@
 //         </TextTabs>
 //       </RightPane>
 //     </Splitter>
-//     <WordEditDialog />
 //     <ConfirmDialog />
 //   </ProjectPage>
 //
@@ -38,7 +37,7 @@
 //
 // Data flow:
 //   - `useProject(projectId)` and `usePage(projectId, idx0)` drive the surface.
-//   - Mutation hooks (page actions, word edits, …) invalidate
+//   - Mutation hooks (page actions, right-panel word edits, …) invalidate
 //     `["page", projectId, idx0]` so usePage re-fetches.
 //   - `useJobProgress` feeds the BusyOverlay.
 //
@@ -73,25 +72,14 @@ import {
   useApplyStyle,
   useApplyComponent,
   useAddWord,
-  useMergeWord,
-  useSplitWord,
-  useDeleteWord,
   useReboxWord,
-  useNudgeWord,
-  useUpdateWordGroundTruth,
 } from "../hooks/useWordMutations";
 // Lane D reuses `toggleAddWordMode` / `exitToSelectMode` (viewport-store
 // helpers) + the `handleAddWord` handler below to add an add-word button
 // outside the toolbar grid without duplicating the mutation wiring.
-import {
-  viewportStore,
-  toggleAddWordMode,
-  toggleEraseMode,
-  setCanvasZoom,
-} from "../stores/viewport-store";
+import { viewportStore, toggleAddWordMode } from "../stores/viewport-store";
 import { displayToSrc } from "../lib/coords";
 import { applyBoxSelect } from "../lib/box-select-handler";
-import { findWordByIndex } from "../lib/word-order";
 import type { SelectionModifier } from "../components/PageImageCanvas";
 import { railStore } from "../stores/rail-store";
 import { useGlobalHotkeys } from "../hooks/useGlobalHotkeys";
@@ -103,16 +91,15 @@ import {
   selectionStore,
   clearSelection,
   toggleWord,
+  applyLineSelection,
+  applyParagraphSelection,
+  promoteCompleteWordLines,
   type SelectionState,
 } from "../stores/selection-store";
 import { worklistStore } from "../stores/worklist-store";
 import { pageNoUrl } from "../lib/routes";
 
 import { PageActions } from "../components/PageActions";
-import {
-  ImageTabsHeader,
-  type LayerVisibility as HeaderLayerVisibility,
-} from "../components/ImageTabsHeader";
 import { Drawer } from "../components/shell/Drawer";
 import { ToolbarActionGrid } from "../components/ToolbarActionGrid";
 import { BulkWordActions } from "../components/BulkWordActions";
@@ -122,7 +109,6 @@ import { OcrFailedBanner, ImageDriftBanner } from "../components/InlineBanners";
 import { TextTabs } from "../components/TextTabs";
 import { WordMatchView } from "../components/WordMatchView";
 import { PlaintextEditor } from "../components/PlaintextEditor";
-import { WordEditDialog, type DialogTarget } from "../components/WordEditDialog";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { RightPanel } from "../components/shell/RightPanel";
 import { WordDetail } from "../components/right-panel/WordDetail";
@@ -287,16 +273,6 @@ export default function ProjectPage() {
     getAddWordActiveSnapshot,
     getAddWordActiveSnapshot,
   );
-  // C1: viewport interaction mode — drives the ImageTabsHeader Erase toggle's
-  // active state so the header and the Rail stay in sync on one source of truth
-  // (viewportStore). The Rail's "erase" mode is mirrored into viewportStore by
-  // PageImageCanvas; reading it here keeps both chrome surfaces consistent.
-  const viewportMode = useSyncExternalStore(
-    viewportStore.subscribe,
-    () => viewportStore.getState().mode,
-    () => "select" as const,
-  );
-  const wordEditState = useDialogStore((s) => s.wordEdit);
   const confirmState = useDialogStore((s) => s.confirm);
 
   // ── QueryClient (for explicit invalidation after job-completion / saves) ─
@@ -339,21 +315,8 @@ export default function ProjectPage() {
   const applyComponent = useApplyComponent(pid, idx0);
   const addWord = useAddWord(pid, idx0);
 
-  // ── Word mutations for WordEditDialog (S1.2 — dialog wiring) ──────────────
-  // These are also used by S3 (reboxWord shared for canvas rebox).
-  const mergeWord = useMergeWord(pid, idx0);
-  const splitWord = useSplitWord(pid, idx0);
-  const deleteWord = useDeleteWord(pid, idx0);
+  // ── Word mutations shared by canvas and right-panel controls ─────────────
   const reboxWord = useReboxWord(pid, idx0);
-  const nudgeWord = useNudgeWord(pid, idx0);
-  const updateGtWord = useUpdateWordGroundTruth(pid, idx0);
-
-  // Refine/nudge raises on the backend when the page image is not loaded
-  // (spec 2026-06-06-word-edit-dialog-wiring §WED-7) — surface it instead of
-  // failing silently.
-  const surfaceRefineError = (err: unknown) => {
-    toast.warn(err instanceof Error ? err.message : "Refine failed — load the page image first.");
-  };
 
   // ── Derived view state ─────────────────────────────────────────────────
   const pagePayload = pageQ.data ?? null;
@@ -542,17 +505,6 @@ export default function ProjectPage() {
   // B1: resolve grid cell clicks → real mutations against the scope-batch
   // routes (Lane A) + existing validate/style/component routes.
   const dispatchToolbarAction = useToolbarDispatch(pid, idx0, toolbarSelection);
-
-  // WordEditDialog `target` requires both line/word indices; default to 0/0
-  // when the store hasn't been populated (dialog is closed in that case).
-  const dialogTarget: DialogTarget = {
-    lineIndex: wordEditState.lineIdx ?? 0,
-    wordIndex: wordEditState.wordIdx ?? 0,
-  };
-
-  // Words list passed to the dialog for the 3-column preview row.
-  const dialogLine = lines.find((l) => l.line_index === dialogTarget.lineIndex) ?? null;
-  const dialogLineWords = dialogLine?.word_matches.map((w) => w.ocr_text) ?? [];
 
   // ── Action callbacks ───────────────────────────────────────────────────
   // Mutations return job_ids for async actions; we route those into
@@ -763,25 +715,45 @@ export default function ProjectPage() {
     modifier: SelectionModifier,
   ) {
     if (!pagePayload) return;
-    const words = applyBoxSelect(pagePayload, rect, modifier);
-    if (words.length === 0) {
+    const boxSelection = applyBoxSelect(pagePayload, rect, modifier, railStore.getState().target);
+    const hasHits =
+      boxSelection.words.length > 0 ||
+      boxSelection.lines.length > 0 ||
+      boxSelection.paragraphs.length > 0;
+    if (!hasHits) {
       if (modifier === "replace") clearSelection();
       return;
     }
+
+    if (boxSelection.lines.length > 0) {
+      applyLineSelection(boxSelection.lines, modifier);
+      useUiPrefs.setState({ rightPanelOpen: true });
+      return;
+    }
+
+    if (boxSelection.paragraphs.length > 0) {
+      applyParagraphSelection(boxSelection.paragraphs, modifier);
+      useUiPrefs.setState({ rightPanelOpen: true });
+      return;
+    }
+
     // Apply toggleWord per word so accumulation logic is consistent with
     // single-click (SEL-4/SEL-5 uses the same toggleWord primitive).
     if (modifier === "replace") {
       // First word replaces, subsequent words toggle-in (all new → add).
-      const [firstLine, firstWord] = words[0]!;
+      const [first, ...rest] = boxSelection.words;
+      if (!first) return;
+      const [firstLine, firstWord] = first;
       toggleWord(firstLine, firstWord, "replace");
-      for (let i = 1; i < words.length; i++) {
-        toggleWord(words[i]![0], words[i]![1], "toggle");
+      for (const [lineIdx, wordIdx] of rest) {
+        toggleWord(lineIdx, wordIdx, "toggle");
       }
     } else {
-      for (const [lineIdx, wordIdx] of words) {
+      for (const [lineIdx, wordIdx] of boxSelection.words) {
         toggleWord(lineIdx, wordIdx, modifier);
       }
     }
+    promoteCompleteWordLines(pagePayload);
     useUiPrefs.setState({ rightPanelOpen: true });
   }
 
@@ -876,94 +848,11 @@ export default function ProjectPage() {
     />
   );
 
-  const topToolbarSlot = (
-    <div
-      data-testid="project-top-toolbar"
-      className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-border-1 bg-bg-surface px-2 text-xs"
-      role="toolbar"
-      aria-label="Page toolbar"
-    >
-      {/* C1: the mismatches-only toggle now lives in ImageTabsHeader (single
-          source of truth); this slot keeps only the page indicator. */}
-      <div className="flex items-center gap-2" />
-      <div className="text-[11px] tabular-nums text-ink-3" data-testid="project-toolbar-page">
-        Page {currentPageNo} / {Math.max(totalPages, 1)}
-      </div>
-    </div>
-  );
-
-  // IS-4: Canvas slot stripped to image-only layout.
-  // ToolbarActionGrid, Splitter, TextTabs, WordMatchView removed from visible
-  // canvas. TextTabs/WordMatchView and ToolbarActionGrid kept as hidden stubs
-  // to preserve driver-contract testids (§2.7, §2.8, §2.9, §2.10).
-  // C1: ImageTabsHeader viewport chrome — layer toggles, selection-mode radios,
-  // Erase Pixels toggle, color legend, mismatches-only toggle, zoom buttons.
-  // Bound to the SAME useUiPrefs (layer visibility + selection mode) and
-  // viewportStore (erase mode) the Rail uses so the two chrome surfaces share
-  // a single source of truth. (Previously built but never mounted — only
-  // commented out at the top of this file.)
-  const headerLayerVisibility: HeaderLayerVisibility = {
-    paragraph: uiPrefs.layerVisibility.paragraph,
-    line: uiPrefs.layerVisibility.line,
-    word: uiPrefs.layerVisibility.word,
-  };
-  const imageTabsHeaderSlot = (
-    <ImageTabsHeader
-      layerVisibility={headerLayerVisibility}
-      selectionMode={uiPrefs.selectionMode}
-      eraseActive={viewportMode === "erase"}
-      onLayerToggle={(layer) => {
-        useUiPrefs.setState((prefs) => ({
-          layerVisibility: {
-            ...prefs.layerVisibility,
-            [layer]: !prefs.layerVisibility[layer],
-          },
-        }));
-        // The page's `uiPrefs` snapshot is bridged through the local
-        // `notifyUiPrefs` listener set (see top of file), not the store's
-        // native subscribe. Without this notify the controlled checkbox
-        // `checked={layerVisibility[layer]}` never re-renders. (M-Final V4.)
-        notifyUiPrefs();
-      }}
-      onSelectionModeChange={(mode) => {
-        useUiPrefs.setState({ selectionMode: mode });
-        // SEL-3: keep railStore.target in sync so the canvas reads the same
-        // granularity as the header radios. "paragraph" maps to "para" since
-        // the rail uses the canonical RailTarget names.
-        const railTarget = mode === "paragraph" ? "para" : (mode as "line" | "word");
-        railStore.getState().setTarget(railTarget);
-        // Same bridge as onLayerToggle: notify so the selection-mode radio
-        // re-renders to reflect the new mode. (M-Final V4.)
-        notifyUiPrefs();
-      }}
-      onEraseToggle={() => {
-        toggleEraseMode();
-      }}
-      onZoomFit={() => {
-        setCanvasZoom(0);
-      }}
-      onZoom100={() => {
-        setCanvasZoom(1);
-      }}
-      matchFilterMode={uiPrefs.matchFilterMode}
-      onMatchFilterModeToggle={() => {
-        useUiPrefs.setMatchFilterMode(
-          uiPrefs.matchFilterMode === "all" ? "mismatches_only" : "all",
-        );
-        notifyUiPrefs();
-      }}
-      // D5: add-word affordance outside the grid. Reuses Lane B's wiring —
-      // handleAddWordToggle calls viewportStore.toggleAddWordMode(), and the
-      // draw→words/add handler (handleAddWord) is already bound on the canvas.
-      addWordActive={addWordActive}
-      onAddWordToggle={handleAddWordToggle}
-    />
-  );
-
+  // IS-4: Canvas slot stripped to the active review surface. The duplicate
+  // ImageTabsHeader viewport chrome was removed; target/layer controls now
+  // live in the app rail.
   const canvasSlot = (
     <div className="flex flex-col h-full min-h-0">
-      {topToolbarSlot}
-      {imageTabsHeaderSlot}
       {/* D3: page validate-all/unvalidate-all + multi-select word bulk ops. */}
       <div className="shrink-0 border-b border-border-1 bg-bg-surface">
         <BulkWordActions projectId={pid} pageIndex={idx0} />
@@ -1130,168 +1019,6 @@ export default function ProjectPage() {
 
       {/* IS-2: hidden PageActions for driver-contract testid preservation §2.5 */}
       {hiddenPageActions}
-
-      {/* WordEditDialog — opens from per-word pencil click via dialogStore.
-          Returns null when open=false, so the dialog testids only appear
-          when the user opens it.
-          S1.2: All mutation callbacks wired (WED-1..WED-9). */}
-      <WordEditDialog
-        open={wordEditState.open}
-        target={dialogTarget}
-        lineWords={dialogLineWords}
-        wordImageUrl={pagePayload?.image_url ?? undefined}
-        wordBBox={
-          pagePayload
-            ? (findWordByIndex(pagePayload, dialogTarget.lineIndex, dialogTarget.wordIndex)?.bbox ??
-              undefined)
-            : undefined
-        }
-        encodedScale={pagePayload?.encoded_dims?.scale ?? undefined}
-        gtText={
-          pagePayload
-            ? (findWordByIndex(pagePayload, dialogTarget.lineIndex, dialogTarget.wordIndex)
-                ?.ground_truth_text ?? "")
-            : ""
-        }
-        onGtChange={() => {}}
-        onGtCommit={(text) => {
-          updateGtWord.mutate({
-            lineIndex: dialogTarget.lineIndex,
-            wordIndex: dialogTarget.wordIndex,
-            text,
-          });
-        }}
-        onMerge={(dir) =>
-          mergeWord
-            .mutateAsync({
-              lineIndex: dialogTarget.lineIndex,
-              wordIndex: dialogTarget.wordIndex,
-              direction: dir === "prev" ? "left" : "right",
-            })
-            .then(() => {})
-        }
-        onSplit={(fraction, axis) => {
-          if (axis === "v") return Promise.resolve(); // backend returns 400 for v-split (words.py:1080)
-          return splitWord
-            .mutateAsync({
-              lineIndex: dialogTarget.lineIndex,
-              wordIndex: dialogTarget.wordIndex,
-              xFraction: fraction,
-              direction: "horizontal",
-            })
-            .then(() => {});
-        }}
-        onDelete={() =>
-          deleteWord
-            .mutateAsync({
-              lineIndex: dialogTarget.lineIndex,
-              wordIndex: dialogTarget.wordIndex,
-            })
-            .then(() => {
-              dialogStore.close("wordEdit");
-            })
-        }
-        onCrop={(dir, padding) => {
-          const w = pagePayload
-            ? findWordByIndex(pagePayload, dialogTarget.lineIndex, dialogTarget.wordIndex)
-            : null;
-          if (!w) return Promise.resolve();
-          const b = { ...w.bbox };
-          if (dir === "left") {
-            b.x += padding;
-            b.width -= padding;
-          }
-          if (dir === "right") {
-            b.width -= padding;
-          }
-          if (dir === "above") {
-            b.y += padding;
-            b.height -= padding;
-          }
-          if (dir === "below") {
-            b.height -= padding;
-          }
-          return reboxWord
-            .mutateAsync({
-              lineIndex: dialogTarget.lineIndex,
-              wordIndex: dialogTarget.wordIndex,
-              bbox: b,
-            })
-            .then(() => {});
-        }}
-        onRefine={() =>
-          nudgeWord
-            .mutateAsync({
-              lineIndex: dialogTarget.lineIndex,
-              wordIndex: dialogTarget.wordIndex,
-              left: 0,
-              right: 0,
-              top: 0,
-              bottom: 0,
-              refineAfter: true,
-            })
-            .then(() => {})
-            .catch(surfaceRefineError)
-        }
-        onExpandRefine={() =>
-          nudgeWord
-            .mutateAsync({
-              lineIndex: dialogTarget.lineIndex,
-              wordIndex: dialogTarget.wordIndex,
-              left: 4,
-              right: 4,
-              top: 4,
-              bottom: 4,
-              refineAfter: true,
-            })
-            .then(() => {})
-            .catch(surfaceRefineError)
-        }
-        onApplyNudge={(n, refineAfter) =>
-          nudgeWord
-            .mutateAsync({
-              lineIndex: dialogTarget.lineIndex,
-              wordIndex: dialogTarget.wordIndex,
-              left: n.left,
-              right: n.right,
-              top: n.top,
-              bottom: n.bottom,
-              refineAfter,
-            })
-            .then(() => {})
-            .catch(surfaceRefineError)
-        }
-        onApplyStyle={(style, scope) =>
-          applyStyle
-            .mutateAsync({
-              lineIndex: dialogTarget.lineIndex,
-              wordIndex: dialogTarget.wordIndex,
-              style,
-              scope,
-            })
-            .then(() => {})
-        }
-        onApplyComponent={(component, enabled) =>
-          applyComponent
-            .mutateAsync({
-              lineIndex: dialogTarget.lineIndex,
-              wordIndex: dialogTarget.wordIndex,
-              component,
-              enabled,
-            })
-            .then(() => {})
-        }
-        onNavigate={(t) => {
-          dialogStore.openWordEdit({ lineIdx: t.lineIndex, wordIdx: t.wordIndex });
-        }}
-        onApply={() => {
-          invalidatePage();
-          dialogStore.close("wordEdit");
-        }}
-        onClose={() => {
-          dialogStore.close("wordEdit");
-        }}
-      />
 
       {/* ConfirmDialog — opens from useConfirm() via dialogStore. */}
       <ConfirmDialog

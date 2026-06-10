@@ -23,10 +23,13 @@
 // NOTE: this component is a *visual* canvas — the ops list display + clear/apply
 // footer lives in the parent ErasePixelsSection.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Layer, Rect, Stage } from "react-konva";
 import type Konva from "konva";
+import type { components } from "../../../api/types";
 import { readCssToken, hexToRgba } from "../../../hooks/useLayerColors";
+
+type BBox = components["schemas"]["BBox"];
 
 // ───────────────────────────────────────────────────────────────────────────
 // Types
@@ -59,6 +62,8 @@ export type EraseOp = BrushOp | LassoOp | RectOp;
 export interface EraseCanvasProps {
   /** URL of the word image slice (optional — placeholder shown when absent). */
   imageUrl?: string | undefined;
+  /** Optional source-pixel crop from the full page image. */
+  cropBBox?: BBox | undefined;
   /** Current tool selection (controlled by parent). */
   tool: EraseTool;
   /** Called when the user picks a different tool. */
@@ -110,6 +115,7 @@ interface LassoDragState {
 
 export function EraseCanvas({
   imageUrl,
+  cropBBox,
   tool,
   onToolChange,
   brushSize,
@@ -120,9 +126,37 @@ export function EraseCanvas({
   height = DEFAULT_HEIGHT,
 }: EraseCanvasProps) {
   const stageRef = useRef<Konva.Stage>(null);
+  const [imageEl, setImageEl] = useState<HTMLImageElement | null>(null);
   const [rectDrag, setRectDrag] = useState<RectDragState | null>(null);
   const [lassoDrag, setLassoDrag] = useState<LassoDragState | null>(null);
   const eraseColors = buildEraseColors();
+
+  useEffect(() => {
+    if (!imageUrl) {
+      setImageEl(null);
+      return;
+    }
+    let cancelled = false;
+    const img = new window.Image();
+    img.onload = () => {
+      if (!cancelled) setImageEl(img);
+    };
+    img.src = imageUrl;
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUrl]);
+
+  const backgroundImageProps =
+    imageUrl && imageEl && cropBBox && cropBBox.width > 0 && cropBBox.height > 0
+      ? {
+          fillPatternImage: imageEl,
+          fillPatternOffsetX: cropBBox.x,
+          fillPatternOffsetY: cropBBox.y,
+          fillPatternScaleX: width / cropBBox.width,
+          fillPatternScaleY: height / cropBBox.height,
+        }
+      : {};
 
   // Extract pointer position from a Konva event. Returns null if unavailable.
   const pointerPos = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -263,11 +297,16 @@ export function EraseCanvas({
           <Layer>
             {/* Background: image or placeholder rect (Konva-mock tests render this as a stub). */}
             <Rect
+              data-testid="erase-canvas-background"
               x={0}
               y={0}
               width={width}
               height={height}
-              {...(!imageUrl ? { fill: readCssToken("--bg-sunk", "#08080c") } : {})}
+              {...(!imageUrl || !imageEl || !cropBBox
+                ? { fill: readCssToken("--bg-sunk", "#08080c") }
+                : {})}
+              {...backgroundImageProps}
+              data-image-url={imageUrl}
             />
           </Layer>
 

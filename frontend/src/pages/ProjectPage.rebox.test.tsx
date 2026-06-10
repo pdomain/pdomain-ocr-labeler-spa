@@ -27,6 +27,7 @@ import { viewportStore } from "../stores/viewport-store";
 let capturedOnRebox:
   | ((rect: { x: number; y: number; width: number; height: number }) => void)
   | null = null;
+let capturedEncodedScale: number | null = null;
 
 const mockNavigate = vi.fn();
 vi.mock("react-router-dom", async (importOriginal) => {
@@ -39,11 +40,12 @@ vi.mock("../components/PageImageCanvas", () => ({
   __esModule: true,
   default: ({
     page,
+    encoded,
     children,
     onRebox,
   }: {
     imageUrl?: string;
-    encoded?: unknown;
+    encoded?: { scale?: number } | null;
     page?: { width: number; height: number };
     projectId?: string;
     pageIndex?: number;
@@ -56,6 +58,7 @@ vi.mock("../components/PageImageCanvas", () => ({
     };
   }) => {
     capturedOnRebox = onRebox ?? null;
+    capturedEncodedScale = encoded?.scale ?? null;
     return (
       <div
         data-testid="image-viewport"
@@ -247,6 +250,7 @@ function pageFixtureWithWords() {
 describe("ProjectPage — onRebox wired to PageImageCanvas (S3.1)", () => {
   beforeEach(() => {
     capturedOnRebox = null;
+    capturedEncodedScale = null;
     dialogStore.reset();
     mockNavigate.mockReset();
     viewportStore.setState({ mode: "select", pendingReboxTarget: null });
@@ -276,6 +280,9 @@ describe("ProjectPage — onRebox wired to PageImageCanvas (S3.1)", () => {
 
     renderProjectPage();
     await screen.findByTestId("project-page");
+    await waitFor(() => {
+      expect(capturedEncodedScale).toBe(0.5);
+    });
 
     // Set rebox mode with a target word
     act(() => {

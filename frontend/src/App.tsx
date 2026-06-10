@@ -14,27 +14,31 @@
 //        load() returns localStorage-seeded defaults; persist callbacks are no-ops.
 //        Full wiring deferred to Phase 2.5 (reactive stores migration).
 // GAP-2: POST /api/ui-prefs backend endpoint not yet implemented — same as GAP-1.
-// GAP-3: GET /api/suite/installed + POST /api/suite/launch backend endpoints not
-//        yet implemented. SuiteSiblingsProvider fetchInstalled returns [] (no-op);
-//        postLaunch returns requires-host-config. Real wiring blocked on pdomain-ocr-ops
-//        mounting /api/suite/* routes in the FastAPI app.
+// GAP-3: Suite launcher callbacks still use frontend shims. The backend mounts
+//        /api/suite/* for compute/settings endpoints, but sibling app launch UX
+//        remains deferred until the app catalog contract is settled.
 
 import { BrowserRouter, Routes, Route, Navigate, useParams, useMatch } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 
-import { Suspense, lazy, useRef } from "react";
+import { Suspense, lazy, useEffect, useRef, type ReactNode } from "react";
 import {
   AppShell,
+  ComputeTargetPanel,
+  createApiDeviceConfig,
   SuiteSiblingsProvider,
+  type SettingsPanelDescriptor,
   type UIPrefsConfig,
   type InstalledApp,
   type LaunchResult,
 } from "@pdomain/pdomain-ui/shell";
+import { useDeviceInfo } from "@pdomain/pdomain-ui/stores";
 import HeaderBar from "./components/HeaderBar";
 import type { PageMetrics } from "./components/HeaderBar";
 import ProjectNavigationControls from "./components/ProjectNavigationControls";
 import { PageActionsCompact } from "./components/PageActionsCompact";
+import { CudaSetupGuidance } from "./components/CudaSetupGuidance";
 import { Rail } from "./components/shell/Rail";
 import RootPage from "./pages/RootPage";
 import ProjectPage from "./pages/ProjectPage";
@@ -73,6 +77,71 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+const _deviceConfig = createApiDeviceConfig();
+let _computeStateWarmupStarted = false;
+
+function ComputeStateWarmup() {
+  useEffect(() => {
+    if (_computeStateWarmupStarted) return;
+    _computeStateWarmupStarted = true;
+    void _deviceConfig.fetchDevice().catch(() => undefined);
+  }, []);
+  return null;
+}
+
+function formatComputeError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (typeof error === "number" || typeof error === "boolean" || typeof error === "bigint") {
+    return String(error);
+  }
+  return "Unable to check compute devices";
+}
+
+function ComputePanelContent() {
+  const device = useDeviceInfo(_deviceConfig);
+
+  let body: ReactNode;
+  if (device.loading && !device.info) {
+    body = (
+      <p key="compute-loading" style={{ margin: 0 }}>
+        Checking compute devices
+      </p>
+    );
+  } else if (device.error && !device.info) {
+    body = (
+      <p key="compute-error" role="alert" style={{ margin: 0, color: "var(--color-danger)" }}>
+        {formatComputeError(device.error)}
+      </p>
+    );
+  } else {
+    body = (
+      <ComputeTargetPanel
+        key="compute-target"
+        info={device.info}
+        onSelect={(deviceId) => void device.setDevice("app", deviceId)}
+        onClear={(scope) => void device.clearDevice(scope)}
+        cudaDocsUrl="/docs/runbooks/cuda-setup.md"
+      />
+    );
+  }
+
+  return (
+    <div>
+      {body}
+      <CudaSetupGuidance key="cuda-guidance" />
+    </div>
+  );
+}
+
+const settingsPanels: SettingsPanelDescriptor[] = [
+  {
+    id: "compute",
+    label: "Compute",
+    content: <ComputePanelContent />,
+  },
+];
 
 /** Redirect /projects/:id → /projects/:id/pages/pageno/1 */
 function ProjectRootRedirect() {
@@ -204,6 +273,7 @@ function AppInner() {
         launcherSlot="header"
         deployMode="local"
         uiPrefsConfig={UI_PREFS_CONFIG}
+        settingsPanels={settingsPanels}
         header={
           <>
             <HeaderBar
@@ -394,7 +464,8 @@ const UI_PREFS_CONFIG: UIPrefsConfig = {
 
 // ── Phase 2.4: SuiteSiblings fetch/launch shims (GAP-3) ─────────────────────
 //
-// The backend does not yet expose /api/suite/installed or /api/suite/launch.
+// The launcher callbacks are still intentionally shimmed even though the backend
+// now mounts suite compute/settings endpoints.
 // fetchInstalled returns an empty list (no siblings shown in launcher).
 // postLaunch returns requires-host-config so the launcher shows an error
 // rather than a crash if somehow invoked.
@@ -423,10 +494,11 @@ export default function App() {
         {/*
          * Phase 2.4: SuiteSiblingsProvider supplies the launcher context
          * that pdomain-ui AppShell's LauncherSlot reads via useSuiteSiblingsContext().
-         * fetchInstalled / postLaunch are shims (GAP-3) until pdomain-ocr-ops
-         * mounts /api/suite/* in the FastAPI app.
+         * fetchInstalled / postLaunch remain shims (GAP-3) until the sibling
+         * launcher contract is wired through the app catalog.
          */}
         <SuiteSiblingsProvider value={{ fetchInstalled, postLaunch }}>
+          <ComputeStateWarmup />
           <AppInner />
           {/* Single Toaster instance — all toasts routed through sonner.
               Position: bottom-right (Slice 26).

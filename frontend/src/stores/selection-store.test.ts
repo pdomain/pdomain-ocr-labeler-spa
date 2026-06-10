@@ -11,6 +11,7 @@ import {
   selectLine,
   selectWord,
   toggleWord,
+  promoteCompleteWordLines,
   walkSibling,
   walkLevel,
 } from "./selection-store";
@@ -153,6 +154,20 @@ describe("selection-store hierarchical layer", () => {
     const s = selectionStore.getState();
     expect(s.selectedLines).toEqual([]);
     expect(s.selectedWords).toEqual([[0, 0]]);
+  });
+
+  it("promotes selected words to line selection when all selectable words in a line are selected", () => {
+    const page = makePage();
+    toggleWord(0, 0, "replace");
+    toggleWord(0, 1, "toggle");
+
+    promoteCompleteWordLines(page);
+
+    const s = selectionStore.getState();
+    expect(s.selectedLines).toEqual([0]);
+    expect(s.selectedWords).toEqual([]);
+    expect(s.level).toBe("line");
+    expect(s.path.lineId).toBe(0);
   });
 
   it("clearSelection wipes both layers", () => {

@@ -86,6 +86,7 @@ import {
   selectPara,
   selectLine,
   toggleWord,
+  promoteCompleteWordLines,
 } from "../stores/selection-store";
 import {
   viewportStore,
@@ -569,6 +570,7 @@ export default function PageImageCanvas({
           // Ctrl/Cmd accumulates across blocks and Shift removes.
           const parts = hit.id.split("-").map(Number);
           toggleWord(parts[0]!, parts[1]!, modifier);
+          if (page) promoteCompleteWordLines(page);
         }
         useUiPrefs.setState({ rightPanelOpen: true });
       }

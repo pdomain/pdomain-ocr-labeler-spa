@@ -3,11 +3,21 @@
 // Issue #240: React Router routes, QueryClient provider wiring.
 // Spec: docs/specs/2026-05-12-frontend-shell-design.md §Routing
 // Phase 2.4: AppShell + SuiteSiblingsProvider mocks added (#262).
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { server } from "./test/server";
 import type * as React from "react";
+
+const fetchDeviceMock = vi.hoisted(() =>
+  vi.fn(async () => ({
+    mode: "local",
+    current: "cpu",
+    effective_source: "auto",
+    available: [{ id: "cpu", label: "CPU", kind: "cpu", available: true }],
+    cuda_docs_url: "/docs/runbooks/cuda-setup.md",
+  })),
+);
 
 // Phase 2.4: Mock @pdomain/pdomain-ui/shell so AppShell renders a
 // transparent pass-through in jsdom — no Zustand store setup, no real
@@ -19,6 +29,7 @@ vi.mock("@pdomain/pdomain-ui/shell", () => ({
     rail,
     main,
     children,
+    settingsPanels,
   }: {
     appId?: string;
     appDisplayName?: string;
@@ -30,6 +41,7 @@ vi.mock("@pdomain/pdomain-ui/shell", () => ({
     launcherSlot?: string;
     deployMode?: string;
     uiPrefsConfig?: unknown;
+    settingsPanels?: Array<{ id: string; label: string; content: React.ReactNode }>;
   }) => (
     <div data-testid="pdomain-ui-app-shell">
       <div data-testid="pdomain-ui-app-shell-header">{header}</div>
@@ -37,14 +49,61 @@ vi.mock("@pdomain/pdomain-ui/shell", () => ({
       <main className="h-full min-h-0 overflow-hidden" data-testid="pdomain-ui-app-shell-main">
         {main}
       </main>
+      <div data-testid="pdomain-ui-app-shell-settings">
+        {settingsPanels?.map((panel) => (
+          <section
+            key={panel.id}
+            data-testid={`settings-panel-${panel.id}`}
+            aria-label={panel.label}
+          >
+            {panel.content}
+          </section>
+        ))}
+      </div>
       {children}
     </div>
   ),
+  ComputeTargetPanel: ({
+    info,
+    cudaDocsUrl,
+  }: {
+    info?: { mode?: string } | null;
+    onSelect?: (deviceId: string) => void;
+    onClear?: (scope: "app" | "suite") => void;
+    cudaDocsUrl?: string;
+  }) => (
+    <div
+      data-testid="compute-target-panel"
+      data-info-mode={info?.mode}
+      data-cuda-docs-url={cudaDocsUrl}
+    />
+  ),
+  createApiDeviceConfig: () => ({
+    fetchDevice: fetchDeviceMock,
+    putDevice: async () => fetchDeviceMock(),
+    clearDevice: async () => fetchDeviceMock(),
+  }),
   SuiteSiblingsProvider: ({ children }: { value?: unknown; children?: React.ReactNode }) => (
     <>{children}</>
   ),
   // Other exports that App.tsx imports as types — provide no-op values so
   // TypeScript import side-effects compile cleanly.
+}));
+
+vi.mock("@pdomain/pdomain-ui/stores", () => ({
+  useDeviceInfo: () => ({
+    info: {
+      mode: "local",
+      current: "cpu",
+      effective_source: "auto",
+      available: [{ id: "cpu", label: "CPU", kind: "cpu", available: true }],
+      cuda_docs_url: "/docs/runbooks/cuda-setup.md",
+    },
+    loading: false,
+    error: null,
+    setDevice: vi.fn(),
+    clearDevice: vi.fn(),
+  }),
 }));
 
 // Phase 2.2: PageImageCanvas now imports @pdomain/pdomain-ui/canvas which
@@ -141,6 +200,10 @@ vi.mock("use-image", () => ({
 
 import App from "./App";
 
+beforeEach(() => {
+  fetchDeviceMock.mockClear();
+});
+
 // Helper: setup session-state mock (null = no project loaded)
 function withNoSession() {
   server.use(
@@ -232,6 +295,32 @@ function withProjectSession() {
     ),
   );
 }
+
+describe("App: compute settings", () => {
+  it("warms compute state on startup", async () => {
+    withNoSession();
+    render(<App />);
+
+    await waitFor(() => {
+      expect(fetchDeviceMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("injects a compute settings panel with CUDA setup guidance", async () => {
+    withNoSession();
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-panel-compute")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("compute-target-panel")).toHaveAttribute(
+      "data-cuda-docs-url",
+      "/docs/runbooks/cuda-setup.md",
+    );
+    expect(screen.getByTestId("cuda-setup-guidance")).toBeInTheDocument();
+  });
+});
 
 describe("App: routing shell", () => {
   it("renders header-bar on the root route", async () => {

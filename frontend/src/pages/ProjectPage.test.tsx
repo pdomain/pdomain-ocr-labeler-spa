@@ -11,7 +11,7 @@
 //   - Hooks (useProject, usePage) are called and consumed correctly.
 //   - Splitter is mounted; image-pane and text-pane regions present.
 //   - PageActions / ToolbarActionGrid / ImageTabsHeader / TextTabs mount.
-//   - WordEditDialog + ConfirmDialog are mounted (closed by default).
+//   - ConfirmDialog is mounted closed by default; word editing lives in RightPanel.
 //   - Loading state shows ProjectLoadingOverlay; no `display:none` stubs
 //     inside ProjectPage (those moved to HeaderBar per spec §10).
 //
@@ -28,7 +28,6 @@ import { server } from "../test/server";
 import { ROUTES } from "../lib/routes";
 import { dialogStore } from "../stores/dialog-store";
 import { useUiPrefs } from "../stores/ui-prefs";
-import { railStore } from "../stores/rail-store";
 import { clearSelection, selectLine } from "../stores/selection-store";
 
 // ─── IS-1: mock useNavigate ──────────────────────────────────────────────────
@@ -311,23 +310,10 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     expect(screen.queryByTestId("splitter")).toBeNull();
   });
 
-  it("C1: mounts ImageTabsHeader chrome (layers, selection mode, erase, zoom) with a single mismatches-only toggle", async () => {
+  it("does not mount duplicate ImageTabsHeader chrome above the image", async () => {
     renderProjectPage();
-    expect(await screen.findByTestId("project-top-toolbar")).toBeInTheDocument();
-    // C1: ImageTabsHeader is now mounted above the canvas (was unmounted in IS-4).
-    expect(screen.getByTestId("image-tabs-header")).toBeInTheDocument();
-    expect(screen.getByTestId("layer-paragraphs-checkbox")).toBeInTheDocument();
-    expect(screen.getByTestId("layer-lines-checkbox")).toBeInTheDocument();
-    expect(screen.getByTestId("layer-words-checkbox")).toBeInTheDocument();
-    expect(screen.getByTestId("selection-mode-paragraph")).toBeInTheDocument();
-    expect(screen.getByTestId("selection-mode-line")).toBeInTheDocument();
-    expect(screen.getByTestId("selection-mode-word")).toBeInTheDocument();
-    expect(screen.getByTestId("erase-pixels-button")).toBeInTheDocument();
-    expect(screen.getByTestId("zoom-fit-button")).toBeInTheDocument();
-    expect(screen.getByTestId("zoom-100-button")).toBeInTheDocument();
-    // The mismatches-only toggle moved into the header — still exactly one in the DOM.
-    expect(screen.getAllByTestId("mismatches-only-toggle")).toHaveLength(1);
-    expect(screen.getByTestId("image-pane")).toBeInTheDocument();
+    expect(await screen.findByTestId("image-pane")).toBeInTheDocument();
+    expect(screen.queryByTestId("image-tabs-header")).toBeNull();
   });
 
   it("IS-4: PageImageCanvas viewport is inside image-pane in the canvas", async () => {
@@ -367,10 +353,9 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     expect(screen.getByTestId("inline-banners")).toBeInTheDocument();
   });
 
-  it("does NOT mount the WordEditDialog when closed (default)", async () => {
+  it("does not mount the retired word-edit modal", async () => {
     renderProjectPage();
     await screen.findByTestId("project-page");
-    // WordEditDialog returns null when open=false → no word-edit-dialog.
     expect(screen.queryByTestId("word-edit-dialog")).toBeNull();
   });
 
@@ -599,53 +584,6 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
         expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
       });
       expect(rematchCalls.length).toBe(0);
-    });
-  });
-
-  // ── SEL-3: selection-mode radios set railStore.target (single source of truth) ─
-
-  describe("SEL-3: header selection-mode radios set railStore.target", () => {
-    beforeEach(() => {
-      // Reset rail store and uiPrefs to defaults before each SEL-3 test.
-      railStore.reset();
-      localStorage.clear();
-      useUiPrefs.setState({ selectionMode: "word" });
-    });
-
-    it("uiPrefs.selectionMode default is 'word' (matches railStore.target default)", () => {
-      // Both stores must agree on the default so the UI is consistent at load.
-      expect(useUiPrefs.getState().selectionMode).toBe("word");
-      expect(railStore.getState().target).toBe("word");
-    });
-
-    it("clicking selection-mode-line radio sets railStore.target to 'line'", async () => {
-      renderProjectPage();
-      await screen.findByTestId("selection-mode-line");
-
-      fireEvent.click(screen.getByTestId("selection-mode-line"));
-
-      expect(railStore.getState().target).toBe("line");
-    });
-
-    it("clicking selection-mode-paragraph radio sets railStore.target to 'para'", async () => {
-      renderProjectPage();
-      await screen.findByTestId("selection-mode-paragraph");
-
-      fireEvent.click(screen.getByTestId("selection-mode-paragraph"));
-
-      expect(railStore.getState().target).toBe("para");
-    });
-
-    it("clicking selection-mode-word radio sets railStore.target to 'word'", async () => {
-      // Start from "line" selection mode to confirm clicking word changes target.
-      // (Clicking an already-checked radio does not re-fire onChange in jsdom.)
-      useUiPrefs.setState({ selectionMode: "line" });
-      renderProjectPage();
-      await screen.findByTestId("selection-mode-word");
-
-      fireEvent.click(screen.getByTestId("selection-mode-word"));
-
-      expect(railStore.getState().target).toBe("word");
     });
   });
 

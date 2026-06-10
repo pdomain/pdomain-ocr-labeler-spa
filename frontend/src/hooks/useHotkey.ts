@@ -8,8 +8,7 @@
 //   - dialog gate: page-scope hotkeys are suppressed when any dialog is open
 //
 // Per-call overrides are accepted via the options param.
-// Dialog-scope hotkeys (e.g. WordEditDialog's nudge keys) pass
-// ignoreDialogGate: true to opt out of the gate.
+// Dialog-scope hotkeys pass ignoreDialogGate: true to opt out of the gate.
 
 import { useHotkeys, type Options } from "react-hotkeys-hook";
 import { dialogStore } from "../stores/dialog-store";
@@ -18,7 +17,7 @@ export type HotkeyOptions = Pick<Options, "enableOnFormTags" | "enabled" | "scop
   /**
    * When true, the dialog gate is bypassed and the handler fires even when
    * a dialog is open. Use for hotkeys that are intentionally active inside
-   * a dialog (e.g. WordEditDialog's Shift+Arrow nudge keys).
+   * a dialog.
    *
    * Default: false (hotkey is suppressed whenever any dialog is open).
    */
@@ -29,12 +28,7 @@ export type HotkeyOptions = Pick<Options, "enableOnFormTags" | "enabled" | "scop
 function isAnyDialogOpen(): boolean {
   const s = dialogStore.getState();
   return (
-    s.ocrConfig.open ||
-    s.export.open ||
-    s.hotkeyHelp.open ||
-    s.sourceFolder.open ||
-    s.wordEdit.open ||
-    s.confirm.open
+    s.ocrConfig.open || s.export.open || s.hotkeyHelp.open || s.sourceFolder.open || s.confirm.open
   );
 }
 
@@ -42,8 +36,8 @@ function isAnyDialogOpen(): boolean {
  * Register a hotkey with sensible SPA defaults.
  *
  * By default the handler is **suppressed** while any dialog is open (issue
- * #444). Dialog-internal hotkeys (e.g. WordEditDialog's nudge keys) pass
- * `ignoreDialogGate: true` to opt out of this gate.
+ * #444). Dialog-internal hotkeys pass `ignoreDialogGate: true` to opt out of
+ * this gate.
  *
  * @param combo   Key combo string (e.g. "mod+s", "ctrl+shift+r", "?")
  * @param handler Callback to invoke when the combo fires

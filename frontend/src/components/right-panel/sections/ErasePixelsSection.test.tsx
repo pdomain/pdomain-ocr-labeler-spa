@@ -58,12 +58,14 @@ vi.mock("react-konva", () => ({
     width,
     height,
     "data-testid": testId,
+    "data-image-url": imageUrl,
   }: {
     x?: number;
     y?: number;
     width?: number;
     height?: number;
     "data-testid"?: string;
+    "data-image-url"?: string;
   }) => (
     <div
       data-testid={testId ?? "konva-rect"}
@@ -71,6 +73,7 @@ vi.mock("react-konva", () => ({
       data-y={y}
       data-width={width}
       data-height={height}
+      data-image-url={imageUrl}
     />
   ),
 }));
@@ -206,6 +209,23 @@ describe("ErasePixelsSection — P3.c canvas behaviour", () => {
     const { fireEvent } = await import("@testing-library/react");
     fireEvent.change(slider, { target: { value: "16" } });
     expect(screen.getByTestId("erase-brush-size").value).toBe("16");
+  });
+
+  it("forwards the page image crop to the erase canvas background", () => {
+    render(
+      <Wrapper>
+        <ErasePixelsSection
+          backendAvailable={true}
+          imageUrl="/api/projects/p1/image/0"
+          cropBBox={{ x: 10, y: 20, width: 30, height: 15 }}
+        />
+      </Wrapper>,
+    );
+
+    expect(screen.getByTestId("erase-canvas-background")).toHaveAttribute(
+      "data-image-url",
+      "/api/projects/p1/image/0",
+    );
   });
 });
 

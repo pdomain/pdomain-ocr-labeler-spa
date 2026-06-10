@@ -1,8 +1,13 @@
 # 07 — Word Edit Dialog
 
-> **Status**: Active
-> **Last updated**: 2026-05-11
-> **Spec-Issue**: pdomain/pdomain-ocr-labeler-spa#18
+> **Superseded 2026-06-10**: the word-edit dialog (`WordEditDialog` component and
+> associated `WordActionRows`, `WordImageCanvas`, `WordTagRow`, `WordRefineNudgeRows`,
+> `useDialogHotkeys`) was replaced by the right-panel `WordDetail` + per-section
+> components (`EraseCanvas`, `ReboxCanvas`, `CharFixerSection`, `ErasePixelsSection`,
+> `ReboxSection`). See [`26-right-panel-detail.md`](26-right-panel-detail.md) for the
+> current design.
+>
+> **Status**: Superseded — **Last updated**: 2026-06-10 — **Spec-Issue**: pdomain/pdomain-ocr-labeler-spa#18
 
 A modal dialog focused on a single word: preview, image-with-marker,
 merge/split/delete, crop, refine, fine-tune nudge, drag-erase, tag

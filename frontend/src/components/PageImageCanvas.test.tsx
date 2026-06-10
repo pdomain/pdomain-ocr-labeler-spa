@@ -1071,7 +1071,12 @@ describe("PageImageCanvas — selection layer rendering (spec-21-A5, #300)", () 
 
 describe("PageImageCanvas — target bbox click → selection action", () => {
   it("scales source-image word bboxes into display space for hit-testing", () => {
-    const page = makePage([makeLine(2, 0, [{ x: 100, y: 200, width: 50, height: 20 }])]);
+    const page = makePage([
+      makeLine(2, 0, [
+        { x: 100, y: 200, width: 50, height: 20 },
+        { x: 300, y: 200, width: 50, height: 20 },
+      ]),
+    ]);
     page.line_matches![0].word_matches[0].word_index = 3;
 
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
@@ -1088,7 +1093,12 @@ describe("PageImageCanvas — target bbox click → selection action", () => {
   });
 
   it("clicking within a word bbox in select mode calls selectWord(lineIdx, wordIdx)", () => {
-    const page = makePage([makeLine(2, 0, [{ x: 100, y: 200, width: 50, height: 20 }])]);
+    const page = makePage([
+      makeLine(2, 0, [
+        { x: 100, y: 200, width: 50, height: 20 },
+        { x: 300, y: 200, width: 50, height: 20 },
+      ]),
+    ]);
     page.line_matches![0].word_matches[0].word_index = 3;
 
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
@@ -1228,7 +1238,12 @@ describe("PageImageCanvas — target bbox click → selection action", () => {
 
   it("hit-tests in page space: a 2x-scaled pointer maps back through ctx.scale onto the word bbox", () => {
     mockStageScale.value = 2;
-    const page = makePage([makeLine(2, 0, [{ x: 100, y: 200, width: 50, height: 20 }])]);
+    const page = makePage([
+      makeLine(2, 0, [
+        { x: 100, y: 200, width: 50, height: 20 },
+        { x: 300, y: 200, width: 50, height: 20 },
+      ]),
+    ]);
     page.line_matches![0].word_matches[0].word_index = 3;
 
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);

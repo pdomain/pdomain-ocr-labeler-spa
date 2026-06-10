@@ -113,6 +113,14 @@ describe("ReboxCanvas (P3.b)", () => {
     expect(screen.queryByTestId("rebox-ghost")).not.toBeInTheDocument();
   });
 
+  it("marks the background with the page image URL when an image is provided", () => {
+    render(<ReboxCanvas {...makeProps({ imageUrl: "/api/projects/p1/image/0" })} />);
+    expect(screen.getByTestId("rebox-canvas-background")).toHaveAttribute(
+      "data-image-url",
+      "/api/projects/p1/image/0",
+    );
+  });
+
   it("renders 8 snap handles in snap mode", () => {
     render(<ReboxCanvas {...makeProps({ tool: "snap" })} />);
     const positions = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];

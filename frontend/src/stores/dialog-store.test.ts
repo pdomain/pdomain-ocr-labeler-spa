@@ -15,8 +15,14 @@ describe("dialog-store: initial state", () => {
     expect(state.ocrConfig.open).toBe(false);
     expect(state.export.open).toBe(false);
     expect(state.hotkeyHelp.open).toBe(false);
-    expect(state.wordEdit.open).toBe(false);
     expect(state.confirm.open).toBe(false);
+  });
+
+  it("does not expose retired word-edit dialog state or launch API", () => {
+    const state = dialogStore.getState() as Record<string, unknown>;
+    const api = dialogStore as Record<string, unknown>;
+    expect(state.wordEdit).toBeUndefined();
+    expect(api.openWordEdit).toBeUndefined();
   });
 });
 
@@ -52,12 +58,6 @@ describe("dialog-store: close()", () => {
     expect(dialogStore.getState().ocrConfig.open).toBe(false);
   });
 
-  it("closes wordEdit (and clears indices via not-open state)", () => {
-    dialogStore.openWordEdit({ lineIdx: 2, wordIdx: 3 });
-    dialogStore.close("wordEdit");
-    expect(dialogStore.getState().wordEdit.open).toBe(false);
-  });
-
   it("closes confirm", () => {
     dialogStore.openConfirm({
       title: "Discard?",
@@ -66,16 +66,6 @@ describe("dialog-store: close()", () => {
     });
     dialogStore.close("confirm");
     expect(dialogStore.getState().confirm.open).toBe(false);
-  });
-});
-
-describe("dialog-store: openWordEdit", () => {
-  it("opens with indices set", () => {
-    dialogStore.openWordEdit({ lineIdx: 4, wordIdx: 7 });
-    const { wordEdit } = dialogStore.getState();
-    expect(wordEdit.open).toBe(true);
-    expect(wordEdit.lineIdx).toBe(4);
-    expect(wordEdit.wordIdx).toBe(7);
   });
 });
 
@@ -119,10 +109,9 @@ describe("dialog-store: subscribe", () => {
 describe("dialog-store: reset", () => {
   it("returns to initial state", () => {
     dialogStore.open("ocrConfig");
-    dialogStore.openWordEdit({ lineIdx: 1, wordIdx: 2 });
     dialogStore.reset();
     const state = dialogStore.getState();
     expect(state.ocrConfig.open).toBe(false);
-    expect(state.wordEdit.open).toBe(false);
+    expect(state.confirm.open).toBe(false);
   });
 });

@@ -131,6 +131,92 @@ export function selectLine(lineId: number): void {
   }));
 }
 
+export function applyLineSelection(
+  lineIds: readonly number[],
+  mode: "replace" | "toggle" | "remove",
+): void {
+  selectionStore.setState((s) => {
+    const incoming = Array.from(new Set(lineIds));
+    let next: number[];
+    if (mode === "replace") {
+      next = incoming;
+    } else if (mode === "toggle") {
+      const selected = new Set(s.selectedLines);
+      for (const lineId of incoming) {
+        if (selected.has(lineId)) {
+          selected.delete(lineId);
+        } else {
+          selected.add(lineId);
+        }
+      }
+      next = Array.from(selected);
+    } else {
+      const removing = new Set(incoming);
+      next = s.selectedLines.filter((lineId) => !removing.has(lineId));
+    }
+
+    if (next.length === 0) {
+      return { ...s, selectedLines: [], level: "none", path: {} };
+    }
+    const firstLineId = next[0];
+    if (firstLineId === undefined) {
+      return { ...s, selectedLines: [], level: "none", path: {} };
+    }
+
+    return {
+      ...s,
+      selectedParagraphs: [],
+      selectedLines: next,
+      selectedWords: [],
+      level: "line",
+      path: { lineId: firstLineId },
+    };
+  });
+}
+
+export function applyParagraphSelection(
+  paragraphIds: readonly number[],
+  mode: "replace" | "toggle" | "remove",
+): void {
+  selectionStore.setState((s) => {
+    const incoming = Array.from(new Set(paragraphIds));
+    let next: number[];
+    if (mode === "replace") {
+      next = incoming;
+    } else if (mode === "toggle") {
+      const selected = new Set(s.selectedParagraphs);
+      for (const paragraphId of incoming) {
+        if (selected.has(paragraphId)) {
+          selected.delete(paragraphId);
+        } else {
+          selected.add(paragraphId);
+        }
+      }
+      next = Array.from(selected);
+    } else {
+      const removing = new Set(incoming);
+      next = s.selectedParagraphs.filter((paragraphId) => !removing.has(paragraphId));
+    }
+
+    if (next.length === 0) {
+      return { ...s, selectedParagraphs: [], level: "none", path: {} };
+    }
+    const firstParaId = next[0];
+    if (firstParaId === undefined) {
+      return { ...s, selectedParagraphs: [], level: "none", path: {} };
+    }
+
+    return {
+      ...s,
+      selectedParagraphs: next,
+      selectedLines: [],
+      selectedWords: [],
+      level: "para",
+      path: { paraId: firstParaId },
+    };
+  });
+}
+
 /** Select a single word by (line_index, word_index). */
 export function selectWord(lineIdx: number, wordIdx: number): void {
   selectionStore.setState((s) => ({
@@ -175,6 +261,61 @@ export function walkSibling(direction: WalkDirection, page: PagePayload): void {
     if (s.level === "none") return s;
     const nextPath = nextSibling(s.path, page, direction);
     return applyPath(s, nextPath);
+  });
+}
+
+export function promoteCompleteWordLines(page: PagePayload): void {
+  selectionStore.setState((s) => {
+    if (s.selectedWords.length === 0) return s;
+
+    const selectedByLine = new Map<number, Set<number>>();
+    for (const [lineIdx, wordIdx] of s.selectedWords) {
+      const words = selectedByLine.get(lineIdx) ?? new Set<number>();
+      words.add(wordIdx);
+      selectedByLine.set(lineIdx, words);
+    }
+
+    const completedLines: number[] = [];
+    const completedLineSet = new Set<number>();
+    for (const line of page.line_matches ?? []) {
+      const selectableWordIds = line.word_matches
+        .map((word) => word.word_index)
+        .filter((wordIndex): wordIndex is number => wordIndex !== null);
+      if (selectableWordIds.length === 0) continue;
+      const selected = selectedByLine.get(line.line_index);
+      if (!selected) continue;
+      if (selectableWordIds.every((wordIndex) => selected.has(wordIndex))) {
+        completedLines.push(line.line_index);
+        completedLineSet.add(line.line_index);
+      }
+    }
+
+    if (completedLines.length === 0) return s;
+
+    const remainingWords = s.selectedWords.filter(([lineIdx]) => !completedLineSet.has(lineIdx));
+    const nextLines = Array.from(new Set([...s.selectedLines, ...completedLines]));
+    const firstLineId = nextLines[0];
+    if (firstLineId === undefined) return s;
+
+    if (remainingWords.length > 0) {
+      const last = remainingWords[remainingWords.length - 1];
+      if (last === undefined) return s;
+      return {
+        ...s,
+        selectedLines: nextLines,
+        selectedWords: remainingWords,
+        level: "word",
+        path: { lineId: last[0], wordId: last },
+      };
+    }
+
+    return {
+      ...s,
+      selectedLines: nextLines,
+      selectedWords: [],
+      level: "line",
+      path: { lineId: firstLineId },
+    };
   });
 }
 

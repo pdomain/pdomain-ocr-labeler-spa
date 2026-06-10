@@ -45,6 +45,23 @@ describe("WordImagePreview (P2.b)", () => {
     expect(img).toHaveAttribute("src", "/img/word.png");
   });
 
+  it("shows a source-image crop when imageUrl, bbox, and source dimensions are provided", () => {
+    render(
+      <WordImagePreview
+        word={makeWord({ bbox: { x: 10, y: 20, width: 30, height: 15 }, ocr_text: "world" })}
+        imageUrl="/api/projects/p1/image/0"
+        cropBBox={{ x: 10, y: 20, width: 30, height: 15 }}
+        sourceWidth={1600}
+        sourceHeight={1200}
+      />,
+    );
+
+    expect(screen.getByTestId("word-image-preview-box")).not.toHaveTextContent("world");
+    const crop = screen.getByTestId("word-image-crop");
+    expect(crop).toHaveAttribute("viewBox", "10 20 30 15");
+    expect(crop.querySelector("image")).toHaveAttribute("href", "/api/projects/p1/image/0");
+  });
+
   it("renders OCR confidence bar", () => {
     render(<WordImagePreview word={makeWord({ match_status: "exact" })} />);
     const ocrBar = screen.getByTestId("word-image-preview-ocr-bar");

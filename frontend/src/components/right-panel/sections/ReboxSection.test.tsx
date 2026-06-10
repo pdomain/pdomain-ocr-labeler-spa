@@ -2,7 +2,7 @@
 // Covers: B-RIGHT-009
 // Spec: docs/plans/hifi-gaps-plan.md slice P3.b.
 //
-// The Konva-backed mini-canvas replaces the legacy WordRefineNudgeRows.
+// The Konva-backed mini-canvas is the right-panel rebox surface.
 // `react-konva` is module-mocked so jsdom can render its <Stage> as a div.
 
 import { describe, it, expect, vi } from "vitest";

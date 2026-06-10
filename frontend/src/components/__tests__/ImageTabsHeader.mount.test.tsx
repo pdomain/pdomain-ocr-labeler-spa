@@ -1,20 +1,13 @@
 // ImageTabsHeader.mount.test.tsx — Lane C / Task C1.
 //
-// Asserts that ProjectPage mounts the ImageTabsHeader viewport-chrome bar
-// above the canvas, wired to the SAME useUiPrefs / viewport store the Rail
-// uses (single source of truth). The header was fully built but never mounted
-// (only commented out at ProjectPage.tsx:18) before this task.
-//
-// Acceptance (plan §Lane C / C1):
-//   - layer-paragraphs-checkbox, selection-mode-word, erase-pixels-button,
-//     legend-chip-line are all in the document.
-//   - toggling layer-words-checkbox updates the words-layer visibility pref.
+// Asserts that ProjectPage no longer mounts the ImageTabsHeader viewport-chrome
+// bar above the canvas.
 //
 // react-konva / pdomain-ui canvas mocked module-wide (same pattern as
 // ProjectPage.test.tsx) so the canvas tree renders as plain divs in jsdom.
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -111,7 +104,7 @@ function projectFixture() {
   };
 }
 
-describe("ImageTabsHeader mount (Lane C / C1)", () => {
+describe("ImageTabsHeader ProjectPage mount", () => {
   beforeEach(() => {
     dialogStore.reset();
     mockNavigate.mockReset();
@@ -128,46 +121,10 @@ describe("ImageTabsHeader mount (Lane C / C1)", () => {
     );
   });
 
-  it("mounts the viewport chrome controls above the canvas", async () => {
+  it("does not mount the duplicate viewport chrome controls above the canvas", async () => {
     renderProjectPage();
     await screen.findByTestId("project-page");
-    await waitFor(() => {
-      expect(screen.getByTestId("image-tabs-header")).toBeInTheDocument();
-    });
-    expect(screen.getByTestId("layer-paragraphs-checkbox")).toBeInTheDocument();
-    expect(screen.getByTestId("selection-mode-word")).toBeInTheDocument();
-    expect(screen.getByTestId("erase-pixels-button")).toBeInTheDocument();
-    expect(screen.getByTestId("legend-chip-line")).toBeInTheDocument();
-  });
-
-  it("toggling layer-words-checkbox updates the words-layer visibility pref", async () => {
-    renderProjectPage();
-    await screen.findByTestId("project-page");
-    const wordsCb = await screen.findByTestId("layer-words-checkbox");
-    expect(useUiPrefs.getState().layerVisibility.word).toBe(true);
-
-    fireEvent.click(wordsCb);
-
-    await waitFor(() => {
-      expect(useUiPrefs.getState().layerVisibility.word).toBe(false);
-    });
-    // DOM assertion: the checkbox itself must reflect the updated state so that
-    // a missing notifyUiPrefs() bridge (which prevents re-render) would fail here.
-    await waitFor(() => {
-      expect(wordsCb).not.toBeChecked();
-    });
-  });
-
-  it("erase button reflects viewport-store erase mode (single source of truth)", async () => {
-    renderProjectPage();
-    await screen.findByTestId("project-page");
-    const eraseBtn = await screen.findByTestId("erase-pixels-button");
-    expect(eraseBtn).toHaveAttribute("aria-pressed", "false");
-
-    fireEvent.click(eraseBtn);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("erase-pixels-button")).toHaveAttribute("aria-pressed", "true");
-    });
+    expect(screen.queryByTestId("image-tabs-header")).toBeNull();
+    expect(screen.queryByTestId("selection-mode-word")).toBeNull();
   });
 });

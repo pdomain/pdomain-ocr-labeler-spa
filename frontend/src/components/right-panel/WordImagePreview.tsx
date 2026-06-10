@@ -19,11 +19,18 @@
 import type { components } from "../../api/types";
 
 type WordMatch = components["schemas"]["WordMatch"];
+type BBox = components["schemas"]["BBox"];
 
 export interface WordImagePreviewProps {
   word: WordMatch;
-  /** Optional word image URL — when provided, shown inside the preview box. */
-  imageUrl?: string;
+  /** Optional page or word image URL. */
+  imageUrl?: string | undefined;
+  /** Optional source-pixel crop from the full page image. */
+  cropBBox?: BBox | undefined;
+  /** Source page image width, required for SVG crop rendering. */
+  sourceWidth?: number | undefined;
+  /** Source page image height, required for SVG crop rendering. */
+  sourceHeight?: number | undefined;
 }
 
 function ocrConfidence(word: WordMatch): number {
@@ -58,7 +65,7 @@ function ConfidenceBar({ label, pct, testid }: ConfidenceBarProps) {
         <div
           data-testid={testid}
           className={`h-full rounded-full transition-all ${barColor}`}
-          style={{ width: `${clamped}%` }}
+          style={{ width: `${String(clamped)}%` }}
         />
       </div>
       <span className="w-6 text-right text-[9px] font-mono text-ink-3 shrink-0">{clamped}%</span>
@@ -66,9 +73,25 @@ function ConfidenceBar({ label, pct, testid }: ConfidenceBarProps) {
   );
 }
 
-export function WordImagePreview({ word, imageUrl }: WordImagePreviewProps) {
+export function WordImagePreview({
+  word,
+  imageUrl,
+  cropBBox,
+  sourceWidth,
+  sourceHeight,
+}: WordImagePreviewProps) {
   const ocrPct = ocrConfidence(word);
   const gtPct = gtConfidence(word);
+  const canRenderCrop =
+    imageUrl &&
+    cropBBox &&
+    sourceWidth &&
+    sourceHeight &&
+    cropBBox.width > 0 &&
+    cropBBox.height > 0;
+  const cropViewBox = canRenderCrop
+    ? [cropBBox.x, cropBBox.y, cropBBox.width, cropBBox.height].map(String).join(" ")
+    : "";
 
   return (
     <div data-testid="word-image-preview" className="flex flex-col gap-2 px-3 py-2">
@@ -78,7 +101,18 @@ export function WordImagePreview({ word, imageUrl }: WordImagePreviewProps) {
         className="w-full h-[76px] rounded border border-border-2 overflow-hidden flex items-center justify-center"
         style={{ background: "var(--bg-sunk)" }}
       >
-        {imageUrl ? (
+        {canRenderCrop ? (
+          <svg
+            data-testid="word-image-crop"
+            role="img"
+            aria-label={word.ocr_text || "Word image crop"}
+            viewBox={cropViewBox}
+            className="h-full w-full"
+            preserveAspectRatio="xMidYMid meet"
+          >
+            <image href={imageUrl} width={sourceWidth} height={sourceHeight} />
+          </svg>
+        ) : imageUrl ? (
           /* When a real image URL is available, show it */
           <img
             src={imageUrl}

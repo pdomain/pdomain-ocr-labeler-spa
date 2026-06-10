@@ -1,8 +1,7 @@
 // ReboxSection.tsx — Rebox accordion section for the word detail editor.
 // Spec: docs/plans/hifi-gaps-plan.md slice P3.b (Gap 35).
 //
-// Replaces the legacy WordRefineNudgeRows-based content with an inline
-// Konva mini-canvas. The user drags the 8 handles (or click-drags in
+// Uses an inline Konva mini-canvas. The user drags the 8 handles (or click-drags in
 // "draw" mode) to reposition a word boundary, then clicks Apply rebox
 // to commit via the existing /rebox endpoint.
 //

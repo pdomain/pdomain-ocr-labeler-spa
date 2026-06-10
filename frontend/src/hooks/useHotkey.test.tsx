@@ -88,14 +88,6 @@ describe("useHotkey dialog gate (issue #444)", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("does NOT fire page-scope hotkey when wordEdit dialog is open", () => {
-    const handler = vi.fn();
-    render(<HotkeyTestComponent combo="v" handler={handler} />);
-    dialogStore.openWordEdit({ lineIdx: 0, wordIdx: 0 });
-    fireEvent.keyDown(document.body, { key: "v", code: "KeyV" });
-    expect(handler).not.toHaveBeenCalled();
-  });
-
   it("does NOT fire page-scope hotkey when confirm dialog is open", () => {
     const handler = vi.fn();
     render(<HotkeyTestComponent combo="d" handler={handler} />);
@@ -115,10 +107,10 @@ describe("useHotkey dialog gate (issue #444)", () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
-  it("fires dialog-scope hotkey even when dialog is open (ignoreDialogGate: true)", () => {
+  it("fires dialog-scope hotkey even when a remaining dialog is open (ignoreDialogGate: true)", () => {
     const handler = vi.fn();
     render(<HotkeyTestComponent combo="arrowleft" handler={handler} ignoreDialogGate={true} />);
-    dialogStore.openWordEdit({ lineIdx: 0, wordIdx: 0 });
+    dialogStore.openConfirm({ title: "Confirm", body: "Are you sure?", onConfirm: vi.fn() });
     fireEvent.keyDown(document.body, { key: "ArrowLeft", code: "ArrowLeft" });
     expect(handler).toHaveBeenCalledTimes(1);
   });

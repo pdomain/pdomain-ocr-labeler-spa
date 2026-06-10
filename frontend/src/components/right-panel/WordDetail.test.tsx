@@ -19,6 +19,9 @@ vi.mock("react-konva", () => ({
   Image: () => null,
 }));
 vi.mock("../PageImage", () => ({ PageImage: () => null }));
+vi.mock("../../hooks/useRefineAvailable", () => ({
+  useRefineAvailable: () => ({ data: { available: true } }),
+}));
 
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -40,6 +43,14 @@ function makePage(): PagePayload {
     page_index: 0,
     line_filter: "all",
     generation: 0,
+    image_url: "/api/projects/p1/image/0",
+    encoded_dims: {
+      src_width: 1600,
+      src_height: 1200,
+      display_width: 800,
+      display_height: 600,
+      scale: 0.5,
+    },
     line_matches: [
       {
         line_index: 0,
@@ -122,6 +133,15 @@ describe("WordDetail (Slice 16)", () => {
   it("resolves selected words by logical word_index, not array position", () => {
     const word = resolveWord(makePageWithLogicalWordIndex(3), 0, [0, 3]);
     expect(word?.ocr_text).toBe("hello");
+  });
+
+  it("passes the page image and word bbox to the word image crop preview", () => {
+    selectWord(0, 0);
+    renderWithQuery(<WordDetail page={makePage()} projectId="p1" pageIndex={0} />);
+
+    const crop = screen.getByTestId("word-image-crop");
+    expect(crop).toHaveAttribute("viewBox", "10 20 30 15");
+    expect(crop.querySelector("image")).toHaveAttribute("href", "/api/projects/p1/image/0");
   });
 
   it("disables prev/next pager buttons by word order, not logical word_index value", () => {

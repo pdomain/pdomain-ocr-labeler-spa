@@ -84,7 +84,7 @@ describe("applyBoxSelect — SEL-2 intersection math", () => {
 
     // drag rect covers display (40,95) to (80,115) — overlaps word 0, not word 1
     const result = applyBoxSelect(page, { x: 40, y: 95, width: 40, height: 20 }, "replace");
-    expect(result).toEqual([[0, 0]]);
+    expect(result.words).toEqual([[0, 0]]);
   });
 
   it("returns multiple words when drag rect covers several", () => {
@@ -96,9 +96,9 @@ describe("applyBoxSelect — SEL-2 intersection math", () => {
     // drag rect covers display space (40,90) to (130,120) — overlaps line 0 words 0,1
     // display: word0=(50,100,25,10), word1=(80,100,25,10), word2=(200,100,25,10)
     const result = applyBoxSelect(page, { x: 40, y: 90, width: 100, height: 35 }, "replace");
-    expect(result).toHaveLength(2);
-    expect(result).toContainEqual([0, 0]);
-    expect(result).toContainEqual([0, 1]);
+    expect(result.words).toHaveLength(2);
+    expect(result.words).toContainEqual([0, 0]);
+    expect(result.words).toContainEqual([0, 1]);
   });
 
   it("returns empty array when drag rect covers no words", () => {
@@ -106,7 +106,7 @@ describe("applyBoxSelect — SEL-2 intersection math", () => {
 
     // drag rect far from any word in display space
     const result = applyBoxSelect(page, { x: 0, y: 0, width: 10, height: 10 }, "replace");
-    expect(result).toHaveLength(0);
+    expect(result.words).toHaveLength(0);
   });
 
   it("skips words with null word_index", () => {
@@ -115,7 +115,7 @@ describe("applyBoxSelect — SEL-2 intersection math", () => {
     ]);
 
     const result = applyBoxSelect(page, { x: 40, y: 95, width: 40, height: 20 }, "replace");
-    expect(result).toHaveLength(0);
+    expect(result.words).toHaveLength(0);
   });
 
   it("returns empty when page has no encoded_dims (fallback scale 1)", () => {
@@ -133,6 +133,23 @@ describe("applyBoxSelect — SEL-2 intersection math", () => {
     };
     // word bbox in source is (10,10,20,10), no scale → display is same
     const result = applyBoxSelect(page, { x: 5, y: 5, width: 30, height: 20 }, "replace");
-    expect(result).toEqual([[0, 0]]);
+    expect(result.words).toEqual([[0, 0]]);
+  });
+
+  it("line target returns intersecting line ids instead of word tuples", () => {
+    const page = makePage([
+      makeLine(0, [makeWord(0, 0, 100, 200, 50, 20), makeWord(0, 1, 160, 200, 50, 20)]),
+      makeLine(1, [makeWord(1, 0, 400, 200, 50, 20)]),
+    ]);
+
+    const result = applyBoxSelect(
+      page,
+      { x: 40, y: 90, width: 100, height: 35 },
+      "replace",
+      "line",
+    );
+
+    expect(result.lines).toEqual([0]);
+    expect(result.words).toEqual([]);
   });
 });

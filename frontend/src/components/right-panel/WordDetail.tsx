@@ -67,7 +67,7 @@ function getSelectionSnapshot() {
 function charFixerHint(ocrText: string | undefined): string {
   const n = Array.from(ocrText ?? "").length;
   if (n === 0) return "edit · fix · unicode";
-  return `${n} range${n === 1 ? "" : "s"}`;
+  return `${String(n)} range${n === 1 ? "" : "s"}`;
 }
 
 export function resolveWord(
@@ -126,6 +126,9 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
   const wordOrder = getWordOrder(page, lineIdx, wordIdx);
   const hasPrevWord = wordOrder.position > 0;
   const hasNextWord = wordOrder.next !== null;
+  const pageImageUrl = page.image_url ?? undefined;
+  const sourceWidth = page.encoded_dims?.src_width;
+  const sourceHeight = page.encoded_dims?.src_height;
 
   return (
     <div data-testid="word-detail" className="flex flex-col gap-1">
@@ -143,7 +146,13 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
       />
 
       {/* P2.b: Word image preview + confidence bars */}
-      <WordImagePreview word={word} />
+      <WordImagePreview
+        word={word}
+        imageUrl={pageImageUrl}
+        cropBBox={word.bbox}
+        sourceWidth={sourceWidth}
+        sourceHeight={sourceHeight}
+      />
 
       {/* P2.c: OCR/GT compare row + inline Ω unicode picker */}
       {/* S2.1: onTab walks to the next/prev word via walkSibling (DRY — reuses WordFooter's Skip path).
@@ -151,7 +160,7 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
       <OcrGtCompareRow
         ocrText={word.ocr_text}
         gtText={word.ground_truth_text}
-        selectedWordKey={`${lineIdx}-${wordIdx}`}
+        selectedWordKey={`${String(lineIdx)}-${String(wordIdx)}`}
         onCommitGt={(text) => {
           updateGt.mutate({
             lineIndex: lineIdx,
@@ -211,13 +220,18 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
         {/* 2 — Rebox (Slice 17 / P3.b Konva mini-canvas) */}
         <Accordion.Item value="rebox" tag="accent">
           <Accordion.Trigger
-            hint={`${Math.round(word.bbox.width)} × ${Math.round(word.bbox.height)} px`}
+            hint={`${String(Math.round(word.bbox.width))} × ${String(Math.round(word.bbox.height))} px`}
             keycap="R"
           >
             Rebox
           </Accordion.Trigger>
           <Accordion.Content>
-            <ReboxSection word={word} projectId={projectId} pageIndex={pageIndex} />
+            <ReboxSection
+              word={word}
+              projectId={projectId}
+              pageIndex={pageIndex}
+              imageUrl={pageImageUrl}
+            />
           </Accordion.Content>
         </Accordion.Item>
 
@@ -229,6 +243,8 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
           <Accordion.Content>
             <ErasePixelsSection
               backendAvailable={refineAvailable}
+              imageUrl={pageImageUrl}
+              cropBBox={word.bbox}
               onApply={(ops) =>
                 erasePixels.mutateAsync({
                   lineIndex: lineIdx,
@@ -266,7 +282,12 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
             Char Fixer
           </Accordion.Trigger>
           <Accordion.Content>
-            <CharFixerSection word={word} projectId={projectId} pageIndex={pageIndex} />
+            <CharFixerSection
+              word={word}
+              projectId={projectId}
+              pageIndex={pageIndex}
+              imageUrl={pageImageUrl}
+            />
           </Accordion.Content>
         </Accordion.Item>
       </Accordion>
@@ -278,7 +299,7 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
         pageIndex={pageIndex}
         lineIndex={lineIdx}
         wordIndex={wordIdx}
-        isValidated={word.is_validated ?? false}
+        isValidated={word.is_validated}
       />
     </div>
   );

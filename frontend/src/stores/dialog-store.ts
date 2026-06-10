@@ -1,5 +1,5 @@
 // dialog-store.ts — central dialog state for OCR-config, export, hotkey-help,
-// word-edit, and confirm dialogs.
+// source-folder, and confirm dialogs.
 // Spec: specs/22-page-surface-wireup.md §5 (Dialog launchers)
 // Issue #309 (spec-22-A)
 //
@@ -9,7 +9,7 @@
 //
 // GAP-6: No pdomain-ui factory covers labeler-specific dialog orchestration.
 //   The dialogs managed here (OCR config, export, hotkey help, source folder,
-//   word-edit, confirm) are all labeler-specific features. pdomain-ui ships
+//   confirm) are all labeler-specific features. pdomain-ui ships
 //   Radix-based dialog primitives but no store abstraction for domain-level
 //   dialog management. This store is kept local permanently.
 //
@@ -29,12 +29,6 @@ import { useSyncExternalStore } from "react";
 /** Dialog keys with a plain `{ open: boolean }` shape. */
 type SimpleDialogKey = "ocrConfig" | "export" | "hotkeyHelp" | "sourceFolder";
 
-interface WordEditDialogState {
-  open: boolean;
-  lineIdx?: number;
-  wordIdx?: number;
-}
-
 interface ConfirmDialogState {
   open: boolean;
   title?: string;
@@ -47,18 +41,15 @@ export interface DialogStoreState {
   export: { open: boolean };
   hotkeyHelp: { open: boolean };
   sourceFolder: { open: boolean };
-  wordEdit: WordEditDialogState;
   confirm: ConfirmDialogState;
 }
 
 interface DialogStoreApi {
   /** Open a simple dialog by key. */
   open: (key: SimpleDialogKey) => void;
-  /** Close any dialog (simple keys + wordEdit + confirm).
+  /** Close any dialog (simple keys + confirm).
    *  Note: SimpleDialogKey already includes "sourceFolder". */
-  close: (key: SimpleDialogKey | "wordEdit" | "confirm") => void;
-  /** Open the word-edit dialog with the target line/word indices. */
-  openWordEdit: (params: { lineIdx: number; wordIdx: number }) => void;
+  close: (key: SimpleDialogKey | "confirm") => void;
   /** Open the confirm dialog with title/body/onConfirm. */
   openConfirm: (params: { title: string; body: string; onConfirm: () => void }) => void;
 }
@@ -72,7 +63,6 @@ const INITIAL_STATE: DialogStoreState = {
   export: { open: false },
   hotkeyHelp: { open: false },
   sourceFolder: { open: false },
-  wordEdit: { open: false },
   confirm: { open: false },
 };
 
@@ -83,16 +73,11 @@ const api: DialogStoreApi = {
     _store.setState((s) => ({ ...s, [key]: { open: true } }));
   },
   close(key) {
-    if (key === "wordEdit") {
-      _store.setState((s) => ({ ...s, wordEdit: { open: false } }));
-    } else if (key === "confirm") {
+    if (key === "confirm") {
       _store.setState((s) => ({ ...s, confirm: { open: false } }));
     } else {
       _store.setState((s) => ({ ...s, [key]: { open: false } }));
     }
-  },
-  openWordEdit({ lineIdx, wordIdx }) {
-    _store.setState((s) => ({ ...s, wordEdit: { open: true, lineIdx, wordIdx } }));
   },
   openConfirm({ title, body, onConfirm }) {
     _store.setState((s) => ({ ...s, confirm: { open: true, title, body, onConfirm } }));
@@ -149,5 +134,7 @@ export const dialogStore = {
 if (typeof window !== "undefined") {
   (window as unknown as Record<string, unknown>)["__DIALOG_STORE_OPEN"] = (
     key: Parameters<typeof api.open>[0],
-  ) => api.open(key);
+  ) => {
+    api.open(key);
+  };
 }

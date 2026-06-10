@@ -63,7 +63,7 @@ export interface CharFixerSectionProps {
   projectId: string;
   pageIndex: number;
   /** Optional cropped-word image URL forwarded to CharFixerCanvas. */
-  imageUrl?: string;
+  imageUrl?: string | undefined;
 }
 
 /**

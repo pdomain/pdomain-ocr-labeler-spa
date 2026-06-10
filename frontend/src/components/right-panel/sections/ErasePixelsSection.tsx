@@ -29,6 +29,9 @@ import { useState } from "react";
 import { Button } from "../../ui/button";
 import { useRefineAvailable } from "../../../hooks/useRefineAvailable";
 import { EraseCanvas, describeOp, type EraseOp, type EraseTool } from "./EraseCanvas";
+import type { components } from "../../../api/types";
+
+type BBox = components["schemas"]["BBox"];
 
 export interface ErasePixelsSectionProps {
   /**
@@ -40,6 +43,8 @@ export interface ErasePixelsSectionProps {
   onApply?: (ops: EraseOp[]) => Promise<void> | void;
   /** URL of the word image slice (forwarded to EraseCanvas). */
   imageUrl?: string | undefined;
+  /** Optional source-pixel crop from the full page image. */
+  cropBBox?: BBox | undefined;
 }
 
 const DEFAULT_BRUSH = 8;
@@ -48,6 +53,7 @@ export function ErasePixelsSection({
   backendAvailable,
   onApply,
   imageUrl,
+  cropBBox,
 }: ErasePixelsSectionProps) {
   // Probe — only consulted when no explicit override was passed.  We always
   // call the hook (rules of hooks) but ignore its value when `backendAvailable`
@@ -117,6 +123,7 @@ export function ErasePixelsSection({
     <div data-testid="erase-pixels-section" className="flex flex-col gap-3 py-1">
       <EraseCanvas
         imageUrl={imageUrl}
+        cropBBox={cropBBox}
         tool={tool}
         onToolChange={setTool}
         brushSize={brushSize}

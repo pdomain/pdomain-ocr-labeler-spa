@@ -149,6 +149,23 @@ export function ReboxCanvas({
   imageUrl,
 }: ReboxCanvasProps) {
   const canvasColors = buildCanvasColors();
+  const [imageEl, setImageEl] = useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    if (!imageUrl) {
+      setImageEl(null);
+      return;
+    }
+    let cancelled = false;
+    const img = new window.Image();
+    img.onload = () => {
+      if (!cancelled) setImageEl(img);
+    };
+    img.src = imageUrl;
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUrl]);
 
   // Fit the *original* bbox into the canvas. We size around the original so
   // the visible scale doesn't change as the user drags the bbox around.
@@ -197,7 +214,7 @@ export function ReboxCanvas({
   // ── Pointer helpers ─────────────────────────────────────────────────────
   const pointerImage = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>): { x: number; y: number } | null => {
-      const stage = e.target.getStage?.();
+      const stage = e.target.getStage();
       if (!stage) return null;
       const pos = stage.getPointerPosition();
       if (!pos) return null;
@@ -249,7 +266,7 @@ export function ReboxCanvas({
   // ── Handle-drag wiring (corner + midpoint) ──────────────────────────────
   const handleHandleDragMove = useCallback(
     (pos: HandlePos) => (e: Konva.KonvaEventObject<DragEvent>) => {
-      const stage = e.target.getStage?.();
+      const stage = e.target.getStage();
       if (!stage) return;
       const ptr = stage.getPointerPosition();
       if (!ptr) return;
@@ -282,6 +299,16 @@ export function ReboxCanvas({
   const overlayY = Math.min(tl.y, br.y);
   const overlayW = Math.abs(br.x - tl.x);
   const overlayH = Math.abs(br.y - tl.y);
+  const backgroundImageProps =
+    imageUrl && imageEl
+      ? {
+          fillPatternImage: imageEl,
+          fillPatternOffsetX: fit.originX,
+          fillPatternOffsetY: fit.originY,
+          fillPatternScaleX: fit.scale * zoom,
+          fillPatternScaleY: fit.scale * zoom,
+        }
+      : {};
 
   return (
     <div
@@ -305,7 +332,9 @@ export function ReboxCanvas({
             y={0}
             width={CANVAS_WIDTH}
             height={CANVAS_HEIGHT}
-            {...(!imageUrl ? { fill: readCssToken("--bg-raised", "#1d1d24") } : {})}
+            {...(!imageUrl || !imageEl ? { fill: readCssToken("--bg-raised", "#1d1d24") } : {})}
+            {...backgroundImageProps}
+            data-image-url={imageUrl}
             data-testid="rebox-canvas-background"
           />
         </Layer>
