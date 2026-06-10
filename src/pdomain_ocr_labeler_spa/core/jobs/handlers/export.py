@@ -181,6 +181,91 @@ def _resolve_image_path(json_path: Path) -> Path | None:
 
 
 # ---------------------------------------------------------------------------
+# Manifest write helper (Track C — export manifest)
+# ---------------------------------------------------------------------------
+
+
+def _write_export_manifest(
+    export_root: Path,
+    project_id: str,
+    exported_at: str,
+    page_count: int,
+    task_stats: list[Any],
+) -> None:
+    """Merge-update the doctr-export manifest.json after a successful export.
+
+    Imports Track-B helpers at call time so the handler stays importable
+    when pdomain_ops is absent (CI, stub environments).  Any failure is
+    logged and swallowed — a manifest write must never abort an otherwise
+    successful export.
+
+    JSON contract (schema: "pdomain.doctr-export-manifest", version 1):
+
+        {
+            "schema": "pdomain.doctr-export-manifest",
+            "version": 1,
+            "generated_at": "<ISO-8601>",
+            "app": "pdomain-ocr-labeler-spa",
+            "projects": {
+                "<project_id>": {
+                    "exported_at": "<ISO-8601>",
+                    "page_count": <int>,
+                    "tasks": {
+                        "<task>": {"item_count": <int>}
+                    }
+                }
+            }
+        }
+
+    Merge semantics: re-exporting a project replaces that project's entry;
+    other projects are preserved.  ``generated_at`` is refreshed on every write.
+    """
+    try:
+        from datetime import UTC, datetime
+
+        from pdomain_ops.schemas.doctr_export import (  # pyright: ignore[reportMissingImports]
+            DoctrExportManifest,
+            DoctrExportProject,
+            DoctrExportTaskStats,
+            read_manifest,
+            write_manifest,
+        )
+    except ImportError:
+        log.debug("pdomain_ops.schemas.doctr_export not available; skipping manifest write")
+        return
+
+    try:
+        existing = read_manifest(export_root)
+
+        existing_projects: dict[str, DoctrExportProject] = (
+            dict(existing.projects) if existing is not None else {}
+        )
+
+        # task_stats items carry .task (name) and .item_count; build the
+        # dict[str, DoctrExportTaskStats] expected by DoctrExportProject.
+        task_map: dict[str, DoctrExportTaskStats] = {
+            ts.task: DoctrExportTaskStats(item_count=ts.item_count) for ts in task_stats
+        }
+        existing_projects[project_id] = DoctrExportProject(
+            exported_at=exported_at,
+            page_count=page_count,
+            tasks=task_map,
+        )
+
+        manifest = DoctrExportManifest(
+            schema_id="pdomain.doctr-export-manifest",
+            version=1,
+            generated_at=datetime.now(UTC),
+            app="pdomain-ocr-labeler-spa",
+            projects=existing_projects,
+        )
+        write_manifest(export_root, manifest)
+        log.debug("manifest updated: %s/manifest.json (project=%s)", export_root, project_id)
+    except Exception:
+        log.warning("manifest write failed for project=%s", project_id, exc_info=True)
+
+
+# ---------------------------------------------------------------------------
 # Export output helpers
 # ---------------------------------------------------------------------------
 
@@ -334,6 +419,39 @@ def _count_exported_words(page: Any, word_filter: WordFilter | None) -> tuple[in
         if _word_has_text(word):
             recognition_words += 1
     return detection_words, recognition_words
+
+
+# ---------------------------------------------------------------------------
+# Task-stats builder (plain objects, no pdomain_ops dependency)
+# ---------------------------------------------------------------------------
+
+
+def _build_task_stats(
+    *,
+    detection: bool,
+    recognition: bool,
+    classification: bool,
+    words_detection: int,
+    words_recognition: int,
+) -> list[Any]:
+    """Build a list of task-stats objects for the manifest helper.
+
+    Uses plain objects (SimpleNamespace) so the handler remains importable
+    without pdomain_ops.  ``_write_export_manifest`` converts these to
+    ``DoctrExportTaskStats`` instances internally using the ``.task`` and
+    ``.item_count`` attributes.
+    """
+    from types import SimpleNamespace
+
+    stats: list[Any] = []
+    if detection:
+        stats.append(SimpleNamespace(task="detection", item_count=words_detection))
+    if recognition:
+        stats.append(SimpleNamespace(task="recognition", item_count=words_recognition))
+    if classification:
+        # Classification re-uses the recognition word count (same words, different labels).
+        stats.append(SimpleNamespace(task="classification", item_count=words_recognition))
+    return stats
 
 
 # ---------------------------------------------------------------------------
@@ -495,6 +613,26 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
             "words_exported_recognition": words_exported_recognition,
             "pages_skipped_not_validated": pages_skipped_not_validated,
         },
+    )
+
+    # --- Track C: write / update the export manifest ---
+    # Runs after the terminal SSE event so a manifest failure never
+    # prevents the "complete" event from reaching the frontend.
+    from datetime import UTC
+    from datetime import datetime as _dt
+
+    _write_export_manifest(
+        export_root=data_root / _DOCTR_EXPORT_DIRNAME,
+        project_id=project_id,
+        exported_at=_dt.now(UTC).isoformat(),
+        page_count=exported_count,
+        task_stats=_build_task_stats(
+            detection=detection,
+            recognition=recognition,
+            classification=include_classification,
+            words_detection=words_exported_detection,
+            words_recognition=words_exported_recognition,
+        ),
     )
 
 
