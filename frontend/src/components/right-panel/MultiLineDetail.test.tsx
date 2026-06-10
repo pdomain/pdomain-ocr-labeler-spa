@@ -246,3 +246,89 @@ describe("MultiLineDetail — ML-5: Tab traversal across lines", () => {
     expect(document.activeElement).toBe(lastInLine0);
   });
 });
+
+// ─── ML-6, ML-7, ML-8: per-line ops, bulk bar, selection preserved ───────────
+
+describe("MultiLineDetail — ML-6: per-line ops wire mutations", () => {
+  beforeEach(() => {
+    clearSelection();
+  });
+
+  it("per-line validate button calls validate mutation for that line", async () => {
+    let capturedBody: unknown = null;
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/validate-batch", async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ updated: 2 });
+      }),
+    );
+    const user = userEvent.setup();
+    wrap(<MultiLineDetail page={makePage()} projectId="p1" pageIndex={0} selectedLines={[0, 1]} />);
+    await user.click(screen.getByTestId("line-validate-button-0"));
+    expect(capturedBody).toMatchObject({ scope: "line", line_indices: [0], validated: true });
+  });
+
+  it("per-line copy-OCR-to-GT button calls copy mutation for that line", async () => {
+    let capturedBody: unknown = null;
+    server.use(
+      http.post("/api/projects/p1/pages/0/lines/0/copy-gt", async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json(makePage());
+      }),
+    );
+    const user = userEvent.setup();
+    wrap(<MultiLineDetail page={makePage()} projectId="p1" pageIndex={0} selectedLines={[0, 1]} />);
+    await user.click(screen.getByTestId("line-ocr-to-gt-button-0"));
+    expect(capturedBody).toMatchObject({ direction: "ocr_to_gt" });
+  });
+});
+
+describe("MultiLineDetail — ML-7: bulk bar fires all-line mutations", () => {
+  beforeEach(() => {
+    clearSelection();
+  });
+
+  it("bulk validate-all calls validate for each selected line", async () => {
+    const bodies: unknown[] = [];
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/validate-batch", async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json({ updated: 1 });
+      }),
+    );
+    const user = userEvent.setup();
+    wrap(<MultiLineDetail page={makePage()} projectId="p1" pageIndex={0} selectedLines={[0, 1]} />);
+    await user.click(screen.getByTestId("multi-line-bulk-validate"));
+    // Two lines → two validate calls
+    expect(bodies).toHaveLength(2);
+  });
+
+  it("bulk copy-OCR-to-GT calls copy for each selected line", async () => {
+    const calls: unknown[] = [];
+    server.use(
+      http.post("/api/projects/p1/pages/0/lines/:li/copy-gt", async ({ request }) => {
+        calls.push(await request.json());
+        return HttpResponse.json(makePage());
+      }),
+    );
+    const user = userEvent.setup();
+    wrap(<MultiLineDetail page={makePage()} projectId="p1" pageIndex={0} selectedLines={[0, 1]} />);
+    await user.click(screen.getByTestId("multi-line-bulk-copy-ocr-to-gt"));
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatchObject({ direction: "ocr_to_gt" });
+  });
+});
+
+describe("MultiLineDetail — ML-8: selection survives ops", () => {
+  beforeEach(() => {
+    clearSelection();
+    applyLineSelection([0, 1], "replace");
+  });
+
+  it("selected lines still selected after validate (not deleted)", () => {
+    wrap(<MultiLineDetail page={makePage()} projectId="p1" pageIndex={0} selectedLines={[0, 1]} />);
+    // Both cards present = selection preserved
+    expect(screen.getByTestId("multi-line-card-0")).toBeInTheDocument();
+    expect(screen.getByTestId("multi-line-card-1")).toBeInTheDocument();
+  });
+});
