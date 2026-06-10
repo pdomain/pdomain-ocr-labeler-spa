@@ -788,4 +788,59 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       expect(calls[0]!.body).toEqual(expect.objectContaining({ scope: "line", validated: true }));
     });
   });
+
+  // ── AG-3: R/Shift+R hotkeys fire refine mutation ─────────────────────────
+
+  describe("AG-3: R and Shift+R hotkeys fire refine/expand-refine endpoint", () => {
+    it("R key fires POST /refine with scope=line mode=refine when a line is selected", async () => {
+      const calls: { url: string; body: unknown }[] = [];
+      const refineResponse = { project_id: "p1", page_index: 0, line_matches: [] };
+      server.use(
+        http.post("/api/projects/:pid/pages/:idx/refine", async ({ request }) => {
+          calls.push({ url: request.url, body: await request.json() });
+          return HttpResponse.json(refineResponse);
+        }),
+      );
+
+      renderProjectPage();
+      await screen.findByTestId("project-page");
+
+      // Select line 0 so the dispatch has a non-empty selected_lines
+      selectLine(0);
+
+      fireEvent.keyDown(document, { key: "r", bubbles: true });
+
+      await waitFor(() => {
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+      });
+      expect(calls[0]!.url).toContain("/refine");
+      expect(calls[0]!.body).toEqual(expect.objectContaining({ scope: "line", mode: "refine" }));
+    });
+
+    it("Shift+R key fires POST /refine with scope=line mode=expand_then_refine", async () => {
+      const calls: { url: string; body: unknown }[] = [];
+      const refineResponse = { project_id: "p1", page_index: 0, line_matches: [] };
+      server.use(
+        http.post("/api/projects/:pid/pages/:idx/refine", async ({ request }) => {
+          calls.push({ url: request.url, body: await request.json() });
+          return HttpResponse.json(refineResponse);
+        }),
+      );
+
+      renderProjectPage();
+      await screen.findByTestId("project-page");
+
+      selectLine(0);
+
+      fireEvent.keyDown(document, { key: "R", shiftKey: true, bubbles: true });
+
+      await waitFor(() => {
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+      });
+      expect(calls[0]!.url).toContain("/refine");
+      expect(calls[0]!.body).toEqual(
+        expect.objectContaining({ scope: "line", mode: "expand_then_refine" }),
+      );
+    });
+  });
 });

@@ -401,10 +401,10 @@ export default function ProjectPage() {
       }
     },
     onRefine: () => {
-      // Refine is not yet a line-level mutation; no-op placeholder.
+      dispatchToolbarAction("line_refine");
     },
     onExpandRefine: () => {
-      // Expand+refine is not yet a line-level mutation; no-op placeholder.
+      dispatchToolbarAction("line_expand_refine");
     },
     onMerge: () => {
       const { selectedLineIndex } = worklistStore.getState();
