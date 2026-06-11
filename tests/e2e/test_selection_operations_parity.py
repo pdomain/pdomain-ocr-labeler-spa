@@ -766,3 +766,198 @@ def test_grid3_stb1_per_word_validate_mutates_state_end_to_end(
     )
 
     _save_screenshot(page, "stb1_per_word_validated_state_change")
+
+
+# ─── Line-scope helpers + parity-gap regression tests (2026-06-11) ────────────
+
+
+def _select_line_via_hierarchy(page: Page, block_nth: int = 0) -> None:
+    """Select a line via the hierarchy tree (level=line selection).
+
+    Same expansion path as ``_select_first_word_via_hierarchy`` but stops at
+    the line node, so the RightPanel shows LineDetail instead of WordDetail.
+    ``block_nth`` picks which top-level block to expand (each fixture block
+    holds exactly one para → one line).
+    """
+    page.locator('[data-testid="drawer-tab-hierarchy"]').first.click()
+    page.wait_for_selector('[data-testid="hierarchy"]', state="visible", timeout=10_000)
+    time.sleep(0.3)
+
+    block_nodes = page.locator('[data-testid^="hierarchy-node-block-"]')
+    if block_nodes.count() > block_nth:
+        block_nodes.nth(block_nth).click()
+        block_nodes.nth(block_nth).press("ArrowRight")
+        time.sleep(0.2)
+
+    para_nodes = page.locator('[data-testid^="hierarchy-node-para-"]')
+    para_nodes.first.wait_for(state="visible", timeout=10_000)
+    para_nodes.first.click()
+    para_nodes.first.press("ArrowRight")
+    time.sleep(0.2)
+
+    line_nodes = page.locator('[data-testid^="hierarchy-node-line-"]')
+    line_nodes.first.wait_for(state="visible", timeout=10_000)
+    line_nodes.first.click()
+    time.sleep(0.4)
+
+
+def _poll_line(base_url: str, line_index: int, predicate, timeout: float = 10.0) -> dict | None:
+    """Poll GET pages/0 until ``predicate(line_match)`` is truthy; return it."""
+    deadline = time.monotonic() + timeout
+    last: dict | None = None
+    while time.monotonic() < deadline:
+        r = httpx.get(f"{base_url}/api/projects/{_PROJECT_ID}/pages/0", timeout=10)
+        if r.status_code == 200:
+            payload = r.json()
+            last = next(
+                (lm for lm in payload.get("line_matches", []) if lm["line_index"] == line_index),
+                None,
+            )
+            if last is not None and predicate(last):
+                return last
+        time.sleep(0.3)
+    return last
+
+
+@pytest.mark.e2e
+def test_sel3_shift_hotkeys_sync_rail_target(sel_server: SelServer, page: Page) -> None:
+    """SEL-3 radio→rail direction: Shift+1/2 selection-mode changes drive the Rail.
+
+    The header selection-mode radios were retired with ImageTabsHeader; the
+    surviving "radio-equivalent" input is the Shift+1/2/3 viewport hotkeys.
+    Per the SEL-3 contract (docs/specs/2026-06-05-selection-operations-parity.md
+    Slice A) a selection-mode change must also set ``railStore.target`` so the
+    Rail highlight and box-select granularity agree.
+
+    Acceptance (visible + real effect): the rail-target-para cell gains
+    data-active="true" after Shift+1, and rail-target-word loses it.
+    """
+    _goto_project_page(page, sel_server.project_url)
+
+    rail_para = page.locator('[data-testid="rail-target-para"]').first
+    rail_word = page.locator('[data-testid="rail-target-word"]').first
+    rail_para.wait_for(state="visible", timeout=10_000)
+
+    # Normalize starting state: click the Word target (also sets selectionMode).
+    rail_word.click()
+    time.sleep(0.3)
+    assert rail_word.get_attribute("data-active") == "true"
+    assert rail_para.get_attribute("data-active") is None
+
+    # Shift+1 → selectionMode "paragraph" → railStore.target must follow.
+    page.keyboard.press("Shift+1")
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if rail_para.get_attribute("data-active") == "true":
+            break
+        time.sleep(0.2)
+    assert rail_para.get_attribute("data-active") == "true", (
+        "Shift+1 set selectionMode=paragraph but rail-target-para did not become "
+        "active — SEL-3 radio→rail sync is broken (PageImageCanvas "
+        "onSelectionModeChange must call railStore.setTarget)."
+    )
+    assert rail_word.get_attribute("data-active") is None
+
+    # Shift+2 → line target follows too.
+    page.keyboard.press("Shift+2")
+    rail_line = page.locator('[data-testid="rail-target-line"]').first
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if rail_line.get_attribute("data-active") == "true":
+            break
+        time.sleep(0.2)
+    assert rail_line.get_attribute("data-active") == "true"
+
+    _save_screenshot(page, "sel3_shift1_rail_target_para_active")
+
+
+@pytest.mark.e2e
+def test_bulk_line_words_validate_selected_end_to_end(
+    sel_server: SelServer,
+    page: Page,
+) -> None:
+    """LineDetail Words-tab bulk bar: "Validate selected" fires a real mutation.
+
+    Path: hierarchy → select line 1 (block 1, "Foo Bar" — untouched by the
+    other tests in this module-scoped server) → LineDetail Words tab → check
+    word 0 → line-detail-bulk-validate → API confirms word 0 is_validated=True
+    while word 1 is untouched (scope=word batch, not whole-line).
+    """
+    # Precondition: word 0 of line 1 starts unvalidated.
+    lm1 = _poll_line(sel_server.base_url, 1, lambda lm: True)
+    assert lm1 is not None, "line 1 missing from fixture payload"
+    w0 = next(wm for wm in lm1["word_matches"] if wm["word_index"] == 0)
+    assert not w0.get("is_validated"), "fixture word (1,0) unexpectedly already validated"
+
+    _goto_project_page(page, sel_server.project_url)
+    _select_line_via_hierarchy(page, block_nth=1)
+
+    line_detail = page.locator('[data-testid="line-detail"]').first
+    line_detail.wait_for(state="visible", timeout=10_000)
+
+    # Switch to the Words tab and check word 0.
+    page.locator('[data-testid="line-detail-tab-words"]').first.click()
+    checkbox = page.locator('[data-testid="line-words-card-checkbox-0"]').first
+    checkbox.wait_for(state="visible", timeout=10_000)
+    checkbox.check()
+
+    bulk_validate = page.locator('[data-testid="line-detail-bulk-validate"]').first
+    bulk_validate.wait_for(state="visible", timeout=5_000)
+    bulk_validate.click()
+
+    # Real-effect acceptance: the server reflects word (1,0) validated.
+    lm = _poll_line(
+        sel_server.base_url,
+        1,
+        lambda lm: any(wm["word_index"] == 0 and wm.get("is_validated") for wm in lm["word_matches"]),
+    )
+    assert lm is not None, "line 1 missing after bulk validate"
+    w0_after = next(wm for wm in lm["word_matches"] if wm["word_index"] == 0)
+    assert w0_after.get("is_validated") is True, (
+        "Bulk 'Validate selected' did NOT persist is_validated=True for word 0 — "
+        "line-detail-bulk-validate → useValidateWords → POST words/validate-batch "
+        "(scope=word) chain is broken."
+    )
+    # Unchecked sibling word stays untouched (proves scope=word, not line).
+    w1_after = next(wm for wm in lm["word_matches"] if wm["word_index"] == 1)
+    assert not w1_after.get("is_validated"), (
+        "Sibling word 1 was validated too — bulk bar sent a broader scope than the checked selection."
+    )
+
+    _save_screenshot(page, "bulk_line_words_validate_selected")
+
+
+@pytest.mark.e2e
+def test_line_gt_commit_end_to_end(sel_server: SelServer, page: Page) -> None:
+    """GTRow line-scope GT commit: editing line-detail-gt-input persists via set-gt.
+
+    Path: hierarchy → select line 0 → fill line-detail-gt-input → Enter
+    (blur-commit) → API confirms ground_truth_line_text updated. Refutes the
+    06-10 review claim that line-level GT commit has "no endpoint" (route:
+    POST .../lines/{li}/set-gt, api/lines_paragraphs.py).
+    """
+    new_gt = "Howdy World"
+
+    _goto_project_page(page, sel_server.project_url)
+    _select_line_via_hierarchy(page, block_nth=0)
+
+    gt_input = page.locator('[data-testid="line-detail-gt-input"]').first
+    gt_input.wait_for(state="visible", timeout=10_000)
+
+    gt_input.click()
+    gt_input.fill(new_gt)
+    gt_input.press("Enter")  # Enter blurs → commit() → useSetLineGt.mutate
+
+    lm = _poll_line(
+        sel_server.base_url,
+        0,
+        lambda lm: lm.get("ground_truth_line_text") == new_gt,
+    )
+    assert lm is not None, "line 0 missing after GT commit"
+    assert lm.get("ground_truth_line_text") == new_gt, (
+        f"Line GT commit did not persist: expected {new_gt!r}, got "
+        f"{lm.get('ground_truth_line_text')!r}. Chain: line-detail-gt-input blur → "
+        "useSetLineGt → POST lines/0/set-gt → token distribution onto words."
+    )
+
+    _save_screenshot(page, "line_gt_commit_persisted")
