@@ -472,6 +472,11 @@ export default function PageImageCanvas({
     },
     onSelectionModeChange: (m: SelectionMode) => {
       useUiPrefs.setState({ selectionMode: m });
+      // SEL-3 (radio→rail direction): selection-mode changes must also set
+      // railStore.target — the single source of truth ProjectPage reads for
+      // box-select granularity — so the Rail highlight and canvas behavior
+      // stay consistent. ("paragraph" ↔ rail "para"; line/word map 1:1.)
+      railStore.getState().setTarget(m === "paragraph" ? "para" : m);
     },
   });
 

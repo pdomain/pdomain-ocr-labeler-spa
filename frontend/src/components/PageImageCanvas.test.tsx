@@ -877,6 +877,32 @@ describe("PageImageCanvas — viewport hotkeys (spec-21-A8, #304, spec §10)", (
     expect(useUiPrefs.getState().selectionMode).toBe("word");
   });
 
+  // SEL-3 (radio→rail direction): any selection-mode change must also drive
+  // railStore.target so the Rail highlight and the canvas drag-select
+  // granularity (ProjectPage reads railStore.target for box-select) agree.
+  // Spec: docs/specs/2026-06-05-selection-operations-parity.md Slice A —
+  // "header selection-mode radios set railStore.target (single source of
+  // truth the canvas reads)".
+  it("Shift+1 syncs railStore.target to 'para' (SEL-3 radio→rail)", () => {
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
+    expect(railStore.getState().target).toBe("word");
+    fireEvent.keyDown(document, { key: "!", code: "Digit1", shiftKey: true });
+    expect(railStore.getState().target).toBe("para");
+  });
+
+  it("Shift+2 syncs railStore.target to 'line' (SEL-3 radio→rail)", () => {
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
+    fireEvent.keyDown(document, { key: "@", code: "Digit2", shiftKey: true });
+    expect(railStore.getState().target).toBe("line");
+  });
+
+  it("Shift+3 syncs railStore.target to 'word' (SEL-3 radio→rail)", () => {
+    railStore.getState().setTarget("line");
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
+    fireEvent.keyDown(document, { key: "#", code: "Digit3", shiftKey: true });
+    expect(railStore.getState().target).toBe("word");
+  });
+
   it("Shift+W toggles layerVisibility.word (acceptance criterion)", () => {
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
     expect(useUiPrefs.getState().layerVisibility.word).toBe(true);

@@ -51,6 +51,25 @@ describe("useRailHotkeys (Slice 10 / P1.f)", () => {
     expect(railStore.getState().target).toBe("word");
   });
 
+  // SEL-3 conflict guard: Shift+1/2/3 belong to the viewport selection-mode
+  // hotkeys (useViewportHotkeys, spec 21 §10). The plain-digit rail bindings
+  // must NOT fire on shifted digits, otherwise Shift+1 ("paragraph" selection
+  // mode) is immediately overwritten by rail target "block" — observed live
+  // in the SEL-3 e2e (browsers/layouts that report key="1" for Shift+1).
+  it("Shift+'1' does NOT hijack the viewport selection-mode hotkey", () => {
+    setup();
+    railStore.getState().setTarget("para");
+    fireEvent.keyDown(document, { key: "1", shiftKey: true });
+    expect(railStore.getState().target).toBe("para");
+  });
+
+  it("Shift+'3' does NOT change the rail target", () => {
+    setup();
+    railStore.getState().setTarget("word");
+    fireEvent.keyDown(document, { key: "3", shiftKey: true });
+    expect(railStore.getState().target).toBe("word");
+  });
+
   it("'v' sets mode to view", () => {
     setup();
     railStore.getState().setMode("erase");

@@ -54,7 +54,13 @@ export function useRailHotkeys() {
 
       const { setTarget, setMode } = railStore.getState();
 
-      const target = TARGET_KEYS[e.key];
+      // Shift+digit belongs to the viewport selection-mode hotkeys
+      // (useViewportHotkeys "shift+1/2/3", spec 21 §10). Some browser/layout
+      // combinations still report key="1" for Shift+1, which would let the
+      // plain-digit rail binding hijack the selection-mode hotkey and
+      // overwrite railStore.target (observed in the SEL-3 e2e). Mode keys
+      // (v/V, r/R, …) intentionally accept Shift for their uppercase forms.
+      const target = e.shiftKey ? undefined : TARGET_KEYS[e.key];
       if (target) {
         e.preventDefault();
         setTarget(target);
