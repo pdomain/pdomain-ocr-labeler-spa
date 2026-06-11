@@ -1,12 +1,8 @@
 """Integration test: doctr-export-root shared path published on startup.
 
 Verifies that ``bootstrap.build_app`` lifespan startup calls
-``publish_shared_path("doctr-export-root", ...)`` when pdomain_ops is
-available, and does NOT raise when it fails.
-
-Also verifies the degraded-mode contract: when ``pdomain_ops.suite.shared_paths``
-is absent (released 0.9.0 / 0.10.0 ops), the module imports cleanly and
-``build_app()`` + lifespan startup succeed without any advertisement.
+``publish_shared_path("doctr-export-root", ...)`` when pdomain_ops >= 0.11 is
+installed (the minimum pinned version), and does NOT raise when it fails.
 """
 
 from __future__ import annotations
@@ -31,41 +27,23 @@ def _make_settings(tmp_path: Path) -> Settings:
     )
 
 
-def test_bootstrap_import_succeeds_without_shared_paths_module(tmp_path: Path) -> None:
-    """``import pdomain_ocr_labeler_spa.bootstrap`` must not raise ModuleNotFoundError.
+def test_bootstrap_publish_shared_path_importable(tmp_path: Path) -> None:
+    """``publish_shared_path`` is importable from bootstrap (ops >= 0.11 guaranteed).
 
-    This is the primary regression test for the ship-blocker: the unconditional
-    top-level import of ``pdomain_ops.suite.shared_paths`` prevented module
-    collection on any env with released ops (0.9.0/0.10.0), crashing the entire
-    pytest suite at conftest import time.
-
-    Approach: patch ``pdomain_ops.suite`` to make the sub-module appear absent,
-    then reload bootstrap to confirm the guarded import degrades cleanly.
+    Regression guard: previously the import was guarded with try/except because
+    the module was absent in ops 0.9.0/0.10.0.  Now that >=0.11.0 is the
+    minimum pin, the import is unconditional — this test confirms the direct
+    import path works and build_app starts cleanly.
     """
-    import sys
+    from pdomain_ocr_labeler_spa.bootstrap import publish_shared_path
 
-    import pdomain_ocr_labeler_spa.bootstrap as _bootstrap_mod
+    assert callable(publish_shared_path), "publish_shared_path must be a callable"
 
-    # Simulate the absent-module condition by temporarily hiding shared_paths.
-    real_shared_paths = sys.modules.pop("pdomain_ops.suite.shared_paths", None)
-
-    # Also ensure a fresh import of bootstrap sees None (force re-evaluation
-    # of the module-level try/except by saving and restoring publish_shared_path).
-    real_publish = _bootstrap_mod.publish_shared_path
-
-    # Replace with None as the guarded path would produce.
-    _bootstrap_mod.publish_shared_path = None  # type: ignore[assignment]
-
-    try:
-        settings = _make_settings(tmp_path)
-        app = build_app(settings)
-        with TestClient(app) as c:
-            resp = c.get("/healthz")
-            assert resp.status_code == 200, "build_app startup failed when publish_shared_path is None"
-    finally:
-        _bootstrap_mod.publish_shared_path = real_publish  # type: ignore[assignment]
-        if real_shared_paths is not None:
-            sys.modules["pdomain_ops.suite.shared_paths"] = real_shared_paths
+    settings = _make_settings(tmp_path)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        resp = c.get("/healthz")
+        assert resp.status_code == 200, "build_app startup failed"
 
 
 def test_publish_shared_path_called_on_startup(tmp_path: Path) -> None:
