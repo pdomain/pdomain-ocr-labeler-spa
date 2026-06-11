@@ -20,6 +20,7 @@ Issue #247
 
 from __future__ import annotations
 
+import os
 import shutil
 import socket
 import threading
@@ -37,6 +38,29 @@ from pdomain_ocr_labeler_spa.settings import Settings
 
 # Path to the bundled fixtures for the tiny-fixture project.
 _TINY_FIXTURE_SRC = Path(__file__).parent / "fixtures" / "projects" / "tiny-fixture"
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Make the headless browser environment hermetic: drop ``DISPLAY``.
+
+    A stale ``DISPLAY`` — e.g. a devcontainer X-forwarding socket left over
+    from a previous editor session — wedges headless chromium's frame
+    production: ``requestAnimationFrame`` never fires even though the page
+    reports ``visibilityState === "visible"``, so every Playwright
+    actionability check (click, drag, the "stable" wait) burns its full
+    timeout.  The tier then melts down into dozens of unrelated-looking
+    click-timeout failures plus an apparent hang (2026-06-10 incident in
+    pdomain-ocr-simple-gui, reproduced in this workspace; see
+    ``test_environment_sanity.py``).
+
+    Headless chromium needs no X server at all, so drop ``DISPLAY`` entirely
+    unless the developer explicitly asked for a headed browser (e.g.
+    ``make exercise-real HEADED=1``).  Runs in each xdist worker too (workers
+    re-import conftest and re-run configure), so the browser subprocess can
+    never inherit the variable.
+    """
+    if not config.getoption("--headed", default=False):
+        os.environ.pop("DISPLAY", None)
 
 
 @dataclass
