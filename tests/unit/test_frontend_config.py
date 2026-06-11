@@ -181,14 +181,12 @@ def test_vitest_config_dedupes_linked_react_runtime() -> None:
     for pkg in ('"react"', '"react-dom"', '"react-konva"'):
         assert pkg in text, f"vitest.config.ts missing local-link dedupe entry for {pkg}."
     assert "dedupe" in text, "vitest.config.ts must configure resolve.dedupe for local links."
-    assert "react/jsx-dev-runtime" in text, (
-        "vitest.config.ts must alias react/jsx-dev-runtime for pdomain-ui's dev-mode JSX dist."
-    )
     assert "react/jsx-runtime" in text, (
         "vitest.config.ts must alias react/jsx-runtime for linked pdomain-ui React elements."
     )
-    assert "jsx-dev-runtime-shim.ts" in text, (
-        "vitest.config.ts must point the jsx-dev-runtime alias at the local shim."
+    # jsxDEV shim removed: pdomain-ui >=0.7.2 uses production JSX transform.
+    assert "jsx-dev-runtime-shim.ts" not in text, (
+        "jsxDEV shim alias must not be present (pdomain-ui 0.7.2 fixed the dev-mode dist)."
     )
     assert "deps" in text and "inline" in text and "@pdomain\\/pdomain-ui" in text, (
         "vitest.config.ts must inline linked pdomain-ui so aliases apply inside its deps."
