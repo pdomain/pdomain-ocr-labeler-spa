@@ -212,6 +212,41 @@ def _goto_grid(server: SwitchServer, page: Page) -> None:
         page.wait_for_selector('[data-testid="root-projects-grid"]', timeout=15_000)
 
 
+# ---------------------------------------------------------------------------
+# P4.6 — source-root apply must work from the browser on a random port (C09)
+# ---------------------------------------------------------------------------
+
+
+def test_source_root_apply_from_browser_on_random_port(switch_server: SwitchServer, page: Page) -> None:
+    """The browser sends Origin: http://127.0.0.1:<random port> on the apply
+    POST; LocalTrustMiddleware must treat it as same-origin (pre-P4.6 it
+    403'd on any non-default port — e2e never caught it because seeding goes
+    through httpx, which sends no Origin header).
+
+    Re-applies the server's existing source root, so module state is
+    unchanged for the other tests.
+    """
+    _goto_grid(switch_server, page)
+
+    page.get_by_role("button", name="Open source folder").click()
+    dialog = page.locator('[data-testid="source-folder-dialog"]')
+    dialog.wait_for(state="visible", timeout=10_000)
+
+    # Scope inside the dialog — hidden HeaderBar driver stubs duplicate the
+    # source-folder-* testids at page level.
+    path_input = dialog.locator('[data-testid="source-folder-path-input"]')
+    path_input.fill(str(switch_server.source_root))
+    dialog.locator('[data-testid="source-folder-apply-button"]').click()
+
+    # Success: the dialog closes (an error keeps it open with error text).
+    dialog.wait_for(state="hidden", timeout=15_000)
+
+    # And the server accepted the root (no 403): list still serves it.
+    r = httpx.get(f"{switch_server.base_url}/api/projects", timeout=SEED_TIMEOUT)
+    assert r.status_code == 200
+    assert str(switch_server.source_root) in r.json()["projects_root"]
+
+
 def test_delete_project_from_grid(switch_server: SwitchServer, page: Page) -> None:
     """Card menu Delete: confirm dialog -> DELETE -> card gone + dir gone."""
     doomed = "tiny-fixture-del"

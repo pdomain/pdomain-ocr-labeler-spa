@@ -192,3 +192,86 @@ def test_local_trust_does_not_block_source_root_same_origin(client: TestClient, 
     )
     # Must not be 403 from LocalTrustMiddleware (may be 400/422 from validation)
     assert resp.status_code != 403
+
+
+# ---------------------------------------------------------------------------
+# P4.6 (parity P6 / C09) — same-origin requests on NON-default ports.
+#
+# The server binds an arbitrary port (auto-port mode, e2e, multi-instance);
+# the browser then sends Origin: http://127.0.0.1:<that port>. The fixed
+# 8080/5173 allowlist rejected those even though the request was literally
+# same-origin (reproduced live: Origin http://127.0.0.1:8931 +
+# Sec-Fetch-Site: same-origin → 403). The e2e suites couldn't catch it
+# because they seed via httpx (no Origin header).
+# ---------------------------------------------------------------------------
+
+
+def _client_on_port(settings: Settings, port: int) -> TestClient:
+    """TestClient whose base_url (and thus Host header) uses ``port``."""
+    app = build_app(settings)
+    return TestClient(app, base_url=f"http://127.0.0.1:{port}")
+
+
+def test_source_root_same_origin_random_port_with_sec_fetch_site(settings: Settings, tmp_path) -> None:
+    """Browser same-origin POST on a random port: Sec-Fetch-Site: same-origin
+    is unforgeable by web content and must be honored regardless of Origin."""
+    with _client_on_port(settings, 8931) as c:
+        resp = c.post(
+            "/api/projects/source-root",
+            json={"path": str(tmp_path)},
+            headers={
+                "Origin": "http://127.0.0.1:8931",
+                "Sec-Fetch-Site": "same-origin",
+            },
+        )
+        assert resp.status_code != 403, "same-origin request rejected on a non-default port"
+
+
+def test_source_root_origin_matches_host_random_port(settings: Settings, tmp_path) -> None:
+    """Older browsers send Origin without Sec-Fetch-Site: an Origin equal to
+    the request's own host IS same-origin and must pass on any port."""
+    with _client_on_port(settings, 8931) as c:
+        resp = c.post(
+            "/api/projects/source-root",
+            json={"path": str(tmp_path)},
+            headers={"Origin": "http://127.0.0.1:8931"},
+        )
+        assert resp.status_code != 403, "host-matching Origin rejected on a non-default port"
+
+
+def test_fs_ls_origin_matches_host_lan_address(settings: Settings) -> None:
+    """Same-origin is host equality, not a localhost-names allowlist — a LAN
+    bind accessed from another machine is still same-origin."""
+    app = build_app(settings)
+    with TestClient(app, base_url="http://192.168.7.5:9000") as c:
+        resp = c.get(
+            "/api/fs/ls",
+            headers={"Origin": "http://192.168.7.5:9000"},
+        )
+        assert resp.status_code == 200
+
+
+def test_source_root_cross_port_origin_still_rejected(settings: Settings, tmp_path) -> None:
+    """A mismatched-port Origin (without Sec-Fetch-Site) is cross-origin and
+    must still be rejected — the P4.6 fix must not loosen the guard."""
+    with _client_on_port(settings, 8931) as c:
+        resp = c.post(
+            "/api/projects/source-root",
+            json={"path": str(tmp_path)},
+            headers={"Origin": "http://127.0.0.1:9999"},
+        )
+        assert resp.status_code == 403
+
+
+def test_source_root_evil_origin_with_cross_site_fetch_rejected(settings: Settings, tmp_path) -> None:
+    """Cross-site browser fetch on a random port keeps getting 403."""
+    with _client_on_port(settings, 8931) as c:
+        resp = c.post(
+            "/api/projects/source-root",
+            json={"path": str(tmp_path)},
+            headers={
+                "Origin": "https://evil.example.com",
+                "Sec-Fetch-Site": "cross-site",
+            },
+        )
+        assert resp.status_code == 403
