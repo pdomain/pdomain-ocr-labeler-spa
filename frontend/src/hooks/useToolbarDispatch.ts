@@ -102,7 +102,15 @@ export function resolveToolbarRequest(
   const mapping = toolbarMapping[mappingKey];
   if (!mapping) return null;
 
-  const firstLine = selection.selected_lines[0];
+  // P1.7 (B-55/66): word-level selections (selectWord, box-select) leave
+  // selected_lines EMPTY, but the cells that template {lineIndex}
+  // (line-split-after, line-split-selected, word-word-to-line) are enabled
+  // whenever all selected words sit in ONE line — derive that line from the
+  // words so enablement and resolvability agree. Words spanning multiple
+  // lines stay unresolvable (and those cells are disabled for them anyway).
+  const wordLines = new Set(selection.selected_words.map(([li]) => li));
+  const lineFromWords = wordLines.size === 1 ? selection.selected_words[0]![0] : undefined;
+  const firstLine = selection.selected_lines[0] ?? lineFromWords;
   const firstPara = selection.selected_paragraphs[0];
 
   let url = mapping.endpoint
@@ -146,7 +154,9 @@ export function resolveToolbarRequest(
   // S4.2: word-word-to-line sends word_keys (list of [line_idx, word_idx] tuples)
   // so the backend `split_line_with_selected_words` route can resolve the words.
   // The static body in toolbarMapping is intentionally empty for this action.
-  if (mappingKey === "word-word-to-line") {
+  // P1.7: line-split-selected posts the SAME split-with-selected route, whose
+  // body REQUIRES word_keys (422 without) — inject them there too.
+  if (mappingKey === "word-word-to-line" || mappingKey === "line-split-selected") {
     body["word_keys"] = selection.selected_words;
   }
 
@@ -195,7 +205,16 @@ export function useToolbarDispatch(
   const mutation = useMutation<unknown, Error, keyof ButtonStates>({
     mutationFn: (stateKey) => {
       const req = resolveToolbarRequest(stateKey, projectId, pageIndex, selection);
-      if (!req) return Promise.resolve(null);
+      if (!req) {
+        // P1.7 acceptance bar: an enabled cell must NEVER silently no-op.
+        // Rejecting routes through onError → toast, so an unresolvable
+        // click is always surfaced instead of "succeeding" with nothing.
+        return Promise.reject(
+          new Error(
+            "This toolbar action can't resolve a target line from the current selection — select words within a single line (or a line) and try again.",
+          ),
+        );
+      }
       return apiSend(req);
     },
     onSuccess: () => {

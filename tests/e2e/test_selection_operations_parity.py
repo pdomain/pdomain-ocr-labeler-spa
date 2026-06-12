@@ -1181,3 +1181,50 @@ def test_line_detail_word_grid_validate_and_gt_commit(mut_server: SelServer, pag
     )
 
     _save_screenshot(page, "line_detail_word_grid_round_trip")
+
+
+# ─── P1.7 round-trip: toolbar split-after from a word selection (B-55) ────────
+
+
+def _line_count(base_url: str) -> int:
+    r = httpx.get(f"{base_url}/api/projects/{_PROJECT_ID}/pages/0", timeout=10)
+    assert r.status_code == 200
+    return len(r.json().get("line_matches", []))
+
+
+@pytest.mark.e2e
+def test_toolbar_split_after_fires_real_request(mut_server: SelServer, page: Page) -> None:
+    """P1.7 (B-55): toolbar-line-split-after works from a WORD selection.
+
+    The cell is enabled whenever all selected words sit in one line, but the
+    old resolver filled {lineIndex} only from selected_lines — empty for
+    word selections — and resolved null with no request and no toast.
+    Selecting word (0,0) and clicking the cell must now split line 0 after
+    the word ("Hello World" → two lines), persisted via API re-fetch.
+
+    Destructive (structural) — runs on its own ``mut_server``.
+    """
+    assert _line_count(mut_server.base_url) == 2, "fixture should start with 2 lines"
+
+    _goto_project_page(page, mut_server.project_url)
+    _select_first_word_via_hierarchy(page)  # word (0,0) — selected_lines stays empty
+
+    cell = page.locator('[data-testid="toolbar-line-split-after"]').first
+    cell.wait_for(state="visible", timeout=10_000)
+    assert cell.is_enabled(), "toolbar-line-split-after should be enabled for a single-line word selection"
+    cell.click()
+
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if _line_count(mut_server.base_url) == 3:
+            break
+        time.sleep(0.3)
+    count = _line_count(mut_server.base_url)
+    assert count == 3, (
+        f"toolbar-line-split-after did NOT split: page still has {count} lines "
+        "(expected 3). Chain: toolbar cell click → useToolbarDispatch → "
+        "resolveToolbarRequest (line derived from word selection) → "
+        "POST lines/0/split-after-word (B-55 regression)."
+    )
+
+    _save_screenshot(page, "toolbar_split_after_word_selection")
