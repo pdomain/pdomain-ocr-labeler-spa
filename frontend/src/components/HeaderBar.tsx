@@ -124,9 +124,16 @@ export default function HeaderBar({
       data-testid="header-bar"
       className="h-14 flex items-center gap-2 px-3 bg-bg-page border-b border-border-1"
     >
-      {/* Left: logo + "Projects" link */}
+      {/* Left: logo + "Projects" link.
+       *
+       * P4.1 (parity F12 / A-02 / C13): both home links carry
+       * skipSessionRedirect so RootPage renders the project grid instead of
+       * session-redirecting straight back to the loaded project. Without
+       * this, the grid is unreachable while a session exists and the user
+       * cannot switch projects from the UI. */}
       <Link
         to="/"
+        state={{ skipSessionRedirect: true }}
         data-testid="header-logo"
         aria-label="OCR Labeler home"
         className="flex items-center gap-1.5 text-ink-1 no-underline shrink-0"
@@ -142,9 +149,11 @@ export default function HeaderBar({
         <span className="text-heading font-semibold text-ink-1 hidden sm:inline">OCR Labeler</span>
       </Link>
 
-      {/* "Projects" breadcrumb link — always visible, navigates back to / */}
+      {/* "Projects" breadcrumb link — always visible, navigates back to /
+       * with skipSessionRedirect so the project grid actually renders (P4.1). */}
       <Link
         to="/"
+        state={{ skipSessionRedirect: true }}
         data-testid="projects-home-link"
         className="text-body text-ink-2 hover:text-ink-1 no-underline shrink-0 transition-colors"
       >

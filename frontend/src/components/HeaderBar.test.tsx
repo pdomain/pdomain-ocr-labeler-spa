@@ -13,7 +13,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import HeaderBar from "./HeaderBar";
 import type { PageMetrics } from "./HeaderBar";
@@ -31,6 +31,20 @@ interface RenderOpts {
   projectName?: string | null;
   pageMetrics?: PageMetrics | null;
   projectRoot?: string | null;
+}
+
+/** Renders current pathname + navigation state so tests can assert on both
+ * after a Link click (LocationSpy pattern — see agent memory: mocking
+ * react-router-dom breaks useParams; read useLocation() instead). */
+function LocationSpy() {
+  const location = useLocation();
+  const state = location.state as { skipSessionRedirect?: boolean } | null;
+  return (
+    <div data-testid="location-spy">
+      path={location.pathname};skipSessionRedirect=
+      {state?.skipSessionRedirect ? "true" : "false"}
+    </div>
+  );
 }
 
 function renderHeaderBar({
@@ -52,6 +66,7 @@ function renderHeaderBar({
           {...(pageMetrics !== undefined && { pageMetrics })}
           {...(projectRoot !== undefined && { projectRoot })}
         />
+        <LocationSpy />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -83,6 +98,26 @@ describe("HeaderBar: structure", () => {
     expect(link.tagName.toLowerCase()).toBe("a");
     expect(link).toHaveAttribute("href", "/");
     expect(link).toHaveTextContent("Projects");
+  });
+
+  it("projects-home-link navigation carries skipSessionRedirect state (P4.1 / A-02)", async () => {
+    // Without skipSessionRedirect, RootPage's session-redirect bounces the
+    // user straight back to the loaded project — the grid is unreachable.
+    const user = userEvent.setup();
+    renderHeaderBar({ route: "/projects/p1/pages/pageno/1" });
+    await user.click(screen.getByTestId("projects-home-link"));
+    const spy = screen.getByTestId("location-spy");
+    expect(spy).toHaveTextContent("path=/");
+    expect(spy).toHaveTextContent("skipSessionRedirect=true");
+  });
+
+  it("header-logo navigation carries skipSessionRedirect state (P4.1 / A-02)", async () => {
+    const user = userEvent.setup();
+    renderHeaderBar({ route: "/projects/p1/pages/pageno/1" });
+    await user.click(screen.getByTestId("header-logo"));
+    const spy = screen.getByTestId("location-spy");
+    expect(spy).toHaveTextContent("path=/");
+    expect(spy).toHaveTextContent("skipSessionRedirect=true");
   });
 
   it("has h-14 height class (56px)", async () => {
