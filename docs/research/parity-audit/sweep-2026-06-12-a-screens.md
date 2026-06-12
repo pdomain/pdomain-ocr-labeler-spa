@@ -98,3 +98,29 @@ N-A = not applicable (capability retired/moved by design with CT sign-off).
 | A-58 | sr-only status/error announcers | PASS | `[role=status][aria-live=polite]` and `[role=alert][aria-live=assertive]` both present. |
 | A-59 | Alt+Arrow breadcrumb hierarchy walk | PARTIAL | Alt+ArrowDown line→word and Alt+ArrowUp word→line verified live. Walking above line (para/block) left the right panel with no detail component visible (empty-state), and Alt+ArrowRight from there showed none — upper-level walk needs a closer look (possibly fixture-shape dependent). |
 | A-60 | Busy overlay during long mutations | NOT-TESTED | Reload-OCR (cold CPU OCR) deliberately not exercised in this sweep; `project-loading-overlay` behavior verified throughout. Dim C owns job-progress UX. |
+
+## Summary
+
+**Counts (60 rows):** PASS 47 (incl. 5 re-mapped) · PARTIAL 7 · FAIL 5 · N-A/NOT-TESTED 1.
+
+**FAIL rows:** A-02 (project list unreachable while a session exists — Projects link bounces), A-18-sub (visible Go button no-op; row itself PARTIAL), A-48 (OCR-config modal mouse-dead, overlay z-bug), A-54 (Mod+, / Mod+O / Mod+J advertised but unbound), A-41-doc / A-55-doc (driver-contract lists testids of dead surfaces — `selection-mode-*`, `project-select`/`load-project-button`/`source-folder-button`, `word-edit-dialog` + `dialog-*`).
+
+**PARTIAL rows:** A-07 (status filter chips cosmetic), A-18 (Go button), A-36 (collapsed drawer expand chevron 0-width), A-38b (right panel re-expand only via new selection), A-45 (`e` hotkey collision erase+export), A-49 (Export dialog mouse-dead content), A-59 (breadcrumb walk above line).
+
+**Confirmed contract-doc gaps (update `docs/architecture/13-driver-contract.md`):**
+
+1. §2.1 `project-select` / `load-project-button` / `source-folder-button` — `ProjectLoadControls.tsx` is never mounted (dead code); capability re-mapped to RootPage card grid + grid "Open source folder" button (which has **no testid**).
+2. `selection-mode-paragraph/line/word` (lines 171-173) — ImageTabsHeader dead since IS-4; DOM count 0. This is exactly why `tests/e2e/test_parity_chrome.py:79` (`test_paragraph_mode_selection_opens_paragraph_detail`, line 100 locator) is red. Current surface: rail targets + Shift+1/2/3.
+3. Word-edit dialog block (lines 265-283) — WordEditDialog deleted in `c5ddd35`; ~20 `dialog-*` testids and `word-edit-dialog` gone; `edit-word-button-{l}-{w}` 0 in DOM.
+4. Duplicate-testid hazard: HeaderBar hidden stubs (`data-testid-stub="true"`) shadow real `source-folder-*` (and nav) controls — unscoped selectors resolve to invisible stubs.
+
+**New bugs found this sweep (not in PARITY-GAP.md):**
+
+- **Dialog overlay z-stacking regression** — OCR-config modal and Export dialog content render *below* the `.dialog-overlay` (z-49 vs z-auto) → fully mouse-dead; dialogs that pass `fixed … z-50` classNames are fine. Likely from the pdomain-ui Dialog overlay-as-sibling change (0.7.x).
+- **Go button no-op** — `ProjectNavigationControls.tsx:122-124` onBlur clears the typed value before the button's onClick reads it.
+- **`e` hotkey collision** — hidden `PageActions` (`PageActions.tsx:132`, export) + `useRailHotkeys` (erase) both fire on one keypress.
+- **Project list unreachable with an active session** — `RootPage.tsx:501` session redirect has no UI bypass; "Projects" link bounces straight back; switching projects via the grid is impossible in normal use.
+- **Collapsed drawer expand chevron 0-width** (`Drawer.tsx:187-199`); Rail "Bulk" is the only mouse path back.
+- **Advertised-but-dead hotkeys** Mod+, (BUG-KBD-1, known) plus Mod+O and Mod+J (new).
+- **Konva console error spam** — `Konva has no node with the type div` ≥5× per project page load.
+- Minor: overflow menu ignores Escape; `project-root-label` briefly absent until projectQ settles.
