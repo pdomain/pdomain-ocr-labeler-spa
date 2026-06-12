@@ -37,43 +37,60 @@ pytestmark = pytest.mark.e2e
 # ---------------------------------------------------------------------------
 
 
-def _minimal_png() -> bytes:
-    """Build a 1x1 white RGB PNG with no external libraries."""
+def _minimal_png(width: int = 64, height: int = 32) -> bytes:
+    """Build a small white RGB PNG with no external libraries."""
 
     def _chunk(name: bytes, data: bytes) -> bytes:
         c = struct.pack(">I", len(data)) + name + data
         return c + struct.pack(">I", zlib.crc32(name + data) & 0xFFFFFFFF)
 
     sig = b"\x89PNG\r\n\x1a\n"
-    ihdr = _chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
-    raw_row = b"\x00\xff\xff\xff"
-    idat = _chunk(b"IDAT", zlib.compress(raw_row))
+    ihdr = _chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+    raw = (b"\x00" + b"\xff" * (width * 3)) * height
+    idat = _chunk(b"IDAT", zlib.compress(raw))
     iend = _chunk(b"IEND", b"")
     return sig + ihdr + idat + iend
 
 
 def _seed_validated_page(data_root: Path, project_id: str) -> None:
-    """Write a minimal validated envelope + PNG image at page index 0."""
+    """Write a validated legacy envelope + PNG image at page index 0.
+
+    The page payload must be a REAL pdomain-book-tools page dict (the
+    ``items`` Block tree) — ``Page.from_dict`` ignores flat ``words``/
+    ``lines`` keys, which would leave ``page.words`` empty and the page
+    permanently below the all-words-validated export gate.
+    """
     project_dir = data_root / "labeled-projects" / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
 
     img_path = project_dir / f"{project_id}_000.png"
     img_path.write_bytes(_minimal_png())
 
+    def _bb(x0: int, y0: int, x1: int, y1: int) -> dict:
+        return {
+            "top_left": {"x": x0, "y": y0},
+            "bottom_right": {"x": x1, "y": y1},
+            "is_normalized": False,
+        }
+
     word = {
+        "type": "Word",
         "text": "test",
         "ground_truth_text": "test",
         "word_labels": ["validated"],
-        "bounding_box": {"x": 0.1, "y": 0.1, "width": 0.2, "height": 0.05},
-        "ground_truth_bounding_box": {"x": 0.1, "y": 0.1, "width": 0.2, "height": 0.05},
+        "bounding_box": _bb(2, 2, 30, 20),
     }
+    line = {"type": "Block", "child_type": "WORDS", "items": [word], "bounding_box": _bb(2, 2, 30, 20)}
+    para = {"type": "Block", "child_type": "BLOCKS", "items": [line], "bounding_box": _bb(2, 2, 30, 20)}
     envelope = {
         "schema": {"name": "pd_ocr_labeler.user_page", "version": "2.1"},
         "payload": {
             "page": {
-                "words": [word],
-                "lines": [{"words": [word]}],
-                "blocks": [],
+                "width": 64,
+                "height": 32,
+                "page_index": 0,
+                "bounding_box": _bb(0, 0, 64, 32),
+                "items": [para],
             }
         },
     }
@@ -153,6 +170,64 @@ def test_export_manifest_created_on_server(live_server: LiveServer) -> None:
     assert project_id in data.get("projects", {}), (
         f"project '{project_id}' not in manifest; projects present: {list(data.get('projects', {}).keys())}"
     )
+    # P1.2 guard (sweep C35): the export must actually export pages — a
+    # "successful" 0-page export is the silent-failure mode this slice fixed.
+    # This run exercises the legacy labeled-projects fallback lane (C56).
+    page_count = data["projects"][project_id].get("page_count", 0)
+    assert page_count >= 1, (
+        f"export reported success but exported {page_count} pages — "
+        "the legacy labeled-projects fallback lane regressed (C35/C56)"
+    )
+
+
+def test_export_current_page_from_event_store_nonzero(exercise_server) -> None:
+    """Store-lane export (PARITY-GAP P1.2 / sweep C35): a page that exists ONLY
+    in the event store (the exercise-fixture seed — no labeled-projects file)
+    must export real recognition crops + labels to disk.
+
+    Uses ``scope=current`` so the run does not depend on validation flags
+    (P1.1 is fixing validation persistence in parallel); the point here is
+    that the export handler resolves the page from the store head at all.
+    """
+    base_url = exercise_server.base_url
+    data_root = Path(str(exercise_server.settings.data_root))
+    project_id = "exercise-fixture"
+
+    resp = httpx.post(
+        f"{base_url}/api/projects/{project_id}/export",
+        json={"scope": "current", "page_index": 0},
+        timeout=10,
+    )
+    assert resp.status_code == 202, f"unexpected status {resp.status_code}: {resp.text}"
+    job_id = resp.json()["job_id"]
+
+    deadline = time.monotonic() + 60.0
+    completed = False
+    events_text = ""
+    while time.monotonic() < deadline:
+        events_resp = httpx.get(
+            f"{base_url}/api/jobs/{job_id}/events",
+            timeout=10,
+            headers={"Accept": "text/event-stream"},
+        )
+        events_text = events_resp.text
+        if "complete" in events_text or "error" in events_text:
+            completed = True
+            break
+        time.sleep(0.5)
+    assert completed, f"export job {job_id} did not complete within 60s"
+
+    labels_path = data_root / "doctr-export" / project_id / "all" / "recognition" / "labels.json"
+    assert labels_path.exists(), (
+        f"no recognition labels.json at {labels_path} — store-first export "
+        f"resolution regressed (C35); events: {events_text[:300]}"
+    )
+    labels = json.loads(labels_path.read_text())
+    assert len(labels) > 0, "recognition labels.json is empty — exported 0 words from the store head"
+
+    images_dir = data_root / "doctr-export" / project_id / "all" / "recognition" / "images"
+    crops = list(images_dir.glob("*.png")) if images_dir.exists() else []
+    assert len(crops) > 0, f"no recognition crops written under {images_dir}"
 
 
 def test_send_to_trainer_hidden_when_not_installed(page: Page, live_server: LiveServer) -> None:
