@@ -436,10 +436,22 @@ class LocalDoctrPageLoader:
         document_module = importlib.import_module("pdomain_book_tools.ocr.document")
         # pdomain-book-tools ≥0.17.1 returns (Document, rotation_degrees) as a
         # tuple; older versions returned Document directly. Unpack defensively.
+        #
+        # auto_rotate=False — parity-audit C28 link 4: book-tools defaults to
+        # auto_rotate=True, which probes 90/180/270 and returns the Document in
+        # the internally DE-ROTATED image space. That silently undoes a manual
+        # rotate (the rotate job rotates pixels on disk, then re-OCRs; the
+        # internal probe rotates them right back for OCR purposes), so served
+        # word bboxes land in the pre-rotate coordinate space and misalign with
+        # the on-disk image. Loader contract: OCR coordinates are ALWAYS in the
+        # on-disk pixel space; rotation is an explicit pixels-first operation
+        # (rotate_page / auto_rotate_all jobs), never an implicit OCR-time
+        # coordinate transform.
         ocr_result = document_module.Document.from_image_ocr_via_doctr(
             image_path,
             source_identifier=image_path.name,
             predictor=predictor,
+            auto_rotate=False,
         )
         doc = ocr_result[0] if isinstance(ocr_result, tuple) else ocr_result
         # Legacy parity (ocr_service.py:80, page_operations.py:351):

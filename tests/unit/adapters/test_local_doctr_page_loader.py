@@ -78,12 +78,16 @@ def stub_pdomain_book_tools(monkeypatch: pytest.MonkeyPatch):
         *,
         source_identifier: str,
         predictor: Any,
+        **kwargs: Any,
     ) -> _FakeDocument:
         calls.append(
             {
                 "image_path": image_path,
                 "source_identifier": source_identifier,
                 "predictor": predictor,
+                # Record extra kwargs (e.g. auto_rotate) so tests can assert
+                # the wire contract with pdomain-book-tools explicitly.
+                **kwargs,
             }
         )
         return _FakeDocument(pages=[_FakePage(source_identifier=source_identifier)])
@@ -146,6 +150,38 @@ def test_loader_run_ocr_passes_image_path_and_source_identifier(
     expected_path = project.image_paths[0]
     assert call["image_path"] == expected_path
     assert call["source_identifier"] == expected_path.name
+
+
+def test_loader_run_ocr_disables_booktools_internal_auto_rotate(
+    tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
+) -> None:
+    """``run_ocr`` must pass ``auto_rotate=False`` to ``from_image_ocr_via_doctr``.
+
+    Parity-audit C28 link 4 root cause: pdomain-book-tools ≥0.17.1 defaults
+    ``auto_rotate=True`` — it probes 90/180/270 and returns the Document in the
+    internally DE-ROTATED image space, discarding the rotation. After a manual
+    rotate job (which rotates pixels on disk first), the internal auto-rotate
+    exactly undoes the user's rotation, so served word bboxes land in the
+    pre-rotate coordinate space and misalign with the on-disk image.
+
+    The page loader's contract is: OCR coordinates are ALWAYS in the on-disk
+    pixel space. Rotation is an explicit pixels-first operation (rotate /
+    auto-rotate-all jobs), never an implicit OCR-time coordinate transform.
+    """
+    project = _make_project(tmp_path)
+    loader = LocalDoctrPageLoader(
+        project=project,
+        predictor_cache=stub_predictor_cache,
+        detection_key="stock",
+        recognition_key="stock",
+        hf_revision=None,
+    )
+    loader.run_ocr(0)
+    call = stub_pdomain_book_tools.calls[0]
+    assert call.get("auto_rotate") is False, (
+        "run_ocr must call from_image_ocr_via_doctr with auto_rotate=False; "
+        f"recorded call kwargs: {sorted(call)}"
+    )
 
 
 def test_loader_run_ocr_uses_predictor_from_cache(
