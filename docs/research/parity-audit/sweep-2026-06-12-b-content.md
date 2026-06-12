@@ -76,6 +76,26 @@ mutating op. Acceptance = VISIBLE + ENABLED + real EFFECT (persisted).
 | 46 | CharFixer per-char bbox apply | `charfixer-apply` | PARTIAL (not fully driven) | Section + apply button render (disabled until canvas drag marks dirty); bbox-drag path not driven this sweep |
 | 47 | CharFixer unicode picker entry | `char-fixer-open-picker-button` | PASS (visible) | Button present + visible |
 
+| 48 | Word merge prev/next (legacy #32/#33) | WordDetail StructureSection `structure-merge-next` + confirm | PASS | "right"+"here" → "righthere" persisted (first run mis-scored by counting `word_index=None` GT-orphan slots) |
+| 49 | Word split at picked position (legacy #40/#42) | StructureSection SplitPicker + `structure-split-button` | PASS | Split "jumps" after pos 2 → `ju`/`mps` persisted. NOTE: SplitPicker char buttons have NO testids (inventory's `glyph-panel-charspan-cell-*` claim is stale — that's GlyphAnnotationPanel) |
+| 50 | Inter-word gap slider (new-only) | `structure-gap-slider` | PASS | Next word's bbox.x moved 446→453 after slider drag, persisted |
+| 51 | Line split-after-word (legacy #36) | LineDetail `line-split-after-word` | PARTIAL | Works (lines+1) but hardcoded `wordIndex: 0` — titled "after its first word"; legacy let you pick the word |
+| 52 | Split line by selected words (legacy #37) | LineDetail `line-split-by-words` | PARTIAL | Works but hardcoded `wordKeys [[li,0]]` — extracts first word only |
+| 53 | Merge lines prev/next (legacy #24) | LineDetail `line-detail-merge-next` | PASS | Split line re-merged, line count restored |
+| 54 | Merge selected lines (toolbar, legacy #24) | `toolbar-line-merge` after 2-line DRAG select | PASS | `POST lines/merge` 200, lines 5→4 |
+| 55 | Toolbar line split-after / split-selected / W→L cells | `toolbar-line-split-after`, `toolbar-line-split-selected`, `toolbar-word-w-to-l` | **FAIL** | All three ENABLED with a word selection but click fires ZERO network requests: endpoints template `{lineIndex}` resolved from `selection.selected_lines[0]` (useToolbarDispatch.ts:113) which is empty for word-level selections → `resolveToolbarRequest` returns null → silent no-op, no toast |
+| 56 | Ctrl-click additive at LINE level | Canvas | **FAIL** | Ctrl-click a second line REPLACES selection (no multi-line-detail); only drag-box accumulates lines. Word-level ctrl-click additive works (row 4) |
+| 57 | Form new paragraph from selected words (legacy #39) | `toolbar-word-to-para` | PASS | 2 selected words moved to a new paragraph (paras 3→4), persisted |
+| 58 | Split paragraph after line (legacy #27) | ParagraphDetail `para-split-after-line` | PARTIAL | Works (paras+1) but `afterLineIndex: 0` hardcoded — always splits after the para's first line |
+| 59 | Merge paragraphs (legacy #29) | ParagraphDetail `para-merge` | PASS | Split para re-merged, count restored |
+| 60 | Delete paragraph (legacy #30) | ParagraphDetail `para-delete` + confirm | PASS | Real route `/paragraphs/{pi}/delete`; lines removed |
+| 61 | Delete word (legacy #34/#35) | WordFooter `word-footer-delete` + ConfirmDialog | **FAIL** | Confirm dialog shows, POST fires to page-scope `/delete` — an explicit BACKEND STUB (lines_paragraphs.py:1764 "Stays a stub", returns empty payload, HTTP 200) — word NOT deleted, no error shown |
+| 62 | Delete line from LineCard button | LineDetail Line tab + MultiLineDetail cards (`line-delete-button-{n}`) | **FAIL** | `useDeleteLine` (useLineMutations.ts:105) also POSTs the stub `/delete` → silent no-op on both surfaces (confirmed live, lines unchanged) |
+| 63 | Delete selected lines (toolbar, legacy #25) | `toolbar-line-delete` | PASS | Uses real `lines/delete-batch`; line removed |
+| 64 | Delete selected words (bulk) | MultiWordDetail `multi-word-delete` + confirm | PASS | Uses real `words/delete-batch`; 2 words removed |
+| 65 | ML-7 bulk Delete lines | `multi-line-bulk-delete` + confirm | **FAIL** | Loops `useDeleteLine` → stub `/delete` → confirm then nothing deleted |
+| 66 | Form new LINE from selected words (legacy #38, slice S4) | `toolbar-word-w-to-l` | **FAIL** | Same resolver null as row 55 — S4 implemented the backend route but the toolbar cell can never reach it from a word selection |
+
 (further rows appended as verified)
 
 ## New findings (not in inventories)
@@ -106,3 +126,22 @@ mutating op. Acceptance = VISIBLE + ENABLED + real EFFECT (persisted).
   via chip × (`_clear_word_tag` → `clear_style_on_word`). Component removal
   is fine (has `enabled:false`). Needs a backend route + frontend off-state
   wiring.
+- **Page-scope `/delete` (and `/merge`) are still backend STUBS** —
+  lines_paragraphs.py:1764/1785, docstring "Stays a stub… D2/D3", return
+  `_stub_page_payload` with HTTP 200. Frontend callers that hit them:
+  `WordFooter` local deleteWord, `useDeleteWord` (useWordMutations.ts:395),
+  `useDeleteLine` (useLineMutations.ts:105). Result: **Delete word
+  (WordFooter), Delete line (LineDetail LineCard), MultiLineDetail card
+  Delete and bulk Delete all show a ConfirmDialog and then silently delete
+  nothing.** Working delete paths use the real routes: `lines/delete-batch`
+  / `paragraphs/delete-batch` (toolbar), `words/delete-batch`
+  (MultiWordDetail/BulkWordActions), `/paragraphs/{pi}/delete`
+  (ParagraphDetail). Fix = point useDeleteWord/useDeleteLine at the batch
+  routes (or implement D2/D3).
+- **Toolbar resolver fails silently on null.** `useToolbarDispatch`'s
+  `resolveToolbarRequest` returns null when a templated `{lineIndex}` can't
+  be filled, and the mutation then resolves `null` with **no toast and no
+  request** — while the grid cell is enabled. Affects `line-split-after`,
+  `line-split-selected`, `word-w-to-l` whenever the selection is word-level
+  (`selected_lines` empty). Cell-enablement logic and resolver requirements
+  disagree.
