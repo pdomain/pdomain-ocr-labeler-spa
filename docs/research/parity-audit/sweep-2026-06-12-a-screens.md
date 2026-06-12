@@ -49,3 +49,27 @@ N-A = not applicable (capability retired/moved by design with CT sign-off).
 | A-26 | Header project-name breadcrumb chip | PASS | `header-project-name` = "exercise-fixture". |
 | A-27 | Total-pages label | PASS | `nav-page-total-label` = "/ 8". |
 
+
+## Batch 3 — Rail, SEL-3, layers, drawer, right panel, QuickSearch, hotkey help
+
+| # | Capability | Verdict | Evidence |
+|---|---|---|---|
+| A-28 | Rail structure (4 mode cards, 4 target swatches, 4 layer toggles, Bulk + Hotkeys footer) | PASS | All of `rail-mode-{view,region,annotate,erase}`, `rail-target-{block,para,line,word}`, `rail-layer-{block,para,line,word}`, `rail-bulk-button`, `rail-hotkeys-button` visible. |
+| A-29 | Rail target click sets active granularity | PASS | Click `rail-target-line`/`-word` → `data-active="true"` moves accordingly (AG-4 syncs `selectionMode`). |
+| A-30 | SEL-3 Shift+1/2/3 selection-mode hotkeys sync rail | PASS | Shift+1 → para active, Shift+2 → line, Shift+3 → word (radio→rail direction of d0ba846 confirmed live). |
+| A-31 | Rail digit hotkeys 1/2/3/4 (target) | PASS | `1` → block active, `3` → line active. |
+| A-32 | Rail mode hotkeys V/R/A + mode click | PASS | `r`→region, `v`→view, `a`→annotate active; clicking the View card also works. |
+| A-33 | Layer toggle click hides/shows overlay layer | PASS | `rail-layer-block` `aria-pressed` true→false on click, restored on second click. |
+| A-34 | Shift+P/L/W layer visibility hotkeys | PASS | Shift+P flipped `rail-layer-para` aria-pressed. |
+| A-35 | Rail "Bulk" footer button opens drawer worklist | PASS | Worklist visible after click (also reopens a collapsed drawer — see A-36). |
+| A-36 | Drawer tabs + collapse/expand | PARTIAL | Worklist/Hierarchy/Text tabs all switch correctly. **NEW BUG: collapsed drawer is 1px wide and `drawer-expand-btn` has width 0 — invisible and mouse-unclickable** (`Drawer.tsx:187-199` renders it, but the collapsed container gets no width; `project-worklist-column` keeps 32px but the drawer div doesn't fill it). Workaround exists: Rail "Bulk" button reopens. |
+| A-37 | Worklist row click → right-panel line detail | PASS | Click `worklist-row-1` → `line-detail` visible. (Rows are indexed by `line_index`, may not start at 0.) |
+| A-38 | Right-panel header breadcrumb chips | PASS | `breadcrumb`, `breadcrumb-chip-root` present in `right-panel-header`. |
+| A-38b | Right-panel collapse / re-expand | PARTIAL | `right-panel-collapse` hides the body and the detail column collapses to width 0 with **no expand control**. Re-expand only happens implicitly via a new selection (worklist row or canvas click — STB-4 `Worklist.tsx:428`, `PageImageCanvas.tsx:589`). No-selection-change path back is keyboard/selection only. |
+| A-39 | QuickSearch: Mod+K focus + worklist filter (S6.4) | PASS | Ctrl+K focuses `quick-search-input`; typing junk filtered visible worklist rows 6 → 0; clearing restores. |
+| A-40 | Hotkey help (`?` opens, Escape closes, Rail button opens) | PASS | All three paths verified; dialog titled "Keyboard Shortcuts". |
+| A-41 | Legacy selection-mode radios (`selection-mode-paragraph/line/word`) | PASS (re-mapped) | Capability = Shift+1/2/3 + rail targets (A-30/A-29). DOM counts are **0** — ImageTabsHeader is dead code since IS-4, but `13-driver-contract.md:171-173` still lists the testids. **Contract-doc gap; explains the pre-existing red in `test_paragraph_mode_selection_opens_paragraph_detail`.** |
+| A-42 | Legacy TextTabs (Matches / Ground Truth / OCR right pane) | PASS (re-mapped) | GT/OCR full-page text → drawer **Text** tab (S2.2 `PlaintextGtOcrView`, shows real page text); Matches list → drawer Worklist. Old `text-pane`/`text-tabs` stubs remain hidden (count 1, visible False); `matches-tab`/`ground-truth-tab`/`ocr-tab` testids no longer exist. |
+| A-43 | ToolbarActionGrid visible above canvas | PASS | `toolbar-action-grid` count 1, visible (v0.2.0 claim re-confirmed at d0ba846). |
+| A-44 | Theme persistence across reload | PASS | Light selected → reload → `data-theme="light"` retained (localStorage). |
+| A-45 | Erase-mode hotkey `e` | PARTIAL | `e` activates rail erase mode, **but ALSO opens the Export dialog**: hidden `PageActions` (IS-2 stub mount) still registers `useHotkey("e", onExport)` (`PageActions.tsx:132`) alongside `useRailHotkeys` MODE_KEYS `e→erase`. Verified live: one keypress → erase active AND "Export Training Data" dialog open. **NEW BUG (hotkey collision).** Shift+E erase-canvas toggle is separate (viewport hotkeys) and untested here (dim B). |
