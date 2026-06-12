@@ -31,8 +31,15 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator, model_validator
 
 from ..core.jobs import JobRunner
+from ..core.persistence.page_store import LabelerPageStore
+from ..core.project_state import ProjectState
 from ..settings import Settings
-from .dependencies import get_job_runner, get_settings
+from .dependencies import (
+    get_job_runner,
+    get_page_store_optional,
+    get_project_state,
+    get_settings,
+)
 
 router = APIRouter(prefix="/api/projects", tags=["export"])
 
@@ -190,26 +197,26 @@ def start_export(
     )
 
 
-def _collect_style_labels(data_root: Path, project_id: str) -> list[str]:
+def _collect_style_labels(data_root: Path, project_id: str, store: object = None) -> list[str]:
     """Return the distinct style labels across saved, fully-validated pages.
 
-    Reads the saved (labeled) page envelopes from disk only — never
-    in-memory state — so the style list is stable across page loads
-    (spec: ``docs/archive/specs/2026-05-12-export-design.md`` lines 119-120).
-    Reuses the export handler's envelope-loading and validation helpers so
-    the scope of "validated page" matches the export pipeline exactly.
+    Store-first (PARITY-GAP P1.2 / sweep C37): pages are resolved from the
+    event store head — the content Save actually wrote — with the legacy
+    ``labeled-projects/`` envelope as a per-page fallback only when no store
+    head exists (C56 compat). Reuses the export handler's resolver so the
+    scope of "validated page" matches the export pipeline exactly.
     """
     # Imported lazily to mirror the handler's deferred ``pdomain_book_tools``
     # import and to keep this module importable in stubbed test envs.
     from ..core.jobs.handlers.export import (
-        _load_page_from_envelope_file,
         _page_is_validated,
-        _scan_labeled_pages,
+        load_export_page,
+        resolve_export_page_refs,
     )
 
     labels: set[str] = set()
-    for json_path in _scan_labeled_pages(data_root, project_id):
-        page = _load_page_from_envelope_file(json_path)
+    for ref in resolve_export_page_refs(data_root, project_id, store):
+        page = load_export_page(ref, store)
         if page is None or not _page_is_validated(page):
             continue
         for word in getattr(page, "words", []) or []:
@@ -223,24 +230,33 @@ def _collect_style_labels(data_root: Path, project_id: str) -> list[str]:
 def list_export_styles(
     project_id: str,
     settings: Settings = Depends(get_settings),
+    project_state: ProjectState = Depends(get_project_state),
+    page_store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``GET /api/projects/{id}/export/styles`` — distinct style labels.
 
     Spec: ``docs/archive/specs/2026-05-12-export-design.md`` lines 43-44, 119-120
     ("Switching to 'All Validated Pages' fires GET .../export/styles" to
     enumerate distinct style labels across saved validated pages, querying
-    only saved page envelopes — not in-memory state).
+    only saved page state — not in-memory mutations).
+
+    Store-first (sweep C37): styles come from the event-store heads (what
+    Save wrote), falling back to legacy envelopes for store-headless pages.
+    The app's single ``page_store`` belongs to the *loaded* project; it is
+    only consulted when the loaded project's id matches ``project_id``.
 
     Returns a JSON array of distinct style label strings present in
     saved validated pages for this project, sorted alphabetically.  When
-    no labeled pages exist (or none are fully validated) the array is
+    no saved pages exist (or none are fully validated) the array is
     empty and callers render only the "All (no style filter)" option.
 
     Issue #225 acceptance: route registered, returns 200 JSON array.
     Lane E1: array is populated from the saved pages' word style labels.
     """
     data_root = Path(settings.data_root)
-    return JSONResponse(status_code=200, content=_collect_style_labels(data_root, project_id))
+    loaded = project_state.loaded_project
+    store = page_store if (loaded is not None and loaded.project_id == project_id) else None
+    return JSONResponse(status_code=200, content=_collect_style_labels(data_root, project_id, store))
 
 
 @router.get("/{project_id}/exports", response_model=list[ExportManifest])

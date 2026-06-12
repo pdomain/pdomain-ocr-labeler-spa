@@ -40,11 +40,15 @@ Key differences:
 ``WordFilter`` mirrors the legacy ``pd_ocr_labeler.operations.export.
 doctr_export.WordFilter`` exactly (frozenset, matches method).
 
-### Page resolution for "all_validated" scope
+### Page resolution (store-first — PARITY-GAP P1.2)
 
-Scans ``<data_root>/labeled-projects/<project_id>/`` for ``*.json`` files
-that parse as valid envelopes.  A page is considered validated when every
-word in the envelope carries ``"validated"`` in its ``word_labels`` list.
+Pages are resolved from the **event store** head (``ProjectAggregate``
+index→page_id map, head provenance content blob — the content Save wrote
+via ``save_page_content_to_store``), with the legacy
+``<data_root>/labeled-projects/<project_id>/`` envelope as a per-page
+fallback ONLY when no store head exists for that index (C56 read-compat).
+A page is considered validated when every word carries ``"validated"`` in
+its ``word_labels`` list.
 """
 
 from __future__ import annotations
@@ -177,6 +181,129 @@ def _resolve_image_path(json_path: Path) -> Path | None:
         candidate = json_path.with_suffix(ext)
         if candidate.exists():
             return candidate
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Store-first page resolution (PARITY-GAP P1.2 — sweep C35/C36/C37)
+# ---------------------------------------------------------------------------
+#
+# Save writes ONLY the event store (``save_page_content_to_store``); the
+# ``labeled-projects/`` lane is retired. Export therefore resolves pages
+# **store-first**: the project's ``ProjectAggregate`` (same ``uuid5``
+# resolution as ``LocalDoctrPageLoader.load_labeled``) yields the
+# index→page_id map, and each page's content is the head provenance blob.
+# A legacy ``labeled-projects/`` envelope is consumed ONLY for pages with
+# no store head (C56 read-compat for pre-migration data).
+
+
+@dataclass(frozen=True)
+class ExportPageRef:
+    """One exportable page: store head (preferred) and/or legacy envelope.
+
+    ``page_index`` is ``-1`` for legacy files whose stem doesn't carry a
+    parsable index (they are still exported, matching the old glob scan).
+    """
+
+    page_index: int
+    prefix: str
+    page_id: Any | None = None  # UUID of the store head (preferred lane)
+    json_path: Path | None = None  # legacy envelope fallback (C56)
+
+
+def _store_page_ids(store: Any, project_id: str) -> dict[int, Any]:
+    """index → page_id map from the project's ``ProjectAggregate``.
+
+    Returns ``{}`` on ANY failure (no store, no aggregate, import error) so
+    callers fall through to the legacy scan — mirrors ``load_labeled``'s
+    never-raise contract. NIL-uuid gap slots (reserved, never OCR'd) are
+    filtered out.
+    """
+    if store is None:
+        return {}
+    try:
+        from ....adapters.ocr.local_doctr import _NIL_PAGE_ID, _project_uuid_for
+
+        proj_agg = store.get_project(_project_uuid_for(project_id))
+        return {
+            idx: page_id for idx, page_id in enumerate(proj_agg.record.page_ids) if page_id != _NIL_PAGE_ID
+        }
+    except Exception as exc:
+        log.debug("export: store page-id resolution failed for %s: %s", project_id, exc)
+        return {}
+
+
+def resolve_export_page_refs(
+    data_root: Path,
+    project_id: str,
+    store: Any,
+    *,
+    page_index: int | None = None,
+) -> list[ExportPageRef]:
+    """Resolve the pages an export should consider, store-first.
+
+    Union of the event-store index→page_id map and the legacy
+    ``labeled-projects/`` scan; when both lanes have the same index the
+    store head wins (the legacy file is stale — Save no longer writes it).
+    ``page_index`` restricts the result to that single index (scope
+    ``current``).
+    """
+    store_map = _store_page_ids(store, project_id)
+
+    legacy_map: dict[int, Path] = {}
+    legacy_unindexed: list[Path] = []
+    for json_path in _scan_labeled_pages(data_root, project_id):
+        try:
+            idx = int(json_path.stem.rsplit("_", 1)[1])
+        except (IndexError, ValueError):
+            legacy_unindexed.append(json_path)
+            continue
+        legacy_map[idx] = json_path
+
+    refs: list[ExportPageRef] = []
+    for idx in sorted(set(store_map) | set(legacy_map)):
+        if page_index is not None and idx != page_index:
+            continue
+        json_path = legacy_map.get(idx)
+        prefix = json_path.stem if json_path is not None else f"{project_id}_{idx:03d}"
+        refs.append(
+            ExportPageRef(
+                page_index=idx,
+                prefix=prefix,
+                page_id=store_map.get(idx),
+                json_path=json_path,
+            )
+        )
+
+    if page_index is None:
+        refs.extend(ExportPageRef(page_index=-1, prefix=p.stem, json_path=p) for p in legacy_unindexed)
+    return refs
+
+
+def load_export_page(ref: ExportPageRef, store: Any) -> Any | None:
+    """Load the ``Page`` for a ref: store head first, legacy envelope fallback."""
+    if ref.page_id is not None and store is not None:
+        from ....api._page_content import load_page_from_store
+
+        page = load_page_from_store(store, ref.page_id)
+        if page is not None:
+            return page
+        log.warning(
+            "export: store head unreadable for page_index=%d (page_id=%s) — trying legacy fallback",
+            ref.page_index,
+            ref.page_id,
+        )
+    if ref.json_path is not None:
+        return _load_page_from_envelope_file(ref.json_path)
+    return None
+
+
+def _resolve_ref_image(ref: ExportPageRef, image_paths: list[Path]) -> Path | None:
+    """Resolve the page image: project source image first, legacy sibling second."""
+    if 0 <= ref.page_index < len(image_paths) and image_paths[ref.page_index].exists():
+        return image_paths[ref.page_index]
+    if ref.json_path is not None:
+        return _resolve_image_path(ref.json_path)
     return None
 
 
@@ -501,23 +628,37 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
 
     data_root: Path = Path(settings.data_root)
 
-    # --- resolve pages to export ---
-    pages_to_export: list[tuple[Path, Path]] = []  # (json_path, image_path)
-
-    if scope == "current" and page_index is not None:
-        # Single-page: find the labeled file for this page index.
-        project_dir = _labeled_project_dir(data_root, project_id)
-        candidate = project_dir / f"{project_id}_{page_index:03d}.json"
-        if candidate.exists():
-            img = _resolve_image_path(candidate)
-            if img:
-                pages_to_export.append((candidate, img))
+    # --- resolve pages to export (store-first, P1.2) ---
+    # The runner context's page_store belongs to the *loaded* project; only
+    # trust it (and the loaded project's image paths) when the ids match —
+    # otherwise an export for project A would read project B's store.
+    store = runner.context.get("page_store")
+    project_state = runner.context.get("project_state")
+    loaded_project = getattr(project_state, "loaded_project", None) if project_state else None
+    image_paths: list[Path] = []
+    if loaded_project is not None and loaded_project.project_id == project_id:
+        image_paths = [Path(p) for p in loaded_project.image_paths]
     else:
-        # all_validated: scan labeled dir.
-        for json_path in _scan_labeled_pages(data_root, project_id):
-            img = _resolve_image_path(json_path)
-            if img:
-                pages_to_export.append((json_path, img))
+        store = None
+
+    refs = resolve_export_page_refs(
+        data_root,
+        project_id,
+        store,
+        page_index=page_index if scope == "current" else None,
+    )
+
+    pages_to_export: list[tuple[ExportPageRef, Path]] = []  # (ref, image_path)
+    for ref in refs:
+        img = _resolve_ref_image(ref, image_paths)
+        if img is not None:
+            pages_to_export.append((ref, img))
+        else:
+            log.warning(
+                "export: no image resolvable for page_index=%d (prefix=%s) — skipping",
+                ref.page_index,
+                ref.prefix,
+            )
 
     total_pages = len(pages_to_export)
 
@@ -532,7 +673,7 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
     words_exported_detection = 0
     words_exported_recognition = 0
     pages_skipped_not_validated = 0
-    for page_num, (json_path, image_path) in enumerate(pages_to_export):
+    for page_num, (ref, image_path) in enumerate(pages_to_export):
         # Cooperative cancel check.
         current_job = runner._jobs.get(job.job_id)
         if current_job and current_job.status == JobStatus.CANCELLED:
@@ -542,15 +683,17 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
                 shutil.rmtree(project_export_root, ignore_errors=True)
             return
 
-        page = _load_page_from_envelope_file(json_path)
+        page = load_export_page(ref, store)
         if page is None:
-            log.warning("export: could not load page from %s — skipping", json_path)
+            log.warning(
+                "export: could not load page_index=%d (prefix=%s) — skipping", ref.page_index, ref.prefix
+            )
             skipped_count += 1
             continue
 
         # Validation gate for all_validated scope.
         if scope != "current" and not _page_is_validated(page):
-            log.debug("export: skipping non-validated page %s", json_path.name)
+            log.debug("export: skipping non-validated page %s", ref.prefix)
             pages_skipped_not_validated += 1
             continue
 
@@ -570,7 +713,7 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
                 detection=detection,
                 recognition=recognition,
                 classification=include_classification,
-                prefix=json_path.stem,
+                prefix=ref.prefix,
             )
 
         # Count each page ONCE (not once per subfolder) — use None filter so
@@ -649,7 +792,10 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
 
 
 __all__ = [
+    "ExportPageRef",
     "WordFilter",
     "export_output_dir",
     "handle_export",
+    "load_export_page",
+    "resolve_export_page_refs",
 ]

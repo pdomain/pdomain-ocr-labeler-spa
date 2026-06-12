@@ -773,11 +773,16 @@ export interface paths {
          *     Spec: ``docs/archive/specs/2026-05-12-export-design.md`` lines 43-44, 119-120
          *     ("Switching to 'All Validated Pages' fires GET .../export/styles" to
          *     enumerate distinct style labels across saved validated pages, querying
-         *     only saved page envelopes — not in-memory state).
+         *     only saved page state — not in-memory mutations).
+         *
+         *     Store-first (sweep C37): styles come from the event-store heads (what
+         *     Save wrote), falling back to legacy envelopes for store-headless pages.
+         *     The app's single ``page_store`` belongs to the *loaded* project; it is
+         *     only consulted when the loaded project's id matches ``project_id``.
          *
          *     Returns a JSON array of distinct style label strings present in
          *     saved validated pages for this project, sorted alphabetically.  When
-         *     no labeled pages exist (or none are fully validated) the array is
+         *     no saved pages exist (or none are fully validated) the array is
          *     empty and callers render only the "All (no style filter)" option.
          *
          *     Issue #225 acceptance: route registered, returns 200 JSON array.
