@@ -48,6 +48,20 @@ router = APIRouter(
 # ── Wire shapes — spec §01-data-models.md §2 ─────────────────────────
 
 
+class PageHistoryInfo(BaseModel):
+    """Undo/redo availability derived from the page aggregate's provenance.
+
+    Spec: ``docs/specs/2026-06-12-event-store-undo.md`` §"API surface" —
+    folded into ``PagePayload`` so every mutation's invalidation refreshes
+    button state with no extra round-trip.
+    """
+
+    undo_available: bool = False
+    redo_available: bool = False
+    cursor: int = -1
+    depth: int = 50
+
+
 class PagePayload(BaseModel):
     """Full per-page payload — spec §5.3 / §1 ``PagePayload``.
 
@@ -70,6 +84,9 @@ class PagePayload(BaseModel):
     # Plaintext representations — spec §1 ``PagePayload``.
     page_text_ocr: str | None = None
     page_text_gt: str | None = None
+    # Undo/redo cursor state — spec 2026-06-12-event-store-undo §"API surface".
+    # ``None`` when no event store / page aggregate is wired (test envs).
+    history: PageHistoryInfo | None = None
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -340,6 +357,52 @@ def _build_provenance_summary(
 ) -> str | None:
     """STUB: replaced by ops build_provenance_summary in M6."""
     return None
+
+
+# ── Undo/redo history info — spec 2026-06-12-event-store-undo (H-B) ──
+
+
+def _build_history_info(
+    store: LabelerPageStore,
+    page_id: Any,
+    *,
+    depth: int,
+) -> PageHistoryInfo | None:
+    """Derive ``PageHistoryInfo`` for *page_id* from its provenance graph.
+
+    Returns ``None`` on any failure (missing aggregate, no provenance) so the
+    payload degrades gracefully — ``history=None`` means "no history surface",
+    the frontend keeps both buttons disabled.
+    """
+    from ..core.page_history import derive_history
+
+    try:
+        agg = store.get_page(page_id)
+    except Exception:  # pragma: no cover - defensive (aggregate missing)
+        log.debug("_build_history_info: aggregate load failed for page_id=%s", page_id)
+        return None
+    graph = agg.record.provenance
+    if graph is None:
+        return None
+    state = derive_history(graph, depth=depth)
+    return PageHistoryInfo(
+        undo_available=state.undo_available,
+        redo_available=state.redo_available,
+        cursor=state.cursor,
+        depth=depth,
+    )
+
+
+def _resolve_undo_depth(settings: Settings) -> int:
+    """Undo-depth bound from settings (``PDLABELER_UNDO_DEPTH``).
+
+    Tolerates settings stand-ins without the field (older test doubles pass
+    ``object()``); slice H-D adds the real ``Settings.undo_depth`` field.
+    """
+    from ..core.page_history import DEFAULT_UNDO_DEPTH
+
+    depth = getattr(settings, "undo_depth", DEFAULT_UNDO_DEPTH)
+    return depth if isinstance(depth, int) and depth > 0 else DEFAULT_UNDO_DEPTH
 
 
 # ── Payload assembly helpers — spec-23-A (issue #306) ─────────────────
@@ -781,6 +844,13 @@ def get_page(
         app_config=app_config,
         page_store=page_store,
     )
+
+    # Undo/redo flags — spec 2026-06-12-event-store-undo. Stamped here (not in
+    # ``_page_payload``) so the helper stays store-free; mutation routes refresh
+    # button state via invalidation → this GET.
+    pstate = project_state.get_page_state(page_index)
+    if page_store is not None and pstate is not None and pstate.page_id is not None:
+        payload.history = _build_history_info(page_store, pstate.page_id, depth=_resolve_undo_depth(settings))
 
     # GAP-2: schedule adjacent-page prefetch AFTER assembling the response
     # so the background task never blocks the current response.
@@ -1493,6 +1563,7 @@ def install_pages_router(app) -> None:  # type: ignore[no-untyped-def]
 __all__ = [
     "GlyphBulkMarkRequest",
     "GlyphBulkMarkResponse",
+    "PageHistoryInfo",
     "PagePayload",
     "ReloadOCRRequest",
     "ReloadOCRResponse",
@@ -1504,6 +1575,7 @@ __all__ = [
     "SavePageResponse",
     "SaveProjectResponse",
     "UpdateSelectionRequest",
+    "_build_history_info",
     "_build_image_url",
     "_build_provenance_summary",
     "_page_payload",

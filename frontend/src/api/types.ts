@@ -661,6 +661,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo Page
+         * @description ``POST .../undo`` — restore the previous version (U-1).
+         *
+         *     409 ``undo_unavailable`` at the oldest reachable version (bounds or the
+         *     ``PDLABELER_UNDO_DEPTH`` floor); 409 ``history_unavailable`` when no
+         *     event store / aggregate is wired.
+         */
+        post: operations["undo_page_api_projects__project_id__pages__page_index__undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/redo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redo Page
+         * @description ``POST .../redo`` — re-apply the next version (U-2).
+         *
+         *     409 ``redo_unavailable`` at the newest version.
+         */
+        post: operations["redo_page_api_projects__project_id__pages__page_index__redo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs": {
         parameters: {
             query?: never;
@@ -3460,6 +3506,36 @@ export interface components {
             }[];
         };
         /**
+         * PageHistoryInfo
+         * @description Undo/redo availability derived from the page aggregate's provenance.
+         *
+         *     Spec: ``docs/specs/2026-06-12-event-store-undo.md`` §"API surface" —
+         *     folded into ``PagePayload`` so every mutation's invalidation refreshes
+         *     button state with no extra round-trip.
+         */
+        PageHistoryInfo: {
+            /**
+             * Undo Available
+             * @default false
+             */
+            undo_available: boolean;
+            /**
+             * Redo Available
+             * @default false
+             */
+            redo_available: boolean;
+            /**
+             * Cursor
+             * @default -1
+             */
+            cursor: number;
+            /**
+             * Depth
+             * @default 50
+             */
+            depth: number;
+        };
+        /**
          * PagePayload
          * @description Full per-page payload — spec §5.3 / §1 ``PagePayload``.
          *
@@ -3492,6 +3568,7 @@ export interface components {
             page_text_ocr?: string | null;
             /** Page Text Gt */
             page_text_gt?: string | null;
+            history?: components["schemas"]["PageHistoryInfo"] | null;
             /** Extra */
             extra?: {
                 [key: string]: unknown;
@@ -4948,6 +5025,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GlyphBulkMarkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_page_api_projects__project_id__pages__page_index__undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    redo_page_api_projects__project_id__pages__page_index__redo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
                 };
             };
             /** @description Validation Error */

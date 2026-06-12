@@ -49,6 +49,7 @@ from .api.env_js import install_env_js
 from .api.export import install_export_router
 from .api.fs import install_fs_router
 from .api.healthz import install_healthz
+from .api.history import install_history_router
 from .api.jobs import install_jobs_router
 from .api.label_vocabulary import install_label_vocabulary_router
 from .api.lines_paragraphs import install_lines_paragraphs_router
@@ -502,6 +503,10 @@ def build_app(settings: Settings | None = None) -> FastAPI:
 
     # /api/projects/{id}/pages/* router — issue #185.
     install_pages_router(app)
+
+    # /api/projects/{id}/pages/{idx}/undo|redo — event-store undo
+    # (docs/specs/2026-06-12-event-store-undo.md, slice H-B).
+    install_history_router(app)
 
     # /api/jobs/* router — issue #185 (SSE for long-running operations).
     install_jobs_router(app)
