@@ -533,23 +533,40 @@ export default function ProjectPage() {
     if (jobId) setActiveJobId(jobId);
   }
 
+  // U-6 (spec 2026-06-12-event-store-undo): re-OCR creates a NEW page
+  // aggregate, so the undo history restarts. The confirm dialog must warn
+  // about that boundary before the job is enqueued.
+  const reloadOcrConfirmBody =
+    "This will re-run OCR for the current page and the page's edit history resets — Undo will not step back across this reload.";
   function handleReloadOcr() {
-    reloadOcr.mutate(undefined, {
-      onSuccess: (data) => {
-        trackJob(data);
-      },
-      onSettled: () => {
-        invalidatePage();
+    dialogStore.openConfirm({
+      title: "Reload OCR?",
+      body: reloadOcrConfirmBody,
+      onConfirm: () => {
+        reloadOcr.mutate(undefined, {
+          onSuccess: (data) => {
+            trackJob(data);
+          },
+          onSettled: () => {
+            invalidatePage();
+          },
+        });
       },
     });
   }
   function handleReloadOcrEdited() {
-    reloadOcrEdited.mutate(undefined, {
-      onSuccess: (data) => {
-        trackJob(data);
-      },
-      onSettled: () => {
-        invalidatePage();
+    dialogStore.openConfirm({
+      title: "Reload OCR (edited image)?",
+      body: reloadOcrConfirmBody,
+      onConfirm: () => {
+        reloadOcrEdited.mutate(undefined, {
+          onSuccess: (data) => {
+            trackJob(data);
+          },
+          onSettled: () => {
+            invalidatePage();
+          },
+        });
       },
     });
   }

@@ -185,19 +185,30 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       rotateProgress.status !== "complete" &&
       rotateProgress.status !== "error");
 
+  // U-6 (spec 2026-06-12-event-store-undo): re-OCR creates a NEW page
+  // aggregate — the undo history resets. Confirm before enqueueing.
+  const reloadOcrConfirmBody =
+    "This will re-run OCR for the current page and the page's edit history resets — Undo will not step back across this reload.";
+
   function handleReloadOcr() {
-    reloadOcr.mutate(undefined, {
-      onSuccess: (data) => {
-        if (data?.job_id) {
-          setActiveJobId(data.job_id);
-          // Show initial loading toast immediately while SSE stream opens.
-          void import("sonner").then(({ toast: sonnerToast }) => {
-            sonnerToast.loading("Running OCR…", { id: data.job_id });
-          });
-        }
-      },
-      onError: () => {
-        toast.error("Failed to start OCR");
+    dialogStore.openConfirm({
+      title: "Reload OCR?",
+      body: reloadOcrConfirmBody,
+      onConfirm: () => {
+        reloadOcr.mutate(undefined, {
+          onSuccess: (data) => {
+            if (data?.job_id) {
+              setActiveJobId(data.job_id);
+              // Show initial loading toast immediately while SSE stream opens.
+              void import("sonner").then(({ toast: sonnerToast }) => {
+                sonnerToast.loading("Running OCR…", { id: data.job_id });
+              });
+            }
+          },
+          onError: () => {
+            toast.error("Failed to start OCR");
+          },
+        });
       },
     });
   }
@@ -239,17 +250,23 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   // Lane A4). Same SSE/job lifecycle as a plain reload.
   function handleReloadOcrEdited() {
     setOverflowOpen(false);
-    reloadOcrEdited.mutate(undefined, {
-      onSuccess: (data) => {
-        if (data?.job_id) {
-          setActiveJobId(data.job_id);
-          void import("sonner").then(({ toast: sonnerToast }) => {
-            sonnerToast.loading("Running OCR (edited)…", { id: data.job_id });
-          });
-        }
-      },
-      onError: () => {
-        toast.error("Failed to start OCR (edited)");
+    dialogStore.openConfirm({
+      title: "Reload OCR (edited image)?",
+      body: reloadOcrConfirmBody,
+      onConfirm: () => {
+        reloadOcrEdited.mutate(undefined, {
+          onSuccess: (data) => {
+            if (data?.job_id) {
+              setActiveJobId(data.job_id);
+              void import("sonner").then(({ toast: sonnerToast }) => {
+                sonnerToast.loading("Running OCR (edited)…", { id: data.job_id });
+              });
+            }
+          },
+          onError: () => {
+            toast.error("Failed to start OCR (edited)");
+          },
+        });
       },
     });
   }

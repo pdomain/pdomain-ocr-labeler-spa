@@ -215,3 +215,27 @@ describe("ProjectPage: Reload confirm copy (U-7)", () => {
     });
   });
 });
+
+describe("ProjectPage: Reload-OCR confirm warns history resets (U-6/H-D)", () => {
+  it("Mod+R opens a confirm whose copy mentions edit history; POST only on confirm", async () => {
+    stubBackend(null);
+    const reloadSpy = vi.fn(() => HttpResponse.json({ job_id: "j1" }, { status: 202 }));
+    server.use(http.post("/api/projects/p1/pages/0/reload-ocr", reloadSpy));
+
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+
+    fireEvent.keyDown(document, { key: "r", ctrlKey: true, bubbles: true });
+    await waitFor(() => {
+      expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
+    });
+    const dialogText = screen.getByTestId("confirm-dialog").textContent ?? "";
+    expect(dialogText).toMatch(/history/i);
+    expect(reloadSpy).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("confirm-dialog-confirm"));
+    await waitFor(() => {
+      expect(reloadSpy).toHaveBeenCalled();
+    });
+  });
+});

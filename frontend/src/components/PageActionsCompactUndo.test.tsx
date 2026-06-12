@@ -162,3 +162,61 @@ describe("PageActionsCompact: Reload rename in overflow (U-7)", () => {
     expect(btn.getAttribute("title") ?? "").not.toMatch(/unsaved|discard|last saved/i);
   });
 });
+
+describe("PageActionsCompact: Reload-OCR confirm warns history resets (U-6/H-D)", () => {
+  it("clicking Reload OCR opens a confirm (no POST yet); copy mentions history", async () => {
+    const reloadSpy = vi.fn(() => HttpResponse.json({ job_id: "j1" }, { status: 202 }));
+    server.use(http.post("/api/projects/proj-1/pages/0/reload-ocr", reloadSpy));
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-reload-ocr"));
+
+    // The mutation must NOT fire until the user confirms.
+    expect(reloadSpy).not.toHaveBeenCalled();
+    const confirm = dialogStore.getState().confirm;
+    expect(confirm.open).toBe(true);
+    expect(`${confirm.title ?? ""} ${confirm.body ?? ""}`).toMatch(/history/i);
+
+    // Confirming fires the POST.
+    confirm.onConfirm?.();
+    await waitFor(() => {
+      expect(reloadSpy).toHaveBeenCalled();
+    });
+  });
+
+  it("Reload OCR (Edited) in the overflow also routes through the history-reset confirm", async () => {
+    stubPage({ undo_available: false, redo_available: false });
+    server.use(
+      http.get("/api/projects/:pid/pages/:idx", () =>
+        HttpResponse.json({
+          ...pagePayload(null),
+          page_record: {
+            page_index: 0,
+            image_path: "x.png",
+            source: "ocr",
+            extensions: { labeler: { has_edited_image: true } },
+          },
+        }),
+      ),
+    );
+    const reloadSpy = vi.fn(() => HttpResponse.json({ job_id: "j2" }, { status: 202 }));
+    server.use(http.post("/api/projects/proj-1/pages/0/reload-ocr", reloadSpy));
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    const btn = await screen.findByTestId("reload-ocr-edited-button");
+    await waitFor(() => {
+      expect(btn).not.toBeDisabled();
+    });
+    await user.click(btn);
+
+    expect(reloadSpy).not.toHaveBeenCalled();
+    const confirm = dialogStore.getState().confirm;
+    expect(confirm.open).toBe(true);
+    expect(`${confirm.title ?? ""} ${confirm.body ?? ""}`).toMatch(/history/i);
+    confirm.onConfirm?.();
+    await waitFor(() => {
+      expect(reloadSpy).toHaveBeenCalled();
+    });
+  });
+});

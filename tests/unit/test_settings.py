@@ -241,3 +241,18 @@ def test_ast_scanner_catches_all_three_assignment_forms() -> None:
             elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
                 flagged = flagged or _is_settings_attr(node.target)
         assert flagged, f"AST scanner missed {label} form: {src!r}"
+
+
+def test_settings_undo_depth_default_and_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Spec 2026-06-12-event-store-undo slice H-D: ``PDLABELER_UNDO_DEPTH``.
+
+    Default 50 (U-8); env-overridable like every other Settings knob.
+    """
+    for var in list(__import__("os").environ):
+        if var.startswith("PDLABELER_"):
+            monkeypatch.delenv(var, raising=False)
+
+    assert Settings().undo_depth == 50
+
+    monkeypatch.setenv("PDLABELER_UNDO_DEPTH", "7")
+    assert Settings().undo_depth == 7

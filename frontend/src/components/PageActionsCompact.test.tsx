@@ -153,6 +153,19 @@ describe("PageActionsCompact: OCR config trigger (#405)", () => {
   });
 });
 
+// H-D (event-store undo U-6): Reload OCR now routes through a confirm dialog
+// that warns the page's edit history resets. The compact component opens the
+// confirm via dialogStore; tests approve it directly (no ConfirmDialog is
+// mounted in this harness).
+function approveReloadOcrConfirm() {
+  act(() => {
+    const confirm = dialogStore.getState().confirm;
+    expect(confirm.open).toBe(true);
+    confirm.onConfirm?.();
+    dialogStore.close("confirm");
+  });
+}
+
 // ─── mutation smoke tests ─────────────────────────────────────────────────────
 
 describe("PageActionsCompact: mutation wiring (P1.b smoke)", () => {
@@ -164,6 +177,7 @@ describe("PageActionsCompact: mutation wiring (P1.b smoke)", () => {
     renderCompact();
 
     await user.click(screen.getByTestId("page-actions-compact-reload-ocr"));
+    approveReloadOcrConfirm();
     await waitFor(() => expect(reloadSpy).toHaveBeenCalled());
   });
 
@@ -307,6 +321,7 @@ describe("PageActionsCompact: restored dropped buttons (Lane C / C2)", () => {
     renderCompact();
     await user.click(screen.getByTestId("page-actions-compact-overflow"));
     await user.click(await screen.findByTestId("reload-ocr-edited-button"));
+    approveReloadOcrConfirm();
     await waitFor(() => expect(reloadSpy).toHaveBeenCalled());
     expect(bodySeen).toMatchObject({ use_edited_image: true });
   });
@@ -454,6 +469,7 @@ describe("PageActionsCompact: toast lifecycle for reload-ocr", () => {
     renderCompact();
 
     await user.click(screen.getByTestId("page-actions-compact-reload-ocr"));
+    approveReloadOcrConfirm();
 
     // Wait for the mutation to complete and loading toast to be called.
     // The dynamic import("sonner") call in handleReloadOcr fires sonnerToast.loading().
@@ -506,6 +522,7 @@ describe("PageActionsCompact: toast lifecycle for reload-ocr", () => {
     renderCompact();
 
     await user.click(screen.getByTestId("page-actions-compact-reload-ocr"));
+    approveReloadOcrConfirm();
     await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
 
     const errorEvent = {

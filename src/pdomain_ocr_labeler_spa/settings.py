@@ -135,6 +135,12 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── Undo/redo (docs/specs/2026-06-12-event-store-undo.md, U-8) ───────────
+    undo_depth: int = 50
+    """Maximum number of per-page undo steps offered by the UI
+    (``PDLABELER_UNDO_DEPTH``). Older versions remain in the event store but
+    stop being reachable via the undo button. Default 50 (spec U-8)."""
+
     # ── Error-handler debug surface (docs/architecture/02-backend.md §8 / D-040) ─────────
     # Q-A11 (resolved 2026-05-07, option B): the unhandled-`Exception`
     # 500 envelope's ``details`` field surfaces the last 3 traceback

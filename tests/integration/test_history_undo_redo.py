@@ -339,3 +339,34 @@ def test_openapi_has_undo_redo_and_history(tmp_path: Path) -> None:
 
 # Keep ruff happy about unused json import if assertions change later.
 _ = json
+
+
+# ── Depth bound (U-8, slice H-D) ─────────────────────────────────────────────
+
+
+@pytest.mark.integration
+def test_undo_depth_bound_respected(tmp_path: Path, seeded_project: Path) -> None:
+    """With ``undo_depth=1``, only one undo step is offered (U-8)."""
+    settings = _make_settings(tmp_path, source_projects_root=seeded_project.parent, undo_depth=1)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        resp = c.post("/api/projects/load", json={"project_root": str(seeded_project)})
+        assert resp.status_code == 200, resp.text
+        _get_history(c)  # prime: loads the page into memory
+        r = c.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "A"})
+        assert r.status_code == 200, r.text
+        r = c.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "B"})
+        assert r.status_code == 200, r.text
+
+        history = _get_history(c)
+        assert history["depth"] == 1
+        assert history["undo_available"] is True
+
+        # One undo allowed…
+        r = c.post("/api/projects/book1/pages/0/undo")
+        assert r.status_code == 200, r.text
+        # …but the second is past the depth floor even though older
+        # versions exist in the store.
+        r = c.post("/api/projects/book1/pages/0/undo")
+        assert r.status_code == 409, r.text
+        assert r.json()["error"] == "undo_unavailable"
