@@ -30,6 +30,12 @@ export interface GlobalHotkeyHandlers {
   onRematchGt?: () => void;
   /** Fired by Mod+E (Export dialog). */
   onExport?: () => void;
+  /** Fired by Mod+Z (page undo — event-store undo spec U-1). Suppressed
+   *  inside form fields by the useHotkey default (enableOnFormTags: false)
+   *  so native text-field undo wins (U-10). */
+  onUndo?: () => void;
+  /** Fired by Mod+Shift+Z (page redo — spec U-2). Same form-field guard. */
+  onRedo?: () => void;
   /** Fired by Mod+ArrowLeft (Previous page). */
   onPrevPage?: () => void;
   /** Fired by Mod+ArrowRight (Next page). */
@@ -54,6 +60,8 @@ export function useGlobalHotkeys({
   onLoadPage,
   onRematchGt,
   onExport,
+  onUndo,
+  onRedo,
   onPrevPage,
   onNextPage,
   onFirstPage,
@@ -67,6 +75,18 @@ export function useGlobalHotkeys({
   useHotkey("mod+l", () => onLoadPage?.(), { enabled });
   useHotkey("mod+g", () => onRematchGt?.(), { enabled });
   useHotkey("mod+e", () => onExport?.(), { enabled });
+  // U-10: enableOnFormTags stays false (useHotkey default) so Mod+Z inside a
+  // text input/textarea performs the NATIVE text undo, never the page undo.
+  // mod+shift+z is registered first so the plain mod+z handler can't shadow it.
+  useHotkey("mod+shift+z", () => onRedo?.(), { enabled });
+  useHotkey(
+    "mod+z",
+    (e) => {
+      if (e.shiftKey) return; // belt-and-braces: leave Mod+Shift+Z to redo
+      onUndo?.();
+    },
+    { enabled },
+  );
   useHotkey("mod+arrowleft", () => onPrevPage?.(), { enabled });
   useHotkey("mod+arrowright", () => onNextPage?.(), { enabled });
   useHotkey("mod+home", () => onFirstPage?.(), { enabled });

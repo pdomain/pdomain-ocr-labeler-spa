@@ -24,6 +24,8 @@ import {
   useSaveProject,
   useLoadPage,
   useRematchGt,
+  useUndoPage,
+  useRedoPage,
 } from "./usePageMutations";
 
 function makeWrapper() {
@@ -213,5 +215,82 @@ describe("useRematchGt", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect((result.current.data as Record<string, unknown>)["page_source"]).toBe("cached_ocr");
+  });
+});
+
+// ─── useUndoPage / useRedoPage (event-store undo H-C) ───────────────────────
+// Spec: docs/specs/2026-06-12-event-store-undo.md §"API surface".
+
+describe("useUndoPage", () => {
+  it("POSTs to /undo and resolves with the refreshed PagePayload", async () => {
+    let called = 0;
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/undo`, () => {
+        called += 1;
+        return HttpResponse.json({
+          project_id: PROJECT_ID,
+          page_index: PAGE_IDX,
+          history: { undo_available: false, redo_available: true, cursor: 0, depth: 50 },
+        });
+      }),
+    );
+
+    const { result } = renderHook(() => useUndoPage(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapper(),
+    });
+    await act(async () => {
+      result.current.mutate();
+    });
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+    expect(called).toBe(1);
+    expect(result.current.data?.history?.redo_available).toBe(true);
+  });
+
+  it("surfaces a 409 as an error (undo unavailable)", async () => {
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/undo`, () =>
+        HttpResponse.json(
+          { error: "undo_unavailable", message: "nothing to undo" },
+          { status: 409 },
+        ),
+      ),
+    );
+    const { result } = renderHook(() => useUndoPage(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapper(),
+    });
+    await act(async () => {
+      result.current.mutate();
+    });
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
+  });
+});
+
+describe("useRedoPage", () => {
+  it("POSTs to /redo", async () => {
+    let called = 0;
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/redo`, () => {
+        called += 1;
+        return HttpResponse.json({
+          project_id: PROJECT_ID,
+          page_index: PAGE_IDX,
+          history: { undo_available: true, redo_available: false, cursor: 1, depth: 50 },
+        });
+      }),
+    );
+    const { result } = renderHook(() => useRedoPage(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapper(),
+    });
+    await act(async () => {
+      result.current.mutate();
+    });
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+    expect(called).toBe(1);
   });
 });

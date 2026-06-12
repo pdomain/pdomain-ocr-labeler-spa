@@ -97,3 +97,59 @@ describe("useGlobalHotkeys (#236)", () => {
     expect(screen.getByTestId("container")).toBeInTheDocument();
   });
 });
+
+// ─── H-C: Mod+Z / Mod+Shift+Z page undo/redo ─────────────────────────────────
+// Spec: docs/specs/2026-06-12-event-store-undo.md (U-1, U-2, U-10).
+
+describe("useGlobalHotkeys: undo/redo (event-store undo H-C)", () => {
+  it("Ctrl+Z fires onUndo", () => {
+    const onUndo = vi.fn();
+    render(<TestComponent onUndo={onUndo} />);
+    pressKey("z", true, false);
+    expect(onUndo).toHaveBeenCalledOnce();
+  });
+
+  it("Ctrl+Shift+Z fires onRedo (not onUndo)", () => {
+    const onUndo = vi.fn();
+    const onRedo = vi.fn();
+    render(<TestComponent onUndo={onUndo} onRedo={onRedo} />);
+    pressKey("Z", true, true);
+    expect(onRedo).toHaveBeenCalledOnce();
+    expect(onUndo).not.toHaveBeenCalled();
+  });
+
+  it("does not fire onUndo when disabled=true", () => {
+    const onUndo = vi.fn();
+    render(<TestComponent onUndo={onUndo} disabled={true} />);
+    pressKey("z", true, false);
+    expect(onUndo).not.toHaveBeenCalled();
+  });
+
+  it("U-10: Ctrl+Z inside a text input does NOT fire page undo (native undo wins)", () => {
+    const onUndo = vi.fn();
+    render(
+      <>
+        <TestComponent onUndo={onUndo} />
+        <input data-testid="gt-input" defaultValue="abc" />
+      </>,
+    );
+    const input = screen.getByTestId("gt-input");
+    input.focus();
+    fireEvent.keyDown(input, { key: "z", ctrlKey: true, bubbles: true });
+    expect(onUndo).not.toHaveBeenCalled();
+  });
+
+  it("U-10: Ctrl+Z inside a textarea does NOT fire page undo", () => {
+    const onUndo = vi.fn();
+    render(
+      <>
+        <TestComponent onUndo={onUndo} />
+        <textarea data-testid="gt-textarea" defaultValue="abc" />
+      </>,
+    );
+    const ta = screen.getByTestId("gt-textarea");
+    ta.focus();
+    fireEvent.keyDown(ta, { key: "z", ctrlKey: true, bubbles: true });
+    expect(onUndo).not.toHaveBeenCalled();
+  });
+});

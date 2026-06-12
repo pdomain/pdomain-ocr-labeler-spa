@@ -20,6 +20,8 @@ import {
   useRematchGt,
   useRotatePage,
   useAutoRotateAll,
+  useUndoPage,
+  useRedoPage,
 } from "../hooks/usePageMutations";
 import { usePage } from "../hooks/usePage";
 import { useJobProgress } from "../hooks/useJobProgress";
@@ -62,6 +64,10 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   const rotationDegrees = pageQ.data?.page_record?.rotation_degrees ?? 0;
   const rotationSource = pageQ.data?.page_record?.rotation_source ?? "none";
   const isRotated = rotationDegrees !== 0;
+  // Undo/redo availability — PagePayload.history (event-store undo, U-3).
+  const history = pageQ.data?.history ?? null;
+  const undoAvailable = history?.undo_available === true;
+  const redoAvailable = history?.redo_available === true;
 
   // Toast lifecycle: react to OCR job progress transitions.
   // Rematch GT is synchronous (no SSE job) so it uses onSuccess/onError directly.
@@ -157,6 +163,8 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   const rematchGt = useRematchGt(projectId, pageIndex);
   const rotatePage = useRotatePage(projectId, pageIndex);
   const autoRotateAll = useAutoRotateAll(projectId);
+  const undoPage = useUndoPage(projectId, pageIndex);
+  const redoPage = useRedoPage(projectId, pageIndex);
 
   const isBusy =
     reloadOcr.isPending ||
@@ -167,6 +175,8 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     rematchGt.isPending ||
     rotatePage.isPending ||
     autoRotateAll.isPending ||
+    undoPage.isPending ||
+    redoPage.isPending ||
     (jobProgress !== null && jobProgress.status !== "complete" && jobProgress.status !== "error") ||
     (saveProjectProgress !== null &&
       saveProjectProgress.status !== "complete" &&
@@ -265,8 +275,9 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     });
   }
 
-  // C2: restored "Load Page" — reloads the page from the last saved state,
-  // discarding unsaved in-memory edits.
+  // "Reload" (formerly "Load Page", U-7): refreshes the page from the
+  // event-store head. Every mutation auto-persists, so there are no
+  // "unsaved edits" to discard — use Undo to step back through history.
   function handleLoadPage() {
     setOverflowOpen(false);
     loadPage.mutate(undefined, {
@@ -324,6 +335,25 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
             ? "Auto-rotate unavailable (rotation module missing)"
             : "Auto-rotate failed",
         );
+      },
+    });
+  }
+
+  // Event-store undo (U-1/U-2): the mutation hooks invalidate the page query
+  // on success, which refetches PagePayload.history and refreshes both
+  // buttons' disabled state.
+  function handleUndo() {
+    undoPage.mutate(undefined, {
+      onError: () => {
+        toast.error("Undo failed");
+      },
+    });
+  }
+
+  function handleRedo() {
+    redoPage.mutate(undefined, {
+      onError: () => {
+        toast.error("Redo failed");
       },
     });
   }
@@ -412,6 +442,33 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
         <span>Save page</span>
       </button>
 
+      {/* Undo/redo — event-store undo (spec 2026-06-12). Canonical driver
+          testids live HERE on the visible controls (the legacy labeler had no
+          undo surface, so these are new testids per the driver contract). */}
+      <button
+        type="button"
+        data-testid="undo-button"
+        aria-label="Undo"
+        disabled={disabled || !undoAvailable}
+        onClick={handleUndo}
+        title="Undo (Ctrl+Z)"
+        className={`${base} ${normal}`}
+      >
+        Undo
+      </button>
+
+      <button
+        type="button"
+        data-testid="redo-button"
+        aria-label="Redo"
+        disabled={disabled || !redoAvailable}
+        onClick={handleRedo}
+        title="Redo (Ctrl+Shift+Z)"
+        className={`${base} ${normal}`}
+      >
+        Redo
+      </button>
+
       <button
         type="button"
         data-testid="page-actions-compact-export"
@@ -493,10 +550,10 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
               data-testid="load-page-button"
               disabled={disabled}
               onClick={handleLoadPage}
-              title="Load Page from last saved state"
+              title="Reload page from the stored version"
               className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-ink-2 hover:bg-bg-raised hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Load Page
+              Reload
             </button>
 
             {/* P2 / C28: rotate actions — previously only inside the hidden

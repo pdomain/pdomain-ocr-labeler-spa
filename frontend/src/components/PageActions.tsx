@@ -5,8 +5,12 @@
 // Issues #214, #217, #263
 //
 // Button layout (left to right):
-//   Reload OCR | Reload OCR (Edited) | Save Page | Save Project | Load Page |
-//   Rematch GT | Rotate CCW (↺) | Rotate CW (↻) | Export…
+//   Reload OCR | Reload OCR (Edited) | Save Page | Save Project | Reload |
+//   Undo | Redo | Rematch GT | Rotate CCW (↺) | Rotate CW (↻) | Export…
+//
+// "Load Page" was renamed "Reload" (testid load-page-button unchanged) —
+// every mutation auto-persists to the event-store head, so there are no
+// "unsaved edits" to discard (spec 2026-06-12-event-store-undo, U-7).
 //
 // Right side: page-name label, source badge, rotation badge.
 //   rotation-badge: always in DOM; visible only when rotation_degrees != 0.
@@ -23,7 +27,8 @@
 //
 // data-testids (driver-contract invariants):
 //   reload-ocr-button, reload-ocr-edited-button, save-page-button,
-//   save-project-button, load-page-button, rematch-gt-button, export-button,
+//   save-project-button, load-page-button, undo-button, redo-button,
+//   rematch-gt-button, export-button,
 //   page-source-badge, page-name-label, rotation-badge,
 //   rotate-ccw-button, rotate-cw-button, rotate-180-button
 
@@ -76,8 +81,16 @@ interface PageActionsProps {
   onSavePage?: (() => void) | undefined;
   /** Callback: user clicked Save Project. */
   onSaveProject?: (() => void) | undefined;
-  /** Callback: user clicked Load Page. */
+  /** Callback: user clicked Reload (testid load-page-button, U-7). */
   onLoadPage?: (() => void) | undefined;
+  /** Whether a previous version exists to undo to (PagePayload.history). */
+  undoAvailable?: boolean | undefined;
+  /** Whether an undone version exists to redo to. */
+  redoAvailable?: boolean | undefined;
+  /** Callback: user clicked Undo (or Mod+Z). */
+  onUndo?: (() => void) | undefined;
+  /** Callback: user clicked Redo (or Mod+Shift+Z). */
+  onRedo?: (() => void) | undefined;
   /** Callback: user clicked Rematch GT. */
   onRematchGt?: (() => void) | undefined;
   /** Callback: user clicked Export. */
@@ -112,6 +125,10 @@ export function PageActions({
   onSavePage,
   onSaveProject,
   onLoadPage,
+  undoAvailable = false,
+  redoAvailable = false,
+  onUndo,
+  onRedo,
   onRematchGt,
   onExport,
   onRotateCw,
@@ -182,9 +199,29 @@ export function PageActions({
           testid="load-page-button"
           disabled={isBusy}
           onClick={onLoadPage}
-          title="Load Page from disk"
+          title="Reload page from the stored version"
         >
-          Load Page
+          Reload
+        </ActionButton>
+
+        {/* Undo/redo — event-store undo (spec 2026-06-12, U-1..U-3). */}
+        <ActionButton
+          testid="undo-button"
+          disabled={isBusy || !undoAvailable}
+          onClick={onUndo}
+          title="Undo (Ctrl+Z)"
+          aria-label="Undo"
+        >
+          Undo
+        </ActionButton>
+        <ActionButton
+          testid="redo-button"
+          disabled={isBusy || !redoAvailable}
+          onClick={onRedo}
+          title="Redo (Ctrl+Shift+Z)"
+          aria-label="Redo"
+        >
+          Redo
         </ActionButton>
 
         <ActionButton

@@ -61,6 +61,8 @@ import {
   useLoadPage,
   useRematchGt,
   useRotatePage,
+  useUndoPage,
+  useRedoPage,
 } from "../hooks/usePageMutations";
 import {
   useValidateLine,
@@ -303,6 +305,8 @@ export default function ProjectPage() {
   const loadPage = useLoadPage(pid, idx0);
   const rematchGt = useRematchGt(pid, idx0);
   const rotatePage = useRotatePage(pid, idx0);
+  const undoPage = useUndoPage(pid, idx0);
+  const redoPage = useRedoPage(pid, idx0);
 
   // ── Line mutations for useMatchesHotkeys (BUG-KBD-3) ──────────────────
   const validateLine = useValidateLine(pid, idx0);
@@ -322,6 +326,9 @@ export default function ProjectPage() {
   const pagePayload = pageQ.data ?? null;
   const pageRecord = pagePayload?.page_record ?? null;
   const lines: LineMatch[] = pagePayload?.line_matches ?? [];
+  // Event-store undo (spec 2026-06-12): availability flags from the payload.
+  const undoAvailable = pagePayload?.history?.undo_available === true;
+  const redoAvailable = pagePayload?.history?.redo_available === true;
 
   // ── Breadcrumb / hierarchy hotkeys (Alt+arrows) ────────────────────────
   // Registered at the page level so they work anywhere on the project page.
@@ -340,7 +347,9 @@ export default function ProjectPage() {
     savePage.isPending ||
     saveProject.isPending ||
     loadPage.isPending ||
-    rematchGt.isPending;
+    rematchGt.isPending ||
+    undoPage.isPending ||
+    redoPage.isPending;
   const totalPages = projectQ.data?.image_paths?.length ?? 0;
   const currentPageNo = idx0 + 1;
   useGlobalHotkeys({
@@ -350,6 +359,8 @@ export default function ProjectPage() {
     onLoadPage: handleLoadPage,
     onRematchGt: handleRematchGt,
     onExport: handleExport,
+    onUndo: handleUndo,
+    onRedo: handleRedo,
     onPrevPage: () => {
       if (projectId && currentPageNo > 1) void navigate(pageNoUrl(projectId, currentPageNo - 1));
     },
@@ -463,7 +474,9 @@ export default function ProjectPage() {
     saveProject.isPending ||
     loadPage.isPending ||
     rematchGt.isPending ||
-    rotatePage.isPending;
+    rotatePage.isPending ||
+    undoPage.isPending ||
+    redoPage.isPending;
 
   // Pseudo-Job object for BusyOverlay. BusyOverlay accepts the full
   // `components.schemas.Job` shape but only branches on `type` / `status`;
@@ -566,16 +579,38 @@ export default function ProjectPage() {
   // F-035: Route destructive hotkeys (Mod+L, Mod+G) through the confirm dialog
   // so accidental keypresses cannot discard or recompute page data without
   // the user explicitly confirming.
+  //
+  // U-7 (spec 2026-06-12-event-store-undo): "Load Page" is now "Reload" —
+  // every mutation auto-persists to the event-store head, so there are no
+  // unsaved edits to discard; the confirm copy must not claim otherwise.
   function handleLoadPage() {
     dialogStore.openConfirm({
-      title: "Load page?",
-      body: "This will discard any unsaved changes and reload the page from the last saved state. This action cannot be undone.",
+      title: "Reload page?",
+      body: "This will refresh the page from the latest stored version. Edits are saved automatically — use Undo to step back through page history.",
       onConfirm: () => {
         loadPage.mutate(undefined, {
           onSettled: () => {
             invalidatePage();
           },
         });
+      },
+    });
+  }
+  // Event-store undo (U-1/U-2): guard on the payload's availability flags so
+  // the Mod+Z/Mod+Shift+Z hotkeys are no-ops at the history bounds (U-3).
+  function handleUndo() {
+    if (!undoAvailable) return;
+    undoPage.mutate(undefined, {
+      onSettled: () => {
+        invalidatePage();
+      },
+    });
+  }
+  function handleRedo() {
+    if (!redoAvailable) return;
+    redoPage.mutate(undefined, {
+      onSettled: () => {
+        invalidatePage();
       },
     });
   }
@@ -821,6 +856,10 @@ export default function ProjectPage() {
         onSavePage={handleSavePage}
         onSaveProject={handleSaveProject}
         onLoadPage={handleLoadPage}
+        undoAvailable={undoAvailable}
+        redoAvailable={redoAvailable}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
         onRematchGt={handleRematchGt}
         onExport={handleExport}
         onRotateCw={handleRotateCw}

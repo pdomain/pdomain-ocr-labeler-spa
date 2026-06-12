@@ -184,3 +184,41 @@ export function useAutoRotateAll(projectId: string) {
       ),
   });
 }
+
+// ─── useUndoPage / useRedoPage (event-store undo H-C) ──────────────────────
+
+/**
+ * Undo the last page mutation via blob-version restore.
+ *
+ * POST .../undo → 200 PagePayload (restored state + refreshed `history`
+ * flags) or 409 when nothing is undoable. On success, invalidate the page
+ * query so canvas/worklist/right-panel refetch the restored content.
+ *
+ * Spec: docs/specs/2026-06-12-event-store-undo.md (U-1).
+ */
+export function useUndoPage(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload>({
+    mutationFn: () => apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/undo`, {}),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+/**
+ * Re-apply the next undone version (symmetric to useUndoPage).
+ *
+ * POST .../redo → 200 PagePayload or 409 at the newest version.
+ *
+ * Spec: docs/specs/2026-06-12-event-store-undo.md (U-2).
+ */
+export function useRedoPage(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload>({
+    mutationFn: () => apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/redo`, {}),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
