@@ -125,6 +125,47 @@ def _seed_load(server: SwitchServer, project_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# P4.3 — deep-link auto-load (F14 / C57)
+# ---------------------------------------------------------------------------
+
+
+def test_deep_link_autoloads_unloaded_project(switch_server: SwitchServer, page: Page) -> None:
+    """A deep link to a project that exists on disk but is not loaded in
+    server memory auto-loads it (legacy ``_initialize_from_url`` parity)
+    instead of bouncing to the RootPage grid.
+
+    Targets PROJECT_B without any prior POST /load for it. (Other tests in
+    this module may have loaded PROJECT_A — loading is exclusive, so B is
+    not in memory either way; on a fresh module server, nothing is.)
+    """
+    # Pre-condition: B is genuinely not loaded.
+    pre = httpx.get(f"{switch_server.base_url}/api/projects/{_PROJECT_B}", timeout=SEED_TIMEOUT)
+    if pre.status_code == 200:
+        # Another test loaded B — force A loaded so B is unloaded again.
+        _seed_load(switch_server, _PROJECT_A)
+
+    page.goto(f"{switch_server.base_url}/projects/{_PROJECT_B}/pages/pageno/2", timeout=30_000)
+
+    # The auto-load gate must keep us on the project route and render the
+    # page once the load + page fetch complete (cold OCR can be slow).
+    page.wait_for_selector('[data-testid="project-page"]', timeout=90_000)
+    wait_for_page_loaded(page, switch_server.base_url, timeout=90_000)
+    assert f"/projects/{_PROJECT_B}/pages/pageno/2" in page.url, f"deep link bounced away: {page.url}"
+
+    # Server memory now holds the deep-linked project.
+    post = httpx.get(f"{switch_server.base_url}/api/projects/{_PROJECT_B}", timeout=SEED_TIMEOUT)
+    assert post.status_code == 200, "project was not auto-loaded into server memory"
+
+
+def test_deep_link_unknown_project_bounces_to_grid(switch_server: SwitchServer, page: Page) -> None:
+    """A deep link to a project that does not exist anywhere still bounces to
+    the RootPage grid (pre-existing A-03 behavior, now via the gate)."""
+    page.goto(f"{switch_server.base_url}/projects/does-not-exist/pages/pageno/1", timeout=30_000)
+    page.wait_for_selector('[data-testid="root-projects-grid"]', timeout=30_000)
+    assert "/projects/" not in page.url
+
+
+# ---------------------------------------------------------------------------
 # P4.1 — project switching reachable (F12 / A-02 / C13)
 # ---------------------------------------------------------------------------
 

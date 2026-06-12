@@ -71,5 +71,13 @@ export function useProject(projectId: string | undefined) {
       apiFetch<ProjectResponse>(`/api/projects/${encodeURIComponent(String(projectId))}`),
     enabled: projectId !== undefined && projectId !== "",
     staleTime: 30_000,
+    // P4.3: a 404 is a stable answer ("not in server memory"), not a flake —
+    // retrying it 3x with backoff delayed the deep-link auto-load (and the
+    // unknown-project bounce) by 5-10s. Other errors keep the default retries.
+    retry: (failureCount, error) => {
+      const status = (error as { status?: number }).status;
+      if (status === 404) return false;
+      return failureCount < 3;
+    },
   });
 }

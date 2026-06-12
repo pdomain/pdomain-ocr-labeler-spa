@@ -42,6 +42,7 @@ import { CudaSetupGuidance } from "./components/CudaSetupGuidance";
 import { Rail } from "./components/shell/Rail";
 import RootPage from "./pages/RootPage";
 import ProjectPage from "./pages/ProjectPage";
+import { ProjectRouteGate } from "./components/ProjectRouteGate";
 import { ROUTES } from "./lib/routes";
 import { useThemePreference } from "./stores/ui-prefs";
 import { useProject } from "./hooks/useProject";
@@ -338,7 +339,17 @@ function AppInner() {
             <Routes>
               <Route path={ROUTES.ROOT} element={<RootPage />} />
               <Route path={ROUTES.PROJECT} element={<ProjectRootRedirect />} />
-              <Route path={ROUTES.PROJECT_PAGE_NO} element={<ProjectPage />} />
+              {/* P4.3 (parity F14 / C57): ProjectRouteGate auto-loads a
+                  deep-linked project that exists on disk but is not yet in
+                  server memory (legacy _initialize_from_url parity). */}
+              <Route
+                path={ROUTES.PROJECT_PAGE_NO}
+                element={
+                  <ProjectRouteGate>
+                    <ProjectPage />
+                  </ProjectRouteGate>
+                }
+              />
               <Route path={ROUTES.PROJECT_PAGE_IDX} element={<ProjectPageIndexRedirect />} />
               {/* Dev/test-only Konva viewport perf-bench page (#305, spec §11).
                   Lazy-loaded so the react-konva module graph stays out of the
