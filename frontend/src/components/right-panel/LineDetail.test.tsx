@@ -674,4 +674,55 @@ describe("STB-3: LineDetail LineCard action buttons perform their mutations", ()
     await user.click(screen.getByTestId("line-delete-button-3"));
     await waitFor(() => expect(body).toEqual({ scope: "line", line_indices: [3] }));
   });
+
+  // P1.6 (B-21): the per-word validate toggle in the LineDetail word grid
+  // must fire a real mutation — LineDetail used to mount LineCard without
+  // onValidateWord, leaving the visible+enabled button a silent no-op.
+  it("word-validate-button in the word grid POSTs validate-batch for that word", async () => {
+    const calls: Record<string, unknown>[] = [];
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/validate-batch", async ({ request }) => {
+        calls.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json(makePage());
+      }),
+    );
+    const user = userEvent.setup();
+    selectLine(3);
+    renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    await user.click(screen.getByTestId("word-validate-button-3-1"));
+    await waitFor(() => expect(calls.length).toBe(1));
+    expect(calls[0]).toEqual(
+      expect.objectContaining({
+        scope: "word",
+        word_indices: [[3, 1]],
+        validated: true,
+      }),
+    );
+  });
+
+  // P1.6 (B-22): the per-word GT input in the LineDetail word grid must
+  // persist — LineDetail used to mount LineCard without onCommitGt.
+  it("gt-text-input in the word grid commits on Enter via words/{li}/{wi}/gt", async () => {
+    const calls: { li: string; wi: string; body: Record<string, unknown> }[] = [];
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/:li/:wi/gt", async ({ request, params }) => {
+        calls.push({
+          li: String(params["li"]),
+          wi: String(params["wi"]),
+          body: (await request.json()) as Record<string, unknown>,
+        });
+        return HttpResponse.json(makePage());
+      }),
+    );
+    const user = userEvent.setup();
+    selectLine(3);
+    renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    const input = screen.getByTestId("gt-text-input-3-0");
+    await user.clear(input);
+    await user.type(input, "Hullo{Enter}");
+    await waitFor(() => expect(calls.length).toBe(1));
+    expect(calls[0]).toEqual(
+      expect.objectContaining({ li: "3", wi: "0", body: { text: "Hullo" } }),
+    );
+  });
 });

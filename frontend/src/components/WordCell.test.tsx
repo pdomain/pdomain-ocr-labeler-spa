@@ -90,6 +90,42 @@ describe("WordCell", () => {
     expect(onCommitGt).not.toHaveBeenCalled();
   });
 
+  // P1.6 (B-22): Enter must commit (blur) like every other GT input in the
+  // app; before this the only commit path was an explicit focus change.
+  it("Enter commits the GT input (blurs, firing onCommitGt)", () => {
+    const onCommitGt = vi.fn();
+    const word = makeWordMatch({
+      word_id: "w-001",
+      line_index: 0,
+      word_index: 0,
+      ground_truth_text: "hello",
+    });
+    render(<WordCell word={word} onCommitGt={onCommitGt} />);
+    const input = screen.getByTestId("gt-text-input-0-0");
+    (input as HTMLInputElement).focus();
+    fireEvent.change(input, { target: { value: "world" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onCommitGt).toHaveBeenCalledOnce();
+    expect(onCommitGt).toHaveBeenCalledWith("w-001", 0, 0, "world");
+  });
+
+  it("Escape reverts the GT input without committing", () => {
+    const onCommitGt = vi.fn();
+    const word = makeWordMatch({
+      word_id: "w-001",
+      line_index: 0,
+      word_index: 0,
+      ground_truth_text: "hello",
+    });
+    render(<WordCell word={word} onCommitGt={onCommitGt} />);
+    const input = screen.getByTestId("gt-text-input-0-0") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "world" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(input.value).toBe("hello");
+    fireEvent.blur(input);
+    expect(onCommitGt).not.toHaveBeenCalled();
+  });
+
   it("renders text_style_labels as tag chips", () => {
     const word = makeWordMatch({
       word_id: "w-002",

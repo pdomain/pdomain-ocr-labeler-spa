@@ -38,6 +38,7 @@ import {
   useSplitLineAfterWord,
   useSplitLineByWords,
   useDeleteLine,
+  useUpdateWordGt,
 } from "../../hooks/useLineMutations";
 import { useApplyStyle, useApplyComponent } from "../../hooks/useWordMutations";
 import type { components } from "../../api/types";
@@ -235,6 +236,8 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
   // P1.4 (B-43): tag-chip x removal for the embedded LineCard's WordCells.
   const applyStyle = useApplyStyle(projectId, pageIndex);
   const applyComponent = useApplyComponent(projectId, pageIndex);
+  // P1.6 (B-22): per-word GT commit for the embedded LineCard's WordCells.
+  const updateWordGt = useUpdateWordGt(projectId, pageIndex);
 
   function toggleDensity() {
     const next: WordDensity = densityPref === "cards" ? "rows" : "cards";
@@ -294,6 +297,16 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
               }}
               onEditWord={(li, wi) => {
                 selectWord(li, wi);
+              }}
+              onValidateWord={(li, wi, validated) => {
+                // P1.6 (B-21): per-word validate toggle — same mutation the
+                // bulk bar and MultiLineDetail word grid use.
+                validateWords.mutate({ wordPairs: [[li, wi]], validated });
+              }}
+              onCommitGt={(_wordId, li, wi, text) => {
+                // P1.6 (B-22): per-word GT commit — same mutation the
+                // MultiLineDetail word grid uses.
+                updateWordGt.mutate({ lineIndex: li, wordIndex: wi, text });
               }}
               onClearWordTag={(li, wi, label, kind) => {
                 // P1.4 (B-43): remove the clicked tag for real. Styles go

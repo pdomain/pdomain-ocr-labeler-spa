@@ -1102,3 +1102,82 @@ def test_style_clear_round_trip(mut_server: SelServer, page: Page) -> None:
     )
 
     _save_screenshot(page, "style_clear_round_trip")
+
+
+# ─── P1.6 round-trip: LineDetail word-grid validate + GT commit (B-21/22) ─────
+
+
+def _word_match(lm: dict, word_index: int) -> dict | None:
+    return next(
+        (wm for wm in lm.get("word_matches", []) if wm.get("word_index") == word_index),
+        None,
+    )
+
+
+@pytest.mark.e2e
+def test_line_detail_word_grid_validate_and_gt_commit(mut_server: SelServer, page: Page) -> None:
+    """P1.6 (B-21/22): the LineDetail Line-tab word grid is wired for real.
+
+    LineDetail used to mount LineCard without onValidateWord/onCommitGt —
+    the per-word validate ✔ and the GT input were visible+enabled no-ops.
+    Round-trip both on line 0's word 1 ("World") and confirm persistence
+    via API re-fetch.
+
+    Uses an isolated mut_server: the GT/validation writes would collide
+    with the shared fixture's other assertions.
+    """
+    lm0 = _poll_line(mut_server.base_url, 0, lambda lm: True)
+    assert lm0 is not None, "line 0 missing from fixture payload"
+    w1 = _word_match(lm0, 1)
+    assert w1 is not None and not w1.get("is_validated"), "fixture word (0,1) should start unvalidated"
+
+    # Tall viewport: in the default headless size the LineDetail footer
+    # (validate-all + merge rows) overlaps the word grid and intercepts
+    # pointer events on the tiny per-word ✔ buttons.
+    page.set_viewport_size({"width": 1280, "height": 1400})
+    _goto_project_page(page, mut_server.project_url)
+    _select_line_via_hierarchy(page, block_nth=0)
+
+    # Scope to the right panel: the retired display:none WordMatchView stub
+    # renders the SAME word-grid testids (canvas-hidden-stubs).
+    detail = page.locator('[data-testid="line-detail"]').first
+    detail.wait_for(state="visible", timeout=10_000)
+
+    # (1) B-21: per-word validate toggle.
+    validate_btn = detail.locator('[data-testid="word-validate-button-0-1"]').first
+    validate_btn.wait_for(state="visible", timeout=10_000)
+    validate_btn.click()
+
+    lm = _poll_line(
+        mut_server.base_url,
+        0,
+        lambda lm: bool((_word_match(lm, 1) or {}).get("is_validated")),
+    )
+    assert lm is not None and (_word_match(lm, 1) or {}).get("is_validated") is True, (
+        "Per-word validate in the LineDetail word grid did NOT persist — "
+        "word-validate-button-0-1 → onValidateWord → useValidateWords → "
+        "POST words/validate-batch chain is broken (B-21 regression)."
+    )
+
+    # (2) B-22: per-word GT input commit on Enter.
+    new_gt = "Wurld"
+    gt_input = detail.locator('[data-testid="gt-text-input-0-1"]').first
+    gt_input.wait_for(state="visible", timeout=10_000)
+    gt_input.click()
+    gt_input.fill(new_gt)
+    gt_input.press("Enter")
+
+    lm = _poll_line(
+        mut_server.base_url,
+        0,
+        lambda lm: (_word_match(lm, 1) or {}).get("ground_truth_text") == new_gt,
+    )
+    got = (_word_match(lm or {}, 1) or {}).get("ground_truth_text")
+    assert got == new_gt, (
+        f"Per-word GT commit in the LineDetail word grid did NOT persist: "
+        f"expected {new_gt!r}, got {got!r}. Chain: gt-text-input-0-1 Enter → "
+        "blur → onCommitGt → useUpdateWordGt → POST words/0/1/gt (B-22 "
+        "regression)."
+    )
+
+    _save_screenshot(page, "line_detail_word_grid_round_trip")

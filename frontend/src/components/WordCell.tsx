@@ -260,7 +260,9 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
         </div>
       )}
 
-      {/* Row 4: GT input */}
+      {/* Row 4: GT input.
+          P1.6 (B-22): Enter commits (via blur) and Escape reverts, matching
+          every other GT input (MultiLineDetail WordRow, LineDetail GTRow). */}
       <input
         ref={inputRef}
         data-testid={`gt-text-input-${l}-${w}`}
@@ -270,6 +272,14 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
           setGtValue(e.target.value);
         }}
         onBlur={handleBlur}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.currentTarget.blur();
+          }
+          if (e.key === "Escape") {
+            setGtValue(committedRef.current);
+          }
+        }}
         className="w-full text-xs border border-border-1 rounded px-1 py-0.5 font-mono focus:outline-none focus:border-accent"
         aria-label={`Ground truth for "${word.ocr_text}"`}
       />
