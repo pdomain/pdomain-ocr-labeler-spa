@@ -166,14 +166,22 @@ def test_delete_scope_returns_404_for_bad_page(loaded_client: TestClient) -> Non
     assert resp.json()["error"] == "page_not_found"
 
 
-def test_delete_scope_returns_200_for_valid_page(loaded_client: TestClient) -> None:
+def test_delete_scope_returns_501_for_valid_page(loaded_client: TestClient) -> None:
+    """Page-scope batch delete is intentionally unimplemented (D2/D3).
+
+    It must NEVER report false success: callers belong on the real
+    ``words/delete-batch`` / ``lines/delete-batch`` routes. A silent 200
+    stub here caused parity finding F5 (B-61/62/65) — four delete
+    surfaces confirmed-then-deleted-nothing.
+    """
     resp = loaded_client.post(
         "/api/projects/book1/pages/0/delete",
         json={"scope": "word"},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 501
     body = resp.json()
-    assert body["project_id"] == "book1"
+    assert body["error"] == "not_implemented"
+    assert "delete-batch" in body["message"]
 
 
 # ── merge-scope ───────────────────────────────────────────────────────
@@ -197,14 +205,20 @@ def test_merge_scope_returns_404_for_bad_page(loaded_client: TestClient) -> None
     assert resp.json()["error"] == "page_not_found"
 
 
-def test_merge_scope_returns_200_for_valid_page(loaded_client: TestClient) -> None:
+def test_merge_scope_returns_501_for_valid_page(loaded_client: TestClient) -> None:
+    """Page-scope batch merge is intentionally unimplemented (D2/D3).
+
+    Same honesty contract as ``/delete`` — the real routes are
+    ``lines/merge`` and ``paragraphs/merge``.
+    """
     resp = loaded_client.post(
         "/api/projects/book1/pages/0/merge",
         json={"scope": "line"},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 501
     body = resp.json()
-    assert body["project_id"] == "book1"
+    assert body["error"] == "not_implemented"
+    assert "merge" in body["message"]
 
 
 # ── split-paragraph-after-line ────────────────────────────────────────
@@ -395,16 +409,23 @@ def test_group_into_paragraph_returns_404_for_bad_page(
     assert resp.json()["error"] == "page_not_found"
 
 
-def test_group_into_paragraph_returns_200_for_valid_page(
+def test_group_into_paragraph_returns_501_for_valid_page(
     loaded_client: TestClient,
 ) -> None:
+    """``words/group-into-paragraph`` is the third false-success stub.
+
+    Uncalled by the SPA (the toolbar uses the real
+    ``paragraphs/group-selected-words`` route) — same honesty contract
+    as ``/delete`` and ``/merge``.
+    """
     resp = loaded_client.post(
         "/api/projects/book1/pages/0/words/group-into-paragraph",
         json={"word_indices": [[0, 1], [0, 2]]},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 501
     body = resp.json()
-    assert body["project_id"] == "book1"
+    assert body["error"] == "not_implemented"
+    assert "group-selected-words" in body["message"]
 
 
 # ── set-line-gt helpers ───────────────────────────────────────────────────

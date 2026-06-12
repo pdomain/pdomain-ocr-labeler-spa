@@ -596,11 +596,13 @@ describe("STB-3: LineDetail LineCard action buttons perform their mutations", ()
     await waitFor(() => expect(copyCalled).toBe(true));
   });
 
-  it("line-delete-button in embedded LineCard calls delete mutation", async () => {
-    let deleteCalled = false;
+  // P1.3 (B-62): delete must hit the real lines/delete-batch route — the
+  // page-scope /delete endpoint is a 501 stub that never deleted anything.
+  it("line-delete-button in embedded LineCard POSTs lines/delete-batch", async () => {
+    let body: unknown;
     server.use(
-      http.post("/api/projects/p1/pages/0/delete", async () => {
-        deleteCalled = true;
+      http.post("/api/projects/p1/pages/0/lines/delete-batch", async ({ request }) => {
+        body = await request.json();
         return HttpResponse.json(makePage());
       }),
     );
@@ -608,6 +610,6 @@ describe("STB-3: LineDetail LineCard action buttons perform their mutations", ()
     selectLine(3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-delete-button-3"));
-    await waitFor(() => expect(deleteCalled).toBe(true));
+    await waitFor(() => expect(body).toEqual({ scope: "line", line_indices: [3] }));
   });
 });

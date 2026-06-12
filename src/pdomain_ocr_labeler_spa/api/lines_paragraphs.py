@@ -71,19 +71,23 @@ Paragraph mutation endpoints (spec-23-D2, issue #318):
   ``page.lines.index(paragraph.lines[after_line_index])``. Wire shape
   ``SplitParagraphAfterLineRequest`` is preserved per spec §14.
 
-Legacy routes kept for frontend compatibility (older 404-stub contract
-already pinned in ``frontend/src/api/types.ts`` and ``hooks/useLineMutations.ts``):
+Legacy routes kept for wire compatibility (shapes pinned in
+``frontend/src/api/types.ts``):
 
-- ``POST .../lines/{li}/copy-gt`` body ``{direction: gt_to_ocr|ocr_to_gt}``.
-- ``POST .../delete`` body ``DeleteScopeRequest`` (page-scope batch).
-- ``POST .../merge`` body ``MergeScopeRequest`` (page-scope batch).
-- ``POST .../lines/{li}/split-with-selected``.
-- ``POST .../words/group-into-paragraph``.
+- ``POST .../lines/{li}/copy-gt`` body ``{direction: gt_to_ocr|ocr_to_gt}``
+  — real (dispatches to the explicit copy routes).
+- ``POST .../lines/{li}/split-with-selected`` — real.
+- ``POST .../delete`` body ``DeleteScopeRequest`` (page-scope batch) — **501**.
+- ``POST .../merge`` body ``MergeScopeRequest`` (page-scope batch) — **501**.
+- ``POST .../words/group-into-paragraph`` — **501**.
 
-These remain stub-shaped (return 200 with a stub PagePayload) because
-their backend semantics are page-scope batches (D3); D2 wires the per-
-paragraph endpoints from the spec table. The page-scope batch routes'
-integration tests remain green via the unchanged ``_page_payload`` stub.
+The three 501 routes are intentionally unimplemented page-scope batches
+(D2/D3): the real per-scope routes (``words/delete-batch``,
+``lines/delete-batch``, ``paragraphs/delete-batch``, ``lines/merge``,
+``paragraphs/merge``, ``paragraphs/group-selected-words``) cover every
+SPA surface. They used to return silent 200 stubs, which made four
+delete surfaces confirm-then-delete-nothing (parity finding F5); a
+mutation route must never report false success.
 """
 
 from __future__ import annotations
@@ -469,12 +473,30 @@ def _resolve_line(page: Any, line_index: int) -> Any | None:
 
 
 def _stub_page_payload(project_id: str, page_index: int) -> JSONResponse:
-    """Return a minimal PagePayload — used by legacy routes that haven't
-    been wired to real mutations yet (paragraph endpoints + page-scope
-    delete/merge live in spec-23-D2/D3).
+    """Return a minimal PagePayload — pre-seed fall-through only.
+
+    Used exclusively by routes whose *happy path is real* but whose
+    PageState hasn't been seeded yet (project loaded, page never OCR'd):
+    the pre-D1/D2 integration tests exercise that fall-through. Routes
+    that have NO real implementation must return ``_not_implemented``
+    instead — a 200 stub on a mutation route reports false success
+    (parity finding F5, B-61/62/65).
     """
     payload = PagePayload(project_id=project_id, page_index=page_index)
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
+
+
+def _not_implemented(message: str) -> JSONResponse:
+    """501 envelope for intentionally-unimplemented legacy routes.
+
+    These routes keep their wire registration (typed clients / OpenAPI
+    stay stable) but must never report false success: any caller that
+    reaches one gets a loud error naming the real route to use.
+    """
+    return JSONResponse(
+        status_code=501,
+        content=ApiError(error="not_implemented", message=message).model_dump(),
+    )
 
 
 def _finalize_structural_edit(
@@ -1778,15 +1800,22 @@ def delete_scope(
     body: DeleteScopeRequest,
     project_state: ProjectState = Depends(get_project_state),
 ) -> JSONResponse:
-    """``POST .../delete`` — page-scope batch delete (paragraph/line/word).
+    """``POST .../delete`` — page-scope batch delete. NOT IMPLEMENTED (501).
 
-    Stays a stub. Spec-23-D1 covers per-line delete; the page-scope batch
-    (paragraph/word) is part of D2/D3.
+    The real delete routes are ``words/delete-batch``, ``lines/delete-batch``
+    and ``paragraphs/delete-batch`` (Lane A / A2) — all frontend callers
+    point there. This legacy route used to return a silent 200 stub, which
+    made four delete surfaces confirm-then-delete-nothing (parity finding
+    F5, B-61/62/65). It now fails loudly so no caller can mistake it for
+    success. Implementing it for real is still parked in spec-23-D2/D3.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
         return err
-    return _stub_page_payload(project_id, page_index)
+    return _not_implemented(
+        "page-scope /delete is not implemented — use words/delete-batch, "
+        "lines/delete-batch or paragraphs/delete-batch instead",
+    )
 
 
 @router.post(
@@ -1799,15 +1828,18 @@ def merge_scope(
     body: MergeScopeRequest,
     project_state: ProjectState = Depends(get_project_state),
 ) -> JSONResponse:
-    """``POST .../merge`` — page-scope batch merge (paragraphs/lines).
+    """``POST .../merge`` — page-scope batch merge. NOT IMPLEMENTED (501).
 
-    Stays a stub. Spec-23-D1 covers the dedicated ``/lines/merge`` route
-    (real mutation); the multi-scope page-level batch is D2/D3.
+    The real merge routes are ``lines/merge`` and ``paragraphs/merge``
+    (spec-23-D1). No SPA surface calls this legacy route; like ``/delete``
+    it used to return a silent 200 stub and now fails loudly instead.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
         return err
-    return _stub_page_payload(project_id, page_index)
+    return _not_implemented(
+        "page-scope /merge is not implemented — use lines/merge or paragraphs/merge instead",
+    )
 
 
 @router.post(
@@ -1980,14 +2012,18 @@ def group_selected_words_into_new_paragraph(
     body: GroupSelectedWordsIntoNewParagraphRequest,
     project_state: ProjectState = Depends(get_project_state),
 ) -> JSONResponse:
-    """``POST .../words/group-into-paragraph`` — paragraph mutation stub.
+    """``POST .../words/group-into-paragraph`` — NOT IMPLEMENTED (501).
 
-    Stays a stub. Paragraph-scope mutations live in spec-23-D2.
+    The real route is ``paragraphs/group-selected-words`` (Lane A / A2),
+    which the toolbar uses. No SPA surface calls this legacy route; it
+    used to return a silent 200 stub and now fails loudly instead.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
         return err
-    return _stub_page_payload(project_id, page_index)
+    return _not_implemented(
+        "words/group-into-paragraph is not implemented — use paragraphs/group-selected-words instead",
+    )
 
 
 def install_lines_paragraphs_router(app) -> None:  # type: ignore[no-untyped-def]

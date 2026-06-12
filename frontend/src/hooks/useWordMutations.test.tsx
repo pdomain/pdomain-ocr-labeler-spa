@@ -36,10 +36,12 @@ describe("useDeleteWord", () => {
     expect(typeof result.current.mutateAsync).toBe("function");
   });
 
-  it("POSTs the word delete-scope body to /pages/{idx}/delete", async () => {
+  // P1.3 (B-61): the page-scope /delete endpoint is a 501 stub — the hook
+  // must use the real words/delete-batch route or the word never deletes.
+  it("POSTs the word batch body to words/delete-batch (NOT the /delete stub)", async () => {
     let body: unknown;
     server.use(
-      http.post("/api/projects/:pid/pages/:idx/delete", async ({ request }) => {
+      http.post("/api/projects/:pid/pages/:idx/words/delete-batch", async ({ request }) => {
         body = await request.json();
         return HttpResponse.json({ project_id: "p", page_index: 0 });
       }),
@@ -54,8 +56,6 @@ describe("useDeleteWord", () => {
     expect(body).toEqual({
       scope: "word",
       word_indices: [[1, 2]],
-      line_indices: [],
-      paragraph_indices: [],
     });
   });
 });

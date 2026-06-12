@@ -1,9 +1,11 @@
 // WordFooter.test.tsx — P2.f tests for the validate/skip/delete footer.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { http, HttpResponse } from "msw";
+import { server } from "../../test/server";
 import { WordFooter } from "./WordFooter";
 import * as selectionStore from "../../stores/selection-store";
 import type { components } from "../../api/types";
@@ -89,5 +91,22 @@ describe("WordFooter (P2.f)", () => {
     await userEvent.click(screen.getByTestId("word-footer-delete"));
     await userEvent.click(screen.getByTestId("confirm-dialog-cancel"));
     expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
+  });
+
+  // P1.3 (B-61): confirming Delete must POST the real words/delete-batch
+  // route — the page-scope /delete endpoint is a 501 stub that never
+  // deleted anything (confirm-then-delete-nothing).
+  it("confirming Delete POSTs words/delete-batch with the word tuple", async () => {
+    let body: unknown;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/words/delete-batch", async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json(minPage);
+      }),
+    );
+    renderFooter();
+    await userEvent.click(screen.getByTestId("word-footer-delete"));
+    await userEvent.click(screen.getByTestId("confirm-dialog-confirm"));
+    await waitFor(() => expect(body).toEqual({ scope: "word", word_indices: [[2, 1]] }));
   });
 });

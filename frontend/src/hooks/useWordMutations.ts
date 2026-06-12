@@ -8,7 +8,7 @@
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/merge         → PagePayload
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/split         → PagePayload
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/char-ranges   → PagePayload (FO-2)
-//   POST /api/projects/{pid}/pages/{idx}/delete                        → PagePayload (S1.1)
+//   POST /api/projects/{pid}/pages/{idx}/words/delete-batch            → PagePayload (P1.3)
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/nudge         → PagePayload (S1.1)
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -25,7 +25,6 @@ type AddWordRequest = components["schemas"]["AddWordRequest"];
 type UpdateWordGroundTruthRequest = components["schemas"]["UpdateWordGroundTruthRequest"];
 type SetCharRangesRequest = components["schemas"]["SetCharRangesRequest"];
 type CharRange = components["schemas"]["CharRange-Input"];
-type DeleteScopeRequest = components["schemas"]["DeleteScopeRequest"];
 type NudgeBboxRequest = components["schemas"]["NudgeBboxRequest"];
 
 // ─── internal helpers ──────────────────────────────────────────────────────
@@ -390,32 +389,27 @@ export function useSetCharBboxes(projectId: string, pageIndex: number) {
   });
 }
 
-// ─── useDeleteWord (S1.1) ─────────────────────────────────────────────────────
+// ─── useDeleteWord (S1.1, repointed P1.3 / B-61) ──────────────────────────────
 
 /**
  * Delete a single word from the page.
  *
- * Uses the generic ``POST .../delete`` endpoint with scope "word".
- * Pattern mirrors the local ``useDeleteWord`` in ``WordFooter.tsx``.
+ * Uses the real ``words/delete-batch`` route (Lane A / A2). The legacy
+ * page-scope ``POST .../delete`` endpoint is an intentionally
+ * unimplemented 501 stub — pointing here at it made word delete
+ * silently delete nothing (parity finding F5, B-61).
  *
- * Endpoint: ``POST /api/projects/{pid}/pages/{idx}/delete``
- * Body: ``DeleteScopeRequest { scope:"word", word_indices:[[li,wi]], line_indices:[], paragraph_indices:[] }``
+ * Endpoint: ``POST /api/projects/{pid}/pages/{idx}/words/delete-batch``
+ * Body: ``{ scope:"word", word_indices:[[li,wi]] }``
  */
 export function useDeleteWord(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
   return useMutation<PagePayload, Error, { lineIndex: number; wordIndex: number }>({
-    mutationFn: ({ lineIndex, wordIndex }) => {
-      const body: DeleteScopeRequest = {
-        scope: "word",
-        word_indices: [[lineIndex, wordIndex]],
-        line_indices: [],
-        paragraph_indices: [],
-      };
-      return apiPost<PagePayload>(
-        `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}/delete`,
-        body,
-      );
-    },
+    mutationFn: ({ lineIndex, wordIndex }) =>
+      apiPost<PagePayload>(
+        `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}/words/delete-batch`,
+        { scope: "word", word_indices: [[lineIndex, wordIndex]] },
+      ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
     },

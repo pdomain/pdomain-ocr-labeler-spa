@@ -237,9 +237,9 @@ class SelServer:
     project_url: str  # /projects/<id>/pages/pageno/1
 
 
-@pytest.fixture(scope="module")
-def sel_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[SelServer]:
-    """Live server with the two-block sel-fixture project pre-loaded.
+@contextlib.contextmanager
+def _sel_server_ctx(tmp_path_factory: pytest.TempPathFactory, label: str) -> Iterator[SelServer]:
+    """Start a live server with the two-block sel-fixture project pre-loaded.
 
     Seeds the event store with synthetic two-block page content so
     GET /api/projects/{id}/pages/0 returns real line_matches without OCR.
@@ -248,10 +248,10 @@ def sel_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[SelServer]:
     if not _spa_built():
         pytest.skip("SPA not built — run `make frontend-build` (or `make e2e`) first")
 
-    data_root = tmp_path_factory.mktemp("sel-data")
-    cache_root = tmp_path_factory.mktemp("sel-cache")
-    config_root = tmp_path_factory.mktemp("sel-config")
-    source_root = tmp_path_factory.mktemp("sel-source")
+    data_root = tmp_path_factory.mktemp(f"{label}-data")
+    cache_root = tmp_path_factory.mktemp(f"{label}-cache")
+    config_root = tmp_path_factory.mktemp(f"{label}-config")
+    source_root = tmp_path_factory.mktemp(f"{label}-source")
 
     # Source project: image + pages.json.
     dest = source_root / _PROJECT_ID
@@ -295,10 +295,32 @@ def sel_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[SelServer]:
 
     project_url = f"{base_url}/projects/{_PROJECT_ID}/pages/pageno/1"
 
-    yield SelServer(base_url=base_url, project_url=project_url)
+    try:
+        yield SelServer(base_url=base_url, project_url=project_url)
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)
 
-    server.should_exit = True
-    thread.join(timeout=5)
+
+@pytest.fixture(scope="module")
+def sel_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[SelServer]:
+    """Shared (module-scoped) sel-fixture server for non-destructive tests."""
+    with _sel_server_ctx(tmp_path_factory, "sel") as srv:
+        yield srv
+
+
+@pytest.fixture
+def mut_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[SelServer]:
+    """Function-scoped isolated server for DESTRUCTIVE round-trips.
+
+    Structural mutations (delete word, split line) would corrupt the shared
+    module-scoped fixture for sibling tests — and with ``-n 2`` xdist
+    distribution the in-worker execution order is not the file order, so
+    "run destructive tests last" is not a safe strategy. Each destructive
+    test gets its own freshly seeded server instead.
+    """
+    with _sel_server_ctx(tmp_path_factory, "mut") as srv:
+        yield srv
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -961,3 +983,59 @@ def test_line_gt_commit_end_to_end(sel_server: SelServer, page: Page) -> None:
     )
 
     _save_screenshot(page, "line_gt_commit_persisted")
+
+
+# ─── P1.3 round-trip: WordFooter delete persists (B-61) ───────────────────────
+
+
+def _real_word_count(lm: dict) -> int:
+    """Count OCR-backed words in a line_match.
+
+    After a delete + GT rematch, the deleted word's ground-truth text
+    becomes an unmatched-GT orphan slot with ``word_index=None`` —
+    counting raw ``word_matches`` entries over-counts (dim-B sweep
+    gotcha, row 48).
+    """
+    return len([wm for wm in lm.get("word_matches", []) if wm.get("word_index") is not None])
+
+
+@pytest.mark.e2e
+def test_word_footer_delete_persists(mut_server: SelServer, page: Page) -> None:
+    """P1.3 (B-61): WordFooter Delete + confirm actually removes the word.
+
+    Regression for parity finding F5: the footer used to POST the
+    page-scope ``/delete`` backend stub — ConfirmDialog, HTTP 200,
+    nothing deleted. It must now hit ``words/delete-batch`` and the
+    deletion must persist via API re-fetch.
+
+    Destructive (structural) — runs on its own ``mut_server``.
+    """
+    lm0 = _poll_line(mut_server.base_url, 0, lambda lm: True)
+    assert lm0 is not None, "line 0 missing from fixture payload"
+    assert _real_word_count(lm0) == 2, "fixture line 0 should start with 2 OCR words"
+
+    _goto_project_page(page, mut_server.project_url)
+    _select_first_word_via_hierarchy(page)  # selects word (0,0) "Hello"
+
+    delete_btn = page.locator('[data-testid="word-footer-delete"]').first
+    delete_btn.wait_for(state="visible", timeout=10_000)
+    delete_btn.click()
+
+    confirm = page.locator('[data-testid="confirm-dialog-confirm"]').first
+    confirm.wait_for(state="visible", timeout=5_000)
+    confirm.click()
+
+    lm = _poll_line(mut_server.base_url, 0, lambda lm: _real_word_count(lm) == 1)
+    assert lm is not None, "line 0 missing after word delete"
+    assert _real_word_count(lm) == 1, (
+        f"WordFooter Delete did NOT persist: line 0 still has "
+        f"{_real_word_count(lm)} OCR words (expected 1). Chain: "
+        "word-footer-delete → ConfirmDialog confirm → useDeleteWord → "
+        "POST words/delete-batch → event store. If this regressed to the "
+        "page-scope /delete stub the server now answers 501 — check the "
+        "network log for the failing POST."
+    )
+    remaining = [wm["ocr_text"] for wm in lm["word_matches"] if wm.get("word_index") is not None]
+    assert remaining == ["World"], f"expected only 'World' to remain, got {remaining}"
+
+    _save_screenshot(page, "word_footer_delete_persisted")

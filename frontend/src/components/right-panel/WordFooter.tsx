@@ -4,7 +4,7 @@
 // Three-button footer pinned to the bottom of the word editor panel:
 //   1. Validate  — toggles word.is_validated via POST .../validated
 //   2. Skip      — walkSibling("next", page); no server call
-//   3. Delete    — POST .../delete with scope:"word"; requires ConfirmDialog
+//   3. Delete    — POST .../words/delete-batch (P1.3); requires ConfirmDialog
 //
 // data-testids:
 //   word-footer                — outer container
@@ -21,7 +21,6 @@ import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
 type ToggleValidatedRequest = components["schemas"]["ToggleValidatedRequest"];
-type DeleteScopeRequest = components["schemas"]["DeleteScopeRequest"];
 
 // ─── internal helpers ─────────────────────────────────────────────────────────
 
@@ -67,21 +66,18 @@ function useToggleValidated(projectId: string, pageIndex: number) {
   });
 }
 
+// P1.3 (B-61): POSTs the real ``words/delete-batch`` route. The legacy
+// page-scope ``/delete`` endpoint is an intentionally unimplemented 501
+// stub — pointing here at it made the footer Delete confirm-then-delete-
+// nothing (parity finding F5).
 function useDeleteWord(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
   return useMutation<PagePayload, Error, { lineIndex: number; wordIndex: number }>({
-    mutationFn: ({ lineIndex, wordIndex }) => {
-      const body: DeleteScopeRequest = {
-        scope: "word",
-        paragraph_indices: [],
-        line_indices: [],
-        word_indices: [[lineIndex, wordIndex]],
-      };
-      return apiPost<PagePayload>(
-        `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}/delete`,
-        body,
-      );
-    },
+    mutationFn: ({ lineIndex, wordIndex }) =>
+      apiPost<PagePayload>(
+        `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}/words/delete-batch`,
+        { scope: "word", word_indices: [[lineIndex, wordIndex]] },
+      ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
     },

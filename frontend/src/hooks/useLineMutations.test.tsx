@@ -69,6 +69,29 @@ describe("useDeleteLine", () => {
     expect(typeof result.current.mutate).toBe("function");
     expect(typeof result.current.mutateAsync).toBe("function");
   });
+
+  // P1.3 (B-62/65): the page-scope /delete endpoint is a 501 stub — the
+  // hook must use the real lines/delete-batch route or the line never
+  // deletes (LineDetail card Delete + MultiLineDetail card/bulk Delete).
+  it("POSTs the line batch body to lines/delete-batch (NOT the /delete stub)", async () => {
+    let body: unknown;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/lines/delete-batch", async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({ project_id: "proj1", page_index: 0 });
+      }),
+    );
+    const Wrapper = makeWrapper();
+    const { result } = renderHook(() => useDeleteLine("proj1", 0), { wrapper: Wrapper });
+    act(() => {
+      result.current.mutate({ lineIndex: 3 });
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(body).toEqual({
+      scope: "line",
+      line_indices: [3],
+    });
+  });
 });
 
 describe("useUpdateWordGt", () => {

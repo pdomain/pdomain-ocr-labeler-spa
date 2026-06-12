@@ -6,7 +6,7 @@
 // Endpoints:
 //   POST /api/projects/{pid}/pages/{idx}/words/validate-batch   → ValidateBatchResponse
 //   POST /api/projects/{pid}/pages/{idx}/lines/{li}/copy-gt     → PagePayload
-//   POST /api/projects/{pid}/pages/{idx}/delete                 → PagePayload
+//   POST /api/projects/{pid}/pages/{idx}/lines/delete-batch     → PagePayload (P1.3)
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/gt     → WordMatch
 //   POST /api/projects/{pid}/pages/{idx}/lines/merge            → PagePayload  (FO-3)
 //   POST /api/projects/{pid}/pages/{idx}/lines/{li}/set-gt      → PagePayload  (Task 3)
@@ -18,7 +18,6 @@ type PagePayload = components["schemas"]["PagePayload"];
 type WordMatch = components["schemas"]["WordMatch"];
 type ValidateBatchRequest = components["schemas"]["ValidateBatchRequest"];
 type CopyLineGtRequest = components["schemas"]["CopyLineGtRequest"];
-type DeleteScopeRequest = components["schemas"]["DeleteScopeRequest"];
 type UpdateWordGroundTruthRequest = components["schemas"]["UpdateWordGroundTruthRequest"];
 type MergeLinesRequest = components["schemas"]["MergeLinesRequest"];
 type PatchParagraphRequest = components["schemas"]["PatchParagraphRequest"];
@@ -99,21 +98,25 @@ export function useCopyLineGt(projectId: string, pageIndex: number) {
   });
 }
 
-// ─── useDeleteLine (#202) ─────────────────────────────────────────────────
+// ─── useDeleteLine (#202, repointed P1.3 / B-62) ──────────────────────────
 
-/** Delete a single line from the page. */
+/**
+ * Delete a single line from the page.
+ *
+ * Uses the real ``lines/delete-batch`` route (Lane A / A2). The legacy
+ * page-scope ``POST .../delete`` endpoint is an intentionally
+ * unimplemented 501 stub — pointing here at it made every line-delete
+ * surface (LineDetail card, MultiLineDetail card + bulk) silently
+ * delete nothing (parity finding F5, B-62/65).
+ */
 export function useDeleteLine(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
   return useMutation<PagePayload, Error, { lineIndex: number }>({
-    mutationFn: ({ lineIndex }) => {
-      const body: DeleteScopeRequest = {
+    mutationFn: ({ lineIndex }) =>
+      apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/lines/delete-batch`, {
         scope: "line",
-        paragraph_indices: [],
         line_indices: [lineIndex],
-        word_indices: [],
-      };
-      return apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/delete`, body);
-    },
+      }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
     },
