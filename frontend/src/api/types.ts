@@ -162,7 +162,24 @@ export interface paths {
         post?: never;
         /**
          * Delete Project
-         * @description ``DELETE /api/projects/{project_id}`` → ``204`` — spec §5.2.
+         * @description ``DELETE /api/projects/{project_id}`` → ``204`` — spec §5.2 (P4.2).
+         *
+         *     Permanently deletes the project (parity F13 / C14 — the grid's per-card
+         *     Delete action). Removes:
+         *
+         *     - the source project directory (including its co-located ``.pd-pages``
+         *       event store + blobs),
+         *     - the ``labeled-projects/<id>`` lane under ``data_root`` (so a future
+         *       re-created project with the same name cannot bleed stale labeled data
+         *       via the labeled > cached > OCR probe order),
+         *     - the in-memory project state + carrier when the deleted project was the
+         *       loaded one,
+         *     - the ``session_state.json`` pointer when it referenced the deleted
+         *       project (so ``/`` does not try to auto-resume a deleted path).
+         *
+         *     Works for any *discovered* project, not only the loaded one. ``404`` for
+         *     unknown ids; ``500 project_delete_failed`` when the filesystem removal
+         *     fails.
          */
         delete: operations["delete_project_api_projects__project_id__delete"];
         options?: never;

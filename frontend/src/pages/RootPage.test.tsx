@@ -3,8 +3,10 @@
 // Issue #84 (EmptyProjectState) + Issue #274 (RootPage + session-state fetch).
 // P5.h tests: hero band, search field, filter chips, project card redesign.
 // Spec: docs/specs/2026-05-12-root-page-design.md §Contract + P5.h (Gaps 59, 60)
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { dialogStore } from "../stores/dialog-store";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -561,5 +563,102 @@ describe("RootPage P5.h — Gap 59: project card redesign", () => {
     await waitFor(() => {
       expect(screen.getByTestId("root-projects-grid")).toBeInTheDocument();
     });
+  });
+});
+
+// --- P4.2 (parity F13 / C14): project card Delete wiring ---
+
+describe("RootPage P4.2 — project card delete", () => {
+  // dialogStore is module-global: an open confirm dialog from a previous test
+  // leaks into the next (Radix sets body pointer-events: none while open).
+  beforeEach(() => {
+    dialogStore.close("confirm");
+    document.body.style.pointerEvents = "";
+  });
+
+  async function openCardMenu() {
+    setupProjectList();
+    renderWithProviders(<RootPage />);
+    const user = userEvent.setup();
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-menu-p1")).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId("project-card-menu-p1"));
+    return user;
+  }
+
+  it("delete menu item opens a confirm dialog (not a silent no-op)", async () => {
+    const user = await openCardMenu();
+    await user.click(screen.getByTestId("project-card-delete-p1"));
+    await waitFor(() => {
+      expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
+    });
+    // The dialog warns about permanence.
+    expect(screen.getByTestId("confirm-dialog").textContent).toMatch(/permanently/i);
+  });
+
+  it("confirming delete calls DELETE /api/projects/{id} and refreshes the list", async () => {
+    let deleteCalled = false;
+    server.use(
+      http.delete("/api/projects/p1", () => {
+        deleteCalled = true;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const user = await openCardMenu();
+    await user.click(screen.getByTestId("project-card-delete-p1"));
+    await waitFor(() => {
+      expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
+    });
+
+    // After the DELETE succeeds, the projects query is refetched; serve an
+    // empty list so the card disappears from the grid.
+    server.use(
+      http.get("/api/projects", () =>
+        HttpResponse.json({
+          projects: [],
+          selected: null,
+          projects_root: "/data",
+          config_source: "default",
+        }),
+      ),
+    );
+
+    await user.click(screen.getByTestId("confirm-dialog-confirm"));
+
+    await waitFor(() => {
+      expect(deleteCalled).toBe(true);
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId("project-card-p1")).not.toBeInTheDocument();
+    });
+  });
+
+  it("cancelling the confirm dialog does NOT call DELETE", async () => {
+    let deleteCalled = false;
+    server.use(
+      http.delete("/api/projects/p1", () => {
+        deleteCalled = true;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const user = await openCardMenu();
+    await user.click(screen.getByTestId("project-card-delete-p1"));
+    await waitFor(() => {
+      expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId("confirm-dialog-cancel"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
+    });
+    expect(deleteCalled).toBe(false);
+    // The card is still there.
+    expect(screen.getByTestId("project-card-p1")).toBeInTheDocument();
+  });
+
+  it("archive menu item is no longer rendered (needs-spec — removed stub)", async () => {
+    await openCardMenu();
+    expect(screen.getByTestId("project-card-delete-p1")).toBeInTheDocument();
+    expect(screen.queryByTestId("project-card-archive-p1")).not.toBeInTheDocument();
   });
 });

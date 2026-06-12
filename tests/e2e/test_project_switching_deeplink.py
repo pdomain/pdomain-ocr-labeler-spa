@@ -150,3 +150,43 @@ def test_home_link_reaches_grid_and_switches_project(switch_server: SwitchServer
     page.wait_for_url(f"**/projects/{_PROJECT_B}/pages/pageno/1", timeout=60_000)
     wait_for_page_loaded(page, switch_server.base_url, timeout=60_000)
     assert f"/projects/{_PROJECT_B}/" in page.url
+
+
+# ---------------------------------------------------------------------------
+# P4.2 — project delete from the grid (F13 / C14)
+# ---------------------------------------------------------------------------
+
+
+def _goto_grid(server: SwitchServer, page: Page) -> None:
+    """Navigate to the RootPage grid, riding through a session redirect if one
+    fires (other tests in this module may have left a session behind)."""
+    page.goto(f"{server.base_url}/", timeout=30_000)
+    try:
+        page.wait_for_selector('[data-testid="root-projects-grid"]', timeout=5_000)
+        return
+    except Exception:
+        # Session redirect landed us on a project page — use the home link
+        # (P4.1) to reach the grid.
+        page.click('[data-testid="projects-home-link"]')
+        page.wait_for_selector('[data-testid="root-projects-grid"]', timeout=15_000)
+
+
+def test_delete_project_from_grid(switch_server: SwitchServer, page: Page) -> None:
+    """Card menu Delete: confirm dialog -> DELETE -> card gone + dir gone."""
+    doomed = "tiny-fixture-del"
+    dest = switch_server.source_root / doomed
+    if not dest.exists():
+        shutil.copytree(_TINY_FIXTURE_SRC, dest)
+
+    _goto_grid(switch_server, page)
+    page.wait_for_selector(f'[data-testid="project-card-{doomed}"]', timeout=10_000)
+
+    page.click(f'[data-testid="project-card-menu-{doomed}"]')
+    page.click(f'[data-testid="project-card-delete-{doomed}"]')
+
+    page.wait_for_selector('[data-testid="confirm-dialog"]', timeout=10_000)
+    page.click('[data-testid="confirm-dialog-confirm"]')
+
+    # The card leaves the grid and the project directory is removed from disk.
+    page.wait_for_selector(f'[data-testid="project-card-{doomed}"]', state="detached", timeout=15_000)
+    assert not dest.exists(), "project source dir survived the grid Delete action"

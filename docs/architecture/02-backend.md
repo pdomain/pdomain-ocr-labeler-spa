@@ -227,7 +227,15 @@ representation. The driver-facing URL bar still uses 1-based
 - `GET /api/projects/{project_id}` → `Project`.
   Returns the loaded `Project` model.
 - `DELETE /api/projects/{project_id}` → `204`.
-  Closes (forgets) the project state in memory; doesn't touch disk.
+  Permanently deletes the project (P4.2, parity F13/C14 — the grid's
+  per-card Delete action). Removes the source project directory
+  (including its co-located `.pd-pages` event store), the
+  `labeled-projects/<id>` lane, the in-memory state + carrier when the
+  deleted project was loaded, and the `session_state.json` pointer when
+  it referenced the deleted project. Works for any discovered project,
+  not only the loaded one. `404` for unknown ids; `500
+  project_delete_failed` on filesystem errors. (Pre-P4.2 semantics —
+  close-in-memory only, loaded project only — superseded 2026-06-12.)
 
 ### 5.3 Pages
 

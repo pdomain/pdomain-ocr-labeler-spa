@@ -57,6 +57,7 @@ What this layer deliberately does NOT do (deferred):
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
 from typing import Literal
 
@@ -70,10 +71,12 @@ from ..core.models import Project
 from ..core.ocr_models import AutoRotateAllRequest
 from ..core.persistence.config_yaml import AppConfig, save_config
 from ..core.persistence.ground_truth import load_ground_truth_from_directory
+from ..core.persistence.paths import labeled_projects_root
 from ..core.persistence.project_envelope import build_project_from_directory
 from ..core.persistence.session_state import (
     SESSION_STATE_SCHEMA_VERSION,
     SessionState,
+    load_session_state,
     save_session_state,
 )
 from ..core.project_enumeration import enumerate_projects
@@ -743,20 +746,85 @@ def save_all(
 @router.delete("/{project_id}", status_code=204, response_model=None)
 def delete_project(
     project_id: str,
+    settings: Settings = Depends(get_settings),
     project_state: ProjectState = Depends(get_project_state),
     carrier: ActiveProjectCarrier = Depends(get_active_project_carrier),
+    src_carrier: SourceRootCarrier = Depends(get_source_root_carrier),
 ) -> Response:
-    """``DELETE /api/projects/{project_id}`` → ``204`` — spec §5.2."""
-    project = project_state.loaded_project
-    if project is None or project.project_id != project_id:
+    """``DELETE /api/projects/{project_id}`` → ``204`` — spec §5.2 (P4.2).
+
+    Permanently deletes the project (parity F13 / C14 — the grid's per-card
+    Delete action). Removes:
+
+    - the source project directory (including its co-located ``.pd-pages``
+      event store + blobs),
+    - the ``labeled-projects/<id>`` lane under ``data_root`` (so a future
+      re-created project with the same name cannot bleed stale labeled data
+      via the labeled > cached > OCR probe order),
+    - the in-memory project state + carrier when the deleted project was the
+      loaded one,
+    - the ``session_state.json`` pointer when it referenced the deleted
+      project (so ``/`` does not try to auto-resume a deleted path).
+
+    Works for any *discovered* project, not only the loaded one. ``404`` for
+    unknown ids; ``500 project_delete_failed`` when the filesystem removal
+    fails.
+    """
+    enumerated = enumerate_projects(src_carrier.get())
+    target = next((p for p in enumerated if p.project_id == project_id), None)
+
+    loaded = project_state.loaded_project
+    is_loaded = loaded is not None and loaded.project_id == project_id
+
+    if target is not None:
+        project_root = target.project_root
+    elif loaded is not None and is_loaded:
+        project_root = Path(loaded.project_root)
+    else:
         return _api_error(  # type: ignore[return-value]
             404,
             "project_not_found",
             f"project not found: {project_id}",
         )
 
-    project_state.clear()
-    carrier.clear()
+    if is_loaded:
+        project_state.clear()
+        carrier.clear()
+
+    # Clear the session-state pointer when it references the deleted project.
+    state = load_session_state(settings.data_root)
+    if state is not None and state.last_project_path is not None:
+        try:
+            points_at_deleted = Path(state.last_project_path).resolve() == project_root.resolve()
+        except (OSError, RuntimeError):
+            points_at_deleted = state.last_project_path == str(project_root)
+        if points_at_deleted:
+            try:
+                save_session_state(
+                    settings.data_root,
+                    SessionState(
+                        schema_version=SESSION_STATE_SCHEMA_VERSION,
+                        last_project_path=None,
+                        last_page_index=0,
+                    ),
+                )
+            except OSError as exc:
+                log.warning("delete_project: failed to clear session_state.json (continuing): %s", exc)
+
+    try:
+        if project_root.is_dir():
+            shutil.rmtree(project_root)
+        labeled_lane = labeled_projects_root(settings.data_root) / project_id
+        if labeled_lane.is_dir():
+            shutil.rmtree(labeled_lane)
+    except OSError as exc:
+        log.error("delete_project: filesystem removal failed for %s: %s", project_id, exc)
+        return _api_error(  # type: ignore[return-value]
+            500,
+            "project_delete_failed",
+            f"failed to delete project files for {project_id}: {exc}",
+        )
+
     return Response(status_code=204)
 
 

@@ -14,12 +14,14 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, ChevronDown } from "@pdomain/pdomain-ui/icons";
 import { FolderOpen } from "@/icons/local-shims";
 import type { components } from "../api/types";
 import { Button } from "../components/ui/button";
-import { dialogStore } from "../stores/dialog-store";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { toast } from "../lib/toast";
+import { dialogStore, useDialogStore } from "../stores/dialog-store";
 
 type SessionStateResponse = components["schemas"]["SessionStateResponse"];
 type ListProjectsResponse = components["schemas"]["ListProjectsResponse"];
@@ -46,6 +48,14 @@ async function postLoadProject(projectPath: string): Promise<void> {
     body: JSON.stringify({ project_root: projectPath, initial_page_index: 0 }),
   });
   if (!res.ok) throw new Error(`POST /api/projects/load failed: ${res.status}`);
+}
+
+/** DELETE /api/projects/{id} — permanently removes the project (P4.2). */
+async function deleteProject(projectId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(projectId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`DELETE /api/projects/${projectId} failed: ${res.status}`);
 }
 
 /** Derive the project ID from an absolute project-directory path.
@@ -146,6 +156,7 @@ function ProgressBar({ percent }: { percent: number }) {
 /** Project card with thumbnail + page count + progress bar + action menu. */
 function ProjectCard({ project }: { project: ProjectKey }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const openMutation = useMutation({
@@ -159,6 +170,32 @@ function ProjectCard({ project }: { project: ProjectKey }) {
 
   const handleOpen = () => {
     openMutation.mutate();
+  };
+
+  // P4.2 (parity F13 / C14): per-card Delete — confirm → DELETE → refresh.
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteProject(project.project_id),
+    onSuccess: () => {
+      toast.success(`Project "${project.label || project.project_id}" deleted`);
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      void queryClient.invalidateQueries({ queryKey: ["session-state"] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete project: ${error.message}`);
+    },
+  });
+
+  const handleDelete = () => {
+    setMenuOpen(false);
+    dialogStore.openConfirm({
+      title: "Delete project?",
+      body:
+        `This will permanently delete "${project.label || project.project_id}" from disk — ` +
+        "source images, OCR data, and labeled work. This action cannot be undone.",
+      onConfirm: () => {
+        deleteMutation.mutate();
+      },
+    });
   };
 
   // Placeholder values — these will be populated when the backend exposes them.
@@ -260,25 +297,18 @@ function ProjectCard({ project }: { project: ProjectKey }) {
             </button>
             {menuOpen && (
               <div className="absolute right-0 top-full mt-1 w-32 bg-bg-raised border border-border-2 rounded shadow-lg z-10">
+                {/* P4.2: Delete is wired (confirm → DELETE → list refresh).
+                 * The former "Archive" stub was REMOVED — there is no archive
+                 * endpoint or project-status field in the API; re-add it once
+                 * the semantics are specced (needs-spec, parity C14). */}
                 <button
                   type="button"
                   data-testid={`project-card-delete-${project.project_id}`}
-                  onClick={() => {
-                    setMenuOpen(false);
-                  }}
-                  className="w-full text-left text-[11px] text-ink-2 px-3 py-1.5 hover:bg-bg-sunk transition-colors"
+                  onClick={handleDelete}
+                  disabled={deleteMutation.isPending}
+                  className="w-full text-left text-[11px] text-ink-2 px-3 py-1.5 hover:bg-bg-sunk transition-colors disabled:opacity-60"
                 >
-                  Delete
-                </button>
-                <button
-                  type="button"
-                  data-testid={`project-card-archive-${project.project_id}`}
-                  onClick={() => {
-                    setMenuOpen(false);
-                  }}
-                  className="w-full text-left text-[11px] text-ink-2 px-3 py-1.5 hover:bg-bg-sunk transition-colors"
-                >
-                  Archive
+                  {deleteMutation.isPending ? "Deleting…" : "Delete"}
                 </button>
               </div>
             )}
@@ -295,6 +325,10 @@ function ProjectCard({ project }: { project: ProjectKey }) {
 function ProjectListView({ projects }: { projects: ProjectKey[] }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<ProjectFilter>("all");
+  // P4.2: confirm dialog for destructive card actions (delete). Same
+  // dialogStore-driven pattern as ProjectPage — the store holds
+  // title/body/onConfirm; this view renders the single dialog instance.
+  const confirmState = useDialogStore((s) => s.confirm);
 
   const handleOpenFolder = () => {
     dialogStore.open("sourceFolder");
@@ -424,6 +458,21 @@ function ProjectListView({ projects }: { projects: ProjectKey[] }) {
           )}
         </div>
       </div>
+
+      {/* P4.2: ConfirmDialog — opened from ProjectCard delete via dialogStore. */}
+      <ConfirmDialog
+        open={confirmState.open}
+        message={confirmState.body ?? ""}
+        title={confirmState.title}
+        confirmLabel="Delete"
+        onConfirm={() => {
+          confirmState.onConfirm?.();
+          dialogStore.close("confirm");
+        }}
+        onCancel={() => {
+          dialogStore.close("confirm");
+        }}
+      />
     </div>
   );
 }

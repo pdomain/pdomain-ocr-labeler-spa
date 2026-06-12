@@ -324,6 +324,94 @@ def test_delete_project_returns_404_when_id_mismatches(
     assert resp.json()["error"] == "project_not_found"
 
 
+# --- P4.2 (parity F13 / C14): DELETE permanently removes the project --------
+
+
+def test_delete_loaded_project_removes_source_dir(tmp_path: Path, projects_root: Path) -> None:
+    """DELETE of the loaded project removes its source directory from disk."""
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        load_resp = c.post(
+            "/api/projects/load",
+            json={"project_root": str(projects_root / "book1")},
+        )
+        assert load_resp.status_code == 200
+
+        del_resp = c.delete("/api/projects/book1")
+        assert del_resp.status_code == 204
+        assert not (projects_root / "book1").exists(), "source project dir survived DELETE"
+
+        # The project list no longer contains it.
+        list_resp = c.get("/api/projects")
+        ids = [p["project_id"] for p in list_resp.json()["projects"]]
+        assert "book1" not in ids
+
+
+def test_delete_discovered_but_not_loaded_project_removes_dir(tmp_path: Path, projects_root: Path) -> None:
+    """DELETE works for a discovered project that is NOT currently loaded.
+
+    The grid's per-card Delete action targets arbitrary projects; the
+    pre-P4.2 endpoint 404'd for everything except the loaded one.
+    """
+    other = projects_root / "book2"
+    other.mkdir()
+    (other / "001.png").write_bytes(b"\x00")
+
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        # Load book1; delete book2 (not loaded).
+        load_resp = c.post(
+            "/api/projects/load",
+            json={"project_root": str(projects_root / "book1")},
+        )
+        assert load_resp.status_code == 200
+
+        del_resp = c.delete("/api/projects/book2")
+        assert del_resp.status_code == 204
+        assert not other.exists(), "source project dir survived DELETE"
+
+        # book1 stays loaded — deleting another project must not clear it.
+        get_resp = c.get("/api/projects/book1")
+        assert get_resp.status_code == 200
+
+
+def test_delete_loaded_project_clears_session_state(tmp_path: Path, projects_root: Path) -> None:
+    """DELETE of the loaded project clears the session-state pointer.
+
+    Otherwise the next visit to ``/`` would try to auto-resume a deleted
+    project path.
+    """
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        c.post("/api/projects/load", json={"project_root": str(projects_root / "book1")})
+        del_resp = c.delete("/api/projects/book1")
+        assert del_resp.status_code == 204
+
+        session_resp = c.get("/api/session-state")
+        assert session_resp.status_code == 200
+        assert session_resp.json()["last_project_path"] is None
+
+
+def test_delete_project_removes_labeled_lane(tmp_path: Path, projects_root: Path) -> None:
+    """DELETE removes ``labeled-projects/<id>`` so a future re-created project
+    with the same name cannot bleed stale labeled data (labeled > cached > OCR
+    probe order)."""
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    labeled_dir = settings.data_root / "labeled-projects" / "book1"
+    labeled_dir.mkdir(parents=True)
+    (labeled_dir / "book1_001.json").write_text("{}")
+
+    app = build_app(settings)
+    with TestClient(app) as c:
+        c.post("/api/projects/load", json={"project_root": str(projects_root / "book1")})
+        del_resp = c.delete("/api/projects/book1")
+        assert del_resp.status_code == 204
+        assert not labeled_dir.exists(), "labeled-projects lane survived DELETE"
+
+
 def test_post_source_root_rejects_nonexistent_path(bare_client: TestClient) -> None:
     """source-root endpoint validates the path and rejects non-existent dirs."""
     resp = bare_client.post("/api/projects/source-root", json={"path": "/does_not_exist_ever"})
