@@ -21,7 +21,7 @@ controls. Persistence + OCR + GT-rematch live here.
 ## 1. Layout
 
 ```
-[Reload OCR] [Reload OCR (Edited)] [Save Page] [Save Project] [Load Page] [Rematch GT] [Rotate ↺] [Rotate ↻] [Export…]   page_001.png   [LABELED] [↻ 90 auto]
+[Reload OCR] [Reload OCR (Edited)] [Save Page] [Save Project] [Reload] [Undo] [Redo] [Rematch GT] [Rotate ↺] [Rotate ↻] [Export…]   page_001.png   [LABELED] [↻ 90 auto]
 ```
 
 Buttons left-to-right, then a divider, then the page name + source
@@ -133,23 +133,29 @@ with a "View details" action that opens a modal listing them.
 
 ---
 
-## 6. Load Page
+## 6. Reload (formerly "Load Page") + Undo/Redo
 
 Synchronous. `POST /api/projects/{id}/pages/{idx}/load`.
 
-Discards in-memory edits for this page and re-loads from disk. Order
-of preference (matches legacy):
+Renamed "Reload" per `docs/specs/2026-06-12-event-store-undo.md` (U-7);
+the `load-page-button` testid is unchanged. Every mutation auto-persists
+to the event-store head and reads resolve the head blob, so there are
+never "unsaved edits" to discard — the action is an honest refresh from
+the store. The confirm copy says so: "This will refresh the page from
+the latest stored version. Edits are saved automatically — use Undo to
+step back through page history."
 
-1. `<data>/labeled-projects/<project_id>/<project_id>_<page:03d>.json`
-2. `<cache>/page-images/<project_id>_<page:03d>_envelope.json` (cache lane)
-3. (None — error 404)
+Returns full `PagePayload`. SPA invalidates the page query.
 
-Returns full `PagePayload`. SPA invalidates the page query and resets
-the selection store.
-
-A confirmation toast appears: "Page reloaded from disk. Unsaved edits
-discarded." This is a destructive action — show shadcn `<AlertDialog />`
-to confirm before posting.
+**Undo / Redo** (`undo-button` / `redo-button`, `Mod+Z` / `Mod+Shift+Z`):
+per-page blob-version restore over the aggregate's provenance history.
+`POST /api/projects/{id}/pages/{idx}/undo|redo` → 200 `PagePayload` or
+409 at the bounds. Availability flags ride on `PagePayload.history`
+(`undo_available` / `redo_available` / `cursor` / `depth`); depth is
+bounded by `PDLABELER_UNDO_DEPTH` (default 50). Reload OCR and rotate
+create a new page aggregate, so the history resets across that boundary
+(the Reload-OCR confirm warns about it). Full design:
+`docs/specs/2026-06-12-event-store-undo.md`.
 
 ---
 
@@ -261,9 +267,11 @@ legacy depends on this distinction.
 | `Ctrl+Shift+S` | Save Project (with confirm) |
 | `Ctrl+R` | Reload OCR (with confirm) |
 | `Ctrl+Shift+R` | Reload OCR (Edited) (with confirm) |
-| `Ctrl+L` | Load Page (with confirm — destructive) |
+| `Ctrl+L` | Reload page from stored version (with confirm) |
 | `Ctrl+G` | Rematch GT (with confirm — destructive) |
 | `Ctrl+E` | Open Export dialog |
+| `Ctrl+Z` | Undo page edit (suppressed inside text fields) |
+| `Ctrl+Shift+Z` | Redo page edit |
 
 These are **new** ([Q10](../../OPEN_QUESTIONS.md)).
 

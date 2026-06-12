@@ -297,15 +297,21 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   // "unsaved edits" to discard — use Undo to step back through history.
   function handleLoadPage() {
     setOverflowOpen(false);
-    loadPage.mutate(undefined, {
-      onSuccess: () => {
-        toast.success("Page loaded");
-      },
-      onError: () => {
-        toast.error("Load page failed");
-      },
-      onSettled: () => {
-        void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    dialogStore.openConfirm({
+      title: "Reload page?",
+      body: "This will refresh the page from the latest stored version. Edits are saved automatically — use Undo to step back through page history.",
+      onConfirm: () => {
+        loadPage.mutate(undefined, {
+          onSuccess: () => {
+            toast.success("Page reloaded");
+          },
+          onError: () => {
+            toast.error("Reload failed");
+          },
+          onSettled: () => {
+            void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+          },
+        });
       },
     });
   }

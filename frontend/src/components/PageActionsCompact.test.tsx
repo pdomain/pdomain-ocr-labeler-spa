@@ -306,6 +306,15 @@ describe("PageActionsCompact: restored dropped buttons (Lane C / C2)", () => {
     renderCompact();
     await user.click(screen.getByTestId("page-actions-compact-overflow"));
     await user.click(await screen.findByTestId("load-page-button"));
+    // U-7: Reload routes through a confirm dialog with the rewritten copy
+    // (no "unsaved edits" claim). Approve it to fire the POST.
+    act(() => {
+      const confirm = dialogStore.getState().confirm;
+      expect(confirm.open).toBe(true);
+      expect(`${confirm.title ?? ""} ${confirm.body ?? ""}`).not.toMatch(/unsaved|discard/i);
+      confirm.onConfirm?.();
+      dialogStore.close("confirm");
+    });
     await waitFor(() => expect(loadSpy).toHaveBeenCalled());
   });
 

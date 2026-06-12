@@ -135,7 +135,7 @@ Refs point into the three sweep docs.
 | P4 | Add-word draw dispatch flaky | B-75 | Backend `words/add` works; UI drag dispatched 1 of 3 attempts and didn't persist. Needs focused e2e. |
 | P5 | Export dialog content mouse-dead | A-49 | Same overlay z-bug as F18 (§5.1); opens, Escape works, content unclickable. |
 | P6 | Source-root apply 403s on non-default ports | C09 | `LocalTrustMiddleware` rejects any Origin off a fixed 8080/5173 allowlist even when `Sec-Fetch-Site: same-origin`. Works on :8080; e2e misses it (httpx, random ports). |
-| P7 | Load Page lost its revert semantic | C20 | Every mutation advances the event-store head; `load_labeled` reads the head, so "discard unsaved edits" is a refresh — there is nothing to discard. Design question, not a wiring bug. |
+| P7 | Load Page lost its revert semantic | C20 | RESOLVED BY DESIGN (CT 2026-06-12): `docs/specs/2026-06-12-event-store-undo.md` — "Load Page" renamed "Reload" (honest refresh, testid unchanged) and real per-page undo/redo ships from the event-store version history (v1 slices H-A…H-D + BV). |
 | P8 | Export run history is client-state only | C43 | `GET /exports` is a hardcoded `[]` stub though manifests exist on disk; history lost on dialog unmount. |
 | P9 | Component filter / output-mode effect unobservable | C38 | Controls render and POST; effect masked while F2 holds. |
 | P10 | Legacy envelope read-compat is export-only | C56 | Planted `UserPageEnvelope` is consumed by export, but page load ignores it once an event-store head exists. |
@@ -306,9 +306,10 @@ milestone. Effort tags: S / M / L. "CT" = needs a CT design decision first;
   brush/lasso/rect erase. Revisit only if real labeling sessions show
   margin-cleanup pain.
 - **F23 glyph panel** — blocked on M11 / Q-A7, unchanged.
-- **P7 Load-Page revert semantics** — design question about what "discard
-  unsaved edits" means under event-store auto-persist; pairs with the P1.1/P1.2
-  persistence decisions and should be settled in the same conversation.
+- **P7 Load-Page revert semantics** — RESOLVED BY DESIGN (CT 2026-06-12):
+  `docs/specs/2026-06-12-event-store-undo.md` builds event-store-powered
+  per-page undo/redo and renames "Load Page" to an honest "Reload"
+  (`load-page-button` testid unchanged). v1 (slices H-A…H-D + BV) shipped.
 - **P12 status filter chips** — needs an API status field; fold into whatever
   project-metadata work comes later.
 

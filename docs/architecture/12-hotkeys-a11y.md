@@ -50,9 +50,11 @@ with `react-hotkeys-hook`, scoping to the relevant DOM region via
 | `Mod+Shift+S` | Save Project (with confirm) | global |
 | `Mod+R` | Reload OCR (with confirm) | global |
 | `Mod+Shift+R` | Reload OCR (Edited) (with confirm) | global |
-| `Mod+L` | Load Page (with confirm — destructive) | global |
+| `Mod+L` | Reload page from stored version (with confirm) | global |
 | `Mod+G` | Rematch GT (with confirm — destructive) | global |
 | `Mod+E` | Open Export dialog | global |
+| `Mod+Z` | Undo page edit (suppressed inside text fields — native text undo wins; spec 2026-06-12-event-store-undo U-10) | global |
+| `Mod+Shift+Z` | Redo page edit | global |
 | `Mod+,` | Open OCR config | global |
 | `Mod+O` | Open Source Folder dialog | global |
 | `?` | Open hotkey-help modal | global |

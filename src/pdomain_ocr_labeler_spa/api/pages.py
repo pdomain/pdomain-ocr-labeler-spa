@@ -1005,7 +1005,11 @@ def load_page(
     app_config: AppConfig = Depends(get_app_config),
     page_store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
-    """``POST .../load`` — re-read the page from disk, discard in-memory edits.
+    """``POST .../load`` — Reload: refresh the page from the event-store head.
+
+    U-7 (spec 2026-06-12-event-store-undo): the SPA labels this "Reload" —
+    every mutation auto-persists to the store head, so there are no unsaved
+    in-memory edits to discard; this is an honest refresh.
 
     Spec §5. Discards any in-memory ``PageState`` for this index, then
     calls ``ensure_page_model`` with the route-layer-injected or on-demand

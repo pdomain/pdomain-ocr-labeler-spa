@@ -5,7 +5,7 @@
 // Wires:
 //   Mod+S         → onSavePage (non-destructive)
 //   Mod+Shift+S   → onSaveProject (non-destructive)
-//   Mod+L         → onLoadPage (destructive — confirm required by caller)
+//   Mod+L         → onLoadPage ("Reload" — confirm required by caller)
 //   Mod+G         → onRematchGt (destructive — confirm required by caller)
 //   Mod+E         → onExport
 //   Mod+ArrowLeft → onPrevPage
@@ -24,7 +24,7 @@ export interface GlobalHotkeyHandlers {
   onSavePage?: () => void;
   /** Fired by Mod+Shift+S (Save Project). Non-destructive. */
   onSaveProject?: () => void;
-  /** Fired by Mod+L (Load Page). Destructive — caller should show confirm first. */
+  /** Fired by Mod+L (Reload page). Caller shows the confirm first (U-7 copy). */
   onLoadPage?: () => void;
   /** Fired by Mod+G (Rematch GT). Destructive — caller should show confirm first. */
   onRematchGt?: () => void;

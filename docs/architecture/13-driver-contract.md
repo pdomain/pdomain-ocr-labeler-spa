@@ -155,7 +155,9 @@ Hotkey: `Enter` on `nav-page-input` triggers `Go To`.
 | `reload-ocr-edited-button` | Reload OCR (Edited) |
 | `save-page-button` | Save Page |
 | `save-project-button` | Save Project |
-| `load-page-button` | Load Page |
+| `load-page-button` | Reload (formerly "Load Page" — renamed per the event-store undo spec U-7; the testid is unchanged) |
+| `undo-button` | Undo last page mutation (event-store undo; new testid — the legacy labeler had no undo surface) |
+| `redo-button` | Redo (symmetric to `undo-button`) |
 | `rematch-gt-button` | Rematch GT |
 | `export-button` | Export... |
 | `page-source-badge` | The badge ("LABELED" / "CACHED OCR" / "RAW OCR" / "LOADING…") |
