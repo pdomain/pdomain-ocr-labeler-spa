@@ -30,3 +30,22 @@ N-A = not applicable (capability retired/moved by design with CT sign-off).
 
 - **NEW — duplicate testids: hidden HeaderBar driver stubs shadow real dialog controls.** `HeaderBar.tsx` hidden-stub block renders `source-folder-up-button` etc. with `data-testid-stub="true"`; when the real SourceFolderDialog is open, page-level `[data-testid=…]` matches 2 elements and `.first` resolves to the invisible stub (Playwright click times out). Driver must scope queries inside `source-folder-dialog`. Contract should either drop the stubs or document the scoping requirement.
 - **NEW — console error spam on project page:** `Konva has no node with the type div. Group will be used instead.` repeated ≥5× on every project-page load — a DOM `<div>` is being rendered inside a react-konva tree somewhere. Not user-visible but indicates a real rendering bug.
+
+## Batch 2 — project page shell, navigation, URL shapes, nav hotkeys
+
+| # | Capability | Verdict | Evidence |
+|---|---|---|---|
+| A-15 | ProjectPage shell (workspace / canvas / worklist / detail columns, image-pane) | PASS | All six layout testids visible. |
+| A-16 | Page "N / M" indicator (legacy nav bar + project-top-toolbar) | PASS (re-mapped) | `project-top-toolbar` / `project-toolbar-page` no longer exist in ProjectPage (inventory `new-a-screens.md` is stale). Indicator = header `nav-page-input` (shows current page) + `nav-page-total-label` ("/ 8"), both visible and live. |
+| A-17 | Prev / Next page buttons | PASS | `nav-next-button` → pageno/2, `nav-prev-button` → pageno/1; prev correctly disabled on page 1. |
+| A-18 | Go To page (input + button) | PARTIAL | Enter in `nav-page-input` navigates (1→5 verified). **NEW BUG: the visible Go button (S6.1) is a guaranteed no-op** — `ProjectNavigationControls.tsx:122-124` `onBlur={() => setGotoValue("")}` clears the typed value when the click blurs the input, so `onGoTo` (line 71-76) falls back to `currentPageNo`. Verified live: typed 3, clicked Go, stayed on page 1, input reset. Mouse-only Go-To is still broken (it was the very gap S6.1 set out to fix). |
+| A-19 | Out-of-range page number rejected | PASS | Enter on "99" (total 8): no navigation, input restored — matches legacy silent-reject. |
+| A-20 | Mod+ArrowLeft / Mod+ArrowRight page nav | PASS | From settled p4: Ctrl+ArrowLeft → 3, Ctrl+ArrowRight → 4. (Hotkey is ignored if pressed during the immediately-post-nav busy window — transient, by design via `enabled`.) |
+| A-21 | Mod+Home / Mod+End first/last page | PASS | Ctrl+End → pageno/8, Ctrl+Home → pageno/1. |
+| A-22 | URL shapes: `/pages/index/{idx0}` redirect + bare `/projects/:id` | PASS | `index/2` → `pageno/3`; bare project → `pageno/1`. |
+| A-23 | Catch-all unknown route → `/` | PASS | `/garbage/route/xyz` → root → session-restore landed back on the project page (handled, no crash). |
+| A-24 | Deep-link straight to `pageno/3` | PASS | Page 3 rendered; nav input shows 3. |
+| A-25 | Header metrics strip (word/match/validated counts) | PASS | "33 words·32 exact·1 fuzzy·0 ✗·…" visible, page-specific. |
+| A-26 | Header project-name breadcrumb chip | PASS | `header-project-name` = "exercise-fixture". |
+| A-27 | Total-pages label | PASS | `nav-page-total-label` = "/ 8". |
+
