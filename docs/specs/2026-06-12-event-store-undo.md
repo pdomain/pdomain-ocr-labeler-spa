@@ -1,6 +1,6 @@
 ---
 repo: pdomain/pdomain-ocr-labeler-spa
-status: draft — awaiting CT review
+status: accepted — v1 ready to implement; U-M6/U-M7 designed (CT resolutions 2026-06-12)
 date: 2026-06-12
 ---
 
@@ -96,7 +96,7 @@ the existing `LabelerPageStore`, swap the in-memory `PageState.page_record` payl
 (re-stamp `_labeler_page_id`), bump the project-state generation (SSE consumers refresh).
 Redo is symmetric.
 
-## Capability matrix
+## Capability matrix (v1)
 
 | ID | Capability | Acceptance criterion (observable behavior — never "testid exists") |
 |------|------------|--------------------------------------------------------------------|
@@ -121,19 +121,23 @@ Redo is symmetric.
   step (coarse whole-page restore per step — acceptable v1 per CT).
 - **Not undoable (v1):** Reload OCR and rotate. Both produce a **new** `page_id` /
   aggregate (`page_state.py:246-256`), so the version chain restarts; the old aggregate
-  remains in the store but is unreachable from the UI. See Q-U1.
+  remains in the store but is unreachable from the UI. Crossing this boundary is
+  **designed** (CT 2026-06-12) and ships as milestone **U-M6** — see "U-M6 — undo across
+  the re-OCR/rotate boundary" below. v1 scope is unchanged.
 - Changelog-only saves (`save_page_to_store` fallback, no content blob) are not
   individually restorable; they're skipped in the chain (pre-existing persistence quirk,
   not widened here).
 
-## Out of scope
+## Out of scope (v1)
 
 - Postgres / managed-adapter persistence (D-042 unchanged).
-- Pruning/compaction of truncated redo branches or old blobs (`dead_branches` machinery
-  exists in pdomain-ops but stays unused here — see Q-U2).
-- A visible history list / jump-to-version panel (see Q-U3).
+- Pruning/compaction of truncated redo branches or old blobs — **designed** below
+  ("Blob & branch pruning"), ships with U-M6.
+- A visible history list / jump-to-version panel — **designed** below ("U-M7 — history
+  panel"), ships as U-M7.
 - Word-level or selective (partial-page) undo.
-- Changes to pdomain-ops (`PageAggregate` API is sufficient as-is).
+- Changes to pdomain-ops (`PageAggregate` API is sufficient as-is — confirmed for
+  U-M6/U-M7 too; see the verified-API notes in those sections).
 
 ## API surface
 
@@ -172,7 +176,17 @@ Redo is symmetric.
 - `docs/research/parity-audit/sweep-2026-06-12-c-system.md` row C20,
   `PARITY-GAP.md` row P7 — the findings this spec resolves.
 
-## Slices
+## Milestone plan
+
+| Milestone | Content | Status |
+|-----------|---------|--------|
+| v1 (slices H-A…H-D + BV, below) | buttons + hotkeys undo/redo, Reload rename, depth bound | ready to implement |
+| **U-M6** (post-v1) | undo across the re-OCR/rotate boundary + blob/branch pruning | designed below |
+| **U-M7** (post-v1) | visible history panel + jump-to-version | designed below |
+
+v1 slice content is unchanged by the 2026-06-12 CT resolutions; U-M6/U-M7 are appended.
+
+## Slices (v1)
 
 ### Slice H-A — version-chain derivation (pure, backend)
 
@@ -240,23 +254,189 @@ confirm copy), mutation hook, hotkey map + help modal.
       sliced" entry to point at this spec (resolved-by-design).
 - [ ] `make ci AI=1` green (includes frontend build); `make e2e AI=1` for the new tests.
 
-## Verification gate
+## Verification gate (v1)
 
 Done means: a human (or driver agent) can open a page, fix three words, press Mod+Z
 three times watching each fix visibly unwind on the canvas, press Mod+Shift+Z to walk
 forward again, restart the server and still undo, and never sees a button that claims to
 discard edits that don't exist — with no console errors.
 
-## Open questions (CT)
+## U-M6 — undo across the re-OCR/rotate boundary + pruning (post-v1)
 
-1. **Q-U1 — undo across re-OCR/rotate.** v1 resets history at the new-aggregate
-   boundary. The old aggregate persists, and `ProjectAggregate.reorder_pages` could
-   re-point `page_ids[idx]` back to it, making "undo the re-OCR" possible later. Want
-   that as a follow-up, or is the boundary acceptable long-term?
-2. **Q-U2 — storage growth policy.** Undo adds no new blobs (content-addressed reuse),
-   but the per-mutation blob stream and truncated redo branches accumulate. v1 ships no
-   pruning. Should a pruning policy (e.g. pdomain-ops `DeadBranch.retain_until`) be
-   specced before real multi-hundred-page sessions, or deferred until observed?
-3. **Q-U3 — history UI.** v1 is buttons + hotkeys only. Is a visible version list
-   ("jump to any prior state", timestamps from provenance) wanted as a follow-up, or
-   YAGNI?
+Resolves Q-U1 and Q-U2 (CT 2026-06-12): the history-reset boundary stays in v1, but
+crossing it is a designed follow-up milestone, not a maybe. Pruning ships in the same
+milestone because the fate of the abandoned aggregate is what the retention policy
+governs.
+
+### Boundary mechanism: page-slot re-pointing
+
+Re-OCR/rotate already creates a **new** page aggregate and re-points
+`ProjectAggregate.page_ids[idx]` at it (`page_state.py:246-256`). The old aggregate and
+its blobs stay in the store untouched — so "undo the re-OCR" is *another* slot re-point,
+back at the previous aggregate. No content is recomputed; the whole intra-aggregate undo
+chain of the old aggregate becomes reachable again.
+
+**Lineage link (the durable record of the boundary).** At re-OCR/rotate completion, link
+the two aggregates via `PageAggregate.set_extension` (fires `ExtensionSet` —
+`pdomain_ops/page_aggregate.py:161-184`, verified; replayable, snapshot-safe, zero ops
+changes), under a new namespace `extensions["labeler.lineage"]` (the existing
+`extensions["labeler"]` view-state model in `core/labeler_extension.py` stays untouched):
+
+- new aggregate: `{"previous_page_id": "<old aggregate id>", "boundary_op":
+  "reocr" | "rotate"}`
+- old aggregate: `{"superseded_by": "<new aggregate id>"}`
+
+**The event that records the re-point.** Crossing the boundary (either direction) calls
+`ProjectAggregate.reorder_pages(page_ids)` with the full list and the one slot swapped —
+the appended `PageReordered` event (`pdomain_ops/page_aggregate.py:212-215`, verified:
+replaces `record.page_ids` wholesale) is the durable record. Append-only is respected:
+the project log honestly records every re-point, exactly as the page log records every
+undo marker.
+
+**Undo crossing back.** When the page's chain cursor is at 0 *and* the current
+aggregate's `labeler.lineage.previous_page_id` is set, undo offers one more step: the
+boundary undo. Executing it re-points the slot to the previous aggregate, reloads the
+in-memory `PageState` from that aggregate's head blob, re-stamps `page_id`
+(the same stamp discipline as `page_state.py:246-256`), bumps the generation.
+
+**Redo crossing forward.** Symmetric: cursor at chain end *and*
+`labeler.lineage.superseded_by` set → redo re-points the slot to the successor
+aggregate.
+
+**Abandoned aggregate.** The aggregate not currently pointed at is never deleted from
+the event store. Its **blobs** are protected by the pruning live-set (below) as long as
+the aggregate is reachable from the slot's current aggregate by walking the lineage
+chain (`previous_page_id` / `superseded_by`) — lineage-reachable aggregates within
+retention contribute all their `blob_refs` to the live set; beyond retention only the
+old aggregate's *version blobs* become prunable (the event log itself stays).
+
+**Linear model at the aggregate level.** A *new* re-OCR performed while sitting on the
+old aggregate re-stamps its `superseded_by` to the newest successor (extension
+namespaces replace on set), discarding the previous forward branch from reachability —
+the same linear truncation rule as U-5, lifted one level.
+
+### Blob & branch pruning (resolves Q-U2)
+
+**Verified pdomain-ops surface (cite, don't invent):**
+
+- `DeadBranch` (`pdomain_ops/pages/provenance.py:33-39`): pure-data pydantic model with
+  exactly `tip_id`, `forked_from_id`, `superseded_at`, `retain_until`. **No retention
+  enforcement exists in pdomain-ops** — the model is a vocabulary, the policy is ours.
+- `ProvenanceGraph.dead_branches: list[DeadBranch]` (`provenance.py:48`) exists, but no
+  `PageAggregate` event mutates it — persisting the list would require a new ops event.
+  **Not needed:** truncation points are deterministic from `history` + markers, so dead
+  branches are **derived at prune time** by the same pure derivation as the cursor model
+  and materialized as in-memory `DeadBranch` values (`tip_id` = last node of the
+  truncated segment, `forked_from_id` = the restored version, `superseded_at` = the
+  truncating node's timestamp — nodes carry `datetime.now(UTC)`, `page_state.py:379` —
+  and `retain_until = superseded_at + retention`).
+- `BlobStore.prune_orphans(live_refs: set[str]) -> list[str]`
+  (`pdomain_ops/blob_store.py:40-47`): deletes **every** blob in the per-project dir not
+  in `live_refs`. The dir also holds image/preprocess blobs, so the live set must be
+  computed conservatively (below).
+
+**No new pdomain-ops surface is required.** No cross-repo prerequisite.
+
+**Retention default:** `PDLABELER_PRUNE_RETENTION_DAYS = 30`. Rationale: labeling a book
+spans days-to-weeks, so a mis-undone branch must survive a multi-week session; blobs are
+small content-addressed whole-page JSON, so the carrying cost of 30 days is trivial;
+time-based beats N-versions because truncations are bursty and N-versions gives
+unpredictable wall-clock protection.
+
+**Trigger:** an explicit maintenance op — `POST
+/api/projects/{project_id}/maintenance/prune` (returns deleted-hash count) — plus an
+optional automatic run at project open gated by `PDLABELER_PRUNE_ON_OPEN`
+(default `false`). **Never on-write:** `prune_orphans` scans the whole blob dir
+(O(blobs) I/O per call), the dir is shared with image blobs, and pruning during
+interactive editing would race in-flight jobs. Default-off auto-prune keeps deletion
+opt-in until U-M6's boundary undo ships (dead-branch blobs are the only recovery path
+beyond the depth bound).
+
+**NEVER pruned (the live set).** Computed as *all* `blob_refs` of *all* nodes across
+*all* aggregates of the project, **minus** only the prune candidates. A blob is a
+candidate only if every node referencing it is (a) a version node of the active chain
+older than `PDLABELER_UNDO_DEPTH` versions from the cursor, or (b) a node of a derived
+dead branch whose `retain_until` has passed, or (c) a node of a lineage-unreachable or
+retention-expired abandoned aggregate's version chain. In particular the current head
+chain back to `PDLABELER_UNDO_DEPTH` is never pruned, and non-history blobs
+(images, preprocess outputs) are never candidates at all. The conservative inversion
+(subtract candidates, don't enumerate keeps) is mandatory because `prune_orphans`
+deletes everything outside `live_refs`.
+
+**Config surface:** `PDLABELER_PRUNE_RETENTION_DAYS` (int, default 30),
+`PDLABELER_PRUNE_ON_OPEN` (bool, default false), both on `Settings` next to
+`PDLABELER_UNDO_DEPTH`.
+
+### U-M6 capability matrix
+
+| ID | Capability | Acceptance criterion (observable behavior) |
+|------|------------|--------------------------------------------|
+| U-11 | Undo crosses the re-OCR boundary | Edit → Reload OCR → undo at cursor 0 offers the boundary step; executing it shows the **pre-re-OCR** content (canvas, worklist, right panel), and further undo steps walk the old aggregate's chain. Survives restart (slot re-point is a `PageReordered` event). |
+| U-12 | Redo crosses forward | After U-11, redo at chain end re-points to the re-OCR'd aggregate and shows the post-re-OCR content. A new re-OCR performed on the old aggregate makes the previous successor unreachable (linear truncation, aggregate level). |
+| U-13 | Pruning respects retention and never eats live data | After truncating a redo branch and advancing the clock past `retain_until` (test fixture), the maintenance op deletes the dead branch's exclusive blobs; the head chain back to `PDLABELER_UNDO_DEPTH`, image blobs, and within-retention branches are intact; a pruned project loads and undoes normally. |
+
+U-6's v1 acceptance (buttons disabled after re-OCR + reset warning in the confirm
+dialog) is superseded by U-11/U-12 when U-M6 lands: the dialog copy changes from "edit
+history resets" to "undo will step back across this reload", and the undo button stays
+enabled at the boundary.
+
+## U-M7 — history panel + jump-to-version (post-v1)
+
+Resolves Q-U3 (CT 2026-06-12). Post-v1 milestone — it needs a new endpoint, a derivation
+extension, a new drawer tab, and its own e2e pass, so folding it into v1's slice H-C
+would widen the BV gate for no v1 benefit; nothing in v1 depends on it.
+
+**Placement:** a new tab in the existing page-scoped **Drawer**
+(`frontend/src/components/shell/Drawer.tsx`), alongside worklist/hierarchy/text —
+`DrawerTab` union in `frontend/src/stores/ui-prefs.ts:62` gains `"history"`. The
+pdomain-ui AppShell right-side settings dock is the *app-scoped* surface
+(`App.tsx` `settingsPanels`); page version history is page-scoped, so it belongs with
+the other page-scoped lists in the Drawer.
+
+**API:** `GET /api/projects/{project_id}/pages/{page_index}/history/versions` →
+ordered version list derived from the same chain derivation:
+`[{node_id, label, timestamp, is_current}]`. `label` is derived from the version's
+changelog entry (`PageChangeEntry.changes[0].type`, e.g. "Validate word", "Edit text",
+"Undo") with the root node labeled from its provenance `source` ("OCR"). Not folded
+into `PagePayload` (unlike the v1 `history` flags) — the full list is fetched only when
+the tab is open.
+
+**Version row shows:** the op label, relative time from `ProvenanceNode.timestamp`
+(e.g. "3 min ago"; timestamps are always set — `page_state.py:379`), and a highlight on
+the current-cursor version.
+
+**Jump-to-version semantics:** a restore event, same mechanism as undo. `POST
+/api/projects/{project_id}/pages/{page_index}/jump` with the target `node_id` appends a
+marker node `extra={"history_op": {"op": "jump", "restores": "<target>", "undoes":
+"<current head>"}}`; the derivation treats `op=jump` exactly like undo/redo markers
+(cursor → index of `restores` — backward or forward). The linear model is preserved: a
+real edit after a backward jump truncates the redo branch from the active chain (U-5
+unchanged). 409 when the target is not in the active chain.
+
+**Testids (new — legacy had no history surface):** `drawer-tab-history` (follows the
+existing `drawer-tab-<id>` pattern, `Drawer.tsx:52-65`), `history-version-row`
+(per-row, with the version's `node_id` as a data attribute), `history-jump-button`
+(per-row action). Added to `docs/architecture/13-driver-contract.md` in the U-M7 BV
+slice.
+
+### U-M7 capability matrix
+
+| ID | Capability | Acceptance criterion (observable behavior) |
+|------|------------|--------------------------------------------|
+| U-14 | History tab lists versions | With ≥3 edits made, opening the history drawer tab shows one row per version (plus the OCR root), each with an op label and a relative time, current version highlighted — not just testids present. |
+| U-15 | Jump restores any listed version | Clicking jump on an older row restores that version on canvas/worklist/right panel; the row highlight moves; undo/redo buttons reflect the new cursor. Jumping forward (after an undo) works symmetrically. |
+| U-16 | Jump obeys the linear model | Jump back two versions → make a real edit → the two newer rows leave the active list (truncated); redo unavailable (consistent with U-5). |
+
+## Resolved questions (CT 2026-06-12)
+
+Formerly the open-questions section; all three resolved by CT on 2026-06-12.
+
+1. **Q-U1 — undo across re-OCR/rotate → RESOLVED.** v1 keeps the history-reset
+   boundary; crossing it is a committed follow-up, designed above as **U-M6**
+   (lineage extensions + `ProjectAggregate.reorder_pages` slot re-pointing).
+2. **Q-U2 — storage growth policy → RESOLVED.** Pruning policy specced now (see "Blob &
+   branch pruning"): derived dead branches using the pdomain-ops `DeadBranch` model,
+   30-day retention default, explicit maintenance op, conservative live-set. Ships with
+   U-M6. No pdomain-ops changes required.
+3. **Q-U3 — history UI → RESOLVED.** Wanted, not YAGNI — designed above as **U-M7**
+   (history drawer tab + jump-to-version as a restore event). Post-v1.
