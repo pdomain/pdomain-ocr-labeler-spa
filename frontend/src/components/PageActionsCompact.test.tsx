@@ -190,7 +190,7 @@ describe("PageActionsCompact: mutation wiring (P1.b smoke)", () => {
 // hidden full PageActions bar. C2 restores them in the compact bar (overflow
 // menu). hasEditedImage is bound to the page payload's labeler extension flag.
 
-function pagePayload(hasEditedImage = false) {
+function pagePayload(hasEditedImage = false, rotationDegrees = 0, rotationSource = "none") {
   return {
     project_id: "proj-1",
     page_index: 0,
@@ -199,6 +199,8 @@ function pagePayload(hasEditedImage = false) {
       image_path: "/data/proj-1/page_001.png",
       source: "ocr",
       provenance_summary: "OCR via DocTR",
+      rotation_degrees: rotationDegrees,
+      rotation_source: rotationSource,
       extensions: {
         labeler: {
           page_number: 1,
@@ -307,6 +309,117 @@ describe("PageActionsCompact: restored dropped buttons (Lane C / C2)", () => {
     await user.click(await screen.findByTestId("reload-ocr-edited-button"));
     await waitFor(() => expect(reloadSpy).toHaveBeenCalled());
     expect(bodySeen).toMatchObject({ use_edited_image: true });
+  });
+});
+
+// ─── P2: rotate buttons on the visible surface (parity-audit C28 link 1) ─────
+// The rotate testids previously existed ONLY inside the display:none hidden
+// PageActions wrapper in ProjectPage — invisible, so the feature was dead.
+// They must render on the real visible surface (compact-bar overflow menu).
+
+describe("PageActionsCompact: rotate buttons (P2 / C28)", () => {
+  it("renders rotate-cw/ccw/180 buttons in the overflow menu, enabled", async () => {
+    stubPage(false);
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    expect(await screen.findByTestId("rotate-cw-button")).not.toBeDisabled();
+    expect(screen.getByTestId("rotate-ccw-button")).not.toBeDisabled();
+    expect(screen.getByTestId("rotate-180-button")).not.toBeDisabled();
+  });
+
+  it.each([
+    ["rotate-cw-button", 90],
+    ["rotate-ccw-button", -90],
+    ["rotate-180-button", 180],
+  ])("clicking %s POSTs rotate with degrees=%i and manual=true", async (testid, degrees) => {
+    stubPage(false);
+    let bodySeen: unknown = null;
+    const rotateSpy = vi.fn(async ({ request }: { request: Request }) => {
+      bodySeen = await request.json();
+      return HttpResponse.json({ job_id: "j-rot" }, { status: 202 });
+    });
+    server.use(http.post("/api/projects/proj-1/pages/0/rotate", rotateSpy));
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId(testid));
+    await waitFor(() => expect(rotateSpy).toHaveBeenCalled());
+    expect(bodySeen).toMatchObject({ degrees, manual: true });
+  });
+});
+
+// ─── P2: rotation badge (parity-audit C28 link 3, frontend side) ─────────────
+
+describe("PageActionsCompact: rotation badge (P2 / C28)", () => {
+  it("shows the rotation badge when the payload carries a manual rotation", async () => {
+    server.use(
+      http.get("/api/projects/:pid/pages/:idx", () =>
+        HttpResponse.json(pagePayload(false, 90, "manual")),
+      ),
+    );
+    renderCompact();
+    const badge = await screen.findByTestId("rotation-badge");
+    await waitFor(() => expect(badge).toBeVisible());
+    expect(badge.textContent).toContain("90");
+    expect(badge.textContent).toContain("manual");
+  });
+
+  it("hides the rotation badge when rotation_degrees is 0", async () => {
+    stubPage(false);
+    renderCompact();
+    // Badge stays in the DOM (driver contract) but is display:none.
+    const badge = await screen.findByTestId("rotation-badge", {}, { timeout: 2000 });
+    expect(badge).not.toBeVisible();
+  });
+});
+
+// ─── P2: auto-rotate-all trigger (parity-audit C29) ──────────────────────────
+// C29: zero non-generated frontend references to auto-rotate-all — the batch
+// job had no UI trigger at all.
+
+describe("PageActionsCompact: auto-rotate-all trigger (P2 / C29)", () => {
+  it("renders auto-rotate-all-button in the overflow menu, enabled", async () => {
+    stubPage(false);
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    expect(await screen.findByTestId("auto-rotate-all-button")).not.toBeDisabled();
+  });
+
+  it("clicking auto-rotate-all POSTs the project-level auto-rotate-all route", async () => {
+    stubPage(false);
+    const autoRotateSpy = vi.fn(() => HttpResponse.json({ job_id: "j-auto-rot" }, { status: 202 }));
+    server.use(http.post("/api/projects/proj-1/auto-rotate-all", autoRotateSpy));
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("auto-rotate-all-button"));
+    await waitFor(() => expect(autoRotateSpy).toHaveBeenCalled());
+  });
+
+  it("shows an error toast when auto-rotate-all is unavailable (503)", async () => {
+    stubPage(false);
+    server.use(
+      http.post("/api/projects/proj-1/auto-rotate-all", () =>
+        HttpResponse.json(
+          { error: "auto_rotate_unavailable", message: "rotation module missing" },
+          { status: 503 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("auto-rotate-all-button"));
+    await waitFor(() => {
+      const calls = toastMock.mock.calls;
+      const errCall = calls.find(
+        ([msg]: [unknown, ...unknown[]]) =>
+          typeof msg === "string" && msg.toLowerCase().includes("auto-rotate"),
+      );
+      expect(errCall).toBeDefined();
+    });
   });
 });
 

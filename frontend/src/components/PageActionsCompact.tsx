@@ -18,6 +18,8 @@ import {
   useSaveProject,
   useLoadPage,
   useRematchGt,
+  useRotatePage,
+  useAutoRotateAll,
 } from "../hooks/usePageMutations";
 import { usePage } from "../hooks/usePage";
 import { useJobProgress } from "../hooks/useJobProgress";
@@ -38,10 +40,14 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   // Save-project job tracking — kept separate to avoid conflating with OCR jobs.
   const [saveProjectJobId, setSaveProjectJobId] = useState<string | null>(null);
+  // Rotate / auto-rotate job tracking (P2 / C28+C29) — separate so the
+  // completion toast can say "rotated" rather than "OCR complete".
+  const [rotateJobId, setRotateJobId] = useState<string | null>(null);
   const [bulkGlyphOpen, setBulkGlyphOpen] = useState(false);
   const [overflowOpen, setOverflowOpen] = useState(false);
   const jobProgress = useJobProgress(activeJobId);
   const saveProjectProgress = useJobProgress(saveProjectJobId);
+  const rotateProgress = useJobProgress(rotateJobId);
 
   // C2: read the page payload so the restored "Reload OCR (Edited)" button can
   // be gated on the real edited-image signal (labeler extension flag set by the
@@ -51,6 +57,11 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     has_edited_image?: boolean;
   } | null;
   const hasEditedImage = labelerExt?.has_edited_image === true;
+
+  // P2 / C28: durable rotation metadata for the rotation badge.
+  const rotationDegrees = pageQ.data?.page_record?.rotation_degrees ?? 0;
+  const rotationSource = pageQ.data?.page_record?.rotation_source ?? "none";
+  const isRotated = rotationDegrees !== 0;
 
   // Toast lifecycle: react to OCR job progress transitions.
   // Rematch GT is synchronous (no SSE job) so it uses onSuccess/onError directly.
@@ -116,12 +127,36 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     },
   });
 
+  // P2 / C28+C29: rotate + auto-rotate jobs share one tracker (only one can
+  // run at a time from this surface). Page query invalidation on completion
+  // refreshes the image, words, and rotation badge in one pass.
+  useJobCompletionInvalidation({
+    activeJobId: rotateJobId,
+    jobProgress: rotateProgress,
+    setActiveJobId: setRotateJobId,
+    invalidationKey: ["page", projectId, pageIndex],
+    onComplete: (jobId) => {
+      toast.success("Rotate complete", { id: jobId });
+    },
+    onError: (jobId) => {
+      toast.error("Rotate failed", { id: jobId });
+    },
+    onRunning: (jobId, event) => {
+      const msg = event.progress?.message ?? "Rotating…";
+      void import("sonner").then(({ toast: sonnerToast }) => {
+        sonnerToast.loading(msg, { id: jobId });
+      });
+    },
+  });
+
   const reloadOcr = useReloadOcr(projectId, pageIndex);
   const reloadOcrEdited = useReloadOcrEdited(projectId, pageIndex);
   const savePage = useSavePage(projectId, pageIndex);
   const saveProject = useSaveProject(projectId);
   const loadPage = useLoadPage(projectId, pageIndex);
   const rematchGt = useRematchGt(projectId, pageIndex);
+  const rotatePage = useRotatePage(projectId, pageIndex);
+  const autoRotateAll = useAutoRotateAll(projectId);
 
   const isBusy =
     reloadOcr.isPending ||
@@ -130,10 +165,15 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     saveProject.isPending ||
     loadPage.isPending ||
     rematchGt.isPending ||
+    rotatePage.isPending ||
+    autoRotateAll.isPending ||
     (jobProgress !== null && jobProgress.status !== "complete" && jobProgress.status !== "error") ||
     (saveProjectProgress !== null &&
       saveProjectProgress.status !== "complete" &&
-      saveProjectProgress.status !== "error");
+      saveProjectProgress.status !== "error") ||
+    (rotateProgress !== null &&
+      rotateProgress.status !== "complete" &&
+      rotateProgress.status !== "error");
 
   function handleReloadOcr() {
     reloadOcr.mutate(undefined, {
@@ -238,6 +278,52 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       },
       onSettled: () => {
         void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      },
+    });
+  }
+
+  // P2 / C28: manual rotate — pixels rotate on disk, page re-OCRs, rotation
+  // metadata persists. 202 + job_id; tracked by the rotate job hook above.
+  function handleRotate(degrees: number) {
+    setOverflowOpen(false);
+    rotatePage.mutate(
+      { degrees },
+      {
+        onSuccess: (data) => {
+          if (data?.job_id) {
+            setRotateJobId(data.job_id);
+            void import("sonner").then(({ toast: sonnerToast }) => {
+              sonnerToast.loading("Rotating page…", { id: data.job_id });
+            });
+          }
+        },
+        onError: () => {
+          toast.error("Failed to start rotate");
+        },
+      },
+    );
+  }
+
+  // P2 / C29: batch auto-rotate. Uses the configured auto-rotate method
+  // (OCR config dialog) server-side; manually-rotated pages are skipped.
+  function handleAutoRotateAll() {
+    setOverflowOpen(false);
+    autoRotateAll.mutate(undefined, {
+      onSuccess: (data) => {
+        if (data?.job_id) {
+          setRotateJobId(data.job_id);
+          void import("sonner").then(({ toast: sonnerToast }) => {
+            sonnerToast.loading("Auto-rotating pages…", { id: data.job_id });
+          });
+        }
+      },
+      onError: (err) => {
+        const status = (err as { status?: number }).status;
+        toast.error(
+          status === 503
+            ? "Auto-rotate unavailable (rotation module missing)"
+            : "Auto-rotate failed",
+        );
       },
     });
   }
@@ -412,9 +498,100 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
             >
               Load Page
             </button>
+
+            {/* P2 / C28: rotate actions — previously only inside the hidden
+                PageActions stub, so the feature had no visible surface. */}
+            <div className="my-0.5 h-px bg-border-2" aria-hidden="true" />
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="rotate-cw-button"
+              disabled={disabled}
+              onClick={() => {
+                handleRotate(90);
+              }}
+              title="Rotate clockwise (+90°), then re-run OCR"
+              className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-ink-2 hover:bg-bg-raised hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <span aria-hidden="true">↻</span> Rotate CW
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="rotate-ccw-button"
+              disabled={disabled}
+              onClick={() => {
+                handleRotate(-90);
+              }}
+              title="Rotate counter-clockwise (-90°), then re-run OCR"
+              className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-ink-2 hover:bg-bg-raised hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <span aria-hidden="true">↺</span> Rotate CCW
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="rotate-180-button"
+              disabled={disabled}
+              onClick={() => {
+                handleRotate(180);
+              }}
+              title="Rotate 180°, then re-run OCR"
+              className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-ink-2 hover:bg-bg-raised hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <span aria-hidden="true">⟳</span> Rotate 180°
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="auto-rotate-all-button"
+              disabled={disabled}
+              onClick={handleAutoRotateAll}
+              title="Detect and fix rotation on every page (configured method; manual rotations kept)"
+              className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-ink-2 hover:bg-bg-raised hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Auto-rotate all pages
+            </button>
           </div>
         )}
       </div>
+
+      {/* P2 / C28: rotation badge — always in DOM (driver contract), visible
+          only when the page carries a non-zero durable rotation. Blue for
+          manual, gray for auto (matches the full PageActions badge).
+          Spec §19: clicking an AUTO badge reverts the auto-rotation. */}
+      <button
+        type="button"
+        data-testid="rotation-badge"
+        style={!isRotated ? { display: "none" } : undefined}
+        onClick={
+          rotationSource === "auto"
+            ? () => {
+                // Inverse quarter-turn within the API's accepted set
+                // (-90 / 90 / 180): 90→-90, 180→180, 270→90.
+                handleRotate(rotationDegrees === 180 ? 180 : rotationDegrees === 270 ? 90 : -90);
+              }
+            : undefined
+        }
+        disabled={rotationSource !== "auto" || isBusy}
+        aria-label={
+          rotationSource === "auto"
+            ? `Auto-rotated ${String(rotationDegrees)}° clockwise. Click to revert.`
+            : `Manually rotated ${String(rotationDegrees)}° clockwise.`
+        }
+        title={
+          rotationSource === "auto"
+            ? `Auto-rotated ${String(rotationDegrees)}° clockwise. Click to revert.`
+            : `Manually rotated ${String(rotationDegrees)}° clockwise.`
+        }
+        className={[
+          "px-2 py-0.5 text-[11px] font-semibold rounded bg-bg-raised",
+          rotationSource === "manual" ? "text-accent" : "text-ink-3",
+          "disabled:cursor-default",
+        ].join(" ")}
+      >
+        ↻ {rotationDegrees}° {rotationSource === "none" ? "" : rotationSource}
+      </button>
 
       <button
         type="button"

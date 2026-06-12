@@ -18,6 +18,7 @@ export type SavePageResponse = components["schemas"]["SavePageResponse"];
 export type SaveProjectResponse = components["schemas"]["SaveProjectResponse"];
 export type PagePayload = components["schemas"]["PagePayload"];
 export type RotatePageResponse = components["schemas"]["RotatePageResponse"];
+export type AutoRotateAllResponse = components["schemas"]["AutoRotateAllResponse"];
 
 // ─── internal helpers ──────────────────────────────────────────────────────
 
@@ -160,5 +161,26 @@ export function useRotatePage(projectId: string, pageIndex: number) {
         degrees,
         manual: true,
       }),
+  });
+}
+
+// ─── useAutoRotateAll (P2 / C29) ──────────────────────────────────────────
+
+/**
+ * Trigger the batch auto-rotate job for every page in the project.
+ *
+ * POST /api/projects/{id}/auto-rotate-all with {} → 202 + job_id.
+ * The backend uses the configured auto-rotate method (OCR config) when no
+ * method is supplied, and skips manually-rotated pages
+ * (overwrite_manual defaults to false server-side).
+ * Returns 503 when the rotation module is unavailable.
+ */
+export function useAutoRotateAll(projectId: string) {
+  return useMutation<AutoRotateAllResponse>({
+    mutationFn: () =>
+      apiPost<AutoRotateAllResponse>(
+        `/api/projects/${encodeURIComponent(projectId)}/auto-rotate-all`,
+        {},
+      ),
   });
 }
