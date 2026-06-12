@@ -20,9 +20,10 @@ Pd-book-tools method mapping (spec §9 names → actual pdomain-book-tools API):
 - ``set_component(component, enabled)`` → ``word.apply_component(component, enabled=enabled)``.
 - ``set_validated(bool)`` → **no method exists** on pdomain-book-tools'
   ``Word`` today. Tracking issue: pdomain/pdomain-book-tools#52.
-  Until that lands, the SPA writes the flag onto a per-page
-  ``validated_words`` map on ``PageState`` (lossy across envelope
-  round-trips; documented limitation).
+  Until that lands, the SPA's ``_apply_word_validated`` helper writes BOTH
+  the in-memory ``word.is_validated`` attribute AND the durable
+  ``"validated"`` string in ``word.word_labels`` (serialized by
+  ``Word.to_dict``/``from_dict``, so it survives restarts — P1.1).
 - ``page.add_word(bbox, text)`` → ``Page.add_word_to_page(x1, y1, x2, y2, text)``
   (closest-line picked automatically; ``line_index`` request field is
   informational, not enforced).
@@ -353,6 +354,35 @@ def _resolve_word(page: Any, line_index: int, word_index: int) -> Any | None:
     return words[word_index]
 
 
+def _apply_word_validated(word: Any, validated: bool) -> None:
+    """Set a word's validated state on BOTH carriers (PARITY-GAP P1.1, sweep C55).
+
+    1. ``word.is_validated`` — dynamic Python attribute; the in-memory fast
+       path the payload read prioritizes (immediate UI feedback without a
+       store round-trip).
+    2. ``"validated"`` in ``word.word_labels`` — the durable carrier:
+       pdomain-book-tools serializes ``word_labels`` through
+       ``Word.to_dict``/``from_dict`` (``pdomain_book_tools/ocr/word.py:677/:737``),
+       so the content blob written by ``save_page_content_to_store`` persists
+       it across restarts, and the read-path fallback in
+       ``core/page_to_line_matches.py`` maps it back to ``is_validated``.
+
+    Both carriers are always written together so they can never disagree.
+    Defensive against duck-typed test stubs without a ``word_labels`` list —
+    the attribute write still happens; the label write is skipped.
+    """
+    word.is_validated = validated
+    labels = getattr(word, "word_labels", None)
+    if not isinstance(labels, list):
+        return
+    if validated:
+        if "validated" not in labels:
+            labels.append("validated")
+    else:
+        while "validated" in labels:
+            labels.remove("validated")
+
+
 def _save_to_store_best_effort(
     *,
     pstate: PageState,
@@ -649,12 +679,11 @@ def toggle_validated(
 
     Spec 23 §9 row 4 calls for ``word.set_validated(bool)``. pdomain-book-tools
     does not yet expose this method (tracking issue
-    pdomain/pdomain-book-tools#52). Until that lands, we set
-    ``word.is_validated`` directly on the Python object: pdomain-book-tools'
-    ``Word`` is a regular class (not frozen), so attribute assignment
-    succeeds — but the flag is **lost** on envelope ``from_dict``
-    round-trip because ``Word.to_dict`` does not serialize it. This
-    matches the documented spec-23-C1 workaround.
+    pdomain/pdomain-book-tools#52). Until that lands,
+    ``_apply_word_validated`` writes both the in-memory ``word.is_validated``
+    attribute and the durable ``"validated"`` entry in ``word.word_labels``;
+    the latter round-trips through ``Word.to_dict``/``from_dict`` so the
+    state survives a server restart (PARITY-GAP P1.1, sweep C55).
 
     Body shape:
     - ``validated=None`` → toggle the current flag.
@@ -674,9 +703,11 @@ def toggle_validated(
         word = _resolve_word(page, line_index, word_index)
         if word is None:
             return _word_not_found(line_index, word_index)
-        current = bool(getattr(word, "is_validated", False))
+        current = bool(getattr(word, "is_validated", False)) or (
+            "validated" in (getattr(word, "word_labels", []) or [])
+        )
         new_value = (not current) if body.validated is None else bool(body.validated)
-        word.is_validated = new_value
+        _apply_word_validated(word, new_value)
         pstate.generation += 1
         _save_to_store_best_effort(
             pstate=pstate,
@@ -716,7 +747,8 @@ def validate_batch(
     """``POST .../words/validate-batch`` — bulk validate/unvalidate a scope.
 
     Spec 23 §9 row 5: iterate over the requested scope and apply
-    ``word.is_validated = body.validated`` to each. Scopes:
+    ``_apply_word_validated(word, body.validated)`` to each (writes both the
+    in-memory attribute and the durable ``word_labels`` carrier). Scopes:
 
     - ``page``: every word on the page.
     - ``paragraph``: words in ``page.paragraphs[pi]`` for each ``pi`` in
@@ -742,7 +774,7 @@ def validate_batch(
     with page_lock:
         targets = _collect_validate_batch_targets(page, body)
         for word in targets:
-            word.is_validated = body.validated
+            _apply_word_validated(word, body.validated)
         # Bump generation even if targets was empty — observable from
         # the SPA as "I sent a validate-batch and got an updated
         # generation back".
@@ -1352,8 +1384,9 @@ class SetCharRangesRequest(BaseModel):
     The backend stores the ranges as a Python attribute on the word
     object (``word.char_ranges``).  pdomain-book-tools does not have a
     first-class ``char_ranges`` concept today; the data is lost on
-    ``Word.to_dict`` → ``from_dict`` round-trip (same documented
-    limitation as ``is_validated``).  When pdomain-book-tools grows a
+    ``Word.to_dict`` → ``from_dict`` round-trip (documented limitation —
+    note ``is_validated`` escaped this fate via the ``word_labels``
+    carrier, P1.1).  When pdomain-book-tools grows a
     ``char_ranges`` field, the route can be updated to call the
     appropriate setter.
     """

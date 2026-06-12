@@ -219,14 +219,15 @@ def _word_to_word_match(
         ocr_text: str = getattr(word_obj, "text", "") or ""
         gt_text: str = getattr(word_obj, "ground_truth_text", "") or ""
 
-        # ``is_validated`` — Word doesn't have a first-class field today;
-        # falls back to the per-page ``validated_words`` sidecar map
-        # maintained by the SPA's word-mutation layer (spec-23-C1).
-        # Priority: (1) ``word.is_validated`` attribute set by toggle_validated
-        # (spec-23-C1 in-memory mutation path); (2) ``word_labels`` "validated"
-        # tag (legacy labeler path, pd_ocr_labeler/viewmodels/.../word_match_view_model.py:241).
-        # The attribute takes priority so toggle_validated changes are reflected
-        # immediately in the refreshed PayLoad without a round-trip to the store.
+        # ``is_validated`` — Word has no first-class field today; the state
+        # lives on two carriers that writers (``_apply_word_validated`` in
+        # ``api/words.py``, P1.1) always keep in sync:
+        # (1) ``word.is_validated`` dynamic attribute — present only on words
+        #     mutated in this process; read first for immediate payload refresh.
+        # (2) ``word_labels`` "validated" tag — the durable carrier serialized
+        #     through ``Word.to_dict``/``from_dict`` (also the legacy labeler
+        #     convention, pd_ocr_labeler/viewmodels/.../word_match_view_model.py:241);
+        #     the fallback that makes validation survive a server restart.
         word_labels: set[str] = set(getattr(word_obj, "word_labels", []) or [])
         _is_validated_attr = getattr(word_obj, "is_validated", None)
         is_validated = (

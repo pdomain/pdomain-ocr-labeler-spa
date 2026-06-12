@@ -958,12 +958,11 @@ export interface paths {
          *
          *     Spec 23 §9 row 4 calls for ``word.set_validated(bool)``. pdomain-book-tools
          *     does not yet expose this method (tracking issue
-         *     pdomain/pdomain-book-tools#52). Until that lands, we set
-         *     ``word.is_validated`` directly on the Python object: pdomain-book-tools'
-         *     ``Word`` is a regular class (not frozen), so attribute assignment
-         *     succeeds — but the flag is **lost** on envelope ``from_dict``
-         *     round-trip because ``Word.to_dict`` does not serialize it. This
-         *     matches the documented spec-23-C1 workaround.
+         *     pdomain/pdomain-book-tools#52). Until that lands,
+         *     ``_apply_word_validated`` writes both the in-memory ``word.is_validated``
+         *     attribute and the durable ``"validated"`` entry in ``word.word_labels``;
+         *     the latter round-trips through ``Word.to_dict``/``from_dict`` so the
+         *     state survives a server restart (PARITY-GAP P1.1, sweep C55).
          *
          *     Body shape:
          *     - ``validated=None`` → toggle the current flag.
@@ -990,7 +989,8 @@ export interface paths {
          * @description ``POST .../words/validate-batch`` — bulk validate/unvalidate a scope.
          *
          *     Spec 23 §9 row 5: iterate over the requested scope and apply
-         *     ``word.is_validated = body.validated`` to each. Scopes:
+         *     ``_apply_word_validated(word, body.validated)`` to each (writes both the
+         *     in-memory attribute and the durable ``word_labels`` carrier). Scopes:
          *
          *     - ``page``: every word on the page.
          *     - ``paragraph``: words in ``page.paragraphs[pi]`` for each ``pi`` in
@@ -1369,8 +1369,11 @@ export interface paths {
          *     pdomain/pdomain-book-tools#52 — same workaround as Word). We
          *     assign ``line.is_validated`` directly and propagate the flag to every
          *     contained word so the validate-batch scope=line view stays
-         *     consistent. The flag is lost on ``Block.to_dict`` → ``from_dict``
-         *     round-trip (documented limitation).
+         *     consistent. The line-level attribute itself is lost on
+         *     ``Block.to_dict`` → ``from_dict`` round-trip (Block has no labels
+         *     carrier), but the per-word state persists via ``word_labels``
+         *     (P1.1) — and the payload derives line validation from its words, so
+         *     the durable state is complete.
          */
         post: operations["validate_line_api_projects__project_id__pages__page_index__lines__line_index__validate_post"];
         delete?: never;
@@ -1699,8 +1702,11 @@ export interface paths {
          *     ``Block`` does not expose such a method (tracking issue
          *     pdomain/pdomain-book-tools#52 — same workaround as Word + Line).
          *     We assign ``paragraph.is_validated`` directly and propagate the flag
-         *     onto every contained word for batch-validate parity. Flag is lost on
-         *     ``Block.to_dict`` → ``from_dict`` round-trip (documented limitation).
+         *     onto every contained word for batch-validate parity. The
+         *     paragraph-level attribute itself is lost on ``Block.to_dict`` →
+         *     ``from_dict`` round-trip (Block has no labels carrier), but the
+         *     per-word state persists via ``word_labels`` (P1.1) — and the payload
+         *     derives paragraph validation from its words.
          */
         post: operations["validate_paragraph_api_projects__project_id__pages__page_index__paragraphs__paragraph_index__validate_post"];
         delete?: never;
@@ -3950,8 +3956,9 @@ export interface components {
          *     The backend stores the ranges as a Python attribute on the word
          *     object (``word.char_ranges``).  pdomain-book-tools does not have a
          *     first-class ``char_ranges`` concept today; the data is lost on
-         *     ``Word.to_dict`` → ``from_dict`` round-trip (same documented
-         *     limitation as ``is_validated``).  When pdomain-book-tools grows a
+         *     ``Word.to_dict`` → ``from_dict`` round-trip (documented limitation —
+         *     note ``is_validated`` escaped this fate via the ``word_labels``
+         *     carrier, P1.1).  When pdomain-book-tools grows a
          *     ``char_ranges`` field, the route can be updated to call the
          *     appropriate setter.
          */

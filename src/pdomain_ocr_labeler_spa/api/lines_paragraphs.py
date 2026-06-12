@@ -112,6 +112,7 @@ from .pages import PagePayload
 from .refine import RefineJobResponse
 from .words import (
     _GT_FORBIDDEN_CODEPOINTS,
+    _apply_word_validated,
     _page_not_loaded,
     _refresh_payload_response,
     _resolve_page_object,
@@ -753,18 +754,23 @@ def validate_line(
     pdomain/pdomain-book-tools#52 — same workaround as Word). We
     assign ``line.is_validated`` directly and propagate the flag to every
     contained word so the validate-batch scope=line view stays
-    consistent. The flag is lost on ``Block.to_dict`` → ``from_dict``
-    round-trip (documented limitation).
+    consistent. The line-level attribute itself is lost on
+    ``Block.to_dict`` → ``from_dict`` round-trip (Block has no labels
+    carrier), but the per-word state persists via ``word_labels``
+    (P1.1) — and the payload derives line validation from its words, so
+    the durable state is complete.
     """
 
     def _mutate(_page: Any, line: Any) -> bool:
         current = bool(getattr(line, "is_validated", False))
         new_value = (not current) if body.validated is None else bool(body.validated)
         line.is_validated = new_value
-        # Propagate to contained words for batch-validate parity.
+        # Propagate to contained words for batch-validate parity. The word
+        # write goes through _apply_word_validated so the durable
+        # ``word_labels`` carrier stays in sync (P1.1).
         for word in getattr(line, "words", []) or []:
             try:
-                word.is_validated = new_value
+                _apply_word_validated(word, new_value)
             except Exception:  # pragma: no cover — frozen-Word defense
                 log.warning(
                     "validate_line: could not propagate is_validated to word on line=%d (frozen?)",
@@ -1521,18 +1527,23 @@ def validate_paragraph(
     ``Block`` does not expose such a method (tracking issue
     pdomain/pdomain-book-tools#52 — same workaround as Word + Line).
     We assign ``paragraph.is_validated`` directly and propagate the flag
-    onto every contained word for batch-validate parity. Flag is lost on
-    ``Block.to_dict`` → ``from_dict`` round-trip (documented limitation).
+    onto every contained word for batch-validate parity. The
+    paragraph-level attribute itself is lost on ``Block.to_dict`` →
+    ``from_dict`` round-trip (Block has no labels carrier), but the
+    per-word state persists via ``word_labels`` (P1.1) — and the payload
+    derives paragraph validation from its words.
     """
 
     def _mutate(_page: Any, paragraph: Any) -> bool:
         current = bool(getattr(paragraph, "is_validated", False))
         new_value = (not current) if body.validated is None else bool(body.validated)
         paragraph.is_validated = new_value
-        # Propagate to every contained word (mirror of validate_line).
+        # Propagate to every contained word (mirror of validate_line) via
+        # _apply_word_validated so the durable ``word_labels`` carrier stays
+        # in sync (P1.1).
         for word in getattr(paragraph, "words", []) or []:
             try:
-                word.is_validated = new_value
+                _apply_word_validated(word, new_value)
             except Exception:  # pragma: no cover — frozen-Word defense
                 log.warning(
                     "validate_paragraph: could not propagate is_validated to word on paragraph=%d (frozen?)",
