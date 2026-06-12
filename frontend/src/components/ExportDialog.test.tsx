@@ -230,6 +230,40 @@ describe("ExportDialog", () => {
     expect(screen.getByTestId("export-stats-skipped-job-stats").textContent).toContain("2");
   });
 
+  // C40 (PARITY-GAP P1.5): the Cancel button must post to the CANONICAL
+  // cancel route /api/jobs/{id}/cancel — the project-scoped variant the
+  // dialog used before does not exist on the backend (405).
+  it("Cancel posts to /api/jobs/{id}/cancel and carries the export-cancel-button testid", async () => {
+    let cancelHits = 0;
+    server.use(
+      http.post(`${BASE_URL}/export`, () =>
+        HttpResponse.json({ job_id: "job-cancel" }, { status: 202 }),
+      ),
+      http.post("/api/jobs/job-cancel/cancel", () => {
+        cancelHits += 1;
+        return HttpResponse.json({ job_id: "job-cancel", status: "cancelled" });
+      }),
+    );
+
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("export-button"));
+    });
+
+    // Running state: Cancel button visible with its driver-contract testid.
+    const cancelButton = await screen.findByTestId("export-cancel-button");
+    await act(async () => {
+      fireEvent.click(cancelButton);
+    });
+
+    await waitFor(() => {
+      expect(cancelHits).toBe(1);
+    });
+  });
+
   it("Close button calls onClose", () => {
     const onClose = vi.fn();
     render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={onClose} />, {

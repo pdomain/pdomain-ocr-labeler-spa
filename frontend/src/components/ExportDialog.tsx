@@ -222,10 +222,10 @@ export function ExportDialog({
 
   async function handleCancel() {
     if (!jobId) return;
-    await fetch(
-      `/api/projects/${encodeURIComponent(projectId)}/jobs/${encodeURIComponent(jobId)}/cancel`,
-      { method: "POST" },
-    );
+    // Canonical cancel route (C40): /api/jobs/{id}/cancel — jobs are not
+    // project-scoped on the backend; the old project-scoped URL 405'd and
+    // left the job running server-side.
+    await fetch(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" });
     setRunning(false);
     setJobId(null);
   }
@@ -497,6 +497,7 @@ export function ExportDialog({
         <DialogFooter className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border-1 bg-bg-raised shrink-0">
           {running ? (
             <button
+              data-testid="export-cancel-button"
               onClick={() => {
                 void handleCancel();
               }}

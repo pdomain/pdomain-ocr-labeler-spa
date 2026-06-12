@@ -306,6 +306,7 @@ Hotkey: `Enter` on `dialog-gt-input` commits.
 | `export-style-all-checkbox` | "All (no style filter)" checkbox |
 | `export-style-checkbox-{key}` | One per style discovered, key = normalised style |
 | `export-button` | Export (the run button inside the dialog) |
+| `export-cancel-button` | Cancel (replaces Export while a job is running; posts `POST /api/jobs/{id}/cancel`) |
 | `export-results` | Container for per-export results |
 | `export-close-button` | Close |
 | `export-send-to-trainer` | Send to Trainer button (only visible when trainer is installed) |
