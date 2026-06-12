@@ -64,6 +64,23 @@ data roots under `/tmp/c-audit/run/`.
 | C42 | Send-to-trainer button (pdomain-ops>=0.11.0) | PASS | Gating correct: with the real registry (trainer absent) button count 0. With trainer registered (isolated `PD_SUITE_DATA_DIR` + stub binary): `export-send-to-trainer` visible+enabled per history row → click → `POST /api/suite/launch?app_id=pdomain-ocr-trainer-spa` 200 → binary spawned with `--port 8997` → healthz polled → new tab opened at `http://localhost:8997/`. Full chain verified live. |
 | C43 | Export run history (new C-39) | PARTIAL | In-dialog "Run History" renders per-run entries with stats testids — but client-state only (lost on dialog unmount/reload). `GET /api/projects/{id}/exports` is a hardcoded `[]` stub (`api/export.py:254`) even though manifests now exist on disk. Spec says best-effort. |
 
+| C44 | Open OCR config modal (C-31) | PASS | `ocr-config-trigger-button` visible+enabled in PageActionsCompact on project routes (PageActionsCompact.tsx:348) AND as a dedicated root-route trigger (App.tsx S6.3(a)) — #405's "trigger missing" is resolved. Click → `ocr-config-modal` opens with all controls present. |
+| C45 | Rescan OCR models (C-32) | PASS | `ocr-rescan-models-button` → `POST /api/ocr-config/rescan` 200; modal stays open. (Env has no local trainer models; options remain stock + HF default.) |
+| C46 | Select detection/recognition model + Apply (C-33/C-34/C-36) | PASS | Select `huggingface` + Apply → `POST /api/ocr-config/models` 200 → `GET /api/ocr-config` reflects `selected_detection=huggingface`; durable on disk (`<data_root>/ocr_config.json`). Restored to stock the same way. |
+| C47 | HF revision pin (C-35) | PASS | `ocr-hf-revision-input` fill "audit-rev-1" + Apply → `hf_pinned_revision="audit-rev-1"` in API + disk; cleared on restore. |
+| C48 | Cancel / snapshot semantics (C-37) | PASS | Changed detection select to stock (pending) → Cancel → server still huggingface; reopen shows server snapshot (huggingface), pending discarded. Done closes; commits auto-rotate only when dirty (S6.3, OCRConfigModal.tsx:328-342). Every close path clears pending state. |
+| C49 | Normalization controls (SPA-new) | PASS (gated off) | `normalize-gt-matching-checkbox` / `normalize-plaintext-checkbox` / `normalize-profile-select` render disabled with `normalize-unavailable-message` — correct: pinned pdomain-book-tools has no `text.normalize` (ModuleNotFoundError verified); probe `GET /api/normalize/available`. Auto-rotate fields enable once ocr-config loads (an early read sees them disabled — load race in the probe, not the product). |
+
+| C50 | `/api/suite/*` backend routes (device, prefs, update, installed, launch) | PASS | All mounted via pdomain-ops 0.11.0 `mount_routes` (bootstrap.py:546). Verified live: `GET /installed` (real registry), `POST /launch` (full chain, C42), `GET/PUT /prefs(/common)` (204; `ui-prefs.json` written in suite dir), `GET /api/suite/device` (cuda:0 + cpu enumerated), `PUT` `{device, scope: app\|suite}` → `current=cpu, effective_source=app`, restore OK, `GET /api/suite/update` (`update_available:false`). Export root published to suite `shared-paths.json` (C41). |
+| C51 | Suite sibling launcher UI (header LauncherSlot) | FAIL | `fetchInstalled`/`postLaunch` passed to SuiteSiblingsProvider are GAP-3 shims returning `[]` / `requires-host-config` (App.tsx:472-488, comment says "replace when ops mounts /api/suite/*" — it has). No launcher testids in DOM; the shell never calls `/api/suite/installed` (network capture: only `/api/suite/device`). Only ExportDialog's send-to-trainer uses the real endpoint. |
+| C52 | Compute-device picker UI | FAIL (unreachable) | `ComputePanelContent`/`ComputeTargetPanel` wired into `settingsPanels` (App.tsx:138-142, 276) but no settings/utility-dock trigger renders: `utility-dock` count 0; full visible-button enumeration on the project page has no settings entry. Backend PUT verified working (C50); the UI to reach it is dead. |
+
+| C53 | Session restore across server restart (C-11/C-57) | PASS | `session_state.json` under data root survives; after kill+restart, browser at `/` → `GET /api/session-state` → frontend `POST /api/projects/load` → lands on `/projects/exercise-fixture/pages/pageno/1` (network-captured live). |
+| C54 | Word-content mutation durability across restart | PASS | GT edit via API, with AND without explicit Save, survives kill+restart+reload (distinct markers verified post-restart). Event-store auto-persist holds at cross-restart strength for content mutations — upgrades C21's in-process-only evidence. |
+| C55 | Validation durability across restart | **FAIL (data loss)** | Validate-all (UI, 32/32 confirmed server-side), single-word toggle (API 200), explicit Save (200): ALL lost on restart — count reverts to the fixture-seeded 8/32 every time (3 independent runs). Validation lives in the in-memory `PageState.validated_words` map; Save serializes the Page payload, which never receives the flags (`api/words.py:21-24` documents the map as "lossy"). Severity: validation is the export gate — with C35/C37 this breaks the validate→save→export pipeline at three independent points. |
+| C56 | Legacy labeled-envelope read-compat (data migration) | PARTIAL | A legacy-format `UserPageEnvelope` planted at `labeled-projects/<id>/<id>_NNN.json` IS consumed correctly by export (C35 positive control: 32 crops + labels). But page load IGNORES it when an event-store head exists (planted GT marker absent after restart+reload — store wins). The "labeled → cached → OCR" probe order (`api/pages.py:911`) applies only absent a store head; not exercisable here since seeding populates every page. |
+| C57 | Deep-link auto-load of an unloaded project (C-12/C-13) | FAIL | Legacy `_initialize_from_url` resolves AND loads the project from a bare URL. SPA: fresh server + `/projects/exercise-fixture/pages/pageno/1` → `GET /api/projects/{id}` 404 → bounces to RootPage; no `POST /load` attempted (network-captured). C11/C12 PASS verdicts hold only for an already-loaded project; the session-resume path (C53) covers the common restart case but not shared/bookmarked deep links to a not-yet-loaded project. |
+
 ## Notes
 
 - Hidden `data-testid-stub="true"` duplicates exist for many legacy testids
@@ -72,3 +89,18 @@ data roots under `/tmp/c-audit/run/`.
 - Playwright MCP browser wedged on this host (stale-DISPLAY issue per
   `tests/e2e/conftest.py`); sweep driven with repo-pinned Playwright +
   `DISPLAY` popped.
+- (C34+ continuation, second session/server) Radix dialog overlays intercept
+  Playwright synthetic clicks — interact inside dialogs via
+  `page.evaluate(... .click())` scoped to the dialog testid (see agent-memory
+  `feedback_e2e_dialog_interaction_gotchas`).
+- C34+ rows ran on `http://127.0.0.1:8935`, data under `/tmp/c-audit2/run/`,
+  same seeded fixture; send-to-trainer (C42) used an isolated
+  `PD_SUITE_DATA_DIR=/tmp/c-audit2/suite` registry with a stub trainer binary
+  serving `/healthz` so the real machine registry was never touched.
+- The exercise fixture seeds 8 of 32 words on page 1 as already-validated —
+  any post-restart validated count of 8/32 means "disk state = seed", a handy
+  data-loss tripwire (used in C55).
+- `POST .../pages/{idx}/save` requires a JSON body (`{}` works); a bodyless
+  POST 400s — test-harness gotcha, not a product bug.
+- Bulk validate-batch takes >1.5s to apply server-side; wait ≥4s before
+  reading counts or the read races the mutation.
