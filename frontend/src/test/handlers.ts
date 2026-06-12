@@ -51,6 +51,16 @@ export const handlers: RequestHandler[] = [
     }),
   ),
 
+  // POST /api/projects/:projectId/current-page-index — page-cursor persistence
+  // (GAP-3).  ProjectPage fires this 300 ms after mount via a debounced,
+  // fire-and-forget `void fetch(...)` with no rejection handler
+  // (ProjectPage.tsx).  Any test that keeps ProjectPage mounted past the
+  // debounce window triggers the POST; without a baseline handler it hits
+  // onUnhandledRequest: "error" and surfaces as an unhandled rejection that
+  // fails the whole vitest run even when every test passes.  Tests that assert
+  // the cursor POST override this with server.use().
+  http.post("/api/projects/:projectId/current-page-index", () => HttpResponse.json({})),
+
   // GET /api/suite/installed — default: no apps installed (trainer absent).
   // Tests that need the trainer button visible override with server.use().
   http.get("/api/suite/installed", () => HttpResponse.json([])),
