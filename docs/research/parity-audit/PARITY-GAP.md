@@ -1,188 +1,332 @@
-# Legacy → New Parity Gap Matrix
+# Legacy → New Parity Gap Matrix (master synthesis)
 
-**Legacy:** `pd-ocr-labeler` (NiceGUI) · **New:** `pdomain-ocr-labeler-spa` (FastAPI + React/Vite/TS, **v0.2.0**)
-**Audited:** 2026-06-06 · **Method:** per-dimension synthesis of the six inventories in this folder, re-verified against current code.
+**Legacy:** `pd-ocr-labeler` (NiceGUI) · **New:** `pdomain-ocr-labeler-spa` (FastAPI + React/Vite/TS)
+**Verified:** 2026-06-12, live Playwright against seeded event-store fixtures at commit `d0ba846`.
+**Supersedes** the 2026-06-06 matrix in this file. That matrix was code-read synthesis;
+every verdict below was re-established by driving a real browser. Where the two disagree,
+this one wins.
 
-> Status key — classified by **capability**, not code presence:
-> - ✅ **PRESENT & WIRED** — visible, enabled, and performs the stated effect via *some* reachable surface.
-> - ⚠️ **PARTIAL / STUBBED** — code path exists but is hidden (`display:none`), unwired, hardcoded, backend-stubbed, or silently no-ops.
-> - ❌ **MISSING** — no reachable working path today.
->
-> A `data-testid` existing is **not** parity. A wired child button whose parent never passes the mutation callback is ❌, not ✅.
+**Method.** Three parallel sweeps, one per dimension:
+
+- [Dim A — screens / nav / chrome / hotkeys](sweep-2026-06-12-a-screens.md) (60 rows)
+- [Dim B — OCR content actions](sweep-2026-06-12-b-content.md) (90 rows)
+- [Dim C — document / project / system](sweep-2026-06-12-c-system.md) (57 rows)
+
+Acceptance bar per row: **visible + enabled + real effect**, durable where applicable,
+checked by API re-fetch or files on disk. A `data-testid` existing is not parity.
+Servers were standalone uvicorn instances seeded via the `_ingest_ocr_result`
+event-store pattern from `tests/e2e/`.
 
 ---
 
 ## 1. Executive summary
 
-| Dimension | ✅ Present | ⚠️ Partial/stub | ❌ Missing | Notes |
-|---|---:|---:|---:|---|
-| **A — screens / nav / chrome** | ~20 | 5 | 2 (+1 new-only unreachable) | Shell is solid; gaps are minor chrome + one blocked entry point (#405). |
-| **B — OCR content actions** | ~35 | ~12 | ~16 | Two entire editing **surfaces** are dead; most capabilities survive via alternate surfaces. |
-| **C — document / project / system** | ~18 | 7 | 5 | Export & save are real; rotate/auto-rotate are known stubs (M9.1/M9.2). |
+| Dimension | Rows | PASS | PARTIAL | FAIL | N-A / untested |
+|---|---:|---:|---:|---:|---:|
+| A — screens / nav / chrome | 60 | 47 | 7 | 5 | 1 |
+| B — OCR content actions | 90 | 64 | 8 | 12 | 3 |
+| C — document / project / system | 57 | 36 | 6 + 1 mixed | 13 | 1 |
+| **Total** | **207** | **147** | **~22** | **30** | **5** |
 
-### The headline finding — why raw counts mislead
+**True parity: ~73%** strict (147 PASS of 202 scoreable rows). Counting PARTIALs at
+half credit: ~78%. The 2026-06-06 estimate of "~80% capability reachability" was
+roughly right in aggregate but wrong in composition — several things it called
+broken have since shipped (WordEditDialog superseded by WordDetail, ToolbarActionGrid
+visible, rotate pixels real), and several things it called working are broken in ways
+only a live browser exposes (export lane, validation persistence, dead deletes).
 
-The new SPA has **more** actions in code than legacy, yet is **not at full parity**, for one structural reason that recurs across dimension B:
-
-> **Capabilities are implemented, but two whole surfaces that expose them are non-functional.**
-
-1. **`WordEditDialog` is a complete no-op.** `ProjectPage.tsx:1048` mounts the dialog with **none** of its mutation callbacks (`onMerge`, `onSplit`, `onDelete`, `onCrop`, `onRefine`, `onExpandRefine`, `onApplyNudge`, `onApplyStyle`, `onApplyComponent`, `onGtChange`, `onGtCommit`). Every button inside the dialog renders, fires `?? Promise.resolve()`, and silently does nothing. **Verified directly** (ProjectPage.tsx:1048–1063 — only `open/target/lineWords/onNavigate/onApply/onClose` + `wordImageUrl={undefined}`).
-
-2. **The Matches pane is hidden.** `WordMatchView` + `TextTabs` + `PlaintextEditor` live inside `<div style={{display:"none"}} data-testid-stub="canvas-hidden-stubs">` (ProjectPage.tsx:978–988). Per-word validate buttons, line/paragraph checkboxes, tag-chip × buttons, GT inputs, and the match-filter content all exist in the DOM purely to satisfy driver-contract testids — invisible and non-interactive to users.
-
-**The saving grace:** most dimension-B *capabilities* are still reachable through **alternate, working surfaces** — the **WordDetail right panel** (rebox, nudge, refine, erase, merge, delete, char-ranges, char-fixer, style/component chips), the **visible ToolbarActionGrid** (page/para/line/word bulk ops — shipped in v0.2.0), and **inline LineCard/ParagraphDetail** controls. So **capability-parity is high (~80%)** even though **surface-parity is not**: a user *can* do most things, just not from the dialog or the Matches pane the legacy app trained them to use.
-
-### True-parity estimate
-
-- **Capability reachability (can the user accomplish the task by *some* path today?): ~80%.**
-- **Surface parity (is it reachable where a legacy user would look?): lower** — two primary editing surfaces are dead.
-- **Genuinely missing capabilities (no working path anywhere):** rebox-on-main-canvas, per-word glyph annotation, form-new-line-from-selected-words (backend stub), erase-to-marker (4 directions), Tab-navigation between GT inputs, and the real image rotate / auto-rotate / re-OCR pipeline.
-
-### Top root causes (fix these and most ❌ rows clear)
-
-1. **Unwired dialog callbacks** (one parent, ~11 props) → clears ~9 ❌ rows at once.
-2. **Hidden Matches pane** (one `display:none`) → architectural decision needed: restore vs. formally retire.
-3. **Two backend stubs** — `/lines/{li}/split-with-selected` (form-new-line) and the rotate/auto-rotate handlers.
-4. **Unmounted components** — `GlyphAnnotationPanel`, `QuickSearch` exist but are mounted nowhere.
+**The one-paragraph story.** The backend capability layer is largely real and durable:
+content mutations auto-persist through the event store and survive server restart,
+OCR / refine / rematch / rotate-pixels / export-mechanism / suite plumbing all execute.
+The failures cluster in three shapes: **(1) wiring stubs** — visible controls whose
+callback chain was never connected (LineDetail word cells, project delete/archive,
+suite launcher shims) or that post to backend routes that are documented stubs
+(word/line `/delete`); **(2) dead or wrong routes** — export reads a retired
+persistence lane, export-cancel posts a URL that 405s, deep links to unloaded projects
+bounce; and **(3) a few systemic bugs** — the pdomain-ui 0.7.x dialog overlay z-bug
+that makes two modals mouse-dead, a parallel-mutation race that silently loses
+updates, and validation state that never reaches disk. None of these are visible from
+unit tests or testid checks; all were caught by the visible+enabled+effect bar.
 
 ---
 
-## 2. Missing (❌) — no reachable working path today
+## 2. Critical-path broken pipelines
 
-### Dimension B — content actions (the bulk of the gaps)
+Call these out first. Each is a cross-dimension chain where every link reports
+success while the user's work is lost.
 
-| Legacy capability | Legacy ref | New evidence | Why it matters |
+### 2a. validate → save → export (training-data pipeline) — broken at three independent points
+
+This is the app's reason to exist, and it cannot produce output today:
+
+1. **Validation is never persisted** (C55). Validation lives in the in-memory
+   `PageState.validated_words` map, documented "lossy" (`api/words.py:21-24`).
+   Save serializes the Page payload, which never receives the flags. Verified
+   three times: validate-all + explicit Save → restart → count reverts to the
+   fixture seed. Silent data loss of the export gate itself.
+2. **Export reads a retired lane** (C35/C36/C37). The export handler scans
+   `<data_root>/labeled-projects/` (`handlers/export.py:509-517`), but Save
+   writes only the event store; `persist_page_to_file` raises
+   `NotImplementedError`. Every export exports **0 pages and reports success**.
+   Positive control: hand-planting a legacy envelope in the dead lane exports
+   correctly — the pipeline is sound, the lanes are disconnected. The style
+   filter (C37) scans the same dead lane, so it always renders empty.
+3. **Export cancel posts a dead URL** (C40). The cancel button POSTs
+   `/api/projects/{id}/jobs/{id}/cancel` → **405**, then resets local UI state
+   while the job keeps running. The canonical `POST /api/jobs/{id}/cancel`
+   works. The button also has no testid (`export-cancel-button` never existed).
+
+### 2b. rotate → re-OCR (M9.1/M9.2 follow-through) — pixels rotate, everything downstream doesn't
+
+1. **Buttons are invisible** (C28). `rotate-cw/ccw/180-button` exist only inside
+   the `display:none` PageActions wrapper (ProjectPage.tsx:797-800). No visible
+   surface renders them.
+2. **Pixel rotation itself works and is durable** — on-disk PNG rotated, served
+   image follows. But **rotation metadata never surfaces**: the store records
+   `rotation_degrees=90, rotation_source="manual"`, while the API payload keeps
+   `rotation_degrees=0`, so the rotation badge can never render.
+3. **Re-OCR after rotate has no effect** — words/bboxes stay byte-identical to
+   pre-rotate portrait coords; overlays are misaligned with the rotated pixels.
+4. **Auto-rotate-all** (C29) has **no UI trigger at all**, and the backend
+   detection path crashes per page ("all pages are expected to be multi-channel
+   2D images") on a plain RGB PNG — result is always `rotated=[]`.
+
+---
+
+## 3. Consolidated FAIL table
+
+One row per distinct failure. Cross-dimension duplicates merged (refs kept).
+Refs point into the three sweep docs.
+
+| # | Failure | Rows | What breaks |
 |---|---|---|---|
-| WordEditDialog — merge word prev/next | `word_edit_dialog.py:1531` | `WordActionRows.tsx:127`; `onMerge` not passed (ProjectPage.tsx:1048) | Dialog merge dead. Alt: `StructureSection` (WordDetail). |
-| WordEditDialog — split word H/V | `word_match_actions.py:1299` | `WordActionRows.tsx:145`; `onSplit` not passed | Dialog split dead. Alt: `StructureSection`. V-split also 400s backend. |
-| WordEditDialog — delete word | `word_edit_dialog.py:1619` | `WordActionRows.tsx:167`; `onDelete` not passed | Dialog delete dead. Alt: `WordFooter`. |
-| WordEditDialog — crop bbox (4 dir) | `word_edit_dialog.py:1641` | `WordActionRows.tsx:185`; `onCrop` not passed | No alt crop surface in WordDetail. |
-| WordEditDialog — apply/clear style | `word_edit_dialog.py:1877` | `WordTagRow.tsx:100`; `onApplyStyle` not passed | Dialog style dead. Alt: ToolbarActionGrid + WordDetail chips. |
-| WordEditDialog — apply/clear component | `word_edit_dialog.py:1505` | `WordTagRow.tsx:127`; `onApplyComponent` not passed | Dialog component dead. Alt: toolbar + chips. |
-| WordEditDialog — refine / expand+refine / apply-nudge | `word_edit_dialog.py:1676` | `WordRefineNudgeRows.tsx:162`; callbacks not passed | Dialog bbox tuning dead. Alt: `BBoxSection`. |
-| WordEditDialog — GT edit (commit) | `word_edit_dialog.py:1403` | `WordEditDialog.tsx:306`; `onGtChange/onGtCommit` not passed | Typing in `dialog-gt-input` has no effect. Alt: WordDetail `ocr-gt-input`. |
-| WordEditDialog — pixel erase on dialog image | `word_edit_dialog.py:435` | `wordImageUrl={undefined}` (ProjectPage.tsx:1052) → blank canvas | Dialog erase broken. Alt: `ErasePixelsSection`. |
-| Rebox word on **main canvas** (draw mode) | `word_match_bbox.py:467` | `"rebox"` mode + `onRebox` prop exist; **not wired** in ProjectPage's `<PageImageCanvas>` | No draw-to-rebox on page. Alt: WordDetail mini-canvas (per-word only). |
-| Per-word **glyph annotation** panel | (new-only target M11) | `GlyphAnnotationPanel.tsx` mounted **nowhere** (only self + test import) | Swash/long-s/ligature per-word review unreachable. Alt: bulk recipe only. |
-| Per-word **validate** button in Matches pane | `word_match_renderer.py:774` | `WordCell.tsx:187` wired, but `WordMatchView` hidden + prop chain broken | Alt: `word-footer-validate`, toolbar, BulkWordActions. |
-| Tag-chip **×** remove in Matches pane | `word_match_renderer.py:956` | `WordCell.tsx:227`; `onClearTag` not threaded + hidden | Alt: `clear-style/component-button`, WordDetail chips. |
-| **Form new line** from selected words (toolbar) | `word_match_actions.py:916` | `/lines/{li}/split-with-selected` is a **backend stub** (`lines_paragraphs.py:1907`, returns empty payload) | Toolbar cell appears to succeed, makes no change. |
-| **Erase-to-marker** (left/right/above/below) | `word_edit_dialog.py:1126` | No equivalent; new erase is brush/lasso/rect only | 4 directional erase ops have no surface. |
-| **Tab-navigate** between GT inputs (word scope) | `word_match_gt_editing.py:145` | No `onKeyDown` Tab handler; Matches pane hidden anyway | Sequential keyboard GT editing missing. |
+| F1 | Validation not persisted across restart | C55 | In-memory map, Save never serializes flags; export gate lost on restart. |
+| F2 | Export exports 0 pages (current + all-validated) | C35, C36 | Handler scans retired `labeled-projects/` lane; event store never feeds it; success toast on empty output. |
+| F3 | Export style filter unreachable | C37 | `_collect_style_labels` scans the same dead lane → always `[]`; only "All" renders. |
+| F4 | Export cancel → 405, job keeps running | C40 | Wrong URL (`/projects/{id}/jobs/{id}/cancel` doesn't exist); button has no testid. |
+| F5 | Delete word / delete line silently no-op (4 surfaces) | B-61, B-62, B-65 | WordFooter delete, LineDetail card delete, MultiLineDetail card + bulk delete all POST the documented backend stub `/delete` (lines_paragraphs.py:1764) → ConfirmDialog, HTTP 200, nothing deleted. Batch routes (toolbar, MultiWordDetail) are real. |
+| F6 | Style removal missing end-to-end (3 surfaces) | B-39, B-41, B-43 | Backend's only style route is add-only (`apply_style_scope`); no route calls book-tools `remove_style_label`. `clear-style-button`, WordDetail chip off-toggle, and tag-chip × all silently no-op. |
+| F7 | LineDetail word-grid validate + GT inputs unwired | B-21, B-22 | LineDetail.tsx:277 mounts LineCard without `onValidateWord` / `onCommitGt`; visible, editable, no effect. Alternates exist (WordDetail, MultiLineDetail). |
+| F8 | Toolbar cells silently no-op on word selection | B-55, B-66 | `resolveToolbarRequest` returns null when `{lineIndex}` can't fill from `selected_lines` → no request, no toast, cell enabled. Hits `line-split-after`, `line-split-selected`, `word-w-to-l` (so S4's form-new-line backend is unreachable from its own toolbar cell). |
+| F9 | Ctrl-click not additive at LINE level | B-56 | Second ctrl-click replaces the selection; only drag-box accumulates lines. Word-level additive works. |
+| F10 | Rotate surface broken (3 of 5 links) | C28 | Buttons invisible; rotation metadata not in API payload; re-OCR after rotate ineffective. Pixel rotation itself works. |
+| F11 | Auto-rotate-all: no UI + detection crash | C29 | Zero frontend references; backend detection crashes per page on RGB PNGs; always `rotated=[]`. Manual-rotation skip honor works. |
+| F12 | Project switching unreachable with an active session | A-02 ≡ C13 | "Projects" link → `/` → session redirect bounces back. No project-select control on project routes. Grid only reachable via the 404 error path. |
+| F13 | Project delete / archive menu items are pure stubs | C14 | `onClick` only closes the menu (RootPage.tsx:265-281); `DELETE /api/projects/{id}` exists but is never called from UI. |
+| F14 | Deep link to a not-yet-loaded project bounces | C57 | `GET /api/projects/{id}` 404 → RootPage; no `POST /load` attempted. Legacy auto-loaded from URL. Session-resume covers restarts only. |
+| F15 | Jobs list / queue UI missing | C32 | `GET /api/jobs` is backend-only; no jobs panel anywhere; progress visible only as toasts + ExportDialog. |
+| F16 | Suite sibling launcher never wired to real endpoints | C51 | App.tsx:472-488 GAP-3 shims return `[]` / `requires-host-config` though `/api/suite/*` is mounted and works (proven by send-to-trainer chain, C42). |
+| F17 | Compute-device picker UI unreachable | C52 | `ComputePanelContent` wired into `settingsPanels` but no settings / utility-dock trigger renders; backend PUT works. |
+| F18 | OCR-config modal mouse-dead | A-48 | pdomain-ui 0.7.x dialog overlay z-bug (see §5.1). Keyboard path works. |
+| F19 | Go button is a guaranteed no-op | A-18 ≡ C16 | `onBlur` clears the typed value before the button's `onClick` reads it (ProjectNavigationControls.tsx:122-124). Enter-in-input works. |
+| F20 | Advertised-but-unbound hotkeys | A-54 | Mod+, (BUG-KBD-1), Mod+O, Mod+J listed in hotkeyMap + help modal; no `useHotkey` registration exists. |
+| F21 | Erase-to-marker (4-direction) has no surface | B-74 | Brush/lasso/rect is the only erase model; unchanged since 06-06. Needs a CT keep-or-retire decision. |
+| F22 | Rebox-on-main-canvas unreachable | B-76 | Canvas handles `mode==="rebox"` but nothing ever sets it; rail modes map only to erase/add-word/select. Alt: ReboxSection mini-canvas. |
+| F23 | Glyph annotation panel unmounted | B-82 | Known-blocked (M11 / Q-A7). Unchanged. |
+| F24 | Driver-contract testid rot | A-41, A-55, A-11 | Contract lists testids of dead surfaces; see §5.3. Doc/test debt, not user-facing. |
 
-### Dimension A — screens / chrome
+## 4. Consolidated PARTIAL table
 
-| Legacy capability | Legacy ref | New evidence | Why it matters |
+| # | Degradation | Rows | Nature |
 |---|---|---|---|
-| **OCR Config from root / no-project** context | `project_load_controls.py:110` | `ocr-config-trigger-button` only injected when `onProjectRoute` (App.tsx:203); absent on RootPage | Can't configure models before opening a project. **Issue #405 open.** |
-| **Resolved project filesystem path** in header | `project_load_controls.py:114` | `source-root-label` shows source *root*, and is `sr-only` on project routes | Lost at-a-glance confirmation of which project dir is open. |
-| *(new-only, unreachable)* **QuickSearch** bar | — | `QuickSearch.tsx:23` defined + tested, **mounted nowhere** | Worklist search store is wired but has no QuickSearch entry point (filter chips still work). |
-
-### Dimension C — document / system
-
-| Legacy capability | Legacy ref | New evidence | Why it matters |
-|---|---|---|---|
-| OCR config **Cancel** (discard w/o applying) | `ocr_config_modal.py:127` | `OCRConfigModal` POSTs on every select `onChange`; no pre-open snapshot | Can't preview model options and back out. |
-| Rotate page **180°** button | (SPA spec C-31) | `PageActions.tsx` renders only CW/CCW; 180 testid in comment, no button | Spec'd variant absent (and rotate is stubbed anyway). |
-| Generic **job queue / progress panel** UI | (SPA-new) | `GET /api/jobs` backend-only; only ExportDialog shows progress | OCR/refine/rotate progress invisible after click. |
-| Source folder **"Use Current"** copy-to-input | `project_load_controls.py:348` | No equivalent button in `SourceFolderDialog` | Minor convenience gap. |
-| Source folder **"Open Typed Path"** (browse w/o apply) | `project_load_controls.py:322` | Single `Mod+Enter` apply only | Reorganized; browse-then-confirm split lost. |
-
----
-
-## 3. Partial / stubbed (⚠️)
-
-### Dimension B
-
-| Capability | New evidence | Nature of the gap |
-|---|---|---|
-| Line split-after-word | `LineDetail.tsx:381` `wordIndex: 0` hardcoded | Always splits after the *first* word; user can't pick the point. |
-| V-split word | `words.py:1080` returns HTTP 400 for `direction="vertical"` | Backend blocks vertical split by design. |
-| Refine / expand bboxes (all scopes) | `handlers/refine.py:90` real, but raises if page image absent | Real op; **silently fails when OCR image not loaded** (job reports "complete"). |
-| WordEditDialog nudge accumulation | `WordRefineNudgeRows.tsx:185` | Preview/accumulate works; **commit discarded** (callback unwired). |
-| Split paragraph after line (right panel) | `ParagraphDetail.tsx` `afterLineIndex: 0` | Always after line 0; no line picker. |
-| Line/para checkbox selection (Matches pane) | `LineCard.tsx:188` no `onChange`; hidden | Bulk checkbox select dead. Alt: canvas drag-select + Rail. |
-| Match-filter content (Unvalidated/Mismatched/All) | `WordMatchView` correct but inside `display:none` | Toggle visible (TextTabs); filtered content invisible. |
-| Word-scope copy-GT (toolbar) | route real, but needs hidden Matches-pane word selection | Reachable only if word checkboxes were visible. |
-| Inline fine-tune bbox (per word column) | `BBoxSection` (right panel) only | Functional, reduced discoverability. |
-
-### Dimension A
-
-| Capability | New evidence | Nature |
-|---|---|---|
-| TextTabs right-pane (Matches/GT/OCR tabs) | `ProjectPage.tsx:978` `display:none` | Deliberate re-map to Drawer/RightPanel; raw GT-vs-OCR side-by-side view lost. |
-| Word-match toolbar location | `ToolbarActionGrid` now **visible** (ProjectPage.tsx:908) but relocated above canvas | Inventory's "hidden" claim is **STALE**; reachable, different surface. |
-| **Go To** button | `ProjectNavigationControls.tsx:155` `className="sr-only"` | No visible click target; Enter-in-input works. Mouse-only minor regression. |
-| Page-navigation spinner | `ProjectLoadingOverlay` cache-dependent | May show nothing on fast cached nav. |
-| Session restore | `RootPage.tsx:458` real | Functionally equivalent; works. |
-
-### Dimension C
-
-| Capability | New evidence | Nature |
-|---|---|---|
-| **Rotate page CW/CCW (manual)** | `handlers/rotate.py:61` `asyncio.sleep(0)`, no image I/O | **Stub** (M9.1). Buttons fire a job that "succeeds" with no effect. |
-| **Auto-rotate all pages** | `handlers/auto_rotate_all.py:71` progress only, no detection | **Stub** (M9.2). |
-| Save page (labeled lane) | `api/pages.py:767`; no-op 200 when `page_store is None` | Silent no-op in store-less configs (CI risk); real when wired. |
-| Save all pages (save-project) | `handlers/save_project.py:191` skips `page_id is None` pages with debug-only log | Partial save, **no user warning** for skipped pages. Route docstring STALE ("stub"). |
-| Export history panel | `api/export.py:246` `list_exports` returns `[]` | Past-session exports not listed; current job progress is shown. |
-| OCR config trigger on RootPage | absent on root (HeaderBar.tsx:193) | Arguably correct (config needs a project); was always-visible in legacy. |
-| QuickSearch `⌘K` focus | `QuickSearch.tsx:34` keycap opens hotkeyHelp, not the field | Misleading shortcut. |
+| P1 | Multi-line bulk unvalidate loses updates intermittently | B-28 | Parallel `mutate()` loop race (§5.2); 2 of 3 runs lost one line, no error. |
+| P2 | Bulk style apply loses updates | B-79 | Same race, third surface observed: 2 words selected, one got the style. |
+| P3 | Hardcoded split points | B-51, B-52, B-58 | Line split-after-word, split-by-words, para split-after-line all hardcode index 0; legacy let you pick. |
+| P4 | Add-word draw dispatch flaky | B-75 | Backend `words/add` works; UI drag dispatched 1 of 3 attempts and didn't persist. Needs focused e2e. |
+| P5 | Export dialog content mouse-dead | A-49 | Same overlay z-bug as F18 (§5.1); opens, Escape works, content unclickable. |
+| P6 | Source-root apply 403s on non-default ports | C09 | `LocalTrustMiddleware` rejects any Origin off a fixed 8080/5173 allowlist even when `Sec-Fetch-Site: same-origin`. Works on :8080; e2e misses it (httpx, random ports). |
+| P7 | Load Page lost its revert semantic | C20 | Every mutation advances the event-store head; `load_labeled` reads the head, so "discard unsaved edits" is a refresh — there is nothing to discard. Design question, not a wiring bug. |
+| P8 | Export run history is client-state only | C43 | `GET /exports` is a hardcoded `[]` stub though manifests exist on disk; history lost on dialog unmount. |
+| P9 | Component filter / output-mode effect unobservable | C38 | Controls render and POST; effect masked while F2 holds. |
+| P10 | Legacy envelope read-compat is export-only | C56 | Planted `UserPageEnvelope` is consumed by export, but page load ignores it once an event-store head exists. |
+| P11 | Generic job cancel UI only in ExportDialog | C33 | Backend cancel route fine; no surface for other job types (pairs with F15). |
+| P12 | Status filter chips are cosmetic | A-07 | Non-"all" chips show all projects (no API status field). |
+| P13 | Collapsed drawer expand chevron has 0 width | A-36 | Invisible/unclickable; Rail "Bulk" is the only mouse path back. |
+| P14 | Right panel re-expand only via new selection | A-38b | Collapse leaves no expand control. |
+| P15 | `e` hotkey collision: erase + Export dialog | A-45 | Hidden PageActions stub still registers `useHotkey("e", onExport)` alongside rail erase. |
+| P16 | Breadcrumb walk above line level shows empty panel | A-59 | Alt+Arrow line↔word fine; para/block walk renders no detail. |
+| P17 | CharFixer bbox apply not fully driven | B-46 | Renders; bbox-drag path not exercised this sweep. |
+| P18 | Match-filter via alternate surface only | B-84 | Legacy `match-filter-*` hidden in stub; visible Worklist filter chips work. |
 
 ---
 
-## 4. Missing / broken user paths (end-to-end journeys)
+## 5. Systemic / upstream issues
 
-1. **Correct a word from the word-edit dialog** — *broken.* The dialog opens but **every** action (merge/split/delete/GT/style/component/crop/refine/nudge) is a no-op. The whole dialog workflow is dead. (Workaround: WordDetail right panel + ToolbarActionGrid.)
-2. **Inline-edit words in the Matches pane** — *broken.* The pane is `display:none`; GT inputs, validate buttons, checkboxes, chip-× are invisible.
-3. **Rebox a word by drawing on the page** — *broken.* `"rebox"` mode unwired on the main canvas; only per-word mini-canvas works.
-4. **Per-word glyph annotation (swash/long-s/ligature)** — *broken.* Panel is dead code; only the page-scope bulk recipe exists.
-5. **Form a new line from selected words (toolbar)** — *silently no-ops.* Backend route is a stub returning an empty payload.
-6. **Open → rotate → export rotated training data** — *broken.* Rotate is a stub; export emits original-orientation image; rotation badge is cosmetic.
-7. **OCR config: explore models then Cancel** — *broken.* Each select POSTs immediately; no discard.
-8. **Save all → restart → reload** — *lossy.* Pages whose `page_id` was never registered are silently skipped with a "saved N pages" toast that may undercount.
+These cut across rows; fixing them clears multiple verdicts at once.
+
+### 5.1 pdomain-ui 0.7.x dialog overlay z-bug (upstream fix needed)
+
+Dialogs whose content relies on the pdomain-ui `.dialog` class render the
+`.dialog-overlay` (z-index 49, `frontend/src/styles/primitives.css:552`) as a
+*sibling on top of* the content (z-index auto) — the whole modal is mouse-dead;
+`elementFromPoint` returns the overlay. Keyboard paths still work. Affected:
+OCRConfigModal (F18), ExportDialog (P5). Dialogs that pass their own
+`fixed … z-50` className (SourceFolderDialog, HotkeyHelpModal, ConfirmDialog)
+are unaffected. Likely from the pdomain-ui Dialog overlay-as-sibling markup in
+the 0.7.x bump → fix belongs upstream in `pdomain-ui`; a local z-index override
+can bridge.
+
+### 5.2 Parallel `for … mutate()` loops silently lose updates
+
+`handleBulkValidate` (MultiLineDetail.tsx:92) and siblings fire one mutation per
+item in a sync loop; with 2+ items, an update is intermittently lost — both
+POSTs sent, no 4xx/5xx, final state reflects only the first. Observed on three
+surfaces (B-28, B-79, multi-line bulk); the same pattern exists in
+`handleBulkCopyOcrToGt`, MultiWordDetail bulk ops, BulkWordActions loops, and
+ProjectPage clear-component loops. Fix shape: use the batch endpoints where they
+exist, or serialize/await the loop.
+
+### 5.3 Driver-contract testid rot (`docs/architecture/13-driver-contract.md`)
+
+- §2.1 `project-select` / `load-project-button` / `source-folder-button`:
+  `ProjectLoadControls.tsx` is dead code, never mounted. Real surface = RootPage
+  card grid; the grid's "Open source folder" button has **no testid**.
+- `selection-mode-paragraph/line/word` (lines 171-173): ImageTabsHeader dead
+  since IS-4, DOM count 0 — this is why
+  `tests/e2e/test_parity_chrome.py::test_paragraph_mode_selection_opens_paragraph_detail`
+  is red. Real surface: rail targets + Shift+1/2/3.
+- `word-edit-dialog` + ~20 `dialog-*` testids (lines 265-283): WordEditDialog
+  deleted in `c5ddd35`; equivalents live in WordDetail sections.
+- `export-cancel-button` never existed in code (C40).
+- SplitPicker buttons have no testids; the inventory's
+  `glyph-panel-charspan-cell-*` claim points at the unmounted panel.
+- **Hidden `data-testid-stub="true"` duplicates** (HeaderBar, canvas-hidden-stubs)
+  shadow real controls — unscoped `[data-testid=…]` selectors resolve to
+  invisible stubs and time out. Either drop the stubs or mandate
+  `:not([data-testid-stub])` scoping in the contract.
+
+### 5.4 Konva div-in-tree console errors
+
+`Konva has no node with the type div. Group will be used instead.` — 3-5× on
+every project-page load (both A and B sweeps). A DOM `<div>` is rendered inside
+a react-konva tree. Benign fallback, real `console.error`, worth a cleanup.
 
 ---
 
-## 5. Present & wired (✅, condensed)
+## 6. Present & wired (condensed)
 
-**Dimension A:** SPA shell + routing; RootPage project grid; No-project placeholder; project/page busy overlays (incl. Cancel); nav bar (Prev/Next/input, Enter goto, Mod+Arrow/Home/End); Source Folder dialog; OCR Config modal (project routes); Export dialog (Mod+E); project select + LOAD; HeaderBar + breadcrumb + metrics strip; Toasts; layer toggles; selection-mode radio; URL deep-links; ConfirmDialog.
+≈147 of 207 rows PASS — the app is far from "everything is broken". Confirmed
+live, one line per area:
 
-**Dimension B:** GT text edit (inline blur-commit); copy GT↔OCR at line/para/page; validate/unvalidate at word/line/para/page; delete word/line/para; merge word/line/para (right panel + toolbar); split word-H, split-line-by-words, split-para-after-line (real routes); form-new-**paragraph** from words/lines; rebox via numeric inputs + Konva mini-canvas; refine/expand+refine/expand (image-dependent); apply/clear style + component (right panel chips, toolbar, BulkWordActions); erase pixels (brush/lasso/rect right panel); add-word from drawn bbox; char-range annotation; per-char GT fix; inter-word gap slider; bulk-mark glyph recipe; paragraph layout-type; line-level GT set; rematch-GT.
-
-**Dimension C:** project list + load; source folder browse/navigate/apply; page nav (prev/next/goto/first/last + hotkeys); save page; load page (discard); **export DocTR** (current page + all-validated — handler is real, route docstring STALE); export style/component filters; reload-OCR (orig + preserve-edits); rematch-GT; refine bboxes (page); OCR config (model select / HF rev / rescan); session restore; page validate/copy via toolbar; 72 global hotkeys; zoom/pan; SSE job progress.
-
----
-
-## 6. New-only additions (no legacy equivalent)
-
-**A:** RootPage card grid + per-project menu; Drawer (Worklist/Hierarchy); RightPanel detail levels; Rail; HotkeyHelpModal; generic ConfirmDialog; OcrFailed/ImageDrift banners; theme chips; metrics strip; `/__perf-test`.
-**B:** CharRangesSection; CharFixerSection (+per-char bbox canvas); multi-tool ErasePixelsSection; gap-picker; BlockDetail layout-type; BulkGlyphMarkDialog (recipe + dry-run); BulkWordActions panel; UnicodePicker; GlyphAnnotationPanel *(built, unmounted)*.
-**C:** zoom/pan; hotkey help; worklist quick-search store; breadcrumb nav; SSE job progress + cancel; auto-save cache lane; adjacent-page prefetch; export output-mode flags; GT normalization profile; auto-rotate config.
+- **Shell & nav:** routing + deep links + redirects, session restore across
+  restart, prev/next/Enter-goto + all four nav hotkeys, drawer tabs, rail
+  (modes/targets/layers + hotkeys incl. SEL-3 sync), worklist + Ctrl+K
+  quick-search, hotkey help, theme persistence, breadcrumbs, metrics strip.
+- **Selection:** click / drag-box / ctrl-click additive (word) / shift-click
+  remove; multi-word + multi-line detail views; granularity sync.
+- **GT editing:** word/line GT inputs persist; copy GT↔OCR at word, line, para,
+  page scope; Tab traversal across cards; Ω picker; CharFixer per-char GT;
+  char-range styling.
+- **Validation (in-session):** word / line / para / page validate + unvalidate
+  across WordDetail, LineDetail bulk, toolbar, BulkWordActions — all persist
+  via API (durability across restart is F1).
+- **Structure ops:** word merge / split / gap slider; line merge (panel +
+  toolbar) + batch delete; para split / merge / delete; words→new-paragraph.
+- **BBox / image:** numeric inputs, nudges, refine / expand+refine at all
+  scopes (202 jobs complete), rebox mini-canvas, erase brush + apply,
+  crop/reset.
+- **Styles/components (apply-side):** apply style + scope, component chips
+  incl. drop cap, layout-type assignment, bulk glyph-mark recipe dry-run.
+- **Page/project ops:** save page, auto-save (cross-restart durable for
+  content), save-project with dirty-only + skip warning, reload OCR (real
+  DocTR, correct words on a real-text project), rematch GT, reload-OCR-edited
+  gating.
+- **Config & suite:** OCR config modal full snapshot/cancel semantics, model
+  select + HF revision pin durable on disk, rescan, normalization gating,
+  auto-rotate config persistence; all `/api/suite/*` routes live; full
+  send-to-trainer launch chain (registry → spawn → healthz → tab).
+- **Export mechanism:** dialog, scope/filters/output-mode controls, SSE
+  progress text, manifest merge-write, suite shared-paths publication — the
+  machinery works end-to-end once fed (planted-envelope control exported 32
+  crops + labels).
 
 ---
 
 ## 7. Prioritized slice plan
 
-Ordered by **(user impact ÷ effort)**. Each slice gets a capability-matrix spec with observable-behavior acceptance + a **mandatory Playwright browser-verification milestone** before close. **No implementation until CT picks slices.**
+Each slice should get a capability-matrix spec
+(format: [`docs/specs/2026-06-05-selection-operations-parity.md`](../../specs/2026-06-05-selection-operations-parity.md))
+with observable-behavior acceptance and a mandatory Playwright verification
+milestone. Effort tags: S / M / L. "CT" = needs a CT design decision first;
+"mech" = mechanical, spec can be written directly.
 
-| # | Slice | Dim | Effort | Why first |
+### P1 — silent data-loss / data-op failures (highest urgency: every one reports success)
+
+| Slice | Covers | Effort | CT? | Acceptance bar |
 |---|---|---|---|---|
-| **S1** | **Wire `WordEditDialog` mutation callbacks** | B | **S** | Highest leverage: one parent (`ProjectPage.tsx`), ~11 props; all child handlers + backend routes already exist. Clears ~9 ❌ rows and restores a whole editing surface. Spec drafted: `docs/specs/2026-06-06-word-edit-dialog-wiring.md`. |
-| **S2** | **Matches-pane decision: restore or retire** | A/B | S–M | `display:none` is a fork in the road. *Decision needed from CT:* un-hide WordMatchView (restore inline editing + filter + checkboxes + tag-× + Tab-nav) **or** formally retire the surface and delete the driver-only stubs. Don't fix blind. |
-| **S3** | **Rebox on main canvas** | B | S | Wire `onRebox` → `useReboxWord` in ProjectPage's `<PageImageCanvas>`; restores draw-to-rebox. |
-| **S4** | **`form-new-line-from-selected-words` backend** | B | S | Implement `/lines/{li}/split-with-selected` (currently returns empty stub payload); toolbar cell already routes to it. |
-| **S5** | **Save-project skipped-page warning** | C | S | Surface skipped (`page_id is None`) pages in the toast/result instead of silent debug-log; prevents silent data loss. Update STALE "stub" docstrings. |
-| **S6** | **Chrome gaps bundle** | A/C | S | Visible Go-To button; resolved-project-path label; OCR-config trigger + Cancel/snapshot semantics (#405); QuickSearch mount + real `⌘K` focus; source-folder "Use Current". |
-| **S7** | **Per-word glyph annotation panel** | B | M | Mount `GlyphAnnotationPanel` in WordDetail (or dialog). **Gated on M11 / Q-A7** (`status:blocked`) — sequence after that resolves. |
-| **S8** | **Real rotate / auto-rotate + re-OCR** | C | **L** | M9.1/M9.2 stubs → actual image rotation, PageRecord update, re-OCR. Largest; needs `pdomain-book-tools` image ops + job pipeline. |
+| P1.1 Validation persistence | F1 (C55) | M | CT (where flags live in the persisted payload / envelope) | validate → Save → server restart → counts identical. |
+| P1.2 Export lane reconnect | F2, F3, P8, P9 (C35-C38, C43) | M | CT (export reads event store vs. Save also writes labeled lane; affects UserPageEnvelope compat C56) | validate+save a page in the UI → export → crops + labels on disk; style filter lists real styles. |
+| P1.3 Real deletes for word/line surfaces | F5 (B-61/62/65) | S | mech (point `useDeleteWord`/`useDeleteLine` at batch routes, or implement D2/D3) | each delete surface removes the item, persisted via API re-fetch. |
+| P1.4 Style removal end-to-end | F6 (B-39/41/43) | S | mech (backend route calling `remove_style_label` + off-state wiring) | toolbar clear, chip off-toggle, tag-× each remove the style, persisted. |
+| P1.5 Export cancel + testid | F4 (C40) | S | mech | cancel during a run → job state cancelled server-side; partial output removed. |
+| P1.6 LineDetail word-grid wiring | F7 (B-21/22) | S | mech (pass two props) | grid validate + GT Enter persist via API. |
+| P1.7 Toolbar resolver honesty | F8 (B-55/66) | S | mech (derive line from word selection, or disable cell + toast) | cells either work from a word selection or are visibly disabled; never silent. |
 
-**Verification harness for every slice:** `tests/e2e/` (`helpers.py`, `fixtures/`, `_seed_event_store` / `_ingest_ocr_result`; run `CI=true`). Acceptance = the action is **visible + enabled + produces the persisted effect**, asserted in a real browser — not a unit test with spies (a prior sweep shipped green while a backend bug made per-word validate silently not persist).
+### P2 — rotate surface (completes M9.1/M9.2 follow-through)
+
+| Slice | Covers | Effort | CT? | Acceptance bar |
+|---|---|---|---|---|
+| P2.1 Rotate buttons visible + metadata surfaced | F10 (C28 links 1+3) | S | mech | visible rotate buttons; API payload carries `rotation_degrees`; badge renders. |
+| P2.2 Re-OCR after rotate | F10 (C28 link 4) | M | mech (investigate why re-OCR output isn't applied post-rotate) | post-rotate re-OCR yields landscape-coord words aligned with pixels. |
+| P2.3 Auto-rotate detection fix + UI trigger | F11 (C29) | M | mech, likely cross-repo (input-shape crash may sit in pdomain-book-tools detection path) | auto-rotate-all on a skewed fixture rotates pages; UI trigger exists; manual-skip honored. |
+
+### P3 — systemic bugs
+
+| Slice | Covers | Effort | CT? | Acceptance bar |
+|---|---|---|---|---|
+| P3.1 Dialog overlay z-fix | F18, P5 (§5.1) | S | mech; upstream pdomain-ui fix + local bridge override | OCR-config and Export dialog content clickable with a mouse. |
+| P3.2 Batch/serialize mutation loops | P1, P2 (§5.2) | S-M | mech | bulk ops on N items always land N updates (loop e2e, 5+ runs green). |
+
+### P4 — reachability: project switching, jobs, suite UI
+
+| Slice | Covers | Effort | CT? | Acceptance bar |
+|---|---|---|---|---|
+| P4.1 Project switching | F12 (A-02/C13) | S | CT-light (skipSessionRedirect on the Projects link vs. header project switcher) | from a loaded project, reach the grid and open a different project. |
+| P4.2 Project delete/archive wiring | F13 (C14) | S | mech (+ confirm dialog) | delete removes the project (API + grid); archive does whatever the API defines. |
+| P4.3 Deep-link auto-load | F14 (C57) | S | mech (404 → attempt `POST /load` before bouncing) | fresh server + pasted page URL lands on that page. |
+| P4.4 Jobs panel UI | F15, P11 (C32/C33) | M | CT (placement/shape; pdomain-ui utility dock is the likely home) | running jobs visible with progress + cancel outside ExportDialog. |
+| P4.5 Suite launcher + settings dock | F16, F17 (C51/C52) | S-M | CT-light (dock trigger placement) | sibling apps listed + launchable; compute-device picker reachable and applies. |
+| P4.6 LocalTrustMiddleware origin check | P6 (C09) | S | mech (honor `Sec-Fetch-Site: same-origin` or derive allowlist from bound port) | source-root apply succeeds on a non-default port from the browser. |
+
+### P5 — polish tail
+
+| Slice | Covers | Effort | CT? | Acceptance bar |
+|---|---|---|---|---|
+| P5.1 Go button fix | F19 | S | mech (read value before blur reset) | type N + click Go → page N. |
+| P5.2 Hotkey cleanup | F20, P15 (A-54/A-45) | S | mech (bind Mod+,/O/J or delist; remove stub `e` registration) | every hotkey in the help modal does what it says; `e` only toggles erase. |
+| P5.3 Line ctrl-click additive | F9 (B-56) | S | mech | ctrl-click accumulates lines into multi-line detail. |
+| P5.4 Split-point pick UX | P3 (B-51/52/58) | M | CT (picker UX for split position) | user picks the split word/line; result persisted. |
+| P5.5 Drawer/panel re-expand affordances | P13, P14 (A-36/A-38b) | S | mech | collapsed drawer + right panel each have a visible click target to reopen. |
+| P5.6 Contract-doc + dead-code cleanup | F24 (§5.3) | S | mech | contract matches DOM; delete ImageTabsHeader + ProjectLoadControls dead code; fix or delete stale e2e (`test_paragraph_mode_selection_opens_paragraph_detail`); add missing testids (source-folder trigger, export-cancel, SplitPicker); drop or document `data-testid-stub` shadowing. |
+| P5.7 Konva div cleanup | §5.4 | S | mech | zero Konva type-div console errors on page load. |
+
+### Deliberately not sliced
+
+- **F21 erase-to-marker** — CT decision first: keep the legacy 4-direction model
+  or formally retire it in favor of brush/lasso/rect.
+- **F23 glyph panel** — blocked on M11 / Q-A7, unchanged.
+- **P7 Load-Page revert semantics** — design question about what "discard
+  unsaved edits" means under event-store auto-persist; pairs with the P1.1/P1.2
+  persistence decisions and should be settled in the same conversation.
+- **P12 status filter chips** — needs an API status field; fold into whatever
+  project-metadata work comes later.
 
 ---
 
-## 8. Stale-inventory corrections (for the record)
+## 8. Corrections to the 2026-06-06 matrix (for the record)
 
-- **ToolbarActionGrid is visible**, not a hidden stub (shipped v0.2.0). `new-a-screens.md` is stale here.
-- **WordEditDialog callbacks are NOT wired in ProjectPage** — `new-b-content.md` implied they were. They are wired internally in the child rows but the parent injects none.
-- **Export handler is real** — route docstrings in `api/export.py` and the save-project route still say "stub/immediately completes"; the handlers are implemented. Docstrings should be corrected.
-- **`persist_page_to_file` is retired** (`page_state.py` raises `NotImplementedError`); all persistence goes through the event store.
+- **WordEditDialog "unwired callbacks" (old S1) is moot** — the dialog was
+  deleted in `c5ddd35`; WordDetail sections are the surface and they pass
+  (except style-clear, F6).
+- **Matches-pane decision (old S2)** landed as retire-and-replace: drawer Text
+  tab + LineDetail/MultiLineDetail editing; the `display:none` stubs remain
+  only as driver-contract debt (F24).
+- **Rotate "stub" (old S8)** is no longer a stub: pixel rotation is real and
+  durable; the remaining breaks are surfacing + re-OCR (F10/F11).
+- **"Export handler is real"** was true but incomplete — the handler is real
+  *and disconnected from the save path* (F2). Code-reading verdicts missed it;
+  only the live pipeline run caught it.
+- Old S3 (main-canvas rebox), S4 (form-new-line), S5 (skip warning), S6 (chrome
+  bundle) shipped; S3's mode-entry wiring regressed/never landed an entry point
+  (F22) and S4's toolbar cell can't reach its own backend (F8). S6's Go button
+  shipped visibly but broken (F19).

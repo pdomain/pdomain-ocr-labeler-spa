@@ -1,5 +1,16 @@
 # Handoff: continue the full legacy→new parity sweep
 
+## 2026-06-12 sweep — DONE
+
+The sweep this handoff asked for is complete. Three live-verified dimension
+sweeps (Playwright, event-store seeded, visible+enabled+effect bar) are
+committed as `sweep-2026-06-12-{a-screens,b-content,c-system}.md`, and
+`PARITY-GAP.md` is the refreshed master synthesis (207 rows, ~73% strict
+parity, prioritized slice plan P1-P5). The instructions below are kept for
+historical context only — do not re-run them; start from `PARITY-GAP.md`.
+
+---
+
 Paste the prompt below into a fresh Claude Code session opened in the
 `ocr-container` workspace.
 
