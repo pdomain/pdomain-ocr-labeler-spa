@@ -96,7 +96,37 @@ mutating op. Acceptance = VISIBLE + ENABLED + real EFFECT (persisted).
 | 65 | ML-7 bulk Delete lines | `multi-line-bulk-delete` + confirm | **FAIL** | Loops `useDeleteLine` → stub `/delete` → confirm then nothing deleted |
 | 66 | Form new LINE from selected words (legacy #38, slice S4) | `toolbar-word-w-to-l` | **FAIL** | Same resolver null as row 55 — S4 implemented the backend route but the toolbar cell can never reach it from a word selection |
 
-(further rows appended as verified)
+| 67 | Page-scope Copy OCR→GT / GT→OCR (legacy #4/#5) | `toolbar-page-ocr-to-gt`/`-gt-to-ocr` | PASS | Mismatched word's gt←ocr then ocr←gt, both persisted |
+| 68 | BBox numeric inputs (rebox) | BBoxSection `bbox-input-x/y/w/h` | PASS | x blur-commit persisted (96→101) |
+| 69 | BBox nudge buttons (legacy #46–#53) | `bbox-nudge-left/right/top/bottom` + step | PASS | x 97→96 persisted via `/rebox` (a first batched run failed due to a toast/ordering artifact; isolated run clean) |
+| 70 | BBox Refine / Expand+Refine (legacy #72/#73) | `bbox-refine-button`/`bbox-expand-refine-button` | PASS | Each fires `/rebox` commit, HTTP 200 |
+| 71 | BBox Crop / Reset (legacy #58–#61/#54 analog) | `bbox-crop-button`/`bbox-reset-button` | PASS | Crop fires `/rebox`; Reset present (new model: numeric crop, no marker-based 4-dir crop) |
+| 72 | Rebox mini-canvas draw + Apply (legacy #43/#44 alt) | ReboxSection `rebox-tool-draw` + `rebox-apply` | PASS | Drew rect on Konva mini-canvas; bbox 134×64→155×77 persisted; snap/draw/pan + zoom controls present |
+| 73 | Erase pixels brush + Apply (legacy #62–#64 alt) | ErasePixelsSection | PASS | Brush stroke staged → `erase-apply` fired `/erase-pixels` ops; lasso/rect tools + op-remove/clear rendered (only brush driven) |
+| 74 | Erase-to-marker 4-dir (legacy #65–#68) | — | **FAIL (still missing)** | No directional erase surface; brush/lasso/rect is the only model (unchanged since 06-06 audit) |
+| 75 | Add word from drawn bbox (legacy #45) | `word-add-button` + canvas draw | **PARTIAL** | Mode toggles (cursor→copy); backend `POST words/add` works (direct call adds word). But the UI draw dispatched only 1 of 3 attempted drags, and that one did not persist a word. Flaky dispatch — needs e2e attention |
+| 76 | Rebox word on MAIN canvas (S3) | viewport mode "rebox" | **FAIL** | `handleRebox` + canvas mode case exist, but NOTHING sets `viewportStore.mode="rebox"` (rail modes map only to erase/add-word/select, PageImageCanvas.tsx:355). No UI entry point → unreachable. Alt: ReboxSection mini-canvas |
+| 77 | Refine/Expand+Refine/Expand toolbar cells, all scopes (legacy #69–#71, #76–#83) | `toolbar-{scope}-refine` etc. | PASS | All cells POST `/refine` (mode refine / expand_then_refine / expand_only), 202 + `refine_bboxes` jobs complete without error |
+| 78 | Page validate/unvalidate via BulkWordActions (legacy #14/#15 alt) | `rail-bulk-button` → `page-validate-all` | PASS | All real words validated then cleared |
+| 79 | Bulk style/component apply to selection (legacy #84/#88 alt) | BulkWordActions `bulk-word-style-apply` | **PARTIAL** | With 2 words selected, only ONE got `bold` — same parallel-mutation-loop lost-update race (3rd surface observed) |
+| 80 | Multi-word bulk validate/unvalidate (MUL-3 effect) | `multi-word-validate` | PASS | Both selected words validated via API |
+| 81 | Bulk glyph-mark recipe dialog (new-only) | `bulk-glyph-mark-button` (PageActionsCompact) → dialog | PASS | Dialog opens; dry-run round-trips and renders "0 words will be modified" |
+| 82 | Per-word glyph annotation panel (M11) | GlyphAnnotationPanel | **FAIL (known/blocked)** | Component still mounted nowhere (only its own file); M11 blocked on Q-A7 — unchanged |
+| 83 | Block/paragraph layout-type assignment | BlockDetail `block-detail-layout-chip-*` + save | PASS | PATCHed `layout_type:"heading"` to all 3 paragraphs of the block |
+| 84 | Filter lines All/Unvalidated/Mismatched (legacy #104) | legacy `match-filter-*` hidden; Worklist `worklist-filter-*` chips | PARTIAL (alt surface) | match-filter-* exist only inside display:none stub; worklist filter chips are visible + clickable (working alternative) |
+| 85 | Full-page GT/OCR text view (S2) | Drawer Text tab → `drawer-text-panel-ground-truth`/`-ocr` | PASS | Both panels visible after clicking `drawer-tab-text` |
+| 86 | Tab/Shift-Tab GT navigation (legacy #3) | MultiLineDetail flat input order; WordDetail `onTab`→`walkSibling` | PASS | Row 26 (cross-card Tab) verified live |
+| 87 | Edit-word pencil opens word editor (legacy #128) | WordCell `edit-word-button-{l}-{w}` in LineDetail | PASS | Click opened WordDetail "Line 2 · Word 2" |
+| 88 | WordEditDialog capabilities (legacy #2, #32–#35, #40–#42, #46–#68, #86–#93 dialog surfaces) | — | N-A (superseded) | Dialog deleted in `c5ddd35` (2026-06-10); equivalents live in WordDetail sections (rows 48–49, 68–73) and are PASS except style-clear (row 41) |
+| 89 | Matches pane (WordMatchView inline editing) | `canvas-hidden-stubs` | N-A (retired surface) | Still display:none, driver-contract testids only; S2 decision replaced it with Drawer Text tab + LineDetail/MultiLineDetail editing |
+| 90 | Rematch GT (legacy #98) | PageActionsCompact | N-A here | Dimension C scope (page-level op) — left to the C auditor |
+
+## Summary counts
+
+- **PASS: 64** (rows 1–13 sel/GT, 14–20, 23–27, 29–38, 40, 42, 44–45, 47–50, 53–54, 57, 59–60, 63–64, 67–73, 77–78, 80–81, 83, 85–87)
+- **PARTIAL: 8** — 28 (multi-line bulk unvalidate race), 46 (charfixer apply not fully driven), 51/52/58 (hardcoded split points), 75 (add-word flaky), 79 (bulk style race), 84 (filter via alt surface)
+- **FAIL: 12** — 21, 22 (LineDetail WordCell validate/GT unwired), 39, 41, 43 (style removal missing end-to-end), 55/66 (toolbar resolver silent nulls incl. W→L), 56 (line ctrl-click additive), 61, 62, 65 (stub `/delete` deletes), 74 (erase-to-marker), 76 (main-canvas rebox), 82 (glyph panel, known-blocked)
+- **N-A: 3** — 88 (dialog superseded), 89 (matches pane retired), 90 (dim C)
 
 ## New findings (not in inventories)
 
@@ -145,3 +175,25 @@ mutating op. Acceptance = VISIBLE + ENABLED + real EFFECT (persisted).
   `line-split-selected`, `word-w-to-l` whenever the selection is word-level
   (`selected_lines` empty). Cell-enablement logic and resolver requirements
   disagree.
+- **Rebox-on-main-canvas has no entry point.** S3 wired `onRebox` +
+  `handleRebox` and the canvas handles `mode==="rebox"`, but no component
+  ever sets `viewportStore.mode = "rebox"` — the rail-mode subscription
+  (PageImageCanvas.tsx:355) maps rail modes only to erase/add-word/select.
+  Dead mode.
+- **Add-word draw dispatch is flaky.** `POST words/add` works (direct call
+  adds a word); the button toggles mode (cursor becomes `copy`); but only
+  1 of 3 live drag attempts dispatched the POST, and that one didn't
+  persist. Needs a focused e2e + investigation (drag threshold vs.
+  pointer-capture in add-word mode).
+- **SplitPicker buttons have no testids** (StructureSection.tsx:106) — the
+  06-05 inventory cited `glyph-panel-charspan-cell-{i}` for word split, but
+  those belong to the unmounted GlyphAnnotationPanel. Driver contract gap
+  if the driver ever needs to split words (workaround: `button[title=
+  "Split after position N"]`).
+
+## Worktree / branch
+
+- Worktree: `/workspaces/ocr-container/pdomain-ocr-labeler-spa/.claude/worktrees/agent-a2bf727009facfe3a`
+- Branch: `worktree-agent-a2bf727009facfe3a` (rebased onto local main `d0ba846`)
+- Harness: `/tmp/audit-b/serve.py` (event-store seeded fixture) + scripted
+  Playwright batches `/tmp/audit-b/batch*.py`; screenshots `/tmp/audit-b/shots/`.
