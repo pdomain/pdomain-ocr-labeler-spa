@@ -73,3 +73,28 @@ N-A = not applicable (capability retired/moved by design with CT sign-off).
 | A-43 | ToolbarActionGrid visible above canvas | PASS | `toolbar-action-grid` count 1, visible (v0.2.0 claim re-confirmed at d0ba846). |
 | A-44 | Theme persistence across reload | PASS | Light selected → reload → `data-theme="light"` retained (localStorage). |
 | A-45 | Erase-mode hotkey `e` | PARTIAL | `e` activates rail erase mode, **but ALSO opens the Export dialog**: hidden `PageActions` (IS-2 stub mount) still registers `useHotkey("e", onExport)` (`PageActions.tsx:132`) alongside `useRailHotkeys` MODE_KEYS `e→erase`. Verified live: one keypress → erase active AND "Export Training Data" dialog open. **NEW BUG (hotkey collision).** Shift+E erase-canvas toggle is separate (viewport hotkeys) and untested here (dim B). |
+
+## Batch 4 — modals, page-action chrome, remaining global hotkeys
+
+| # | Capability | Verdict | Evidence |
+|---|---|---|---|
+| A-46 | PageActionsCompact header actions (Reload OCR / Rematch / Save / Export / OCR-config / overflow / Bulk glyphs) | PASS | All 8 testids visible+enabled in header on project route. |
+| A-47 | Overflow menu (Reload OCR Edited / Save Project / Load Page) | PASS | All three entries visible after opening `page-actions-compact-overflow`. Minor: the menu does **not** close on Escape (outside-click only). |
+| A-48 | OCR Configuration modal interaction | FAIL (regression) | Modal opens (trigger on both root and project routes) **but the entire modal content is mouse-dead**: local `.dialog-overlay` (`frontend/src/styles/primitives.css:552`, `z-index:49`) is a *sibling* rendered before the content, and the content (`pdomain-ui` `.dialog` class) has `z-index:auto` → overlay paints on top; `elementFromPoint` over Cancel returns the overlay; Playwright clicks time out. Keyboard path works (focus lands inside, Tab cycles controls, Escape closes). Dialogs that pass their own `fixed … z-50` className (SourceFolderDialog, HotkeyHelpModal, ConfirmDialog) are unaffected. Likely regressed with the pdomain-ui Dialog markup (overlay-as-sibling) in the 0.7.x bump. |
+| A-49 | Export dialog (open via button + Mod+E; close via Escape) | PARTIAL | Opens both ways; Escape closes. **Content is mouse-dead — same overlay z-bug as A-48** (`export-button` blocked by `.dialog-overlay`). Export execution impact belongs to dim C — flagged. |
+| A-50 | Mod+S save page hotkey | PASS | Fires immediately; toast feedback "Project exercise-fixture: nothing to save." (pristine page; text comes from `save_project.py:126` — wording oddity for a page-save, noted for dim C). |
+| A-51 | Mod+Shift+S save project hotkey | PASS | Toast "Project exercise-fixture: nothing to save." |
+| A-52 | Mod+L load page → confirm dialog | PASS | "Load page?" AlertDialog opens; `confirm-dialog-cancel` clickable (ConfirmDialog carries its own `z-50`); closes. Note: ConfirmDialog is `role="alertdialog"`, not `role="dialog"` — drivers beware. |
+| A-53 | Mod+G rematch GT → confirm dialog | PASS | "Rematch GT?" AlertDialog opens; Confirm button clickable and fires the mutation (toast feedback arrives). |
+| A-54 | Advertised hotkeys Mod+, (OCR config), Mod+O (source folder), Mod+J (jump to page) | FAIL | All three listed in `hotkeyMap.ts:28-37` and shown in the help modal, but **none is bound** — no `useHotkey` registration exists; pressing them does nothing. Mod+, is BUG-KBD-1 (M9.5, still open); Mod+O / Mod+J are additional advertised-but-dead entries. |
+| A-55 | Word editing surface reachable (legacy WordEditDialog) | PASS (re-mapped) | WordEditDialog was deleted in `c5ddd35` ("replace WordEditDialog with WordDetail sections"). Canvas click on a word bbox (rail target=word) opens the WordDetail right panel (verified live). **Contract-doc gap: `13-driver-contract.md:265-283` still lists `word-edit-dialog` + ~20 `dialog-*` testids that no longer exist anywhere**; `edit-word-button-{l}-{w}` also returned 0 in the DOM. |
+| A-56 | `/__perf-test` dev route | PASS | Loads; 6 canvas elements rendered. |
+
+## Batch 5 — confirm effect, announcers, breadcrumb hotkeys
+
+| # | Capability | Verdict | Evidence |
+|---|---|---|---|
+| A-57 | ConfirmDialog Confirm button fires the guarded mutation | PASS | Mod+G → Confirm click → mutation runs, toast feedback arrives. (Toast text was "nothing to save" — rematch feedback wording for dim C to review.) |
+| A-58 | sr-only status/error announcers | PASS | `[role=status][aria-live=polite]` and `[role=alert][aria-live=assertive]` both present. |
+| A-59 | Alt+Arrow breadcrumb hierarchy walk | PARTIAL | Alt+ArrowDown line→word and Alt+ArrowUp word→line verified live. Walking above line (para/block) left the right panel with no detail component visible (empty-state), and Alt+ArrowRight from there showed none — upper-level walk needs a closer look (possibly fixture-shape dependent). |
+| A-60 | Busy overlay during long mutations | NOT-TESTED | Reload-OCR (cold CPU OCR) deliberately not exercised in this sweep; `project-loading-overlay` behavior verified throughout. Dim C owns job-progress UX. |
