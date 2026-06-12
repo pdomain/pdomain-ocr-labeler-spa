@@ -120,7 +120,7 @@ Refs point into the three sweep docs.
 | F18 | OCR-config modal mouse-dead | A-48 | pdomain-ui 0.7.x dialog overlay z-bug (see §5.1). Keyboard path works. |
 | F19 | Go button is a guaranteed no-op | A-18 ≡ C16 | `onBlur` clears the typed value before the button's `onClick` reads it (ProjectNavigationControls.tsx:122-124). Enter-in-input works. |
 | F20 | Advertised-but-unbound hotkeys | A-54 | Mod+, (BUG-KBD-1), Mod+O, Mod+J listed in hotkeyMap + help modal; no `useHotkey` registration exists. |
-| F21 | Erase-to-marker (4-direction) has no surface | B-74 | Brush/lasso/rect is the only erase model; unchanged since 06-06. Needs a CT keep-or-retire decision. |
+| F21 | Erase-to-marker (4-direction) — RETIRED | B-74 | CT decision 2026-06-12: retired, superseded by brush/lasso/rect erase. Revisit only if real labeling sessions show margin-cleanup pain. |
 | F22 | Rebox-on-main-canvas unreachable | B-76 | Canvas handles `mode==="rebox"` but nothing ever sets it; rail modes map only to erase/add-word/select. Alt: ReboxSection mini-canvas. |
 | F23 | Glyph annotation panel unmounted | B-82 | Known-blocked (M11 / Q-A7). Unchanged. |
 | F24 | Driver-contract testid rot | A-41, A-55, A-11 | Contract lists testids of dead surfaces; see §5.3. Doc/test debt, not user-facing. |
@@ -302,8 +302,9 @@ milestone. Effort tags: S / M / L. "CT" = needs a CT design decision first;
 
 ### Deliberately not sliced
 
-- **F21 erase-to-marker** — CT decision first: keep the legacy 4-direction model
-  or formally retire it in favor of brush/lasso/rect.
+- **F21 erase-to-marker** — RETIRED (CT decision 2026-06-12): superseded by
+  brush/lasso/rect erase. Revisit only if real labeling sessions show
+  margin-cleanup pain.
 - **F23 glyph panel** — blocked on M11 / Q-A7, unchanged.
 - **P7 Load-Page revert semantics** — design question about what "discard
   unsaved edits" means under event-store auto-persist; pairs with the P1.1/P1.2
