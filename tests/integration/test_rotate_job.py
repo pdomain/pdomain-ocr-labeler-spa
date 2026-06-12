@@ -289,6 +289,20 @@ def test_rotate_updates_rotation_degrees_in_aggregate(tmp_path: Path, projects_r
             f"expected rotation_source='manual', got {agg.record.rotation_source}"
         )
 
+        # C28 link 3: the page payload served right after the rotate job must
+        # carry the durable rotation metadata so the SPA badge can render —
+        # not just the aggregate.
+        resp3 = c.get("/api/projects/book1/pages/0")
+        assert resp3.status_code == 200, resp3.text
+        record = resp3.json()["page_record"]
+        assert record is not None, "page_record missing after rotate job"
+        assert record["rotation_degrees"] == 90, (
+            f"payload rotation_degrees not surfaced after rotate: {record['rotation_degrees']!r}"
+        )
+        assert record["rotation_source"] == "manual", (
+            f"payload rotation_source not surfaced after rotate: {record['rotation_source']!r}"
+        )
+
 
 def test_rotate_path_traversal_rejected(
     loaded_client_with_loader: tuple[TestClient, _FakePageLoader, list[dict[str, Any]], Path],

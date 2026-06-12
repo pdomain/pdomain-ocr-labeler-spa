@@ -482,6 +482,7 @@ def _page_payload(
     project_state: ProjectState,
     settings: Settings,
     app_config: AppConfig | None = None,
+    page_store: LabelerPageStore | None = None,
 ) -> PagePayload:
     """Build a ``PagePayload`` from current in-memory state — spec §3.
 
@@ -625,6 +626,33 @@ def _page_payload(
         if summary is not None:
             page_record = page_record.model_copy(update={"provenance_summary": summary})
 
+    # C28 link 3: surface durable rotation metadata.  The rotate jobs persist
+    # ``rotation_degrees`` / ``rotation_source`` on the PageAggregate record,
+    # but ``page_to_line_matches`` rebuilds ``page_record`` fresh on every
+    # call, so the fields stay at their defaults (0 / "none") and the SPA
+    # rotation badge can never render.  Read them back from the aggregate
+    # keyed by ``pstate.page_id`` (stamped by both the OCR-lane ingest and the
+    # labeled-lane reload).  Best-effort: a store read failure degrades to the
+    # defaults rather than failing the payload.
+    if page_record is not None and page_store is not None and pstate is not None:
+        agg_page_id = pstate.page_id
+        if agg_page_id is not None:
+            try:
+                agg_record = page_store.get_page(agg_page_id).record
+                if agg_record.rotation_degrees or agg_record.rotation_source != "none":
+                    page_record = page_record.model_copy(
+                        update={
+                            "rotation_degrees": agg_record.rotation_degrees,
+                            "rotation_source": agg_record.rotation_source,
+                        }
+                    )
+            except Exception:  # pragma: no cover - defensive
+                log.debug(
+                    "_page_payload: rotation-metadata read failed for page_id=%s",
+                    agg_page_id,
+                    exc_info=True,
+                )
+
     # Lane C / Task C2: surface whether a persisted edited-image blob exists
     # (Lane A4 erase-pixels path writes ``pstate.edited_image_blob``) onto the
     # labeler extension so the frontend can truthfully enable the
@@ -706,6 +734,7 @@ def get_page(
     runner: JobRunner = Depends(get_job_runner),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    page_store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``GET /api/projects/{pid}/pages/{idx}`` — populated PagePayload.
 
@@ -750,6 +779,7 @@ def get_page(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=page_store,
     )
 
     # GAP-2: schedule adjacent-page prefetch AFTER assembling the response
@@ -903,6 +933,7 @@ def load_page(
     runner: JobRunner = Depends(get_job_runner),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    page_store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../load`` — re-read the page from disk, discard in-memory edits.
 
@@ -946,6 +977,7 @@ def load_page(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=page_store,
     )
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
@@ -983,6 +1015,7 @@ def rematch_gt(
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    page_store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../rematch-gt`` — re-run page-level GT matching (spec §7).
 
@@ -1105,6 +1138,7 @@ def rematch_gt(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=page_store,
     )
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
@@ -1162,6 +1196,7 @@ def update_selection(
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    page_store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../selection`` — fold a delta into ``pstate.selection``.
 
@@ -1204,6 +1239,7 @@ def update_selection(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=page_store,
     )
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
@@ -1338,6 +1374,7 @@ def glyph_bulk_mark(
     project_state: ProjectState = Depends(get_project_state),  # pyright: ignore[reportCallInDefaultInitializer]
     settings: Settings = Depends(get_settings),  # pyright: ignore[reportCallInDefaultInitializer]
     app_config: AppConfig = Depends(get_app_config),  # pyright: ignore[reportCallInDefaultInitializer]
+    page_store: LabelerPageStore | None = Depends(get_page_store_optional),  # pyright: ignore[reportCallInDefaultInitializer]
 ) -> JSONResponse:
     """``POST .../pages/{idx}/glyph-bulk-mark`` — apply a glyph-mark recipe to the page.
 
@@ -1411,6 +1448,7 @@ def glyph_bulk_mark(
             project_state=project_state,
             settings=settings,
             app_config=app_config,
+            page_store=page_store,
         )
 
     affected = [f"{li}_{wi}" for (li, wi) in result.affected_word_ids]
