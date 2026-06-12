@@ -37,6 +37,25 @@ mutating op. Acceptance = VISIBLE + ENABLED + real EFFECT (persisted).
 | 9 | ML-7 multi-line bulk bar | MultiLineDetail | PASS (visible) | `multi-line-bulk-bar` visible (effect verified later) |
 | 10 | Click line/para/block opens its detail panel | Rail target + canvas click | PASS | line→`line-detail`, para→`paragraph-detail`, block→`block-detail` all visible |
 
+| 11 | Word GT edit, commit on Enter/blur (legacy #1/#2) | WordDetail `ocr-gt-input` | PASS | Set "quicker" → API `ground_truth_text` updated |
+| 12 | Per-word Copy OCR→GT (legacy #13) | WordDetail `ocr-gt-copy-btn` | PASS | GT became OCR text "qu1ck", persisted |
+| 13 | Unicode/Ω picker insert (new-only) | WordDetail `ocr-gt-omega-btn` | PASS | Picker opens, glyph inserts into GT input, Enter persists |
+| 14 | Word validate toggle (legacy #23) | WordDetail `word-footer-validate` | PASS | `is_validated` False→True via API after click |
+| 15 | Line GT set (line-level GT input) | LineDetail `line-detail-gt-input` | PASS | "jumps over lazy hounds" persisted to `ground_truth_line_text` |
+| 16 | Line Copy GT→OCR (legacy #8/#10) | LineDetail `line-copy-gt-to-ocr` | PASS | `ocr_line_text` became GT text |
+| 17 | Line Copy OCR→GT (legacy #9/#11) | LineDetail `line-copy-ocr-to-gt` | PASS | GT == OCR after click |
+| 18 | Line validate-all (legacy #18/#20) | LineDetail `line-detail-validate-all` | PASS | All 4 words of line 1 `is_validated` |
+| 19 | Bulk validate checked words (legacy #21) | LineDetail Words-tab `line-detail-bulk-validate` | PASS | word(2,0) validated, unchecked sibling untouched |
+| 20 | Bulk skip/unvalidate checked words (legacy #22) | LineDetail Words-tab `line-detail-bulk-skip` | PASS | word(2,0) unvalidated |
+| 21 | Per-word validate in LineDetail word grid (legacy #23 surface) | LineDetail Line-tab WordCell `word-validate-button-{l}-{w}` | **FAIL** | Visible + enabled, click has NO effect — LineDetail.tsx:277 mounts LineCard without `onValidateWord`; silent no-op. Alternates: word-footer-validate, MultiLineDetail grid |
+| 22 | Per-word GT input in LineDetail word grid (legacy #1 surface) | LineDetail Line-tab WordCell `gt-text-input-{l}-{w}` | **FAIL** | Visible + editable, Enter does NOT persist — `onCommitGt` not passed to LineCard in LineDetail.tsx:277. Alternates: WordDetail input, MultiLineDetail grid |
+| 23 | Paragraph validate / unvalidate (legacy #16/#17) | ParagraphDetail `para-validate`/`para-unvalidate` | PASS | Lines 2+3 all validated then all cleared via API |
+| 24 | Paragraph Copy OCR→GT / GT→OCR (legacy #6/#7) | ParagraphDetail `para-copy-ocr-to-gt`/`para-copy-gt-to-ocr` | PASS | word(3,2) gt←"tw0"; line3 ocr==gt after reverse copy |
+| 25 | ML-4 inline GT edit in multi-line cards | MultiLineDetail `gt-text-input-{l}-{w}` | PASS | word(3,0) gt "AND" persisted |
+| 26 | ML-5 Tab traversal crosses line cards (legacy #3 Tab GT nav) | MultiLineDetail | PASS | Tab from gt-text-input-2-3 focuses gt-text-input-3-0 |
+| 27 | ML-6 per-line validate on card | MultiLineDetail `line-validate-button-{n}` | PASS | Line 3 all words validated; button disables when fully validated (one-way; unvalidate via bulk bar) |
+| 28 | ML-7 bulk bar ops across selected lines | MultiLineDetail `multi-line-bulk-*` | **PARTIAL** | Validate-all persisted both lines; **Unvalidate-all intermittently loses one line** (2 of 3 runs: only 1st of 2 parallel `validateLine.mutate` loop POSTs took effect; both return no error — silent lost update). Race in N-parallel-mutation loops |
+
 (further rows appended as verified)
 
 ## New findings (not in inventories)
@@ -49,3 +68,11 @@ mutating op. Acceptance = VISIBLE + ENABLED + real EFFECT (persisted).
   type div. Group will be used instead.` — something renders a `<div>`
   inside the react-konva tree (3× per load). Benign fallback but a real
   console.error; worth a cleanup issue.
+- **Parallel-mutation loops silently lose updates.** `handleBulkValidate`
+  (MultiLineDetail.tsx:92) fires `validateLine.mutate` per selected line in
+  a sync loop; with 2 lines selected, one POST's effect was intermittently
+  lost (observed 2 of 3 runs; both requests sent, no 4xx/5xx in server log,
+  final state only reflected the first). Same loop pattern exists in
+  `handleBulkCopyOcrToGt`, MultiWordDetail bulk ops, BulkWordActions
+  style/component loops, and ProjectPage clear-component loops — all are
+  exposed to the same race. Single-mutation paths are unaffected.
