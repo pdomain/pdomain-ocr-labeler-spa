@@ -69,4 +69,11 @@ export const handlers: RequestHandler[] = [
   http.post("/api/suite/launch", () =>
     HttpResponse.json({ kind: "opened", url: "http://localhost:8090", spawned: true, pid: 0 }),
   ),
+
+  // POST .../words/{li}/{wi}/char-ranges — fire-and-forget word mutation that
+  // can resolve AFTER its test's afterEach resetHandlers() ran (hotkey-driven
+  // in ProjectPage tests). A per-test server.use() handler is already gone by
+  // then, so only a DEFAULT handler prevents the timing-dependent
+  // "unhandled request" rejection that intermittently fails the whole suite.
+  http.post("/api/projects/:pid/pages/:idx/words/:li/:wi/char-ranges", () => HttpResponse.json({})),
 ];
