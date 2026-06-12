@@ -41,7 +41,11 @@ def stub_doctr(monkeypatch: pytest.MonkeyPatch) -> None:
         def __init__(self, pages: list[_FakePage]) -> None:
             self.pages = pages
 
-    def from_image_ocr_via_doctr(image_path: Any, *, source_identifier: str, predictor: Any) -> _FakeDocument:
+    def from_image_ocr_via_doctr(
+        image_path: Any, *, source_identifier: str, predictor: Any, **kwargs: Any
+    ) -> _FakeDocument:
+        # **kwargs absorbs auto_rotate (the loader always passes auto_rotate=False
+        # so OCR coords stay in the on-disk pixel space — C28 link 4).
         return _FakeDocument(pages=[_FakePage(source_identifier=source_identifier)])
 
     fake_module = SimpleNamespace(
