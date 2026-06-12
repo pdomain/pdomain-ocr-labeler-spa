@@ -56,6 +56,26 @@ mutating op. Acceptance = VISIBLE + ENABLED + real EFFECT (persisted).
 | 27 | ML-6 per-line validate on card | MultiLineDetail `line-validate-button-{n}` | PASS | Line 3 all words validated; button disables when fully validated (one-way; unvalidate via bulk bar) |
 | 28 | ML-7 bulk bar ops across selected lines | MultiLineDetail `multi-line-bulk-*` | **PARTIAL** | Validate-all persisted both lines; **Unvalidate-all intermittently loses one line** (2 of 3 runs: only 1st of 2 parallel `validateLine.mutate` loop POSTs took effect; both return no error — silent lost update). Race in N-parallel-mutation loops |
 
+| 29 | GRID-1 ToolbarActionGrid visible + collapsible | Canvas column | PASS | `toolbar-action-grid` visible, not display:none |
+| 30 | GRID-2 cells enable/disable per selection | ToolbarActionGrid | PASS | No selection: page cells enabled, word cells disabled; word click enables word cells |
+| 31 | Page validate / unvalidate all (legacy #14/#15) | `toolbar-page-validate`/`-unvalidate` | PASS | All 24 words validated then cleared via API |
+| 32 | Word validate selected (legacy #21/#22) | `toolbar-word-validate`/`-unvalidate` | PASS | word(0,0) toggled, persisted |
+| 33 | Word Copy OCR→GT (legacy #13) | `toolbar-word-ocr-to-gt` | PASS | word(0,1) gt←"qu1ck" persisted |
+| 34 | Word Copy GT→OCR (legacy #12) | `toolbar-word-gt-to-ocr` | PASS | word(0,1) `ocr_text` became GT ("quick") |
+| 35 | Line validate (toolbar, legacy #18/#19) | `toolbar-line-validate` | PASS | line 4 all words validated, persisted |
+| 36 | Line Copy OCR→GT (toolbar, legacy #9) | `toolbar-line-ocr-to-gt` | PASS | line 4 gt==ocr after click |
+| 37 | Para validate (toolbar, legacy #16/#17) | `toolbar-para-validate` | PASS | para 2 (lines 4+5) all validated |
+| 38 | Apply style + scope select (legacy #84/#85) | `apply-style-select`+`apply-style-button`, `scope-select` | PASS | italics persisted to `text_style_labels`; scope-select whole/part present |
+| 39 | Clear style (toolbar, legacy chip-clear path) | `clear-style-button` | **FAIL** | Click sends `style:"regular"` (ProjectPage.tsx:681) but backend `/style` only calls add-only `apply_style_scope` — italics NOT removed (styles stayed `['italics','regular']`) |
+| 40 | Apply/clear component incl. drop cap (legacy #88/#89) | `apply-component-select` etc. | PASS | footnote marker applied + cleared via `enabled:false`; options include drop cap / drop cap unrecovered / subscript / superscript |
+| 41 | WordDetail style chip toggle OFF (legacy #92-equivalent) | `style-chip-italics` | **FAIL** | Chip click re-sends `applyStyle` with the same styleKey regardless of off-state (WordDetail.tsx:179) — italics never removed |
+| 42 | WordDetail component chip toggle (legacy #90/#91) | `component-chip-drop-cap` | PASS | drop cap on → `word_components=['drop cap']` → off again |
+| 43 | Tag-chip × remove (legacy #92) | WordCell `word-tag-clear-button-*` (LineDetail surface) | **FAIL** | Click has no effect: LineDetail passes no `onClearWordTag`, ProjectPage has no clearTag handler, and backend has NO style-remove route at all |
+| 44 | Char-range add/delete (new-only) | CharRangesSection | PASS | anchor+end click, italics chip, Add → `char_ranges=[{start:0,end:2,styles:['italics']}]` persisted; delete cleared |
+| 45 | CharFixer per-char GT edit (new-only) | `char-fixer-input-{i}` | PASS | "J" persisted to gt after 500ms debounce |
+| 46 | CharFixer per-char bbox apply | `charfixer-apply` | PARTIAL (not fully driven) | Section + apply button render (disabled until canvas drag marks dirty); bbox-drag path not driven this sweep |
+| 47 | CharFixer unicode picker entry | `char-fixer-open-picker-button` | PASS (visible) | Button present + visible |
+
 (further rows appended as verified)
 
 ## New findings (not in inventories)
@@ -76,3 +96,13 @@ mutating op. Acceptance = VISIBLE + ENABLED + real EFFECT (persisted).
   `handleBulkCopyOcrToGt`, MultiWordDetail bulk ops, BulkWordActions
   style/component loops, and ProjectPage clear-component loops — all are
   exposed to the same race. Single-mutation paths are unaffected.
+- **Style tag REMOVAL is missing end-to-end.** The SPA backend's only style
+  route (`POST .../words/{li}/{wi}/style`, words.py:517) calls book-tools
+  `apply_style_scope` which is ADD-ONLY (word.py:313–338). book-tools has
+  `remove_style_label` (word.py:357) but no SPA route calls it
+  (`grep remove_style_label src/` → zero hits). Consequence: all three
+  clear-style surfaces silently no-op (toolbar `clear-style-button`,
+  WordDetail chip off-toggle, WordCell tag-×). Legacy could remove a style
+  via chip × (`_clear_word_tag` → `clear_style_on_word`). Component removal
+  is fine (has `enabled:false`). Needs a backend route + frontend off-state
+  wiring.
