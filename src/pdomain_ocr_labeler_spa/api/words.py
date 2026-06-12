@@ -106,10 +106,18 @@ class UpdateWordGroundTruthRequest(BaseModel):
 
 
 class ApplyStyleRequest(BaseModel):
-    """Spec §2 lines 288-290."""
+    """Spec §2 lines 288-290.
+
+    ``enabled`` (P1.4, B-39/41/43) mirrors ``ApplyComponentRequest``:
+    ``True`` (default, back-compat) adds the style via book-tools'
+    add-only ``apply_style_scope``; ``False`` removes it via
+    ``remove_style_label``. Before this flag the SPA had no style-remove
+    path at all, so every clear-style surface silently no-oped.
+    """
 
     style: str
     scope: Literal["whole", "part"] = "whole"
+    enabled: bool = True
 
 
 class ApplyComponentRequest(BaseModel):
@@ -555,10 +563,14 @@ def apply_style(
     app_config: AppConfig = Depends(get_app_config),
     store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
-    """``POST .../words/{li}/{wi}/style`` — apply text style label to a word.
+    """``POST .../words/{li}/{wi}/style`` — apply/remove a text style label.
 
     Spec 23 §9 row 2: ``word.apply_style(style_id, scope)`` →
     ``word.apply_style_scope(style, scope)`` in pdomain-book-tools.
+    ``enabled=False`` (P1.4) removes the label via
+    ``word.remove_style_label(style)`` instead — the off-state for the
+    toolbar clear-style button, the WordDetail chip toggle and the
+    WordCell tag-x.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -574,7 +586,10 @@ def apply_style(
         word = _resolve_word(page, line_index, word_index)
         if word is None:
             return _word_not_found(line_index, word_index)
-        word.apply_style_scope(body.style, body.scope)
+        if body.enabled:
+            word.apply_style_scope(body.style, body.scope)
+        else:
+            word.remove_style_label(body.style)
         pstate.generation += 1
         _save_to_store_best_effort(
             pstate=pstate,
@@ -586,6 +601,7 @@ def apply_style(
                     "word": word_index,
                     "style": body.style,
                     "scope": body.scope,
+                    "enabled": body.enabled,
                 }
             ],
         )

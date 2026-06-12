@@ -124,10 +124,13 @@ describe("ComponentPalette (P2.e + Q-B2-STYLE-LABELS)", () => {
     expect(onChange).toHaveBeenCalledWith("footnote marker", "on");
   });
 
-  it("toggling active component calls onComponentChange with 'mixed'", async () => {
+  // P1.4 (B-41): ChipPalette is binary — an active chip's next value is
+  // "off", never "mixed" (consumers skip "mixed", which made the off-toggle
+  // unreachable and tag removal impossible).
+  it("toggling active component calls onComponentChange with 'off'", async () => {
     const onChange = vi.fn();
     render(<ComponentPalette activeComponents={["superscript"]} onComponentChange={onChange} />);
     await userEvent.click(screen.getByTestId("component-chip-superscript"));
-    expect(onChange).toHaveBeenCalledWith("superscript", "mixed");
+    expect(onChange).toHaveBeenCalledWith("superscript", "off");
   });
 });

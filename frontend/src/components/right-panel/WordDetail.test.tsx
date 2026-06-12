@@ -23,8 +23,10 @@ vi.mock("../../hooks/useRefineAvailable", () => ({
   useRefineAvailable: () => ({ data: { available: true } }),
 }));
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { http, HttpResponse } from "msw";
+import { server } from "../../test/server";
 import { WordDetail, resolveWord } from "./WordDetail";
 import { clearSelection, selectWord } from "../../stores/selection-store";
 import type { components } from "../../api/types";
@@ -153,5 +155,54 @@ describe("WordDetail (Slice 16)", () => {
     expect(screen.getByTestId("word-detail")).not.toHaveTextContent(/word not found/i);
     expect(screen.getByTestId("word-header-prev")).toBeDisabled();
     expect(screen.getByTestId("word-header-next")).toBeDisabled();
+  });
+});
+
+// ─── P1.4 (B-41): style chip toggle must send enabled on/off ────────────────
+
+describe("WordDetail style chip toggle (P1.4 / B-41)", () => {
+  beforeEach(() => {
+    clearSelection();
+  });
+
+  it("clicking an inactive style chip POSTs enabled:true", async () => {
+    const calls: Record<string, unknown>[] = [];
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/words/:li/:wi/style", async ({ request }) => {
+        calls.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json(makePage());
+      }),
+    );
+
+    selectWord(0, 0);
+    renderWithQuery(<WordDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    fireEvent.click(screen.getByTestId("style-chip-italics"));
+
+    await waitFor(() => expect(calls.length).toBe(1));
+    expect(calls[0]).toEqual(
+      expect.objectContaining({ style: "italics", scope: "whole", enabled: true }),
+    );
+  });
+
+  it("clicking an ACTIVE style chip POSTs enabled:false (removes the style)", async () => {
+    const calls: Record<string, unknown>[] = [];
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/words/:li/:wi/style", async ({ request }) => {
+        calls.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json(makePage());
+      }),
+    );
+
+    const page = makePage();
+    page.line_matches![0]!.word_matches[0]!.text_style_labels = ["italics"];
+    selectWord(0, 0);
+    renderWithQuery(<WordDetail page={page} projectId="p1" pageIndex={0} />);
+    fireEvent.click(screen.getByTestId("style-chip-italics"));
+
+    await waitFor(() => expect(calls.length).toBe(1));
+    // Off-toggle used to re-APPLY the same style (silent no-op, B-41).
+    expect(calls[0]).toEqual(
+      expect.objectContaining({ style: "italics", scope: "whole", enabled: false }),
+    );
   });
 });

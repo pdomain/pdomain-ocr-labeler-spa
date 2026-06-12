@@ -110,11 +110,14 @@ describe("StylePalette (P2.d + Q-B2-STYLE-LABELS)", () => {
     expect(onStyleChange).toHaveBeenCalledWith("bold", "on");
   });
 
-  it("toggling active style calls onStyleChange with 'mixed'", async () => {
+  // P1.4 (B-41): ChipPalette is binary — an active chip's next value is
+  // "off", never "mixed" (consumers skip "mixed", which made the off-toggle
+  // unreachable: styles could never be cleared from the palette).
+  it("toggling active style calls onStyleChange with 'off'", async () => {
     const onStyleChange = vi.fn();
     render(<StylePalette activeStyles={["bold"]} onStyleChange={onStyleChange} />);
     await userEvent.click(screen.getByTestId("style-chip-bold"));
-    expect(onStyleChange).toHaveBeenCalledWith("bold", "mixed");
+    expect(onStyleChange).toHaveBeenCalledWith("bold", "off");
   });
 
   it("calls onStyleChange with canonical 'small caps' (with space) when clicked", async () => {

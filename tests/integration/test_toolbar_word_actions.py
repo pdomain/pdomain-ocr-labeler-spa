@@ -119,6 +119,45 @@ def test_word_apply_style(toolbar_loaded: Any) -> None:
     assert "italics" in labels
 
 
+def test_word_remove_style(toolbar_loaded: Any) -> None:
+    """P1.4 (B-39/41/43): ``enabled:false`` removes a style label.
+
+    book-tools' ``apply_style_scope`` is ADD-ONLY; before this slice the
+    SPA had no route at all that called ``remove_style_label``, so every
+    clear-style surface (toolbar clear-style-button, WordDetail chip
+    off-toggle, WordCell tag-x) silently no-oped. Mirrors the component
+    route's ``enabled`` flag.
+    """
+    client, _ps, page = toolbar_loaded
+    r = client.post(
+        f"{_BASE}/words/0/0/style",
+        json={"style": "italics", "scope": "whole"},
+    )
+    assert r.status_code == 200, r.text
+    labels = [s.lower() for s in (page.lines[0].words[0].text_style_labels or [])]
+    assert "italics" in labels
+
+    r = client.post(
+        f"{_BASE}/words/0/0/style",
+        json={"style": "italics", "scope": "whole", "enabled": False},
+    )
+    assert r.status_code == 200, r.text
+    labels = [s.lower() for s in (page.lines[0].words[0].text_style_labels or [])]
+    assert "italics" not in labels
+
+
+def test_word_apply_style_enabled_defaults_true(toolbar_loaded: Any) -> None:
+    """Back-compat: bodies without ``enabled`` keep the add semantics."""
+    client, _ps, page = toolbar_loaded
+    r = client.post(
+        f"{_BASE}/words/0/1/style",
+        json={"style": "bold", "scope": "whole"},
+    )
+    assert r.status_code == 200, r.text
+    labels = [s.lower() for s in (page.lines[0].words[1].text_style_labels or [])]
+    assert "bold" in labels
+
+
 def test_word_apply_component(toolbar_loaded: Any) -> None:
     client, _ps, page = toolbar_loaded
     r = client.post(

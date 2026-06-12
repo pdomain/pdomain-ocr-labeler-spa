@@ -668,9 +668,14 @@ export default function ProjectPage() {
       applyStyle.mutate({ lineIndex, wordIndex, style, scope: applyScope });
     }
   }
-  // Clearing a style maps to applying the "regular" style — pdomain-book-tools'
-  // `apply_style_scope` discards "regular", so the word reverts to plain text.
-  function handleClearStyle(_style: string, scope: string) {
+  // P1.4 (B-39): clearing REMOVES the selected style via enabled:false.
+  // The old behavior applied "regular" — a silent no-op, because
+  // pdomain-book-tools' `apply_style_scope` is add-only and discards "regular".
+  function handleClearStyle(style: string, scope: string) {
+    if (!style) {
+      toast.warn("Pick the style to clear in the Style… dropdown first.");
+      return;
+    }
     const targets = selectedWordTargets();
     if (targets.length === 0) {
       toast.warn("Select one or more words before clearing a style.");
@@ -678,7 +683,7 @@ export default function ProjectPage() {
     }
     const applyScope = scope === "part" ? "part" : "whole";
     for (const [lineIndex, wordIndex] of targets) {
-      applyStyle.mutate({ lineIndex, wordIndex, style: "regular", scope: applyScope });
+      applyStyle.mutate({ lineIndex, wordIndex, style, scope: applyScope, enabled: false });
     }
   }
   function handleApplyComponent(component: string) {

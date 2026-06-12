@@ -173,7 +173,9 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
         }}
       />
 
-      {/* P2.d: STYLE chip palette — whole-word styling */}
+      {/* P2.d: STYLE chip palette — whole-word styling.
+          P1.4 (B-41): the off-toggle removes the style (enabled:false);
+          it used to re-apply the same style, a silent no-op. */}
       <StylePalette
         activeStyles={word.text_style_labels ?? []}
         onStyleChange={(styleKey, next) => {
@@ -183,6 +185,7 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
             wordIndex: wordIdx,
             style: styleKey,
             scope: "whole",
+            enabled: next === "on",
           });
         }}
       />

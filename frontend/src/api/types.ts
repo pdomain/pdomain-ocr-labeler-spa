@@ -911,10 +911,14 @@ export interface paths {
         put?: never;
         /**
          * Apply Style
-         * @description ``POST .../words/{li}/{wi}/style`` — apply text style label to a word.
+         * @description ``POST .../words/{li}/{wi}/style`` — apply/remove a text style label.
          *
          *     Spec 23 §9 row 2: ``word.apply_style(style_id, scope)`` →
          *     ``word.apply_style_scope(style, scope)`` in pdomain-book-tools.
+         *     ``enabled=False`` (P1.4) removes the label via
+         *     ``word.remove_style_label(style)`` instead — the off-state for the
+         *     toolbar clear-style button, the WordDetail chip toggle and the
+         *     WordCell tag-x.
          */
         post: operations["apply_style_api_projects__project_id__pages__page_index__words__line_index___word_index__style_post"];
         delete?: never;
@@ -1838,10 +1842,14 @@ export interface paths {
         put?: never;
         /**
          * Delete Scope
-         * @description ``POST .../delete`` — page-scope batch delete (paragraph/line/word).
+         * @description ``POST .../delete`` — page-scope batch delete. NOT IMPLEMENTED (501).
          *
-         *     Stays a stub. Spec-23-D1 covers per-line delete; the page-scope batch
-         *     (paragraph/word) is part of D2/D3.
+         *     The real delete routes are ``words/delete-batch``, ``lines/delete-batch``
+         *     and ``paragraphs/delete-batch`` (Lane A / A2) — all frontend callers
+         *     point there. This legacy route used to return a silent 200 stub, which
+         *     made four delete surfaces confirm-then-delete-nothing (parity finding
+         *     F5, B-61/62/65). It now fails loudly so no caller can mistake it for
+         *     success. Implementing it for real is still parked in spec-23-D2/D3.
          */
         post: operations["delete_scope_api_projects__project_id__pages__page_index__delete_post"];
         delete?: never;
@@ -1861,10 +1869,11 @@ export interface paths {
         put?: never;
         /**
          * Merge Scope
-         * @description ``POST .../merge`` — page-scope batch merge (paragraphs/lines).
+         * @description ``POST .../merge`` — page-scope batch merge. NOT IMPLEMENTED (501).
          *
-         *     Stays a stub. Spec-23-D1 covers the dedicated ``/lines/merge`` route
-         *     (real mutation); the multi-scope page-level batch is D2/D3.
+         *     The real merge routes are ``lines/merge`` and ``paragraphs/merge``
+         *     (spec-23-D1). No SPA surface calls this legacy route; like ``/delete``
+         *     it used to return a silent 200 stub and now fails loudly instead.
          */
         post: operations["merge_scope_api_projects__project_id__pages__page_index__merge_post"];
         delete?: never;
@@ -1952,9 +1961,11 @@ export interface paths {
         put?: never;
         /**
          * Group Selected Words Into New Paragraph
-         * @description ``POST .../words/group-into-paragraph`` — paragraph mutation stub.
+         * @description ``POST .../words/group-into-paragraph`` — NOT IMPLEMENTED (501).
          *
-         *     Stays a stub. Paragraph-scope mutations live in spec-23-D2.
+         *     The real route is ``paragraphs/group-selected-words`` (Lane A / A2),
+         *     which the toolbar uses. No SPA surface calls this legacy route; it
+         *     used to return a silent 200 stub and now fails loudly instead.
          */
         post: operations["group_selected_words_into_new_paragraph_api_projects__project_id__pages__page_index__words_group_into_paragraph_post"];
         delete?: never;
@@ -2367,6 +2378,12 @@ export interface components {
         /**
          * ApplyStyleRequest
          * @description Spec §2 lines 288-290.
+         *
+         *     ``enabled`` (P1.4, B-39/41/43) mirrors ``ApplyComponentRequest``:
+         *     ``True`` (default, back-compat) adds the style via book-tools'
+         *     add-only ``apply_style_scope``; ``False`` removes it via
+         *     ``remove_style_label``. Before this flag the SPA had no style-remove
+         *     path at all, so every clear-style surface silently no-oped.
          */
         ApplyStyleRequest: {
             /** Style */
@@ -2377,6 +2394,11 @@ export interface components {
              * @enum {string}
              */
             scope: "whole" | "part";
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
         };
         /**
          * AutoRotateAllRequest

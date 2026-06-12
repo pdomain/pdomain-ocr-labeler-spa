@@ -147,22 +147,32 @@ export function useSplitWord(projectId: string, pageIndex: number) {
 // ─── useApplyStyle ─────────────────────────────────────────────────────────
 
 /**
- * Apply a text style label to a word (Slice 19 — Char Ranges).
+ * Apply or remove a text style label on a word (Slice 19 — Char Ranges).
  *
  * Backend endpoint accepts ``scope: "whole" | "part"``. Char-range
  * position metadata is held as local state in ``CharRangesSection``
  * until the backend grows positioned ranges; for now we send the
  * style label with ``scope: "part"`` to signal partial application.
+ *
+ * ``enabled`` (P1.4, B-39/41/43): ``true`` (default) adds the style;
+ * ``false`` removes it (backend calls ``remove_style_label``). Mirrors
+ * ``useApplyComponent``.
  */
 export function useApplyStyle(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
   return useMutation<
     PagePayload,
     Error,
-    { lineIndex: number; wordIndex: number; style: string; scope?: ApplyStyleRequest["scope"] }
+    {
+      lineIndex: number;
+      wordIndex: number;
+      style: string;
+      scope?: ApplyStyleRequest["scope"];
+      enabled?: boolean;
+    }
   >({
-    mutationFn: ({ lineIndex, wordIndex, style, scope = "whole" }) => {
-      const body: ApplyStyleRequest = { style, scope };
+    mutationFn: ({ lineIndex, wordIndex, style, scope = "whole", enabled = true }) => {
+      const body: ApplyStyleRequest = { style, scope, enabled };
       return apiPost<PagePayload>(
         `${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/style`,
         body,

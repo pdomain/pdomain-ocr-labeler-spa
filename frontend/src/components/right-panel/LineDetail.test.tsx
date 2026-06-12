@@ -596,6 +596,68 @@ describe("STB-3: LineDetail LineCard action buttons perform their mutations", ()
     await waitFor(() => expect(copyCalled).toBe(true));
   });
 
+  // P1.4 (B-43): the WordCell tag-chip × must remove the style/component.
+  // LineDetail previously passed no onClearWordTag → the × was a no-op,
+  // and the backend had no style-remove path at all.
+  it("word-tag-clear-button (style) POSTs words/{li}/{wi}/style with enabled:false", async () => {
+    const calls: Record<string, unknown>[] = [];
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/:li/:wi/style", async ({ request, params }) => {
+        calls.push({
+          li: params["li"],
+          wi: params["wi"],
+          ...((await request.json()) as Record<string, unknown>),
+        });
+        return HttpResponse.json(makePage());
+      }),
+    );
+    const page = makePage();
+    page.line_matches![0]!.word_matches[0]!.text_style_labels = ["italics"];
+    const user = userEvent.setup();
+    selectLine(3);
+    renderWithQuery(<LineDetail page={page} projectId="p1" pageIndex={0} />);
+    await user.click(screen.getByTestId("word-tag-clear-button-3-0-italics"));
+    await waitFor(() => expect(calls.length).toBe(1));
+    expect(calls[0]).toEqual(
+      expect.objectContaining({
+        li: "3",
+        wi: "0",
+        style: "italics",
+        scope: "whole",
+        enabled: false,
+      }),
+    );
+  });
+
+  it("word-tag-clear-button (component) POSTs words/{li}/{wi}/component enabled:false", async () => {
+    const calls: Record<string, unknown>[] = [];
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/:li/:wi/component", async ({ request, params }) => {
+        calls.push({
+          li: params["li"],
+          wi: params["wi"],
+          ...((await request.json()) as Record<string, unknown>),
+        });
+        return HttpResponse.json(makePage());
+      }),
+    );
+    const page = makePage();
+    page.line_matches![0]!.word_matches[1]!.word_components = ["drop cap"];
+    const user = userEvent.setup();
+    selectLine(3);
+    renderWithQuery(<LineDetail page={page} projectId="p1" pageIndex={0} />);
+    await user.click(screen.getByTestId("word-tag-clear-button-3-1-drop cap"));
+    await waitFor(() => expect(calls.length).toBe(1));
+    expect(calls[0]).toEqual(
+      expect.objectContaining({
+        li: "3",
+        wi: "1",
+        component: "drop cap",
+        enabled: false,
+      }),
+    );
+  });
+
   // P1.3 (B-62): delete must hit the real lines/delete-batch route — the
   // page-scope /delete endpoint is a 501 stub that never deleted anything.
   it("line-delete-button in embedded LineCard POSTs lines/delete-batch", async () => {

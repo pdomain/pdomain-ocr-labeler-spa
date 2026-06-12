@@ -83,7 +83,12 @@ export function ChipPalette({
             value={value}
             data-testid={`${testIdPrefix}-${item.key.replace(/ /g, "-")}`}
             onChange={(next) => {
-              onChange(item.key, next);
+              // P1.4 (B-41): Chip's tristate cycle is off→on→mixed→off, but
+              // ChipPalette renders a BINARY state (activeKeys.has → on/off;
+              // "mixed" is never displayed). Consumers skip "mixed", so
+              // without this mapping the off-toggle is unreachable — an
+              // active chip could never be cleared.
+              onChange(item.key, next === "mixed" ? "off" : next);
             }}
           >
             {item.label}

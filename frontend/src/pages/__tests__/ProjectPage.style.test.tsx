@@ -219,7 +219,10 @@ describe("ProjectPage — style / component / add-word wiring (Lane B / B2)", ()
     expect(calls[0].body).toEqual(expect.objectContaining({ style: "italics", scope: "whole" }));
   });
 
-  it("clear-style-button clears the style on the selected word", async () => {
+  // P1.4 (B-39): clear must REMOVE the selected style via enabled:false.
+  // The old behavior POSTed style:"regular" — a no-op, because book-tools'
+  // apply_style_scope is add-only and discards "regular".
+  it("clear-style-button removes the selected style with enabled:false", async () => {
     const calls: Record<string, unknown>[] = [];
     server.use(
       http.post("/api/projects/:pid/pages/:idx/words/:li/:wi/style", async ({ request }) => {
@@ -235,13 +238,36 @@ describe("ProjectPage — style / component / add-word wiring (Lane B / B2)", ()
       expect(selectionStore.getState().selectedWords).toEqual([[0, 0]]);
     });
 
+    fireEvent.change(screen.getByTestId("apply-style-select"), { target: { value: "italics" } });
     fireEvent.click(screen.getByTestId("clear-style-button"));
 
     await waitFor(() => {
       expect(calls.length).toBeGreaterThanOrEqual(1);
     });
-    // Clearing maps to applying the "regular" style (book-tools discards it).
-    expect(calls[0]).toEqual(expect.objectContaining({ style: "regular" }));
+    expect(calls[0]).toEqual(expect.objectContaining({ style: "italics", enabled: false }));
+  });
+
+  it("clear-style-button with no style chosen warns and fires no request", async () => {
+    const calls: Record<string, unknown>[] = [];
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/words/:li/:wi/style", async ({ request }) => {
+        calls.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json(pageFixture());
+      }),
+    );
+
+    renderProjectPage();
+    await screen.findByTestId("clear-style-button");
+    selectWord(0, 0);
+    await waitFor(() => {
+      expect(selectionStore.getState().selectedWords).toEqual([[0, 0]]);
+    });
+
+    // No style selected in apply-style-select (placeholder value "").
+    fireEvent.click(screen.getByTestId("clear-style-button"));
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(calls).toEqual([]);
   });
 
   it("apply-component-button POSTs component with enabled:true", async () => {
