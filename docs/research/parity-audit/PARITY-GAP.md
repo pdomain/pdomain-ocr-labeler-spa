@@ -2,6 +2,8 @@
 
 **Legacy:** `pd-ocr-labeler` (NiceGUI) · **New:** `pdomain-ocr-labeler-spa` (FastAPI + React/Vite/TS)
 **Verified:** 2026-06-12, live Playwright against seeded event-store fixtures at commit `d0ba846`.
+**Re-verified:** 2026-06-13 at commit `94451f5`, after the post-sweep fix batch
+(P1.x data-loss fixes, P2 rotate arc, P4 reachability fixes, undo/redo arc) — see §1a.
 **Supersedes** the 2026-06-06 matrix in this file. That matrix was code-read synthesis;
 every verdict below was re-established by driving a real browser. Where the two disagree,
 this one wins.
@@ -50,10 +52,95 @@ unit tests or testid checks; all were caught by the visible+enabled+effect bar.
 
 ---
 
+## 1a. Post-fix re-verification (2026-06-13, commit `94451f5`)
+
+Between the 2026-06-12 synthesis (`d0ba846`) and `94451f5`, a fix batch landed for
+most P1/P2/P4 slices plus the event-store undo/redo arc. Every claim below was
+re-verified **live** (fresh `make frontend-build`, standalone seeded uvicorn on a
+non-default port, scripted headless Playwright, effects checked by API re-fetch,
+server restart, or files on disk). Items marked *code-confirmed* were checked by
+grep only because no fix commit touched them.
+
+### Fixed and verified live
+
+| Item | Fix commit(s) | Live evidence (2026-06-13) |
+|---|---|---|
+| F1 validation persistence | `56e4a7b` | validate word → Save → **real server restart** → `is_validated` still true. |
+| F2 export exports 0 pages | `142ed30` | UI export (all-validated) → crops on disk + `manifest.json` `page_count: 1`, det/rec `item_count: 7` — store-first read works. ⚠ new minor bug below. |
+| F3 export style filter | `142ed30` | `GET /export/styles` → `["bold","regular","underline"]`; scope=all renders `export-style-checkbox-*` per style. |
+| F4 export cancel 405 | `bbce201` | `export-cancel-button` testid exists; code posts canonical `/api/jobs/{id}/cancel` (ExportDialog.tsx:228). Not catchable live — tiny-fixture job finishes in <1 s. |
+| F5 dead word/line deletes | `8531bf5` | WordFooter delete: word count 7→6 via `words/delete-batch`. LineDetail card delete: line removed (note: **no confirm dialog** on this surface, unlike WordFooter/bulk). Bulk delete: see §1a-partial. |
+| F6 style removal | `f576a5a` | All 3 surfaces remove the label (API re-fetch): toolbar `clear-style-button` (`italics`→`regular`), WordDetail chip off-toggle, `word-tag-clear-button-*` × (bold removed). |
+| F7 LineDetail word grid | `db5b172` | Grid `word-validate-button-{l}-{w}` False→True (validate-batch route); `gt-text-input-{l}-{w}` Enter persisted `"BETA-GRID"`. |
+| F8 toolbar resolver nulls | `42ddf7d` | Word selection + `toolbar-line-split-after` → `lines/0/split-after-word` 200, line count 3→4 (no more silent null). |
+| F10 rotate surface | `e30460a`, `b17bbe5`, `df7ae6b` | All four rotate buttons **visible** in the overflow menu; CW rotate: on-disk PNG 1200×1600→1600×1200 (durable), payload `page_record.rotation_degrees=90/manual`, `rotation-badge` renders; re-OCR re-runs in new pixel space (sideways text → 0 words; rotating back re-found "Rotate Test"). ⚠ round-trip metadata bug below. |
+| F11 auto-rotate-all | `e30460a` + detection fix | `auto-rotate-all-button` visible; `auto_rotate_all` job **completes** (no per-page detection crash). |
+| F12 project switching | `db712e9` | From a loaded project, `projects-home-link` renders the grid (no session-redirect bounce). |
+| F13 project delete stub | `df9f941` | Card menu Delete → confirm → `/api/projects` returns `projects: []`; Archive item dropped. |
+| F14 deep-link bounce | `743a5ba` | Fresh server, project **not** loaded, page deep-link → auto-loads and renders `pageno/1`. |
+| P6 LocalTrustMiddleware 403 | `2b90422` | Browser-origin `POST /api/projects/source-root` on port 8431 → **200**. |
+| P7 Load-Page semantics | `3074798`…`94451f5` | Button is now "Reload" + ConfirmDialog; undo/redo: GT edit → `undo-button` reverts (API) → `redo-button` re-applies, via `/pages/0/undo|redo`. |
+| F21 erase-to-marker | `00447c8` | RETIRED by CT decision (already reflected in §3/§7). |
+
+### Still failing (re-verified live at `94451f5`)
+
+| Item | Evidence |
+|---|---|
+| F9 line ctrl-click not additive | Line target: click line A, ctrl-click line B → `line-detail` (replace), `multi-line-detail` never opens. |
+| F18 OCR-config modal mouse-dead | Modal opens; `ocr-rescan-models-button` click times out (overlay intercepts). §5.1 unchanged (still present with pdomain-ui 0.7.2). |
+| P5 export dialog mouse-dead | Scope radio click times out; whole batch driven via JS clicks. |
+| F19 Go button no-op | Typed "2" + clicked `nav-goto-button` → URL stayed `pageno/1` (Enter still works). |
+| §5.2 parallel-mutation race | Two fresh observations: (1) MultiWordDetail bulk style/component apply on 2 words — one word's POST **404s** (page-version conflict in the new history chain; second concurrent mutation targets a stale version) → only one word updated, no UI error; (2) MultiLineDetail bulk delete on 2 lines → only 1 deleted (`handleBulkDelete` still loops `mutate()` per line — now also index-shift hazardous since deletes renumber lines). |
+| P8 export history | `GET /api/projects/{id}/exports` still returns `[]` while manifests exist on disk. |
+| §5.4 Konva div errors | 14 `Konva has no node with the type div` console errors on one project-page load. |
+
+### Still failing (code-confirmed unchanged, not re-driven)
+
+F15 jobs panel (no `JobsPanel`/`jobs-panel` in frontend), F16 suite launcher
+(GAP-3 shims still in App.tsx:476-484), F17 compute/settings trigger
+(`settingsPanels` passed but no visible dock trigger renders), F20 unbound
+hotkeys (`mod+,`/`mod+o`/`mod+j` still have no `useHotkey` registration; the
+undo arc added `mod+z`/`mod+shift+z`), F22 rebox-on-main-canvas (nothing sets
+viewport mode `"rebox"`), F23 glyph panel (blocked, M11/Q-A7), F24 testid rot.
+PARTIALs P3, P4, P10, P12–P18 were not re-checked (no fix commits touched them).
+
+### New defects found during re-verification
+
+1. **Export run-history row shows "0 pages"** while the export actually wrote
+   crops and `manifest.json` says `page_count: 1` — `pagesExported` is read from
+   `progress.progress?.total ?? 0` at completion (ExportDialog.tsx:155). Display
+   bug only, but it re-creates the old "looks broken / looks like 0 pages"
+   confusion that F2 was about.
+2. **Rotate round-trip metadata drift**: CW (90) then CCW leaves
+   `page_record.rotation_degrees=270` instead of 0; the header badge shows
+   "↻ 270° manual" on a page whose pixels and OCR are back to the original
+   orientation. Pixels/OCR are correct; only the accounting is wrong.
+3. **MultiWordDetail bulk apply can 404 server-side** (see §5.2 above): the
+   race is no longer purely a lost client update — with the version-chain
+   history (H-A), the second concurrent mutation can be rejected with 404 and
+   the UI swallows it. Same fix shape as P3.2 (serialize or batch).
+4. **LineDetail card delete has no confirm dialog** — WordFooter delete and
+   bulk delete confirm; the single-line delete fires immediately. Inconsistent
+   destruction guard, worth folding into P1.3 follow-up.
+
+### Updated standing (scoreable rows, after fix batch)
+
+Of the 30 FAILs in §3: **13 fixed-and-verified, 1 retired (F21), 10 still
+failing, F23 still blocked** (F5 counts as fixed with its bulk surface demoted
+to the §5.2 race; F24 is doc debt). Strict true parity moves from ~73% to
+**~81%**, with the remaining mass concentrated in: the dialog overlay z-bug
+(§5.1), the mutation-loop race (§5.2), reachability chrome (jobs panel, suite
+launcher, settings dock), and small polish items (Go button, line ctrl-click,
+unbound hotkeys).
+
+---
+
 ## 2. Critical-path broken pipelines
 
-Call these out first. Each is a cross-dimension chain where every link reports
-success while the user's work is lost.
+> **2026-06-13 status:** both pipelines below are **repaired and live-verified**
+> at `94451f5` (see §1a): validate→save→export now produces real crops + manifest
+> after a restart-durable validate, and rotate→re-OCR works end-to-end with a
+> visible surface. Kept verbatim as the record of what was broken at `d0ba846`.
 
 ### 2a. validate → save → export (training-data pipeline) — broken at three independent points
 
@@ -97,6 +184,9 @@ This is the app's reason to exist, and it cannot produce output today:
 
 One row per distinct failure. Cross-dimension duplicates merged (refs kept).
 Refs point into the three sweep docs.
+
+> **2026-06-13:** F1–F8, F10–F14 fixed and live-verified; F21 retired — see §1a.
+> Still failing: F9, F15–F20, F22 (F23 blocked, F24 doc debt).
 
 | # | Failure | Rows | What breaks |
 |---|---|---|---|
@@ -243,6 +333,12 @@ live, one line per area:
 ---
 
 ## 7. Prioritized slice plan
+
+> **2026-06-13 status:** P1.1–P1.7, P2.1–P2.3, P4.1–P4.3, P4.6 **shipped and
+> live-verified** (§1a); P7's design resolution (undo/redo + Reload) shipped.
+> Open: P3.1 (overlay z-bug), P3.2 (mutation-loop race — now also 404s, §1a),
+> P4.4 (jobs panel), P4.5 (suite launcher/settings dock), all of P5, plus the
+> four new defects in §1a.
 
 Each slice should get a capability-matrix spec
 (format: [`docs/specs/2026-06-05-selection-operations-parity.md`](../../specs/2026-06-05-selection-operations-parity.md))
