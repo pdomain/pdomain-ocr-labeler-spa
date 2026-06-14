@@ -86,7 +86,6 @@ import {
   selectPara,
   selectLine,
   toggleWord,
-  promoteCompleteWordLines,
 } from "../stores/selection-store";
 import {
   viewportStore,
@@ -582,9 +581,16 @@ export default function PageImageCanvas({
         } else {
           // SEL-4/SEL-5: word clicks use modifier-aware toggleWord so
           // Ctrl/Cmd accumulates across blocks and Shift removes.
+          //
+          // A single point-click selects exactly the clicked word and opens
+          // WordDetail — it must NOT auto-promote to line level even when the
+          // clicked word completes its line (e.g. a one-word line). Line
+          // promotion is a drag/box-select affordance only; it is applied in
+          // ProjectPage's box-select handler, not here. Promoting on a single
+          // click hid WordDetail behind LineDetail for one-word lines
+          // (test_click_word_bbox_on_image_opens_word_detail).
           const parts = hit.id.split("-").map(Number);
           toggleWord(parts[0]!, parts[1]!, modifier);
-          if (page) promoteCompleteWordLines(page);
         }
         useUiPrefs.setState({ rightPanelOpen: true });
       }
@@ -788,6 +794,24 @@ export default function PageImageCanvas({
           className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${canvasZoom === 1.0 ? "border-accent/60 bg-accent/10 text-accent" : "border-border-2 bg-bg-surface/90 text-ink-2 hover:text-ink-1"}`}
         >
           100%
+        </button>
+        {/* Mismatches-only bbox overlay toggle (Issue #295). When on, the word
+            bbox overlay dims exact/validated words so only mismatches stand out.
+            Re-homed from the removed ImageTabsHeader to the canvas overlay
+            (D-053) — the toggle that drives the overlay lives on the overlay. */}
+        <button
+          type="button"
+          data-testid="mismatches-only-toggle"
+          aria-pressed={matchFilterMode === "mismatches_only"}
+          title="Show mismatches only — dims exact/validated word bboxes"
+          onClick={() => {
+            useUiPrefs.setMatchFilterMode(
+              matchFilterMode === "mismatches_only" ? "all" : "mismatches_only",
+            );
+          }}
+          className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${matchFilterMode === "mismatches_only" ? "border-accent/60 bg-accent/10 text-accent" : "border-border-2 bg-bg-surface/90 text-ink-2 hover:text-ink-1"}`}
+        >
+          Mismatches
         </button>
       </div>
 

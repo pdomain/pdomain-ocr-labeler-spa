@@ -2012,6 +2012,98 @@ Its `PageActions.test.tsx` is deleted too.
 
 ---
 
+## D-053 — Retire ImageTabsHeader; re-home viewport controls to Rail + canvas overlay
+
+**Date:** 2026-06-14
+**Status:** Accepted
+**Relates to:** D-050/D-051/D-052 (stub removal arc), Issue #295 (mismatches-only).
+
+### Context
+
+`ImageTabsHeader.tsx` rendered a viewport-chrome bar above the canvas with
+layer-visibility checkboxes (`layer-*-checkbox`), selection-mode radios
+(`selection-mode-*`), zoom buttons (`zoom-fit-button` / `zoom-100-button`),
+and the mismatches-only toggle (`mismatches-only-toggle`). Lane C / D-050
+removed that bar from `ProjectPage` because it duplicated controls already
+present in the Rail (target + layer sections) and on the canvas overlay
+(`canvas-zoom-*`). `ImageTabsHeader.mount.test.tsx` asserts ProjectPage no
+longer mounts it.
+
+The removal left two gaps: (1) the driver-contract §2.6 still listed the
+retired `ImageTabsHeader` testids, and the e2e suite still drove them
+(`is_checked()` / `:checked` against controls that no longer exist), and
+(2) the `mismatches-only-toggle` lost its only home — `matchFilterMode`
+state + the bbox-dimming consumer survived in `PageImageCanvas`, but no
+visible control toggled it, orphaning Issue #295's feature.
+
+### Decision
+
+- The layer-visibility and selection-mode controls live **exclusively** in
+  the Rail: `rail-layer-{block,para,line,word}` (LayerToggleRow, `aria-pressed`)
+  and `rail-target-{block,para,line,word}` (TargetCell, `data-active`). They
+  are real `<button>`s, not native checkbox/radio inputs.
+- Zoom controls live **exclusively** on the canvas overlay as
+  `canvas-zoom-fit` / `canvas-zoom-100` inside `canvas-zoom-controls`.
+- The `mismatches-only-toggle` testid is **preserved** and re-homed to the
+  canvas overlay beside the zoom controls — a real, visible `<button>`
+  (`aria-pressed`) wired to `useUiPrefs.setMatchFilterMode`. The toggle that
+  drives the bbox overlay now lives on the overlay it controls.
+- No `display:none` stub is introduced for any retired testid (per the
+  D-046→D-052 arc — stubs that satisfy a testid without a real control are
+  forbidden).
+
+### Consequences
+
+- `docs/architecture/13-driver-contract.md` §2.6 rewritten as a re-homing
+  map; §2.14 gains the `rail-layer-*` rows.
+- E2e tests updated to drive the real controls via `aria-pressed` /
+  `data-active` instead of `:checked`:
+  `test_parity_chrome::{test_words_layer_checkbox_toggles_overlay_visibility,
+  test_paragraph_mode_selection_opens_paragraph_detail}` and
+  `test_ui_coverage::{test_layer_checkbox_toggles, test_selection_mode_toggles,
+  test_zoom_buttons_present, test_zoom_fit_click, test_canvas_ui_elements}`.
+- Issue #295's mismatches-only feature is reachable by a user again.
+
+---
+
+## D-054 — Single point-click selects a word; line promotion is drag-select only
+
+**Date:** 2026-06-14
+**Status:** Accepted
+
+### Context
+
+`handleStagePointerUp` in `PageImageCanvas` treats a trivial (≤2px) pointer-up
+as a point-click. For a word-target click it called `toggleWord(...)` then
+`promoteCompleteWordLines(page)`. `promoteCompleteWordLines` collapses a
+fully-word-selected line to **line-level** selection. For a one-word line
+(or any line where the single clicked word is its only selectable word), a
+single click therefore promoted straight to line selection, rendering
+`LineDetail` instead of `WordDetail`. The browser test
+`test_click_word_bbox_on_image_opens_word_detail` clicks a one-word line's
+bbox and expects `WordDetail` (`word-header-id`); it failed because
+`LineDetail` rendered instead.
+
+### Decision
+
+A single point-click selects exactly the clicked word and opens `WordDetail`.
+It must not auto-promote to line level. `promoteCompleteWordLines` is a
+**drag/box-select** affordance only — it remains applied in `ProjectPage`'s
+box-select handler (selecting every word in a line via a drag collapses to
+the line). The call is removed from the single-click path in
+`PageImageCanvas.handleStagePointerUp`.
+
+### Consequences
+
+- `test_click_word_bbox_on_image_opens_word_detail` passes; clicking a word
+  bbox on the image opens that word's detail editor (legacy parity).
+- Box-select promotion behaviour is unchanged.
+- Existing `PageImageCanvas.test.tsx` AG-5 tests (plain click selects one
+  word; Ctrl-click accumulates) already encode this expectation and continue
+  to pass.
+
+---
+
 ## Pending decisions
 
 See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for any sub-questions
