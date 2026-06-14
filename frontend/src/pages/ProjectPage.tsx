@@ -4,13 +4,12 @@
 //       §10 (Driver-contract preservation), §11 (Notifications).
 // Issue #314 (spec-22-C).
 //
-// Replaces the 76-line `display:none`-stub page with the full §3 layout:
+// Implements the full §3 layout:
 //
 //   <ProjectPage>
 //     <ProjectLoadingOverlay />
 //     <PageHeader>
 //       <ProjectNavigationControls />
-//       <PageActions />
 //     </PageHeader>
 //     <ToolbarActionGrid />
 //     <Splitter direction="horizontal">

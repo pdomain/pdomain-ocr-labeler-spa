@@ -1966,6 +1966,52 @@ as `textTabsSlot`.
 
 ---
 
+## D-052 — Remove last display:none stub block; source-folder + OCR-config fields on real modal controls
+
+**Date:** 2026-06-14
+**Status:** Accepted
+**Supersedes:** D-046 (partially) — the source-folder and OCR-config field stubs that D-046 kept are now removed.
+
+### Context
+
+`SourceFolderDialog` and `OCRConfigModal` were fully implemented as real React
+components. Their driver-contract testids (`source-folder-*`, `ocr-detection-model-select`,
+etc.) existed as both real controls inside those modals AND as hidden `display:none`
+stubs in the `HeaderBar` `display:none` div (the last surviving stub block
+after D-046/D-049/D-050/D-051 removed the others). The result was that
+`data-testid-stub="true"` attributes remained in the DOM alongside real implementations,
+creating a misleading dual-presence.
+
+### Decision
+
+Remove the entire `display:none` stub `<div>` from `HeaderBar.tsx`. The
+source-folder dialog and OCR-config modal field testids now live **exclusively**
+on their real visible controls inside the respective modals. To reach them, the
+driver or e2e test must first OPEN the modal:
+
+- Source-folder fields: click `source-folder-button` (in `ProjectLoadControls`)
+  → `SourceFolderDialog` opens → fields are visible.
+- OCR-config fields: click `ocr-config-trigger-button` (in `PageActionsCompact`
+  on project routes, or in the root-route header injection in `App.tsx`) →
+  `OCRConfigModal` opens → fields are visible.
+
+Delete `PageActions.tsx` (dead file — never imported in production code after M2).
+Its `PageActions.test.tsx` is deleted too.
+
+### Consequences
+
+- No `data-testid-stub` attributes remain in the DOM for these two groups.
+- Driver/e2e tests that previously checked for stubs must open the modal first.
+- E2e tests updated: `test_stub_testids_present` and `test_stub_testids_have_stub_attribute`
+  replaced by `test_source_folder_stub_testids_absent_without_dialog`,
+  `test_source_folder_dialog_testids_present`,
+  `test_ocr_config_stub_testids_absent_without_modal`, and updated
+  `test_ocr_config_modal_testids_present` (now opens the modal).
+- `docs/architecture/13-driver-contract.md` §2.2 / §2.3 updated to reflect
+  that the driver must open the modal before addressing these testids.
+
+---
+
 ## Pending decisions
 
 See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for any sub-questions

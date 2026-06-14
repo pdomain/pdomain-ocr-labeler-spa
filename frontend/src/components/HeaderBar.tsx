@@ -18,9 +18,10 @@
 //   (The AppShell injects the LauncherSlot + SettingsSlot ⚙ into its header zone
 //   alongside this bar; HeaderBar carries no document-scoped controls.)
 //
-// The `display:none` driver-contract stub div is retained (D-046): the
-// source-folder and OCR-config field stubs, plus the nav stubs, must stay
-// reachable on every route (including the root route) for the Playwright driver.
+// D-052 (2026-06-14): the last `display:none` stub block is removed. Source-folder
+// dialog and OCR-config modal fields now live exclusively on their real, visible
+// controls inside the respective modals. To reach them, the driver must first
+// OPEN the modal (click `source-folder-button` / `ocr-config-trigger-button`).
 
 import { Link } from "react-router-dom";
 
@@ -108,106 +109,6 @@ export default function HeaderBar({ projectName, projectRoot }: HeaderBarProps =
       {/* Spacer — pushes the AppShell-injected LauncherSlot + SettingsSlot ⚙
        * (rendered by pdomain-ui AppShell into the header zone) to the right. */}
       <div className="flex-1 min-w-0" />
-
-      {/*
-       * Spec 22 §10 — driver-contract preservation (D-046).
-       *
-       * D-046 (2026-05-21): project-select / load-project-button /
-       * source-folder-button / ocr-config-trigger-button stubs REMOVED — those
-       * controls live at their real locations. The source-folder + OCR-config
-       * field stubs below are KEPT (driver-contract §2.2/§2.3).
-       *
-       * D-049 (2026-06-14): nav-* stubs REMOVED. The real
-       * ProjectNavigationControls in WorkspaceToolbar leftSlot is the single
-       * source of truth; the `:not([data-testid-stub])` selector convention
-       * is retired for nav testids.
-       */}
-      <div style={{ display: "none" }}>
-        {/* Source-folder dialog stubs — always present in DOM, even when dialog is closed */}
-        <span
-          data-testid="source-folder-current-path-label"
-          data-testid-stub="true"
-          aria-label="Current folder path (stub)"
-        />
-        <input
-          data-testid="source-folder-path-input"
-          data-testid-stub="true"
-          aria-label="Folder path (stub)"
-          readOnly
-        />
-        <button
-          type="button"
-          data-testid="source-folder-home-button"
-          data-testid-stub="true"
-          aria-label="Go to home folder (stub)"
-        />
-        <button
-          type="button"
-          data-testid="source-folder-up-button"
-          data-testid-stub="true"
-          aria-label="Go up one folder (stub)"
-        />
-        <button
-          type="button"
-          data-testid="source-folder-open-typed-button"
-          data-testid-stub="true"
-          aria-label="Open typed path (stub)"
-        />
-        <button
-          type="button"
-          data-testid="source-folder-use-current-button"
-          data-testid-stub="true"
-          aria-label="Use current folder (stub)"
-        />
-        <button
-          type="button"
-          data-testid="source-folder-cancel-button"
-          data-testid-stub="true"
-          aria-label="Cancel source folder dialog (stub)"
-        />
-        <button
-          type="button"
-          data-testid="source-folder-apply-button"
-          data-testid-stub="true"
-          aria-label="Apply source folder selection (stub)"
-        />
-
-        {/* OCR config modal stubs — always present in DOM, even when modal is closed */}
-        <select
-          data-testid="ocr-detection-model-select"
-          data-testid-stub="true"
-          aria-label="OCR detection model (stub)"
-        />
-        <select
-          data-testid="ocr-recognition-model-select"
-          data-testid-stub="true"
-          aria-label="OCR recognition model (stub)"
-        />
-        <input
-          data-testid="ocr-hf-revision-input"
-          data-testid-stub="true"
-          aria-label="HuggingFace model revision (stub)"
-          readOnly
-        />
-        <button
-          type="button"
-          data-testid="ocr-rescan-models-button"
-          data-testid-stub="true"
-          aria-label="Rescan available models (stub)"
-        />
-        <button
-          type="button"
-          data-testid="ocr-config-cancel-button"
-          data-testid-stub="true"
-          aria-label="Cancel OCR config (stub)"
-        />
-        <button
-          type="button"
-          data-testid="ocr-config-apply-button"
-          data-testid-stub="true"
-          aria-label="Apply OCR config (stub)"
-        />
-      </div>
     </header>
   );
 }

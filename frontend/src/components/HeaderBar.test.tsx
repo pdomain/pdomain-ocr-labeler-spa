@@ -6,15 +6,11 @@
 //   - searchSlot (QuickSearch) → Drawer worklist-header slot
 //   - theme chips → pdomain-ui SettingsModal Appearance panel (D-048)
 //
-// Visible layout (chrome only):
-//   Left: logo badge + "OCR Labeler" + "Projects" link
-//         [+ "/" + project-name chip] [+ resolved project-root path label]
-//   The AppShell injects LauncherSlot + SettingsSlot ⚙ into its header zone.
-//
-// The `display:none` driver-contract stub div (D-046) is retained: source-folder
-// + OCR-config field stubs and nav stubs stay reachable on every route. These
-// stubs carry `data-testid-stub="true"`; the chrome-only assertions below check
-// that no NON-stub document control is present in the header.
+// D-052 (2026-06-14): The last `display:none` stub block is removed.
+// Source-folder and OCR-config field testids are no longer in the HeaderBar DOM.
+// They live exclusively inside the real modals (SourceFolderDialog /
+// OCRConfigModal). The chrome-only assertions check that NONE of those controls
+// appear in the header at all.
 
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -231,12 +227,12 @@ describe("HeaderBar: S6.2 project-root-label", () => {
   });
 });
 
-// --- driver-contract stubs (display:none) — retained per D-046 ----------------
-// D-049: nav-* stubs removed from HeaderBar. Source-folder + OCR-config
-// field stubs remain (driver-contract §2.2/§2.3).
+// --- D-052: all display:none stubs removed from HeaderBar --------------------
+// D-049: nav-* stubs removed. D-052: source-folder + OCR-config field stubs
+// also removed. No stub elements remain in HeaderBar.
 
-describe("HeaderBar: driver-contract stubs (D-046/D-049)", () => {
-  it("D-049: nav stubs are NO LONGER in the DOM (removed per D-049)", async () => {
+describe("HeaderBar: D-052 — no stub elements remain in header", () => {
+  it("D-049: nav stubs are NOT in the DOM (removed per D-049)", async () => {
     renderHeaderBar();
     // Nav stubs were removed — the real ProjectNavigationControls in
     // WorkspaceToolbar is the single source of truth.
@@ -244,15 +240,21 @@ describe("HeaderBar: driver-contract stubs (D-046/D-049)", () => {
     expect(screen.queryByTestId("nav-next-button")).not.toBeInTheDocument();
   });
 
-  it("stub source-folder elements are in the DOM", async () => {
+  it("D-052: source-folder field testids are NOT in the header DOM (stubs removed)", async () => {
     renderHeaderBar();
-    expect(screen.getByTestId("source-folder-path-input")).toBeInTheDocument();
-    expect(screen.getByTestId("source-folder-apply-button")).toBeInTheDocument();
+    // These testids live only inside the real SourceFolderDialog modal.
+    expect(screen.queryByTestId("source-folder-path-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("source-folder-apply-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("source-folder-home-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("source-folder-cancel-button")).not.toBeInTheDocument();
   });
 
-  it("stub ocr-config elements are in the DOM", async () => {
+  it("D-052: OCR-config field testids are NOT in the header DOM (stubs removed)", async () => {
     renderHeaderBar();
-    expect(screen.getByTestId("ocr-detection-model-select")).toBeInTheDocument();
-    expect(screen.getByTestId("ocr-config-apply-button")).toBeInTheDocument();
+    // These testids live only inside the real OCRConfigModal.
+    expect(screen.queryByTestId("ocr-detection-model-select")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("ocr-config-apply-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("ocr-hf-revision-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("ocr-config-cancel-button")).not.toBeInTheDocument();
   });
 });

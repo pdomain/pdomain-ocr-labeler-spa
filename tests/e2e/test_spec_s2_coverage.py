@@ -96,24 +96,23 @@ def _open_word_edit_dialog_via_js(page: Page) -> bool:
 def test_source_folder_dialog_open_close(exercise_server: ExerciseServer, page: Page) -> None:
     """SECT-2.2: source-folder-dialog opens when trigger button is clicked and closes.
 
-    The source-folder-button renders as sr-only when a project is already loaded
-    (breadcrumb mode); the dialog's internal testids are always pre-rendered.
-    We use the change-project-button (breadcrumb mode) or source-folder-button
-    (empty state mode) to open the dialog, verify all §2.2 testids are present,
-    and close it via source-folder-cancel-button.
+    D-052 (2026-06-14): the display:none stub block is removed from HeaderBar.
+    Source-folder field testids are now ONLY present inside the open modal.
+
+    This test navigates to the root page (where the "Open source folder" button
+    is always visible in the projects grid header), opens the dialog, verifies
+    all §2.2 testids are present while open, then closes.
     """
-    _goto_project_page(page, exercise_server.base_url, 1)
-    _wait_for_line_cards(page)
+    # Navigate to root page (project grid). If a session redirect fires,
+    # use the projects-home-link to reach the grid.
+    page.goto(f"{exercise_server.base_url}/", timeout=15_000)
+    try:
+        page.wait_for_selector('[data-testid="root-projects-grid"]', timeout=5_000)
+    except Exception:
+        page.click('[data-testid="projects-home-link"]')
+        page.wait_for_selector('[data-testid="root-projects-grid"]', timeout=10_000)
 
-    # source-folder-dialog is already mounted at App level — its inner controls
-    # are always in DOM regardless of open/close state (pre-rendered).
-    page.wait_for_selector(
-        '[data-testid="source-folder-cancel-button"]',
-        state="attached",
-        timeout=10_000,
-    )
-
-    # §2.2 testids — all must be in DOM (attached) at project-page load.
+    # §2.2 testids — only present while dialog is open (D-052).
     s2_2_testids = [
         "source-folder-current-path-label",
         "source-folder-path-input",
@@ -124,38 +123,39 @@ def test_source_folder_dialog_open_close(exercise_server: ExerciseServer, page: 
         "source-folder-cancel-button",
         "source-folder-apply-button",
     ]
+
+    # Confirm testids are absent before opening (D-052: no stubs).
+    present_before = [t for t in s2_2_testids if page.locator(f'[data-testid="{t}"]').count() > 0]
+    assert not present_before, (
+        f"D-052: source-folder testids should be absent before dialog opens: {present_before}"
+    )
+
+    # Open the dialog via the "Open source folder" button in the root-page grid header.
+    # This is a pdomain-ui Button with no data-testid — select by role + accessible name.
+    trigger = page.get_by_role("button", name="Open source folder")
+    trigger.wait_for(state="visible", timeout=8_000)
+    trigger.click()
+
+    # Dialog root should become visible.
+    dialog = page.locator('[data-testid="source-folder-dialog"]')
+    dialog.wait_for(state="visible", timeout=8_000)
+
+    # All §2.2 testids must be present and real (no data-testid-stub) while open.
     missing = [t for t in s2_2_testids if page.locator(f'[data-testid="{t}"]').count() == 0]
-    assert not missing, f"§2.2 source-folder testids missing from DOM: {missing}"
+    assert not missing, f"§2.2 source-folder testids missing while dialog open: {missing}"
 
-    # Try to open the dialog via the visible change-project-button or source-folder-button.
-    change_btn = page.locator('[data-testid="change-project-button"]').first
-    sfb = page.locator('[data-testid="source-folder-button"]').first
+    # Close via cancel button.
+    cancel_btn = page.locator('[data-testid="source-folder-cancel-button"]').first
+    cancel_btn.wait_for(state="visible", timeout=5_000)
+    cancel_btn.click()
+    time.sleep(0.3)
 
-    opened = False
-    if change_btn.is_visible():
-        change_btn.click()
-        time.sleep(0.5)
-        # After opening, source-folder-dialog should become visible.
-        if page.locator('[data-testid="source-folder-dialog"]').count() > 0:
-            opened = True
-    elif sfb.is_visible():
-        sfb.click()
-        time.sleep(0.5)
-        if page.locator('[data-testid="source-folder-dialog"]').count() > 0:
-            opened = True
+    # Root page must still render after close.
+    page.wait_for_selector("#root", timeout=5_000)
 
-    if opened:
-        # Dialog is open — close via cancel button.
-        cancel_btn = page.locator('[data-testid="source-folder-cancel-button"]').first
-        if cancel_btn.is_visible():
-            cancel_btn.click()
-            time.sleep(0.3)
-        # App shell must be healthy after close.
-        assert page.locator('[data-testid="project-page"]').is_visible()
-
-    # Whether or not we could open the dialog, all testids must remain in DOM.
-    missing_after = [t for t in s2_2_testids if page.locator(f'[data-testid="{t}"]').count() == 0]
-    assert not missing_after, f"§2.2 testids disappeared after dialog interaction: {missing_after}"
+    # §2.2 testids should be absent again after close (D-052: no stubs).
+    missing_after = [t for t in s2_2_testids if page.locator(f'[data-testid="{t}"]').count() > 0]
+    assert not missing_after, f"§2.2 testids still present after dialog close: {missing_after}"
 
 
 # ---------------------------------------------------------------------------
@@ -167,26 +167,25 @@ def test_source_folder_dialog_open_close(exercise_server: ExerciseServer, page: 
 def test_ocr_config_modal_open_and_close(exercise_server: ExerciseServer, page: Page) -> None:
     """SECT-2.3: OCR config modal opens via ocr-config-trigger-button and all §2.3 testids present.
 
-    #405: ocr-config-trigger-button restored in PageActionsCompact (project-page context).
-    The OCRConfigModal field stubs remain pre-rendered in the HeaderBar hidden div.
+    D-052 (2026-06-14): the display:none stub block is removed from HeaderBar.
+    OCR-config field testids are now ONLY present inside the open modal.
 
     This test verifies:
-      (a) ocr-config-trigger-button is present as a real button (not just stub) on project route.
-      (b) §2.3 inner testids are pre-rendered (attached) before modal opens.
-      (c) Modal opens via trigger button click; all §2.3 testids remain in DOM.
-      (d) Modal closes cleanly (cancel or Escape).
+      (a) ocr-config-trigger-button is present as a real button on project route.
+      (b) §2.3 inner testids are absent before modal opens (D-052: no stubs).
+      (c) Modal opens via trigger button click; all §2.3 testids are present and real.
+      (d) Modal closes cleanly via Escape; §2.3 testids disappear.
     """
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
-    # (a) #405: ocr-config-trigger-button must be present as the real button in
-    # PageActionsCompact (not a stub). Select the non-stub instance.
+    # (a) ocr-config-trigger-button must be present as a real visible button in
+    # PageActionsCompact on the project route (no data-testid-stub).
     trigger = page.locator('[data-testid="ocr-config-trigger-button"]:not([data-testid-stub])')
     trigger.wait_for(state="visible", timeout=10_000)
     assert trigger.count() >= 1, "ocr-config-trigger-button real button must be visible on project route"
 
-    # (b) §2.3 inner testids must be in DOM (attached) — pre-rendered in
-    # HeaderBar hidden stub div regardless of open/close state.
+    # (b) §2.3 inner testids must be absent before the modal opens (D-052: no stubs).
     s2_3_inner = [
         "ocr-detection-model-select",
         "ocr-recognition-model-select",
@@ -195,13 +194,10 @@ def test_ocr_config_modal_open_and_close(exercise_server: ExerciseServer, page: 
         "ocr-config-cancel-button",
         "ocr-config-apply-button",
     ]
-    page.wait_for_selector(
-        '[data-testid="ocr-detection-model-select"]',
-        state="attached",
-        timeout=10_000,
+    present_before = [t for t in s2_3_inner if page.locator(f'[data-testid="{t}"]').count() > 0]
+    assert not present_before, (
+        f"D-052: OCR config inner testids should be absent before modal opens: {present_before}"
     )
-    missing = [t for t in s2_3_inner if page.locator(f'[data-testid="{t}"]').count() == 0]
-    assert not missing, f"§2.3 OCR config inner testids missing from DOM: {missing}"
 
     # (c) Open the modal via the real trigger button. Wait for the real modal
     # (DialogContent carries data-testid="ocr-config-modal") to actually become
@@ -210,15 +206,20 @@ def test_ocr_config_modal_open_and_close(exercise_server: ExerciseServer, page: 
     modal = page.locator('[data-testid="ocr-config-modal"]')
     modal.wait_for(state="visible", timeout=10_000)
 
-    # (d) Close via Escape (Radix Dialog handles it natively). We deliberately
-    # do NOT click ocr-config-close-button here: that testid also exists on the
-    # hidden HeaderBar reachability stub (data-testid-stub), so a blind click
-    # can land on the never-clickable stub and hang.
+    # All §2.3 testids must be present and real while the modal is open.
+    missing = [t for t in s2_3_inner if page.locator(f'[data-testid="{t}"]').count() == 0]
+    assert not missing, f"§2.3 OCR config inner testids missing while modal open: {missing}"
+
+    # (d) Close via Escape (Radix Dialog handles it natively).
     page.keyboard.press("Escape")
     modal.wait_for(state="hidden", timeout=10_000)
 
     # App shell must still be healthy.
     assert page.locator('[data-testid="project-page"]').is_visible()
+
+    # §2.3 testids should be absent again after close (D-052: no stubs).
+    present_after = [t for t in s2_3_inner if page.locator(f'[data-testid="{t}"]').count() > 0]
+    assert not present_after, f"§2.3 testids still present after modal close: {present_after}"
 
 
 # ---------------------------------------------------------------------------

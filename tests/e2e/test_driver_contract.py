@@ -5,10 +5,13 @@ Covers: B-DRIVER-001, B-DRIVER-002, B-DRIVER-003, B-DRIVER-005
 Loads the tiny-fixture project, walks the full UI, and asserts that every
 testid catalogued in ``docs/architecture/13-driver-contract.md §2`` (or the spec doc
 ``docs/specs/2026-05-12-driver-contract-design.md §Testid catalogue``) is
-either:
+present on a real, visible control.
 
-  (a) present in the DOM, or
-  (b) present AND ``data-testid-stub="true"`` (not-yet-implemented cells).
+D-052 (2026-06-14): the last ``display:none`` stub block is removed from
+``HeaderBar``.  Source-folder and OCR-config modal field testids now only
+appear after opening the respective dialog (click ``source-folder-button`` /
+``ocr-config-trigger-button`` first).  All ``data-testid-stub`` attributes
+are retired for these two groups.
 
 Tests that require navigating to a specific page or opening a dialog are
 self-contained; a failure in one does not cascade to the next.
@@ -55,7 +58,8 @@ _NEW_HEADER_TESTIDS = [
     "ocr-config-trigger-button",  # PageActionsCompact.tsx — OCR config trigger (#405 restore)
 ]
 
-# Source-folder dialog stubs (display:none until implemented).
+# Source-folder dialog testids (D-052: real controls inside SourceFolderDialog).
+# Only reachable after clicking source-folder-button to open the dialog.
 _SOURCE_FOLDER_STUB_TESTIDS = [
     "source-folder-current-path-label",
     "source-folder-path-input",
@@ -67,7 +71,8 @@ _SOURCE_FOLDER_STUB_TESTIDS = [
     "source-folder-apply-button",
 ]
 
-# OCR config modal stubs (display:none until implemented in full).
+# OCR config modal testids (D-052: real controls inside OCRConfigModal).
+# Only reachable after clicking ocr-config-trigger-button to open the modal.
 _OCR_CONFIG_STUB_TESTIDS = [
     "ocr-detection-model-select",
     "ocr-recognition-model-select",
@@ -269,45 +274,96 @@ def test_new_contract_testids_present_on_project_page(live_server: LiveServer, p
 
 
 @pytest.mark.e2e
-def test_stub_testids_present(live_server: LiveServer, page: Page) -> None:
-    """All stub testids (display:none, data-testid-stub=true) exist in DOM.
+def test_source_folder_stub_testids_absent_without_dialog(live_server: LiveServer, page: Page) -> None:
+    """D-052: source-folder testids are NOT present before the dialog is opened.
 
     Covers: B-DRIVER-001
 
-    Checks source-folder dialog stubs and OCR config stubs that are rendered
-    as hidden placeholder elements until full implementation. Nav testids are
-    excluded per D-049 — they are real controls on the project page now, not
-    root-route stubs (see _NAV_TESTIDS_RETIRED_AS_STUBS).
+    The display:none stub block has been removed (D-052). Source-folder field
+    testids are now exclusively inside the real SourceFolderDialog modal, which
+    only mounts when ``source-folder-button`` is clicked.
     """
     page.goto(live_server.base_url, timeout=15_000)
     page.wait_for_selector("#root", timeout=10_000)
 
-    all_stubs = _SOURCE_FOLDER_STUB_TESTIDS + _OCR_CONFIG_STUB_TESTIDS
-    missing = _all_stub_or_present(page, all_stubs)
-    assert not missing, f"Stub testids missing from DOM (should exist even if display:none): {missing}"
+    # All source-folder modal fields should be absent before the dialog opens.
+    present_before_open = []
+    for tid in _SOURCE_FOLDER_STUB_TESTIDS:
+        if page.locator(f'[data-testid="{tid}"]').count() > 0:
+            present_before_open.append(tid)
+    assert not present_before_open, (
+        f"D-052: source-folder field testids should not be in the DOM before the dialog is "
+        f"opened (the stub div was removed): {present_before_open}"
+    )
 
 
 @pytest.mark.e2e
-def test_stub_testids_have_stub_attribute(live_server: LiveServer, page: Page) -> None:
-    """Stub testids carry data-testid-stub='true' so the driver can distinguish them.
+def test_source_folder_dialog_testids_present(live_server: LiveServer, page: Page) -> None:
+    """D-052: source-folder dialog fields are real controls inside the open dialog.
 
     Covers: B-DRIVER-001
 
-    Nav testids are excluded per D-049: they are no longer stubs — they render
-    as real, non-stub controls on the project page (see
-    _NAV_TESTIDS_RETIRED_AS_STUBS). Their real-control nature is asserted by
-    test_nav_testids_are_real_controls below.
+    Opens the source-folder dialog via the "Open source folder" button on the root
+    page (the RootPage Button that calls dialogStore.open("sourceFolder")), then
+    asserts that all driver-contract §2.2 testids are present as real visible
+    controls (no ``data-testid-stub`` attribute).
+    """
+    # Navigate to root and ensure the projects grid is visible.
+    # If the server has a session active (from a prior test), the root route
+    # redirects to the project page — click the home link to reach the grid.
+    page.goto(live_server.base_url, timeout=15_000)
+    try:
+        page.wait_for_selector('[data-testid="root-projects-grid"]', timeout=5_000)
+    except Exception:
+        page.click('[data-testid="projects-home-link"]')
+        page.wait_for_selector('[data-testid="root-projects-grid"]', timeout=10_000)
+
+    # The root-page "Open source folder" button triggers the SourceFolderDialog.
+    # It uses a pdomain-ui Button with no data-testid; select by role + name.
+    trigger = page.get_by_role("button", name="Open source folder")
+    trigger.wait_for(state="visible", timeout=8_000)
+    trigger.click()
+
+    # Dialog should open — wait for the dialog root.
+    dialog_root = page.locator('[data-testid="source-folder-dialog"]')
+    dialog_root.wait_for(state="visible", timeout=8_000)
+
+    # All driver-contract §2.2 testids must be present and NOT stubs.
+    missing = []
+    stubbed = []
+    for tid in _SOURCE_FOLDER_STUB_TESTIDS:
+        locator = page.locator(f'[data-testid="{tid}"]')
+        if locator.count() == 0:
+            missing.append(tid)
+        elif locator.get_attribute("data-testid-stub") == "true":
+            stubbed.append(tid)
+    assert not missing, f"Source-folder dialog testids missing after opening dialog: {missing}"
+    assert not stubbed, (
+        f"Source-folder dialog testids still carry data-testid-stub (should be real): {stubbed}"
+    )
+
+
+@pytest.mark.e2e
+def test_ocr_config_stub_testids_absent_without_modal(live_server: LiveServer, page: Page) -> None:
+    """D-052: OCR-config field testids are NOT present before the modal is opened.
+
+    Covers: B-DRIVER-001
+
+    The display:none stub block has been removed (D-052). OCR-config field
+    testids are now exclusively inside the real OCRConfigModal, which only
+    mounts when ``ocr-config-trigger-button`` is clicked.
     """
     page.goto(live_server.base_url, timeout=15_000)
     page.wait_for_selector("#root", timeout=10_000)
 
-    all_stubs = _SOURCE_FOLDER_STUB_TESTIDS + _OCR_CONFIG_STUB_TESTIDS
-    not_stubbed = []
-    for tid in all_stubs:
-        locator = page.locator(f'[data-testid="{tid}"][data-testid-stub="true"]')
-        if locator.count() == 0:
-            not_stubbed.append(tid)
-    assert not not_stubbed, f"Stub testids missing data-testid-stub='true' attribute: {not_stubbed}"
+    present_before_open = []
+    for tid in _OCR_CONFIG_STUB_TESTIDS:
+        if page.locator(f'[data-testid="{tid}"]').count() > 0:
+            present_before_open.append(tid)
+    assert not present_before_open, (
+        f"D-052: OCR-config field testids should not be in the DOM before the modal is "
+        f"opened (the stub div was removed): {present_before_open}"
+    )
 
 
 @pytest.mark.e2e
@@ -385,15 +441,38 @@ def test_text_tabs_testids_present_on_project_page(live_server: LiveServer, page
 
 @pytest.mark.e2e
 def test_ocr_config_modal_testids_present(live_server: LiveServer, page: Page) -> None:
-    """OCR config modal testids exist (stub or active) before modal is open."""
+    """D-052: OCR config modal fields are real controls inside the open modal.
+
+    Covers: B-DRIVER-001
+
+    Opens the OCR-config modal via ``ocr-config-trigger-button`` (visible on
+    the root route as a standalone button injected alongside HeaderBar in
+    App.tsx), then asserts that all driver-contract §2.3 testids are present
+    as real visible controls with no ``data-testid-stub`` attribute.
+    """
     page.goto(live_server.base_url, timeout=15_000)
     page.wait_for_selector("#root", timeout=10_000)
 
-    # Modal testid exists only when modal is open (not stub).
-    # The stubs inside ProjectPage are always-present; the modal itself
-    # only mounts when the button is clicked.
-    missing = _all_stub_or_present(page, _OCR_CONFIG_STUB_TESTIDS)
-    assert not missing, f"OCR config stub testids missing: {missing}"
+    # ocr-config-trigger-button is injected alongside HeaderBar on the root route.
+    trigger = page.locator('[data-testid="ocr-config-trigger-button"]')
+    trigger.wait_for(state="visible", timeout=8_000)
+    trigger.click()
+
+    # Modal should open — wait for the modal root.
+    modal_root = page.locator('[data-testid="ocr-config-modal"]')
+    modal_root.wait_for(state="visible", timeout=8_000)
+
+    # All driver-contract §2.3 testids must be present and NOT stubs.
+    missing = []
+    stubbed = []
+    for tid in _OCR_CONFIG_STUB_TESTIDS:
+        locator = page.locator(f'[data-testid="{tid}"]')
+        if locator.count() == 0:
+            missing.append(tid)
+        elif locator.get_attribute("data-testid-stub") == "true":
+            stubbed.append(tid)
+    assert not missing, f"OCR config modal testids missing after opening modal: {missing}"
+    assert not stubbed, f"OCR config modal testids still carry data-testid-stub (should be real): {stubbed}"
 
 
 @pytest.mark.e2e

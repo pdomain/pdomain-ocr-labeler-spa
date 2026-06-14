@@ -96,29 +96,34 @@ Any testid the legacy has that we want to retire requires
 > (`theme-chips`, `theme-chip-*`) are **retired**; theme is changed via the ⚙
 > SettingsModal Appearance panel (`settings-appearance-theme-dark` /
 > `settings-appearance-theme-light`, owned by pdomain-ui). All moved testids are
-> unchanged (D-014); only mount points changed. The `display:none` HeaderBar
-> stubs (`nav-*`, `source-folder-*`, `ocr-config-*` fields) are retained.
+> unchanged (D-014); only mount points changed.
+>
+> **D-052 (2026-06-14):** The last `display:none` stub block in `HeaderBar` is
+> **removed**. `nav-*`, `source-folder-*`, and `ocr-config-*` field stubs are all
+> gone. Every driver-contract testid now lives on a real, visible control.
+> Source-folder and OCR-config field testids are accessible only after opening
+> the respective modal (see §2.2 / §2.3).
 
-| Control | New location | New testid(s) |
+| Control | Location | Testid(s) |
 |---|---|---|
 | Project dropdown | `ProjectLoadControls.tsx` on RootPage | `project-select` (real) |
 | LOAD button | `ProjectLoadControls.tsx` on RootPage | `load-project-button` (real) |
 | Source folder button | `ProjectLoadControls.tsx` (breadcrumb mode) | `source-folder-button` (real) |
-| OCR config trigger | `PageActionsCompact.tsx` on project routes | `ocr-config-trigger-button` (real); field stubs still in HeaderBar hidden div |
-| Export trigger | `PageActionsCompact.tsx` / `PageActions.tsx` | `page-actions-compact-export` / `export-button` |
+| OCR config trigger (root route) | `App.tsx` header injection (root route only) | `ocr-config-trigger-button` (real) |
+| OCR config trigger (project routes) | `PageActionsCompact.tsx` | `ocr-config-trigger-button` (real) |
+| Export trigger | `PageActionsCompact.tsx` | `export-button` |
 | Hotkey help trigger | Rail footer (`Rail.tsx`) | `rail-hotkeys-button` |
-
-The project-load trio (`project-select`, `load-project-button`,
-`source-folder-button`) are real controls inside `ProjectLoadControls`,
-rendered on the RootPage and in breadcrumb mode on project routes. The
-source-folder dialog fields (§2.2) and OCR-config modal fields (§2.3)
-continue to have stubs in the HeaderBar hidden div.
 
 > **#405 (2026-05-22):** `ocr-config-trigger-button` is restored as a real button
 > in `PageActionsCompact.tsx`, available on every project route. It was inadvertently
 > left without a user-facing trigger by D-046 / #401.
 
 ### 2.2 Source folder dialog
+
+> **D-052 (2026-06-14):** Source-folder field testids are now **exclusively** on
+> real controls inside the open `SourceFolderDialog`. There are no `display:none`
+> stubs for these testids. The driver must click `source-folder-button` first to
+> open the dialog, then address the fields.
 
 | Testid | What it is |
 |---|---|
@@ -135,15 +140,14 @@ Hotkey: `Enter` on the path input triggers `source-folder-open-typed-button`.
 
 ### 2.3 OCR config modal
 
-> **#405 (2026-05-22):** `ocr-config-trigger-button` is restored as a real visible button
-> in `PageActionsCompact.tsx` on project routes (fix for D-046 regression). Click it to
-> open the OCR-config modal. The `ocr-config-trigger-button` in the HeaderBar hidden stub
-> div is no longer present. The modal field stubs (below) remain in the HeaderBar hidden div.
-> The modal itself uses `data-testid="ocr-config-modal"`.
+> **D-052 (2026-06-14):** OCR-config field testids are now **exclusively** on real
+> controls inside the open `OCRConfigModal`. There are no `display:none` stubs for
+> these testids. The driver must click `ocr-config-trigger-button` first to open
+> the modal, then address the fields. The modal root uses `data-testid="ocr-config-modal"`.
 
 | Testid | What it is |
 |---|---|
-| `ocr-detection-model-select` | Detection model select (stub in HeaderBar; real when modal open) |
+| `ocr-detection-model-select` | Detection model select |
 | `ocr-recognition-model-select` | Recognition model select |
 | `ocr-hf-revision-input` | HF revision input |
 | `ocr-rescan-models-button` | Rescan Models button |
