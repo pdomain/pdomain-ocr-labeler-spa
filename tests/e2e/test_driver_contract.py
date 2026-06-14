@@ -77,8 +77,16 @@ _OCR_CONFIG_STUB_TESTIDS = [
     "ocr-config-apply-button",
 ]
 
-# Nav stubs (display:none until implemented).
-_NAV_STUB_TESTIDS = [
+# Nav testids — RETIRED as stubs per D-049 (2026-06-14). The `display:none`
+# nav stubs in HeaderBar are removed; the real `ProjectNavigationControls`
+# in the `WorkspaceToolbar` `leftSlot` is now the single source of truth.
+# These testids are NOT present (and NOT stubs) on the root route — they only
+# render on the project page as real, visible, non-stub controls. Their
+# project-page presence is covered by:
+#   - test_ui_coverage.py::test_nav_controls_in_dom (NAV-1)
+#   - test_project_page_smoke.py (nav-prev/next non-stub clicks)
+# so they are deliberately excluded from the root-route stub assertions below.
+_NAV_TESTIDS_RETIRED_AS_STUBS = [
     "nav-prev-button",
     "nav-next-button",
     "nav-goto-button",
@@ -266,13 +274,15 @@ def test_stub_testids_present(live_server: LiveServer, page: Page) -> None:
 
     Covers: B-DRIVER-001
 
-    Checks source-folder dialog stubs, OCR config stubs, and nav stubs that
-    are rendered as hidden placeholder elements until full implementation.
+    Checks source-folder dialog stubs and OCR config stubs that are rendered
+    as hidden placeholder elements until full implementation. Nav testids are
+    excluded per D-049 — they are real controls on the project page now, not
+    root-route stubs (see _NAV_TESTIDS_RETIRED_AS_STUBS).
     """
     page.goto(live_server.base_url, timeout=15_000)
     page.wait_for_selector("#root", timeout=10_000)
 
-    all_stubs = _SOURCE_FOLDER_STUB_TESTIDS + _OCR_CONFIG_STUB_TESTIDS + _NAV_STUB_TESTIDS
+    all_stubs = _SOURCE_FOLDER_STUB_TESTIDS + _OCR_CONFIG_STUB_TESTIDS
     missing = _all_stub_or_present(page, all_stubs)
     assert not missing, f"Stub testids missing from DOM (should exist even if display:none): {missing}"
 
@@ -282,17 +292,56 @@ def test_stub_testids_have_stub_attribute(live_server: LiveServer, page: Page) -
     """Stub testids carry data-testid-stub='true' so the driver can distinguish them.
 
     Covers: B-DRIVER-001
+
+    Nav testids are excluded per D-049: they are no longer stubs — they render
+    as real, non-stub controls on the project page (see
+    _NAV_TESTIDS_RETIRED_AS_STUBS). Their real-control nature is asserted by
+    test_nav_testids_are_real_controls below.
     """
     page.goto(live_server.base_url, timeout=15_000)
     page.wait_for_selector("#root", timeout=10_000)
 
-    all_stubs = _SOURCE_FOLDER_STUB_TESTIDS + _OCR_CONFIG_STUB_TESTIDS + _NAV_STUB_TESTIDS
+    all_stubs = _SOURCE_FOLDER_STUB_TESTIDS + _OCR_CONFIG_STUB_TESTIDS
     not_stubbed = []
     for tid in all_stubs:
         locator = page.locator(f'[data-testid="{tid}"][data-testid-stub="true"]')
         if locator.count() == 0:
             not_stubbed.append(tid)
     assert not not_stubbed, f"Stub testids missing data-testid-stub='true' attribute: {not_stubbed}"
+
+
+@pytest.mark.e2e
+def test_nav_testids_are_real_controls(live_server: LiveServer, page: Page) -> None:
+    """D-049: nav testids render as real, non-stub controls on the project page.
+
+    Covers: B-DRIVER-001
+
+    Asserts the NEW contract that replaced the retired nav-stub convention:
+    every nav testid in _NAV_TESTIDS_RETIRED_AS_STUBS is present on the project
+    page inside project-navigation-controls and carries NO data-testid-stub
+    attribute. (Root-route absence is intentional — they only mount on the
+    project route's WorkspaceToolbar leftSlot.)
+    """
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
+    page.goto(url, timeout=15_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+    wait_for_project_ready(page)
+
+    nav_controls = page.locator('[data-testid="project-navigation-controls"]')
+    nav_controls.wait_for(state="attached", timeout=10_000)
+    assert nav_controls.count() > 0, "project-navigation-controls must be in DOM on the project page"
+
+    missing = []
+    stubbed = []
+    for tid in _NAV_TESTIDS_RETIRED_AS_STUBS:
+        if page.locator(f'[data-testid="{tid}"]').count() == 0:
+            missing.append(tid)
+        elif page.locator(f'[data-testid="{tid}"][data-testid-stub="true"]').count() > 0:
+            stubbed.append(tid)
+    assert not missing, f"Nav testids missing from project page (D-049 real controls): {missing}"
+    assert not stubbed, f"Nav testids still carry retired data-testid-stub attribute: {stubbed}"
 
 
 @pytest.mark.e2e

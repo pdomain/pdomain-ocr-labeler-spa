@@ -510,14 +510,27 @@ def test_text_panel_gt_and_ocr(exercise_server: ExerciseServer, page: Page) -> N
 
 @pytest.mark.e2e
 def test_right_panel_structure(exercise_server: ExerciseServer, page: Page) -> None:
-    """RIGHT-1: right-panel / right-panel-placeholder / right-panel-collapse in DOM."""
+    """RIGHT-1: right-panel / text-pane (no-selection) / right-panel-collapse in DOM.
+
+    D-051 (2026-06-14): on the project page the RightPanel receives a
+    ``textTabsSlot``, so at level="none" it renders the visible TextTabs
+    ``text-pane`` instead of the generic ``right-panel-placeholder``. The
+    placeholder only renders when no textTabsSlot is supplied (it is still
+    unit-tested in RightPanel.test.tsx). The driver-contract no-selection
+    surface on the project page is now ``text-pane``.
+    """
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
     assert page.locator('[data-testid="right-panel"]').count() > 0, "right-panel must be in DOM"
-    # Placeholder shows when nothing is selected.
-    assert page.locator('[data-testid="right-panel-placeholder"]').count() > 0, (
-        "right-panel-placeholder must be in DOM (no selection yet)"
+    # D-051: with no selection the right panel shows the TextTabs text-pane,
+    # NOT the generic placeholder.
+    assert page.locator('[data-testid="text-pane"]').count() > 0, (
+        "text-pane (TextTabs no-selection slot) must be in DOM per D-051"
+    )
+    assert page.locator('[data-testid="right-panel-placeholder"]').count() == 0, (
+        "right-panel-placeholder must NOT render on the project page (D-051: "
+        "textTabsSlot replaces it at level=none)"
     )
     assert page.locator('[data-testid="right-panel-collapse"]').count() > 0, (
         "right-panel-collapse must be in DOM"
