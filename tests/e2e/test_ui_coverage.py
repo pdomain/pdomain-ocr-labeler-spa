@@ -18,9 +18,9 @@ NAV-3  : breadcrumb / projects-home-link
 DRAWER-1: drawer / drawer-collapse-btn / drawer-expand-btn collapse cycle
 DRAWER-2: worklist / worklist-filter-row / worklist-sort-select / worklist-queue
 RAIL-1  : rail / rail-bulk-button / rail-hotkeys-button DOM presence
-RAIL-2  : layer-paragraphs-checkbox / layer-words-checkbox toggles
-RAIL-3  : selection-mode-paragraph / selection-mode-line / selection-mode-word toggles
-RAIL-4  : zoom-fit-button / zoom-100-button DOM presence
+RAIL-2  : rail-layer-para / rail-layer-word visibility toggles (LayerToggleRow)
+RAIL-3  : rail-target-para / rail-target-line / rail-target-word selection toggles
+RAIL-4  : canvas-zoom-fit / canvas-zoom-100 DOM presence (canvas overlay)
 TEXT-1  : text-tabs / text-tab-matches / text-tab-ground-truth / text-tab-ocr switching
 TEXT-2  : text-panel-ground-truth / text-panel-ocr rendering
 RIGHT-1 : right-panel / right-panel-placeholder / right-panel-collapse
@@ -366,18 +366,26 @@ def test_rail_dom_presence(exercise_server: ExerciseServer, page: Page) -> None:
 
 @pytest.mark.e2e
 def test_layer_checkbox_toggles(exercise_server: ExerciseServer, page: Page) -> None:
-    """RAIL-2: layer-paragraphs-checkbox and layer-words-checkbox toggle without crash."""
+    """RAIL-2: rail-layer-para and rail-layer-word visibility toggles work without crash.
+
+    The viewport-chrome ImageTabsHeader checkboxes were retired (D-050/D-053);
+    layer visibility is now toggled by the Rail's ``rail-layer-*`` buttons
+    (LayerToggleRow), whose ``aria-pressed`` reflects each layer's visibility.
+    """
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
-    for testid in ("layer-paragraphs-checkbox", "layer-words-checkbox"):
-        cb = page.locator(f'[data-testid="{testid}"]').first
-        assert cb.count() > 0, f"{testid} must be in DOM"
-        if cb.is_visible():
-            cb.click()
-            time.sleep(0.15)
-            cb.click()  # restore
-            time.sleep(0.15)
+    for testid in ("rail-layer-para", "rail-layer-word"):
+        btn = page.locator(f'[data-testid="{testid}"]').first
+        assert btn.count() > 0, f"{testid} must be in DOM"
+        before = btn.get_attribute("aria-pressed")
+        btn.click()
+        time.sleep(0.15)
+        after = btn.get_attribute("aria-pressed")
+        assert after != before, f"{testid} aria-pressed should flip on click ({before} → {after})"
+        btn.click()  # restore
+        time.sleep(0.15)
+        assert btn.get_attribute("aria-pressed") == before, f"{testid} should restore to {before}"
 
     # App shell must be healthy after toggles.
     assert page.locator('[data-testid="project-page"]').is_visible()
@@ -390,22 +398,29 @@ def test_layer_checkbox_toggles(exercise_server: ExerciseServer, page: Page) -> 
 
 @pytest.mark.e2e
 def test_selection_mode_toggles(exercise_server: ExerciseServer, page: Page) -> None:
-    """RAIL-3: selection-mode-paragraph / line / word toggles cycle without crash."""
+    """RAIL-3: rail-target-para / line / word selection cells cycle without crash.
+
+    The viewport-chrome ImageTabsHeader selection-mode radios were retired
+    (D-050/D-053); selection mode (canvas hit-test target) is now driven by the
+    Rail's ``rail-target-*`` cells, whose ``data-active`` marks the active target.
+    """
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
-    for testid in ("selection-mode-paragraph", "selection-mode-line", "selection-mode-word"):
+    for testid in ("rail-target-para", "rail-target-line", "rail-target-word"):
         btn = page.locator(f'[data-testid="{testid}"]').first
         assert btn.count() > 0, f"{testid} must be in DOM"
-        if btn.is_visible():
-            btn.click()
-            time.sleep(0.15)
-
-    # Restore word mode (expected default for word editor flow).
-    word_btn = page.locator('[data-testid="selection-mode-word"]').first
-    if word_btn.is_visible():
-        word_btn.click()
+        btn.click()
         time.sleep(0.15)
+        assert btn.get_attribute("data-active") == "true", (
+            f"{testid} should be the active target after clicking it"
+        )
+
+    # End on word mode (expected default for the word editor flow).
+    word_btn = page.locator('[data-testid="rail-target-word"]').first
+    word_btn.click()
+    time.sleep(0.15)
+    assert word_btn.get_attribute("data-active") == "true"
 
     assert page.locator('[data-testid="project-page"]').is_visible()
 
@@ -417,26 +432,31 @@ def test_selection_mode_toggles(exercise_server: ExerciseServer, page: Page) -> 
 
 @pytest.mark.e2e
 def test_zoom_buttons_present(exercise_server: ExerciseServer, page: Page) -> None:
-    """RAIL-4: zoom-fit-button and zoom-100-button are present on project page."""
+    """RAIL-4: the canvas zoom controls are present on the project page.
+
+    The viewport-chrome ImageTabsHeader zoom buttons were retired (D-050/D-053);
+    Fit/100% now live on the canvas overlay as ``canvas-zoom-fit`` /
+    ``canvas-zoom-100`` (inside ``canvas-zoom-controls``).
+    """
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
-    assert page.locator('[data-testid="zoom-fit-button"]').count() > 0, "zoom-fit-button must be in DOM"
-    assert page.locator('[data-testid="zoom-100-button"]').count() > 0, "zoom-100-button must be in DOM"
+    assert page.locator('[data-testid="canvas-zoom-fit"]').count() > 0, "canvas-zoom-fit must be in DOM"
+    assert page.locator('[data-testid="canvas-zoom-100"]').count() > 0, "canvas-zoom-100 must be in DOM"
 
 
 @pytest.mark.e2e
 def test_zoom_fit_click(exercise_server: ExerciseServer, page: Page) -> None:
-    """RAIL-4b: clicking zoom-fit-button does not crash the app."""
+    """RAIL-4b: clicking the canvas zoom controls does not crash the app."""
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
-    fit_btn = page.locator('[data-testid="zoom-fit-button"]').first
+    fit_btn = page.locator('[data-testid="canvas-zoom-fit"]').first
     if fit_btn.is_visible():
         fit_btn.click()
         time.sleep(0.2)
 
-    hundred_btn = page.locator('[data-testid="zoom-100-button"]').first
+    hundred_btn = page.locator('[data-testid="canvas-zoom-100"]').first
     if hundred_btn.is_visible():
         hundred_btn.click()
         time.sleep(0.2)

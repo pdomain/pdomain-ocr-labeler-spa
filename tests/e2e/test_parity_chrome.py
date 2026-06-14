@@ -44,31 +44,40 @@ _EXERCISE_ID = "exercise-fixture"
 
 
 def test_words_layer_checkbox_toggles_overlay_visibility(exercise_server: ExerciseServer, page: Page) -> None:
-    """Toggling layer-words-checkbox off unchecks it (overlay no longer drawn)."""
+    """Toggling the words-layer rail control flips its pressed state (overlay no longer drawn).
+
+    The viewport-chrome ImageTabsHeader was retired (D-050/D-053); the words-layer
+    toggle now lives in the Rail as ``rail-layer-word`` — a real ``<button>`` whose
+    ``aria-pressed`` reflects words-layer visibility (LayerToggleRow). That pressed
+    state is the DOM-observable proof the words-layer pref flipped; the overlay
+    itself is Konva-drawn (no per-word DOM nodes).
+    """
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
-    cb = page.locator('[data-testid="layer-words-checkbox"]').first
-    cb.wait_for(state="visible", timeout=10_000)
+    btn = page.locator('[data-testid="rail-layer-word"]').first
+    btn.wait_for(state="visible", timeout=10_000)
     # Words layer defaults to on.
-    assert cb.is_checked(), "words layer should default to visible"
+    assert btn.get_attribute("aria-pressed") == "true", "words layer should default to visible"
 
-    cb.click()
-    # The checkbox state is the DOM-observable proof the words layer pref flipped;
-    # the overlay itself is Konva-drawn (no per-word DOM nodes).
+    btn.click()
     page.wait_for_function(
-        "!document.querySelector(\"[data-testid='layer-words-checkbox']\")?.checked",
+        "document.querySelector(\"[data-testid='rail-layer-word']\")"
+        "?.getAttribute('aria-pressed') === 'false'",
         timeout=10_000,
     )
-    assert not cb.is_checked(), "words layer checkbox should be unchecked after toggle"
+    assert btn.get_attribute("aria-pressed") == "false", (
+        "words layer toggle should read unpressed after toggle"
+    )
 
     # Toggling back restores visibility.
-    cb.click()
+    btn.click()
     page.wait_for_function(
-        "document.querySelector(\"[data-testid='layer-words-checkbox']\")?.checked === true",
+        "document.querySelector(\"[data-testid='rail-layer-word']\")"
+        "?.getAttribute('aria-pressed') === 'true'",
         timeout=10_000,
     )
-    assert cb.is_checked()
+    assert btn.get_attribute("aria-pressed") == "true"
 
 
 # ---------------------------------------------------------------------------
@@ -77,13 +86,15 @@ def test_words_layer_checkbox_toggles_overlay_visibility(exercise_server: Exerci
 
 
 def test_paragraph_mode_selection_opens_paragraph_detail(exercise_server: ExerciseServer, page: Page) -> None:
-    """Paragraph rail target checks selection-mode-paragraph; selecting a
-    paragraph surfaces the right-panel paragraph-detail view.
+    """Selecting the paragraph rail target activates it; selecting a paragraph
+    surfaces the right-panel paragraph-detail view.
 
     Switching the rail target to ``para`` is what makes the canvas hit-test
-    resolve paragraphs (and it flips ``selection-mode-paragraph`` to checked).
-    We then select a paragraph via the hierarchy tree — a deterministic DOM
-    path — and assert ``paragraph-detail`` renders.
+    resolve paragraphs. The viewport-chrome ImageTabsHeader radios were retired
+    (D-050/D-053); the selection-mode control now lives in the Rail as
+    ``rail-target-para`` — a real ``<button>`` whose ``data-active`` reflects the
+    active target. We then select a paragraph via the hierarchy tree — a
+    deterministic DOM path — and assert ``paragraph-detail`` renders.
     """
     # The exercise-fixture is deterministically seeded via the event store
     # (invariant since d0c1494). Content presence is asserted, not skipped —
@@ -93,15 +104,15 @@ def test_paragraph_mode_selection_opens_paragraph_detail(exercise_server: Exerci
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
-    # Enter paragraph selection mode via the canonical selection-mode radio.
-    # onSelectionModeChange syncs railStore.target (ProjectPage radio→rail),
-    # and rail-target buttons now also sync selectionMode back (rail→radio).
-    # Both controls are bidirectional so both always agree (SEL-3 complete).
-    para_radio = page.locator('[data-testid="selection-mode-paragraph"]')
-    para_radio.wait_for(state="visible", timeout=10_000)
-    para_radio.check()
-    page.wait_for_selector(
-        '[data-testid="selection-mode-paragraph"]:checked',
+    # Enter paragraph selection mode via the canonical rail target cell.
+    # Clicking rail-target-para sets railStore.target="para" (canvas hit-test
+    # resolves paragraphs) and syncs uiPrefs.selectionMode="paragraph".
+    para_target = page.locator('[data-testid="rail-target-para"]')
+    para_target.wait_for(state="visible", timeout=10_000)
+    para_target.click()
+    page.wait_for_function(
+        "document.querySelector(\"[data-testid='rail-target-para']\")"
+        "?.getAttribute('data-active') === 'true'",
         timeout=10_000,
     )
 

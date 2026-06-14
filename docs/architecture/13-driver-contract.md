@@ -198,20 +198,39 @@ Hotkey: `Enter` on `nav-page-input` triggers `Go To`.
 | `page-source-badge` | The badge ("LABELED" / "CACHED OCR" / "RAW OCR" / "LOADING…") |
 | `page-name-label` | Filename label |
 
-### 2.6 Image tabs (left pane)
+### 2.6 Image viewport controls
+
+> **D-053 (2026-06-14):** the `ImageTabsHeader` viewport-chrome bar was
+> retired (it duplicated controls already present in the Rail and on the
+> canvas overlay). The layer-visibility, selection-mode, zoom, and
+> mismatches-only controls it carried are re-homed to **real, visible**
+> controls — they are NOT `display:none` stubs:
+>
+> | Retired testid | Real control (live) | Where |
+> |---|---|---|
+> | `layer-paragraphs-checkbox` | `rail-layer-para` (`aria-pressed`) | Rail §2.14 |
+> | `layer-lines-checkbox` | `rail-layer-line` (`aria-pressed`) | Rail §2.14 |
+> | `layer-words-checkbox` | `rail-layer-word` (`aria-pressed`) | Rail §2.14 |
+> | `selection-mode-paragraph` | `rail-target-para` (`data-active`) | Rail §2.14 |
+> | `selection-mode-line` | `rail-target-line` (`data-active`) | Rail §2.14 |
+> | `selection-mode-word` | `rail-target-word` (`data-active`) | Rail §2.14 |
+> | `zoom-fit-button` | `canvas-zoom-fit` (`aria-pressed`) | canvas overlay |
+> | `zoom-100-button` | `canvas-zoom-100` (`aria-pressed`) | canvas overlay |
+> | `mismatches-only-toggle` | `mismatches-only-toggle` (`aria-pressed`) | canvas overlay |
+>
+> The Rail controls are `<button>`s (not native checkbox/radio inputs);
+> use `aria-pressed` / `data-active` rather than `:checked`. The
+> `mismatches-only-toggle` testid is preserved unchanged — it now lives on
+> the canvas overlay beside the zoom controls (Issue #295).
 
 | Testid | What it is |
 |---|---|
-| `layer-paragraphs-checkbox` | Show Paragraphs |
-| `layer-lines-checkbox` | Show Lines |
-| `layer-words-checkbox` | Show Words |
-| `selection-mode-paragraph` | Radio: Paragraph |
-| `selection-mode-line` | Radio: Line |
-| `selection-mode-word` | Radio: Word |
-| `erase-pixels-button` | Erase Pixels mode toggle |
+| `erase-pixels-button` | Erase Pixels mode toggle (also reachable via Rail erase mode) |
+| `canvas-zoom-controls` | Zoom controls group (canvas overlay) |
+| `canvas-zoom-fit` | Fit page to viewport |
+| `canvas-zoom-100` | 100% zoom (1:1 pixel) |
 | `mismatches-only-toggle` | Toggle: dim exact/validated word bboxes (Issue #295) |
-| `zoom-fit-button` | Fit page to viewport width |
-| `zoom-100-button` | 100% zoom (1:1 pixel) |
+| `canvas-mode-pill` | Current canvas mode indicator pill |
 | `image-viewport` | The Konva `<Stage>`'s outer wrapper div |
 
 Drag rectangle CSS class: `.ocr-drag-rect` (legacy CSS class
@@ -380,11 +399,18 @@ The Rail is the 64px left column. It has three sections: MODE, TARGET, and LAYER
 | `rail-target-para` | Para target cell (between line and block) |
 | `rail-target-line` | Line target cell |
 | `rail-target-word` | Word target cell |
+| `rail-layer-block` | Block layer visibility toggle (`aria-pressed`) |
+| `rail-layer-para` | Paragraph layer visibility toggle (`aria-pressed`) |
+| `rail-layer-line` | Line layer visibility toggle (`aria-pressed`) |
+| `rail-layer-word` | Word layer visibility toggle (`aria-pressed`) |
 | `rail-bulk-button` | Bulk actions footer button |
 | `rail-hotkeys-button` | Keyboard shortcuts footer button (opens hotkey overlay) |
 
-Active cells carry `data-active="true"`. Hotkeys: `1`/`2`/`3`/`4` → block/para/line/word;
-`V`/`R`/`A`/`E` → view/region/annotate/erase.
+Active target cells carry `data-active="true"`. Layer toggles are `<button>`s
+whose `aria-pressed` reflects layer visibility (LAYERS section, D-053).
+Selecting a target cell also syncs `uiPrefs.selectionMode` (para/line/word).
+Hotkeys: `1`/`2`/`3`/`4` → block/para/line/word; `V`/`R`/`A`/`E` →
+view/region/annotate/erase.
 
 ### 2.15 Glyph annotations (spec `specs/20-glyph-annotations.md §7`, issue #270)
 
