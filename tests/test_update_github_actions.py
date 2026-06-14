@@ -107,3 +107,60 @@ def test_update_uv_version_refs_updates_quoted_setup_uv_with_inline_comment(tmp_
 
     assert update_github_actions.update_uv_version_refs(workflow, version="0.11.16")
     assert 'version: "0.11.16"' in workflow.read_text(encoding="utf-8")
+
+
+def test_update_github_actions_does_not_touch_pyproject(tmp_path: Path) -> None:
+    """update_github_actions must never rewrite pyproject.toml required-version.
+
+    The dep-refresh job calls ``uv lock --upgrade`` after this script runs.
+    If required-version was rewritten to the latest uv release, the running
+    uv (which setup-uv installed at job-start) would violate the requirement
+    it just wrote, poisoning itself.  The required-version floor is a deliberate
+    contributor floor and must not auto-track the latest release.
+    """
+    import json
+    import subprocess
+
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    workflow = workflows / "ci.yml"
+    workflow.write_text(
+        "jobs:\n"
+        "  ci:\n"
+        "    steps:\n"
+        '      - uses: "astral-sh/setup-uv@oldoldoldoldoldoldoldoldoldoldoldoldoldoldoldoldold1"\n'
+        "        with:\n"
+        '          version: "0.1.0"\n'
+        '      - uses: "actions/checkout@oldoldoldoldoldoldoldoldoldoldoldoldoldoldoldoldold2"\n',
+        encoding="utf-8",
+    )
+    pyproject = tmp_path / "pyproject.toml"
+    original_content = '[tool.uv]\nrequired-version = ">=0.11.16"\n'
+    pyproject.write_text(original_content, encoding="utf-8")
+
+    def fake_runner(command: list[str]) -> subprocess.CompletedProcess[str]:
+        endpoint = command[-1] if command[0] == "gh" else ""
+        if "releases/latest" in endpoint:
+            if "astral-sh/uv" in endpoint:
+                payload: dict[str, object] = {"tag_name": "0.11.21"}
+            else:
+                payload = {"tag_name": "v-test"}
+        elif "git/ref/tags" in endpoint:
+            payload = {"object": {"type": "commit", "sha": "a" * 40}}
+        elif "git/tags" in endpoint:
+            payload = {"object": {"sha": "a" * 40}}
+        else:
+            payload = {}
+        return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
+
+    changed = update_github_actions.update_github_actions(
+        workflow_dir=workflows,
+        runner=fake_runner,
+    )
+
+    # pyproject.toml must NOT appear among changed paths
+    assert pyproject not in changed, "update_github_actions must not touch pyproject.toml"
+    # pyproject.toml content must be byte-for-byte identical
+    assert pyproject.read_text(encoding="utf-8") == original_content, (
+        "pyproject.toml required-version was modified; must never be auto-updated"
+    )
