@@ -32,22 +32,39 @@ switching between task modes.
 
 ## 3. Component tree / layout
 
+> **D-047 (2026-06-14):** The shipped shell is the pdomain-ui `AppShell` (in
+> `App.tsx`) plus `ProjectPage`'s own body grid. `StudioShell` (below) remains a
+> tested layout primitive but is not in the live render path; the tree shown
+> here reflects what `ProjectPage` actually renders. The AppShell chrome header
+> is document-control-free; the `WorkspaceToolbar` band carries the
+> document/page-scoped controls, and the ⌘K `QuickSearch` lives in the Drawer
+> worklist header.
+
 ```
-ProjectPage
-└── StudioShell                      data-testid="studio-shell"
-    ├── [header zone]                data-testid="studio-shell-header"
-    │   ├── HeaderBar (AppHeader)
-    │   ├── Breadcrumb               data-testid="breadcrumb"
-    │   └── QuickSearch              data-testid="quick-search"
-    ├── [rail zone]                  data-testid="studio-shell-rail"
-    │   └── Rail                     data-testid="rail"
-    ├── [drawer zone]                data-testid="studio-shell-drawer"
-    │   └── Drawer                   data-testid="drawer"
-    ├── [canvas zone]                data-testid="studio-shell-canvas"
-    │   └── ImageViewport / BBoxOverlay
-    └── [right zone]                 data-testid="studio-shell-right"
-        └── WordDetail / LineDetail / BlockDetail
+App (pdomain-ui AppShell)
+├── [header zone]  chrome only
+│   ├── HeaderBar                     data-testid="header-bar"
+│   │   (logo, app name, project breadcrumb, project-root label)
+│   ├── LauncherSlot                  (pdomain-ui)
+│   └── SettingsSlot ⚙                (pdomain-ui; Appearance panel owns theme — D-048)
+├── [rail zone]                       data-testid="rail"  (project route)
+└── [main zone]
+    └── ProjectPage                   data-testid="project-page"
+        ├── WorkspaceToolbar          data-testid="workspace-toolbar"
+        │   ├── leftSlot   = ProjectNavigationControls  (nav-*)
+        │   ├── centerSlot = PageActionsCompact         (page-actions-compact-*)
+        │   └── rightSlot  = WorkspaceMetrics           (header-metrics-strip)
+        └── project-workspace         data-testid="project-workspace"
+            ├── canvas column         (ImageViewport / BBoxOverlay)
+            ├── worklist column
+            │   └── Drawer            data-testid="drawer"
+            │       └── worklist-header  data-testid="drawer-worklist-header"
+            │           └── QuickSearch  data-testid="quick-search" (⌘K focus)
+            └── detail column         (WordDetail / LineDetail / BlockDetail)
 ```
+
+The `StudioShell` 5-zone grid primitive (below) is retained for its tests and
+potential reuse; it is not currently mounted by `ProjectPage`.
 
 ### CSS grid template
 

@@ -78,6 +78,12 @@ export interface DrawerProps extends WorklistProps, HierarchyProps {
   pageTextGt?: string | null | undefined;
   /** S2.2: Full-page OCR text for the Text tab. */
   pageTextOcr?: string | null | undefined;
+  /**
+   * M1 (D-047): content rendered in a header region above the worklist body
+   * (only on the worklist tab). The ⌘K QuickSearch is injected here after its
+   * relocation out of the AppShell chrome header.
+   */
+  worklistHeader?: React.ReactNode;
 }
 
 export function Drawer({
@@ -89,6 +95,7 @@ export function Drawer({
   tabCounts,
   pageTextGt,
   pageTextOcr,
+  worklistHeader,
 }: DrawerProps) {
   const open = useSyncExternalStore(useUiPrefs.subscribe, getDrawerOpen, getDrawerOpen);
   const activeTab = useSyncExternalStore(useUiPrefs.subscribe, getDrawerTab, getDrawerTab);
@@ -168,6 +175,18 @@ export function Drawer({
               <ChevronLeft size={14} />
             </button>
           </div>
+
+          {/* M1 (D-047): worklist-header slot — relocated QuickSearch lives
+           * here (it filters the worklist, which lives in this drawer). Only
+           * rendered on the worklist tab and only when content is injected. */}
+          {activeTab === "worklist" && worklistHeader != null && (
+            <div
+              data-testid="drawer-worklist-header"
+              className="flex-shrink-0 border-b border-border-1 px-2 py-1.5"
+            >
+              {worklistHeader}
+            </div>
+          )}
 
           {/* Body — mount active tab content */}
           <div className="flex-1 min-h-0 overflow-hidden">

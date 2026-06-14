@@ -258,8 +258,20 @@ export default function App() {
 }
 ```
 
-`HeaderBar` contains `ProjectLoadControls`. No tabs, no nav at the app
+`HeaderBar` is chrome-only (D-047, 2026-06-14): logo, app name, project
+breadcrumb, and the resolved project-root path label. The AppShell injects the
+LauncherSlot + SettingsSlot ⚙ (which owns theme via the Appearance panel,
+D-048) into the header zone. Document/page-scoped controls live in the body:
+page navigation, page actions, and the metrics strip moved into the
+`WorkspaceToolbar` band (a pdomain-ui `StageToolbar`,
+`data-testid="workspace-toolbar"`) at the top of the project route; the ⌘K
+`QuickSearch` moved into the Drawer worklist header
+(`data-testid="drawer-worklist-header"`). No tabs, no nav chrome at the app
 level — the legacy is a single page and we preserve that look.
+
+> Note: the snippet above predates the pdomain-ui AppShell adoption (Phase 2.4).
+> In the shipped app `App.tsx` mounts the pdomain-ui `AppShell` with
+> `header` / `rail` / `main` slots rather than a hand-rolled flex column.
 
 ---
 

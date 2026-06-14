@@ -44,7 +44,7 @@
 // Hook-order discipline: ALL hooks are called unconditionally at the top
 // before any early return, matching the Rules of Hooks.
 
-import { useMemo, useState, useSyncExternalStore, useEffect } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "../lib/toast";
@@ -102,7 +102,13 @@ import { worklistStore } from "../stores/worklist-store";
 import { pageNoUrl } from "../lib/routes";
 
 import { PageActions } from "../components/PageActions";
+import { PageActionsCompact } from "../components/PageActionsCompact";
+import ProjectNavigationControls from "../components/ProjectNavigationControls";
 import { Drawer } from "../components/shell/Drawer";
+import { WorkspaceToolbar } from "../components/shell/WorkspaceToolbar";
+import { WorkspaceMetrics, type PageMetrics } from "../components/shell/WorkspaceMetrics";
+import { QuickSearch, type QuickSearchHandle } from "../components/shell/QuickSearch";
+import { useHotkey } from "../hooks/useHotkey";
 import { ToolbarActionGrid } from "../components/ToolbarActionGrid";
 import { BulkWordActions } from "../components/BulkWordActions";
 import { BusyOverlay, ProjectLoadingOverlay } from "../components/BusyOverlay";
@@ -330,9 +336,36 @@ export default function ProjectPage() {
   const undoAvailable = pagePayload?.history?.undo_available === true;
   const redoAvailable = pagePayload?.history?.redo_available === true;
 
+  // D-047: per-page match metrics for the WorkspaceToolbar rightSlot (moved
+  // out of the chrome header). Derived from the page payload's word matches.
+  const pageMetrics: PageMetrics | null = useMemo(() => {
+    const lineMatches = pagePayload?.line_matches ?? null;
+    if (!lineMatches) return null;
+    const words = lineMatches.flatMap((l) => l.word_matches);
+    const total = words.length;
+    if (total === 0) return null;
+    return {
+      total,
+      exact: words.filter((w) => w.match_status === "exact").length,
+      fuzzy: words.filter((w) => w.match_status === "fuzzy").length,
+      mismatch: words.filter((w) => w.match_status === "mismatch").length,
+      validated: words.filter((w) => w.is_validated).length,
+      glyphs_reviewed: words.filter((w) => w.glyph_annotations != null).length,
+    };
+  }, [pagePayload]);
+
   // ── Breadcrumb / hierarchy hotkeys (Alt+arrows) ────────────────────────
   // Registered at the page level so they work anywhere on the project page.
   useBreadcrumbHotkeys({ page: pagePayload ?? undefined });
+
+  // ── ⌘K QuickSearch (D-047) ─────────────────────────────────────────────
+  // QuickSearch relocated from the chrome header into the Drawer worklist
+  // header (it filters the worklist, which lives in the drawer). The Mod+K
+  // global hotkey still focuses the input — behavior preserved exactly.
+  const quickSearchRef = useRef<QuickSearchHandle>(null);
+  useHotkey("mod+k", () => {
+    quickSearchRef.current?.focusInput();
+  });
 
   // ── Global hotkeys (BUG-KBD-2) ─────────────────────────────────────────
   // Wired here at the page level so Mod+S, Mod+ArrowLeft/Right, etc. are
@@ -906,6 +939,29 @@ export default function ProjectPage() {
       tabCounts={drawerTabCounts}
       pageTextGt={pagePayload?.page_text_gt}
       pageTextOcr={pagePayload?.page_text_ocr}
+      // D-047: ⌘K QuickSearch lives in the worklist header (it filters the
+      // worklist). Mod+K focuses it via quickSearchRef (focus preserved).
+      worklistHeader={<QuickSearch ref={quickSearchRef} />}
+    />
+  );
+
+  // D-047: full-width workspace toolbar band — mounts at the top of the
+  // project route body (where today's nav/actions appeared), leaving the
+  // AppShell chrome header free of document/page-scoped controls.
+  //   leftSlot   = ProjectNavigationControls (page nav)
+  //   centerSlot = PageActionsCompact        (page actions)
+  //   rightSlot  = WorkspaceMetrics          (per-page match metrics)
+  const workspaceToolbar = (
+    <WorkspaceToolbar
+      leftSlot={
+        projectId ? (
+          <ProjectNavigationControls projectId={projectId} pageNo={String(idx0 + 1)} />
+        ) : undefined
+      }
+      centerSlot={
+        projectId ? <PageActionsCompact projectId={projectId} pageIndex={idx0} /> : undefined
+      }
+      rightSlot={<WorkspaceMetrics pageMetrics={pageMetrics} />}
     />
   );
 
@@ -1055,12 +1111,15 @@ export default function ProjectPage() {
   const rightWidth = selectionLevel === "line" || selectionLevel === "block" ? 640 : 520;
 
   return (
-    <div data-testid="project-page" className="h-full">
+    <div data-testid="project-page" className="flex flex-col h-full min-h-0">
       <ProjectLoadingOverlay isLoading={isPageLoading} />
+
+      {/* D-047: workspace toolbar band — full width, top of the project body. */}
+      <div className="shrink-0">{workspaceToolbar}</div>
 
       <div
         data-testid="project-workspace"
-        className="grid h-full min-h-0 bg-bg-page"
+        className="grid flex-1 min-h-0 bg-bg-page"
         style={{
           gridTemplateColumns: `minmax(0, 1fr) ${drawerOpen ? "320px" : "32px"} ${
             rightPanelOpen ? `${rightWidth}px` : "0px"

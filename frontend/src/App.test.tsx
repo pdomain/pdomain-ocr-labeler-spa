@@ -435,16 +435,19 @@ describe("App: routing shell", () => {
   });
 });
 
-// ─── S6.4: QuickSearch mounted in App header ─────────────────────────────────
-describe("App: S6.4 QuickSearch in header", () => {
-  it("quick-search input is present in the App header on the root route", async () => {
+// ─── D-047: QuickSearch relocated out of the chrome header ────────────────────
+describe("App: D-047 QuickSearch is no longer in the chrome header", () => {
+  it("quick-search input is NOT in the App header on the root route (relocated to drawer)", async () => {
     withNoSession();
     render(<App />);
     await waitFor(() => {
       expect(screen.getByTestId("header-bar")).toBeInTheDocument();
     });
-    // S6.4: QuickSearch must be mounted and its input present.
-    expect(screen.queryByTestId("quick-search-input")).not.toBeNull();
+    // D-047: ⌘K QuickSearch moved into the Drawer worklist-header slot (project
+    // route only — it filters the worklist). The chrome header carries no
+    // document-scoped controls, so it is absent on the root route.
+    expect(screen.queryByTestId("quick-search-input")).toBeNull();
+    expect(screen.queryByTestId("quick-search")).toBeNull();
   });
 });
 

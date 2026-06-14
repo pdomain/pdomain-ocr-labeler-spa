@@ -121,6 +121,33 @@ describe("Drawer (Slice 11)", () => {
   });
 });
 
+// --- M1 (D-047): worklist-header slot for relocated QuickSearch ---
+
+describe("Drawer M1 — worklist-header slot (D-047)", () => {
+  beforeEach(() => {
+    resetPrefs();
+  });
+
+  it("renders drawer-worklist-header region containing injected content on the worklist tab", () => {
+    render(<Drawer worklistHeader={<span data-testid="ws-header-content">search</span>} />);
+    const header = screen.getByTestId("drawer-worklist-header");
+    expect(header).toBeInTheDocument();
+    expect(header.querySelector('[data-testid="ws-header-content"]')).not.toBeNull();
+  });
+
+  it("does not render drawer-worklist-header when no content is injected", () => {
+    render(<Drawer />);
+    expect(screen.queryByTestId("drawer-worklist-header")).not.toBeInTheDocument();
+  });
+
+  it("does not render drawer-worklist-header on the hierarchy tab", async () => {
+    const user = userEvent.setup();
+    render(<Drawer worklistHeader={<span data-testid="ws-header-content">search</span>} />);
+    await user.click(screen.getByTestId("drawer-tab-hierarchy"));
+    expect(screen.queryByTestId("drawer-worklist-header")).not.toBeInTheDocument();
+  });
+});
+
 // --- Gap 18: tab icons + count badges + collapse chevron ---
 
 describe("Drawer Gap 18 — tab icons + count badges", () => {

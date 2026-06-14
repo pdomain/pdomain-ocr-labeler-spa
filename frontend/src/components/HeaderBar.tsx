@@ -1,124 +1,45 @@
-// HeaderBar.tsx — 56px top chrome, present on every route.
-// Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 9.
-//       specs/22-page-surface-wireup.md §3, §6 (issue #309)
-//       docs/plans/hifi-gaps-plan.md P1.a (Gaps 1, 3, 5)
-// IS-2: added navSlot + actionsSlot props for project-route header wiring.
-// P1.a: added projectName breadcrumb + pageMetrics strip.
+// HeaderBar.tsx — chrome-only top bar, present on every route.
+// Spec: docs/specs/2026-06-14-labeler-spa-header-to-workspace-toolbar-design.md
+//       specs/17-decisions.md D-047 (header → workspace-toolbar move),
+//       D-048 (theme-chip relocation to SettingsModal Appearance panel)
 //
-// Layout:
-//   Left:   logo glyph + "Projects" link back to / [+ "/" + project-name chip]
-//   Center: [navSlot] + [actionsSlot] (project-route injected content)
-//   Right:  [metrics strip (project route only)] + theme toggle (Dark/Light/System chips)
+// M1 of the header→workspace-toolbar realignment slims HeaderBar to pure
+// pdomain-ui-style chrome. The document/page-scoped controls (navSlot,
+// searchSlot, actionsSlot, the metrics strip, the theme chips) were moved out:
+//   - page navigation / page actions / metrics → WorkspaceToolbar band
+//     (StageToolbar at the top of the project route body).
+//   - ⌘K QuickSearch → Drawer worklist-header slot.
+//   - theme → pdomain-ui SettingsModal Appearance panel (UIPrefs owns theme;
+//     the AppShell ⚙ gear opens it). Local ThemeChips removed (D-048).
 //
-// 56px height (`h-14`), `bg-bg-page`, `border-b border-border-1`.
-// Gap 1: header height 40→56px (DONE).
+// Visible layout (chrome only):
+//   Left:   logo glyph + "OCR Labeler" + "Projects" link [+ "/" + project-name
+//           breadcrumb] [+ resolved project-root path label]
+//   (The AppShell injects the LauncherSlot + SettingsSlot ⚙ into its header zone
+//   alongside this bar; HeaderBar carries no document-scoped controls.)
+//
+// The `display:none` driver-contract stub div is retained (D-046): the
+// source-folder and OCR-config field stubs, plus the nav stubs, must stay
+// reachable on every route (including the root route) for the Playwright driver.
 
-import type * as React from "react";
 import { Link } from "react-router-dom";
-
-import { useThemePreference, useUiPrefs, type ThemePreference } from "../stores/ui-prefs";
-
-// ─── ThemeChips ──────────────────────────────────────────────────────────────
-
-const THEME_CHIPS: { value: ThemePreference; label: string }[] = [
-  { value: "dark", label: "Dark" },
-  { value: "light", label: "Light" },
-  { value: "system", label: "System" },
-];
-
-const CHIP_ACTIVE: Record<ThemePreference, string> = {
-  dark: "bg-accent text-accent-ink border-accent",
-  light: "bg-accent text-accent-ink border-accent",
-  system: "bg-accent text-accent-ink border-accent",
-};
-
-const CHIP_INACTIVE = "bg-bg-sunk text-ink-2 border-border-2 hover:bg-bg-raised hover:text-ink-1";
-
-function ThemeChips() {
-  const theme = useThemePreference();
-  return (
-    <div
-      data-testid="theme-chips"
-      className="flex items-center gap-1"
-      role="radiogroup"
-      aria-label="Theme"
-    >
-      {THEME_CHIPS.map(({ value, label }) => {
-        const active = theme === value;
-        return (
-          <button
-            key={value}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            data-testid={`theme-chip-${value}`}
-            onClick={() => {
-              useUiPrefs.setTheme(value);
-            }}
-            className={`px-1.5 py-0.5 rounded border text-[10px] font-medium transition-colors ${active ? CHIP_ACTIVE[value] : CHIP_INACTIVE}`}
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 // ─── HeaderBar ───────────────────────────────────────────────────────────────
 
-/** Computed per-page word-match metrics passed from AppShell. */
-export interface PageMetrics {
-  total: number;
-  exact: number;
-  fuzzy: number;
-  mismatch: number;
-  validated: number;
-  /** Number of words with glyph_annotations !== null (spec §8). Optional — only shown when present. */
-  glyphs_reviewed?: number | undefined;
-}
-
 export interface HeaderBarProps {
-  /**
-   * IS-2: Optional slot rendered in the center-left area (after logo).
-   * Used to inject ProjectNavigationControls when on a project route.
-   */
-  navSlot?: React.ReactNode;
-  /**
-   * IS-2: Optional slot rendered in the center-right area (before the
-   * theme toggle). Used to inject PageActionsCompact when on a project route.
-   */
-  actionsSlot?: React.ReactNode;
   /**
    * P1.a: Project name displayed as a breadcrumb chip after "Projects" link.
    * Only rendered when non-null and truthy.
    */
   projectName?: string | null;
   /**
-   * P1.a: Per-page word-match metrics displayed in the header right area.
-   * Only rendered when non-null and total > 0.
-   */
-  pageMetrics?: PageMetrics | null;
-  /**
    * S6.2: Resolved project_root path, shown as a visible mono label next to
    * the project breadcrumb on project routes. Only rendered when non-null/truthy.
    */
   projectRoot?: string | null;
-  /**
-   * S6.4: Optional search widget slot (QuickSearch) rendered in the center of
-   * the header bar (before actionsSlot). Always mounted so Mod+K can focus it.
-   */
-  searchSlot?: React.ReactNode;
 }
 
-export default function HeaderBar({
-  navSlot,
-  actionsSlot,
-  projectName,
-  pageMetrics,
-  projectRoot,
-  searchSlot,
-}: HeaderBarProps = {}) {
+export default function HeaderBar({ projectName, projectRoot }: HeaderBarProps = {}) {
   return (
     <header
       data-testid="header-bar"
@@ -184,78 +105,27 @@ export default function HeaderBar({
         </span>
       )}
 
-      {/* Center-left: navigation slot (project route only) */}
-      {navSlot}
-
-      {/* Spacer */}
+      {/* Spacer — pushes the AppShell-injected LauncherSlot + SettingsSlot ⚙
+       * (rendered by pdomain-ui AppShell into the header zone) to the right. */}
       <div className="flex-1 min-w-0" />
 
-      {/* S6.4: search slot — QuickSearch widget, always rendered (Mod+K focuses it) */}
-      {searchSlot}
-
-      {/* Center-right: actions slot (project route only) */}
-      {actionsSlot}
-
-      {/* P1.a: metrics strip — only when on a project route with loaded words */}
-      {pageMetrics && pageMetrics.total > 0 && (
-        <div
-          data-testid="header-metrics-strip"
-          className="flex items-center gap-1.5 text-[10px] text-ink-3 shrink-0"
-        >
-          <span>{pageMetrics.total} words</span>
-          <span>·</span>
-          <span className="text-status-exact">{pageMetrics.exact} exact</span>
-          <span>·</span>
-          <span className="text-status-fuzzy">{pageMetrics.fuzzy} fuzzy</span>
-          <span>·</span>
-          <span className="text-status-mismatch">{pageMetrics.mismatch} ✗</span>
-          <span>·</span>
-          <span>
-            {pageMetrics.validated}/{pageMetrics.total} validated
-          </span>
-          {pageMetrics.glyphs_reviewed !== undefined && (
-            <>
-              <span>·</span>
-              <span>
-                {pageMetrics.glyphs_reviewed}/{pageMetrics.total} glyphs
-              </span>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Right: theme toggle */}
-      {/* D-046: ocr-config-trigger-button removed from HeaderBar; restored in PageActionsCompact (#405) */}
-      <div className="shrink-0">
-        <ThemeChips />
-      </div>
-
       {/*
-       * Spec 22 §10 — driver-contract preservation.
+       * Spec 22 §10 — driver-contract preservation (D-046).
        *
        * Nav-control stubs live here so the testids are reachable on every
        * route (including the root route). The block remains `display:none`
        * and carries `data-testid-stub="true"` so the driver pre-pass can
        * distinguish them from the real controls. The real
-       * ProjectNavigationControls is rendered inside ProjectPage and does NOT
-       * carry `data-testid-stub` — drivers select it via
-       * `[data-testid="nav-prev-button"]:not([data-testid-stub])`.
+       * ProjectNavigationControls is rendered inside the WorkspaceToolbar
+       * (project route) and does NOT carry `data-testid-stub` — drivers
+       * select it via `[data-testid="nav-prev-button"]:not([data-testid-stub])`.
        *
-       * Source-folder stubs removed (#294): the real SourceFolderDialog is
-       * now mounted in App.tsx and the source-folder-button in
-       * ProjectLoadControls opens it.
+       * D-046 (2026-05-21): project-select / load-project-button /
+       * source-folder-button / ocr-config-trigger-button stubs REMOVED — those
+       * controls live at their real locations. The source-folder + OCR-config
+       * field stubs below are KEPT (driver-contract §2.2/§2.3).
        */}
       <div style={{ display: "none" }}>
-        {/*
-         * D-046 (2026-05-21): project-select, load-project-button, source-folder-button,
-         * and ocr-config-trigger-button stubs REMOVED from HeaderBar. These controls
-         * now live at their real locations:
-         *   project-select / load-project-button → ProjectLoadControls (RootPage)
-         *   source-folder-button → ProjectLoadControls (breadcrumb mode)
-         *   ocr-config-trigger-button → dialogStore.open("ocrConfig") from project-page context
-         * See specs/17-decisions.md D-046 and docs/architecture/13-driver-contract.md §2.1.
-         */}
-
         {/* Source-folder dialog stubs — always present in DOM, even when dialog is closed */}
         <span
           data-testid="source-folder-current-path-label"
@@ -341,7 +211,8 @@ export default function HeaderBar({
           aria-label="Apply OCR config (stub)"
         />
 
-        {/* Nav stubs — always present in DOM */}
+        {/* Nav stubs — always present in DOM (driver-contract §2.4); the real
+         * ProjectNavigationControls renders in the WorkspaceToolbar leftSlot. */}
         <button
           data-testid="nav-prev-button"
           data-testid-stub="true"

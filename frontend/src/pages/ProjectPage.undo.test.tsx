@@ -10,7 +10,7 @@
 // undo slice does not collide with parallel work in the main test file).
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -112,6 +112,16 @@ beforeEach(() => {
   dialogStore.reset();
 });
 
+// D-047: PageActionsCompact is now visible in the WorkspaceToolbar band AND
+// the canonical driver-contract §2.5 PageActions bar stays mounted (hidden) in
+// ProjectPage — both emit `undo-button` / `redo-button`. Scope these queries to
+// the `page-actions-bar` (the legacy §2.5 surface these tests target) so the
+// duplicate visible-toolbar button does not make `getByTestId` ambiguous.
+function actionButton(testid: string): HTMLElement {
+  const bar = screen.getByTestId("page-actions-bar");
+  return within(bar).getByTestId(testid);
+}
+
 describe("ProjectPage: Mod+Z / Mod+Shift+Z dispatch undo/redo (H-C)", () => {
   it("Ctrl+Z POSTs /undo when history.undo_available", async () => {
     stubBackend({ undo_available: true, redo_available: false });
@@ -123,7 +133,7 @@ describe("ProjectPage: Mod+Z / Mod+Shift+Z dispatch undo/redo (H-C)", () => {
     renderProjectPage();
     await screen.findByTestId("project-page");
     await waitFor(() => {
-      expect(screen.getByTestId("undo-button")).not.toBeDisabled();
+      expect(actionButton("undo-button")).not.toBeDisabled();
     });
 
     fireEvent.keyDown(document, { key: "z", ctrlKey: true, bubbles: true });
@@ -140,7 +150,7 @@ describe("ProjectPage: Mod+Z / Mod+Shift+Z dispatch undo/redo (H-C)", () => {
     renderProjectPage();
     await screen.findByTestId("project-page");
     await waitFor(() => {
-      expect(screen.getByTestId("undo-button")).toBeDisabled();
+      expect(actionButton("undo-button")).toBeDisabled();
     });
 
     fireEvent.keyDown(document, { key: "z", ctrlKey: true, bubbles: true });
@@ -159,7 +169,7 @@ describe("ProjectPage: Mod+Z / Mod+Shift+Z dispatch undo/redo (H-C)", () => {
     renderProjectPage();
     await screen.findByTestId("project-page");
     await waitFor(() => {
-      expect(screen.getByTestId("redo-button")).not.toBeDisabled();
+      expect(actionButton("redo-button")).not.toBeDisabled();
     });
 
     fireEvent.keyDown(document, { key: "Z", ctrlKey: true, shiftKey: true, bubbles: true });
@@ -176,7 +186,7 @@ describe("ProjectPage: Mod+Z / Mod+Shift+Z dispatch undo/redo (H-C)", () => {
     const page = renderProjectPage();
     await screen.findByTestId("project-page");
     await waitFor(() => {
-      expect(screen.getByTestId("undo-button")).not.toBeDisabled();
+      expect(actionButton("undo-button")).not.toBeDisabled();
     });
 
     // Inject a text input (stands in for any GT input) and focus it.

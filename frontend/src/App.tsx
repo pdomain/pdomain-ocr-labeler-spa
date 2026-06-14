@@ -22,7 +22,7 @@ import { BrowserRouter, Routes, Route, Navigate, useParams, useMatch } from "rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 
-import { Suspense, lazy, useEffect, useRef, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, type ReactNode } from "react";
 import {
   AppShell,
   ComputeTargetPanel,
@@ -35,9 +35,6 @@ import {
 } from "@pdomain/pdomain-ui/shell";
 import { useDeviceInfo } from "@pdomain/pdomain-ui/stores";
 import HeaderBar from "./components/HeaderBar";
-import type { PageMetrics } from "./components/HeaderBar";
-import ProjectNavigationControls from "./components/ProjectNavigationControls";
-import { PageActionsCompact } from "./components/PageActionsCompact";
 import { CudaSetupGuidance } from "./components/CudaSetupGuidance";
 import { Rail } from "./components/shell/Rail";
 import RootPage from "./pages/RootPage";
@@ -46,7 +43,6 @@ import { ProjectRouteGate } from "./components/ProjectRouteGate";
 import { ROUTES } from "./lib/routes";
 import { useThemePreference } from "./stores/ui-prefs";
 import { useProject } from "./hooks/useProject";
-import { usePage } from "./hooks/usePage";
 
 // Lazy-load the perf-bench page so the heavy react-konva module graph
 // (and its Node-canvas dependency in jsdom test environments) is only
@@ -62,8 +58,6 @@ import { useNotificationStream } from "./hooks/useNotificationStream";
 import { OCRConfigModal } from "./components/OCRConfigModal";
 import { ExportDialog } from "./components/ExportDialog";
 import { HotkeyHelpModal } from "./components/HotkeyHelpModal";
-import { QuickSearch, type QuickSearchHandle } from "./components/shell/QuickSearch";
-import { useHotkey } from "./hooks/useHotkey";
 import { SourceFolderDialog } from "./components/SourceFolderDialog";
 import { dialogStore, useDialogStore } from "./stores/dialog-store";
 
@@ -197,29 +191,21 @@ function useRouteProjectContext(): { projectId: string | null; pageIndex: number
 function AppInner() {
   useNotificationStream();
 
-  // S6.4: ref to QuickSearch handle so Mod+K can focus the search input.
-  const quickSearchRef = useRef<QuickSearchHandle>(null);
-  // S6.4: global Mod+K focuses the search input (not opens hotkey help — that's ?).
-  // enableOnFormTags: false (default) means Mod+K doesn't re-fire when already in an input.
-  useHotkey("mod+k", () => {
-    quickSearchRef.current?.focusInput();
-  });
-
   // Dialog open-state slices — re-render only when these change.
   const ocrConfigOpen = useDialogStore((s) => s.ocrConfig.open);
   const exportOpen = useDialogStore((s) => s.export.open);
   const sourceFolderOpen = useDialogStore((s) => s.sourceFolder.open);
   const { projectId, pageIndex } = useRouteProjectContext();
 
-  // IS-2: Inject nav + actions slots into HeaderBar when on a project route.
+  // D-047: HeaderBar is now chrome-only. The document/page-scoped controls
+  // (nav, page actions, metrics, ⌘K search) moved into the project route body
+  // (WorkspaceToolbar band + Drawer worklist header) — owned by ProjectPage.
   const onProjectRoute = projectId !== null;
-  const pageNo = String(pageIndex + 1);
 
-  // P1.a: Fetch project name + page metrics for header breadcrumb + strip.
-  // Both hooks are guarded via enabled:false when projectId is null/undefined.
+  // Fetch project name + resolved root for the chrome breadcrumb.
+  // useProject is guarded via enabled:false when projectId is null/undefined.
   const projectIdOrUndef = projectId ?? undefined;
   const projectQ = useProject(projectIdOrUndef);
-  const pageQ = usePage(projectIdOrUndef, pageIndex);
 
   // Prefer using a display name; fall back to project_id as identifier.
   // The ProjectResponse shape has no separate display-name field, so we
@@ -227,23 +213,6 @@ function AppInner() {
   const headerProjectName: string | null = projectQ.data ? projectQ.data.project_id : null;
   // S6.2: resolved project_root path for the header label (only on project routes)
   const headerProjectRoot: string | null = projectQ.data?.project_root ?? null;
-
-  const pageMetrics: PageMetrics | null = (() => {
-    const lineMatches = pageQ.data?.line_matches ?? null;
-    if (!lineMatches) return null;
-    const words = lineMatches.flatMap((l) => l.word_matches);
-    const total = words.length;
-    if (total === 0) return null;
-    const glyphsReviewedCount = words.filter((w) => w.glyph_annotations != null).length;
-    return {
-      total,
-      exact: words.filter((w) => w.match_status === "exact").length,
-      fuzzy: words.filter((w) => w.match_status === "fuzzy").length,
-      mismatch: words.filter((w) => w.match_status === "mismatch").length,
-      validated: words.filter((w) => w.is_validated).length,
-      glyphs_reviewed: glyphsReviewedCount,
-    };
-  })();
 
   return (
     /*
@@ -277,41 +246,31 @@ function AppInner() {
         settingsPanels={settingsPanels}
         header={
           <>
+            {/* D-047: chrome-only HeaderBar — no document/page-scoped controls.
+             * The AppShell injects the LauncherSlot + SettingsSlot ⚙ (which owns
+             * the Appearance/theme panel, D-048) into this header zone. */}
             <HeaderBar
-              searchSlot={
-                /* S6.4: QuickSearch always rendered so Mod+K can focus it on any route */
-                <QuickSearch ref={quickSearchRef} />
-              }
-              navSlot={
-                onProjectRoute ? (
-                  <ProjectNavigationControls projectId={projectId} pageNo={pageNo} />
-                ) : undefined
-              }
-              actionsSlot={
-                onProjectRoute ? (
-                  <PageActionsCompact projectId={projectId} pageIndex={pageIndex} />
-                ) : (
-                  /* S6.3(a): OCR config trigger on root route (#405).
-                   * PageActionsCompact owns this button on project routes; on the
-                   * root route a dedicated small trigger keeps the modal reachable
-                   * without touching PageActionsCompact (T-SAVE conflict boundary). */
-                  <button
-                    type="button"
-                    data-testid="ocr-config-trigger-button"
-                    aria-label="Open OCR configuration"
-                    onClick={() => {
-                      dialogStore.open("ocrConfig");
-                    }}
-                    className="px-2 py-1 text-xs border border-border-2 rounded bg-bg-raised text-ink-2 hover:text-ink-1 hover:border-accent transition-colors"
-                  >
-                    OCR Config
-                  </button>
-                )
-              }
               projectName={headerProjectName}
               projectRoot={onProjectRoute ? headerProjectRoot : null}
-              pageMetrics={pageMetrics}
             />
+            {/* S6.3(a): OCR config trigger reachable on the root route (#405).
+             * PageActionsCompact owns this button on project routes (inside the
+             * WorkspaceToolbar band); on the root route a dedicated small trigger
+             * keeps the modal reachable before a project is loaded. Mounted as a
+             * sibling of the chrome HeaderBar (not inside it). */}
+            {!onProjectRoute && (
+              <button
+                type="button"
+                data-testid="ocr-config-trigger-button"
+                aria-label="Open OCR configuration"
+                onClick={() => {
+                  dialogStore.open("ocrConfig");
+                }}
+                className="px-2 py-1 text-xs border border-border-2 rounded bg-bg-raised text-ink-2 hover:text-ink-1 hover:border-accent transition-colors"
+              >
+                OCR Config
+              </button>
+            )}
             {/*
              * Accessible live regions — spec #238.
              * Placed here (inside header slot) so they are always present in

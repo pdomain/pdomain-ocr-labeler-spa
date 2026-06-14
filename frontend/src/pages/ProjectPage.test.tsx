@@ -268,16 +268,22 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     });
   });
 
-  it("IS-2: ProjectNavigationControls is no longer inside ProjectPage (moved to App HeaderBar navSlot)", async () => {
-    // After IS-2, ProjectNavigationControls is rendered via App.tsx HeaderBar
-    // navSlot, not inside ProjectPage. ProjectPage.test renders ProjectPage in
-    // isolation without the App wrapper, so nav-controls are not present here.
-    // The driver contract preserves testids via stubs in HeaderBar.
+  it("D-047: ProjectNavigationControls renders inside the WorkspaceToolbar band", async () => {
+    // D-047 reverses IS-2: the chrome header is document-control-free, so
+    // ProjectNavigationControls now lives in the WorkspaceToolbar band at the
+    // top of the project route body (leftSlot). The band carries
+    // data-testid="workspace-toolbar".
     renderProjectPage();
     await screen.findByTestId("project-page");
-    await waitFor(() => {
-      expect(screen.queryByTestId("project-navigation-controls")).toBeNull();
-    });
+    const toolbar = await screen.findByTestId("workspace-toolbar");
+    expect(toolbar.querySelector('[data-testid="project-navigation-controls"]')).not.toBeNull();
+  });
+
+  it("D-047: PageActionsCompact renders inside the WorkspaceToolbar centerSlot", async () => {
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    const toolbar = await screen.findByTestId("workspace-toolbar");
+    expect(toolbar.querySelector('[data-testid="page-actions-compact"]')).not.toBeNull();
   });
 
   it("IS-2: PageActions bar is hidden (driver testids still reachable in DOM)", async () => {

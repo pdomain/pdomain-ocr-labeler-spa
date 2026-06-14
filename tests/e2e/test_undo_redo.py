@@ -385,8 +385,8 @@ def test_textfield_mod_z_does_not_fire_page_undo(undo_server: UndoServer, page: 
     payload = _wait_validated_count(undo_server, 0, 2)
     assert payload["history"]["undo_available"] is True
 
-    # Focus a text input (quick-search lives in the shell header), type,
-    # then press Control+Z — the page state must NOT change.
+    # Focus a text input (quick-search lives in the Drawer worklist header
+    # after D-047), type, then press Control+Z — the page state must NOT change.
     search = page.locator('[data-testid="quick-search-input"]')
     search.click()
     search.type("hello")

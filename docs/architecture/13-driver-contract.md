@@ -83,6 +83,21 @@ Any testid the legacy has that we want to retire requires
 > **D-046 (2026-05-21):** The legacy inline header controls have been
 > deprecated and removed (see `specs/17-decisions.md` D-046). The driver
 > must reach these controls at their new locations as documented below.
+>
+> **D-047 / D-048 (2026-06-14):** `HeaderBar` is now chrome-only
+> (`specs/17-decisions.md` D-047/D-048). The document/page-scoped controls moved
+> out of the header into a full-width `WorkspaceToolbar` band
+> (`data-testid="workspace-toolbar"`) at the top of the project route body:
+> page navigation (`nav-*`, §2.4) → `leftSlot`; page actions
+> (`page-actions-compact-*`, §2.5b) → `centerSlot`; the metrics strip
+> (`header-metrics-strip`) → `rightSlot`. The `⌘K` QuickSearch (`quick-search*`)
+> moved into the Drawer worklist header (`data-testid="drawer-worklist-header"`)
+> — Mod+K still focuses `quick-search-input`. The SPA-only theme chips
+> (`theme-chips`, `theme-chip-*`) are **retired**; theme is changed via the ⚙
+> SettingsModal Appearance panel (`settings-appearance-theme-dark` /
+> `settings-appearance-theme-light`, owned by pdomain-ui). All moved testids are
+> unchanged (D-014); only mount points changed. The `display:none` HeaderBar
+> stubs (`nav-*`, `source-folder-*`, `ocr-config-*` fields) are retained.
 
 | Control | New location | New testid(s) |
 |---|---|---|
@@ -136,6 +151,13 @@ Hotkey: `Enter` on the path input triggers `source-folder-open-typed-button`.
 | `ocr-config-apply-button` | Apply |
 
 ### 2.4 Project navigation
+
+> **D-047 (2026-06-14):** The real `ProjectNavigationControls`
+> (`project-navigation-controls`) now renders inside the `WorkspaceToolbar`
+> band `leftSlot` (top of the project route body), not the chrome header. The
+> `display:none` nav stubs in HeaderBar (carrying `data-testid-stub="true"`)
+> remain so these testids are reachable on the root route; select the real
+> controls via `[data-testid="nav-prev-button"]:not([data-testid-stub])`.
 
 | Testid | What it is |
 |---|---|

@@ -1753,6 +1753,113 @@ OPEN_QUESTIONS.md `§2.1 testid retirement gate` (line 77–79 of
 
 ---
 
+## D-047 — Header → workspace-toolbar realignment (chrome-only header)
+
+**Date:** 2026-06-14
+**Status:** Accepted
+**Spec:** `docs/specs/2026-06-14-labeler-spa-header-to-workspace-toolbar-design.md`
+**Plan:** `docs/plans/2026-06-14-labeler-spa-header-to-workspace-toolbar.md` (M1)
+
+### Context
+
+The AppShell `header` slot was overloaded with document/page-scoped controls
+that pdomain-ui's design reserves for the app body, not chrome. `HeaderBar`
+injected `navSlot` (ProjectNavigationControls), `actionsSlot`
+(PageActionsCompact), a `searchSlot` (QuickSearch), an inline metrics strip,
+and theme chips. pdomain-ui's documented header layout is chrome-only
+(`[icon] [name] [breadcrumb] [spacer] [LauncherSlot] [SettingsSlot ⚙]`); the
+documented convention for an in-app document toolbar is the `StageToolbar`
+primitive (`leftSlot`/`centerSlot`/`rightSlot`).
+
+### Decision
+
+`HeaderBar` slims to pure chrome (logo, app name, project breadcrumb, resolved
+project-root label). It no longer accepts `navSlot` / `actionsSlot` /
+`searchSlot` / `pageMetrics`, and the theme chips are removed (see D-048). The
+document/page-scoped controls move into a new full-width `WorkspaceToolbar`
+band (a thin wrapper over the pdomain-ui `StageToolbar`,
+`data-testid="workspace-toolbar"`):
+
+| Moved control | New mount point | Slot |
+|---|---|---|
+| `ProjectNavigationControls` (`nav-*`) | `WorkspaceToolbar` | `leftSlot` |
+| `PageActionsCompact` (`page-actions-compact-*` + undo/redo/rotate) | `WorkspaceToolbar` | `centerSlot` |
+| metrics strip (`header-metrics-strip`) | `WorkspaceMetrics` in `WorkspaceToolbar` | `rightSlot` |
+| `QuickSearch` (`quick-search*`) | `Drawer` worklist-header slot (`drawer-worklist-header`) | — |
+
+**Mount point reality vs. the design wording.** The design describes mounting
+the band "in StudioShell's header zone." In the shipped app the live shell is
+the pdomain-ui `AppShell` (in `App.tsx`) plus `ProjectPage`'s own
+`project-workspace` grid — `StudioShell` is not in the render path (it remains
+a tested layout primitive). The `WorkspaceToolbar` band is therefore mounted at
+the top of `ProjectPage`'s body (above `project-workspace`), which is exactly
+where today's nav/actions appeared and is the project route's de-facto header
+zone. The `⌘K` (Mod+K) focus hotkey moved into `ProjectPage` alongside
+`QuickSearch`; focus behavior is unchanged.
+
+**Driver-contract testid preservation (D-014).** Every moved control keeps its
+exact `data-testid`; only the mount point changes. The metrics strip keeps
+`header-metrics-strip` for driver continuity despite no longer living in the
+header. The `display:none` driver stubs in `HeaderBar` (`nav-*`,
+`source-folder-*`, `ocr-config-*` field stubs) are retained per D-046 so those
+testids stay reachable on every route, including the root route.
+
+### Consequences
+
+- The hidden `PageActions` bar (`page-actions-bar`, driver-contract §2.5
+  testids) stays mounted in `ProjectPage`. Because `PageActionsCompact` is now
+  visible in the project body, the overlapping testids (`undo-button`,
+  `redo-button`, `load-page-button`, `reload-ocr-edited-button`,
+  `rotate-cw/ccw/180-button`, `rotation-badge`, `save-project-button`) appear in
+  both surfaces. This duplication already existed in the running app (compact in
+  header + hidden full bar); consolidating the §2.5 surface onto
+  `PageActionsCompact` is deferred to M2 (Slice 2A).
+- Tests that asserted controls were *absent* from `ProjectPage` (IS-2 era) are
+  repointed to assert presence in the `WorkspaceToolbar` band.
+
+---
+
+## D-048 — Theme chips relocated to the SettingsModal Appearance panel
+
+**Date:** 2026-06-14
+**Status:** Accepted
+**Spec:** `docs/specs/2026-06-14-labeler-spa-header-to-workspace-toolbar-design.md`
+
+### Context
+
+`HeaderBar` rendered a local theme radio group with SPA-new testids
+(`theme-chips`, `theme-chip-dark`, `theme-chip-light`, `theme-chip-system`).
+These were never part of the legacy `pd-ocr-labeler` driver contract — they are
+SPA-only. pdomain-ui owns theme via its `UIPrefs` provider (wired through the
+AppShell `uiPrefsConfig`), which applies `data-theme` to the document and
+exposes theme controls in the built-in `SettingsModal` Appearance panel
+(testids `settings-appearance-theme-dark` / `settings-appearance-theme-light`).
+
+### Decision
+
+Remove the local `ThemeChips` from `HeaderBar`. Theme is now changed via the ⚙
+SettingsModal Appearance panel that the pdomain-ui AppShell already renders into
+the header zone. The legacy `theme-chips` / `theme-chip-*` testids are retired.
+
+Because these testids are SPA-new (not in the legacy driver contract), retiring
+them is permitted under D-014's "new elements get new testids" clause. The move
+is surfaced here (not silent): `HeaderBar.test.tsx` is updated to assert the
+chips are absent, and the driver-contract doc carries no rows for them (none
+existed). Drivers that need to change theme use the Appearance panel testids
+above.
+
+### Consequences
+
+- `ThemedToaster` still reads the local `useThemePreference` store for the
+  sonner toast theme. When theme is changed via the Appearance panel, the
+  visible page theme (`data-theme`) updates immediately through pdomain-ui's
+  provider; the toaster theme may lag until the local store re-seeds (the same
+  GAP-1 deferral that governs `/api/ui-prefs` persistence). The local
+  `setTheme` path remains for programmatic callers; it is simply no longer
+  surfaced as header chips.
+
+---
+
 ## Pending decisions
 
 See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for any sub-questions

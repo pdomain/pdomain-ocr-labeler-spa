@@ -1,14 +1,20 @@
-// HeaderBar.test.tsx — tests for the simplified HeaderBar.
+// HeaderBar.test.tsx — tests for the chrome-only HeaderBar.
 //
-// Simplified layout (2026-05-16):
-//   Left:   logo badge + "OCR Labeler" text (link to /) + "Projects" link to /
-//           [+ "/" + project-name chip when projectName prop is set]
-//   Center: navSlot (optional) + actionsSlot (optional)
-//   Right:  [header-metrics-strip (project route only)] + ThemeChips (Dark/Light/System)
-//   Hidden: driver-contract stub div (display:none)
+// M1 (D-047 / D-048, 2026-06-14): HeaderBar is slimmed to pure chrome. The
+// document/page-scoped controls moved out:
+//   - navSlot / actionsSlot / metrics → WorkspaceToolbar band
+//   - searchSlot (QuickSearch) → Drawer worklist-header slot
+//   - theme chips → pdomain-ui SettingsModal Appearance panel (D-048)
 //
-// Removed from HeaderBar: ProjectLoadControls, MetricsStrip, QuickSearch,
-// dialog trigger buttons (ocr-config, export, hotkey-help), UserMenu.
+// Visible layout (chrome only):
+//   Left: logo badge + "OCR Labeler" + "Projects" link
+//         [+ "/" + project-name chip] [+ resolved project-root path label]
+//   The AppShell injects LauncherSlot + SettingsSlot ⚙ into its header zone.
+//
+// The `display:none` driver-contract stub div (D-046) is retained: source-folder
+// + OCR-config field stubs and nav stubs stay reachable on every route. These
+// stubs carry `data-testid-stub="true"`; the chrome-only assertions below check
+// that no NON-stub document control is present in the header.
 
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -16,7 +22,6 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import HeaderBar from "./HeaderBar";
-import type { PageMetrics } from "./HeaderBar";
 
 // --- helpers -----------------------------------------------------------------
 
@@ -26,10 +31,7 @@ function makeQueryClient() {
 
 interface RenderOpts {
   route?: string;
-  navSlot?: React.ReactNode;
-  actionsSlot?: React.ReactNode;
   projectName?: string | null;
-  pageMetrics?: PageMetrics | null;
   projectRoot?: string | null;
 }
 
@@ -47,23 +49,13 @@ function LocationSpy() {
   );
 }
 
-function renderHeaderBar({
-  route = "/",
-  navSlot,
-  actionsSlot,
-  projectName,
-  pageMetrics,
-  projectRoot,
-}: RenderOpts = {}) {
+function renderHeaderBar({ route = "/", projectName, projectRoot }: RenderOpts = {}) {
   const qc = makeQueryClient();
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={[route]}>
         <HeaderBar
-          {...(navSlot !== undefined && { navSlot })}
-          {...(actionsSlot !== undefined && { actionsSlot })}
           {...(projectName !== undefined && { projectName })}
-          {...(pageMetrics !== undefined && { pageMetrics })}
           {...(projectRoot !== undefined && { projectRoot })}
         />
         <LocationSpy />
@@ -125,32 +117,56 @@ describe("HeaderBar: structure", () => {
     const header = screen.getByTestId("header-bar");
     expect(header.className).toMatch(/h-14/);
   });
+});
+
+// --- chrome-only: no visible document/page-scoped controls (D-047) -----------
+
+describe("HeaderBar: chrome-only (D-047)", () => {
+  /** A "real" (non-stub) testid is one without data-testid-stub="true". */
+  function queryRealTestId(testid: string): HTMLElement | null {
+    const matches = screen.queryAllByTestId(testid);
+    return matches.find((el) => el.getAttribute("data-testid-stub") !== "true") ?? null;
+  }
+
+  it("does NOT render the metrics strip in the header", async () => {
+    renderHeaderBar({ route: "/projects/p1/pages/pageno/1" });
+    expect(screen.queryByTestId("header-metrics-strip")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("metrics-strip")).not.toBeInTheDocument();
+  });
+
+  it("does NOT render theme chips (relocated to SettingsModal Appearance panel — D-048)", async () => {
+    renderHeaderBar();
+    expect(screen.queryByTestId("theme-chips")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("theme-chip-dark")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("theme-chip-light")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("theme-chip-system")).not.toBeInTheDocument();
+  });
+
+  it("does NOT render QuickSearch in the header (relocated to drawer)", async () => {
+    renderHeaderBar();
+    expect(screen.queryByTestId("quick-search")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("quick-search-input")).not.toBeInTheDocument();
+  });
+
+  it("does NOT render real (non-stub) page-action controls in the header", async () => {
+    renderHeaderBar({ route: "/projects/p1/pages/pageno/1" });
+    expect(screen.queryByTestId("page-actions-compact")).not.toBeInTheDocument();
+    expect(queryRealTestId("page-actions-compact-save-page")).toBeNull();
+  });
+
+  it("does NOT render real (non-stub) nav controls in the header", async () => {
+    // The only nav-prev-button present is the display:none driver stub; no
+    // real ProjectNavigationControls is mounted in the chrome header anymore.
+    renderHeaderBar({ route: "/projects/p1/pages/pageno/1" });
+    expect(queryRealTestId("nav-prev-button")).toBeNull();
+    expect(queryRealTestId("nav-page-input")).toBeNull();
+  });
 
   it("does NOT render project-load controls (removed)", async () => {
     renderHeaderBar();
     expect(screen.queryByTestId("project-select")).not.toBeInTheDocument();
     expect(screen.queryByTestId("load-project-button")).not.toBeInTheDocument();
     expect(screen.queryByTestId("source-folder-button")).not.toBeInTheDocument();
-  });
-
-  it("does NOT render legacy metrics-strip testid (removed)", async () => {
-    renderHeaderBar({ route: "/projects/p1/pages/pageno/1" });
-    expect(screen.queryByTestId("metrics-strip")).not.toBeInTheDocument();
-  });
-
-  it("does NOT render header-metrics-strip when pageMetrics is null", async () => {
-    renderHeaderBar({ route: "/projects/p1/pages/pageno/1", pageMetrics: null });
-    expect(screen.queryByTestId("header-metrics-strip")).not.toBeInTheDocument();
-  });
-
-  it("does NOT render header-project-name when projectName is null", async () => {
-    renderHeaderBar({ route: "/projects/p1/pages/pageno/1", projectName: null });
-    expect(screen.queryByTestId("header-project-name")).not.toBeInTheDocument();
-  });
-
-  it("does NOT render quick-search (removed)", async () => {
-    renderHeaderBar();
-    expect(screen.queryByTestId("quick-search")).not.toBeInTheDocument();
   });
 
   it("does NOT render dialog trigger buttons (removed)", async () => {
@@ -163,53 +179,6 @@ describe("HeaderBar: structure", () => {
   it("does NOT render user-menu (removed)", async () => {
     renderHeaderBar();
     expect(screen.queryByTestId("user-menu-trigger")).not.toBeInTheDocument();
-  });
-});
-
-// --- theme chips -------------------------------------------------------------
-
-describe("HeaderBar: theme chips", () => {
-  it("renders theme-chips radiogroup", async () => {
-    renderHeaderBar();
-    expect(screen.getByTestId("theme-chips")).toBeInTheDocument();
-  });
-
-  it("renders Dark, Light, System chip buttons", async () => {
-    renderHeaderBar();
-    expect(screen.getByTestId("theme-chip-dark")).toBeInTheDocument();
-    expect(screen.getByTestId("theme-chip-light")).toBeInTheDocument();
-    expect(screen.getByTestId("theme-chip-system")).toBeInTheDocument();
-  });
-
-  it("clicking a chip changes aria-checked", async () => {
-    renderHeaderBar();
-    const lightChip = screen.getByTestId("theme-chip-light");
-    await userEvent.click(lightChip);
-    expect(lightChip).toHaveAttribute("aria-checked", "true");
-  });
-});
-
-// --- slots -------------------------------------------------------------------
-
-describe("HeaderBar: navSlot and actionsSlot", () => {
-  it("renders navSlot content when provided", async () => {
-    renderHeaderBar({ navSlot: <span data-testid="nav-slot-content">Nav</span> });
-    expect(screen.getByTestId("nav-slot-content")).toBeInTheDocument();
-  });
-
-  it("does not render navSlot content when not provided", async () => {
-    renderHeaderBar();
-    expect(screen.queryByTestId("nav-slot-content")).not.toBeInTheDocument();
-  });
-
-  it("renders actionsSlot content when provided", async () => {
-    renderHeaderBar({ actionsSlot: <span data-testid="actions-slot-content">Actions</span> });
-    expect(screen.getByTestId("actions-slot-content")).toBeInTheDocument();
-  });
-
-  it("does not render actionsSlot content when not provided", async () => {
-    renderHeaderBar();
-    expect(screen.queryByTestId("actions-slot-content")).not.toBeInTheDocument();
   });
 });
 
@@ -228,74 +197,9 @@ describe("HeaderBar: project breadcrumb", () => {
     expect(screen.queryByTestId("header-project-name")).not.toBeInTheDocument();
   });
 
-  it("does NOT render breadcrumb separator when projectName is null", async () => {
+  it("does NOT render header-project-name when projectName is null", async () => {
     renderHeaderBar({ projectName: null });
-    // The "/" separator span has text content "/"; ensure it's absent when no project.
     expect(screen.queryByTestId("header-project-name")).not.toBeInTheDocument();
-  });
-});
-
-// --- metrics strip (P1.a) ----------------------------------------------------
-
-describe("HeaderBar: metrics strip", () => {
-  const metrics: PageMetrics = {
-    total: 12,
-    exact: 8,
-    fuzzy: 3,
-    mismatch: 1,
-    validated: 4,
-  };
-
-  it("renders header-metrics-strip when pageMetrics has total > 0", async () => {
-    renderHeaderBar({ pageMetrics: metrics });
-    expect(screen.getByTestId("header-metrics-strip")).toBeInTheDocument();
-  });
-
-  it("shows word count in the strip", async () => {
-    renderHeaderBar({ pageMetrics: metrics });
-    expect(screen.getByTestId("header-metrics-strip")).toHaveTextContent("12 words");
-  });
-
-  it("shows exact count in the strip", async () => {
-    renderHeaderBar({ pageMetrics: metrics });
-    expect(screen.getByTestId("header-metrics-strip")).toHaveTextContent("8 exact");
-  });
-
-  it("shows fuzzy count in the strip", async () => {
-    renderHeaderBar({ pageMetrics: metrics });
-    expect(screen.getByTestId("header-metrics-strip")).toHaveTextContent("3 fuzzy");
-  });
-
-  it("shows mismatch count with ✗ in the strip", async () => {
-    renderHeaderBar({ pageMetrics: metrics });
-    expect(screen.getByTestId("header-metrics-strip")).toHaveTextContent("1 ✗");
-  });
-
-  it("shows validated fraction in the strip", async () => {
-    renderHeaderBar({ pageMetrics: metrics });
-    expect(screen.getByTestId("header-metrics-strip")).toHaveTextContent("4/12 validated");
-  });
-
-  it("shows glyphs-reviewed fraction when glyphs_reviewed is provided (spec §8)", async () => {
-    const withGlyphs: PageMetrics = { ...metrics, glyphs_reviewed: 7 };
-    renderHeaderBar({ pageMetrics: withGlyphs });
-    expect(screen.getByTestId("header-metrics-strip")).toHaveTextContent("7/12 glyphs");
-  });
-
-  it("does NOT show glyphs metric when glyphs_reviewed is absent", async () => {
-    renderHeaderBar({ pageMetrics: metrics });
-    expect(screen.getByTestId("header-metrics-strip")).not.toHaveTextContent("glyphs");
-  });
-
-  it("does NOT render header-metrics-strip when total is 0", async () => {
-    const zeroMetrics: PageMetrics = { total: 0, exact: 0, fuzzy: 0, mismatch: 0, validated: 0 };
-    renderHeaderBar({ pageMetrics: zeroMetrics });
-    expect(screen.queryByTestId("header-metrics-strip")).not.toBeInTheDocument();
-  });
-
-  it("does NOT render header-metrics-strip when pageMetrics is undefined", async () => {
-    renderHeaderBar();
-    expect(screen.queryByTestId("header-metrics-strip")).not.toBeInTheDocument();
   });
 });
 
@@ -326,10 +230,10 @@ describe("HeaderBar: S6.2 project-root-label", () => {
   });
 });
 
-// --- driver-contract stubs (display:none) ------------------------------------
+// --- driver-contract stubs (display:none) — retained per D-046 ----------------
 
-describe("HeaderBar: driver-contract stubs", () => {
-  it("stub nav buttons are in the DOM (display:none)", async () => {
+describe("HeaderBar: driver-contract stubs (D-046)", () => {
+  it("stub nav buttons are in the DOM (display:none, data-testid-stub)", async () => {
     renderHeaderBar();
     const prev = screen.getByTestId("nav-prev-button");
     expect(prev).toBeInTheDocument();
