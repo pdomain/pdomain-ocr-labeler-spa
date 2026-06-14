@@ -6,7 +6,7 @@ End-to-end guard of the M0 persistence fix *through the rendered UI*:
   2. Edit its ground-truth text in ``ocr-gt-input`` (commit on Enter).
   3. Validate it via ``word-footer-validate``.
   4. Apply the 'italics' style via ``style-chip-italics``.
-  5. Click the real ``page-actions-compact-save-page`` button.
+  5. Click the real ``save-page-button`` button.
   6. Reload the page route (full browser reload).
   7. Re-select the same word and assert the GT edit, validated state, and
      style label all survived the round-trip.
@@ -94,7 +94,7 @@ def test_save_then_reload_persists_gt_validation_and_style(
     )
 
     # 4. Click the real Save Page button (enabled on a project route).
-    save_btn = page.locator('[data-testid="page-actions-compact-save-page"]').first
+    save_btn = page.locator('[data-testid="save-page-button"]').first
     save_btn.wait_for(state="visible", timeout=10_000)
     assert save_btn.is_enabled(), "Save page button must be enabled on a project route"
     save_btn.click()

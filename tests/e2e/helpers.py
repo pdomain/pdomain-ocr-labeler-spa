@@ -197,3 +197,29 @@ def require_page_line_matches(base_url: str, project_id: str, page_index: int) -
         "event-store seeding invariant violated (check _ingest_ocr_result path)"
     )
     return count
+
+
+# Page-action overflow menu (PageActionsCompact, D-050/D-051): the secondary
+# actions (reload-ocr-edited, save-project, load-page, rotate-*, auto-rotate-all)
+# now live ONLY inside the Radix ``DropdownMenuContent``, which mounts its items
+# into the DOM lazily on open. Tests that select any of those testids MUST open
+# the overflow first via this helper, otherwise the items are simply absent.
+_OVERFLOW_TRIGGER = '[data-testid="page-actions-compact-overflow"]'
+# A menu item that is always present (never disabled-out of existence) once the
+# menu mounts — used as the readiness signal that the content has rendered.
+_OVERFLOW_READY_ITEM = '[data-testid="save-project-button"]'
+
+
+def open_page_actions_overflow(page: Page, timeout: int = 5_000) -> None:
+    """Open the PageActionsCompact overflow menu and wait for it to mount.
+
+    The Radix ``DropdownMenuContent`` renders its items only after the trigger
+    is activated, so direct selection of overflow-only testids
+    (``reload-ocr-edited-button``, ``save-project-button``, ``load-page-button``,
+    ``rotate-cw/ccw/180-button``, ``auto-rotate-all-button``) requires the menu
+    to be open first. This is idempotent-safe: if the menu is already open the
+    ready-item wait returns immediately.
+    """
+    if page.locator(_OVERFLOW_READY_ITEM).count() == 0:
+        page.locator(f"{_OVERFLOW_TRIGGER}:visible").click()
+    page.wait_for_selector(_OVERFLOW_READY_ITEM, state="visible", timeout=timeout)

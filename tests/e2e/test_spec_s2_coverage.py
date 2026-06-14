@@ -44,7 +44,7 @@ from tests.e2e.exercise_real_project import (
     _goto_project_page,
     _wait_for_line_cards,
 )
-from tests.e2e.helpers import require_page_line_matches
+from tests.e2e.helpers import open_page_actions_overflow, require_page_line_matches
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -235,8 +235,10 @@ def test_page_actions_all_testids_present(exercise_server: ExerciseServer, page:
     export-button, page-source-badge, page-name-label.
 
     PageActions is rendered visibly in the canvas zone (no longer hidden per
-    IS-2 change).  We assert each testid is in the DOM (attached check tolerates
-    a disabled state without requiring visibility).
+    IS-2 change).  D-050/D-051: the secondary actions (reload-ocr-edited,
+    save-project, load-page) moved INTO the Radix overflow ``DropdownMenuContent``,
+    which mounts its items lazily on open — so we open the overflow before
+    asserting those are present. The remaining testids are visible directly.
     """
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
@@ -244,19 +246,27 @@ def test_page_actions_all_testids_present(exercise_server: ExerciseServer, page:
     # page-actions-bar must be attached (may be inside a hidden stub container).
     page.wait_for_selector('[data-testid="page-actions-bar"]', state="attached", timeout=10_000)
 
-    s2_5_testids = [
+    # Directly-visible §2.5 testids (always in the DOM, not behind the overflow).
+    visible_testids = [
         "reload-ocr-button",
-        "reload-ocr-edited-button",
         "save-page-button",
-        "save-project-button",
-        "load-page-button",
         "rematch-gt-button",
         "export-button",
         "page-source-badge",
         "page-name-label",
     ]
-    missing = [t for t in s2_5_testids if page.locator(f'[data-testid="{t}"]').count() == 0]
-    assert not missing, f"§2.5 page-action testids missing from DOM: {missing}"
+    missing = [t for t in visible_testids if page.locator(f'[data-testid="{t}"]').count() == 0]
+    assert not missing, f"§2.5 visible page-action testids missing from DOM: {missing}"
+
+    # Overflow-only §2.5 testids — mount only once the overflow menu is open.
+    open_page_actions_overflow(page)
+    overflow_testids = [
+        "reload-ocr-edited-button",
+        "save-project-button",
+        "load-page-button",
+    ]
+    missing_overflow = [t for t in overflow_testids if page.locator(f'[data-testid="{t}"]').count() == 0]
+    assert not missing_overflow, f"§2.5 overflow page-action testids missing from DOM: {missing_overflow}"
 
 
 @pytest.mark.e2e
@@ -286,10 +296,15 @@ def test_page_actions_rematch_gt_button_clickable(exercise_server: ExerciseServe
 
 @pytest.mark.e2e
 def test_save_project_button_present_and_interactive(exercise_server: ExerciseServer, page: Page) -> None:
-    """SECT-2.5c: save-project-button is in DOM; clicking it triggers a project-level save."""
+    """SECT-2.5c: save-project-button is in DOM; clicking it triggers a project-level save.
+
+    D-050/D-051: save-project-button lives inside the overflow menu, which must
+    be opened before the item mounts.
+    """
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
+    open_page_actions_overflow(page)
     btn = page.locator('[data-testid="save-project-button"]').first
     assert btn.count() > 0, "save-project-button must be in DOM"
 
@@ -644,7 +659,7 @@ def test_export_dialog_style_checkbox_and_results(exercise_server: ExerciseServe
     export_dialog = page.locator('[data-testid="export-dialog"]')
     if export_dialog.count() == 0:
         # Try force-click on the compact export button.
-        export_btn = page.locator('[data-testid="page-actions-compact-export"]').first
+        export_btn = page.locator('[data-testid="export-button"]').first
         if export_btn.count() > 0:
             export_btn.click(force=True)
             time.sleep(0.5)
@@ -723,7 +738,7 @@ def test_busy_overlay_appears_during_mutation(exercise_server: ExerciseServer, p
 
     # Trigger a save via the compact save button; it may be disabled on the
     # exercise-fixture (always labeled), so fall back to the API-level save.
-    save_btn = page.locator('[data-testid="page-actions-compact-save-page"]').first
+    save_btn = page.locator('[data-testid="save-page-button"]').first
     overlay_appeared = False
 
     if save_btn.count() > 0 and save_btn.is_visible() and not save_btn.is_disabled():

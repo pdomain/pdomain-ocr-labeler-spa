@@ -402,7 +402,7 @@ def test_page1_ocr_config_modal(exercise_server: ExerciseServer, page: Page) -> 
 def test_page1_save_page(exercise_server: ExerciseServer, page: Page) -> None:
     """Page 1: verify Save Page UI elements are present, then save via API.
 
-    ``page-actions-compact-save-page`` is disabled because ``PageActionsCompact``
+    ``save-page-button`` is disabled because ``PageActionsCompact``
     calls ``useParams()`` outside a ``<Route>`` element (React Router v6 returns
     ``{}`` there, so ``projectId`` is always ``undefined`` → button stays
     disabled).  This is a pre-existing UI issue tracked separately.  We verify
@@ -412,9 +412,9 @@ def test_page1_save_page(exercise_server: ExerciseServer, page: Page) -> None:
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
-    # Driver-contract testids must be in DOM (hidden PageActions stub).
+    # Driver-contract testid must be in DOM (visible PageActionsCompact button).
     page.wait_for_selector('[data-testid="save-page-button"]', state="attached", timeout=10_000)
-    assert page.locator('[data-testid="page-actions-compact-save-page"]').count() > 0
+    assert page.locator('[data-testid="save-page-button"]').count() > 0
 
     # The badge is visible and shows current source.
     badge = page.locator('[data-testid="page-source-badge"]').first
@@ -440,17 +440,17 @@ def test_page1_export_dialog(exercise_server: ExerciseServer, page: Page) -> Non
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
-    # export-button and page-actions-compact-export are in DOM (may be disabled
-    # due to the PageActionsCompact useParams-outside-Route issue).
+    # export-button is in DOM (may be disabled due to the PageActionsCompact
+    # useParams-outside-Route issue).
     page.wait_for_selector('[data-testid="export-button"]', state="attached", timeout=10_000)
-    assert page.locator('[data-testid="page-actions-compact-export"]').count() > 0
+    assert page.locator('[data-testid="export-button"]').count() > 0
 
     # Open the export dialog via JS (since the button may be disabled).
     # dialogStore.open("export") is the same action as clicking the button.
     page.evaluate('() => { window.__DIALOG_STORE_OPEN?.("export"); }')
 
     # Fallback: try clicking the compact export button (force bypasses disabled).
-    export_btn = page.locator('[data-testid="page-actions-compact-export"]').first
+    export_btn = page.locator('[data-testid="export-button"]').first
     if not export_btn.is_disabled():
         export_btn.click()
     else:

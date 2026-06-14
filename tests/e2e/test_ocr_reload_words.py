@@ -138,7 +138,7 @@ def test_ocr_reload_refreshes_page_data(running_server: str, page: Page) -> None
     initial_rows = _count_worklist_rows(page)
 
     # Click Reload OCR.
-    reload_btn = page.locator('[data-testid="page-actions-compact-reload-ocr"]')
+    reload_btn = page.locator('[data-testid="reload-ocr-button"]')
     reload_btn.wait_for(state="visible", timeout=5_000)
     reload_btn.click()
 
@@ -191,7 +191,7 @@ def test_ocr_reload_api_returns_line_matches(running_server: str, page: Page) ->
     page.goto(PAGE_URL, timeout=20_000)
     page.wait_for_selector('[data-testid="project-page"]', timeout=15_000)
 
-    reload_btn = page.locator('[data-testid="page-actions-compact-reload-ocr"]')
+    reload_btn = page.locator('[data-testid="reload-ocr-button"]')
     reload_btn.wait_for(state="visible", timeout=5_000)
     reload_btn.click()
 

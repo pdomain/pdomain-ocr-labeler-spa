@@ -42,7 +42,7 @@ from pdomain_ocr_labeler_spa.bootstrap import build_app
 from pdomain_ocr_labeler_spa.core.models import Project
 from pdomain_ocr_labeler_spa.core.persistence.page_store import LabelerPageStore
 from pdomain_ocr_labeler_spa.settings import Settings
-from tests.e2e.helpers import SEED_TIMEOUT, wait_for_page_loaded
+from tests.e2e.helpers import SEED_TIMEOUT, open_page_actions_overflow, wait_for_page_loaded
 
 _PROJECT_ID = "undo-fixture"
 _PAGE_W, _PAGE_H = 400, 300
@@ -408,8 +408,8 @@ def test_reload_button_renamed_with_new_confirm_copy(undo_server: UndoServer, pa
     """U-7: load-page-button says "Reload"; confirm copy honest; click works."""
     _goto_page(page, undo_server, page_no=2)
 
-    # The visible control lives in the compact overflow menu.
-    page.locator('[data-testid="page-actions-compact-overflow"]').click()
+    # The visible control lives in the compact overflow menu (mounts on open).
+    open_page_actions_overflow(page)
     btn = page.locator('[data-testid="load-page-button"]').first
     btn.wait_for(state="visible", timeout=5_000)
     assert "Reload" in (btn.text_content() or "")
@@ -450,7 +450,7 @@ def test_reload_ocr_resets_history(undo_server: UndoServer, page: Page) -> None:
     expect(_undo_btn(page)).to_be_enabled(timeout=10_000)
 
     # Reload OCR → confirm dialog mentions the history reset (U-6 copy).
-    page.locator('[data-testid="page-actions-compact-reload-ocr"]').click()
+    page.locator('[data-testid="reload-ocr-button"]').click()
     dialog = page.locator('[data-testid="confirm-dialog"]')
     dialog.wait_for(state="visible", timeout=5_000)
     assert "history" in (dialog.text_content() or "").lower()

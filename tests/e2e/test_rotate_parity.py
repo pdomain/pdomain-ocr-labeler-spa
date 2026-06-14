@@ -54,6 +54,7 @@ from pdomain_ocr_labeler_spa.adapters.ocr.local_doctr import (
 from pdomain_ocr_labeler_spa.bootstrap import build_app
 from pdomain_ocr_labeler_spa.core.persistence.page_store import LabelerPageStore
 from pdomain_ocr_labeler_spa.settings import Settings
+from tests.e2e.helpers import open_page_actions_overflow
 
 pytestmark = pytest.mark.e2e
 
@@ -337,8 +338,9 @@ def _wait_for_job_terminal(base_url: str, job_id: str, timeout: float) -> dict:
 
 
 def _open_overflow(page: Page) -> None:
-    page.locator('[data-testid="page-actions-compact-overflow"]:visible').click()
-    page.wait_for_selector('[data-testid="page-actions-compact-overflow-menu"]', timeout=5_000)
+    # Delegates to the shared helper: opens the PageActionsCompact overflow and
+    # waits for the Radix menu items to mount (the content renders lazily on open).
+    open_page_actions_overflow(page)
 
 
 # ─── Tests ───────────────────────────────────────────────────────────────────

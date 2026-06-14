@@ -51,7 +51,7 @@ _DEPRECATED_HEADER_TESTIDS = [
 # These are always-rendered elements per the updated driver contract.
 _NEW_HEADER_TESTIDS = [
     "rail-hotkeys-button",  # Rail.tsx footer — hotkey help trigger
-    "page-actions-compact-export",  # PageActionsCompact.tsx — export trigger
+    "export-button",  # PageActionsCompact.tsx — export trigger
     "ocr-config-trigger-button",  # PageActionsCompact.tsx — OCR config trigger (#405 restore)
 ]
 
@@ -209,7 +209,7 @@ def test_header_testids_present(live_server: LiveServer, page: Page) -> None:
     This test asserts:
       (a) Deprecated testids are NOT present anywhere in the DOM (the stubs
           were deleted — not hidden — per commit b101ec8).
-      (b) New §2.1 testids (rail-hotkeys-button, page-actions-compact-export)
+      (b) New §2.1 testids (rail-hotkeys-button, export-button)
           are present on a project page route where PageActionsCompact renders.
 
     Project-load controls (project-select, load-project-button,
@@ -237,7 +237,7 @@ def test_new_contract_testids_present_on_project_page(live_server: LiveServer, p
     Covers: B-DRIVER-001
 
     rail-hotkeys-button is rendered by Rail.tsx inside ProjectPage.
-    page-actions-compact-export is rendered by PageActionsCompact on project routes.
+    export-button is rendered by PageActionsCompact on project routes.
     Both are real interactive elements (not stubs) per the updated contract.
     """
     _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
