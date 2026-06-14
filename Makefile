@@ -241,6 +241,16 @@ frontend-install: ## Install frontend dependencies
 	@echo "Installing frontend deps..."
 	@$(call _npm,install --frozen-lockfile)
 
+# SPA bundle freshness — shared by `run` and `exercise-real`.
+# SPA_BUNDLE is the built index.html; SPA_SRCS lists the frontend source
+# inputs whose mtime, if newer than the bundle, means a rebuild is needed.
+# Only paths that actually exist in frontend/ are listed (a stray path would
+# make `find` print a warning and the guard would misfire).
+SPA_BUNDLE := src/pdomain_ocr_labeler_spa/static/index.html
+SPA_SRCS := frontend/src frontend/index.html frontend/package.json \
+        frontend/vite.config.ts frontend/tailwind.config.js \
+        frontend/postcss.config.js frontend/tsconfig.json
+
 frontend-build: ## Build the SPA into src/pdomain_ocr_labeler_spa/static/ (so the wheel includes it)
 	@echo "Building frontend..."
 	@$(call _npm,install)
@@ -370,9 +380,11 @@ EXERCISE_HEADED ?= $(if $(filter 1,$(HEADED)),--headed,)
 
 exercise-real: ## Run Playwright exercise against the 8-page exercise-fixture project
 	@echo "Running exercise harness (8 pages, real OCR data)..."
-	@if [ ! -f src/pdomain_ocr_labeler_spa/static/index.html ]; then \
-		echo "SPA bundle missing — running frontend-build first..."; \
+	@if [ ! -f $(SPA_BUNDLE) ] || [ -n "$$(find $(SPA_SRCS) -newer $(SPA_BUNDLE) 2>/dev/null)" ]; then \
+		echo "SPA bundle stale or missing — running frontend-build first..."; \
 		$(MAKE) --no-print-directory frontend-build; \
+	else \
+		echo "SPA bundle up to date."; \
 	fi
 	uv run --group e2e pytest tests/e2e/exercise_real_project.py -v \
 		$(if $(EXERCISE_HEADED),--headed,) \
@@ -392,16 +404,21 @@ dev: ## Run uvicorn with --reload against a Vite dev server on :5173
 # (printed by __main__.main via core.device_info.describe_device)
 # announces whether torch picked up the local GPU.
 #
-# We rebuild the SPA only if the bundle is missing — operators running
-# `make run` repeatedly shouldn't pay the npm-install + vite-build cost
-# every invocation. To force a rebuild, run `make frontend-build` first.
+# We rebuild the SPA when the bundle is missing OR when any frontend source
+# is newer than the built bundle (mtime-based, via `find -newer`). Operators
+# running `make run` repeatedly after no source change won't pay the
+# npm-install + vite-build cost; but an edit to frontend/src (etc.) is picked
+# up automatically instead of silently serving a stale bundle.
+# Caveat: a fresh `git checkout`/clone doesn't preserve mtimes, so the first
+# `make run` after a clone may rebuild once even if nothing changed.
+# `make frontend-build` remains the explicit force-rebuild path.
 
-run: ## Build SPA if missing, then serve via pdomain-ocr-labeler-ui (production-style; opens browser)
-	@if [ ! -f src/pdomain_ocr_labeler_spa/static/index.html ]; then \
-		echo "SPA bundle missing; running frontend-build first..."; \
+run: ## Build SPA if missing or stale, then serve via pdomain-ocr-labeler-ui (production-style; opens browser)
+	@if [ ! -f $(SPA_BUNDLE) ] || [ -n "$$(find $(SPA_SRCS) -newer $(SPA_BUNDLE) 2>/dev/null)" ]; then \
+		echo "SPA bundle stale or missing; running frontend-build first..."; \
 		$(MAKE) --no-print-directory frontend-build; \
 	else \
-		echo "SPA bundle present at src/pdomain_ocr_labeler_spa/static/index.html (run 'make frontend-build' to refresh)."; \
+		echo "SPA bundle up to date."; \
 	fi
 	uv run pdomain-ocr-labeler-ui
 

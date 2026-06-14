@@ -19,7 +19,7 @@ milestone-by-milestone implementation (M0…M9). Architecture: `docs/architectur
 | `make frontend-build AI=1` | builds SPA into `src/pdomain_ocr_labeler_spa/static/` |
 | `make openapi-export AI=1` | exports `/openapi.json` → regenerates `frontend/src/api/types.ts` |
 | `make build AI=1` | builds the wheel (requires populated `static/`) |
-| `make run` | builds SPA if missing, then `pdomain-ocr-labeler-ui` (production-style) |
+| `make run` | builds SPA if missing or stale, then `pdomain-ocr-labeler-ui` (production-style) |
 | `make ci AI=1` | setup + test + frontend-test + build |
 | `make docker-build` | builds the production Docker image |
 | `make local-setup` | clone any missing sibling pd-* repos |
