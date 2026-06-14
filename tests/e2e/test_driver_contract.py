@@ -324,8 +324,8 @@ def test_text_tabs_testids_present_on_project_page(live_server: LiveServer, page
     page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
     wait_for_project_ready(page)
 
-    # Text-tabs testids are rendered in the project page shell even before
-    # full M3 data hooks are wired — the TextTabs component is mounted.
+    # D-051: Text-tabs testids are rendered visibly in RightPanel textTabsSlot
+    # (level="none"). TextTabs is mounted and visible when the right panel is open.
     missing = _all_stub_or_present(page, _TEXT_TABS_TESTIDS)
     # Some may not be rendered yet (M2 stub page). Only fail if the tab
     # navigation buttons are gone (those are always-rendered).

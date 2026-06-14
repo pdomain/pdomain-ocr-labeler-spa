@@ -1860,6 +1860,112 @@ above.
 
 ---
 
+## D-049 — Remove HeaderBar nav-* stubs; retire `:not([data-testid-stub])` for nav testids
+
+**Date:** 2026-06-14
+**Status:** Accepted
+**Spec:** `docs/specs/2026-06-14-labeler-spa-header-to-workspace-toolbar-design.md` (M2 primitive adoption)
+
+### Context
+
+D-047 moved `ProjectNavigationControls` into the `WorkspaceToolbar` `leftSlot`.
+The `display:none` nav stubs (`nav-prev-button`, `nav-next-button`,
+`nav-goto-button`, `nav-page-input`, `nav-page-total-label`) were kept in
+`HeaderBar` so these testids were reachable on every route including root.
+Drivers had to use `[data-testid="nav-prev-button"]:not([data-testid-stub])`
+to avoid matching the stub.
+
+The M2 primitive-adoption arc removes all three legacy display:none stub
+blocks. With the stubs gone, nav testids exist ONLY in the real
+`ProjectNavigationControls` in `WorkspaceToolbar`.
+
+### Decision
+
+Remove the 5 nav-* stubs from the `HeaderBar` hidden div. The
+`ProjectNavigationControls` in `WorkspaceToolbar` `leftSlot` is the single
+source of truth. The `:not([data-testid-stub])` selector convention is
+**retired** for these testids — select them directly.
+
+### Consequences
+
+- Nav testids are only present on project routes (where `WorkspaceToolbar`
+  renders). Drivers must navigate to a project page before locating them.
+- The `data-testid-stub="true"` pattern remains for source-folder and
+  OCR-config modal field stubs in `HeaderBar` (those stubs are retained).
+
+---
+
+## D-050 — Remove hidden PageActions stub; rename PageActionsCompact testids to §2.5 canonical names
+
+**Date:** 2026-06-14
+**Status:** Accepted
+**Spec:** `docs/specs/2026-06-14-labeler-spa-header-to-workspace-toolbar-design.md` (M2 primitive adoption)
+
+### Context
+
+A hidden `PageActions` component (`data-testid-stub="page-actions-hidden"`)
+was mounted in `ProjectPage` to preserve driver-contract §2.5 testids
+(`reload-ocr-button`, `save-page-button`, etc.). The visible
+`PageActionsCompact` used its own prefixed testids
+(`page-actions-compact-reload-ocr`, etc.), which differed from the contract.
+Drivers had to rely on the hidden stub for the canonical testids.
+
+### Decision
+
+1. Remove `hiddenPageActions` from `ProjectPage` entirely.
+2. Rename `PageActionsCompact` button testids to the §2.5 canonical names:
+   - `page-actions-compact-reload-ocr` → `reload-ocr-button`
+   - `page-actions-compact-rematch-gt` → `rematch-gt-button`
+   - `page-actions-compact-save-page` → `save-page-button`
+   - `page-actions-compact-export` → `export-button`
+3. Add `data-testid="page-actions-bar"` wrapper div around `PageActionsCompact`.
+4. Add `page-name-label` and `page-source-badge` spans to `PageActionsCompact`.
+5. Replace the hand-rolled overflow menu state with `pdomain-ui` `DropdownMenu`.
+
+### Consequences
+
+- `PageActionsCompact` is the sole source of truth for §2.5 testids.
+- The `page-actions-compact-*` interim names are retired for the four renamed
+  buttons. The `page-actions-compact` container testid and
+  `page-actions-compact-overflow` trigger testid are **preserved**.
+- `page-actions-bar` wraps the compact bar; driver tests that wait for
+  `page-actions-bar` now find a visible element (no `state="attached"` needed,
+  though it is harmless).
+
+---
+
+## D-051 — Wire TextTabs + WordMatchView visibly into RightPanel textTabsSlot
+
+**Date:** 2026-06-14
+**Status:** Accepted
+**Spec:** `docs/specs/2026-06-14-labeler-spa-header-to-workspace-toolbar-design.md` (M2 primitive adoption)
+
+### Context
+
+`TextTabs` + `WordMatchView` + `PlaintextEditor` were mounted inside a
+`display:none` `canvas-hidden-stubs` div in `ProjectPage` to keep driver-
+contract §2.7/§2.8 testids in the DOM while the right panel was in use.
+The virtualizer inside `WordMatchView` renders zero items when hidden.
+
+### Decision
+
+Remove `canvas-hidden-stubs`. Add a `textTabsSlot?: React.ReactNode` prop to
+`RightPanel`. When `selection-store.level === "none"` (no selection active)
+and `textTabsSlot` is provided, render it instead of the placeholder text.
+`ProjectPage` passes `textTabsContent` (the `TextTabs` + `WordMatchView` tree)
+as `textTabsSlot`.
+
+### Consequences
+
+- `TextTabs` and `WordMatchView` are now visible in the right panel whenever
+  no selection is active (the default state on page load).
+- Driver-contract §2.7/§2.8 testids are reachable without
+  `:not([data-testid-stub])` guards.
+- The virtualizer inside `WordMatchView` now has a real viewport and renders
+  line cards normally.
+
+---
+
 ## Pending decisions
 
 See [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) for any sub-questions

@@ -169,7 +169,7 @@ describe("PageActionsCompact: Reload-OCR confirm warns history resets (U-6/H-D)"
     server.use(http.post("/api/projects/proj-1/pages/0/reload-ocr", reloadSpy));
     const user = userEvent.setup();
     renderCompact();
-    await user.click(screen.getByTestId("page-actions-compact-reload-ocr"));
+    await user.click(screen.getByTestId("reload-ocr-button"));
 
     // The mutation must NOT fire until the user confirms.
     expect(reloadSpy).not.toHaveBeenCalled();

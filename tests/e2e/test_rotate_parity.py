@@ -22,9 +22,9 @@ Rotate is destructive (pixels rotated in place on disk) — every test gets a
 function-scoped server (same pattern as ``test_selection_operations_parity
 .mut_server``).
 
-Selector note: the legacy testids also exist inside the hidden PageActions
-stub wrapper (``data-testid-stub="page-actions-hidden"``), so locators here
-always scope with ``:visible``.
+Selector note: D-050 removed the hidden PageActions stub wrapper. Rotate
+testids now exist ONLY in the visible overflow menu. Locators use ``:visible``
+(still appropriate, since menu items only appear after the trigger is clicked).
 """
 
 from __future__ import annotations
@@ -368,8 +368,8 @@ def test_rotate_cw_round_trip_realigns_words_with_rotated_pixels(rot_server: Rot
 
     _goto_project_page(page, rot_server.project_url)
 
-    # 1. Visible + enabled rotate buttons (scoped :visible — the same testids
-    #    also exist inside the hidden PageActions stub).
+    # 1. Visible + enabled rotate buttons (scoped :visible — exist only in the
+    #    visible overflow menu after D-050 removed the hidden PageActions stub).
     _open_overflow(page)
     for testid in ("rotate-cw-button", "rotate-ccw-button", "rotate-180-button"):
         btn = page.locator(f'[data-testid="{testid}"]:visible')

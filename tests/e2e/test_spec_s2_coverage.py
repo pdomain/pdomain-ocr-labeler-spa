@@ -309,14 +309,13 @@ def test_save_project_button_present_and_interactive(exercise_server: ExerciseSe
 def test_line_card_testids_attached(exercise_server: ExerciseServer, page: Page) -> None:
     """SECT-2.8: line-card-{n} testids are in the DOM (attached) for at least one line.
 
-    WordMatchView is in a display:none container (driver-contract IS-2 stub).
-    The virtualizer renders zero items when hidden, so we assert at least one
-    line-card is attached — even if zero are visible — to prove the testid
-    is being rendered at all.
+    D-051: WordMatchView is now mounted visibly in RightPanel textTabsSlot
+    (level="none"), replacing the display:none canvas-hidden-stubs container.
+    The virtualizer renders items when the right panel is open (default).
 
     The worklist (always visible) acts as the primary proxy for line data.
     We use the worklist-row count to verify data is available, then assert
-    that the hidden WordMatchView's line-card testids exist in the DOM.
+    that the visible WordMatchView's line-card testids exist in the DOM.
 
     The exercise-fixture is deterministically seeded via the event store
     (invariant since d0c1494), so 0 line_matches is a seeding regression,
@@ -328,9 +327,8 @@ def test_line_card_testids_attached(exercise_server: ExerciseServer, page: Page)
     count = _wait_for_line_cards(page)
     assert count > 0, "No worklist rows — exercise-fixture seeding invariant violated"
 
-    # The WordMatchView renders line-card-{n} elements when its container is
-    # mounted. Even in display:none, the first few cards may be rendered by the
-    # virtualizer. We wait briefly for them.
+    # The WordMatchView renders line-card-{n} elements when mounted.
+    # Wait briefly for them.
     time.sleep(0.5)
 
     # line-card-0 should be rendered (first line always visible to virtualizer).
@@ -357,7 +355,8 @@ def test_per_word_testids_present_when_cards_visible(exercise_server: ExerciseSe
     _goto_project_page(page, exercise_server.base_url, 3)  # page 3 has OCR mismatches
     _wait_for_line_cards(page)
 
-    # plaintext-editor-gt is always pre-rendered in the hidden text-pane stub.
+    # D-051: plaintext-editor-gt is rendered visibly in the text-pane slot
+    # inside RightPanel (no longer in a display:none stub container).
     page.wait_for_selector(
         '[data-testid="plaintext-editor-gt"]',
         state="attached",

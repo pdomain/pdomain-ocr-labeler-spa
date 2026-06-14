@@ -112,18 +112,15 @@ export default function HeaderBar({ projectName, projectRoot }: HeaderBarProps =
       {/*
        * Spec 22 §10 — driver-contract preservation (D-046).
        *
-       * Nav-control stubs live here so the testids are reachable on every
-       * route (including the root route). The block remains `display:none`
-       * and carries `data-testid-stub="true"` so the driver pre-pass can
-       * distinguish them from the real controls. The real
-       * ProjectNavigationControls is rendered inside the WorkspaceToolbar
-       * (project route) and does NOT carry `data-testid-stub` — drivers
-       * select it via `[data-testid="nav-prev-button"]:not([data-testid-stub])`.
-       *
        * D-046 (2026-05-21): project-select / load-project-button /
        * source-folder-button / ocr-config-trigger-button stubs REMOVED — those
        * controls live at their real locations. The source-folder + OCR-config
        * field stubs below are KEPT (driver-contract §2.2/§2.3).
+       *
+       * D-049 (2026-06-14): nav-* stubs REMOVED. The real
+       * ProjectNavigationControls in WorkspaceToolbar leftSlot is the single
+       * source of truth; the `:not([data-testid-stub])` selector convention
+       * is retired for nav testids.
        */}
       <div style={{ display: "none" }}>
         {/* Source-folder dialog stubs — always present in DOM, even when dialog is closed */}
@@ -210,34 +207,6 @@ export default function HeaderBar({ projectName, projectRoot }: HeaderBarProps =
           data-testid-stub="true"
           aria-label="Apply OCR config (stub)"
         />
-
-        {/* Nav stubs — always present in DOM (driver-contract §2.4); the real
-         * ProjectNavigationControls renders in the WorkspaceToolbar leftSlot. */}
-        <button
-          data-testid="nav-prev-button"
-          data-testid-stub="true"
-          aria-label="Previous page (stub)"
-        >
-          Prev
-        </button>
-        <button data-testid="nav-next-button" data-testid-stub="true" aria-label="Next page (stub)">
-          Next
-        </button>
-        <button
-          data-testid="nav-goto-button"
-          data-testid-stub="true"
-          aria-label="Go to page (stub)"
-        >
-          Go
-        </button>
-        <input
-          data-testid="nav-page-input"
-          data-testid-stub="true"
-          aria-label="Page number (stub)"
-        />
-        <span data-testid="nav-page-total-label" data-testid-stub="true">
-          / 0
-        </span>
       </div>
     </header>
   );

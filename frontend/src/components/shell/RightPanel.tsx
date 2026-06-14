@@ -61,11 +61,24 @@ export interface RightPanelProps {
   pageIndex?: number | undefined;
   /** Rendered when `selection-store.level === "word"`. */
   wordSlot?: React.ReactNode;
+  /**
+   * Rendered when `selection-store.level === "none"` (no selection).
+   * D-051: TextTabs + WordMatchView are wired here so they render visibly
+   * instead of in a display:none canvas-hidden-stubs container.
+   */
+  textTabsSlot?: React.ReactNode;
   /** Invoked when the collapse button is clicked. */
   onCollapse?: (() => void) | undefined;
 }
 
-export function RightPanel({ page, projectId, pageIndex, wordSlot, onCollapse }: RightPanelProps) {
+export function RightPanel({
+  page,
+  projectId,
+  pageIndex,
+  wordSlot,
+  textTabsSlot,
+  onCollapse,
+}: RightPanelProps) {
   const state = useSyncExternalStore(
     subscribeSelection,
     getSelectionSnapshot,
@@ -167,6 +180,9 @@ export function RightPanel({ page, projectId, pageIndex, wordSlot, onCollapse }:
               No paragraph selected.
             </div>
           )
+        ) : textTabsSlot ? (
+          /* D-051: level === "none" — render TextTabs slot when provided */
+          <div className="flex flex-col h-full min-h-0">{textTabsSlot}</div>
         ) : (
           /* STB-5: level === "none" — only show the generic placeholder here */
           <div className="p-3">

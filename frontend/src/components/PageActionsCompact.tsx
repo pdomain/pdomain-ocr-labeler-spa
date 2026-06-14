@@ -6,10 +6,20 @@
 //
 // Receives projectId + pageIndex as props (resolved by AppShell via
 // useRouteProjectContext / useMatch, which works outside <Routes>).
-// The full PageActions bar (with all driver-contract testids) remains
-// mounted hidden inside ProjectPage for driver compatibility.
+// D-050 (2026-06-14): page-actions-bar wrapper added + page-name-label +
+// page-source-badge; testids renamed to driver-contract §2.5 canonical names.
+// D-049/D-050: hidden PageActions stub removed; this component is the sole
+// source of truth for §2.5 page-action testids.
 
 import { useState } from "react";
+import {
+  ButtonGroup,
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@pdomain/pdomain-ui/primitives";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useReloadOcr,
@@ -46,7 +56,6 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   // completion toast can say "rotated" rather than "OCR complete".
   const [rotateJobId, setRotateJobId] = useState<string | null>(null);
   const [bulkGlyphOpen, setBulkGlyphOpen] = useState(false);
-  const [overflowOpen, setOverflowOpen] = useState(false);
   const jobProgress = useJobProgress(activeJobId);
   const saveProjectProgress = useJobProgress(saveProjectJobId);
   const rotateProgress = useJobProgress(rotateJobId);
@@ -249,7 +258,6 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   // post-erase image (use_edited_image: true; the field exists in types.ts from
   // Lane A4). Same SSE/job lifecycle as a plain reload.
   function handleReloadOcrEdited() {
-    setOverflowOpen(false);
     dialogStore.openConfirm({
       title: "Reload OCR (edited image)?",
       body: reloadOcrConfirmBody,
@@ -274,7 +282,6 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   // C2: restored "Save Project" — persists every page (202 + job_id).
   // S5.2: on completion, reads payload.skipped_pages and shows warning if > 0.
   function handleSaveProject() {
-    setOverflowOpen(false);
     saveProject.mutate(undefined, {
       onSuccess: (data) => {
         if (data?.job_id) {
@@ -296,7 +303,6 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   // event-store head. Every mutation auto-persists, so there are no
   // "unsaved edits" to discard — use Undo to step back through history.
   function handleLoadPage() {
-    setOverflowOpen(false);
     dialogStore.openConfirm({
       title: "Reload page?",
       body: "This will refresh the page from the latest stored version. Edits are saved automatically — use Undo to step back through page history.",
@@ -319,7 +325,6 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   // P2 / C28: manual rotate — pixels rotate on disk, page re-OCRs, rotation
   // metadata persists. 202 + job_id; tracked by the rotate job hook above.
   function handleRotate(degrees: number) {
-    setOverflowOpen(false);
     rotatePage.mutate(
       { degrees },
       {
@@ -341,7 +346,6 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   // P2 / C29: batch auto-rotate. Uses the configured auto-rotate method
   // (OCR config dialog) server-side; manually-rotated pages are skipped.
   function handleAutoRotateAll() {
-    setOverflowOpen(false);
     autoRotateAll.mutate(undefined, {
       onSuccess: (data) => {
         if (data?.job_id) {
@@ -420,279 +424,274 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   // Rematch is synchronous — show spinner while the mutation is pending.
   const rematchRunning = rematchGt.isPending;
 
+  // D-050: page metadata for name label and source badge.
+  const pageName = pageQ.data?.page_record?.image_path?.split("/").pop() ?? null;
+  const pageSource =
+    (
+      pageQ.data?.page_record?.extensions?.["labeler"] as
+        | { page_source?: string }
+        | null
+        | undefined
+    )?.page_source ?? null;
+  const provenanceSummary = pageQ.data?.page_record?.provenance_summary ?? null;
+
   return (
-    <div
-      data-testid="page-actions-compact"
-      className="flex items-center gap-1 shrink-0"
-      aria-label="Page actions"
-    >
-      <button
-        type="button"
-        data-testid="page-actions-compact-reload-ocr"
-        aria-label="Reload OCR"
-        disabled={disabled}
-        onClick={handleReloadOcr}
-        title="Reload OCR (Ctrl+R)"
-        className={`${base} ${normal}`}
+    <div data-testid="page-actions-bar" className="flex">
+      <ButtonGroup
+        data-testid="page-actions-compact"
+        className="flex items-center gap-1 shrink-0"
+        aria-label="Page actions"
       >
-        {ocrRunning && <Spinner />}
-        Reload OCR
-      </button>
-
-      <button
-        type="button"
-        data-testid="page-actions-compact-rematch-gt"
-        aria-label="Rematch GT"
-        disabled={disabled}
-        onClick={handleRematchGt}
-        title="Rematch GT (Ctrl+G)"
-        className={`${base} ${normal}`}
-      >
-        {rematchRunning && <Spinner />}
-        Rematch
-      </button>
-
-      <button
-        type="button"
-        data-testid="page-actions-compact-save-page"
-        aria-label="Save page (Ctrl+S)"
-        disabled={disabled}
-        onClick={handleSavePage}
-        title="Save page (Ctrl+S)"
-        className={`${base} ${accentBtn}`}
-      >
-        <span aria-hidden="true">✓</span>
-        <span>Save page</span>
-      </button>
-
-      {/* Undo/redo — event-store undo (spec 2026-06-12). Canonical driver
-          testids live HERE on the visible controls (the legacy labeler had no
-          undo surface, so these are new testids per the driver contract). */}
-      <button
-        type="button"
-        data-testid="undo-button"
-        aria-label="Undo"
-        disabled={disabled || !undoAvailable}
-        onClick={handleUndo}
-        title="Undo (Ctrl+Z)"
-        className={`${base} ${normal}`}
-      >
-        Undo
-      </button>
-
-      <button
-        type="button"
-        data-testid="redo-button"
-        aria-label="Redo"
-        disabled={disabled || !redoAvailable}
-        onClick={handleRedo}
-        title="Redo (Ctrl+Shift+Z)"
-        className={`${base} ${normal}`}
-      >
-        Redo
-      </button>
-
-      <button
-        type="button"
-        data-testid="page-actions-compact-export"
-        aria-label="Export"
-        disabled={disabled}
-        onClick={handleExport}
-        title="Export (E)"
-        className={`${base} ${normal}`}
-      >
-        Export
-        <span aria-hidden="true" className="text-[9px] opacity-70">
-          ▾
-        </span>
-      </button>
-
-      {/* #405: OCR-config trigger restored in project-page context (was removed from HeaderBar by D-046).
-          Driver contract §2.3: testid "ocr-config-trigger-button" preserved. */}
-      <button
-        type="button"
-        data-testid="ocr-config-trigger-button"
-        aria-label="OCR Config"
-        disabled={disabled}
-        onClick={handleOcrConfig}
-        title="OCR Config (Mod+,)"
-        className={`${base} ${normal}`}
-      >
-        OCR Config
-      </button>
-
-      {/* C2: overflow menu restores the action buttons dropped from the compact
-          bar — Reload OCR (Edited), Save Project, Load Page. These previously
-          lived only in the hidden full PageActions bar. */}
-      <div className="relative">
+        {/* D-050: driver-contract §2.5 canonical testids on visible buttons */}
         <button
           type="button"
-          data-testid="page-actions-compact-overflow"
-          aria-label="More page actions"
-          aria-haspopup="menu"
-          aria-expanded={overflowOpen}
-          disabled={!projectId}
-          onClick={() => setOverflowOpen((v) => !v)}
-          title="More actions"
+          data-testid="reload-ocr-button"
+          aria-label="Reload OCR"
+          disabled={disabled}
+          onClick={handleReloadOcr}
+          title="Reload OCR (Ctrl+R)"
           className={`${base} ${normal}`}
         >
-          <span aria-hidden="true">⋯</span>
+          {ocrRunning && <Spinner />}
+          Reload OCR
         </button>
 
-        {overflowOpen && (
-          <div
-            role="menu"
-            data-testid="page-actions-compact-overflow-menu"
-            className="absolute right-0 z-50 mt-1 flex min-w-[12rem] flex-col gap-0.5 rounded border border-border-2 bg-bg-surface p-1 shadow-lg"
-          >
+        <button
+          type="button"
+          data-testid="rematch-gt-button"
+          aria-label="Rematch GT"
+          disabled={disabled}
+          onClick={handleRematchGt}
+          title="Rematch GT (Ctrl+G)"
+          className={`${base} ${normal}`}
+        >
+          {rematchRunning && <Spinner />}
+          Rematch
+        </button>
+
+        <button
+          type="button"
+          data-testid="save-page-button"
+          aria-label="Save page (Ctrl+S)"
+          disabled={disabled}
+          onClick={handleSavePage}
+          title="Save page (Ctrl+S)"
+          className={`${base} ${accentBtn}`}
+        >
+          <span aria-hidden="true">✓</span>
+          <span>Save page</span>
+        </button>
+
+        {/* Undo/redo — event-store undo (spec 2026-06-12). Canonical driver
+            testids live HERE on the visible controls (the legacy labeler had no
+            undo surface, so these are new testids per the driver contract). */}
+        <button
+          type="button"
+          data-testid="undo-button"
+          aria-label="Undo"
+          disabled={disabled || !undoAvailable}
+          onClick={handleUndo}
+          title="Undo (Ctrl+Z)"
+          className={`${base} ${normal}`}
+        >
+          Undo
+        </button>
+
+        <button
+          type="button"
+          data-testid="redo-button"
+          aria-label="Redo"
+          disabled={disabled || !redoAvailable}
+          onClick={handleRedo}
+          title="Redo (Ctrl+Shift+Z)"
+          className={`${base} ${normal}`}
+        >
+          Redo
+        </button>
+
+        <button
+          type="button"
+          data-testid="export-button"
+          aria-label="Export"
+          disabled={disabled}
+          onClick={handleExport}
+          title="Export (E)"
+          className={`${base} ${normal}`}
+        >
+          Export
+          <span aria-hidden="true" className="text-[9px] opacity-70">
+            ▾
+          </span>
+        </button>
+
+        {/* #405: OCR-config trigger restored in project-page context (was removed from HeaderBar by D-046).
+            Driver contract §2.3: testid "ocr-config-trigger-button" preserved. */}
+        <button
+          type="button"
+          data-testid="ocr-config-trigger-button"
+          aria-label="OCR Config"
+          disabled={disabled}
+          onClick={handleOcrConfig}
+          title="OCR Config (Mod+,)"
+          className={`${base} ${normal}`}
+        >
+          OCR Config
+        </button>
+
+        {/* C2: overflow menu (Radix DropdownMenu) — Reload OCR (Edited), Save
+            Project, Load Page, rotate actions. D-050: adopted pdomain-ui
+            DropdownMenu replacing the hand-rolled open/close state. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             <button
               type="button"
-              role="menuitem"
+              data-testid="page-actions-compact-overflow"
+              aria-label="More page actions"
+              aria-haspopup="menu"
+              disabled={!projectId}
+              title="More actions"
+              className={`${base} ${normal}`}
+            >
+              <span aria-hidden="true">⋯</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[12rem]">
+            <DropdownMenuItem
               data-testid="reload-ocr-edited-button"
               disabled={disabled || !hasEditedImage}
-              onClick={handleReloadOcrEdited}
-              title={hasEditedImage ? "Reload OCR using edited image" : "No edited image available"}
-              className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-ink-2 hover:bg-bg-raised hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
+              onSelect={handleReloadOcrEdited}
             >
               Reload OCR (Edited)
-            </button>
-            <button
-              type="button"
-              role="menuitem"
+            </DropdownMenuItem>
+            <DropdownMenuItem
               data-testid="save-project-button"
               disabled={disabled}
-              onClick={handleSaveProject}
-              title="Save Project"
-              className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-ink-2 hover:bg-bg-raised hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
+              onSelect={handleSaveProject}
             >
               Save Project
-            </button>
-            <button
-              type="button"
-              role="menuitem"
+            </DropdownMenuItem>
+            <DropdownMenuItem
               data-testid="load-page-button"
               disabled={disabled}
-              onClick={handleLoadPage}
-              title="Reload page from the stored version"
-              className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-ink-2 hover:bg-bg-raised hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
+              onSelect={handleLoadPage}
             >
               Reload
-            </button>
-
-            {/* P2 / C28: rotate actions — previously only inside the hidden
-                PageActions stub, so the feature had no visible surface. */}
-            <div className="my-0.5 h-px bg-border-2" aria-hidden="true" />
-            <button
-              type="button"
-              role="menuitem"
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
               data-testid="rotate-cw-button"
               disabled={disabled}
-              onClick={() => {
+              onSelect={() => {
                 handleRotate(90);
               }}
-              title="Rotate clockwise (+90°), then re-run OCR"
-              className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-ink-2 hover:bg-bg-raised hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span aria-hidden="true">↻</span> Rotate CW
-            </button>
-            <button
-              type="button"
-              role="menuitem"
+            </DropdownMenuItem>
+            <DropdownMenuItem
               data-testid="rotate-ccw-button"
               disabled={disabled}
-              onClick={() => {
+              onSelect={() => {
                 handleRotate(-90);
               }}
-              title="Rotate counter-clockwise (-90°), then re-run OCR"
-              className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-ink-2 hover:bg-bg-raised hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span aria-hidden="true">↺</span> Rotate CCW
-            </button>
-            <button
-              type="button"
-              role="menuitem"
+            </DropdownMenuItem>
+            <DropdownMenuItem
               data-testid="rotate-180-button"
               disabled={disabled}
-              onClick={() => {
+              onSelect={() => {
                 handleRotate(180);
               }}
-              title="Rotate 180°, then re-run OCR"
-              className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-ink-2 hover:bg-bg-raised hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span aria-hidden="true">⟳</span> Rotate 180°
-            </button>
-            <button
-              type="button"
-              role="menuitem"
+            </DropdownMenuItem>
+            <DropdownMenuItem
               data-testid="auto-rotate-all-button"
               disabled={disabled}
-              onClick={handleAutoRotateAll}
-              title="Detect and fix rotation on every page (configured method; manual rotations kept)"
-              className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-ink-2 hover:bg-bg-raised hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
+              onSelect={handleAutoRotateAll}
             >
               Auto-rotate all pages
-            </button>
-          </div>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* P2 / C28: rotation badge — always in DOM (driver contract), visible
+            only when the page carries a non-zero durable rotation. Blue for
+            manual, gray for auto.
+            Spec §19: clicking an AUTO badge reverts the auto-rotation. */}
+        <button
+          type="button"
+          data-testid="rotation-badge"
+          style={!isRotated ? { display: "none" } : undefined}
+          onClick={
+            rotationSource === "auto"
+              ? () => {
+                  // Inverse quarter-turn within the API's accepted set
+                  // (-90 / 90 / 180): 90→-90, 180→180, 270→90.
+                  handleRotate(rotationDegrees === 180 ? 180 : rotationDegrees === 270 ? 90 : -90);
+                }
+              : undefined
+          }
+          disabled={rotationSource !== "auto" || isBusy}
+          aria-label={
+            rotationSource === "auto"
+              ? `Auto-rotated ${String(rotationDegrees)}° clockwise. Click to revert.`
+              : `Manually rotated ${String(rotationDegrees)}° clockwise.`
+          }
+          title={
+            rotationSource === "auto"
+              ? `Auto-rotated ${String(rotationDegrees)}° clockwise. Click to revert.`
+              : `Manually rotated ${String(rotationDegrees)}° clockwise.`
+          }
+          className={[
+            "px-2 py-0.5 text-[11px] font-semibold rounded bg-bg-raised",
+            rotationSource === "manual" ? "text-accent" : "text-ink-3",
+            "disabled:cursor-default",
+          ].join(" ")}
+        >
+          ↻ {rotationDegrees}° {rotationSource === "none" ? "" : rotationSource}
+        </button>
+
+        <button
+          type="button"
+          data-testid="bulk-glyph-mark-button"
+          aria-label="Bulk-mark glyphs"
+          disabled={disabled}
+          onClick={() => setBulkGlyphOpen(true)}
+          title="Bulk-mark glyphs"
+          className={`${base} ${normal}`}
+        >
+          Bulk glyphs
+        </button>
+
+        {/* D-050: page-name-label and page-source-badge — visible in the actions
+            bar (previously only in the hidden PageActions stub). */}
+        {pageName && (
+          <span
+            data-testid="page-name-label"
+            className="px-2 text-[11px] text-ink-3 font-mono truncate max-w-[180px] shrink-0"
+            title={pageName}
+          >
+            {pageName}
+          </span>
         )}
-      </div>
+        <span
+          data-testid="page-source-badge"
+          className="px-2 py-0.5 text-[11px] text-ink-3 truncate shrink-0"
+          title={provenanceSummary ?? pageSource ?? ""}
+        >
+          {pageSource ?? ""}
+        </span>
 
-      {/* P2 / C28: rotation badge — always in DOM (driver contract), visible
-          only when the page carries a non-zero durable rotation. Blue for
-          manual, gray for auto (matches the full PageActions badge).
-          Spec §19: clicking an AUTO badge reverts the auto-rotation. */}
-      <button
-        type="button"
-        data-testid="rotation-badge"
-        style={!isRotated ? { display: "none" } : undefined}
-        onClick={
-          rotationSource === "auto"
-            ? () => {
-                // Inverse quarter-turn within the API's accepted set
-                // (-90 / 90 / 180): 90→-90, 180→180, 270→90.
-                handleRotate(rotationDegrees === 180 ? 180 : rotationDegrees === 270 ? 90 : -90);
-              }
-            : undefined
-        }
-        disabled={rotationSource !== "auto" || isBusy}
-        aria-label={
-          rotationSource === "auto"
-            ? `Auto-rotated ${String(rotationDegrees)}° clockwise. Click to revert.`
-            : `Manually rotated ${String(rotationDegrees)}° clockwise.`
-        }
-        title={
-          rotationSource === "auto"
-            ? `Auto-rotated ${String(rotationDegrees)}° clockwise. Click to revert.`
-            : `Manually rotated ${String(rotationDegrees)}° clockwise.`
-        }
-        className={[
-          "px-2 py-0.5 text-[11px] font-semibold rounded bg-bg-raised",
-          rotationSource === "manual" ? "text-accent" : "text-ink-3",
-          "disabled:cursor-default",
-        ].join(" ")}
-      >
-        ↻ {rotationDegrees}° {rotationSource === "none" ? "" : rotationSource}
-      </button>
-
-      <button
-        type="button"
-        data-testid="bulk-glyph-mark-button"
-        aria-label="Bulk-mark glyphs"
-        disabled={disabled}
-        onClick={() => setBulkGlyphOpen(true)}
-        title="Bulk-mark glyphs"
-        className={`${base} ${normal}`}
-      >
-        Bulk glyphs
-      </button>
-
-      {bulkGlyphOpen && (
-        <BulkGlyphMarkDialog
-          open={bulkGlyphOpen}
-          projectId={projectId}
-          pageIndex={pageIndex}
-          onClose={() => setBulkGlyphOpen(false)}
-        />
-      )}
+        {bulkGlyphOpen && (
+          <BulkGlyphMarkDialog
+            open={bulkGlyphOpen}
+            projectId={projectId}
+            pageIndex={pageIndex}
+            onClose={() => setBulkGlyphOpen(false)}
+          />
+        )}
+      </ButtonGroup>
     </div>
   );
 }

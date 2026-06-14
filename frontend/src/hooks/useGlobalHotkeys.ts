@@ -5,6 +5,7 @@
 // Wires:
 //   Mod+S         → onSavePage (non-destructive)
 //   Mod+Shift+S   → onSaveProject (non-destructive)
+//   Mod+R         → onReloadOcr (destructive — confirm required by caller)
 //   Mod+L         → onLoadPage ("Reload" — confirm required by caller)
 //   Mod+G         → onRematchGt (destructive — confirm required by caller)
 //   Mod+E         → onExport
@@ -14,8 +15,8 @@
 //   Mod+End       → onLastPage
 //
 // The hook itself does NOT show the confirm dialog — callers should wrap
-// onLoadPage / onRematchGt with a confirm-dialog state setter so the UX
-// reads: hotkey fires → dialog opens → user confirms → mutation fires.
+// onReloadOcr / onLoadPage / onRematchGt with a confirm-dialog state setter
+// so the UX reads: hotkey fires → dialog opens → user confirms → mutation fires.
 
 import { useHotkey } from "./useHotkey";
 
@@ -24,6 +25,9 @@ export interface GlobalHotkeyHandlers {
   onSavePage?: () => void;
   /** Fired by Mod+Shift+S (Save Project). Non-destructive. */
   onSaveProject?: () => void;
+  /** Fired by Mod+R (Reload OCR). Destructive — caller must show confirm first.
+   *  U-6: re-OCR resets the page's undo history. */
+  onReloadOcr?: () => void;
   /** Fired by Mod+L (Reload page). Caller shows the confirm first (U-7 copy). */
   onLoadPage?: () => void;
   /** Fired by Mod+G (Rematch GT). Destructive — caller should show confirm first. */
@@ -57,6 +61,7 @@ export interface GlobalHotkeyHandlers {
 export function useGlobalHotkeys({
   onSavePage,
   onSaveProject,
+  onReloadOcr,
   onLoadPage,
   onRematchGt,
   onExport,
@@ -72,6 +77,7 @@ export function useGlobalHotkeys({
 
   useHotkey("mod+s", () => onSavePage?.(), { enabled });
   useHotkey("mod+shift+s", () => onSaveProject?.(), { enabled });
+  useHotkey("mod+r", () => onReloadOcr?.(), { enabled });
   useHotkey("mod+l", () => onLoadPage?.(), { enabled });
   useHotkey("mod+g", () => onRematchGt?.(), { enabled });
   useHotkey("mod+e", () => onExport?.(), { enabled });

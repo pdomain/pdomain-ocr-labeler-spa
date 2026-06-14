@@ -101,7 +101,6 @@ import {
 import { worklistStore } from "../stores/worklist-store";
 import { pageNoUrl } from "../lib/routes";
 
-import { PageActions } from "../components/PageActions";
 import { PageActionsCompact } from "../components/PageActionsCompact";
 import ProjectNavigationControls from "../components/ProjectNavigationControls";
 import { Drawer } from "../components/shell/Drawer";
@@ -389,6 +388,7 @@ export default function ProjectPage() {
     disabled: isAnyMutationPending,
     onSavePage: handleSavePage,
     onSaveProject: handleSaveProject,
+    onReloadOcr: handleReloadOcr,
     onLoadPage: handleLoadPage,
     onRematchGt: handleRematchGt,
     onExport: handleExport,
@@ -567,8 +567,10 @@ export default function ProjectPage() {
   }
 
   // U-6 (spec 2026-06-12-event-store-undo): re-OCR creates a NEW page
-  // aggregate, so the undo history restarts. The confirm dialog must warn
-  // about that boundary before the job is enqueued.
+  // aggregate, so the undo history restarts. The confirm dialog must warn.
+  // Mod+R wires to this via useGlobalHotkeys (D-050: button is in
+  // PageActionsCompact; hotkey is retained here so keyboard shortcut works
+  // globally even without the button in focus).
   const reloadOcrConfirmBody =
     "This will re-run OCR for the current page and the page's edit history resets — Undo will not step back across this reload.";
   function handleReloadOcr() {
@@ -578,23 +580,7 @@ export default function ProjectPage() {
       onConfirm: () => {
         reloadOcr.mutate(undefined, {
           onSuccess: (data) => {
-            trackJob(data);
-          },
-          onSettled: () => {
-            invalidatePage();
-          },
-        });
-      },
-    });
-  }
-  function handleReloadOcrEdited() {
-    dialogStore.openConfirm({
-      title: "Reload OCR (edited image)?",
-      body: reloadOcrConfirmBody,
-      onConfirm: () => {
-        reloadOcrEdited.mutate(undefined, {
-          onSuccess: (data) => {
-            trackJob(data);
+            trackJob(data as { job_id?: string | null } | undefined | null);
           },
           onSettled: () => {
             invalidatePage();
@@ -679,48 +665,6 @@ export default function ProjectPage() {
   }
   function handleExport() {
     dialogStore.open("export");
-  }
-
-  function handleRotateCw() {
-    rotatePage.mutate(
-      { degrees: 90 },
-      {
-        onSuccess: (data) => {
-          trackJob(data);
-        },
-        onSettled: () => {
-          invalidatePage();
-        },
-      },
-    );
-  }
-
-  function handleRotateCcw() {
-    rotatePage.mutate(
-      { degrees: -90 },
-      {
-        onSuccess: (data) => {
-          trackJob(data);
-        },
-        onSettled: () => {
-          invalidatePage();
-        },
-      },
-    );
-  }
-
-  function handleRotate180() {
-    rotatePage.mutate(
-      { degrees: 180 },
-      {
-        onSuccess: (data) => {
-          trackJob(data);
-        },
-        onSettled: () => {
-          invalidatePage();
-        },
-      },
-    );
   }
 
   function handleToolbarAction(key: keyof ButtonStates) {
@@ -876,48 +820,10 @@ export default function ProjectPage() {
   // ── Render ─────────────────────────────────────────────────────────────
 
   // ── Slot content ──────────────────────────────────────────────────────
-  // IS-2: The App-level HeaderBar now handles the full top chrome via
-  // navSlot (ProjectNavigationControls) and actionsSlot (PageActionsCompact).
-  //
-  // PageActions is kept mounted as a hidden div to preserve all driver-
-  // contract testids (§2.5: reload-ocr-button, save-page-button, etc.).
-  // The driver selects these via [data-testid="..."] — the hidden wrapper
-  // does not prevent selection.
-
-  // IS-2: PageActions kept hidden for driver-contract testid preservation.
-  // Driver contract §2.5: all page-action testids must be reachable in DOM.
-  const hiddenPageActions = (
-    <div style={{ display: "none" }} data-testid-stub="page-actions-hidden">
-      <PageActions
-        isBusy={isMutating || activeJob !== null}
-        // C2: bind to the real edited-image signal (labeler extension flag set
-        // by the erase-pixels path / Lane A4) instead of the hardcoded false.
-        hasEditedImage={pageRecord?.extensions?.["labeler"]?.["has_edited_image"] === true}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        pageSource={pageRecord?.extensions?.["labeler"]?.["page_source"] as any}
-        // C2: surface the backend-assembled provenance one-liner so the source
-        // badge tooltip is no longer blank (audit row 26).
-        provenanceSummary={pageRecord?.provenance_summary ?? null}
-        pageName={pageRecord?.image_path?.split("/").pop() ?? null}
-        rotationDegrees={pageRecord?.rotation_degrees ?? 0}
-        rotationSource={pageRecord?.rotation_source ?? null}
-        onReloadOcr={handleReloadOcr}
-        onReloadOcrEdited={handleReloadOcrEdited}
-        onSavePage={handleSavePage}
-        onSaveProject={handleSaveProject}
-        onLoadPage={handleLoadPage}
-        undoAvailable={undoAvailable}
-        redoAvailable={redoAvailable}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        onRematchGt={handleRematchGt}
-        onExport={handleExport}
-        onRotateCw={handleRotateCw}
-        onRotateCcw={handleRotateCcw}
-        onRotate180={handleRotate180}
-      />
-    </div>
-  );
+  // D-050 (2026-06-14): hidden PageActions stub removed. Driver-contract
+  // §2.5 testids (reload-ocr-button, save-page-button, etc.) are now the
+  // canonical testids on the visible PageActionsCompact buttons and
+  // page-actions-bar wrapper.
 
   // IS-3: Drawer wired with real Drawer component.
   // lineMatches is already computed above; page is pagePayload.
@@ -1060,39 +966,31 @@ export default function ProjectPage() {
           </div>
         )}
       </div>
-
-      {/*
-       * IS-4: Driver-contract testid preservation stubs.
-       *
-       * §2.7: TextTabs testids (text-tab-*, match-filter-*) must remain.
-       * §2.8: WordMatchView per-line/per-word testids must remain.
-       *
-       * ToolbarActionGrid (§2.9/§2.10) is now visible above — no longer
-       * needs to live in this hidden container.
-       */}
-      <div style={{ display: "none" }} data-testid-stub="canvas-hidden-stubs">
-        <div data-testid="text-pane">
-          <TextTabs
-            pageTextGt={pagePayload?.page_text_gt}
-            pageTextOcr={pagePayload?.page_text_ocr}
-            lineFilter={uiPrefs.matchFilter}
-            onLineFilterChange={(f) => {
-              setMatchFilter(f);
-            }}
-          >
-            <WordMatchView lines={lines} filter={uiPrefs.matchFilter} />
-          </TextTabs>
-          <PlaintextEditor source="gt" page={pagePayload} />
-          <PlaintextEditor source="ocr" page={pagePayload} />
-        </div>
-      </div>
     </div>
   );
 
   // Right panel slot — RightPanel routes on selection-store.level.
-  // Word-level content is WordDetail (Slice 16). WordMatchView stays in the
-  // canvas TextTabs.
+  // Word-level content is WordDetail (Slice 16).
+  // D-051 (2026-06-14): TextTabs + WordMatchView are now mounted visibly in
+  // the RightPanel textTabsSlot (level="none"), replacing the
+  // canvas-hidden-stubs display:none container.
   // IS-6: onCollapse wired to useUiPrefs.setState({ rightPanelOpen: false }).
+  const textTabsContent = (
+    <div data-testid="text-pane" className="flex flex-col h-full min-h-0">
+      <TextTabs
+        pageTextGt={pagePayload?.page_text_gt}
+        pageTextOcr={pagePayload?.page_text_ocr}
+        lineFilter={uiPrefs.matchFilter}
+        onLineFilterChange={(f) => {
+          setMatchFilter(f);
+        }}
+      >
+        <WordMatchView lines={lines} filter={uiPrefs.matchFilter} />
+      </TextTabs>
+      <PlaintextEditor source="gt" page={pagePayload} />
+      <PlaintextEditor source="ocr" page={pagePayload} />
+    </div>
+  );
   const wordDetailSlot =
     pagePayload && projectId ? (
       <WordDetail page={pagePayload} projectId={projectId} pageIndex={idx0} />
@@ -1103,6 +1001,7 @@ export default function ProjectPage() {
       projectId={projectId ?? undefined}
       pageIndex={idx0}
       wordSlot={wordDetailSlot}
+      textTabsSlot={textTabsContent}
       onCollapse={() => {
         useUiPrefs.setState({ rightPanelOpen: false });
       }}
@@ -1136,9 +1035,6 @@ export default function ProjectPage() {
           {rightSlot}
         </div>
       </div>
-
-      {/* IS-2: hidden PageActions for driver-contract testid preservation §2.5 */}
-      {hiddenPageActions}
 
       {/* ConfirmDialog — opens from useConfirm() via dialogStore. */}
       <ConfirmDialog

@@ -286,14 +286,15 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     expect(toolbar.querySelector('[data-testid="page-actions-compact"]')).not.toBeNull();
   });
 
-  it("IS-2: PageActions bar is hidden (driver testids still reachable in DOM)", async () => {
-    // PageActions is kept mounted as a hidden div for driver-contract §2.5
-    // testid preservation. The testids are reachable but the element is hidden.
+  it("D-050: PageActions §2.5 testids are visible in PageActionsCompact", async () => {
+    // D-050: Hidden PageActions stub removed. §2.5 testids are now the canonical
+    // testids on visible PageActionsCompact buttons inside page-actions-bar.
     renderProjectPage();
     expect(await screen.findByTestId("page-actions-bar")).toBeInTheDocument();
     expect(screen.getByTestId("reload-ocr-button")).toBeInTheDocument();
     expect(screen.getByTestId("save-page-button")).toBeInTheDocument();
-    expect(screen.getByTestId("save-project-button")).toBeInTheDocument();
+    // save-project-button is in the overflow menu — check it's in DOM
+    expect(screen.getByTestId("page-actions-compact-overflow")).toBeInTheDocument();
   });
 
   it("GRID-1: ToolbarActionGrid is visible (not inside display:none subtree)", async () => {
@@ -418,10 +419,11 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     server.use(http.post("/api/projects/:pid/pages/:idx/save", () => new Promise(() => {})));
     renderProjectPage();
     // Wait for the page to fully render.
-    const saveBtnEl = await screen.findByTestId("save-page-button");
-    // IS-2: PageActions is in a hidden div; use fireEvent.click (not
-    // userEvent.click which checks visibility) to trigger the mutation.
-    fireEvent.click(saveBtnEl);
+    await screen.findByTestId("project-workspace");
+    // D-050: save-page-button is in PageActionsCompact (own useSavePage hook).
+    // Trigger ProjectPage's own save mutation via Ctrl+S hotkey so that
+    // ProjectPage's isMutating flag rises (drives BusyOverlay).
+    fireEvent.keyDown(document, { key: "s", ctrlKey: true });
     // BusyOverlay renders inside the image-pane while the mutation is pending.
     // IS-4: image-pane is now a direct flex child of the canvas column (no splitter).
     expect(await screen.findByTestId("busy-overlay")).toBeInTheDocument();

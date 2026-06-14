@@ -88,12 +88,13 @@ describe("PageActionsCompact: testids (P1.b)", () => {
     expect(screen.getByTestId("page-actions-compact")).toBeInTheDocument();
   });
 
-  it("renders all five compact button testids", () => {
+  it("renders all five compact button testids (D-050: legacy §2.5 names)", () => {
     renderCompact();
-    expect(screen.getByTestId("page-actions-compact-reload-ocr")).toBeInTheDocument();
-    expect(screen.getByTestId("page-actions-compact-rematch-gt")).toBeInTheDocument();
-    expect(screen.getByTestId("page-actions-compact-save-page")).toBeInTheDocument();
-    expect(screen.getByTestId("page-actions-compact-export")).toBeInTheDocument();
+    // D-050: testids renamed to driver-contract §2.5 canonical names
+    expect(screen.getByTestId("reload-ocr-button")).toBeInTheDocument();
+    expect(screen.getByTestId("rematch-gt-button")).toBeInTheDocument();
+    expect(screen.getByTestId("save-page-button")).toBeInTheDocument();
+    expect(screen.getByTestId("export-button")).toBeInTheDocument();
     // #405: ocr-config-trigger-button restored in PageActionsCompact (project-page context)
     expect(screen.getByTestId("ocr-config-trigger-button")).toBeInTheDocument();
   });
@@ -111,6 +112,106 @@ describe("PageActionsCompact: testids (P1.b)", () => {
     expect(screen.getByText("Export")).toBeInTheDocument();
     expect(screen.getByText("OCR Config")).toBeInTheDocument();
   });
+
+  it("renders undo-button and redo-button testids", () => {
+    renderCompact();
+    expect(screen.getByTestId("undo-button")).toBeInTheDocument();
+    expect(screen.getByTestId("redo-button")).toBeInTheDocument();
+  });
+
+  it("renders page-actions-compact-overflow testid", () => {
+    renderCompact();
+    expect(screen.getByTestId("page-actions-compact-overflow")).toBeInTheDocument();
+  });
+
+  it("renders rotation-badge testid always in DOM (driver contract)", async () => {
+    renderCompact();
+    // badge is always in DOM even when not visible (display:none when not rotated)
+    await screen.findByTestId("rotation-badge", {}, { timeout: 2000 });
+  });
+});
+
+// ─── M2 primitive adoption: ButtonGroup / IconButton / DropdownMenu ───────────
+// M2-Slice-2A: PageActionsCompact must use pdomain-ui primitives for generic
+// toolbar mechanics. Tests assert the structural contracts the primitives impose.
+
+describe("PageActionsCompact: pdomain-ui primitive adoption (M2-Slice-2A)", () => {
+  it("main action buttons are accessible by aria-label", () => {
+    renderCompact();
+    // Buttons must carry aria-label (IconButton contract requires it)
+    expect(screen.getByLabelText("Reload OCR")).toBeInTheDocument();
+    expect(screen.getByLabelText("Rematch GT")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Save page/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Undo")).toBeInTheDocument();
+    expect(screen.getByLabelText("Redo")).toBeInTheDocument();
+    expect(screen.getByLabelText("Export")).toBeInTheDocument();
+    expect(screen.getByLabelText("OCR Config")).toBeInTheDocument();
+  });
+
+  it("buttons are grouped via role=group (ButtonGroup contract)", () => {
+    renderCompact();
+    // ButtonGroup renders role="group" with an aria-label
+    const groups = screen.getAllByRole("group");
+    expect(groups.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("overflow button has aria-haspopup=menu (overflow/DropdownMenu contract)", () => {
+    renderCompact();
+    const overflow = screen.getByTestId("page-actions-compact-overflow");
+    expect(overflow).toHaveAttribute("aria-haspopup");
+  });
+
+  it("overflow menu items are accessible via role=menuitem after opening", async () => {
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    // DropdownMenu renders role="menuitem" on items
+    const menuItems = await screen.findAllByRole("menuitem");
+    expect(menuItems.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("all testids survive primitive adoption (D-050 preservation)", () => {
+    renderCompact();
+    // D-050: page-actions-bar wrapper + renamed §2.5 testids + new labels/badges
+    const requiredTestids = [
+      "page-actions-bar",
+      "page-actions-compact",
+      "reload-ocr-button",
+      "rematch-gt-button",
+      "save-page-button",
+      "undo-button",
+      "redo-button",
+      "export-button",
+      "ocr-config-trigger-button",
+      "page-actions-compact-overflow",
+      "bulk-glyph-mark-button",
+      "page-source-badge",
+    ];
+    for (const tid of requiredTestids) {
+      expect(screen.getByTestId(tid), `testid=${tid} should be present`).toBeInTheDocument();
+    }
+  });
+
+  it("overflow menu testids survive primitive adoption", async () => {
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    const overflowTestids = [
+      "reload-ocr-edited-button",
+      "save-project-button",
+      "load-page-button",
+      "rotate-cw-button",
+      "rotate-ccw-button",
+      "rotate-180-button",
+      "auto-rotate-all-button",
+    ];
+    for (const tid of overflowTestids) {
+      expect(
+        await screen.findByTestId(tid),
+        `overflow testid=${tid} should be present`,
+      ).toBeInTheDocument();
+    }
+  });
 });
 
 // ─── disabled state ───────────────────────────────────────────────────────────
@@ -121,8 +222,8 @@ describe("PageActionsCompact: disabled when no project", () => {
     // (projectId !== null), but the component's own disabled guard also
     // checks !projectId so an empty string keeps buttons disabled.
     renderCompact("", 0);
-    expect(screen.getByTestId("page-actions-compact-reload-ocr")).toBeDisabled();
-    expect(screen.getByTestId("page-actions-compact-save-page")).toBeDisabled();
+    expect(screen.getByTestId("reload-ocr-button")).toBeDisabled();
+    expect(screen.getByTestId("save-page-button")).toBeDisabled();
   });
 });
 
@@ -132,7 +233,7 @@ describe("PageActionsCompact: export opens dialog", () => {
   it("clicking export button opens the export dialog", async () => {
     const user = userEvent.setup();
     renderCompact();
-    await user.click(screen.getByTestId("page-actions-compact-export"));
+    await user.click(screen.getByTestId("export-button"));
     expect(dialogStore.getState().export.open).toBe(true);
   });
 });
@@ -176,7 +277,7 @@ describe("PageActionsCompact: mutation wiring (P1.b smoke)", () => {
     const user = userEvent.setup();
     renderCompact();
 
-    await user.click(screen.getByTestId("page-actions-compact-reload-ocr"));
+    await user.click(screen.getByTestId("reload-ocr-button"));
     approveReloadOcrConfirm();
     await waitFor(() => expect(reloadSpy).toHaveBeenCalled());
   });
@@ -194,7 +295,7 @@ describe("PageActionsCompact: mutation wiring (P1.b smoke)", () => {
     const user = userEvent.setup();
     renderCompact();
 
-    await user.click(screen.getByTestId("page-actions-compact-save-page"));
+    await user.click(screen.getByTestId("save-page-button"));
     await waitFor(() => expect(saveSpy).toHaveBeenCalled());
   });
 });
@@ -263,8 +364,11 @@ describe("PageActionsCompact: restored dropped buttons (Lane C / C2)", () => {
     const user = userEvent.setup();
     renderCompact();
     await user.click(screen.getByTestId("page-actions-compact-overflow"));
-    expect(await screen.findByTestId("save-project-button")).not.toBeDisabled();
-    expect(screen.getByTestId("load-page-button")).not.toBeDisabled();
+    // Radix DropdownMenuItem renders as div with aria-disabled — check absence of it.
+    const saveProject = await screen.findByTestId("save-project-button");
+    expect(saveProject).not.toHaveAttribute("aria-disabled", "true");
+    const loadPage = screen.getByTestId("load-page-button");
+    expect(loadPage).not.toHaveAttribute("aria-disabled", "true");
   });
 
   it("reload-ocr-edited is enabled when the page has an edited image", async () => {
@@ -272,8 +376,12 @@ describe("PageActionsCompact: restored dropped buttons (Lane C / C2)", () => {
     const user = userEvent.setup();
     renderCompact();
     await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    // Radix DropdownMenuItem renders as div with aria-disabled — check absence.
     await waitFor(() => {
-      expect(screen.getByTestId("reload-ocr-edited-button")).not.toBeDisabled();
+      expect(screen.getByTestId("reload-ocr-edited-button")).not.toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
     });
   });
 
@@ -282,8 +390,10 @@ describe("PageActionsCompact: restored dropped buttons (Lane C / C2)", () => {
     const user = userEvent.setup();
     renderCompact();
     await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    // Radix DropdownMenuItem renders as a div with aria-disabled (not HTML disabled).
     await waitFor(() => {
-      expect(screen.getByTestId("reload-ocr-edited-button")).toBeDisabled();
+      const btn = screen.getByTestId("reload-ocr-edited-button");
+      expect(btn).toHaveAttribute("aria-disabled", "true");
     });
   });
 
@@ -347,9 +457,11 @@ describe("PageActionsCompact: rotate buttons (P2 / C28)", () => {
     const user = userEvent.setup();
     renderCompact();
     await user.click(screen.getByTestId("page-actions-compact-overflow"));
-    expect(await screen.findByTestId("rotate-cw-button")).not.toBeDisabled();
-    expect(screen.getByTestId("rotate-ccw-button")).not.toBeDisabled();
-    expect(screen.getByTestId("rotate-180-button")).not.toBeDisabled();
+    // Radix DropdownMenuItem renders as div — check aria-disabled absence.
+    const cw = await screen.findByTestId("rotate-cw-button");
+    expect(cw).not.toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByTestId("rotate-ccw-button")).not.toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByTestId("rotate-180-button")).not.toHaveAttribute("aria-disabled", "true");
   });
 
   it.each([
@@ -408,7 +520,9 @@ describe("PageActionsCompact: auto-rotate-all trigger (P2 / C29)", () => {
     const user = userEvent.setup();
     renderCompact();
     await user.click(screen.getByTestId("page-actions-compact-overflow"));
-    expect(await screen.findByTestId("auto-rotate-all-button")).not.toBeDisabled();
+    // Radix DropdownMenuItem renders as div — check aria-disabled absence.
+    const autoBtn = await screen.findByTestId("auto-rotate-all-button");
+    expect(autoBtn).not.toHaveAttribute("aria-disabled", "true");
   });
 
   it("clicking auto-rotate-all POSTs the project-level auto-rotate-all route", async () => {
@@ -477,7 +591,7 @@ describe("PageActionsCompact: toast lifecycle for reload-ocr", () => {
     const user = userEvent.setup();
     renderCompact();
 
-    await user.click(screen.getByTestId("page-actions-compact-reload-ocr"));
+    await user.click(screen.getByTestId("reload-ocr-button"));
     approveReloadOcrConfirm();
 
     // Wait for the mutation to complete and loading toast to be called.
@@ -530,7 +644,7 @@ describe("PageActionsCompact: toast lifecycle for reload-ocr", () => {
     const user = userEvent.setup();
     renderCompact();
 
-    await user.click(screen.getByTestId("page-actions-compact-reload-ocr"));
+    await user.click(screen.getByTestId("reload-ocr-button"));
     approveReloadOcrConfirm();
     await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
 

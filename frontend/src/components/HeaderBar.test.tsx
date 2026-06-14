@@ -154,12 +154,13 @@ describe("HeaderBar: chrome-only (D-047)", () => {
     expect(queryRealTestId("page-actions-compact-save-page")).toBeNull();
   });
 
-  it("does NOT render real (non-stub) nav controls in the header", async () => {
-    // The only nav-prev-button present is the display:none driver stub; no
-    // real ProjectNavigationControls is mounted in the chrome header anymore.
+  it("does NOT render nav controls in the header (D-049: nav stubs removed)", async () => {
+    // D-049: nav-* stubs removed from HeaderBar. The real
+    // ProjectNavigationControls in WorkspaceToolbar leftSlot is the single
+    // source of truth.
     renderHeaderBar({ route: "/projects/p1/pages/pageno/1" });
-    expect(queryRealTestId("nav-prev-button")).toBeNull();
-    expect(queryRealTestId("nav-page-input")).toBeNull();
+    expect(screen.queryByTestId("nav-prev-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("nav-page-input")).not.toBeInTheDocument();
   });
 
   it("does NOT render project-load controls (removed)", async () => {
@@ -231,13 +232,16 @@ describe("HeaderBar: S6.2 project-root-label", () => {
 });
 
 // --- driver-contract stubs (display:none) — retained per D-046 ----------------
+// D-049: nav-* stubs removed from HeaderBar. Source-folder + OCR-config
+// field stubs remain (driver-contract §2.2/§2.3).
 
-describe("HeaderBar: driver-contract stubs (D-046)", () => {
-  it("stub nav buttons are in the DOM (display:none, data-testid-stub)", async () => {
+describe("HeaderBar: driver-contract stubs (D-046/D-049)", () => {
+  it("D-049: nav stubs are NO LONGER in the DOM (removed per D-049)", async () => {
     renderHeaderBar();
-    const prev = screen.getByTestId("nav-prev-button");
-    expect(prev).toBeInTheDocument();
-    expect(prev).toHaveAttribute("data-testid-stub", "true");
+    // Nav stubs were removed — the real ProjectNavigationControls in
+    // WorkspaceToolbar is the single source of truth.
+    expect(screen.queryByTestId("nav-prev-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("nav-next-button")).not.toBeInTheDocument();
   });
 
   it("stub source-folder elements are in the DOM", async () => {

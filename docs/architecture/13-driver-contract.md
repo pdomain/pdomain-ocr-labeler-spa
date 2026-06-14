@@ -154,10 +154,13 @@ Hotkey: `Enter` on the path input triggers `source-folder-open-typed-button`.
 
 > **D-047 (2026-06-14):** The real `ProjectNavigationControls`
 > (`project-navigation-controls`) now renders inside the `WorkspaceToolbar`
-> band `leftSlot` (top of the project route body), not the chrome header. The
-> `display:none` nav stubs in HeaderBar (carrying `data-testid-stub="true"`)
-> remain so these testids are reachable on the root route; select the real
-> controls via `[data-testid="nav-prev-button"]:not([data-testid-stub])`.
+> band `leftSlot` (top of the project route body), not the chrome header.
+>
+> **D-049 (2026-06-14):** The `display:none` nav stubs in HeaderBar are
+> **removed**. The real `ProjectNavigationControls` in `WorkspaceToolbar`
+> `leftSlot` is the single source of truth for nav testids. The
+> `:not([data-testid-stub])` selector convention is **retired** for these
+> testids — select them directly.
 
 | Testid | What it is |
 |---|---|
@@ -170,6 +173,12 @@ Hotkey: `Enter` on the path input triggers `source-folder-open-typed-button`.
 Hotkey: `Enter` on `nav-page-input` triggers `Go To`.
 
 ### 2.5 Page actions
+
+> **D-050 (2026-06-14):** The hidden `PageActions` stub wrapper
+> (`data-testid-stub="page-actions-hidden"`) is **removed**. All §2.5
+> testids are now the canonical testids on visible `PageActionsCompact`
+> buttons inside the `page-actions-bar` wrapper. The
+> `page-actions-compact-*` prefixed interim names are retired.
 
 | Testid | What it is |
 |---|---|
@@ -210,6 +219,12 @@ These are right-pane `TextTabs.tsx` tab triggers, not image-viewport
 overlays. The decision not to add image-viewport text-overlay sub-tabs
 is recorded in `specs/17-decisions.md` D-045 (2026-05-16). These
 testids are live in the SPA and must be preserved per D-014.
+
+> **D-051 (2026-06-14):** `TextTabs` + `WordMatchView` are now mounted
+> **visibly** in `RightPanel` `textTabsSlot` (renders when
+> `selection-store.level === "none"`). The `display:none`
+> `canvas-hidden-stubs` container is **removed**. Select these testids
+> without a `:not([data-testid-stub])` guard — they are always visible.
 
 | Testid | What it is |
 |---|---|

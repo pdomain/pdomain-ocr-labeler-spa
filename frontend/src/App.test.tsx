@@ -405,17 +405,15 @@ describe("App: routing shell", () => {
     window.history.pushState({}, "", "/");
   });
 
-  it("IS-2: HeaderBar renders without navSlot or actionsSlot on root route", async () => {
+  it("IS-2/D-049: HeaderBar renders without navSlot or actionsSlot on root route", async () => {
     withNoSession();
     render(<App />);
     await waitFor(() => {
       expect(screen.getByTestId("header-bar")).toBeInTheDocument();
     });
-    // On root route, no project is loaded → no nav controls injected.
-    // nav-prev-button exists only as a stub in HeaderBar (data-testid-stub).
-    const prevBtns = screen.getAllByTestId("nav-prev-button");
-    // All present buttons should be stubs (no real ProjectNavigationControls).
-    expect(prevBtns.every((btn) => btn.getAttribute("data-testid-stub") === "true")).toBe(true);
+    // D-049: nav stubs removed from HeaderBar. On root route, nav-prev-button
+    // is absent entirely (no real ProjectNavigationControls + no stub).
+    expect(screen.queryByTestId("nav-prev-button")).toBeNull();
   });
 
   it("IS-2: project route renders HeaderBar with project-navigation-controls (via withProjectSession)", async () => {
