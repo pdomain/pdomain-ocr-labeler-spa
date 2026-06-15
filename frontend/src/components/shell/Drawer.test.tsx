@@ -254,3 +254,52 @@ describe("Drawer S2.2 — Text tab visible GT/OCR view", () => {
     }
   });
 });
+
+// ─── Bug 2a: Expand button must not be clipped by overflow-hidden container ───
+// Before the fix, the expand button was INSIDE the w-0 overflow-hidden outer
+// div, making it invisible/unclickable. After the fix, the outer wrapper is
+// always at least w-8 (32px) and the expand button is a sibling of the inner
+// overflow-hidden panel, not a child of it.
+
+describe("Drawer Bug-2a — expand button not clipped when collapsed", () => {
+  beforeEach(() => {
+    useUiPrefs.setState({ drawerOpen: false, drawerTab: "worklist" });
+  });
+
+  it("expand button is in the document and inside the drawer root (not clipped)", () => {
+    render(<Drawer />);
+    const drawer = screen.getByTestId("drawer");
+    const expandBtn = screen.getByTestId("drawer-expand-btn");
+    // Expand button must be a descendant of the drawer root element.
+    expect(drawer.contains(expandBtn)).toBe(true);
+  });
+
+  it("expand button is NOT inside an element that has overflow-hidden AND no width", () => {
+    render(<Drawer />);
+    const expandBtn = screen.getByTestId("drawer-expand-btn");
+    // Walk ancestors: none of the ancestors between expandBtn and drawer root
+    // should combine overflow-hidden with w-0 (which would clip the button).
+    // After the fix, the outer wrapper uses w-8 (not w-0) when collapsed.
+    const drawer = screen.getByTestId("drawer");
+    let el: Element | null = expandBtn.parentElement;
+    while (el && el !== drawer.parentElement) {
+      const classes = el.className;
+      // The pre-fix pattern: both overflow-hidden AND w-0 on the same element.
+      const hasOverflowHidden = classes.includes("overflow-hidden");
+      const hasWZero = classes.includes("w-0");
+      expect(
+        hasOverflowHidden && hasWZero,
+        `ancestor element has overflow-hidden AND w-0 which would clip the expand button: ${classes}`,
+      ).toBe(false);
+      el = el.parentElement;
+    }
+  });
+
+  it("outer drawer root does NOT have w-0 class when collapsed", () => {
+    render(<Drawer />);
+    const drawer = screen.getByTestId("drawer");
+    // After the fix the collapsed outer wrapper is w-8, not w-0.
+    expect(drawer.className).not.toContain("w-0");
+    expect(drawer.className).toContain("w-8");
+  });
+});

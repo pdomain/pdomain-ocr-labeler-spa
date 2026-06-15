@@ -101,17 +101,37 @@ export function Drawer({
   const activeTab = useSyncExternalStore(useUiPrefs.subscribe, getDrawerTab, getDrawerTab);
 
   return (
+    // Outer wrapper: always at least 32px wide so the expand tab is never clipped.
+    // When open, it stretches to 320px via the inner panel width. The expand
+    // button lives here — OUTSIDE the overflow-hidden panel — so it is always
+    // visible and clickable even when the drawer is collapsed.
     <div
       data-testid="drawer"
       data-open={open ? "true" : "false"}
       className={cn(
-        "flex flex-col h-full bg-bg-surface border-r border-border-1 overflow-hidden transition-all",
-        open ? "w-[320px]" : "w-0",
+        "flex flex-row h-full bg-bg-surface transition-all",
+        open ? "w-[320px]" : "w-8",
         className,
       )}
     >
+      {/* Expand button (visible when collapsed) — rendered OUTSIDE the overflow-hidden panel */}
+      {!open && (
+        <button
+          type="button"
+          data-testid="drawer-expand-btn"
+          onClick={() => {
+            setDrawerOpen(true);
+          }}
+          aria-label="Expand drawer"
+          className="w-8 flex-shrink-0 flex items-center justify-center text-ink-3 hover:text-ink-1 border-r border-border-1"
+        >
+          <ChevronRight size={14} />
+        </button>
+      )}
+
+      {/* Inner panel — overflow-hidden only when open; collapsed it is absent */}
       {open && (
-        <>
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden border-r border-border-1">
           {/* Tab strip + collapse button */}
           <div
             data-testid="drawer-header"
@@ -199,22 +219,7 @@ export function Drawer({
               <PlaintextGtOcrView pageTextGt={pageTextGt} pageTextOcr={pageTextOcr} />
             )}
           </div>
-        </>
-      )}
-
-      {/* Expand button (visible when collapsed) */}
-      {!open && (
-        <button
-          type="button"
-          data-testid="drawer-expand-btn"
-          onClick={() => {
-            setDrawerOpen(true);
-          }}
-          aria-label="Expand drawer"
-          className="w-full flex items-center justify-center text-ink-3 hover:text-ink-1 py-2"
-        >
-          <ChevronRight size={14} />
-        </button>
+        </div>
       )}
     </div>
   );

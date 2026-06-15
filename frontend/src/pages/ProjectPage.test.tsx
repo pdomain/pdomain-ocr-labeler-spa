@@ -851,4 +851,71 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       );
     });
   });
+
+  // ── Bug-1: toolbar-grid-collapse chevron direction ───────────────────────────
+
+  describe("Bug-1 — Actions panel chevron reflects open state", () => {
+    it("toolbar-grid-collapse renders UP chevron (polyline 18 15 12 9 6 15) when panel is CLOSED", async () => {
+      // When toolbarGridCollapsed=true the chevron should point UP (∧) to
+      // indicate the panel can be expanded (content revealed below).
+      useUiPrefs.setState({ toolbarGridCollapsed: true });
+      renderProjectPage();
+      await screen.findByTestId("toolbar-grid-collapse");
+      const btn = screen.getByTestId("toolbar-grid-collapse");
+      // The UP chevron polyline points are "18 15 12 9 6 15".
+      const polyline = btn.querySelector("polyline");
+      expect(polyline).not.toBeNull();
+      expect(polyline!.getAttribute("points")).toBe("18 15 12 9 6 15");
+    });
+
+    it("toolbar-grid-collapse renders DOWN chevron (polyline 6 9 12 15 18 9) when panel is OPEN", async () => {
+      // When toolbarGridCollapsed=false (open) the chevron should point DOWN (∨)
+      // to indicate the panel is open and can be collapsed.
+      useUiPrefs.setState({ toolbarGridCollapsed: false });
+      renderProjectPage();
+      await screen.findByTestId("toolbar-grid-collapse");
+      const btn = screen.getByTestId("toolbar-grid-collapse");
+      // The DOWN chevron polyline points are "6 9 12 15 18 9".
+      const polyline = btn.querySelector("polyline");
+      expect(polyline).not.toBeNull();
+      expect(polyline!.getAttribute("points")).toBe("6 9 12 15 18 9");
+    });
+  });
+
+  // ── Bug-2b: right panel always has a re-open control ─────────────────────────
+
+  describe("Bug-2b — right panel re-open control always present", () => {
+    it("right-panel-expand-btn is in the DOM when rightPanelOpen is false", async () => {
+      useUiPrefs.setState({ rightPanelOpen: false });
+      renderProjectPage();
+      await screen.findByTestId("project-page");
+      expect(screen.getByTestId("right-panel-expand-btn")).toBeInTheDocument();
+    });
+
+    it("clicking right-panel-expand-btn sets rightPanelOpen to true", async () => {
+      useUiPrefs.setState({ rightPanelOpen: false });
+      renderProjectPage();
+      await screen.findByTestId("project-page");
+      fireEvent.click(screen.getByTestId("right-panel-expand-btn"));
+      await waitFor(() => {
+        expect(useUiPrefs.getState().rightPanelOpen).toBe(true);
+      });
+    });
+
+    it("right-panel-expand-btn is NOT in the DOM when rightPanelOpen is true", async () => {
+      useUiPrefs.setState({ rightPanelOpen: true });
+      renderProjectPage();
+      await screen.findByTestId("right-panel");
+      expect(screen.queryByTestId("right-panel-expand-btn")).toBeNull();
+    });
+
+    it("project-detail-column always has content (re-open tab) when right panel is collapsed", async () => {
+      useUiPrefs.setState({ rightPanelOpen: false });
+      renderProjectPage();
+      await screen.findByTestId("project-page");
+      const detailCol = screen.getByTestId("project-detail-column");
+      // The column must not be empty — it now contains the re-open tab button.
+      expect(detailCol.children.length).toBeGreaterThan(0);
+    });
+  });
 });

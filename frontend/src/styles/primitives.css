@@ -657,3 +657,48 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-3);
 }
+
+/* ── StageToolbar (mirrors pdomain-ui theme/primitives.css §stage-toolbar) ──
+ * StageToolbar applies className="stage-toolbar" via the shared library but
+ * this repo ships its own primitives.css, so the rules must be present here.
+ * Keep in sync with pdomain-ui theme/primitives.css lines 2343–2380.
+ * All values use existing design-token vars already defined in tokens.css.
+ * ─────────────────────────────────────────────────────────────────────────── */
+.stage-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-2);
+  border-radius: 6px 6px 0 0;
+}
+
+.stage-toolbar[data-sticky="true"] {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  box-shadow: 0 1px 0 var(--border-2);
+}
+
+.stage-toolbar__left,
+.stage-toolbar__center,
+.stage-toolbar__right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Auto margins on center consume all free space evenly, centering the
+ * center slot between left and right. The right slot's margin-left:auto
+ * only applies when center is absent — :has() lets us scope it so we
+ * don't double-claim free space alongside center's auto margins. */
+.stage-toolbar__center {
+  margin: 0 auto;
+  justify-content: center;
+}
+
+.stage-toolbar:not(:has(.stage-toolbar__center)) .stage-toolbar__right {
+  margin-left: auto;
+}

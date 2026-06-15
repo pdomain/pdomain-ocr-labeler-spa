@@ -919,20 +919,7 @@ export default function ProjectPage() {
             }}
           >
             {uiPrefs.toolbarGridCollapsed ? (
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            ) : (
+              // Collapsed (closed) — UP chevron; click to expand and reveal content below.
               <svg
                 width="14"
                 height="14"
@@ -945,6 +932,21 @@ export default function ProjectPage() {
                 aria-hidden="true"
               >
                 <polyline points="18 15 12 9 6 15" />
+              </svg>
+            ) : (
+              // Open — DOWN chevron; points toward the visible content below.
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <polyline points="6 9 12 15 18 9" />
               </svg>
             )}
           </button>
@@ -1005,7 +1007,34 @@ export default function ProjectPage() {
         useUiPrefs.setState({ rightPanelOpen: false });
       }}
     />
-  ) : null;
+  ) : (
+    // IS-6: when the right panel is collapsed, render a narrow 32px re-open tab
+    // so the user always has a visible control to restore the panel.
+    <button
+      data-testid="right-panel-expand-btn"
+      type="button"
+      aria-label="Expand detail panel"
+      onClick={() => {
+        useUiPrefs.setState({ rightPanelOpen: true });
+      }}
+      className="flex flex-col items-center justify-center w-full h-full text-ink-3 hover:text-ink-1 hover:bg-bg-1 border-l border-border-1 bg-bg-surface"
+    >
+      {/* ChevronLeft — detail panel is to the right, so left-chevron = "expand leftward" */}
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <polyline points="15 18 9 12 15 6" />
+      </svg>
+    </button>
+  );
   const rightWidth = selectionLevel === "line" || selectionLevel === "block" ? 640 : 520;
 
   return (
@@ -1020,7 +1049,7 @@ export default function ProjectPage() {
         className="grid flex-1 min-h-0 bg-bg-page"
         style={{
           gridTemplateColumns: `minmax(0, 1fr) ${drawerOpen ? "320px" : "32px"} ${
-            rightPanelOpen ? `${rightWidth}px` : "0px"
+            rightPanelOpen ? `${rightWidth}px` : "32px"
           }`,
         }}
       >
