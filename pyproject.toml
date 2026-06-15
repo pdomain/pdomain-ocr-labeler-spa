@@ -31,7 +31,7 @@ dependencies = [
     # urllib3>=2.7.0 — PYSEC-2026-141 / PYSEC-2026-142
     "urllib3>=2.7.0",
     # OCR / image domain (wired in later milestones; harmless to declare now)
-    "pdomain-book-tools>=0.18.3",
+    "pdomain-book-tools>=0.20.0",
     "huggingface_hub>=0.23",
     # Suite plumbing: port probing + registry (find_available_port, register_self)
     # >=0.9.0: PageAggregate.rotation_updated / RotationUpdated event (S8 rotate).
