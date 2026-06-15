@@ -2,12 +2,14 @@
 
 Three independent chrome behaviours:
 
-  V4a — toggling ``layer-words-checkbox`` off flips the words layer pref so the
-        word overlay is no longer rendered (checkbox goes unchecked; the Konva
-        ``BBoxOverlay layer="words"`` receives ``visible={false}``).
-  V4b — selecting the paragraph rail target checks ``selection-mode-paragraph``
-        and makes the canvas hit-test resolve paragraphs; selecting a paragraph
-        then surfaces the right-panel ``paragraph-detail`` view.
+  V4a — toggling ``rail-layer-word`` off flips the words layer pref so the
+        word overlay is no longer rendered (``aria-pressed`` goes "false"; the
+        Konva ``BBoxOverlay layer="words"`` receives ``visible={false}``).
+        (ImageTabsHeader retired D-050/D-053; control re-homed to Rail.)
+  V4b — clicking ``rail-target-para`` activates paragraph mode (``data-active``
+        "true") and makes the canvas hit-test resolve paragraphs; selecting a
+        paragraph then surfaces the right-panel ``paragraph-detail`` view.
+        (``selection-mode-paragraph`` radio retired; Rail target is canonical.)
   V4c — opening the OCR-config modal shows detection/recognition model selects
         that are populated with at least one option each.
 

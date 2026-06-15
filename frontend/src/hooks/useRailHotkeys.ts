@@ -11,9 +11,8 @@
 //   a/A → mode=annotate
 //   e/E → mode=erase
 //
-// SEL-3: target hotkeys (2/3/4) also sync uiPrefs.selectionMode so the
-// ImageTabsHeader radio stays consistent. Key 1 (block) leaves selectionMode
-// unchanged — block has no radio counterpart.
+// SEL-3: target hotkeys (2/3/4) also sync uiPrefs.selectionMode.
+// Key 1 (block) leaves selectionMode unchanged — block has no counterpart.
 
 import { useEffect } from "react";
 import { railStore, type RailTarget, type RailMode } from "../stores/rail-store";

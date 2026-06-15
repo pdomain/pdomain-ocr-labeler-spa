@@ -12,11 +12,11 @@
 // Active mode button: same active treatment.
 // Hotkeys: 1/2/3/4 (target), V/R/A/E (mode) — wired via useRailHotkeys.
 //
-// SEL-3 (bidirectional): rail-target buttons also drive uiPrefs.selectionMode
-// so both controls stay consistent. The "block" target has no radio counterpart
-// in ImageTabsHeader — clicking block leaves selectionMode unchanged (rather
-// than picking an arbitrary "nearest" value, which could confuse the user).
-// The three others map 1:1: para→"paragraph", line→"line", word→"word".
+// SEL-3 (bidirectional): rail-target buttons drive uiPrefs.selectionMode.
+// The "block" target has no selectionMode counterpart — clicking block leaves
+// selectionMode unchanged (rather than picking an arbitrary "nearest" value,
+// which could confuse the user). The three others map 1:1:
+// para→"paragraph", line→"line", word→"word".
 
 import { useSyncExternalStore } from "react";
 import { Eye, Plus } from "@pdomain/pdomain-ui/icons";
@@ -223,11 +223,11 @@ export function Rail() {
     }));
   }
 
-  // SEL-3 (bidirectional sync, rail→radio): set railStore.target AND sync
-  // uiPrefs.selectionMode so the ImageTabsHeader radio stays consistent.
-  // "block" has no radio counterpart — leave selectionMode unchanged when
-  // the user picks block, so the radio continues to reflect the last
-  // word/line/para mode rather than going blank or picking arbitrarily.
+  // SEL-3 (bidirectional sync, rail→pref): set railStore.target AND sync
+  // uiPrefs.selectionMode. "block" has no selectionMode counterpart —
+  // leave selectionMode unchanged when the user picks block, so it
+  // continues to reflect the last word/line/para mode rather than going
+  // blank or picking arbitrarily.
   function handleSetTarget(t: RailTarget) {
     setTarget(t);
     if (t === "para") {

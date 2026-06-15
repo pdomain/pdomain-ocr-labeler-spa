@@ -38,14 +38,17 @@ The decision happens in M4. Document the result in a new ADR.
 
 ## 1. Component map (Konva sketch — actual choice in M4)
 
+> **D-050/D-053 (shipped):** `ImageTabsHeader` was retired. Layer-visibility
+> controls now live in the Rail (`rail-layer-*` buttons). Selection-mode and
+> zoom controls live in the canvas overlay (`canvas-zoom-fit`, `canvas-zoom-100`,
+> `mismatches-only-toggle`). `erase-pixels-button` and `add-word-button` remain
+> in the canvas overlay.
+
 ```
-<ImageTabs>                                    (components/ImageTabs.tsx)
-  <ImageTabsHeader />                          (components/ImageTabsHeader.tsx)
-    layer checkboxes
-    selection-mode radio
-    Erase Pixels button
-    legend badges
-  <PageImageCanvas />                          (components/PageImageCanvas.tsx)
+<Rail />                                       (components/shell/Rail.tsx)
+  rail-layer-block, rail-layer-para, rail-layer-line, rail-layer-word (aria-pressed)
+  rail-target-block, rail-target-para, rail-target-line, rail-target-word (data-active)
+<PageImageCanvas />                            (components/PageImageCanvas.tsx)
     <Stage>
       <Layer name="image">
         <Image src={page.image_url} />
@@ -76,25 +79,37 @@ horizontal space and adds `overflow: auto` for vertical scrolling.
 
 ---
 
-## 2. Header
+## 2. Viewport Controls (re-homed from retired ImageTabsHeader — D-050/D-053)
 
-`ImageTabsHeader` columns left-to-right:
+### Rail layer toggles
 
-1. Three checkboxes:
-   - **Show Paragraphs** — `data-testid="layer-paragraphs-checkbox"`,
-     bound to `usePrefsStore.layerVisible.paragraphs`.
-   - **Show Lines** — `layer-lines-checkbox`.
-   - **Show Words** — `layer-words-checkbox`.
-   Default all checked.
-2. **Selection Mode** radio group (radix RadioGroup) with three options:
-   `paragraph` (testid `selection-mode-paragraph`),
-   `line` (testid `selection-mode-line`),
-   `word` (testid `selection-mode-word`).
-   Default `word`. Bound to `usePrefsStore.selectionMode`.
-3. **Erase Pixels** button — testid `erase-pixels-button`.
-   Pressed-state when `useViewportStore.mode === "erase"`. Toggles the
-   viewport into Erase mode.
-4. Legend badges — three rounded chips with the layer color.
+Four `aria-pressed` buttons in the Rail control layer visibility:
+
+- `rail-layer-block` — block bbox overlay
+- `rail-layer-para` — paragraph bbox overlay (replaces `layer-paragraphs-checkbox`)
+- `rail-layer-line` — line bbox overlay (replaces `layer-lines-checkbox`)
+- `rail-layer-word` — word bbox overlay (replaces `layer-words-checkbox`)
+
+Bound to `useUiPrefs.layerVisibility`. Default: all visible.
+
+### Rail selection-mode targets
+
+Four `data-active` buttons in the Rail control the canvas hit-test unit:
+
+- `rail-target-block`, `rail-target-para`, `rail-target-line`, `rail-target-word`
+  (replace `selection-mode-paragraph`, `selection-mode-line`, `selection-mode-word`)
+
+Bound to `railStore.target` / `useUiPrefs.selectionMode`. Default: `word`.
+
+### Canvas overlay controls
+
+- **Erase Pixels** — `erase-pixels-button` (canvas overlay, `aria-pressed`).
+  Toggles `useViewportStore.mode === "erase"`.
+- **Add Word** — `add-word-button` (canvas overlay, `aria-pressed`).
+- **Mismatches only** — `mismatches-only-toggle` (canvas overlay, `aria-pressed`).
+  Dims exact/validated word bboxes to 20% opacity.
+- **Zoom Fit** — `canvas-zoom-fit` (replaces `zoom-fit-button`).
+- **Zoom 100%** — `canvas-zoom-100` (replaces `zoom-100-button`).
 
 Layer colors (RGBA verbatim from legacy
 `image_tabs.py:280-285,500-535`):
@@ -299,8 +314,8 @@ These are **new** — the legacy has no viewport hotkeys
 
 - **ImageTabs text-overlay sub-tabs (#295).** Resolved 2026-05-16 per
   D-045: no text-overlay sub-tabs (GT / OCR / Matches overlaid on the
-  canvas) will be added. The `mismatches-only-toggle` in
-  `ImageTabsHeader` is the shipped resolution. Coverage for the GT and
+  canvas) will be added. The `mismatches-only-toggle` in the canvas
+  overlay is the shipped resolution. Coverage for the GT and
   OCR use-cases comes from the right-pane `TextTabs` (Matches / Ground
   Truth / OCR) and the `WordDetail` / `LineDetail` panels. See
   `specs/17-decisions.md` D-045.

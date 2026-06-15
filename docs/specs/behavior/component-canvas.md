@@ -10,7 +10,7 @@
 - **Shared unit:** yes
 - **Implementation:** `frontend/src/components/PageImageCanvas.tsx`,
   `frontend/src/components/BBoxOverlay.tsx`,
-  `frontend/src/components/ImageTabsHeader.tsx`,
+  `frontend/src/components/shell/Rail.tsx`,
   `frontend/src/stores/viewport-store.ts`,
   `frontend/src/stores/selection-store.ts`
 - **Backend / collaborators touched:** page payload image URL, selection state,
@@ -54,8 +54,8 @@
 
 - **Flow(s):** -
 - **Composed by:** -
-- **Trigger:** User clicks `zoom-fit-button`, `zoom-100-button`, layer
-  checkboxes, or selection-mode radios.
+- **Trigger:** User clicks `canvas-zoom-fit`, `canvas-zoom-100`, Rail layer
+  buttons (`rail-layer-*`), or Rail selection-mode targets (`rail-target-*`).
 - **Preconditions:** Project page is loaded.
 - **Observable output:** Zoom/layer/mode visual state updates; hidden layers no
   longer render their bboxes; selection mode controls which level is selected.

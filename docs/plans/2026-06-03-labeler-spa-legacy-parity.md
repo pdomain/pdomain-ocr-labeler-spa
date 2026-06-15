@@ -291,16 +291,13 @@ Worktree: `.claude/worktrees/parity-lane-c`. No dependency on Lane A/B except A4
 
 ### Task C1: Mount `ImageTabsHeader` (layer toggles, selection-mode, erase, legend)
 
-Audit: `ImageTabsHeader.tsx` is fully built but never mounted (only commented out at `ProjectPage.tsx:18`). Its controls (Show Para/Lines/Words checkboxes, Select-mode radio, Erase Pixels button, color legend) exist only via Rail + hotkeys.
+> **Superseded by D-050/D-053.** `ImageTabsHeader.tsx` was permanently retired
+> (never mounted). Layer controls re-homed to the Rail (`rail-layer-*`);
+> selection-mode to Rail targets (`rail-target-*`); zoom/erase/mismatches-only
+> to the canvas overlay. `ImageTabsHeader.tsx` and its unit tests deleted in
+> `chore/delete-imagetabsheader`. Steps below are obsolete.
 
-**Files:**
-- Modify: `frontend/src/pages/ProjectPage.tsx` (mount `<ImageTabsHeader />` above the canvas, wired to the same `useUiPrefs`/viewport store the Rail uses)
-- Test: `frontend/src/components/__tests__/ImageTabsHeader.mount.test.tsx`
-
-- [ ] **Step 1: Write failing test** — render ProjectPage, assert `layer-paragraphs-checkbox`, `selection-mode-word`, `erase-pixels-button`, `legend-chip-line` are all in the document and that toggling `layer-words-checkbox` updates the words-layer visibility pref.
-- [ ] **Step 2: Run, expect FAIL** (component not mounted).
-- [ ] **Step 3: Implement** — uncomment/import and mount `ImageTabsHeader`, binding its props to the existing `useUiPrefs` selectors and `toggleEraseMode` already used by the Rail (so Rail and header stay in sync on one source of truth).
-- [ ] **Step 4: Run, expect PASS. Commit** — `git commit -m "feat(chrome): mount ImageTabsHeader viewport controls (layers/selection/erase/legend)"`.
+~~Audit: `ImageTabsHeader.tsx` is fully built but never mounted (only commented out at `ProjectPage.tsx:18`). Its controls (Show Para/Lines/Words checkboxes, Select-mode radio, Erase Pixels button, color legend) exist only via Rail + hotkeys.~~
 
 ### Task C2: Restore dropped action buttons in `PageActionsCompact`
 
@@ -377,9 +374,9 @@ Audit row 20: legacy 3-way filter (Unvalidated / Mismatched / All); SPA has 2-wa
 
 ### Task D5: Add-Word affordance in the toolbar/canvas
 
-Audit row 30 / row 38: legacy has an explicit "Add Word" button + draw mode; SPA's grid `word-add-button` toggles mode but (pre-Lane-B B2) had no API leg. Ensure a discoverable Add-Word control exists outside the grid too (e.g. in `ImageTabsHeader` or PageActions) and that draw→`words/add` works end-to-end.
+Audit row 30 / row 38: legacy has an explicit "Add Word" button + draw mode; SPA's grid `word-add-button` toggles mode but (pre-Lane-B B2) had no API leg. Ensure a discoverable Add-Word control exists outside the grid too (canvas overlay `add-word-button`) and that draw→`words/add` works end-to-end.
 
-**Files:** Modify `frontend/src/components/ImageTabsHeader.tsx` (add `add-word-button`) + verify wiring from B2 (+ test).
+**Files:** `add-word-button` now lives in the canvas overlay in `PageImageCanvas.tsx` (`ImageTabsHeader.tsx` retired D-050/D-053). Verify wiring from B2 (+ test).
 - [ ] **Step 1:** Failing test — `add-word-button` enters add mode; drawing a rect POSTs `words/add`. **Steps 2–5** standard. (Coordinate with Lane B2 to avoid duplicate handlers.)
 
 ---
@@ -436,7 +433,7 @@ Worktree: `.claude/worktrees/parity-verify`. Runs after all lanes merge. This re
 ### Task V4: Viewport chrome controls work in the browser
 
 **Files:** `tests/e2e/test_parity_chrome.py` (Create)
-- [x] **Step 1:** Toggle `layer-words-checkbox` off, assert word overlays hidden on the canvas; switch `selection-mode-paragraph`, assert clicking the image selects a paragraph; open OCR-config, assert the model selects are populated. **Step 2:** `make e2e`, expect PASS. **Commit.** — `tests/e2e/test_parity_chrome.py`: words-checkbox toggle (EXECUTED, PASS — surfaced + fixed a real bug: `onLayerToggle`/`onSelectionModeChange` skipped `notifyUiPrefs()` so the controlled checkbox never re-rendered); OCR-config model selects populated (EXECUTED, PASS); paragraph selection via rail-target-para + hierarchy → `paragraph-detail` (authored; SKIPS in sandbox, needs word content).
+- [x] **Step 1:** Toggle words-layer rail button (`rail-layer-word`) off, assert word overlays hidden on the canvas; switch to paragraph mode via `rail-target-para`, assert clicking the image selects a paragraph; open OCR-config, assert the model selects are populated. **Step 2:** `make e2e`, expect PASS. **Commit.** — `tests/e2e/test_parity_chrome.py`: words-layer rail toggle (EXECUTED, PASS — original task was written against `layer-words-checkbox`/`selection-mode-paragraph`, re-homed by D-050/D-053 before execution; test was authored against rail targets); OCR-config model selects populated (EXECUTED, PASS); paragraph selection via rail-target-para + hierarchy → `paragraph-detail` (authored; SKIPS in sandbox, needs word content).
 
 ### Task V5: React Router sub-path renders
 

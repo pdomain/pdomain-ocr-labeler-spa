@@ -29,8 +29,8 @@ implementation decisions before they can be treated as locked behavior.
   current canvas click miss appears to preserve selection.
 - Erase repeated-drag behavior conflicts: some docs say erase remains active,
   current component evidence suggests erase exits after one drag.
-- `ImageTabsHeader` has tests but may not be mounted by current `ProjectPage`;
-  ownership of layer/zoom controls should be confirmed.
+- `ImageTabsHeader` was retired (D-050/D-053) and deleted. Layer controls live
+  in the Rail (`rail-layer-*`); zoom controls in the canvas overlay (`canvas-zoom-*`).
 
 ## Shell and drawer
 

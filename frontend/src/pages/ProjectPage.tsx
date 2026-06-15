@@ -14,7 +14,7 @@
 //     <ToolbarActionGrid />
 //     <Splitter direction="horizontal">
 //       <LeftPane data-testid="image-pane">
-//         <ImageTabsHeader />
+//         (ImageTabsHeader retired D-050/D-053)
 //         <BusyOverlay />
 //         <PageImageCanvas />
 //         <InlineBanners />

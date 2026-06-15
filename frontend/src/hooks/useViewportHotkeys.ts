@@ -14,8 +14,7 @@
 // itself still listens globally via react-hotkeys-hook.
 
 import { useHotkey } from "./useHotkey";
-import type { SelectionMode } from "../components/ImageTabsHeader";
-import type { LayerVisibility } from "../stores/ui-prefs";
+import type { LayerVisibility, SelectionMode } from "../stores/ui-prefs";
 
 interface UseViewportHotkeysOptions {
   /** Disable all viewport hotkeys (e.g. when a modal is open). */

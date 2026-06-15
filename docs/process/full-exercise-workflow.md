@@ -1160,32 +1160,32 @@ edge.
 
 ### 7.1 — Toggle paragraph layer visibility
 
-**Action.** Uncheck `layer-paragraphs-checkbox`.
+**Action.** Click `rail-layer-para` in the Rail (aria-pressed button; D-050/D-053).
 
 **Expected.** Paragraph bounding-box rectangles disappear from the canvas overlay.
-Checking it again restores them.
+Clicking again restores them.
 
-**Pass criterion.** No paragraph-colored rects visible when unchecked.
+**Pass criterion.** No paragraph-colored rects visible when `aria-pressed="false"`.
 
 ---
 
 ### 7.2 — Toggle line layer visibility
 
-**Action.** Uncheck `layer-lines-checkbox`.
+**Action.** Click `rail-layer-line` in the Rail.
 
 **Expected.** Line bboxes (pink family) disappear from canvas.
 
-**Pass criterion.** No pink rects visible when unchecked.
+**Pass criterion.** No pink rects visible when `aria-pressed="false"`.
 
 ---
 
 ### 7.3 — Toggle word layer visibility
 
-**Action.** Uncheck `layer-words-checkbox`.
+**Action.** Click `rail-layer-word` in the Rail.
 
 **Expected.** Word bboxes (blue family) disappear from canvas.
 
-**Pass criterion.** No blue word rects visible when unchecked.
+**Pass criterion.** No blue word rects visible when `aria-pressed="false"`.
 
 ---
 
@@ -1193,17 +1193,17 @@ Checking it again restores them.
 
 **Action.** Focus the canvas (click on it or Tab to it). Press `Shift+P`.
 
-**Expected.** Paragraph layer toggles (same as unchecking `layer-paragraphs-checkbox`).
+**Expected.** Paragraph layer toggles (same as clicking `rail-layer-para`).
 
 **Variants.** `Shift+L` (lines), `Shift+W` (words).
 
-**Pass criterion.** Same visual result as unchecking the corresponding checkbox.
+**Pass criterion.** Same visual result as toggling the corresponding `rail-layer-*` button.
 
 ---
 
 ### 7.5 — Selection mode: Word (default)
 
-**Action.** Confirm `selection-mode-word` radio is active. Click anywhere on the
+**Action.** Confirm `rail-target-word` is active (`data-active="true"`). Click anywhere on the
 canvas outside a word bbox.
 
 **Expected.** Selection clears. Toolbar word-scope buttons are disabled.
@@ -1220,7 +1220,7 @@ the number of words inside the drag rect.
 
 ### 7.6 — Selection mode: Line
 
-**Action.** Click `selection-mode-line` radio. Drag a box overlapping multiple
+**Action.** Click `rail-target-line`. Drag a box overlapping multiple
 line bboxes.
 
 **Expected.** Lines (not individual words) are selected. Toolbar line-scope
@@ -1233,7 +1233,7 @@ enabled.
 
 ### 7.7 — Selection mode: Paragraph
 
-**Action.** Click `selection-mode-paragraph` radio. Click inside a paragraph
+**Action.** Click `rail-target-para`. Click inside a paragraph
 bbox.
 
 **Expected.** That paragraph is selected. Toolbar paragraph-scope buttons are
@@ -1392,11 +1392,11 @@ selected scope.
 
 ### 7.19 — Zoom fit and 100%
 
-**Action.** Click `zoom-fit-button`.
+**Action.** Click `canvas-zoom-fit` (canvas overlay; D-050/D-053).
 
 **Expected.** Page image scales to fit the viewport width.
 
-**Action.** Click `zoom-100-button`.
+**Action.** Click `canvas-zoom-100`.
 
 **Expected.** Page image renders at 1:1 pixel ratio.
 
@@ -1455,9 +1455,9 @@ interaction.
 | `Shift+P` | Toggle paragraph layer | Paragraph rects appear/disappear |
 | `Shift+L` | Toggle line layer | Line rects appear/disappear |
 | `Shift+W` | Toggle word layer | Word rects appear/disappear |
-| `Shift+1` | Selection mode → paragraph | `selection-mode-paragraph` becomes active |
-| `Shift+2` | Selection mode → line | `selection-mode-line` becomes active |
-| `Shift+3` | Selection mode → word | `selection-mode-word` becomes active |
+| `Shift+1` | Selection mode → paragraph | `rail-target-para` gets `data-active="true"` |
+| `Shift+2` | Selection mode → line | `rail-target-line` gets `data-active="true"` |
+| `Shift+3` | Selection mode → word | `rail-target-word` gets `data-active="true"` |
 | `Shift+E` | Toggle Erase mode | `erase-pixels-button` active state toggles |
 | `Shift+A` | Toggle Add Word mode | `word-add-button` active state toggles |
 
@@ -2144,10 +2144,13 @@ of truth is `docs/architecture/13-driver-contract.md`.
 
 ### Image Tabs (left pane)
 
-`layer-paragraphs-checkbox`, `layer-lines-checkbox`, `layer-words-checkbox`,
-`selection-mode-paragraph`, `selection-mode-line`, `selection-mode-word`,
-`erase-pixels-button`, `mismatches-only-toggle`,
-`zoom-fit-button`, `zoom-100-button`, `image-viewport`
+`image-viewport`, `erase-pixels-button`, `add-word-button`, `mismatches-only-toggle`,
+`canvas-zoom-fit`, `canvas-zoom-100`, `canvas-zoom-controls`
+
+> **Retired (D-050/D-053):** `layer-paragraphs-checkbox`, `layer-lines-checkbox`,
+> `layer-words-checkbox`, `selection-mode-paragraph`, `selection-mode-line`,
+> `selection-mode-word`, `zoom-fit-button`, `zoom-100-button` — moved to Rail and
+> canvas overlay (see Rail section below).
 
 ### Rail
 

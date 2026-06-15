@@ -36,6 +36,12 @@ export interface LayerVisibility {
 }
 
 /**
+ * Selection mode — which bbox unit the canvas hit-test resolves.
+ * Aligned with legacy labeler; see specs/21-konva-renderer.md §8.
+ */
+export type SelectionMode = "paragraph" | "line" | "word";
+
+/**
  * Match-filter mode for the word-match list — spec 22 §8.
  *
  * Mirrors legacy `pd-ocr-labeler` filter values
@@ -74,7 +80,7 @@ export interface UiPrefsState {
   layerVisibility: LayerVisibility;
   /** Horizontal splitter ratio in [0.2, 0.8]. 0.5 = panes equal width. */
   splitterRatio: number;
-  selectionMode: "paragraph" | "line" | "word";
+  selectionMode: SelectionMode;
   /** Word-match list filter (spec 22 §8). Default: "unvalidated". */
   matchFilter: MatchFilter;
   /** Whether the drawer panel is open. Spec: Slice 11. */

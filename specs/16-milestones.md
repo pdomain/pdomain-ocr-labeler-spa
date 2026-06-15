@@ -302,8 +302,9 @@ work as in the legacy.
   with the right colors (paragraphs green, lines pink, words blue).
   Match exact RGBA values from
   `pd-ocr-labeler/.../views/projects/pages/image_tabs.py:280-285`.
-- `components/ImageTabsHeader.tsx` — Show Paragraphs / Lines / Words
-  checkboxes, Selection Mode radio, legend badges.
+- Rail (`components/shell/Rail.tsx`) — Show Paragraphs / Lines / Words
+  toggle buttons (`rail-layer-*`), Selection Mode targets (`rail-target-*`).
+  (`ImageTabsHeader.tsx` retired D-050/D-053; controls live in Rail + canvas overlay.)
 - `components/PageImageCanvas.tsx` — drag handlers (mousedown/move/up
   on the Stage). Drag rect drawn with blue dashed `#2563eb` stroke
   exactly matching legacy.
@@ -698,8 +699,9 @@ only on those two upstream deliveries.
 - `frontend/src/components/WordCell.tsx` — corner badge + chip row.
 - `frontend/src/components/WordEditDialog.tsx` — Typography section.
 - `frontend/src/components/ToolbarActionGrid.tsx` — Bulk-mark button.
-- `frontend/src/components/ImageTabsHeader.tsx` —
+- `frontend/src/components/PageImageCanvas.tsx` (canvas overlay) —
   `predictions-overlay-toggle`.
+  (`ImageTabsHeader.tsx` deleted; overlay toggle lives in canvas overlay.)
 - `tests/unit/test_glyph_annotations_envelope.py`.
 - `tests/unit/test_glyph_envelope_back_compat.py`.
 - `tests/unit/test_glyph_bulk_mark.py`.

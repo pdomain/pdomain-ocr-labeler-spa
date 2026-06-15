@@ -323,7 +323,8 @@ for unattended bulk marking on a project — see §6 for testids.
 Optional, M11.x polish — ghost-color outlines on words with
 `glyph_predictions != None and glyph_annotations is None`, so the user
 can see at-a-glance which words the classifier wants attention on.
-Toggle in `<ImageTabsHeader>` ("Show prediction hints").
+Toggle in the canvas overlay ("Show prediction hints").
+(`ImageTabsHeader` retired D-050/D-053; new controls live in the canvas overlay.)
 
 **Ghost color (Q-A6, resolved).** Default: translucent blue (`#3B82F6`,
 Tailwind `blue-500`) at 40% opacity. This is the `--predictions-ghost-color`
@@ -427,7 +428,7 @@ a new subsection "2.x Glyph annotations":
 | `bulk-glyph-dry-run-button` | Preview button |
 | `bulk-glyph-apply-button` | Apply button |
 | `bulk-glyph-preview-count` | Span containing the preview count text (`47 words will be modified`) |
-| `predictions-overlay-toggle` | `<ImageTabsHeader>` checkbox for prediction hints overlay |
+| `predictions-overlay-toggle` | Canvas overlay toggle for prediction hints overlay |
 
 The driver agent uses `bulk-glyph-*` to script unattended runs across a
 labeled corpus. The `{line}-{word}` parameterised testids let it

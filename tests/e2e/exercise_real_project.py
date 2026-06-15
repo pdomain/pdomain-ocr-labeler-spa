@@ -289,8 +289,10 @@ def test_per_page_common_workflow(
     # 1. Image viewport present.
     page.wait_for_selector('[data-testid="image-viewport"]', timeout=10_000)
 
-    # 2. Layer checkboxes — toggle lines off and back on.
-    lines_cb = page.locator('[data-testid="layer-lines-checkbox"]').first
+    # 2. Rail layer toggle — toggle lines off and back on.
+    # Layer controls moved from the retired ImageTabsHeader to the Rail
+    # (rail-layer-line is an aria-pressed button; D-050/D-053).
+    lines_cb = page.locator('[data-testid="rail-layer-line"]').first
     if lines_cb.is_visible():
         lines_cb.click()
         time.sleep(0.15)
@@ -694,7 +696,7 @@ def test_page5_erase_mode_toggle(exercise_server: ExerciseServer, page: Page) ->
     time.sleep(0.2)
 
     aria_pressed = erase_btn.get_attribute("aria-pressed")
-    # Should be "true" when active (ImageTabsHeader sets this).
+    # Should be "true" when active (canvas overlay manages aria-pressed).
     if aria_pressed is not None:
         assert aria_pressed == "true", (
             f"Expected erase-pixels-button aria-pressed='true' after click, got {aria_pressed!r}"
@@ -1102,7 +1104,7 @@ def test_phase_6_22_hotkey_apply_style_component(exercise_server: ExerciseServer
 @pytest.mark.e2e
 @pytest.mark.skip("TODO: walk in browser — CU-2.2")
 def test_phase_7_1_toggle_paragraph_layer(exercise_server: ExerciseServer, page: Page) -> None:
-    """P7.1 — uncheck layer-paragraphs-checkbox; paragraph rects disappear from canvas."""
+    """P7.1 — toggle rail-layer-para off (aria-pressed → false); paragraph rects disappear from canvas."""
 
 
 @pytest.mark.e2e

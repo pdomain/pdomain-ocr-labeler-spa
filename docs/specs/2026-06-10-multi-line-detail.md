@@ -131,8 +131,8 @@ the open conditions:
 - [ ] AG-4 (CONFIRMED, root cause of the multi-line failure): selection
       granularity has two disagreeing sources of truth. Observed on fresh
       bundle: page LOADS with `rail-target-line` `data-active=true` while
-      `selection-mode-word` is checked; clicking rail targets never updates
-      the radio; and box-select drag routing follows the RADIO
+      `uiPrefs.selectionMode` defaulted to "word"; clicking rail targets never updated
+      that pref; and box-select drag routing follows `selectionMode`
       (`selectionMode`), so "line mode" drags select WORDS. Fix: make one
       store the single source of truth (rail target ⇄ selectionMode
       reconciled on mount AND on every change, both directions), and make

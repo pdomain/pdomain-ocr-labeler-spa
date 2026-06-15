@@ -81,7 +81,7 @@ tested; this spec changes how they compose, not what they do.
   <ToolbarActionGrid />                    ← Page / Paragraph / Line / Word rows + Apply Style/Component
   <Splitter direction="horizontal">
     <LeftPane data-testid="image-pane">
-      <ImageTabsHeader />                  ← visibility checkboxes + selection mode + Erase
+      {/* ImageTabsHeader retired D-050/D-053 — controls in Rail + canvas overlay */}
       <BusyOverlay />                      ← shipped — overlay on loading
       <PageImageCanvas />                  ← shipped post-spec-21
         <BBoxOverlay layer="paragraphs" … />

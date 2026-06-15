@@ -95,8 +95,7 @@ import {
   setCanvasZoom,
   type ViewportMode,
 } from "../stores/viewport-store";
-import { useUiPrefs, type LayerVisibility } from "../stores/ui-prefs";
-import type { SelectionMode } from "./ImageTabsHeader";
+import { useUiPrefs, type LayerVisibility, type SelectionMode } from "../stores/ui-prefs";
 import { useViewportHotkeys } from "../hooks/useViewportHotkeys";
 import { railStore, type RailTarget } from "../stores/rail-store";
 
