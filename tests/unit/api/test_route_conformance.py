@@ -36,10 +36,14 @@ from fastapi.routing import APIRoute
 @pytest.fixture(scope="module")
 def schema_routes() -> list[APIRoute]:
     """All APIRoute instances that are included in the OpenAPI schema."""
+    from pdomain_ocr_labeler_spa.api.route_introspection import iter_leaf_routes
     from pdomain_ocr_labeler_spa.bootstrap import build_app
 
     app = build_app()
-    return [r for r in app.routes if isinstance(r, APIRoute) and r.include_in_schema]
+    # Starlette 1.3 nests include_router'd routes under ``_IncludedRouter``
+    # wrappers; ``iter_leaf_routes`` recurses into them so this fixture keeps
+    # seeing the first-party APIRoutes (otherwise the checks pass vacuously).
+    return [r for r in iter_leaf_routes(app) if isinstance(r, APIRoute) and r.include_in_schema]
 
 
 def test_every_schema_route_has_explicit_response_model(schema_routes: list[APIRoute]) -> None:

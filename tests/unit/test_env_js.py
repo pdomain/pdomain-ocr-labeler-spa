@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from pdomain_ocr_labeler_spa.api.route_introspection import iter_leaf_route_paths
 from pdomain_ocr_labeler_spa.bootstrap import build_app
 from pdomain_ocr_labeler_spa.settings import Settings
 
@@ -83,7 +84,7 @@ def test_env_js_route_absent_from_router_table_in_api_only(tmp_path: Path) -> No
         mode="api_only",
     )
     app = build_app(s)
-    paths = {getattr(r, "path", None) for r in app.router.routes}
+    paths = iter_leaf_route_paths(app)
     assert "/env.js" not in paths
 
 
@@ -97,7 +98,7 @@ def test_env_js_route_present_in_router_table_in_normal(tmp_path: Path) -> None:
         mode="normal",
     )
     app = build_app(s)
-    paths = {getattr(r, "path", None) for r in app.router.routes}
+    paths = iter_leaf_route_paths(app)
     assert "/env.js" in paths
 
 

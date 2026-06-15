@@ -25,6 +25,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from pdomain_ocr_labeler_spa.api.route_introspection import (
+    iter_leaf_route_paths,
+    iter_leaf_routes,
+)
 from pdomain_ocr_labeler_spa.bootstrap import build_app
 from pdomain_ocr_labeler_spa.settings import Settings
 
@@ -224,7 +228,7 @@ def test_image_cache_disabled_in_api_only_mode(tmp_path: Path) -> None:
         mode="api_only",
     )
     app = build_app(s)
-    paths = {route.path for route in app.routes if hasattr(route, "path")}  # pyright: ignore[reportAttributeAccessIssue]
+    paths = iter_leaf_route_paths(app)
     assert "/image-cache/{key:path}" not in paths
     assert "/{full_path:path}" not in paths
 
@@ -558,7 +562,7 @@ def test_spa_fallback_skipped_when_frontend_dev_url_set(tmp_path: Path, spa_dir:
         frontend_dev_url="http://localhost:5173",
     )
     app = build_app(s)
-    paths = {route.path for route in app.routes if hasattr(route, "path")}  # pyright: ignore[reportAttributeAccessIssue]
+    paths = iter_leaf_route_paths(app)
     # The SPA catch-all is NOT registered.
     assert "/{full_path:path}" not in paths
     # Core routes ARE still registered.
@@ -1069,7 +1073,11 @@ def test_catch_all_registered_after_real_routes(settings: Settings) -> None:
     be after every concrete route or it will shadow them.
     """
     app = build_app(settings)
-    paths = [route.path for route in app.routes if hasattr(route, "path")]  # pyright: ignore[reportAttributeAccessIssue]
+    paths = [
+        route.path  # pyright: ignore[reportAttributeAccessIssue]
+        for route in iter_leaf_routes(app)
+        if hasattr(route, "path")
+    ]
     assert "/{full_path:path}" in paths
     assert paths[-1] == "/{full_path:path}", (
         "SPA catch-all must be the last registered route, otherwise it "

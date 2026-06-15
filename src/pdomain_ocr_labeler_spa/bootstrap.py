@@ -284,6 +284,8 @@ def _suppress_ops_schema_violations(app: FastAPI) -> None:
     """
     from fastapi.routing import APIRoute
 
+    from .api.route_introspection import iter_leaf_routes
+
     # Paths whose ops-mounted routes cannot provide a typed response_model.
     # Keyed by (method, path) pairs matching the APIRoute attributes.
     ops_suppress: frozenset[tuple[str, str]] = frozenset(
@@ -296,7 +298,10 @@ def _suppress_ops_schema_violations(app: FastAPI) -> None:
         }
     )
 
-    for route in app.routes:
+    # Starlette 1.3 nests include_router'd routes under ``_IncludedRouter``
+    # wrappers, so ``app.routes`` no longer yields these APIRoutes directly.
+    # ``iter_leaf_routes`` recurses into the wrappers to restore a flat view.
+    for route in iter_leaf_routes(app):
         if not isinstance(route, APIRoute):
             continue
         if not getattr(route, "include_in_schema", True):
