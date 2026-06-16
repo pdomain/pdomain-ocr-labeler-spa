@@ -16,8 +16,8 @@
 //   style-palette          — outer container
 //   style-chip-{styleKey}  — individual chip (key = canonical style string, spaces → -)
 
-import { Chip } from "../ui/Chip";
-import type { TristateValue } from "../ui/Chip";
+import { TriStateChip } from "@pdomain/pdomain-ui/primitives";
+import type { TriStateValue } from "@pdomain/pdomain-ui/primitives";
 import { useLabelVocabulary, FALLBACK_STYLES } from "../../hooks/useLabelVocabulary";
 
 export interface StyleItem {
@@ -63,7 +63,7 @@ export interface ChipPaletteProps {
   items: ChipPaletteItem[];
   activeKeys: Set<string>;
   "data-testid-prefix": string;
-  onChange: (key: string, next: TristateValue) => void;
+  onChange: (key: string, next: TriStateValue) => void;
 }
 
 export function ChipPalette({
@@ -75,11 +75,10 @@ export function ChipPalette({
   return (
     <div className="flex flex-wrap gap-1">
       {items.map((item) => {
-        const value: TristateValue = activeKeys.has(item.key) ? "on" : "off";
+        const value: TriStateValue = activeKeys.has(item.key) ? "on" : "off";
         return (
-          <Chip
+          <TriStateChip
             key={item.key}
-            variant="tristate"
             value={value}
             data-testid={`${testIdPrefix}-${item.key.replace(/ /g, "-")}`}
             onChange={(next) => {
@@ -92,7 +91,7 @@ export function ChipPalette({
             }}
           >
             {item.label}
-          </Chip>
+          </TriStateChip>
         );
       })}
     </div>
@@ -105,7 +104,7 @@ export interface StylePaletteProps {
   /** Currently active style labels on the word. */
   activeStyles: string[];
   /** Called when a chip is toggled — canonical style key + new tristate value. */
-  onStyleChange: (styleKey: string, next: TristateValue) => void;
+  onStyleChange: (styleKey: string, next: TriStateValue) => void;
 }
 
 export function StylePalette({ activeStyles, onStyleChange }: StylePaletteProps) {

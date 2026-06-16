@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StylePalette, ChipPalette } from "./StylePalette";
-import type { TristateValue } from "../ui/Chip";
+import type { TriStateValue } from "@pdomain/pdomain-ui/primitives";
 
 // Mock useLabelVocabulary so StylePalette renders the canonical set in tests
 // without needing a real QueryClient + MSW.
@@ -143,7 +143,7 @@ describe("ChipPalette (P2.d reusable)", () => {
   ];
 
   it("renders chips with correct testids", () => {
-    const noop: (key: string, next: TristateValue) => void = vi.fn();
+    const noop: (key: string, next: TriStateValue) => void = vi.fn();
     render(
       <ChipPalette
         items={items}
@@ -157,7 +157,7 @@ describe("ChipPalette (P2.d reusable)", () => {
   });
 
   it("active keys show as 'on'", () => {
-    const noop: (key: string, next: TristateValue) => void = vi.fn();
+    const noop: (key: string, next: TriStateValue) => void = vi.fn();
     render(
       <ChipPalette
         items={items}

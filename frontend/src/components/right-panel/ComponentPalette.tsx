@@ -15,7 +15,7 @@
 //   component-chip-{componentKey} — individual chip (key = canonical component string, spaces → -)
 
 import { ChipPalette } from "./StylePalette";
-import type { TristateValue } from "../ui/Chip";
+import type { TriStateValue } from "@pdomain/pdomain-ui/primitives";
 import type { ChipPaletteItem } from "./StylePalette";
 import { useLabelVocabulary, FALLBACK_COMPONENTS } from "../../hooks/useLabelVocabulary";
 
@@ -45,7 +45,7 @@ export interface ComponentPaletteProps {
   /** Currently active component tags on the word. */
   activeComponents: string[];
   /** Called when a chip is toggled — canonical component key + new tristate value. */
-  onComponentChange: (componentKey: string, next: TristateValue) => void;
+  onComponentChange: (componentKey: string, next: TriStateValue) => void;
 }
 
 export function ComponentPalette({ activeComponents, onComponentChange }: ComponentPaletteProps) {

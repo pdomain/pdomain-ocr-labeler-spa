@@ -38,7 +38,7 @@
 //   char-range-add               -- bottom "+ Add range" button
 
 import { useState, useEffect } from "react";
-import { Chip, type TristateValue } from "../../ui/Chip";
+import { TriStateChip, type TriStateValue } from "@pdomain/pdomain-ui/primitives";
 import { Button } from "../../ui/button";
 import { useSetCharRanges } from "../../../hooks/useWordMutations";
 import { ChipPalette, STYLE_ITEMS } from "../StylePalette";
@@ -60,14 +60,14 @@ interface CharRange {
   start: number;
   end: number;
   // Legacy tristate styles from the pending panel (kept for compat).
-  styles: Record<PendingStyleKey, TristateValue>;
+  styles: Record<PendingStyleKey, TriStateValue>;
   // P4.a: per-range kind + chip state.
   kind: RangeKind;
   activeStyles: Set<string>;
   activeComponents: Set<string>;
 }
 
-function emptyStyles(): Record<PendingStyleKey, TristateValue> {
+function emptyStyles(): Record<PendingStyleKey, TriStateValue> {
   return {
     italics: "off",
     bold: "off",
@@ -106,7 +106,7 @@ function fromApiCharRange(r: ApiCharRange): CharRange {
   const kind: RangeKind = activeComponents.size > 0 ? "component" : "style";
   const styles = Object.fromEntries(
     PENDING_STYLE_KEYS.map((k) => [k, styleSet.has(k) ? "on" : "off"]),
-  ) as Record<PendingStyleKey, TristateValue>;
+  ) as Record<PendingStyleKey, TriStateValue>;
   return { start: r.start, end: r.end, kind, styles, activeStyles, activeComponents };
 }
 
@@ -249,7 +249,7 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
   const [anchor, setAnchor] = useState<number | null>(null);
   const [endPos, setEndPos] = useState<number | null>(null);
   const [pendingStyles, setPendingStyles] =
-    useState<Record<PendingStyleKey, TristateValue>>(emptyStyles);
+    useState<Record<PendingStyleKey, TriStateValue>>(emptyStyles);
 
   // Persisted range cards — initialise from word.char_ranges if present.
   const [ranges, setRanges] = useState<CharRange[]>(() =>
@@ -301,7 +301,7 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
     setPendingStyles(emptyStyles);
   }
 
-  function handlePendingChipChange(key: PendingStyleKey, next: TristateValue) {
+  function handlePendingChipChange(key: PendingStyleKey, next: TriStateValue) {
     setPendingStyles((prev) => ({ ...prev, [key]: next }));
   }
 
@@ -355,7 +355,7 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
     persistRanges(next);
   }
 
-  function handleStyleChipChange(index: number, key: string, next: TristateValue) {
+  function handleStyleChipChange(index: number, key: string, next: TriStateValue) {
     const updated = ranges.map((r, i) => {
       if (i !== index) return r;
       const activeStyles = new Set(r.activeStyles);
@@ -367,7 +367,7 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
     persistRanges(updated);
   }
 
-  function handleComponentChipChange(index: number, key: string, next: TristateValue) {
+  function handleComponentChipChange(index: number, key: string, next: TriStateValue) {
     const updated = ranges.map((r, i) => {
       if (i !== index) return r;
       const activeComponents = new Set(r.activeComponents);
@@ -438,9 +438,8 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
         </p>
         <div className="flex flex-wrap gap-1">
           {PENDING_STYLE_KEYS.map((s) => (
-            <Chip
+            <TriStateChip
               key={s}
-              variant="tristate"
               value={pendingStyles[s]}
               data-testid={`char-ranges-chip-${s}`}
               onChange={(next) => {
@@ -448,7 +447,7 @@ export function CharRangesSection({ word, projectId, pageIndex }: CharRangesSect
               }}
             >
               {s}
-            </Chip>
+            </TriStateChip>
           ))}
         </div>
         <div className="flex justify-end">
