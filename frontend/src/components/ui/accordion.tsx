@@ -1,15 +1,12 @@
-// accordion.tsx — Labeler accordion, pdomain-ui composition (Slice 6).
+// accordion.tsx — Labeler accordion, pdomain-ui 0.11.0 composition.
 //
 // Strategy:
 //   AccordionItem   → pdomain-ui AccordionItem (adds .acc base class, tone prop)
-//   AccordionTrigger → local thin wrapper on raw Radix (NOT pdui AccordionTrigger).
-//                      Reason: pdui AccordionTrigger hard-codes its own chevron
-//                      (<span className="chev">›</span>) inside the trigger AND
-//                      wraps with AccordionPrimitive.Header. Using it would produce
-//                      a double chevron and conflict with the labeler's richer
-//                      layout (hint text + KeyCap chip + custom ChevronDown icon).
-//                      The trigger manually adds .acc-head / .acc-trigger CSS classes
-//                      so primitives.css focus/hover rules still apply.
+//   AccordionTrigger → pdomain-ui AccordionTrigger (0.11.0 generic slots):
+//                      · keycap  → endContent={<KeyCap keys={keycap} />}
+//                      · hint    → <span className="acc-hint">{hint}</span> in children
+//                      · chevron → pdui default (omitted → built-in .chev span "›")
+//                      Pdui owns the Header (.acc-head) + trigger (.acc-trigger) wrappers.
 //   AccordionContent → pdomain-ui AccordionContent (adds .acc-body, primitives.css
 //                      open/close animation). Labeler adds bg-bg-sunk + inner px-4 pb-4.
 //
@@ -23,10 +20,10 @@ import * as React from "react";
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
 import {
   AccordionItem as PduiAccordionItem,
+  AccordionTrigger as PduiAccordionTrigger,
   AccordionContent as PduiAccordionContent,
   type AccordionTone,
 } from "@pdomain/pdomain-ui/primitives";
-import { ChevronDown } from "@pdomain/pdomain-ui/icons";
 
 import { cn } from "@/lib/utils";
 import { KeyCap } from "@pdomain/pdomain-ui/primitives";
@@ -59,52 +56,46 @@ const AccordionItem = React.forwardRef<
 ));
 AccordionItem.displayName = "AccordionItem";
 
-// AccordionTrigger — labeler's richer trigger, built on raw Radix.
-// Adds primitives.css .acc-head / .acc-trigger classes for base styling.
-// Extended props: hint text + keycap chip.
-type AccordionTriggerProps = React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Trigger> & {
-  /** Short helper text shown between the label and the chevron. */
+// AccordionTrigger — labeler's richer trigger, composed via pdui's AccordionTrigger
+// (pdomain-ui 0.11.0 generic slots).
+//
+// Slot mapping:
+//   keycap → endContent={<KeyCap keys={keycap} />}
+//   hint   → <span className="acc-hint">{hint}</span> appended to children
+//   chevron → omitted (pdui default: .chev span with "›")
+//
+// Pdui owns the Header (.acc-head) and trigger button (.acc-trigger) wrappers.
+// The labeler adds layout + typography via className prop.
+type AccordionTriggerProps = React.ComponentPropsWithoutRef<typeof PduiAccordionTrigger> & {
+  /** Short helper text shown between the label and the keycap. */
   hint?: string;
   /** Keyboard shortcut shown as a KeyCap chip at the right. */
   keycap?: string | string[];
 };
 
 const AccordionTrigger = React.forwardRef<
-  React.ComponentRef<typeof AccordionPrimitive.Trigger>,
+  React.ComponentRef<typeof PduiAccordionTrigger>,
   AccordionTriggerProps
 >(({ className, children, hint, keycap, ...props }, ref) => (
-  <AccordionPrimitive.Header className="acc-head flex">
-    <AccordionPrimitive.Trigger
-      ref={ref}
-      className={cn(
-        "acc-trigger",
-        "flex flex-1 items-center justify-between py-2.5 px-4",
-        "text-[10.5px] font-bold tracking-[0.05em] uppercase text-ink-1 transition-all",
-        "hover:bg-bg-raised",
-        "[&[data-state=open]>svg]:rotate-180",
-        className,
-      )}
-      {...props}
-    >
-      {/* Left: label + optional hint text */}
-      <span className="flex items-baseline gap-2 min-w-0">
-        <span className="shrink-0">{children}</span>
-        {hint && (
-          <span className="text-[9px] font-normal normal-case tracking-normal text-ink-3 truncate">
-            {hint}
-          </span>
-        )}
-      </span>
-
-      {/* Right: optional keycap + chevron */}
-      <span className="flex items-center gap-2 shrink-0 ml-2">
-        {keycap && <KeyCap keys={keycap} />}
-        <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
-      </span>
-    </AccordionPrimitive.Trigger>
-  </AccordionPrimitive.Header>
+  <PduiAccordionTrigger
+    ref={ref}
+    className={cn(
+      "flex flex-1 items-center justify-between py-2.5 px-4",
+      "text-[10.5px] font-bold tracking-[0.05em] uppercase text-ink-1 transition-all",
+      "hover:bg-bg-raised",
+      className,
+    )}
+    endContent={keycap ? <KeyCap keys={keycap} /> : undefined}
+    {...props}
+  >
+    {/* Left: label + optional hint text (pdui .acc-hint = muted secondary text) */}
+    <span className="flex items-baseline gap-2 min-w-0">
+      <span className="shrink-0">{children}</span>
+      {hint && <span className="acc-hint truncate">{hint}</span>}
+    </span>
+  </PduiAccordionTrigger>
 ));
-AccordionTrigger.displayName = AccordionPrimitive.Trigger.displayName;
+AccordionTrigger.displayName = PduiAccordionTrigger.displayName;
 
 // AccordionContent — pdomain-ui's content adds .acc-body (primitives.css animation).
 // Labeler adds bg-bg-sunk for the sunken background and inner padding.

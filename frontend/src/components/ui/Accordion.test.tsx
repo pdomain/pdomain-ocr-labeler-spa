@@ -1,9 +1,12 @@
-// Accordion.test.tsx — Slice 6 migration tests.
+// Accordion.test.tsx — pdomain-ui 0.11.0 AccordionTrigger composition tests.
 //
-// After migration:
-//   AccordionItem   → pdomain-ui AccordionItem, .acc base class, tone prop (accent/danger)
-//   AccordionTrigger → local thin wrapper on raw Radix (.acc-head/.acc-trigger CSS), richer layout
-//   AccordionContent → pdomain-ui AccordionContent, .acc-body base class + bg-bg-sunk + px-4 pb-4
+// After migration (pdomain-ui 0.11.0 AccordionTrigger adoption):
+//   AccordionItem   → pdomain-ui AccordionItem (adds .acc base class, tone prop)
+//   AccordionTrigger → thin wrapper on pdui AccordionTrigger (0.11.0 generic slots)
+//                      · hint → <span className="acc-hint"> inside children
+//                      · keycap → endContent={<KeyCap>}
+//                      · chevron: pdui default (omitted → built-in .chev span "›")
+//   AccordionContent → pdomain-ui AccordionContent (.acc-body + bg-bg-sunk + px-4 pb-4)
 //
 // Labeler tag → pdui tone mapping:
 //   tag="accent"   → .acc.accent  (via tone="accent")
@@ -77,9 +80,8 @@ describe("Accordion (pdomain-ui primitives composition)", () => {
     expect(firstItem.className).toContain("danger");
   });
 
-  // AccordionTrigger uses raw Radix (not pdui's trigger) to avoid double chevron
-  // but wraps with .acc-head (primitives.css) via AccordionPrimitive.Header
-  it("trigger has acc-trigger class from primitives.css", () => {
+  // AccordionTrigger now uses pdui's AccordionTrigger; pdui adds .acc-trigger to the button
+  it("trigger has acc-trigger class from pdomain-ui primitives.css", () => {
     const { container } = render(<SimpleAccordion />);
     const trigger = container.querySelector("button[type=button]");
     if (trigger) {
@@ -87,7 +89,7 @@ describe("Accordion (pdomain-ui primitives composition)", () => {
     }
   });
 
-  // Trigger layout: uppercase + reduced height (spec)
+  // pdui AccordionTrigger wraps Radix button — trigger layout classes pass through via className
   it("trigger has uppercase tracking style (spec accordion label)", () => {
     const { container } = render(<SimpleAccordion />);
     const trigger = container.querySelector("button[type=button]");
@@ -105,6 +107,17 @@ describe("Accordion (pdomain-ui primitives composition)", () => {
     }
   });
 
+  // pdui 0.11.0: default chevron is .chev span containing "›" (not a ChevronDown SVG)
+  it("trigger has pdui default .chev chevron (span with › text, no SVG)", () => {
+    const { container } = render(<SimpleAccordion />);
+    const chevSpan = container.querySelector(".chev");
+    expect(chevSpan).toBeTruthy();
+    expect(chevSpan?.textContent).toBe("›");
+    // The old custom ChevronDown SVG must be absent
+    const svgChevron = container.querySelector("svg");
+    expect(svgChevron).toBeNull();
+  });
+
   // AccordionContent from pdomain-ui adds .acc-body class; labeler adds bg-bg-sunk
   it("content has acc-body class from pdomain-ui", () => {
     render(<SimpleAccordion />);
@@ -118,6 +131,19 @@ describe("Accordion (pdomain-ui primitives composition)", () => {
     fireEvent.click(screen.getByText("Section 1"));
     const bgSunk = document.querySelector(".bg-bg-sunk");
     expect(bgSunk).toBeTruthy();
+  });
+
+  // data-testid passes through to pdui AccordionTrigger → Radix button
+  it("testid prop passes through to trigger button", () => {
+    render(
+      <Accordion type="single" collapsible>
+        <Accordion.Item value="x">
+          <Accordion.Trigger data-testid="my-trigger">Label</Accordion.Trigger>
+          <Accordion.Content>body</Accordion.Content>
+        </Accordion.Item>
+      </Accordion>,
+    );
+    expect(screen.getByTestId("my-trigger")).toBeInTheDocument();
   });
 });
 
@@ -176,7 +202,8 @@ describe("Accordion trigger redesign (P2.g)", () => {
     expect(screen.getByText("R")).toBeInTheDocument();
   });
 
-  it("hint text has lowercase normal tracking (not uppercase)", () => {
+  // hint uses pdui .acc-hint CSS class (muted secondary text), not bespoke Tailwind
+  it("hint text has pdui .acc-hint class (not bespoke Tailwind)", () => {
     const { container } = render(
       <Accordion type="single" collapsible>
         <Accordion.Item value="x">
@@ -190,7 +217,7 @@ describe("Accordion trigger redesign (P2.g)", () => {
     );
     expect(hintEl).toBeTruthy();
     if (hintEl) {
-      expect(hintEl.className).toContain("normal-case");
+      expect(hintEl.className).toContain("acc-hint");
     }
   });
 });
