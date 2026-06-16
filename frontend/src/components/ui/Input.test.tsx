@@ -1,48 +1,48 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
-import { Input } from "./Input";
+import { Input } from "@pdomain/pdomain-ui/primitives";
 
-describe("Input", () => {
-  it("renders md size by default", () => {
-    const { container } = render(<Input placeholder="test" />);
-    expect(container.firstChild).toHaveClass("h-[30px]");
+// Slice 2: local Input.tsx deleted; re-pointed to pdui Input.
+// Tests assert observable behaviour (element type, attr forwarding, ref),
+// NOT bespoke Tailwind class strings — those live in primitives.css now.
+
+describe("Input (pdui)", () => {
+  it("renders an input element", () => {
+    render(<Input placeholder="test" />);
+    expect(screen.getByPlaceholderText("test")).toBeInstanceOf(HTMLInputElement);
   });
 
-  it("renders sm size", () => {
-    const { container } = render(<Input size="sm" placeholder="test" />);
-    expect(container.firstChild).toHaveClass("h-[26px]");
+  it("accepts sm size without throwing", () => {
+    const { container } = render(<Input size="sm" placeholder="sm" />);
+    expect(container.querySelector("input")).not.toBeNull();
   });
 
-  it("forwards ref", () => {
+  it("accepts md size without throwing", () => {
+    const { container } = render(<Input size="md" placeholder="md" />);
+    expect(container.querySelector("input")).not.toBeNull();
+  });
+
+  it("accepts lg size without throwing (pdui superset)", () => {
+    const { container } = render(<Input size="lg" placeholder="lg" />);
+    expect(container.querySelector("input")).not.toBeNull();
+  });
+
+  it("forwards ref to underlying input", () => {
     const ref = { current: null as HTMLInputElement | null };
     render(<Input ref={ref} />);
     expect(ref.current).toBeInstanceOf(HTMLInputElement);
   });
 
-  it("applies base classes", () => {
-    const { container } = render(<Input placeholder="test" />);
-    const input = container.firstChild as HTMLInputElement;
-    expect(input).toHaveClass("bg-sunk");
-    expect(input).toHaveClass("border-border-2");
-    expect(input).toHaveClass("rounded-[5px]");
-    expect(input).toHaveClass("text-ink-1");
-  });
-
-  it("combines custom className with size and base classes", () => {
-    const { container } = render(<Input size="md" className="custom-class" placeholder="test" />);
-    const input = container.firstChild as HTMLInputElement;
-    expect(input).toHaveClass("custom-class");
-    expect(input).toHaveClass("h-[30px]");
-    expect(input).toHaveClass("bg-sunk");
-  });
-
-  it("passes through standard HTML attributes", () => {
-    const { container } = render(
-      <Input placeholder="enter text" disabled data-testid="test-input" />,
-    );
-    const input = container.firstChild as HTMLInputElement;
+  it("passes through standard HTML attributes including data-testid", () => {
+    render(<Input placeholder="enter text" disabled data-testid="test-input" />);
+    const input = screen.getByTestId("test-input");
     expect(input).toHaveAttribute("placeholder", "enter text");
     expect(input).toHaveAttribute("disabled");
-    expect(input).toHaveAttribute("data-testid", "test-input");
+  });
+
+  it("merges extra className onto rendered element", () => {
+    render(<Input className="my-custom" placeholder="x" />);
+    const input = screen.getByPlaceholderText("x");
+    expect(input.className).toContain("my-custom");
   });
 });

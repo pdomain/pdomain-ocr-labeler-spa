@@ -46,7 +46,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Button } from "../../ui/button";
-import { Input } from "../../ui/Input";
+import { Input } from "@pdomain/pdomain-ui/primitives";
 import { UnicodePicker } from "../UnicodePicker";
 import { useUpdateWordGroundTruth, useSetCharBboxes } from "../../../hooks/useWordMutations";
 import type { components } from "../../../api/types";

@@ -18,7 +18,7 @@
 //   bbox-crop-button          — Crop to BBox button
 
 import { useState } from "react";
-import { Input } from "../../ui/Input";
+import { Input } from "@pdomain/pdomain-ui/primitives";
 import { Button } from "../../ui/button";
 import { useReboxWord } from "../../../hooks/useWordMutations";
 import type { components } from "../../../api/types";

@@ -18,7 +18,7 @@
 //   ocr-gt-unicode-picker       — inline UnicodePicker wrapper (when open)
 
 import { useState, useRef, useEffect } from "react";
-import { Input } from "../ui/Input";
+import { Input } from "@pdomain/pdomain-ui/primitives";
 import { UnicodePicker } from "./UnicodePicker";
 
 export interface OcrGtCompareRowProps {
