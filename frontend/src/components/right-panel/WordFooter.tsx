@@ -14,7 +14,7 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { KeyCap } from "../ui/KeyCap";
+import { KeyCap } from "@pdomain/pdomain-ui/primitives";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { walkSibling } from "../../stores/selection-store";
 import type { components } from "../../api/types";

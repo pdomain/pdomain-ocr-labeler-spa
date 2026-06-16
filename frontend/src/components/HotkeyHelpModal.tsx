@@ -17,7 +17,7 @@
 import { useSyncExternalStore } from "react";
 import { useHotkey } from "../hooks/useHotkey";
 import { dialogStore, useDialogStore } from "../stores/dialog-store";
-import { KeyCap } from "./ui/KeyCap";
+import { KeyCap } from "@pdomain/pdomain-ui/primitives";
 import {
   getPopulatedGroups,
   subscribeRegistry,

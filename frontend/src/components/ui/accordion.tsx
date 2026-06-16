@@ -3,7 +3,7 @@ import * as AccordionPrimitive from "@radix-ui/react-accordion";
 import { ChevronDown } from "@pdomain/pdomain-ui/icons";
 
 import { cn } from "@/lib/utils";
-import { KeyCap } from "./KeyCap";
+import { KeyCap } from "@pdomain/pdomain-ui/primitives";
 
 // Static class lookup for tag variants — no string interpolation for Tailwind
 type AccordionTagVariant = "accent" | "mismatch";
