@@ -1,23 +1,47 @@
+// accordion.tsx — Labeler accordion, pdomain-ui composition (Slice 6).
+//
+// Strategy:
+//   AccordionItem   → pdomain-ui AccordionItem (adds .acc base class, tone prop)
+//   AccordionTrigger → local thin wrapper on raw Radix (NOT pdui AccordionTrigger).
+//                      Reason: pdui AccordionTrigger hard-codes its own chevron
+//                      (<span className="chev">›</span>) inside the trigger AND
+//                      wraps with AccordionPrimitive.Header. Using it would produce
+//                      a double chevron and conflict with the labeler's richer
+//                      layout (hint text + KeyCap chip + custom ChevronDown icon).
+//                      The trigger manually adds .acc-head / .acc-trigger CSS classes
+//                      so primitives.css focus/hover rules still apply.
+//   AccordionContent → pdomain-ui AccordionContent (adds .acc-body, primitives.css
+//                      open/close animation). Labeler adds bg-bg-sunk + inner px-4 pb-4.
+//
+// tag → tone mapping (labeler API → pdui API):
+//   tag="accent"   → tone="accent"  (.acc.accent  in primitives.css)
+//   tag="mismatch" → tone="danger"  (.acc.danger  uses --mismatch color in primitives.css)
+//
+// Re-export Accordion root from pdui for context compatibility.
+
 import * as React from "react";
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
+import {
+  AccordionItem as PduiAccordionItem,
+  AccordionContent as PduiAccordionContent,
+  type AccordionTone,
+} from "@pdomain/pdomain-ui/primitives";
 import { ChevronDown } from "@pdomain/pdomain-ui/icons";
 
 import { cn } from "@/lib/utils";
 import { KeyCap } from "@pdomain/pdomain-ui/primitives";
 
-// Static class lookup for tag variants — no string interpolation for Tailwind
+// Labeler-facing tag prop; "mismatch" maps to pdui's "danger" tone.
 type AccordionTagVariant = "accent" | "mismatch";
 
-const tagClasses: Record<AccordionTagVariant, string> = {
-  accent: "border-l-2 border-accent bg-accent/5",
-  mismatch: "border-l-2 border-status-mismatch bg-status-mismatch/5",
+const tagToTone: Record<AccordionTagVariant, AccordionTone> = {
+  accent: "accent",
+  mismatch: "danger",
 };
 
-const defaultItemClasses = "border border-border-1 rounded-md";
-
-// LabelerAccordionItem adds the labeler's `tag` variant. The root/item/trigger
-// all use this package's Radix primitives so their Accordion context matches
-// even when pdomain-ui is linked locally.
+// LabelerAccordionItem wraps pdui's AccordionItem, translating the labeler's
+// `tag` prop to pdui's `tone` prop.  All other props (value, className, etc.)
+// pass through.
 type AccordionItemProps = React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Item> & {
   tag?: AccordionTagVariant;
 };
@@ -26,27 +50,22 @@ const AccordionItem = React.forwardRef<
   React.ComponentRef<typeof AccordionPrimitive.Item>,
   AccordionItemProps
 >(({ className, tag, ...props }, ref) => (
-  <AccordionPrimitive.Item
+  <PduiAccordionItem
     ref={ref}
-    className={cn("acc", tag ? tagClasses[tag] : defaultItemClasses, className)}
+    tone={tag ? tagToTone[tag] : "default"}
+    className={className}
     {...props}
   />
 ));
 AccordionItem.displayName = "AccordionItem";
 
-// AccordionTrigger: the labeler's trigger has a richer layout than pdomain-ui's
-// AccordionTrigger (hint text, keycap chip, custom chevron, uppercase label).
-// pdomain-ui's AccordionTrigger internally wraps with AccordionPrimitive.Header AND
-// appends its own chevron span, making it incompatible with the labeler layout.
-// We build on the Radix primitives directly here; @radix-ui/react-accordion
-// remains an explicit dep for this reason.
-//
-// Extended trigger props: optional helper text + keycap hint.
-// P2.g (Gap 32, 54): spec'd row is: UPPERCASE LABEL · hint text · keycap
+// AccordionTrigger — labeler's richer trigger, built on raw Radix.
+// Adds primitives.css .acc-head / .acc-trigger classes for base styling.
+// Extended props: hint text + keycap chip.
 type AccordionTriggerProps = React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Trigger> & {
-  /** Short helper text shown between the label and the chevron (e.g. "crop, nudge"). */
+  /** Short helper text shown between the label and the chevron. */
   hint?: string;
-  /** Keyboard shortcut shown as a KeyCap chip at the right (e.g. "B" or ["⌘","B"]). */
+  /** Keyboard shortcut shown as a KeyCap chip at the right. */
   keycap?: string | string[];
 };
 
@@ -54,10 +73,11 @@ const AccordionTrigger = React.forwardRef<
   React.ComponentRef<typeof AccordionPrimitive.Trigger>,
   AccordionTriggerProps
 >(({ className, children, hint, keycap, ...props }, ref) => (
-  <AccordionPrimitive.Header className="flex">
+  <AccordionPrimitive.Header className="acc-head flex">
     <AccordionPrimitive.Trigger
       ref={ref}
       className={cn(
+        "acc-trigger",
         "flex flex-1 items-center justify-between py-2.5 px-4",
         "text-[10.5px] font-bold tracking-[0.05em] uppercase text-ink-1 transition-all",
         "hover:bg-bg-raised",
@@ -66,7 +86,7 @@ const AccordionTrigger = React.forwardRef<
       )}
       {...props}
     >
-      {/* Left: label (always uppercase via CSS) + optional hint text */}
+      {/* Left: label + optional hint text */}
       <span className="flex items-baseline gap-2 min-w-0">
         <span className="shrink-0">{children}</span>
         {hint && (
@@ -86,24 +106,19 @@ const AccordionTrigger = React.forwardRef<
 ));
 AccordionTrigger.displayName = AccordionPrimitive.Trigger.displayName;
 
-// AccordionContent: built directly on Radix Content rather than pdomain-ui's wrapper
-// because the labeler's bg-bg-sunk + animation classes are applied at this layer
-// and pdomain-ui's AccordionContent adds its own 'acc-body' class that would conflict.
+// AccordionContent — pdomain-ui's content adds .acc-body (primitives.css animation).
+// Labeler adds bg-bg-sunk for the sunken background and inner padding.
 const AccordionContent = React.forwardRef<
   React.ComponentRef<typeof AccordionPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Content>
 >(({ className, children, ...props }, ref) => (
-  <AccordionPrimitive.Content
+  <PduiAccordionContent
     ref={ref}
-    className={cn(
-      "overflow-hidden bg-bg-sunk text-body text-ink-1 transition-all",
-      "data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down",
-      className,
-    )}
+    className={cn("bg-bg-sunk text-body text-ink-1", className)}
     {...props}
   >
     <div className="pb-4 pt-0 px-4">{children}</div>
-  </AccordionPrimitive.Content>
+  </PduiAccordionContent>
 ));
 AccordionContent.displayName = AccordionPrimitive.Content.displayName;
 

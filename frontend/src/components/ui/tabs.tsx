@@ -10,10 +10,6 @@
 //   - appearance prop (pdui): default | underline. Labeler uses 'underline'
 //     for the detail-panel tab strips (LineDetail, BlockDetail).
 //   - All labeler data-testids pass through via ...props.
-export {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-  type TabsAppearance,
-} from "@pdomain/pdomain-ui/primitives";
+//
+// @radix-ui/react-tabs dep removed — pdomain-ui bundles Radix internally.
+export { Tabs, TabsList, TabsTrigger, TabsContent } from "@pdomain/pdomain-ui/primitives";

@@ -1,8 +1,19 @@
+// Accordion.test.tsx — Slice 6 migration tests.
+//
+// After migration:
+//   AccordionItem   → pdomain-ui AccordionItem, .acc base class, tone prop (accent/danger)
+//   AccordionTrigger → local thin wrapper on raw Radix (.acc-head/.acc-trigger CSS), richer layout
+//   AccordionContent → pdomain-ui AccordionContent, .acc-body base class + bg-bg-sunk + px-4 pb-4
+//
+// Labeler tag → pdui tone mapping:
+//   tag="accent"   → .acc.accent  (via tone="accent")
+//   tag="mismatch" → .acc.danger  (via tone="danger"; primitives.css uses --mismatch color)
+
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import { Accordion } from "./accordion";
 
-describe("Accordion", () => {
+describe("Accordion (pdomain-ui primitives composition)", () => {
   function SimpleAccordion({ tag }: { tag?: "accent" | "mismatch" }) {
     return (
       <Accordion type="single" collapsible>
@@ -34,9 +45,7 @@ describe("Accordion", () => {
     render(<SimpleAccordion />);
     fireEvent.click(screen.getByText("Section 1"));
     fireEvent.click(screen.getByText("Section 1"));
-    // After close, content should not be visible (Radix hides it)
     const content = screen.queryByText("Content 1");
-    // Either hidden or not in DOM
     if (content) {
       expect(content).not.toBeVisible();
     } else {
@@ -44,33 +53,42 @@ describe("Accordion", () => {
     }
   });
 
-  it("accent tag adds accent stripe class", () => {
-    const { container } = render(<SimpleAccordion tag="accent" />);
-    // Find the first AccordionItem (has data-state attribute from Radix)
+  // AccordionItem from pdomain-ui adds .acc base class
+  it("AccordionItem has primitives.css .acc base class", () => {
+    const { container } = render(<SimpleAccordion />);
     const items = container.querySelectorAll("[data-state]");
     const firstItem = items[0] as HTMLElement;
-    if (firstItem) {
-      expect(firstItem.className).toContain("border-accent");
-    }
+    expect(firstItem.className).toContain("acc");
   });
 
-  it("mismatch tag adds mismatch stripe class", () => {
+  // tag="accent" → tone="accent" → .acc.accent in primitives.css
+  it("accent tag maps to .acc.accent class via tone prop", () => {
+    const { container } = render(<SimpleAccordion tag="accent" />);
+    const items = container.querySelectorAll("[data-state]");
+    const firstItem = items[0] as HTMLElement;
+    expect(firstItem.className).toContain("accent");
+  });
+
+  // tag="mismatch" → tone="danger" → .acc.danger in primitives.css (uses --mismatch color)
+  it("mismatch tag maps to .acc.danger class via tone remapping", () => {
     const { container } = render(<SimpleAccordion tag="mismatch" />);
-    const itemWithMismatch = container.querySelector('[class*="status-mismatch"]');
-    expect(itemWithMismatch).toBeTruthy();
+    const items = container.querySelectorAll("[data-state]");
+    const firstItem = items[0] as HTMLElement;
+    expect(firstItem.className).toContain("danger");
   });
 
-  it("trigger uses py-2.5 (reduced height ~36px) not py-4", () => {
+  // AccordionTrigger uses raw Radix (not pdui's trigger) to avoid double chevron
+  // but wraps with .acc-head (primitives.css) via AccordionPrimitive.Header
+  it("trigger has acc-trigger class from primitives.css", () => {
     const { container } = render(<SimpleAccordion />);
-    // AccordionTrigger is a <button> inside AccordionHeader <h3>
     const trigger = container.querySelector("button[type=button]");
     if (trigger) {
-      expect(trigger.className).toContain("py-2.5");
-      expect(trigger.className).not.toContain("py-4");
+      expect(trigger.className).toContain("acc-trigger");
     }
   });
 
-  it("trigger label uses uppercase tracking style (spec accordion label)", () => {
+  // Trigger layout: uppercase + reduced height (spec)
+  it("trigger has uppercase tracking style (spec accordion label)", () => {
     const { container } = render(<SimpleAccordion />);
     const trigger = container.querySelector("button[type=button]");
     if (trigger) {
@@ -78,17 +96,28 @@ describe("Accordion", () => {
     }
   });
 
-  it("content uses bg-bg-sunk not bg-sunk", () => {
+  it("trigger has reduced height py-2.5 (not py-4)", () => {
+    const { container } = render(<SimpleAccordion />);
+    const trigger = container.querySelector("button[type=button]");
+    if (trigger) {
+      expect(trigger.className).toContain("py-2.5");
+      expect(trigger.className).not.toContain("py-4");
+    }
+  });
+
+  // AccordionContent from pdomain-ui adds .acc-body class; labeler adds bg-bg-sunk
+  it("content has acc-body class from pdomain-ui", () => {
     render(<SimpleAccordion />);
     fireEvent.click(screen.getByText("Section 1"));
-    // Content is the Radix Content element (has data-state=open when open)
-    const openContent = document.querySelector("[data-state=open]");
-    // Walk up to find the content container with background class
-    if (openContent) {
-      // The content wrapper should have bg-bg-sunk
-      const contentEl = document.querySelector(".bg-bg-sunk");
-      expect(contentEl).toBeTruthy();
-    }
+    const accBody = document.querySelector(".acc-body");
+    expect(accBody).toBeTruthy();
+  });
+
+  it("content has bg-bg-sunk labeler-specific class", () => {
+    render(<SimpleAccordion />);
+    fireEvent.click(screen.getByText("Section 1"));
+    const bgSunk = document.querySelector(".bg-bg-sunk");
+    expect(bgSunk).toBeTruthy();
   });
 });
 
@@ -115,9 +144,7 @@ describe("Accordion trigger redesign (P2.g)", () => {
         </Accordion.Item>
       </Accordion>,
     );
-    // The label text should be there but no hint span
     expect(screen.getByText("Bbox")).toBeInTheDocument();
-    // No element with text-ink-3 hint style — just check the hint text is absent
     expect(screen.queryByText("coords · nudge")).not.toBeInTheDocument();
   });
 
@@ -158,7 +185,6 @@ describe("Accordion trigger redesign (P2.g)", () => {
         </Accordion.Item>
       </Accordion>,
     );
-    // Find the hint span by text content
     const hintEl = Array.from(container.querySelectorAll("span")).find(
       (el) => el.textContent === "per-char styles",
     );
