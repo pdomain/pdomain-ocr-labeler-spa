@@ -24,7 +24,7 @@
 //   line-delete-button-{lineIndex}
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { StatusPip } from "../ui/StatusPip";
+import { StatusPip } from "@pdomain/pdomain-ui/primitives";
 import {
   useValidateLine,
   useCopyLineGt,

@@ -1,13 +1,14 @@
-// StatusPip.test.tsx — Vitest unit tests for StatusPip.
-// P5.i Gap 57: added "ocr" and "gt" variant tests.
+// StatusPip.test.tsx — Vitest unit tests for the pdomain-ui StatusPip primitive.
+// After Tier A migration, StatusPip comes from @pdomain/pdomain-ui/primitives.
+// The upstream component bakes data-testid={`status-pip-${status}`} automatically.
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
-import { StatusPip } from "./StatusPip";
+import { StatusPip } from "@pdomain/pdomain-ui/primitives";
 
 describe("StatusPip — existing variants", () => {
   it("renders without label (dot only)", () => {
-    const { container } = render(<StatusPip status="exact" />);
-    expect(container.querySelector(".bg-status-exact\\/10")).toBeTruthy();
+    render(<StatusPip status="exact" />);
+    expect(screen.getByTestId("status-pip-exact")).toBeInTheDocument();
   });
 
   it("renders with label", () => {
@@ -15,20 +16,19 @@ describe("StatusPip — existing variants", () => {
     expect(screen.getByText("Fuzzy")).toBeInTheDocument();
   });
 
-  it("mismatch applies mismatch classes", () => {
-    const { container } = render(<StatusPip status="mismatch" />);
-    expect(container.firstChild).toHaveClass("bg-status-mismatch/10");
+  it("mismatch renders with correct testid", () => {
+    render(<StatusPip status="mismatch" />);
+    expect(screen.getByTestId("status-pip-mismatch")).toBeInTheDocument();
   });
 
-  it("exact status dot renders", () => {
-    const { container } = render(<StatusPip status="exact" />);
-    const pip = container.querySelector(".bg-status-exact");
-    expect(pip).toBeTruthy();
+  it("exact status renders with correct testid", () => {
+    render(<StatusPip status="exact" />);
+    expect(screen.getByTestId("status-pip-exact")).toBeInTheDocument();
   });
 
-  it("fuzzy status with label", () => {
-    const { container } = render(<StatusPip status="fuzzy" label="Match" />);
-    expect(container.firstChild).toHaveClass("bg-status-fuzzy/10");
+  it("fuzzy status with label renders both testid and label", () => {
+    render(<StatusPip status="fuzzy" label="Match" />);
+    expect(screen.getByTestId("status-pip-fuzzy")).toBeInTheDocument();
     expect(screen.getByText("Match")).toBeInTheDocument();
   });
 });
@@ -44,17 +44,7 @@ describe("StatusPip — Gap 57: ocr/gt variants", () => {
     expect(screen.getByTestId("status-pip-gt")).toBeInTheDocument();
   });
 
-  it("ocr variant uses amber/fuzzy tone", () => {
-    const { container } = render(<StatusPip status="ocr" />);
-    expect(container.firstChild).toHaveClass("bg-status-fuzzy/10");
-  });
-
-  it("gt variant uses accent tone", () => {
-    const { container } = render(<StatusPip status="gt" />);
-    expect(container.firstChild).toHaveClass("bg-accent/10");
-  });
-
-  it("ocr renders label text", () => {
+  it("ocr variant renders label text", () => {
     render(<StatusPip status="ocr" label="0.92" />);
     expect(screen.getByText("0.92")).toBeInTheDocument();
   });

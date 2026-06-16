@@ -11,7 +11,7 @@
 //   word-header-prev        — ◀ prev-word button
 //   word-header-next        — ▶ next-word button
 
-import { StatusPip } from "../ui/StatusPip";
+import { StatusPip } from "@pdomain/pdomain-ui/primitives";
 import type { components } from "../../api/types";
 
 type WordMatch = components["schemas"]["WordMatch"];
@@ -54,7 +54,7 @@ export function WordHeader({ word, hasPrev, hasNext, onPrev, onNext }: WordHeade
         {/* Validation status pip */}
         <StatusPip
           status={matchToStatus(word.match_status)}
-          label={word.is_validated ? "✓" : undefined}
+          {...(word.is_validated ? { label: "✓" } : {})}
         />
 
         {/* Word pager */}

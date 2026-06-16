@@ -27,7 +27,7 @@ import { worklistStore, type MatchFilter, type WorklistSort } from "../../stores
 import { selectLine } from "../../stores/selection-store";
 import { useUiPrefs } from "../../stores/ui-prefs";
 import { filterLines } from "../../lib/filter-predicates";
-import { StatusPip } from "../ui/StatusPip";
+import { StatusPip } from "@pdomain/pdomain-ui/primitives";
 import { BulkActions } from "./BulkActions";
 
 type LineMatch = components["schemas"]["LineMatch"];

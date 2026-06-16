@@ -37,7 +37,7 @@
 
 import { useSyncExternalStore, useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
-import { StatusPip } from "../ui/StatusPip";
+import { StatusPip } from "@pdomain/pdomain-ui/primitives";
 import {
   selectionStore,
   selectLine,

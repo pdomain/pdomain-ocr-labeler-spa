@@ -25,7 +25,7 @@
 import { useSyncExternalStore, useState, useEffect } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { LineCard } from "../LineCard";
-import { StatusPip } from "../ui/StatusPip";
+import { StatusPip } from "@pdomain/pdomain-ui/primitives";
 import { LineWordsCard } from "./LineWordsCard";
 import { selectionStore, selectWord } from "../../stores/selection-store";
 import { useUiPrefs } from "../../stores/ui-prefs";

@@ -9,7 +9,7 @@
 //   line-words-card-checkbox-{wordIndex} — bulk selection checkbox
 
 import type { components } from "../../api/types";
-import { StatusPip } from "../ui/StatusPip";
+import { StatusPip } from "@pdomain/pdomain-ui/primitives";
 
 type WordMatch = components["schemas"]["WordMatch"];
 type MatchStatus = components["schemas"]["MatchStatus"];
