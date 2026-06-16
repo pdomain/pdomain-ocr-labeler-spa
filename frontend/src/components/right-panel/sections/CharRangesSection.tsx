@@ -39,7 +39,7 @@
 
 import { useState, useEffect } from "react";
 import { TriStateChip, type TriStateValue } from "@pdomain/pdomain-ui/primitives";
-import { Button } from "../../ui/button";
+import { Button } from "@pdomain/pdomain-ui/primitives";
 import { useSetCharRanges } from "../../../hooks/useWordMutations";
 import { ChipPalette, STYLE_ITEMS } from "../StylePalette";
 import { COMPONENT_ITEMS } from "../ComponentPalette";

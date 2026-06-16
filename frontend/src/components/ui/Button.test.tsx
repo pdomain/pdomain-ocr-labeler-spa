@@ -1,47 +1,51 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
-import { Button } from "./button";
+import { Button } from "@pdomain/pdomain-ui/primitives";
 
-describe("Button", () => {
-  it("renders with default variant and size", () => {
+// Slice 4: local button.tsx deleted; re-pointed to pdui Button.
+// Tests assert observable behaviour — element type, click handling,
+// disabled behaviour, data-testid forwarding — NOT bespoke Tailwind
+// class strings (now in primitives.css).
+
+describe("Button (pdui)", () => {
+  it("renders a button element", () => {
     render(<Button>Click me</Button>);
     expect(screen.getByRole("button", { name: "Click me" })).toBeInTheDocument();
   });
 
-  it("primary variant has accent class", () => {
-    const { container } = render(<Button variant="primary">Primary</Button>);
-    expect(container.firstChild).toHaveClass("bg-accent");
+  it("accepts variant=primary without throwing", () => {
+    render(<Button variant="primary">Primary</Button>);
+    expect(screen.getByRole("button", { name: "Primary" })).toBeInTheDocument();
   });
 
-  it("secondary variant has raised background", () => {
-    const { container } = render(<Button variant="secondary">Secondary</Button>);
-    expect(container.firstChild).toHaveClass("bg-raised");
+  it("accepts variant=secondary without throwing", () => {
+    render(<Button variant="secondary">Secondary</Button>);
+    expect(screen.getByRole("button", { name: "Secondary" })).toBeInTheDocument();
   });
 
-  it("ghost variant starts transparent", () => {
-    const { container } = render(<Button variant="ghost">Ghost</Button>);
-    expect(container.firstChild).toHaveClass("bg-transparent");
+  it("accepts variant=ghost without throwing", () => {
+    render(<Button variant="ghost">Ghost</Button>);
+    expect(screen.getByRole("button", { name: "Ghost" })).toBeInTheDocument();
   });
 
-  it("danger variant has mismatch styling", () => {
-    const { container } = render(<Button variant="danger">Danger</Button>);
-    const el = container.firstChild as HTMLElement;
-    expect(el.className).toContain("status-mismatch");
+  it("accepts variant=danger without throwing", () => {
+    render(<Button variant="danger">Danger</Button>);
+    expect(screen.getByRole("button", { name: "Danger" })).toBeInTheDocument();
   });
 
-  it("sm size has correct height class", () => {
-    const { container } = render(<Button size="sm">Small</Button>);
-    expect(container.firstChild).toHaveClass("h-6");
+  it("accepts size=sm without throwing", () => {
+    render(<Button size="sm">Small</Button>);
+    expect(screen.getByRole("button", { name: "Small" })).toBeInTheDocument();
   });
 
-  it("lg size has correct height class", () => {
-    const { container } = render(<Button size="lg">Large</Button>);
-    expect(container.firstChild).toHaveClass("h-[34px]");
+  it("accepts size=lg without throwing", () => {
+    render(<Button size="lg">Large</Button>);
+    expect(screen.getByRole("button", { name: "Large" })).toBeInTheDocument();
   });
 
-  it("default size has 30px height class", () => {
-    const { container } = render(<Button size="default">Default</Button>);
-    expect(container.firstChild).toHaveClass("h-[30px]");
+  it("accepts size=default without throwing (pdui default size)", () => {
+    render(<Button size="default">Default</Button>);
+    expect(screen.getByRole("button", { name: "Default" })).toBeInTheDocument();
   });
 
   it("click fires callback", () => {
@@ -60,5 +64,10 @@ describe("Button", () => {
     );
     fireEvent.click(screen.getByRole("button"));
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("forwards data-testid", () => {
+    render(<Button data-testid="my-btn">X</Button>);
+    expect(screen.getByTestId("my-btn")).toBeInTheDocument();
   });
 });

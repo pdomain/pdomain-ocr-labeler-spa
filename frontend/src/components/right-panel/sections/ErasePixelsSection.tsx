@@ -26,7 +26,7 @@
 //   erase-clear                — clear-all link button
 
 import { useState } from "react";
-import { Button } from "../../ui/button";
+import { Button } from "@pdomain/pdomain-ui/primitives";
 import { useRefineAvailable } from "../../../hooks/useRefineAvailable";
 import { EraseCanvas, describeOp, type EraseOp, type EraseTool } from "./EraseCanvas";
 import type { components } from "../../../api/types";

@@ -18,7 +18,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, ChevronDown } from "@pdomain/pdomain-ui/icons";
 import { FolderOpen } from "@/icons/local-shims";
 import type { components } from "../api/types";
-import { Button } from "../components/ui/button";
+import { Button } from "@pdomain/pdomain-ui/primitives";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { toast } from "../lib/toast";
 import { dialogStore, useDialogStore } from "../stores/dialog-store";

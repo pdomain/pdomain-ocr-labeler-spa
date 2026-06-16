@@ -45,7 +45,7 @@
 //   charfixer-apply                     — Apply button (disabled until dirty)
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { Button } from "../../ui/button";
+import { Button } from "@pdomain/pdomain-ui/primitives";
 import { Input } from "@pdomain/pdomain-ui/primitives";
 import { UnicodePicker } from "../UnicodePicker";
 import { useUpdateWordGroundTruth, useSetCharBboxes } from "../../../hooks/useWordMutations";

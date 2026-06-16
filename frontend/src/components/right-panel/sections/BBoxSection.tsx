@@ -19,7 +19,7 @@
 
 import { useState } from "react";
 import { Input } from "@pdomain/pdomain-ui/primitives";
-import { Button } from "../../ui/button";
+import { Button } from "@pdomain/pdomain-ui/primitives";
 import { useReboxWord } from "../../../hooks/useWordMutations";
 import type { components } from "../../../api/types";
 

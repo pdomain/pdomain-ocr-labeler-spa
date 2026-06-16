@@ -22,7 +22,7 @@
 //   rebox-reset              — Reset to original bbox
 
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "../../ui/button";
+import { Button } from "@pdomain/pdomain-ui/primitives";
 import { ReboxCanvas, type ReboxTool } from "./ReboxCanvas";
 import { useReboxWord } from "../../../hooks/useWordMutations";
 import type { components } from "../../../api/types";

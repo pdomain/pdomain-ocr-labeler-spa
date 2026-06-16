@@ -21,7 +21,7 @@
 //   structure-split-button            — Split at position N button
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Button } from "../../ui/button";
+import { Button } from "@pdomain/pdomain-ui/primitives";
 import { ConfirmDialog } from "../../ConfirmDialog";
 import { useMergeWord, useSplitWord, useAdjustWordGap } from "../../../hooks/useWordMutations";
 import { getWordOrder } from "../../../lib/word-order";
