@@ -2,6 +2,16 @@
 // Covers: B-JOBS-003
 // Spec: docs/specs/2026-05-12-notifications-design.md §BusyOverlay logic
 // Issue #232
+//
+// After pdui Slice 1 migration (2026-06-16):
+//   - BusyOverlay and ProjectLoadingOverlay are thin wrappers that keep their
+//     own data-testid roots (required by driver contract + ProjectPage.test.tsx
+//     containment assertion). BlockingOperationOverlay from pdui uses Radix
+//     Dialog Portal (escapes to document.body) so cannot carry the testid;
+//     instead, the wrapper div carries data-testid and the inner card uses
+//     OperationStatusPanel from @pdomain/pdomain-ui/status.
+//   - Cancel button logic (cancellable / best-effort) is preserved; cancel
+//     button rendered via OperationStatusPanel.primaryAction.
 
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -127,6 +137,19 @@ describe("BusyOverlay", () => {
     );
     expect(screen.getByTestId("busy-overlay")).toBeInTheDocument();
   });
+
+  it("renders data-testid='busy-overlay' with pdui OperationStatusPanel inner content", () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <BusyOverlay activeJob={null} isMutating />
+      </QueryClientProvider>,
+    );
+    // Outer wrapper must carry data-testid (driver contract + DOM containment in ProjectPage.test.tsx)
+    expect(screen.getByTestId("busy-overlay")).toBeInTheDocument();
+    // Inner content rendered via OperationStatusPanel; data-state="running" appears inside overlay
+    const overlay = screen.getByTestId("busy-overlay");
+    expect(overlay.querySelector("[data-state='running']")).toBeInTheDocument();
+  });
 });
 
 describe("ProjectLoadingOverlay", () => {
@@ -146,5 +169,16 @@ describe("ProjectLoadingOverlay", () => {
       </QueryClientProvider>,
     );
     expect(screen.getByTestId("project-loading-overlay")).toBeInTheDocument();
+  });
+
+  it("renders data-testid='project-loading-overlay' with pdui OperationStatusPanel inner content", () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ProjectLoadingOverlay isLoading />
+      </QueryClientProvider>,
+    );
+    const overlay = screen.getByTestId("project-loading-overlay");
+    // Inner content rendered via OperationStatusPanel; data-state="running" appears inside overlay
+    expect(overlay.querySelector("[data-state='running']")).toBeInTheDocument();
   });
 });
