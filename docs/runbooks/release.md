@@ -9,7 +9,7 @@ For the wheel's deployment contract see [`docs/architecture/15-deployment-dev.md
 
 ## Prerequisites
 
-- Clean working tree on `main`, in sync with `origin/main`.
+- Clean working tree on `master`, in sync with `origin/master`.
 - `make ci AI=1` green (the release script runs this as a pre-flight).
 - `gh` CLI authenticated with write access to the repository.
 
@@ -81,7 +81,7 @@ produces an sdist). The sdist path fails because the unpacked sdist has no
 ### Standard release (patch / minor / major)
 
 ```sh
-# From a clean main branch, in sync with origin/main:
+# From a clean master branch, in sync with origin/master:
 make release-patch   # v0.4.2 -> v0.4.3
 make release-minor   # v0.4.2 -> v0.5.0
 make release-major   # v0.4.2 -> v1.0.0
@@ -90,12 +90,12 @@ make release-major   # v0.4.2 -> v1.0.0
 Each target delegates to `scripts/do-release.sh` via `scripts/release-common.sh`.
 The script (`scripts/release-common.sh`, verified 2026-06-01):
 
-1. Fetches `origin/main` and checks that the working tree is clean and on `main`.
+1. Fetches `origin/master` and checks that the working tree is clean and on `master`.
 2. Computes the next three-component version tag from existing `vN.N.N` git tags.
 3. Runs `make ci-slow` (the `RELEASE_PREFLIGHT`).
 4. Creates an annotated tag `vN.N.N`.
 5. Pushes `main` and the exact tag to `origin`.
-6. Triggers `.github/workflows/release.yml` via `gh workflow run release.yml --ref main -f tag=vN.N.N`.
+6. Triggers `.github/workflows/release.yml` via `gh workflow run release.yml --ref master -f tag=vN.N.N`.
 
 ### Escape hatches
 
