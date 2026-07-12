@@ -1,7 +1,7 @@
 # pdomain-ocr-labeler-spa installer (Windows PowerShell)
 #
 # Usage:
-#   irm https://raw.githubusercontent.com/pdomain/pdomain-ocr-labeler-spa/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/pdomain/pdomain-ocr-labeler-spa/master/install.ps1 | iex
 #
 # Downloads the prebuilt wheel attached to the latest GitHub Release and
 # runs `uv tool install` against it. The wheel ships with the React SPA

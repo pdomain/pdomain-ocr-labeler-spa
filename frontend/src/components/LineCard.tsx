@@ -88,8 +88,7 @@ export interface LineCardProps {
    * Signature: (wordId, lineIndex, wordIndex, newText) => void
    */
   onCommitGt?:
-    | ((wordId: string, lineIndex: number, wordIndex: number, text: string) => void)
-    | undefined;
+    ((wordId: string, lineIndex: number, wordIndex: number, text: string) => void) | undefined;
   /**
    * Called when the edit-word pencil button is clicked on a word row.
    * Should select the word in the selection store and open the right panel.

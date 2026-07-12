@@ -20,7 +20,7 @@ Single-line GitHub-Release wheel installer, mirroring pgdp-prep's flow.
 ### Linux / macOS
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/<org>/pdomain-ocr-labeler-spa/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/<org>/pdomain-ocr-labeler-spa/master/install.sh | bash
 ```
 
 `install.sh` does:
@@ -33,7 +33,7 @@ curl -fsSL https://raw.githubusercontent.com/<org>/pdomain-ocr-labeler-spa/main/
 ### Windows
 
 ```pwsh
-iwr -useb https://raw.githubusercontent.com/<org>/pdomain-ocr-labeler-spa/main/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/<org>/pdomain-ocr-labeler-spa/master/install.ps1 | iex
 ```
 
 Same flow, PowerShell-flavoured.

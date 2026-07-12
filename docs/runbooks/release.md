@@ -94,7 +94,7 @@ The script (`scripts/release-common.sh`, verified 2026-06-01):
 2. Computes the next three-component version tag from existing `vN.N.N` git tags.
 3. Runs `make ci-slow` (the `RELEASE_PREFLIGHT`).
 4. Creates an annotated tag `vN.N.N`.
-5. Pushes `main` and the exact tag to `origin`.
+5. Pushes `master` and the exact tag to `origin`.
 6. Triggers `.github/workflows/release.yml` via `gh workflow run release.yml --ref master -f tag=vN.N.N`.
 
 ### Escape hatches

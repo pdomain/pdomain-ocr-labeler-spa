@@ -37,7 +37,7 @@ repos:
     -   id: check-merge-conflict
 -   repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: 01a675ea018f2fb714478a5ffb83fcea8374bb06  # frozen: v0.15.16
+    rev: v0.15.21
     hooks:
     # Run the linter for imports
     -   id: ruff-check
@@ -54,17 +54,19 @@ repos:
 # environment can be cached across the workspace and bumps happen
 # in one place. Per-repo rules live in `.markdownlint-cli2.jsonc`.
 -   repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: 534166213006ec869b773b7ed8c6ebeaad1165d0  # frozen: v0.22.1
+    rev: v0.23.0
     hooks:
     -   id: markdownlint-cli2
+        exclude: ^docs/superpowers/
     -   id: markdownlint-cli2
         alias: markdownlint-cli2-fix
         args: [--fix]
+        exclude: ^docs/superpowers/
         stages: [manual]
 
 # Secret scanner. Rev kept in lockstep with pdomain-book-tools canonical (v8.30.1).
 -   repo: https://github.com/gitleaks/gitleaks
-    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # frozen: v8.30.1
+    rev: v8.30.1
     hooks:
     -   id: gitleaks
 
@@ -139,8 +141,8 @@ repos:
         # mise-trust-worktrees trusts generated worktree roots so this can use
         # the project tool versions from mise.toml without per-worktree prompts.
         entry: bash -c 'cd frontend && if command -v mise >/dev/null 2>&1; then
-          exec mise exec -- npx tsc -b --noEmit; else exec npx tsc -b --noEmit;
-          fi'
+          exec mise exec -- pnpm exec tsc -b --noEmit; else exec pnpm exec tsc
+          -b --noEmit; fi'
         language: system
         files:
           ^frontend/(src/.*\.(ts|tsx)|tsconfig.*\.json|package(-lock)?\.json|vite\.config\.ts)$
@@ -149,7 +151,7 @@ repos:
         name: frontend eslint
         description: ESLint flat-config check for the React SPA.
         entry: bash -c 'cd frontend && if command -v mise >/dev/null 2>&1; then
-          exec mise exec -- npm run --silent lint; else exec npm run --silent
+          exec mise exec -- pnpm run --silent lint; else exec pnpm run --silent
           lint; fi'
         language: system
         # Match what eslint actually lints: SPA source, the flat config
@@ -163,7 +165,7 @@ repos:
         name: frontend prettier --check
         description: Prettier format check for the React SPA.
         entry: bash -c 'cd frontend && if command -v mise >/dev/null 2>&1; then
-          exec mise exec -- npm run --silent format:check; else exec npm run
+          exec mise exec -- pnpm run --silent format:check; else exec pnpm run
           --silent format:check; fi'
         language: system
         # Prettier covers a broader file set than ESLint (CSS, JSON,

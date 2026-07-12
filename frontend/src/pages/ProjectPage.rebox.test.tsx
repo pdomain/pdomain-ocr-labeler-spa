@@ -25,8 +25,7 @@ import { viewportStore } from "../stores/viewport-store";
 // capture the onRebox prop passed by ProjectPage. The component is imported
 // from ../components/PageImageCanvas in ProjectPage.tsx.
 let capturedOnRebox:
-  | ((rect: { x: number; y: number; width: number; height: number }) => void)
-  | null = null;
+  ((rect: { x: number; y: number; width: number; height: number }) => void) | null = null;
 let capturedEncodedScale: number | null = null;
 
 const mockNavigate = vi.fn();

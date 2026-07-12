@@ -429,9 +429,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   const pageSource =
     (
       pageQ.data?.page_record?.extensions?.["labeler"] as
-        | { page_source?: string }
-        | null
-        | undefined
+        { page_source?: string } | null | undefined
     )?.page_source ?? null;
   const provenanceSummary = pageQ.data?.page_record?.provenance_summary ?? null;
 

@@ -4,7 +4,7 @@ set -euo pipefail
 # Install pdomain-ocr-labeler-spa as a standalone tool using uv.
 #
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/pdomain/pdomain-ocr-labeler-spa/main/install.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/pdomain/pdomain-ocr-labeler-spa/master/install.sh | bash
 #
 # Downloads the prebuilt wheel attached to the latest GitHub Release and
 # runs `uv tool install` against it. The wheel ships with the React SPA

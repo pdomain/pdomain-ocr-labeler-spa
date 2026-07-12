@@ -56,8 +56,7 @@ export interface WordCellProps {
    * Signature: (wordId, lineIndex, wordIndex, newText) => void
    */
   onCommitGt?:
-    | ((wordId: string, lineIndex: number, wordIndex: number, text: string) => void)
-    | undefined;
+    ((wordId: string, lineIndex: number, wordIndex: number, text: string) => void) | undefined;
   /** Base URL for page image slices (e.g. /api/.../pages/0/image). When provided
    *  and word_id is set, a crop thumbnail is shown in row 2. */
   imageBaseUrl?: string | undefined;
