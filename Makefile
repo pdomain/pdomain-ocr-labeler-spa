@@ -27,7 +27,7 @@ else
         local-setup-py local-frontend-install local-frontend-build local-frontend-test \
         mise-download mise-trust-worktrees mise-setup mise-doctor \
         docker-build docker-run docker-shell \
-        release-patch release-minor release-major _do-release ci-slow ci-against-main
+        release-patch release-minor release-major _do-release ci-slow ci-against-master
 
 # ---------------------------------------------------------------------------
 # Help / discovery
@@ -466,8 +466,8 @@ ci: setup frontend-install pre-commit-check typecheck openapi-export frontend-bu
 
 ci-slow: ci build ## Full pre-flight for releases (CI plus wheel build)
 
-ci-against-main: ## Validate against pd-* siblings' latest main, then revert (transient)
-	@./scripts/ci-against-main.sh
+ci-against-master: ## Validate against pd-* siblings' latest master, then revert (transient)
+	@./scripts/ci-against-master.sh
 
 # ---------------------------------------------------------------------------
 # Docker

@@ -37,7 +37,7 @@ repos:
     -   id: check-merge-conflict
 -   repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: c59bba8fb259db0fec2bbb77ad8ba51ea7341b56  # frozen: v0.15.16
+    rev: 01a675ea018f2fb714478a5ffb83fcea8374bb06  # frozen: v0.15.16
     hooks:
     # Run the linter for imports
     -   id: ruff-check
