@@ -19,9 +19,7 @@ last_verified: 2026-07-13
 
 ## Removal commit
 
-The removal commit is the first docgraph migration commit. Its SHA is recorded
-in the follow-up tombstone-completion commit because a commit cannot contain its
-own SHA. Every source below remains recoverable with
+The removal commit is `ee95c83`. Every source below remains recoverable with
 `git log --all --full-history -- <old path>`.
 
 ## Per-document outcomes

@@ -57,7 +57,7 @@ question, plan, and spec ledgers in the live `docs/archive/` retrieval tree.
 - Replacement: `docs/architecture/00-overview.md` through
   `docs/architecture/28-palettes-pickers.md`, `specs/17-decisions.md`, this
   decision log, and Git history.
-- Removal commit: the 2026-07-13 docgraph migration commit.
+- Removal commit: `ee95c83`.
 - Rationale kept: shipped design and changed directions are in current
   architecture and the context docs.
 - Remaining work: glyph annotations and other residual items are in
@@ -73,7 +73,7 @@ question, plan, and spec ledgers in the live `docs/archive/` retrieval tree.
 - Outcome: implemented, superseded, or stale.
 - Replacement: current architecture, runbooks, behavior specifications, and
   the partial PGDP alignment backlog.
-- Removal commit: the 2026-07-13 docgraph migration commit.
+- Removal commit: `ee95c83`.
 - Rationale kept: the PGDP scope boundary and remaining alignment intent are in
   [`intent-map.md`](intent-map.md).
 - Remaining work: see the Active, Deferred, and Blocked intent sections.
@@ -88,7 +88,7 @@ question, plan, and spec ledgers in the live `docs/archive/` retrieval tree.
 - Outcome: implemented or superseded.
 - Replacement: behavior specifications, right-panel architecture, current
   `pdomain-ui` shell architecture, and Git history.
-- Removal commit: the 2026-07-13 docgraph migration commit.
+- Removal commit: `ee95c83`.
 - Rationale kept: the right-panel and upstream-first changed directions are
   recorded in current architecture and [`intent-map.md`](intent-map.md).
 - Remaining work: the partial PGDP alignment backlog remains active.
