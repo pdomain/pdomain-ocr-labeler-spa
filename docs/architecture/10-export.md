@@ -223,6 +223,30 @@ Implementation: `src/pdomain_ocr_labeler_spa/operations/export/cli.py`.
 Reuses the same `DocTRExportOperations` driver as the dialog. Doesn't
 boot the FastAPI server; reads envelopes directly from disk.
 
+## 5.1 Cross-application export exchange
+
+The completed export is also a suite-level handoff to Trainer:
+
+- After a successful export, `core/jobs/handlers/export.py` merge-updates
+  `<data_root>/doctr-export/manifest.json` through
+  `pdomain_ops.schemas.doctr_export`. Re-exporting one project preserves the
+  other project entries. Manifest failure is logged and does not turn a
+  successful dataset export into a failed job.
+- During startup, `bootstrap.py` publishes the DocTR export root as the shared
+  path `doctr-export-root`. Publication is best-effort so an unavailable suite
+  registry does not prevent the Labeler from starting.
+- The dialog checks whether Trainer is installed. When it is available, the
+  completed state offers `export-send-to-trainer`, which launches Trainer
+  through the suite API. The button is absent when Trainer is unavailable.
+
+This is the current contract. Older notes that name `pd_ocr_ops` predate the
+package rename; the live dependency and schema owner are `pdomain_ops`.
+
+Contract coverage lives in `tests/unit/core/test_export_manifest.py`,
+`tests/integration/test_export_manifest_integration.py`,
+`tests/integration/test_startup_shared_path.py`, and
+`tests/e2e/test_export_manifest_and_trainer.py`.
+
 ---
 
 ## 6. Tests

@@ -307,6 +307,26 @@ populated payload via `_page_payload` (defined in §3). The TS types
 in `frontend/src/api/types.ts` need no regeneration unless backend
 Pydantic models change.
 
+### Current PageRecord convergence boundary
+
+Page lifecycle fields now use `pdomain_ops.pages.PageRecord`. The local
+`core.models` module re-exports that shared type and `RotationSource`, so code
+and tests still use both import paths even though they resolve to the shared
+model. Labeler-only view state is stored in the namespaced
+`extensions["labeler"]` payload defined by `core/labeler_extension.py`.
+
+Convergence is therefore partial at the import and adaptation boundary, not a
+claim that every Labeler path is suite-neutral. Persistence and validation
+paths import `PageRecord` directly from `pdomain_ops`; rotation coverage and
+older Labeler modules still import the local compatibility facade. Keep the
+facade until those callers migrate, and do not move Labeler-only fields into
+the shared lifecycle schema.
+
+The [shared PageRecord decision](../decisions/2026-07-13-shared-page-record-boundary.md)
+defines field ownership and the compatibility-facade policy. The
+[intent map](../context/intent-map.md) tracks removal of the remaining indirect
+imports as active convergence work.
+
 ---
 
 ## 15. Tests
