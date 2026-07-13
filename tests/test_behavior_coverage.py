@@ -75,6 +75,7 @@ def test_render_markdown_lists_status() -> None:
     }
     report = build_report(declared, {"B-HOME-003"})
     md = render_markdown(report)
+    assert md.startswith("<!-- docgraph: ignore -->\n\n")
     assert "B-HOME-001" in md
     assert "specified" in md
     assert "test-written" in md

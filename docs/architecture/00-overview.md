@@ -1,3 +1,11 @@
+---
+kind: architecture
+status: built
+owner: maintainers
+created: 2026-05-06
+last_verified: 2026-07-13
+---
+
 # 00 — Overview
 
 > **Status**: Active
@@ -296,7 +304,7 @@ session. If a milestone is too big, split it.
 | Page viewport / overlays | `04-image-viewport.md`, `12-hotkeys-a11y.md` |
 | Word matches view | `05-word-matches.md`, `01-data-models.md` |
 | Toolbar | `06-toolbar-actions.md`, `13-driver-contract.md` |
-| Word edit dialog | `07-word-edit-dialog.md` |
+| Word and line detail editing | [`26-right-panel-detail.md`](26-right-panel-detail.md) |
 | Save / load / OCR | `08-page-actions.md`, `09-persistence.md` |
 | Disk format | `09-persistence.md` |
 | DocTR export | `10-export.md` |

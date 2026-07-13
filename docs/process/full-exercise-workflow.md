@@ -1,3 +1,11 @@
+---
+kind: process
+status: partial
+owner: maintainers
+created: 2026-05-19
+last_verified: 2026-07-13
+---
+
 # Full Exercise Workflow — pdomain-ocr-labeler-spa
 
 > **Purpose.** This document is the authoritative end-to-end test plan for the

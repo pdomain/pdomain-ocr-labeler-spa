@@ -1,3 +1,11 @@
+---
+kind: runbook
+status: active
+owner: maintainers
+created: 2026-06-01
+last_verified: 2026-07-13
+---
+
 # Release Runbook
 
 How to build and publish a new `pdomain-ocr-labeler-spa` wheel.
@@ -150,3 +158,27 @@ Wheels are published to GitHub Releases and indexed by
 `pdomain/pdomain-index-pip` (self-hosted PEP 503 index on GitHub
 Pages). Do not use `pip`/`twine` to push to PyPI - the release pipeline does
 not target PyPI.
+
+## Trigger
+
+Use this runbook when preparing or validating a tagged wheel release.
+
+## Preconditions
+
+Start from a clean release commit with locked backend and frontend dependencies
+installed. Confirm the intended version source before tagging.
+
+## Steps
+
+Run the build and release checks above in order. Publish only through the GitHub
+Release workflow and the `pdomain-index-pip` target described above.
+
+## Verification
+
+Require the repository CI gate, inspect the wheel for `static/index.html`, and
+confirm the release artifact is indexed by the intended package index.
+
+## Rollback
+
+Do not overwrite a bad published artifact. Stop publication, correct the source,
+and issue a new version according to the repository release policy.

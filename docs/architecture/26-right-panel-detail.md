@@ -1,3 +1,11 @@
+---
+kind: architecture
+status: built
+owner: maintainers
+created: 2026-05-16
+last_verified: 2026-07-13
+---
+
 # 26 — Right Panel Detail Views
 
 > **Status**: Active (shipped — hi-fi redesign Slices 16–22, P2, P5.e–P5.g)

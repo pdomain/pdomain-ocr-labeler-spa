@@ -1,3 +1,11 @@
+---
+kind: spec
+status: active
+owner: maintainers
+created: 2026-06-01
+last_verified: 2026-07-13
+---
+
 # Behavior unit spec - Drawer worklist and hierarchy
 
 - **Unit type:** component
@@ -159,3 +167,18 @@
 ## Known regressions
 
 - None captured yet.
+
+## Adversarial Review
+
+**Accepted finding:** The drawer/worklist shipped; fixture timing and hierarchy population remain
+material E2E risks.
+
+**Stage:** migration-time current-state review on 2026-07-13.
+
+**Source:** an independent read-only reviewer compared this document with current
+code, tests, architecture, and git history.
+
+**Result:** the review accepted the finding above and used it to declare the
+metadata status. Residual risks remain explicit here or in
+`docs/context/intent-map.md`; deferred or blocked behavior is not claimed as
+shipped.

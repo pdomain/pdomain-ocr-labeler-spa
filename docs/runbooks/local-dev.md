@@ -1,3 +1,11 @@
+---
+kind: runbook
+status: active
+owner: maintainers
+created: 2026-05-31
+last_verified: 2026-07-13
+---
+
 # Local Development Runbook
 
 Practical recipes for developing `pdomain-ocr-labeler-spa` locally.
@@ -167,3 +175,28 @@ All variables use the `PDLABELER_` prefix (`settings.py`).
 | pnpm link not applying after `make local-dev` | `rm -rf frontend/node_modules frontend/pnpm-lock.yaml && pnpm install` inside `frontend/` |
 | Port conflict on startup | Set `PDLABELER_PORT=NNNN` or let the port-probing pick the next free port |
 | basedpyright errors after `make openapi-export` | Regenerated `types.ts` may expose new type gaps — fix them before committing |
+
+## Trigger
+
+Use this runbook when developing this SPA against editable or linked sibling
+`pd-*` repositories instead of registry packages.
+
+## Preconditions
+
+Run `make local-setup` so required siblings exist. Preserve the current lockfile
+and any intentional local links before switching modes.
+
+## Steps
+
+Run `make local-dev`, inspect resolution with `make local-check`, and use
+`make local-run` or the local frontend targets documented above.
+
+## Verification
+
+Require `make local-check` to report the intended editable Python and linked npm
+sources. Run the focused tests for any changed sibling integration.
+
+## Rollback
+
+Leave local mode by running the normal locked setup/install targets, which
+restore registry resolution. Do not delete sibling checkouts or unrelated work.

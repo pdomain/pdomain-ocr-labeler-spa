@@ -1,3 +1,11 @@
+---
+kind: decision
+status: active
+owner: maintainers
+created: 2026-05-06
+last_verified: 2026-07-13
+---
+
 # 17 — Architecture Decisions Log
 
 > **Status**: Active
@@ -9,6 +17,11 @@ when. New entries on top.
 
 > Format: short, low-ceremony ADRs. One per decision. Don't replace
 > existing entries — supersede them with a new entry that links back.
+
+## Supersedes / Superseded-by
+
+Each decision entry records its own supersession relationship. Entries without
+an explicit relationship remain in force unless later evidence says otherwise.
 
 ---
 
@@ -1329,7 +1342,7 @@ sub-clause naming the flag, the default, and the trade-off:
 **Refs.** [`OPEN_QUESTIONS.md Q-A11`](../OPEN_QUESTIONS.md),
 [`02-backend.md`](../docs/architecture/02-backend.md) §3 (Settings field list) and §8
 (error handling),
-[`docs/archive/research/BUGS_FOUND.md` B-51](../docs/archive/research/BUGS_FOUND.md),
+historical bug B-51 (retained in Git history),
 F-003 / GH #408.
 
 ---
@@ -1395,7 +1408,7 @@ dropped-key-name in `extra=`).
 [`09-persistence.md`](../docs/architecture/09-persistence.md) §6 (session_state.json) — to
 be amended; §11 (UserPageEnvelope) — kept strict per documented
 asymmetry,
-[`docs/archive/research/BUGS_FOUND.md` B-58](../docs/archive/research/BUGS_FOUND.md).
+historical bug B-58 (retained in Git history).
 
 ---
 
@@ -1463,7 +1476,7 @@ prioritise:
   do not let it appear in the next-up slice list."
 
 **Refs.** Ratifies user directive 2026-05-07 against
-[`docs/ROADMAP.md` Scope freeze callout](../docs/ROADMAP.md);
+the historical roadmap scope-freeze callout (retained in Git history);
 this file's prior entries D-005 (auth), D-018 (OCR engine axis),
 D-019 (S3 storage), D-021 (UI prefs), D-023 (multi-tab), D-040 (500
 body redaction); [`00-overview.md` Non-goals](../docs/architecture/00-overview.md).
@@ -1483,7 +1496,7 @@ removed.
 **Why.**
 
 - The 2026-05-14 parity audit
-  ([`docs/PARITY_GAPS_2026_05_14.md`](../docs/PARITY_GAPS_2026_05_14.md))
+  (the retired 2026-05-14 parity audit)
   found that `PageImageCanvas.tsx` shipped as a DOM stub because
   the D-020 spike never ran. Eight months of "soon" without a
   measurement, while downstream issues (#197, #198) closed against
@@ -1502,8 +1515,7 @@ removed.
 - [`../docs/architecture/21-konva-renderer.md`](../docs/architecture/21-konva-renderer.md) is the implementation spec; it
   replaces `04-image-viewport.md` §0 ("research spike at M4 start").
 - `OPEN_QUESTIONS.md` Q-A14 is resolved: the spike is unnecessary.
-  Move Q-A14 to `docs/archive/research/QUESTIONS_RESOLVED.md` in the same
-  commit that lands this ADR.
+  Record Q-A14 as resolved in the durable decision context.
 - `use-image@^1.1` is added to `frontend/package.json` as a runtime
   dependency.
 - All future bbox-overlay work uses `react-konva` `<Rect>` nodes;
@@ -1524,9 +1536,9 @@ removed.
   reference, not the better.
 
 **Refs.** [`OPEN_QUESTIONS.md Q-A14`](../OPEN_QUESTIONS.md),
-[`21-konva-renderer.md`](21-konva-renderer.md),
+[`21-konva-renderer.md`](../docs/architecture/21-konva-renderer.md),
 [`docs/architecture/04-image-viewport.md`](../docs/architecture/04-image-viewport.md),
-[`docs/PARITY_GAPS_2026_05_14.md`](../docs/PARITY_GAPS_2026_05_14.md),
+the retired 2026-05-14 parity audit,
 D-020 (superseded).
 
 ---

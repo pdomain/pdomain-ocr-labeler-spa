@@ -1,3 +1,11 @@
+---
+kind: process
+status: active
+owner: maintainers
+created: 2026-05-22
+last_verified: 2026-07-13
+---
+
 # Lint-rule Deviations — pdomain-ocr-labeler-spa
 
 Standing suppressions and per-file rule overrides in this repo.

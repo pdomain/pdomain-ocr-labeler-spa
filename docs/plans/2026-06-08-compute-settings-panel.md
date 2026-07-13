@@ -1,5 +1,9 @@
 ---
-status: backlog
+last_verified: 2026-07-13
+created: 2026-06-10
+owner: maintainers
+kind: plan
+status: draft
 priority: now
 repo: pdomain/pdomain-ocr-labeler-spa
 ---
@@ -34,3 +38,23 @@ guidance available in `pdomain-ocr-simple-gui`.
   link.
 - Focused frontend tests cover panel registration, startup warmup, and guidance
   rendering.
+
+## Goal
+
+Expose the shared compute-device state and CUDA guidance without merging
+app-specific OCR settings into device selection.
+
+## Architecture
+
+Mount the suite device route in FastAPI, warm it at startup, and present it
+through the shared `pdomain-ui` compute panel.
+
+## Tech Stack
+
+FastAPI and the pdomain ops suite device API back a React/TypeScript panel using
+`createApiDeviceConfig()` and `useDeviceInfo()`.
+
+## Global Constraints
+
+Keep OCR configuration separate, preserve generated OpenAPI types, and test the
+startup warmup without requiring CUDA hardware.

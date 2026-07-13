@@ -1,5 +1,9 @@
 ---
-status: backlog
+last_verified: 2026-07-13
+created: 2026-06-16
+owner: maintainers
+kind: plan
+status: draft
 priority: now
 repo: pdomain/pdomain-ocr-labeler-spa
 ---
@@ -247,3 +251,23 @@ Map each caller to the upstream variant it needs. Many will just use `Button`; s
 - **`useNotificationStream`** (SSE consumer) — domain-specific labeler hook, not a UI primitive
 - **`--status-*` / `--layer-*` CSS token aliases** in `index.css` — labeler-specific semantic tokens; pdomain-ui does not define these
 - **`KeyCap.tsx`** — already deleted; upstream `KeyCap` from `@pdomain/pdomain-ui/primitives` is used directly (Tier A prerequisite)
+
+## Goal
+
+Replace the remaining compatible local UI primitives with maintained
+`pdomain-ui` primitives while preserving labeler behavior.
+
+## Architecture
+
+Migrate tier by tier through existing wrappers so shared primitives can land
+without a single high-risk rewrite of all consumers.
+
+## Tech Stack
+
+React, TypeScript, Tailwind, Vitest, Playwright, and `@pdomain/pdomain-ui` cover
+the migration and its visual/behavioral verification.
+
+## Global Constraints
+
+Preserve accessibility, public wrapper contracts, and exact testids. Keep local
+Tabs or Accordion behavior where shared primitives are not contract-compatible.

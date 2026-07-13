@@ -1,3 +1,11 @@
+---
+kind: architecture
+status: built
+owner: maintainers
+created: 2026-05-16
+last_verified: 2026-07-13
+---
+
 # 25 — Drawer: Worklist, Hierarchy, Bulk Actions
 
 > **Status**: Active (shipped — hi-fi redesign Slices 11–12, Slice 23, P5.a–P5.c)

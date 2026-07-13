@@ -1,6 +1,10 @@
 ---
+last_verified: 2026-07-13
+created: 2026-06-12
+owner: maintainers
+kind: spec
 repo: pdomain/pdomain-ocr-labeler-spa
-status: accepted — v1 ready to implement; U-M6/U-M7 designed (CT resolutions 2026-06-12)
+status: partial
 date: 2026-06-12
 ---
 
@@ -173,8 +177,7 @@ Redo is symmetric.
   metadata (why rotate is a history boundary).
 - `frontend/src/pages/ProjectPage.tsx:572` — the stale "discard any unsaved changes"
   confirm copy to rewrite.
-- `docs/research/parity-audit/sweep-2026-06-12-c-system.md` row C20,
-  `PARITY-GAP.md` row P7 — the findings this spec resolves.
+- The retired 2026-06-12 parity sweep rows C20 and P7 — retained in Git history.
 
 ## Milestone plan
 
@@ -250,8 +253,7 @@ confirm copy), mutation hook, hotkey map + help modal.
 - [ ] Update `docs/architecture/13-driver-contract.md` (`undo-button`, `redo-button`,
       Load Page → Reload note) and `docs/architecture/08-page-actions.md` +
       `12-hotkeys-a11y.md`.
-- [ ] Update `docs/research/parity-audit/PARITY-GAP.md` row P7 + its "deliberately not
-      sliced" entry to point at this spec (resolved-by-design).
+- [ ] Preserve the retired parity row P7 resolution in current architecture.
 - [ ] `make ci AI=1` green (includes frontend build); `make e2e AI=1` for the new tests.
 
 ## Verification gate (v1)
@@ -440,3 +442,18 @@ Formerly the open-questions section; all three resolved by CT on 2026-06-12.
    U-M6. No pdomain-ops changes required.
 3. **Q-U3 — history UI → RESOLVED.** Wanted, not YAGNI — designed above as **U-M7**
    (history drawer tab + jump-to-version as a restore event). Post-v1.
+
+## Adversarial Review
+
+**Accepted finding:** The v1 undo/redo surface shipped, while U-M6 cross-OCR history and U-M7
+visible history remain future work.
+
+**Stage:** migration-time current-state review on 2026-07-13.
+
+**Source:** an independent read-only reviewer compared this document with current
+code, tests, architecture, and git history.
+
+**Result:** the review accepted the finding above and used it to declare the
+metadata status. Residual risks remain explicit here or in
+`docs/context/intent-map.md`; deferred or blocked behavior is not claimed as
+shipped.

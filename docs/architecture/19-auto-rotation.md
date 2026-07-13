@@ -1,7 +1,15 @@
+---
+kind: architecture
+status: built
+owner: maintainers
+created: 2026-05-06
+last_verified: 2026-07-13
+---
+
 # 19 — Auto-Rotation + Manual Rotate
 
-> **Status**: Active
-> **Last updated**: 2026-05-11
+> **Status**: Built
+> **Last updated**: 2026-07-13
 > **Spec-Issue**: pdomain/pdomain-ocr-labeler-spa#42
 
 Pages from book scans sometimes arrive rotated (sideways, upside-down).
@@ -52,10 +60,11 @@ Backend behaviour:
 Manual rotate is **slow** (re-runs OCR). Returns a Job (202
 Accepted) like Reload OCR — see [`08-page-actions.md`](08-page-actions.md) §2.
 
-### 1.2 Auto-rotate (project-load pass, ships post-M9)
+### 1.2 Auto-rotate (batch job, shipped)
 
-When a project loads, an opt-in pre-pass evaluates every page's
-correct rotation and applies it before the first OCR.
+The `auto_rotate_all` job evaluates project pages, applies a selected rotation,
+reruns OCR, and persists rotation metadata. It skips manually rotated pages
+unless `overwrite_manual` is true.
 
 | Setting | Default | Where |
 |---|---|---|

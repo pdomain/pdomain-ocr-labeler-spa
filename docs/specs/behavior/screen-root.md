@@ -1,3 +1,11 @@
+---
+kind: spec
+status: active
+owner: maintainers
+created: 2026-06-01
+last_verified: 2026-07-13
+---
+
 # Behavior unit spec - Root screen
 
 - **Unit type:** screen
@@ -126,3 +134,18 @@
 ## Known regressions
 
 - None captured yet.
+
+## Adversarial Review
+
+**Accepted finding:** The root route now exposes OCR configuration and shared shell behavior; older
+missing-trigger claims are resolved.
+
+**Stage:** migration-time current-state review on 2026-07-13.
+
+**Source:** an independent read-only reviewer compared this document with current
+code, tests, architecture, and git history.
+
+**Result:** the review accepted the finding above and used it to declare the
+metadata status. Residual risks remain explicit here or in
+`docs/context/intent-map.md`; deferred or blocked behavior is not claimed as
+shipped.

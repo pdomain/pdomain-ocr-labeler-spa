@@ -1,3 +1,11 @@
+---
+kind: spec
+status: draft
+owner: maintainers
+created: 2026-06-01
+last_verified: 2026-07-13
+---
+
 # Behavior unit spec - Glyph annotations
 
 - **Unit type:** component/backend side-channel
@@ -95,3 +103,18 @@
 - **Tier(s):** A
 - **Regression:** no
 - **Test:** -
+
+## Adversarial Review
+
+**Accepted finding:** The described frontend glyph components do not exist; this remains draft
+behavior even though Q-A5–Q-A7 are resolved.
+
+**Stage:** migration-time current-state review on 2026-07-13.
+
+**Source:** an independent read-only reviewer compared this document with current
+code, tests, architecture, and git history.
+
+**Result:** the review accepted the finding above and used it to declare the
+metadata status. Residual risks remain explicit here or in
+`docs/context/intent-map.md`; deferred or blocked behavior is not claimed as
+shipped.

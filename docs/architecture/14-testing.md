@@ -1,3 +1,11 @@
+---
+kind: architecture
+status: built
+owner: maintainers
+created: 2026-05-06
+last_verified: 2026-07-13
+---
+
 # 14 — Testing Strategy
 
 > **Status**: Active

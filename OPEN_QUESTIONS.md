@@ -1,9 +1,16 @@
+---
+kind: context
+status: active
+owner: maintainers
+created: 2026-05-06
+last_verified: 2026-07-13
+---
+
 # Open Questions for `pdomain-ocr-labeler-spa`
 
-> **Resolved questions are archived in [`docs/archive/research/QUESTIONS_RESOLVED.md`](docs/archive/research/QUESTIONS_RESOLVED.md).**
-> Only currently-open questions live below. When a question is answered, move
-> its full entry to the archive in the same commit that lands the resolution
-> ADR (see [`docs/process/DEVELOPMENT.md` § Archive on close](docs/process/DEVELOPMENT.md#archive-on-close)).
+> **Resolved questions are recorded in [`docs/context/decisions.md`](docs/context/decisions.md) and Git history.**
+> Only currently-open questions live below. When a question is answered, remove
+> its full entry in the same commit that records the durable decision.
 
 Questions the spec authors could not resolve from the source material alone.
 Each entry: **Q** (the question), **Context** (why it matters), **Options**

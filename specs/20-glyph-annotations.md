@@ -1,3 +1,11 @@
+---
+kind: spec
+status: active
+owner: maintainers
+created: 2026-05-06
+last_verified: 2026-07-13
+---
+
 # 20 — Glyph-level Side-channel Annotations
 
 > **Status**: Active
@@ -207,7 +215,7 @@ WARN once per session the first time it writes v2.2.
 Lives in `frontend/src/components/glyph/GlyphAnnotationPanel.tsx`.
 
 Opens **inside** the existing `<WordEditDialog>`
-([`07-word-edit-dialog.md`](../docs/architecture/07-word-edit-dialog.md)) as a new
+([`26-right-panel-detail.md`](../docs/architecture/26-right-panel-detail.md)) as a new
 collapsible section "Typography". Also accessible without opening the
 dialog: a small chip-row appears under each `<WordCell>` GT input
 ([`05-word-matches.md`](../docs/architecture/05-word-matches.md)) when the word has
@@ -282,7 +290,7 @@ Clicking any chip opens the panel. Used in two places:
 
 ### 5.4 Modified: `<WordEditDialog>`
 
-[`07-word-edit-dialog.md`](../docs/architecture/07-word-edit-dialog.md): add a new
+[`26-right-panel-detail.md`](../docs/architecture/26-right-panel-detail.md): add a new
 "Typography" section between the existing tag-chips row and the
 preview-column row. Section is collapsed by default; auto-expands when
 the word has predictions awaiting review.
@@ -517,13 +525,12 @@ exactly the same.
 
 ---
 
-## 11. Open issues
+## 11. Residual issues
 
-- **Q-A5** (legacy v2.2 tolerance). See §4. Listed in
-  [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md).
-- **Q-A6** (predictions-overlay color). What color is the ghost outline
-  on the canvas? Recommend amber-50 to match the corner-badge palette.
-  Listed in [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md).
+- **Q-A5** (legacy v2.2 tolerance). **Resolved — commit `dba8a93`.** The
+  compatibility behavior is defined in §4.
+- **Q-A6** (predictions-overlay color). **Resolved — commit `dba8a93`.** The
+  default is translucent blue as defined in §6.
 - **Q-A7** (per-mark provenance). **Resolved — D-044.** The `source` field
   is a single string per word (`GlyphAnnotations`-level); character-level
   provenance is deferred to v2.3 per D-044. See
@@ -536,3 +543,18 @@ exactly the same.
 - **Cross-page bulk mark** is out of v1 scope. If the driver needs it,
   it iterates per-page. A future M with project-wide bulk + SSE
   progress could add it.
+
+## Adversarial Review
+
+**Accepted finding:** Q-A5–Q-A7 are resolved, but the glyph frontend and trainer producer are
+still unimplemented.
+
+**Stage:** migration-time current-state review on 2026-07-13.
+
+**Source:** an independent read-only reviewer compared this document with current
+code, tests, architecture, and git history.
+
+**Result:** the review accepted the finding above and used it to declare the
+metadata status. Residual risks remain explicit here or in
+`docs/context/intent-map.md`; deferred or blocked behavior is not claimed as
+shipped.

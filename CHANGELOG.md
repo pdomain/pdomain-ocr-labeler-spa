@@ -1,3 +1,11 @@
+---
+kind: reference
+status: active
+owner: maintainers
+created: 2026-06-01
+last_verified: 2026-07-13
+---
+
 # Changelog
 
 ## Unreleased

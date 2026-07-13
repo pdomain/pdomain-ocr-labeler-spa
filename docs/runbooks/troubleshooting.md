@@ -1,3 +1,11 @@
+---
+kind: runbook
+status: active
+owner: maintainers
+created: 2026-06-01
+last_verified: 2026-07-13
+---
+
 # Troubleshooting
 
 Common failure modes and fixes, sourced from real code paths.
@@ -213,3 +221,28 @@ versions.
 ```sh
 make local-upgrade-deps
 ```
+
+## Trigger
+
+Use this runbook after a documented development, startup, build, dependency, or
+local-mode symptom occurs.
+
+## Preconditions
+
+Capture the failing command and exact message first. Check local-dev resolution
+before changing dependencies, and preserve project data and user edits.
+
+## Steps
+
+Match the symptom to the relevant section above, confirm its stated cause, then
+apply only that section's fix.
+
+## Verification
+
+Rerun the original failing command. If the fix changes tracked files, also run
+the repository-required focused and full gates.
+
+## Rollback
+
+Reverse only the attempted environment or dependency change. Restore locked
+resolution with repository Make targets; never discard unrelated work or data.

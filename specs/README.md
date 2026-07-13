@@ -1,3 +1,11 @@
+---
+kind: spec
+status: active
+owner: maintainers
+created: 2026-05-06
+last_verified: 2026-07-13
+---
+
 # `pdomain-ocr-labeler-spa` Specs
 
 Numbered design documents.
@@ -35,7 +43,7 @@ Specs are now organized into two trees:
 | 04 | [`../docs/architecture/04-image-viewport.md`](../docs/architecture/04-image-viewport.md) | Konva canvas, overlays, drag modes |
 | 05 | [`../docs/architecture/05-word-matches.md`](../docs/architecture/05-word-matches.md) | Right-pane line cards + per-word controls |
 | 06 | [`../docs/architecture/06-toolbar-actions.md`](../docs/architecture/06-toolbar-actions.md) | Scope-action grid, style/component apply |
-| 07 | [`../docs/architecture/07-word-edit-dialog.md`](../docs/architecture/07-word-edit-dialog.md) | Preview, nudge, crop, refine, erase |
+| 07 | [`../docs/architecture/26-right-panel-detail.md`](../docs/architecture/26-right-panel-detail.md) | Persistent word/line detail editing |
 | 08 | [`../docs/architecture/08-page-actions.md`](../docs/architecture/08-page-actions.md) | Reload OCR / Save / Load / Rematch GT |
 | 09 | [`../docs/architecture/09-persistence.md`](../docs/architecture/09-persistence.md) | UserPageEnvelope, image cache, session state |
 | 10 | [`../docs/architecture/10-export.md`](../docs/architecture/10-export.md) | DocTR export dialog + endpoint |
@@ -78,3 +86,18 @@ In-source docstrings and comments still reference `specs/<file>` paths
 for the specs that moved. These are non-runtime references (editor
 navigation only). Updating them en masse is a separate chore — see the
 follow-up issue filed in this audit pass.
+
+## Adversarial Review
+
+**Accepted finding:** The active/implemented split remains useful; retired execution artifacts
+belong in Git history and the retirement manifest.
+
+**Stage:** migration-time current-state review on 2026-07-13.
+
+**Source:** an independent read-only reviewer compared this document with current
+code, tests, architecture, and git history.
+
+**Result:** the review accepted the finding above and used it to declare the
+metadata status. Residual risks remain explicit here or in
+`docs/context/intent-map.md`; deferred or blocked behavior is not claimed as
+shipped.

@@ -1,3 +1,11 @@
+---
+kind: architecture
+status: built
+owner: maintainers
+created: 2026-05-16
+last_verified: 2026-07-13
+---
+
 # 27 — Right Panel Action Sections
 
 > **Status**: Active (shipped — hi-fi redesign Slices 16–20, P3.a–P4.b)
@@ -14,7 +22,8 @@ geometric and structural operations a labeler performs on a word: bounding-box
 nudging, interactive rebox via a Konva mini-canvas, pixel erasure, word merge /
 split / gap adjustment, per-character style ranges, and per-character GT
 correction with a character-bbox canvas. Collectively they replace the legacy
-`word_edit_dialog.py`'s inline tool rows (see [`07-word-edit-dialog.md`](07-word-edit-dialog.md)
+`word_edit_dialog.py`'s historical inline tool rows (superseded by
+[`26-right-panel-detail.md`](26-right-panel-detail.md)
 for the legacy reference).
 
 ## 2. User-facing goals

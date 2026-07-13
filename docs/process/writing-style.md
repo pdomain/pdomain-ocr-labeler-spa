@@ -1,3 +1,11 @@
+---
+kind: process
+status: active
+owner: maintainers
+created: 2026-05-28
+last_verified: 2026-07-13
+---
+
 # Writing Style
 
 Use this style for docs, reports, issue text, PR text, and user-facing copy.

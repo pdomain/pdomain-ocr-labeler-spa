@@ -1,3 +1,11 @@
+---
+kind: architecture
+status: built
+owner: maintainers
+created: 2026-05-16
+last_verified: 2026-07-13
+---
+
 # 24 — Studio Shell / Layout
 
 > **Status**: Active (shipped — FO-1–FO-9 follow-ons)

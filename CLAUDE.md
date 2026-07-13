@@ -1,3 +1,11 @@
+---
+kind: process
+status: active
+owner: maintainers
+created: 2026-05-09
+last_verified: 2026-07-13
+---
+
 # CLAUDE — pdomain-ocr-labeler-spa
 
 FastAPI + React/Vite/TS replacement for the NiceGUI `pd-ocr-labeler`. Spec-driven,
@@ -32,7 +40,7 @@ milestone-by-milestone implementation (M0…M9). Architecture: `docs/architectur
 | `make local-run` | run SPA against local-dev workspace — re-applies Python editables + rebuilds SPA via local path (does NOT call `make run`; avoids registry `pnpm install --frozen-lockfile` that would discard `pnpm link`) |
 | `make update-pdomain-deps` | bump pd-* sibling deps to registry latest; leaves diff for review |
 
-See [workspace `docs/process/local-dev.md`](../docs/process/local-dev.md) for the canonical local-dev pattern (spec #362).
+See the workspace `docs/process/local-dev.md` for the canonical local-dev pattern (spec #362).
 
 `AI=1` captures verbose output to `.ci-ai.log`; stdout shows `✅` on pass or
 filtered failure sections on error. Remove `AI=1` only if you need full verbose
@@ -52,32 +60,27 @@ output for debugging.
 - Open questions live in `OPEN_QUESTIONS.md`; do not resolve them unilaterally.
 - After FastAPI model changes: run `make openapi-export` to keep TS types in sync.
 - `make build` will refuse without a populated `static/` — run `make frontend-build` first.
-- Archive closed bugs/questions on close: cut from `docs/archive/research/BUGS_FOUND.md` / `OPEN_QUESTIONS.md`
-  into `docs/archive/research/BUGS_RESOLVED.md` / `docs/archive/research/QUESTIONS_RESOLVED.md` in the same commit.
+- Track open bugs in the issue tracker and open design questions in
+  `OPEN_QUESTIONS.md`. Record durable outcomes in `docs/context/decisions.md`.
 - Auth/S3/Postgres/managed-adapter axes are deferred (D-042) — do not implement without user OK.
 
 ## Current milestone
 
 **Cut-over complete as of 2026-05-21.** M0–M10, M9.5, hi-fi FO-1–FO-9,
 and all 8 CU milestones (complete-labeler-spa plan) are shipped.
-M9.1 (manual rotate) and M9.2 (auto-rotate-all) ship the job/SSE
-plumbing only — the actual image rotation, re-OCR, and PageRecord
-update are stubbed. See `docs/archive/research/BUGS_FOUND.md`.
+M9.1 (manual rotate) and M9.2 (auto-rotate-all) now rotate images, rerun OCR,
+persist rotation metadata, and protect manual overrides.
 Milestone history lives in GitHub milestones and `specs/16-milestones.md`.
 
-**Path to usable** — see `docs/archive/plans/plan-to-usable.md` (archived,
-cut-over complete). All rows checked; legacy pd-ocr-labeler superseded.
+**Path to usable** — cut-over is complete; the retired execution plan remains
+available in Git history. The legacy `pd-ocr-labeler` is superseded.
 
 **Open work:**
 
-- M9.5 keyboard audit (#286, `status:backlog`): browser walk TODOs
-  pending CT; hotkeys + audit doc already shipped.
-- M11 glyph annotations (#267–#270, `status:blocked`): needs Q-A7
-  resolution before implementation.
+- M11 glyph annotations (#267–#270, `status:backlog`): Q-A5–Q-A7 are resolved,
+  but the frontend glyph surface has not shipped.
 - #366 tighten tsconfig.test.json relaxations (`status:backlog`).
 - #404 lint-deviations.md documentation (`kind:chore`).
-- #405 OCR-config modal trigger missing after HeaderBar deprecation
-  (`status:blocked`).
 
 Per-slice history is preserved in git log and GitHub closed milestones.
 
@@ -112,9 +115,9 @@ When shipping a plan task:
 ## docs/ folder
 
 This repo follows the workspace docs/ template — see [`docs/README.md`](docs/README.md). Active
-folders: `architecture/`, `decisions/`, `plans/`, `process/`, `research/`,
-`runbooks/`, `specs/`, `templates/`, `usage/`, plus parallel `archive/`
-subfolders.
+folders: `architecture/`, `context/`, `decisions/`, `plans/`, `process/`,
+`runbooks/`, `specs/`, `templates/`, and `usage/`. Retired material remains in
+Git history and is summarized in `docs/context/decisions.md`.
 
 **Superpowers redirect.** When a superpowers skill (e.g. `brainstorming`,
 `writing-plans`) instructs you to save to `docs/superpowers/specs/<file>.md`

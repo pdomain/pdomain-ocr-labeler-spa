@@ -1,3 +1,11 @@
+---
+kind: architecture
+status: built
+owner: maintainers
+created: 2026-05-31
+last_verified: 2026-07-13
+---
+
 # Module Map
 
 > **Status**: Active

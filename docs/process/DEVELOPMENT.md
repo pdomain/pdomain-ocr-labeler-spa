@@ -1,9 +1,17 @@
+---
+kind: process
+status: active
+owner: maintainers
+created: 2026-05-06
+last_verified: 2026-07-13
+---
+
 # Development
 
 How to set up `pdomain-ocr-labeler-spa` for hacking. End users running the
 published wheel don't need any of this — the wheel ships with a
-pre-built frontend bundle. See the project [`README.md`](../README.md)
-for the user-facing pitch and [`specs/`](../specs/) for the
+pre-built frontend bundle. See the project [`README.md`](../../README.md)
+for the user-facing pitch and [`specs/`](../../specs/README.md) for the
 authoritative design notes.
 
 > **Status note (2026-05-07).** Backend is feature-rich (M0 scaffold +
@@ -119,7 +127,7 @@ make frontend-build  # writes the SPA bundle into src/pdomain_ocr_labeler_spa/st
 make build           # produces the wheel; refuses without a populated static/
 ```
 
-The build refusal is enforced by [`build_hooks/spa_check.py`](../build_hooks/spa_check.py)
+The build refusal is enforced by `build_hooks/spa_check.py`
 — intentional, so a forgotten `make frontend-build` can't ship a blank
 page.
 
@@ -141,45 +149,24 @@ make ci   # setup + test + frontend-test + build
 
 Mirrors the `.github/workflows/release.yml` pipeline.
 
-## Archive on close
+## Record outcomes on close
 
-`docs/archive/research/BUGS_FOUND.md` and `OPEN_QUESTIONS.md` track *currently-open* findings
-and questions only. When you close one, **move its full entry to the matching
-archive file in the same commit that lands the close** — don't leave it in
-the active list with a `(closed)` tag. Active docs are for in-flight work;
-[`docs/archive/`](../archive/) is the historical record.
-
-The recipe:
-
-1. Land the fix (or the resolution ADR).
-2. In the same commit that closes the entry, edit the active doc:
-   - For a bug: cut the full `## B-NN — …` block from `docs/archive/research/BUGS_FOUND.md`
-     and paste it (verbatim, plus the closing-commit hash and iter number on
-     the **Status** line) into `docs/archive/research/BUGS_RESOLVED.md`, preserving
-     numeric `B-NN` order.
-   - For a question: cut the full `## Q-NN — …` block (or the
-     Resolved-pending entry) from `OPEN_QUESTIONS.md` and paste it into
-     `docs/archive/research/QUESTIONS_RESOLVED.md`, plus add a row to the
-     Resolution-log table at the bottom.
-3. Keep the active doc's pointer to the archive — don't strip it; new
-   contributors find the historical record through that link.
-
-Why: every prior code-review checkpoint left closed entries accumulating in
-the active doc; by iter 50 `BUGS_FOUND.md` had ~70 closed entries and ~2
-open ones, so finding the current backlog meant scrolling past 2,300 lines
-of resolved work. The same was happening to `OPEN_QUESTIONS.md`. The
-"archive on close" rule keeps both docs short and discoverable.
+Track bugs in the issue tracker and unresolved design choices in
+[`OPEN_QUESTIONS.md`](../../OPEN_QUESTIONS.md). When work closes, remove stale
+open-state prose and record durable rationale in
+[`docs/context/decisions.md`](../context/decisions.md). Git history preserves
+execution transcripts and retired ledgers without exposing them as current
+retrieval truth.
 
 ## Useful references
 
-- [`docs/architecture/00-overview.md`](architecture/00-overview.md) — goals, non-goals,
+- [`docs/architecture/00-overview.md`](../architecture/00-overview.md) — goals, non-goals,
   tech stack, milestone contract.
-- [`specs/16-milestones.md`](../specs/16-milestones.md) — milestone
+- [`specs/16-milestones.md`](../../specs/16-milestones.md) — milestone
   acceptance gates.
-- [`OPEN_QUESTIONS.md`](../OPEN_QUESTIONS.md) — deferred decisions.
-- [`specs/16-milestones.md`](../specs/16-milestones.md) — implementation status by
+- [`OPEN_QUESTIONS.md`](../../OPEN_QUESTIONS.md) — deferred decisions.
+- [`specs/16-milestones.md`](../../specs/16-milestones.md) — implementation status by
   milestone.
-- [`docs/archive/research/BUGS_FOUND.md`](../archive/research/BUGS_FOUND.md) — open code-review findings;
-  closed entries archived in
-  [`docs/archive/research/BUGS_RESOLVED.md`](../archive/research/BUGS_RESOLVED.md).
-- [`docs/archive/`](archive/) — closed bugs + resolved questions.
+- [`docs/context/current-state.md`](../context/current-state.md) — current work and risks.
+- [`docs/context/intent-map.md`](../context/intent-map.md) — active, deferred, and blocked intent.
+- [`docs/context/decisions.md`](../context/decisions.md) — durable outcomes and retirement tombstones.

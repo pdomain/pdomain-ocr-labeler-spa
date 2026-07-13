@@ -1,3 +1,5 @@
+<!-- docgraph: ignore -->
+
 # M0 Acceptance Gate
 
 Authoritative milestone definition: [`../specs/16-milestones.md`](../specs/16-milestones.md) §M0.

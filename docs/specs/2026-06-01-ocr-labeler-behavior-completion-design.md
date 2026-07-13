@@ -1,3 +1,11 @@
+---
+kind: spec
+status: partial
+owner: maintainers
+created: 2026-06-01
+last_verified: 2026-07-13
+---
+
 # OCR Labeler Behavior Completion Design
 
 Date: 2026-06-01
@@ -18,7 +26,7 @@ word editing, jobs, persistence visibility, and deferred behavior tracking.
 - Preserve the old hidden toolbar grid as a long-term driver contract.
 - Implement PGDP API import.
 - Implement edited-image OCR.
-- Implement real rotation side effects beyond current job plumbing.
+- Change the shipped rotation algorithm or persistence contract.
 - Implement page-level persistent erase in this phase.
 - Add first-run migration prompts or external migration scripts.
 
@@ -286,7 +294,7 @@ Operations that enter Jobs:
 - reload OCR for current page
 - save project
 - export
-- rotate once real side effects exist
+- manual and batch rotation
 - refine if long-running
 - manual OCR prefetch
 - any batch or multi-page operation
@@ -355,7 +363,6 @@ approved:
 
 - PGDP API import
 - edited-image OCR
-- real image rotation and OCR/save side effects
 - page-level persistent erase
 - automatic opportunistic OCR prefetch
 - external Claude page-labeling driver
@@ -380,7 +387,6 @@ Strict xfail coverage is required for:
 - automatic OCR prefetch
 - PGDP import
 - edited-image OCR
-- real rotation side effects
 - any approved NiceGUI-derived action not implemented in the visible action rail
 
 ## Workstreams
@@ -429,7 +435,7 @@ Strict xfail coverage is required for:
    - surface OCR config sidecar warning
 
 8. Deferred behavior guards
-   - add xfails for PGDP import, edited-image OCR, real rotation, automatic
+   - add xfails for PGDP import, edited-image OCR, automatic
      prefetch, page-level erase, and approved missing actions
 
 ## Acceptance Criteria
@@ -449,3 +455,15 @@ Strict xfail coverage is required for:
 - Manual OCR prefetch is represented as a background job.
 - Persistence state is visible and recoverable for save errors/conflicts.
 - Deferred approved behavior has strict xfail tests.
+
+## Adversarial Review
+
+**Stage:** migration-time current-state review on 2026-07-13.
+
+**Source:** an independent read-only reviewer compared this document with current
+code, tests, architecture, and git history.
+
+**Result:** manual and batch rotation shipped after this design was written, so
+rotation was removed from its deferred and xfail lists. PGDP import,
+edited-image OCR, persistent page-level erase, and glyph implementation remain
+residual risks here or in `docs/context/intent-map.md`.

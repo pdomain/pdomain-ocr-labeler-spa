@@ -1,3 +1,11 @@
+---
+kind: architecture
+status: built
+owner: maintainers
+created: 2026-05-06
+last_verified: 2026-07-13
+---
+
 # 15 — Deployment + Developer Workflow
 
 > **Status**: Active
@@ -496,7 +504,7 @@ standard agreed 2026-05-07; mirrored across all `pd-*` repos.
 
 A workspace developer can opt into **dev-local mode** for the venv:
 editable installs of sibling `pd-*` checkouts (notably
-[`pdomain-book-tools`](../../pdomain-book-tools/)), GPU/CUDA torch wheels, and
+`pdomain-book-tools`), GPU/CUDA torch wheels, and
 `doctr` from git. None of that state is captured in `uv.lock` — it's
 applied imperatively after `uv sync`. So the obvious recipe
 

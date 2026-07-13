@@ -1,3 +1,11 @@
+---
+kind: architecture
+status: built
+owner: maintainers
+created: 2026-05-14
+last_verified: 2026-07-13
+---
+
 # 22 — ProjectPage wireup — mount the real labeling surface
 
 > **Status**: Active (shipped — all spec-22-* child issues closed 2026-05-15).
@@ -10,7 +18,7 @@
 Replaces the 76-line `ProjectPage.tsx` stub with the full labeling
 surface — image viewport on the left, text tabs on the right, page
 actions on top, dialogs wired to launchers. The components all exist
-(see audit [`../PARITY_GAPS_2026_05_14.md`](../PARITY_GAPS_2026_05_14.md) §2); this spec assembles
+(the retired parity audit identified this assembly gap); this spec assembles
 them.
 
 ---
@@ -173,8 +181,8 @@ their own slice.
 
 ## 6. Header trigger buttons (new in HeaderBar)
 
-The legacy header layout (see
-[`pd-ocr-labeler/docs/architecture/ui-action-buttons.md`](../../../pd-ocr-labeler/docs/architecture/ui-action-buttons.md))
+The legacy header layout (see the sibling repository's
+`pd-ocr-labeler/docs/architecture/ui-action-buttons.md`)
 shows OCR config (#109) next to the project load controls. SPA mirrors:
 
 ```tsx
@@ -307,9 +315,9 @@ Land in order A → B → C. A and B can also run in parallel.
 
 ## 14. Refs
 
-- Audit: [`../PARITY_GAPS_2026_05_14.md`](../PARITY_GAPS_2026_05_14.md)
+- Historical parity audit: retained in Git history.
 - Spec 21 (Konva): [`21-konva-renderer.md`](21-konva-renderer.md)
 - Spec 23 (backend payload): [`23-page-payload-backend.md`](23-page-payload-backend.md)
 - Spec 03 (frontend shell): [`03-frontend.md`](03-frontend.md)
 - Spec 04 (image viewport): [`04-image-viewport.md`](04-image-viewport.md)
-- Legacy `page_view.py`: [`pd-ocr-labeler/pd_ocr_labeler/views/projects/pages/page_view.py`](../../../pd-ocr-labeler/pd_ocr_labeler/views/projects/pages/page_view.py)
+- Legacy `page_view.py`: `pd-ocr-labeler/pd_ocr_labeler/views/projects/pages/page_view.py`

@@ -1,3 +1,11 @@
+---
+kind: spec
+status: active
+owner: maintainers
+created: 2026-05-06
+last_verified: 2026-07-13
+---
+
 # 16 — Milestones
 
 > **Status**: Active
@@ -448,7 +456,7 @@ tag chips. Page-scope `Refine all bboxes` button works.
 
 **Specs.**
 
-- [`07-word-edit-dialog.md`](../docs/architecture/07-word-edit-dialog.md) — full
+- [`26-right-panel-detail.md`](../docs/architecture/26-right-panel-detail.md) — current
 - [`12-hotkeys-a11y.md`](../docs/architecture/12-hotkeys-a11y.md) — Enter on dialog GT,
   Escape close
 
@@ -713,7 +721,7 @@ only on those two upstream deliveries.
 Cross-refs [`01-data-models.md`](../docs/architecture/01-data-models.md) §3, §4 (envelope
 bump rules), [`05-word-matches.md`](../docs/architecture/05-word-matches.md) (`<WordCell>`
 host),
-[`07-word-edit-dialog.md`](../docs/architecture/07-word-edit-dialog.md) (Typography
+[`26-right-panel-detail.md`](../docs/architecture/26-right-panel-detail.md) (Typography
 section),
 [`13-driver-contract.md`](../docs/architecture/13-driver-contract.md) (testid catalogue
 additions).
@@ -785,3 +793,18 @@ and the legacy `core/` modules — the SPA work is mostly UI + endpoint
 plumbing).
 
 Total: ~15–20 sessions for an AI agent operating end-to-end.
+
+## Adversarial Review
+
+**Accepted finding:** M0–M10 and cut-over shipped; M11 remains unimplemented backlog rather than
+blocked on Q-A7.
+
+**Stage:** migration-time current-state review on 2026-07-13.
+
+**Source:** an independent read-only reviewer compared this document with current
+code, tests, architecture, and git history.
+
+**Result:** the review accepted the finding above and used it to declare the
+metadata status. Residual risks remain explicit here or in
+`docs/context/intent-map.md`; deferred or blocked behavior is not claimed as
+shipped.

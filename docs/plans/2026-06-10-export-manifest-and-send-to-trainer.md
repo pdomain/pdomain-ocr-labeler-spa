@@ -1,5 +1,9 @@
 ---
-status: backlog
+last_verified: 2026-07-13
+created: 2026-06-10
+owner: maintainers
+kind: plan
+status: draft
 priority: now
 repo: pdomain/pdomain-ocr-labeler-spa
 ---
@@ -1406,3 +1410,23 @@ git commit -m "test(e2e): add Playwright tests for export manifest + trainer aff
 2. **`DoctrExportManifest` field names:** The plan assumes `.schema`, `.version`, `.generated_at`, `.app`, `.projects` and that `write_manifest(path, manifest)` writes JSON atomically. If the Track-B API differs (e.g. `manifest.schema_name` or a `.to_dict()` serializer), update Task 2's implementation.
 3. **`publish_shared_path` signature:** The plan uses `publish_shared_path("doctr-export-root", export_root, app="pdomain-ocr-labeler-spa")`. If Track B uses a different call shape (e.g. a `SharedPathEntry` dataclass), update Task 4.
 4. **Trainer app ID:** The plan hardcodes `"pdomain-ocr-trainer-spa"`. Confirm this matches the `app_id` the trainer registers in the suite registry before shipping.
+
+## Goal
+
+Write a durable export manifest and offer an effectful handoff to the trainer
+after successful export.
+
+## Architecture
+
+Extend the export job to publish manifest state, then consume that state through
+the shared-path and suite-launch APIs in the export UI.
+
+## Tech Stack
+
+The backend uses FastAPI job handlers and atomic JSON persistence; the frontend
+uses React, TanStack Query, and the existing export dialog.
+
+## Global Constraints
+
+Never publish a manifest before export succeeds. Preserve path containment,
+atomic writes, generated API types, and the existing export contract.

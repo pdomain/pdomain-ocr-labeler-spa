@@ -93,6 +93,8 @@ def build_report(declared: dict[str, Record], cited: set[str]) -> Report:
 
 def render_markdown(report: Report) -> str:
     lines = [
+        "<!-- docgraph: ignore -->",
+        "",
         "# Behavior coverage (generated - do not edit)",
         "",
         "Run `make behavior-coverage` to regenerate.",

@@ -1,3 +1,11 @@
+---
+kind: architecture
+status: built
+owner: maintainers
+created: 2026-05-14
+last_verified: 2026-07-13
+---
+
 # 23 — Backend page payload + mutation endpoints
 
 > **Status**: Active (shipped — all spec-23-* child issues closed 2026-05-15).
@@ -8,9 +16,8 @@
 
 Replaces the 501 stubs in `api/pages.py`, `api/words.py`,
 `api/lines_paragraphs.py` with real handlers. The frontend cannot
-operate until these return real data; the audit
-[`../PARITY_GAPS_2026_05_14.md` §2.3](../PARITY_GAPS_2026_05_14.md)
-shows that this is one of the two P0 backend-side gaps.
+operate until these return real data; the retired parity audit identified this
+as one of the two P0 backend-side gaps.
 
 ---
 
@@ -159,9 +166,8 @@ Wired in `_HANDLERS` dict in `runner.py:279`.
 **Target.** Re-run `core/ground_truth_matcher.rematch_page` (a thin
 wrapper over `pdomain_book_tools.matching` calls already used during
 initial OCR). Replaces `page.line_matches` with freshly-matched
-results; per-word GT edits are discarded (legacy semantics, per
-[`how-to-label-a-page.md`](../../../pd-ocr-labeler/docs/usage/how-to-label-a-page.md)
-§10).
+results; per-word GT edits are discarded (legacy semantics documented in
+`pd-ocr-labeler/docs/usage/how-to-label-a-page.md` §10).
 
 Body is empty (`RematchGtRequest` is intentionally empty).
 
@@ -353,7 +359,7 @@ A → B can run in parallel. C/D/E can run in parallel after A lands
 
 ## 17. Refs
 
-- Audit: [`../PARITY_GAPS_2026_05_14.md`](../PARITY_GAPS_2026_05_14.md)
+- Historical parity audit: retained in Git history.
 - Existing helpers: `core/page_state.py`, `core/persistence/cached_envelope.py`,
   `core/persistence/ground_truth.py`, `core/jobs/runner.py`.
 - Spec 02 (backend): [`02-backend.md`](02-backend.md) §5

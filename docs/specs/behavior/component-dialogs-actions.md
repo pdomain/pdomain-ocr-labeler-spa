@@ -1,10 +1,18 @@
+---
+kind: spec
+status: active
+owner: maintainers
+created: 2026-06-01
+last_verified: 2026-07-13
+---
+
 # Behavior unit spec - Page actions and dialogs
 
 - **Unit type:** component
 - **Address:** `PageActionsCompact`, hidden `PageActions`, `OCRConfigModal`,
   `SourceFolderDialog`, `ExportDialog`, `WordEditDialog`, `HotkeyHelpModal`
 - **UI definition:** none - existing stable UI documented in
-  `docs/architecture/06-toolbar-actions.md`, `07-word-edit-dialog.md`,
+  `docs/architecture/06-toolbar-actions.md`, `26-right-panel-detail.md`,
   `08-page-actions.md`, `10-export.md`, `12-hotkeys-a11y.md`,
   `13-driver-contract.md`
 - **Parent unit(s):** `screen-project-page.md`, `screen-root.md`
@@ -370,3 +378,18 @@
 
 - B-ACTIONS-001 - OCR config trigger disappeared after HeaderBar controls were
   deprecated; #405 restored a real visible project-route trigger.
+
+## Adversarial Review
+
+**Accepted finding:** Persistent right-panel editing superseded the standalone word dialog; current
+action contracts must follow the visible replacement.
+
+**Stage:** migration-time current-state review on 2026-07-13.
+
+**Source:** an independent read-only reviewer compared this document with current
+code, tests, architecture, and git history.
+
+**Result:** the review accepted the finding above and used it to declare the
+metadata status. Residual risks remain explicit here or in
+`docs/context/intent-map.md`; deferred or blocked behavior is not claimed as
+shipped.

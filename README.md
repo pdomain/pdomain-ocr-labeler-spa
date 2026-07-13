@@ -1,15 +1,26 @@
+---
+kind: process
+status: active
+owner: maintainers
+created: 2026-05-06
+last_verified: 2026-07-13
+---
+
 # pdomain-ocr-labeler-spa
 
+Repository guidance is in [`AGENTS.md`](AGENTS.md); release history is in
+[`CHANGELOG.md`](CHANGELOG.md); documentation starts at
+[`docs/README.md`](docs/README.md).
+
 A FastAPI + React/Vite/TypeScript replacement for the NiceGUI-based
-[`pd-ocr-labeler`](../pd-ocr-labeler/). Functionally identical to the
+`pd-ocr-labeler` legacy sibling repository. Functionally identical to the
 current labeler, structurally modelled on
-[`pdomain-prep-for-pgdp`](../pdomain-prep-for-pgdp/).
+the `pdomain-prep-for-pgdp` sibling repository.
 
 > **Status (2026-05-21):** Cut-over complete. Hi-fi P1–P5 shipped;
-> smoke run triaged; legacy `pd-ocr-labeler` superseded. See
-> [`docs/archive/plans/plan-to-usable.md`](docs/archive/plans/plan-to-usable.md)
-> for the full cut-over checklist. Known issues: see open bugs (e.g. #405 —
-> OCR-config modal has no user-facing trigger).
+> smoke run triaged; legacy `pd-ocr-labeler` superseded. The retired cut-over
+> checklist remains in Git history. Known issues are tracked in
+> [`docs/context/open-findings.md`](docs/context/open-findings.md).
 
 ## Why
 
@@ -115,7 +126,7 @@ Specs are split into two trees as of 2026-05-14:
 | [`04-image-viewport.md`](docs/architecture/04-image-viewport.md) | Konva canvas, overlays, drag modes |
 | [`05-word-matches.md`](docs/architecture/05-word-matches.md) | Right-pane line cards + per-word editing |
 | [`06-toolbar-actions.md`](docs/architecture/06-toolbar-actions.md) | Scope-action grid, style/component apply, add-word |
-| [`07-word-edit-dialog.md`](docs/architecture/07-word-edit-dialog.md) | Preview, nudge, crop, refine, erase |
+| [`26-right-panel-detail.md`](docs/architecture/26-right-panel-detail.md) | Persistent word/line detail editing |
 | [`08-page-actions.md`](docs/architecture/08-page-actions.md) | Reload OCR / Save / Load / Rematch GT |
 | [`09-persistence.md`](docs/architecture/09-persistence.md) | UserPageEnvelope, image cache, session state |
 | [`10-export.md`](docs/architecture/10-export.md) | DocTR export dialog + endpoint |

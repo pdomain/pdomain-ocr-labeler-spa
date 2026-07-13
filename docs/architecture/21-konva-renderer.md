@@ -1,3 +1,11 @@
+---
+kind: architecture
+status: built
+owner: maintainers
+created: 2026-05-14
+last_verified: 2026-07-13
+---
+
 # 21 — Konva renderer for the image viewport
 
 > **Status**: Active (shipped — supersedes D-020 deferral via D-043).
@@ -8,11 +16,10 @@
 Replaces the DOM-stub `PageImageCanvas` and the no-op `BBoxOverlay`
 with a real Konva renderer. The component shape from
 [`04-image-viewport.md`](04-image-viewport.md) stands; this spec fills in
-the bodies. The `WordImageCanvas` Konva implementation
-([`frontend/src/components/WordImageCanvas.tsx:236-330`](../../frontend/src/components/WordImageCanvas.tsx))
-is the reference for `react-konva` patterns, hover guides, drag
-preview, and image loading; this spec lifts those patterns up to the
-full page viewport scale.
+the bodies. The shipped
+`frontend/src/components/PageImageCanvas.tsx`
+contains the resulting `react-konva` patterns, hover guides, drag preview, and
+image loading at full-page viewport scale.
 
 ---
 
@@ -62,7 +69,7 @@ Confirmed: **Konva is the renderer for v1 and beyond.** Raw
    Konva-shaped; switching to raw canvas would require rewriting all
    downstream specs (selection, drag-rect overlay, hover guides).
 
-See [`17-decisions.md` D-043](17-decisions.md#d-043--konva-renderer-commitment-supersedes-d-020).
+See [`specs/17-decisions.md` D-043](../../specs/17-decisions.md#d-043--konva-renderer-commitment-supersedes-d-020).
 
 ---
 
@@ -266,7 +273,7 @@ Vitest fixtures.
 When `selectionMode` is `paragraph` (legacy default for "paragraph"
 mode), drag-rect intersection is computed against paragraph bboxes;
 ditto for line / word. The legacy implements this in
-`_apply_box_selection` ([`image_tabs.py:678-737`](../../../pd-ocr-labeler/pd_ocr_labeler/views/projects/pages/image_tabs.py)).
+`_apply_box_selection` in the legacy sibling's `image_tabs.py`.
 
 Selection-mode types must align with the legacy:
 `paragraph | line | word`. The current SPA mismatch
@@ -419,8 +426,6 @@ because spec 22 mounts `PageImageCanvas` in `ProjectPage`.
   [`../../specs/17-decisions.md` D-043](../../specs/17-decisions.md#d-043--konva-renderer-commitment-supersedes-d-020).
 - Superseded:
   [`../../specs/17-decisions.md` D-020](../../specs/17-decisions.md#d-020--defer-konva-vs-canvas-decision-to-m4-with-research-subagent).
-- Legacy renderer:
-  [`pd-ocr-labeler/pd_ocr_labeler/views/projects/pages/image_tabs.py:230-470`](../../../pd-ocr-labeler/pd_ocr_labeler/views/projects/pages/image_tabs.py).
-- WordImageCanvas reference:
-  [`frontend/src/components/WordImageCanvas.tsx`](../../frontend/src/components/WordImageCanvas.tsx).
+- Legacy renderer: `pd-ocr-labeler/pd_ocr_labeler/views/projects/pages/image_tabs.py`.
+- Shipped renderer: `frontend/src/components/PageImageCanvas.tsx`.
 - `react-konva` + `use-image` docs.

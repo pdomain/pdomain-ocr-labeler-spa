@@ -1,3 +1,11 @@
+---
+kind: architecture
+status: built
+owner: maintainers
+created: 2026-05-06
+last_verified: 2026-07-13
+---
+
 # 02 — Backend (FastAPI)
 
 > **Status**: Active
@@ -308,15 +316,15 @@ representation. The driver-facing URL bar still uses 1-based
 - `POST /.../words/{line_index}/{word_index}/crop`
   → `WordMatch`. Body: `{ side: "above" | "below" | "left" | "right", marker_x: int, marker_y: int }`.
   Clip the word's bbox at the click marker coordinate. Used by the Crop row in the word
-  edit dialog ([`07-word-edit-dialog.md`](07-word-edit-dialog.md) §3.5 / §4.4).
+  edit surface ([`26-right-panel-detail.md`](26-right-panel-detail.md)).
 - `POST /.../words/{line_index}/{word_index}/refine-bbox`
   → `WordMatch`. Body: `{}` (no body). Re-run bbox refinement for a single word using
   the current OCR model. Dialog re-renders with the updated bbox preview
-  ([`07-word-edit-dialog.md`](07-word-edit-dialog.md) §3.6).
+  ([`26-right-panel-detail.md`](26-right-panel-detail.md)).
 - `POST /.../words/{line_index}/{word_index}/expand-and-refine-bbox`
   → `WordMatch`. Body: `{ margin_px: int }`. Expand the word's bbox by `margin_px` then
   refine. Paired with the Expand + Refine button in the word edit dialog
-  ([`07-word-edit-dialog.md`](07-word-edit-dialog.md) §3.6).
+  ([`26-right-panel-detail.md`](26-right-panel-detail.md)).
 
 `PagePayload` is returned for any operation that may have changed
 counts/positions of other words (split, merge, add, batch-validate,

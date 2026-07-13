@@ -1,6 +1,10 @@
 ---
+last_verified: 2026-07-13
+created: 2026-06-10
+owner: maintainers
+kind: spec
 repo: pdomain/pdomain-ocr-labeler-spa
-status: approved
+status: active
 date: 2026-06-10
 ---
 
@@ -168,3 +172,18 @@ Done means: a human (or driver agent) can open the app, drag across three
 lines, see three cards with every word editable, fix a GT word with Enter,
 validate a whole line from its card, and bulk-validate the rest — with no
 placeholder, no first-line-only view, and no console errors.
+
+## Adversarial Review
+
+**Accepted finding:** The multi-line detail surface shipped; remaining risk is browser coverage of
+mixed-selection and mutation error states.
+
+**Stage:** migration-time current-state review on 2026-07-13.
+
+**Source:** an independent read-only reviewer compared this document with current
+code, tests, architecture, and git history.
+
+**Result:** the review accepted the finding above and used it to declare the
+metadata status. Residual risks remain explicit here or in
+`docs/context/intent-map.md`; deferred or blocked behavior is not claimed as
+shipped.

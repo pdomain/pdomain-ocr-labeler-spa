@@ -1,3 +1,11 @@
+---
+kind: process
+status: active
+owner: maintainers
+created: 2026-05-11
+last_verified: 2026-07-13
+---
+
 # Conventions — pdomain-ocr-labeler-spa
 
 <!-- workspace-conventions:start -->

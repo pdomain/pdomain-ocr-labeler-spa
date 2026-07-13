@@ -1,3 +1,11 @@
+---
+kind: architecture
+status: built
+owner: maintainers
+created: 2026-05-16
+last_verified: 2026-07-13
+---
+
 # 28 — Palettes and Pickers
 
 > **Status**: Active (shipped — hi-fi redesign P2.d, P2.e, P4.c)

@@ -1,3 +1,11 @@
+---
+kind: plan
+status: partial
+owner: maintainers
+created: 2026-07-04
+last_verified: 2026-07-13
+---
+
 # Labeler SPA PGDP Alignment Backlog
 
 > **For agentic workers:** use `superpowers:subagent-driven-development` for
@@ -9,8 +17,8 @@
 language and common app patterns, without porting the PGDP 24-stage pipeline
 into the labeler.
 
-**Source gap analysis:**
-`docs/research/2026-06-14-pgdp-design-handoff-labeler-spa-gap-analysis.md`
+**Source gap analysis:** retired after its shipped findings and residual intent
+were captured here and in `docs/context/intent-map.md`.
 
 ## Principles
 
@@ -326,7 +334,8 @@ labeler-native surface that could share chip/palette/status primitives.
 
 **Work:**
 
-- Re-check the current Q-A7/M11 blocker.
+- Re-check M11 implementation priority and upstream dependency readiness; Q-A7
+  is resolved.
 - When unblocked, implement with the same primitive/workbench alignment rules as
   the rest of this backlog.
 
@@ -345,3 +354,23 @@ labeler-native surface that could share chip/palette/status primitives.
   confirm-and-advance gates.
 - XState v5 rewrite solely for PGDP parity.
 - Copying `final/` prototype code or `DesignCanvas`/`DCArtboard` scaffolding.
+
+## Goal
+
+Adopt shared PGDP/pdomain-ui shell and workbench patterns without importing the
+PGDP pipeline product model into the labeler.
+
+## Architecture
+
+Keep OCR/GT editing local while replacing compatible chrome, operational
+panels, and primitives through explicit adapters to `pdomain-ui`.
+
+## Tech Stack
+
+React, TypeScript, Zustand, TanStack Query, FastAPI, and `pdomain-ui` provide the
+existing integration surface.
+
+## Global Constraints
+
+Preserve labeler domain behavior, accessibility, and exact driver testids. Do
+not add stage registries, submit-check, or cold-storage pipeline behavior.

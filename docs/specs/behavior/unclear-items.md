@@ -1,3 +1,11 @@
+---
+kind: spec
+status: active
+owner: maintainers
+created: 2026-06-01
+last_verified: 2026-07-13
+---
+
 # Unclear behavior inventory
 
 These items were found during behavior capture and need product or
@@ -83,3 +91,18 @@ implementation decisions before they can be treated as locked behavior.
   are explicitly stubbed.
 - OCR config sidecar save failures are logged/swallowed while live config still
   applies; confirm whether users need stronger visible feedback.
+
+## Adversarial Review
+
+**Accepted finding:** Resolved rotation, Q-A5–Q-A7, and OCR-trigger claims must not remain in
+this ambiguity inventory.
+
+**Stage:** migration-time current-state review on 2026-07-13.
+
+**Source:** an independent read-only reviewer compared this document with current
+code, tests, architecture, and git history.
+
+**Result:** the review accepted the finding above and used it to declare the
+metadata status. Residual risks remain explicit here or in
+`docs/context/intent-map.md`; deferred or blocked behavior is not claimed as
+shipped.
