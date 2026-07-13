@@ -14,8 +14,10 @@ last_verified: 2026-07-13
 - **Status:** active
 - **Owner:** maintainers
 - **Last verified:** 2026-07-13
-- **Read when:** deciding what to build next or what remains intentionally parked.
-- **Search terms:** active intent, deferred, blocked, rejected, owner decision.
+- **Read when:** deciding what to build next, what remains intentionally
+  parked, or how shared page-schema convergence should proceed.
+- **Search terms:** active intent, deferred, blocked, rejected, owner decision,
+  PageRecord convergence, shared lifecycle, labeler extension.
 
 ## Active
 
@@ -26,6 +28,13 @@ last_verified: 2026-07-13
 - Keep behavior contracts and their coverage map aligned with executable tests.
 - Implement the approved glyph-annotation design when prioritized; Q-A5–Q-A7
   no longer block it.
+- **Converge PageRecord imports without widening the shared schema.** Shared
+  lifecycle fields remain owned by `pdomain_ops.pages.PageRecord`; Labeler-only
+  view state remains in `extensions["labeler"]`. The Labeler backend
+  maintainers own migration of callers that still use the `core.models`
+  compatibility re-export. Completion means production callers import the
+  shared type directly and the facade can be removed with persistence,
+  validation, and rotation tests passing.
 
 ## Deferred
 
@@ -45,6 +54,9 @@ No product-direction blocker is established by current repository evidence.
   scope.
 - Do not restore the standalone `WordEditDialog`; persistent right-panel editing
   superseded it.
+- Do not move Labeler-only view state into the suite-wide PageRecord schema.
+- Do not describe the current state as fully converged while both import paths
+  remain supported.
 
 ## Needs owner decision
 
