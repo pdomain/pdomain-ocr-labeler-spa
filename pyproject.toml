@@ -36,6 +36,9 @@ dependencies = [
     # Suite plumbing: port probing + registry (find_available_port, register_self)
     # >=0.9.0: PageAggregate.rotation_updated / RotationUpdated event (S8 rotate).
     # >=0.11.0: shared_paths API + DoctrExportManifest schema (Track C).
+    # Not bumped to 0.11.1 (device-display fix): 0.11.1 hard-pins fastapi<0.137 +
+    # starlette==1.0.0, incompatible with our fastapi>=0.115 (installed 0.139.0).
+    # Blocked on ocr-container-meta#399; the device wiring here needs no bump.
     "pdomain-ops>=0.11.0",
 ]
 
