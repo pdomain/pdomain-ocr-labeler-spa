@@ -2,7 +2,7 @@
 Status: active
 Owner: CT
 Created: 2026-07-13
-Last verified: 2026-07-13
+Last verified: 2026-07-14
 Kind: decision
 ---
 
@@ -60,7 +60,6 @@ No later decision supersedes this boundary.
 
 ## Remaining work
 
-Move remaining callers to direct `pdomain_ops.pages` imports when doing so
-improves ownership clarity, then remove the compatibility re-export in a
-separately tested change. The implementation steps are in
-[`../plans/2026-07-14-pagerecord-import-convergence.md`](../plans/2026-07-14-pagerecord-import-convergence.md).
+None. The direct-import migration and compatibility-export removal were
+completed and are documented in
+[`../architecture/01-data-models.md`](../architecture/01-data-models.md#pagerecord).

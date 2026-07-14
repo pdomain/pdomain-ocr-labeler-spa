@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-07-14
 ---
 
 # 01 — Data Models
@@ -19,10 +19,10 @@ data root is shared during transition ([D-003](../../specs/17-decisions.md)).
 
 Conventions:
 
-- Domain models live in `src/pdomain_ocr_labeler_spa/core/models.py`. They
-  are reused by both the `IStorage`/`IOCREngine` Protocols and the
-  wire — no separate DTO layer (mirrors pgdp-prep's
-  `core/models.py:1-300`).
+- Labeler-owned domain models live in
+  `src/pdomain_ocr_labeler_spa/core/models.py`. Shared page lifecycle models
+  come from `pdomain_ops.pages`. Both sets are reused by the
+  `IStorage`/`IOCREngine` Protocols and the wire, with no separate DTO layer.
 - Per-route ad-hoc shapes (`<Verb><Noun>Request` / `<Verb><Noun>Response`)
   live in the route module that defines them.
 - All persistence schemas use Pydantic v2 with `model_config = ConfigDict(extra="forbid")`
@@ -61,39 +61,26 @@ class Project(BaseModel):
 
 ### `PageRecord`
 
-Wraps `pdomain_book_tools.ocr.page.Page` plus per-page UI/persistence
-metadata. Mirrors legacy `PageModel` (`page_model.py:8`).
+`pdomain_ops.pages.PageRecord` owns page lifecycle data shared across suite
+applications, including rotation metadata. Labeler production and test code
+imports this type directly. `core.models` does not define or re-export it.
 
-```python
-class PageSource(StrEnum):
-    OCR = "ocr"
-    CACHED_OCR = "cached_ocr"
-    FILESYSTEM = "filesystem"
-    FALLBACK = "fallback"
+Labeler-only page state lives in the namespaced `extensions["labeler"]`
+payload. `src/pdomain_ocr_labeler_spa/core/labeler_extension.py` owns the typed
+extension helpers, so suite consumers do not depend on Labeler concepts. The
+actual OCR `Page` object remains separate in the Labeler's in-memory page state.
 
-class CachedImageSet(BaseModel):
-    original: str | None = None
-    lines: str | None = None
-    paragraphs: str | None = None
-    words: str | None = None
-    matched_words: str | None = None
+#### Evidence
 
-class PageRecord(BaseModel):
-    page_index: int           # 0-based
-    page_number: int          # 1-based
-    image_path: Path          # absolute
-    page_source: PageSource = PageSource.OCR
-    ocr_failed: bool = False
-    ocr_provenance: OCRProvenance | None = None
-    saved_provenance: dict | None = None
-    cached_images: CachedImageSet = CachedImageSet()
-    # Note: the actual Page object lives in PageState in-memory; it
-    # is NOT serialised through this model. Wire shapes that need the
-    # page contents use PagePayload (see §2 below).
-```
-
-The legacy `PageModel.__getattr__` proxy is dropped: the SPA always
-accesses the underlying `Page` object explicitly.
+- Code: `src/pdomain_ocr_labeler_spa/api/pages.py`,
+  `src/pdomain_ocr_labeler_spa/core/page_to_line_matches.py`, and
+  `src/pdomain_ocr_labeler_spa/core/labeler_extension.py`.
+- Tests: `tests/unit/core/test_models_no_local_pagerecord.py`,
+  `tests/unit/core/test_page_to_line_matches.py`,
+  `tests/integration/test_validation_persist_round_trip.py`, and
+  `tests/integration/test_rotate_router.py`.
+- Verified: 2026-07-14 with the focused pytest set, pre-commit checks, and
+  `make ci AI=1`.
 
 ### `MatchStatus`
 
