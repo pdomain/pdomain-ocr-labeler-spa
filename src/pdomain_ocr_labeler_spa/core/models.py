@@ -17,7 +17,6 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
-from pdomain_ops.pages import PageRecord, RotationSource
 from pydantic import BaseModel, ConfigDict, Field
 
 _MAX_DISPLAY_DIMENSION = 1200
@@ -301,10 +300,8 @@ __all__ = [
     "LineFilter",
     "LineMatch",
     "MatchStatus",
-    "PageRecord",
     "PageSource",
     "Project",
-    "RotationSource",
     "Selection",
     "WordMatch",
 ]

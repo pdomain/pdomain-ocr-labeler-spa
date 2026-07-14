@@ -33,6 +33,8 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from pdomain_ops.pages import PageRecord
+
 if TYPE_CHECKING:
     from pdomain_book_tools.ocr.page import Page as _Page
 
@@ -43,7 +45,6 @@ from .models import (
     LigatureMarkModel,
     LineMatch,
     MatchStatus,
-    PageRecord,
     PageSource,
     WordMatch,
 )

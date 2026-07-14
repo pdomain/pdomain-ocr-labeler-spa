@@ -11,6 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import JSONResponse, Response
 from pdomain_book_tools.ocr.page import Page
 from pdomain_ops.pages import PagePayload as OpsPagePayload
+from pdomain_ops.pages import PageRecord
 from pdomain_ops.pages import build_provenance_summary as ops_build_provenance_summary
 from pydantic import BaseModel, Field
 
@@ -19,7 +20,7 @@ from ..core.glyph.bulk_mark import GlyphBulkMarkParams, apply_bulk_mark
 from ..core.ground_truth_matcher import rematch_page
 from ..core.jobs import JobRunner
 from ..core.labeler_extension import LabelerPageExtension
-from ..core.models import EncodedDims, LineFilter, LineMatch, PageRecord, PageSource, Selection
+from ..core.models import EncodedDims, LineFilter, LineMatch, PageSource, Selection
 from ..core.page_state import PageLoader, ensure_page_model, save_page_content_to_store, save_page_to_store
 from ..core.page_to_line_matches import page_to_line_matches
 from ..core.persistence.config_yaml import AppConfig
