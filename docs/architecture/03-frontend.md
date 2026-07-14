@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-07-14
 ---
 
 # 03 — Frontend (React/Vite/TS)
@@ -334,53 +334,61 @@ viewing the same page need consistent toolbar disabled-states.)
 
 ### `src/api/client.ts`
 
-Hand-written fetch wrapper. Verbatim shape from pgdp-prep
-`frontend/src/api/client.ts:11-79`:
+Hand-written fetch wrapper. `ApiClient` is a class constructed with a fixed
+`baseUrl`; there is **no auth token and no `Authorization` header** — this app is
+no-auth by design (D-005 / D-042, see `specs/17-decisions.md`). The shape below
+originated from the pgdp-prep scaffold but has since diverged; it is transcribed
+from the real `frontend/src/api/client.ts`:
 
 ```ts
-type Opts = { body?: unknown; query?: Record<string, string | number | boolean | undefined>; headers?: HeadersInit };
-
-function getApiBase(): string {
-  return (window as any).__ENV__?.API_BASE ?? "";
-}
-
-function getAuthToken(): string | null {
-  return localStorage.getItem("pdlabeler.api_token") ?? (window as any).__ENV__?.API_TOKEN ?? null;
-}
-
-async function request<T>(method: string, path: string, opts: Opts = {}): Promise<T> {
-  const url = new URL(getApiBase() + path, window.location.origin);
-  for (const [k, v] of Object.entries(opts.query ?? {})) {
-    if (v !== undefined) url.searchParams.set(k, String(v));
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    public error: string,
+    public override message: string,
+    public details?: unknown,
+  ) {
+    super(message);
+    this.name = "ApiError";
   }
-  const headers = new Headers(opts.headers);
-  if (opts.body !== undefined) headers.set("Content-Type", "application/json");
-  const token = getAuthToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  const res = await fetch(url.toString(), {
-    method,
-    headers,
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-  });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    const e = new Error(detail?.message ?? res.statusText);
-    (e as any).status = res.status;
-    (e as any).detail = detail;
-    throw e;
-  }
-  if (res.status === 204) return undefined as T;
-  return res.json();
 }
 
-export const api = {
-  get: <T>(path: string, opts?: Opts) => request<T>("GET", path, opts),
-  post: <T>(path: string, opts?: Opts) => request<T>("POST", path, opts),
-  put: <T>(path: string, opts?: Opts) => request<T>("PUT", path, opts),
-  patch: <T>(path: string, opts?: Opts) => request<T>("PATCH", path, opts),
-  delete: <T>(path: string, opts?: Opts) => request<T>("DELETE", path, opts),
-};
+export class ApiClient {
+  private baseUrl: string;
+
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl;
+  }
+
+  private async request<T>(
+    method: string,
+    path: string,
+    options?: { body?: unknown },
+  ): Promise<T> {
+    const url = new URL(path, this.baseUrl).toString();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const fetchOptions: RequestInit = { method, headers };
+    if (options !== undefined && "body" in options) {
+      fetchOptions.body = JSON.stringify(options.body);
+    }
+    const res = await fetch(url, fetchOptions);
+    if (!res.ok) {
+      // parse the error envelope and throw ApiError(status, error, message, details)
+    }
+    if (res.status === 204) return undefined as T;
+    return res.json();
+  }
+
+  get<T>(path: string): Promise<T> { /* request("GET", path) */ }
+  post<T>(path: string, body?: unknown): Promise<T> { /* request("POST", path, { body }) */ }
+  put<T>(path: string, body?: unknown): Promise<T> { /* request("PUT", path, { body }) */ }
+  delete<T>(path: string): Promise<T> { /* request("DELETE", path) */ }
+  // plus a domain helper: setCurrentPageIndex(...)
+}
 ```
+
+There is no `query`-param support, no `getAuthToken`, and no module-level `api`
+singleton — callers construct an `ApiClient` with a base URL.
 
 ### `src/api/types.ts`
 
