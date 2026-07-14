@@ -63,6 +63,14 @@ _TERMINAL = {JobStatus.COMPLETE, JobStatus.ERROR, JobStatus.CANCELLED}
 
 Handler = Callable[["JobRunner", Job], Coroutine[Any, Any, None]]
 
+# Task 3 (docs/plans/2026-07-14-review-fixes.md): job types whose handlers
+# call ``loader.run_ocr`` on an ``asyncio.to_thread`` worker — the only
+# handlers gated by ``JobRunner``'s OCR concurrency semaphore. Verified
+# against the handlers registered below: ``reload_ocr.py``,
+# ``rotate.py``, and ``auto_rotate_all.py`` each call ``loader.run_ocr``;
+# ``save_project`` / ``export`` / ``refine_bboxes`` do not.
+_OCR_HEAVY_JOB_TYPES = frozenset({"reload_ocr", "rotate_page", "auto_rotate_all"})
+
 
 class JobRunner:
     """Single-process asyncio job runner.
@@ -72,7 +80,13 @@ class JobRunner:
     ``stop()`` is called.
     """
 
-    def __init__(self, broker: JobEventBroker, *, context: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        broker: JobEventBroker,
+        *,
+        context: dict[str, Any] | None = None,
+        max_concurrent_ocr_jobs: int = 1,
+    ) -> None:
         self._broker = broker
         self._jobs: dict[str, Job] = {}
         self._queue: asyncio.Queue[Job] = asyncio.Queue()
@@ -82,6 +96,12 @@ class JobRunner:
         # Populated by ``build_app`` so handlers can access app-level config
         # without a full DI graph (handlers run outside FastAPI request context).
         self.context: dict[str, Any] = context or {}
+        # Task 3: caps concurrent OCR-heavy jobs (see ``_OCR_HEAVY_JOB_TYPES``).
+        # ``<= 0`` disables the cap — no semaphore, unbounded like every
+        # other job type.
+        self._ocr_semaphore: asyncio.Semaphore | None = (
+            asyncio.Semaphore(max_concurrent_ocr_jobs) if max_concurrent_ocr_jobs > 0 else None
+        )
 
     def get_job(self, job_id: str) -> Job | None:
         return self._jobs.get(job_id)
@@ -222,7 +242,13 @@ class JobRunner:
             handler = _HANDLERS.get(job.job_type)
             if handler is None:
                 raise NotImplementedError(f"no handler for job type {job.job_type!r}")
-            await handler(self, running)
+            # Task 3: only OCR-heavy job types wait on the semaphore; every
+            # other job type runs unbounded exactly as before.
+            if self._ocr_semaphore is not None and job.job_type in _OCR_HEAVY_JOB_TYPES:
+                async with self._ocr_semaphore:
+                    await handler(self, running)
+            else:
+                await handler(self, running)
         except asyncio.CancelledError:
             raise
         except Exception as exc:

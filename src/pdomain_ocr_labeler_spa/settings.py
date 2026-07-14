@@ -111,6 +111,15 @@ class Settings(BaseSettings):
     poll_interval_seconds: float = 0.5
     """Background JobRunner poll cadence — M3-deferred consumer."""
 
+    max_concurrent_ocr_jobs: int = 1
+    """Max number of OCR-heavy jobs (``reload_ocr`` / ``rotate_page`` /
+    ``auto_rotate_all`` — every job type whose handler calls
+    ``loader.run_ocr``) that ``JobRunner`` runs concurrently
+    (``PDLABELER_MAX_CONCURRENT_OCR_JOBS``). ``<= 0`` disables the cap
+    (unbounded, matching pre-Task-3 behavior). Other job types
+    (``save_project``, ``export``, ``refine_bboxes``) are never gated by
+    this semaphore."""
+
     # ── OCR (docs/architecture/02-backend.md §3 lines 141-142) ───────────────────────────
     # Consumers land in M3 (OCR predictor cache + model prefetch). The
     # `hf_repo` default mirrors legacy `pd-ocr-labeler/...` — see
