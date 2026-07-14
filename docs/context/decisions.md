@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-07-13
+last_verified: 2026-07-14
 ---
 
 # Decisions
@@ -13,7 +13,7 @@ last_verified: 2026-07-13
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-07-13
+- **Last verified:** 2026-07-14
 - **Read when:** looking for durable migration, lifecycle, or changed-direction rationale.
 - **Search terms:** decisions, tombstones, retirement, changed direction, docgraph.
 
@@ -136,3 +136,35 @@ document's lifecycle status.
 ### Supersedes / Superseded-by
 
 Supersedes the generic kind written during this uncommitted migration batch.
+
+## 2026-07-14 — Retire the PageRecord import convergence plan
+
+### Context
+
+The PageRecord import convergence plan completed its test-first migration.
+Production and test callers now import shared lifecycle types from
+`pdomain_ops.pages`, and `core.models` no longer exposes the compatibility
+names.
+
+### Decision
+
+Remove the completed execution checklist from live retrieval. Keep the shared
+schema boundary and shipped evidence in
+[`../architecture/01-data-models.md`](../architecture/01-data-models.md#pagerecord)
+and
+[`../decisions/2026-07-13-shared-page-record-boundary.md`](../decisions/2026-07-13-shared-page-record-boundary.md).
+
+### Consequences
+
+Docgraph retrieval points readers to present-tense architecture instead of a
+completed command checklist. Git history preserves the exact plan.
+
+### Supersedes / Superseded-by
+
+- Old path: `docs/plans/2026-07-14-pagerecord-import-convergence.md`.
+- Outcome: implemented and retired.
+- Superseded by: `docs/architecture/01-data-models.md`.
+- Removal commit: the commit containing this tombstone.
+- Rationale kept: shared ownership and evidence are in the architecture and
+  decision records linked above.
+- Remaining work: none.

@@ -2,7 +2,7 @@
 Status: active
 Owner: CT
 Created: 2026-07-13
-Last verified: 2026-07-13
+Last verified: 2026-07-14
 Kind: decision
 ---
 
@@ -37,6 +37,17 @@ One lifecycle schema prevents wire and persistence drift. A namespaced
 extension keeps application-specific state available without making every
 suite consumer depend on Labeler concepts.
 
+## Consequences
+
+Labeler code must import shared lifecycle types from `pdomain_ops.pages`.
+Labeler-only state must use the namespaced extension. Removing the temporary
+compatibility export does not change persisted data or the API wire shape.
+
+## Supersedes / Superseded-by
+
+This decision supersedes local ownership of the PageRecord lifecycle schema.
+No later decision supersedes this boundary.
+
 ## Evidence
 
 - `src/pdomain_ocr_labeler_spa/core/models.py` imports and re-exports
@@ -49,6 +60,6 @@ suite consumer depend on Labeler concepts.
 
 ## Remaining work
 
-Move remaining callers to direct `pdomain_ops.pages` imports when doing so
-improves ownership clarity, then remove the compatibility re-export in a
-separately tested change.
+None. The direct-import migration and compatibility-export removal were
+completed and are documented in
+[`../architecture/01-data-models.md`](../architecture/01-data-models.md#pagerecord).

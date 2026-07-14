@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-07-13
+last_verified: 2026-07-14
 ---
 
 # Intent map
@@ -13,7 +13,7 @@ last_verified: 2026-07-13
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-07-13
+- **Last verified:** 2026-07-14
 - **Read when:** deciding what to build next, what remains intentionally
   parked, or how shared page-schema convergence should proceed.
 - **Search terms:** active intent, deferred, blocked, rejected, owner decision,
@@ -28,13 +28,15 @@ last_verified: 2026-07-13
 - Keep behavior contracts and their coverage map aligned with executable tests.
 - Implement the approved glyph-annotation design when prioritized; Q-A5–Q-A7
   no longer block it.
-- **Converge PageRecord imports without widening the shared schema.** Shared
+
+## Done
+
+- **Converged PageRecord imports without widening the shared schema.** Shared
   lifecycle fields remain owned by `pdomain_ops.pages.PageRecord`; Labeler-only
-  view state remains in `extensions["labeler"]`. The Labeler backend
-  maintainers own migration of callers that still use the `core.models`
-  compatibility re-export. Completion means production callers import the
-  shared type directly and the facade can be removed with persistence,
-  validation, and rotation tests passing.
+  view state remains in `extensions["labeler"]`. Production and test callers
+  now import shared lifecycle types directly, and the `core.models`
+  compatibility exports are removed. Persistence, validation, conversion, and
+  rotation tests pass against the shared types.
 
 ## Deferred
 

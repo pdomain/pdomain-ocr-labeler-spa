@@ -10,7 +10,7 @@ Acceptance:
 - 404 on unknown project
 - 404 on out-of-range page index
 - 400 on invalid degrees (e.g. 45)
-- RotationSource enum values exported in models
+- RotationSource enum values owned by pdomain-ops
 - PageRecord has rotation_degrees + rotation_source fields
 """
 
@@ -21,9 +21,9 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from pdomain_ops.pages import PageRecord, RotationSource
 
 from pdomain_ocr_labeler_spa.bootstrap import build_app
-from pdomain_ocr_labeler_spa.core.models import PageRecord, RotationSource
 from pdomain_ocr_labeler_spa.settings import Settings
 
 

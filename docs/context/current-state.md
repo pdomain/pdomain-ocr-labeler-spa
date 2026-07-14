@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-07-13
+last_verified: 2026-07-14
 ---
 
 # Current state
@@ -13,7 +13,7 @@ last_verified: 2026-07-13
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-07-13
+- **Last verified:** 2026-07-14
 - **Read when:** orienting on shipped behavior, open work, or repository risk.
 - **Search terms:** current state, shipped, open work, risks, roadmap.
 
@@ -31,6 +31,11 @@ persist rotation metadata. The implementation is in
 `src/pdomain_ocr_labeler_spa/core/jobs/handlers/auto_rotate_all.py`; browser coverage is in
 `tests/e2e/test_rotate_parity.py`. Earlier documentation that called these
 handlers stubs was stale.
+
+Page lifecycle types now have one import owner. Production and test callers
+import `PageRecord` and `RotationSource` from `pdomain_ops.pages`; the temporary
+`core.models` compatibility exports have been removed. Structural, persistence,
+validation, conversion, and rotation tests enforce the boundary.
 
 ## Open work
 
