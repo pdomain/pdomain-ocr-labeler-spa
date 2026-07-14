@@ -66,7 +66,9 @@ The handler raises on loader exceptions; ``JobRunner._run_one`` catches
 and transitions the job to ``ERROR`` with the exception text on
 ``error_message``. Before re-raising, we queue a ``NotificationKind.NEGATIVE``
 notification with key ``ocr_failed`` so SPA clients see a banner +
-toast independently of the SSE job stream.
+toast independently of the SSE job stream. A ``run_ocr`` call exceeding
+``Settings.ocr_timeout_s`` (Task 2, docs/plans/2026-07-14-review-fixes.md)
+follows the same path via a re-raised ``TimeoutError``.
 """
 
 from __future__ import annotations
@@ -271,13 +273,30 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
                 page_index,
             )
 
+    timeout_s = settings.ocr_timeout_s
     try:
         if edited_image_bytes is not None:
-            outcome: PageLoadOutcome = await asyncio.to_thread(
-                loader.run_ocr, page_index, edited_image_bytes=edited_image_bytes
-            )
+            ocr_coro = asyncio.to_thread(loader.run_ocr, page_index, edited_image_bytes=edited_image_bytes)
         else:
-            outcome = await asyncio.to_thread(loader.run_ocr, page_index)
+            ocr_coro = asyncio.to_thread(loader.run_ocr, page_index)
+        if timeout_s > 0:
+            outcome: PageLoadOutcome = await asyncio.wait_for(ocr_coro, timeout=timeout_s)
+        else:
+            outcome = await ocr_coro
+    except TimeoutError as exc:
+        # Task 2 (docs/plans/2026-07-14-review-fixes.md): cancelling this
+        # await does NOT kill the OS thread running ``run_ocr`` — see
+        # ``Settings.ocr_timeout_s`` docstring. Queue a NEGATIVE
+        # notification, then re-raise so the runner records the error
+        # on the job (same failure path as an OCR exception below).
+        # ``asyncio.wait_for`` raises a bare ``TimeoutError()`` with no
+        # message, so ``JobRunner._run_one``'s ``str(exc)`` would
+        # otherwise store an empty ``error_message`` — re-raise a new
+        # ``TimeoutError`` carrying the descriptive message instead.
+        message = f"OCR timed out for page {page_index + 1} after {timeout_s}s"
+        notification_queue.queue(NotificationKind.NEGATIVE, message)
+        log.error("reload_ocr: %s project=%s", message, project_id)
+        raise TimeoutError(message) from exc
     except Exception as exc:
         # Spec §6: ``ocr_failed`` notification on exception. Queue first,
         # then re-raise so the runner records the error on the job.

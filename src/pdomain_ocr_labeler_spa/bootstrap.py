@@ -347,7 +347,11 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # the lifespan so the runner can be started in the lifespan task and
     # stashed on ``app.state`` for DI. Per-``build_app`` for test isolation.
     broker = JobEventBroker()
-    runner = JobRunner(broker, context={"settings": settings})
+    runner = JobRunner(
+        broker,
+        context={"settings": settings},
+        max_concurrent_ocr_jobs=settings.max_concurrent_ocr_jobs,
+    )
     lifespan = _make_lifespan(settings, carrier, ocr_carrier, runner)
 
     app = FastAPI(title="pdomain-ocr-labeler-spa", lifespan=lifespan)
