@@ -72,6 +72,7 @@ from .core.app_state import build_app_state
 from .core.jobs import JobEventBroker, JobRunner
 from .core.logging_config import configure_logging
 from .core.notifications import NotificationQueue
+from .core.ocr.device_pref import resolve_ocr_device_override
 from .core.ocr.predictor import PredictorCache
 from .core.ocr.weights_resolver import build_weights_resolver
 from .core.ocr_config_state import OCRConfigCarrier
@@ -481,7 +482,8 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # path). ``ocr_carrier`` is the same instance captured by the
     # lifespan closure so snapshot() reads current user selection.
     runner.context["predictor_cache"] = PredictorCache(
-        weights_resolver=build_weights_resolver(_resolve_local_models_root())
+        weights_resolver=build_weights_resolver(_resolve_local_models_root()),
+        device_resolver=resolve_ocr_device_override,
     )
     runner.context["ocr_config_carrier"] = ocr_carrier
     runner.context["settings"] = settings

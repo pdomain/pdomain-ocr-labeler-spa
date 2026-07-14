@@ -32,9 +32,22 @@ def stub_doctr_support(monkeypatch: pytest.MonkeyPatch):
 
     call_log: list[dict[str, Any]] = []
 
+    def _add_to(obj: SimpleNamespace) -> SimpleNamespace:
+        """Attach a torch-``Module``-shaped ``.to(device)``: mutates + returns self."""
+        obj.to_calls = []
+
+        def _to(device: str) -> SimpleNamespace:
+            obj.to_calls.append(device)
+            obj.device = device
+            return obj
+
+        obj.to = _to
+        obj.device = None
+        return obj
+
     def _make_stock() -> object:
         call_log.append({"factory": "stock"})
-        return SimpleNamespace(kind="stock", id=len(call_log))
+        return _add_to(SimpleNamespace(kind="stock", id=len(call_log)))
 
     def _make_finetuned(det_path: str, reco_path: str, *, vocab: str = "") -> object:
         call_log.append(
@@ -45,7 +58,7 @@ def stub_doctr_support(monkeypatch: pytest.MonkeyPatch):
                 "vocab": vocab,
             }
         )
-        return SimpleNamespace(kind="finetuned", det=det_path, reco=reco_path, id=len(call_log))
+        return _add_to(SimpleNamespace(kind="finetuned", det=det_path, reco=reco_path, id=len(call_log)))
 
     fake_module = SimpleNamespace(
         get_default_doctr_predictor=_make_stock,
@@ -162,4 +175,56 @@ def test_default_resolver_returns_none(stub_doctr_support) -> None:
 
     cache = PredictorCache()
     p = cache.get_or_create("local:foo", "local:foo", None)
+    assert p.kind == "stock"
+
+
+def test_device_resolver_moves_stock_predictor_via_to(stub_doctr_support) -> None:
+    cache = PredictorCache(device_resolver=lambda: "cuda:0")
+
+    p = cache.get_or_create("stock", "stock", None)
+
+    assert p.to_calls == ["cuda:0"]
+    assert p.device == "cuda:0"
+
+
+def test_device_resolver_reapplied_on_cache_hit_when_device_changes(stub_doctr_support) -> None:
+    devices = iter(["cuda:0", "cpu"])
+    cache = PredictorCache(device_resolver=lambda: next(devices))
+
+    p1 = cache.get_or_create("stock", "stock", None)
+    p2 = cache.get_or_create("stock", "stock", None)
+
+    assert p1 is p2  # cache hit — same object, .to() mutates and returns self
+    assert p1.to_calls == ["cuda:0", "cpu"]
+    assert len(stub_doctr_support.calls) == 1  # only one factory build (cache hit path)
+
+
+def test_no_device_resolver_never_calls_to(stub_doctr_support) -> None:
+    cache = PredictorCache()
+
+    p = cache.get_or_create("stock", "stock", None)
+
+    assert p.to_calls == []
+
+
+def test_device_resolver_returning_none_skips_to(stub_doctr_support) -> None:
+    cache = PredictorCache(device_resolver=lambda: None)
+
+    p = cache.get_or_create("stock", "stock", None)
+
+    assert p.to_calls == []
+
+
+def test_device_resolver_to_failure_is_swallowed(stub_doctr_support) -> None:
+    def _broken_stock() -> object:
+        def _raise_to(device: str) -> object:
+            raise RuntimeError("cuda oom")
+
+        return SimpleNamespace(kind="stock", to=_raise_to)
+
+    stub_doctr_support.module.get_default_doctr_predictor = _broken_stock
+    cache = PredictorCache(device_resolver=lambda: "cuda:0")
+
+    p = cache.get_or_create("stock", "stock", None)
+
     assert p.kind == "stock"

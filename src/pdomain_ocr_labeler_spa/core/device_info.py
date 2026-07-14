@@ -30,11 +30,17 @@ the slice request:
 from __future__ import annotations
 
 
-def describe_device() -> str:
+def describe_device(*, device_override: str | None = None) -> str:
     """Return a one-line description of the resolved torch device.
 
-    Never raises. See module docstring for output forms.
+    ``device_override``, when set, short-circuits the torch probe below —
+    the suite compute-device preference (``resolve_ocr_device_override``)
+    is authoritative over auto-detection. Never raises. See module
+    docstring for output forms.
     """
+    if device_override:
+        return f"device: {device_override} (suite preference override)"
+
     try:
         import torch  # local import: see module docstring
     except Exception:

@@ -71,6 +71,15 @@ def test_describe_device_reports_cpu_when_cuda_unavailable(monkeypatch):
     assert out == "device: cpu"
 
 
+def test_describe_device_reports_override_when_set(monkeypatch):
+    """A suite compute-device override short-circuits the torch probe entirely."""
+    monkeypatch.setitem(sys.modules, "torch", None)
+
+    out = device_info.describe_device(device_override="cpu")
+
+    assert out == "device: cpu (suite preference override)"
+
+
 def test_describe_device_swallows_exceptions(monkeypatch):
     """A broken torch (raising on attr access) must not propagate."""
 

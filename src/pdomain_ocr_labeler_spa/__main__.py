@@ -358,10 +358,13 @@ def main(argv: list[str] | None = None) -> int:
     # pipeline starts pulling models. ``describe_device()`` never raises
     # and lazily imports torch, so the cost is bounded and a torch-less
     # env still boots cleanly. Printed BEFORE the URL so a `tail -1` of
-    # the boot log still surfaces the listen address.
+    # the boot log still surfaces the listen address. The suite
+    # compute-device preference (if any) overrides the raw torch probe
+    # so the banner reflects what OCR will actually use.
     from .core.device_info import describe_device
+    from .core.ocr.device_pref import resolve_ocr_device_override
 
-    print(describe_device())  # noqa: T201  # intentional CLI boot banner
+    print(describe_device(device_override=resolve_ocr_device_override()))  # noqa: T201  # intentional CLI boot banner
 
     url = f"http://{host}:{port}"
     print(f"Listening on {url}")  # noqa: T201  # intentional CLI boot banner

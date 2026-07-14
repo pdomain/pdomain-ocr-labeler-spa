@@ -112,12 +112,25 @@ class PredictorCache:
     consumed by ``Document.from_image_ocr_via_doctr(predictor=...)``
     which accepts whatever ``pdomain_book_tools.ocr.doctr_support``
     produces.
+
+    ``device_resolver`` (optional) is called after every resolution —
+    cache hit or fresh build — and, if it returns a device string, that
+    device is applied via ``predictor.to(device)``. This is the uniform
+    seam: ``get_default_doctr_predictor`` has no ``device=`` factory
+    kwarg, so ``.to()`` is the only way to move an already-built
+    predictor.
     """
 
-    def __init__(self, *, weights_resolver: WeightsResolver | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        weights_resolver: WeightsResolver | None = None,
+        device_resolver: Callable[[], str | None] | None = None,
+    ) -> None:
         self._cache: dict[PredictorKey, Any] = {}
         self._lock = threading.Lock()
         self._weights_resolver: WeightsResolver = weights_resolver or _default_resolver
+        self._device_resolver = device_resolver
 
     def get_or_create(
         self,
@@ -133,9 +146,22 @@ class PredictorCache:
         with self._lock:
             cached = self._cache.get(key)
             if cached is not None:
-                return cached
-            predictor = self._build(key)
-            self._cache[key] = predictor
+                predictor = cached
+            else:
+                predictor = self._build(key)
+                self._cache[key] = predictor
+        return self._apply_device_override(predictor)
+
+    def _apply_device_override(self, predictor: Any) -> Any:
+        if self._device_resolver is None:
+            return predictor
+        device = self._device_resolver()
+        if not device:
+            return predictor
+        try:
+            return predictor.to(device)
+        except Exception:
+            logger.exception("predictor.to(%r) failed; using predictor unchanged", device)
             return predictor
 
     def clear(self) -> None:
