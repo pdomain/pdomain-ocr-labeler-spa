@@ -256,3 +256,21 @@ def test_settings_undo_depth_default_and_env(monkeypatch: pytest.MonkeyPatch) ->
 
     monkeypatch.setenv("PDLABELER_UNDO_DEPTH", "7")
     assert Settings().undo_depth == 7
+
+
+def test_settings_ocr_timeout_s_default_and_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """docs/plans/2026-07-14-review-fixes.md Task 2: ``PDLABELER_OCR_TIMEOUT_S``.
+
+    Default 900.0 seconds; env-overridable; <=0 disables the timeout.
+    """
+    for var in list(__import__("os").environ):
+        if var.startswith("PDLABELER_"):
+            monkeypatch.delenv(var, raising=False)
+
+    assert Settings().ocr_timeout_s == 900.0
+
+    monkeypatch.setenv("PDLABELER_OCR_TIMEOUT_S", "30")
+    assert Settings().ocr_timeout_s == 30.0
+
+    monkeypatch.setenv("PDLABELER_OCR_TIMEOUT_S", "0")
+    assert Settings().ocr_timeout_s == 0.0

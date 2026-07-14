@@ -266,6 +266,74 @@ def test_reload_ocr_with_production_context_wiring(tmp_path: Path, projects_root
         assert loader.calls == [0]
 
 
+# ── Task 2: OCR timeout (docs/plans/2026-07-14-review-fixes.md) ──────────
+
+
+class _SlowPageLoader:
+    """Stand-in ``PageLoader`` whose ``run_ocr`` sleeps past a tiny timeout."""
+
+    def __init__(self, *, sleep_s: float) -> None:
+        self._sleep_s = sleep_s
+        self.calls: list[int] = []
+
+    def run_ocr(self, page_index: int) -> PageLoadOutcome:
+        self.calls.append(page_index)
+        time.sleep(self._sleep_s)
+        return PageLoadOutcome(
+            page_index=page_index,
+            source=PageSource.OCR,
+            payload={"fake": "page", "idx": page_index},
+        )
+
+    def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
+        return None
+
+    def load_cached(self, page_index: int) -> PageLoadOutcome | None:
+        return None
+
+
+def test_reload_ocr_times_out_and_marks_job_error(tmp_path: Path, projects_root: Path) -> None:
+    """A ``run_ocr`` call exceeding ``Settings.ocr_timeout_s`` errors the job.
+
+    The job must end in ``ERROR`` with "timed out" in the error message,
+    and a NEGATIVE notification must be queued — reusing the existing
+    failure path (spec §6 ``ocr_failed`` semantics).
+    """
+    settings = _make_settings(tmp_path, source_projects_root=projects_root, ocr_timeout_s=0.05)
+    app = build_app(settings)
+    loader = _SlowPageLoader(sleep_s=5.0)
+    recorded: list[dict[str, Any]] = []
+
+    with TestClient(app) as c:
+        c.app.state.job_runner.context["page_loader"] = loader  # type: ignore[attr-defined]
+        _wrap_broker_publish(c.app.state.job_events, recorded)  # type: ignore[attr-defined]
+        resp = c.post(
+            "/api/projects/load",
+            json={"project_root": str(projects_root / "book1")},
+        )
+        assert resp.status_code == 200, resp.text
+
+        ocr_resp = c.post("/api/projects/book1/pages/0/reload-ocr", json={})
+        assert ocr_resp.status_code == 202
+
+        _wait_for_terminal(recorded, timeout=5.0)
+
+        terminal = recorded[-1]
+        assert terminal.get("type") == "error", terminal
+        assert "timed out" in terminal.get("error", "").lower(), terminal
+
+        notif_queue = c.app.state.notification_queue  # type: ignore[attr-defined]
+        notifications = notif_queue.snapshot()
+        timeout_notifications = [
+            n
+            for n in notifications
+            if n.kind == NotificationKind.NEGATIVE and "timed out" in n.message.lower()
+        ]
+        assert timeout_notifications, (
+            f"expected an OCR-timeout notification; got {[(n.kind, n.message) for n in notifications]}"
+        )
+
+
 def test_get_page_loader_raises_when_project_not_loaded() -> None:
     """_get_page_loader raises RuntimeError when project_state.loaded_project is None.
 
