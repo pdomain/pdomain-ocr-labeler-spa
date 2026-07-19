@@ -67,9 +67,14 @@ Recommended next steps · What is NOT broken (scopes the fix) · Resolution.
 Lead with the **smallest decisive evidence**, separate **observation** from
 **hypothesis**, and always include a **What is NOT broken** section.
 
-## Open issues
+## GitHub-open issue records
 
-- *None yet.*
+- [`2026-05-22-gh-430-ci-equivalence.md`](2026-05-22-gh-430-ci-equivalence.md)
+- [`2026-05-22-gh-433-openapi-drift.md`](2026-05-22-gh-433-openapi-drift.md)
+- [`2026-05-22-gh-437-openapi-schema-quality.md`](2026-05-22-gh-437-openapi-schema-quality.md)
+  — implemented locally; GitHub closure remains.
+- [`2026-05-23-gh-460-resolver-narrowing.md`](2026-05-23-gh-460-resolver-narrowing.md)
+  — implemented locally; GitHub closure remains.
 
 ## Resolved issues
 

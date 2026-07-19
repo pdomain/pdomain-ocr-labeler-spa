@@ -30,6 +30,8 @@ last_verified: 2026-07-19
   no longer block it.
 - Reconcile driver-contract section 2.11 and its E2E coverage with the shipped
   right-panel editing model before deleting migrated GitHub issue #454.
+- Resolve the two active governed [GitHub-open issue records](../issues/README.md):
+  CI gate equivalence and OpenAPI drift.
 
 ## Done
 
@@ -39,6 +41,13 @@ last_verified: 2026-07-19
   now import shared lifecycle types directly, and the `core.models`
   compatibility exports are removed. Persistence, validation, conversion, and
   rotation tests pass against the shared types.
+- **Enforced OpenAPI response contracts.** Repository-wide conformance tests
+  reject empty JSON schemas and verify response models, success responses,
+  JPEG declarations, and streaming routes. GitHub issue #437 remains open only
+  for external-state reconciliation.
+- **Accepted resolver narrowing.** Page resolvers return `Page | None` through
+  nominal checks plus a guarded structural fallback for test doubles. GitHub
+  issue #460 remains open only for external-state reconciliation.
 
 ## Deferred
 

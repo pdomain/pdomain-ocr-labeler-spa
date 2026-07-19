@@ -37,7 +37,7 @@ repos:
     -   id: check-merge-conflict
 -   repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.15.21
+    rev: v0.15.22
     hooks:
     # Run the linter for imports
     -   id: ruff-check
@@ -54,7 +54,7 @@ repos:
 # environment can be cached across the workspace and bumps happen
 # in one place. Per-repo rules live in `.markdownlint-cli2.jsonc`.
 -   repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.23.0
+    rev: v0.23.1
     hooks:
     -   id: markdownlint-cli2
         exclude: ^docs/superpowers/
