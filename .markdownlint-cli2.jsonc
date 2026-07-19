@@ -30,6 +30,7 @@
     "frontend/dist/**",
     "src/pdomain_ocr_labeler_spa/static/**",
     ".pytest_cache/**",
+    "docs/issues/TEMPLATE.md",
     "docs/plans/**",
     "docs/archive/**",
     "docs/research/**"

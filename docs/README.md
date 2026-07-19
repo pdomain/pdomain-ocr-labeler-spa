@@ -15,6 +15,7 @@ How documentation is organized in this repo.
 | `architecture/` | Durable reference — how the system works today. | Capturing current shape (modules, data flow, contracts, current-state diagrams). |
 | `context/` | Authored current state, intent, and durable migration decisions. | Orienting work or finding retired-topic tombstones. |
 | `decisions/` | ADRs — dated, append-only "we chose X because Y." | Recording a specific design choice with context, alternatives, consequences. |
+| `issues/` | Governed records for active defects, investigations, and deferred work. | Replacing tracker issues with durable repository evidence. |
 | `plans/` | Active execution — what order to make a spec real. | Sequencing work for an approved spec. |
 | `process/` | Cross-cutting workflow conventions (verification rules, merge strategy, release process). | Capturing how the team works, not what the system does. |
 | `runbooks/` | Operational reference — something is broken or being operated. | An on-call or ops task needs a recipe. |
@@ -55,6 +56,10 @@ This layout is workspace-standard; see
 - [`context/decisions.md`](context/decisions.md) — durable decisions and retirement tombstones
 - [`context/retirement-manifest.md`](context/retirement-manifest.md) — per-document outcomes and replacements
 - [`context/open-findings.md`](context/open-findings.md) — unresolved defects transferred from the retired bug ledger
+
+### issues/
+
+- [`issues/README.md`](issues/README.md) — governed issue-record format and lifecycle
 
 ### plans/
 
