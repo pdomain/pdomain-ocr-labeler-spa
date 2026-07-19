@@ -67,7 +67,7 @@ and transitions the job to ``ERROR`` with the exception text on
 ``error_message``. Before re-raising, we queue a ``NotificationKind.NEGATIVE``
 notification with key ``ocr_failed`` so SPA clients see a banner +
 toast independently of the SSE job stream. A ``run_ocr`` call exceeding
-``Settings.ocr_timeout_s`` (Task 2, docs/plans/2026-07-14-review-fixes.md)
+``Settings.ocr_timeout_s`` (see ``docs/architecture/02-backend.md``)
 follows the same path via a re-raised ``TimeoutError``.
 """
 
@@ -284,7 +284,7 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
         else:
             outcome = await ocr_coro
     except TimeoutError as exc:
-        # Task 2 (docs/plans/2026-07-14-review-fixes.md): cancelling this
+        # docs/architecture/02-backend.md: cancelling this
         # await does NOT kill the OS thread running ``run_ocr`` — see
         # ``Settings.ocr_timeout_s`` docstring. Queue a NEGATIVE
         # notification, then re-raise so the runner records the error

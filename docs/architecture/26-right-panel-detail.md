@@ -221,6 +221,12 @@ to display. Renders an empty-state `"No word selected."` div when `level !==
 
 - Uses `Accordion` in `type="multiple"` mode — any number of sections can be
   open simultaneously.
+- Keeps a thin local wrapper around `@pdomain/pdomain-ui` Accordion primitives.
+  The wrapper maps the labeler `tag="accent"` contract to shared
+  `tone="accent"` and `tag="mismatch"` to `tone="danger"`.
+- Composes the labeler's hint text into the trigger body and its `KeyCap` into
+  the shared trigger's `endContent` slot. The shared primitive owns the header,
+  trigger, default chevron, and open/close behavior.
 - The accordion body has `paddingBottom: "52px"` so the sticky WordFooter does
   not obscure the bottom item.
 - Six items in order: Bounding Box (keycap B), Rebox (keycap R, tag="accent"),
@@ -229,6 +235,16 @@ to display. Renders an empty-state `"No word selected."` div when `level !==
 - Accordion trigger hints: `BBoxSection` uses `bboxHint(word.bbox)` (formatted
   coords); Rebox shows `"W × H px"`; CharFixer shows `"N ranges"` or
   `"edit · fix · unicode"` when empty.
+
+Evidence:
+
+- Code: `frontend/src/components/ui/accordion.tsx` and
+  `frontend/src/components/right-panel/WordDetail.tsx`
+- Tests: `frontend/src/components/ui/Accordion.test.tsx` — tone mapping,
+  trigger hint, keycap slot, shared chevron, content, and testid pass-through
+- Commits: `77be4d4` (Accordion composition) and `120d3ef` (shared trigger
+  slots)
+- Verified: 2026-07-19 against current code and tests
 
 **WordFooter** (sticky `bottom-0`)
 

@@ -130,6 +130,40 @@ Vite path aliases (closes pgdp-prep gap): `@/*` → `src/*`. Configured
 in both `vite.config.ts` (via `vite-tsconfig-paths`) and
 `tsconfig.app.json`.
 
+### Shared primitive ownership
+
+`@pdomain/pdomain-ui` owns compatible general-purpose primitives. The SPA
+imports `Input`, `TriStateChip`, and `Button` directly, and the former local
+implementations have been deleted. Their HTML attributes, refs, event behavior,
+and driver-facing testids continue to pass through the shared components.
+
+Tabs remain behind `components/ui/tabs.tsx`, a compatibility re-export of the
+shared `Tabs`, `TabsList`, `TabsTrigger`, and `TabsContent`. This boundary keeps
+existing imports stable while `pdomain-ui` owns the DOM behavior and
+`primitives.css` classes, including active state and count badges.
+
+The SPA still owns domain-specific behavior that is not a general primitive:
+the Sonner toast helper, the long-lived notification SSE consumer, and the
+`--status-*` and `--layer-*` semantic token aliases.
+
+Evidence:
+
+- Code: `frontend/src/components/ui/tabs.tsx`,
+  `frontend/src/components/right-panel/OcrGtCompareRow.tsx`,
+  `frontend/src/components/right-panel/StylePalette.tsx`,
+  `frontend/src/lib/toast.ts`, `frontend/src/hooks/useNotificationStream.tsx`,
+  and `frontend/src/styles/tokens.css`; local `Input.tsx`, `Chip.tsx`, and
+  `button.tsx` are absent
+- Tests: `frontend/src/components/ui/Input.test.tsx`,
+  `frontend/src/components/ui/Chip.test.tsx`,
+  `frontend/src/components/ui/Button.test.tsx`,
+  `frontend/src/components/ui/Tabs.test.tsx`,
+  `frontend/src/hooks/useNotificationStream.test.tsx`, and
+  `frontend/src/styles/tokens.test.ts`
+- Commits: `799fc0b` (Input), `fcab138` (Chip), `b312a68` (Button), and
+  `cedb967` (Tabs)
+- Verified: 2026-07-19 against current code, tests, and Git history
+
 ---
 
 ## 3. Routes
@@ -375,8 +409,12 @@ export class ApiClient {
     if (!res.ok) {
       // parse the error envelope and throw ApiError(status, error, message, details)
     }
-    if (res.status === 204) return undefined as T;
-    return res.json();
+    if (res.status === 204 || res.headers.get("content-length") === "0") {
+      return null as T;
+    }
+    const responseText = await res.text();
+    if (!responseText) return null as T;
+    return JSON.parse(responseText) as T;
   }
 
   get<T>(path: string): Promise<T> { /* request("GET", path) */ }
@@ -389,6 +427,23 @@ export class ApiClient {
 
 There is no `query`-param support, no `getAuthToken`, and no module-level `api`
 singleton — callers construct an `ApiClient` with a base URL.
+
+Falsy JSON values remain valid request bodies. The client serializes a body
+whenever the caller supplies the `body` key. Tests cover `0`, `false`, and an
+empty string; the same key-presence branch serializes `null`.
+
+Successful responses return `null` without JSON parsing when the status is 204,
+the `Content-Length` header is `0`, or the response text is empty. Other
+successful responses are parsed from their text as JSON.
+
+Evidence:
+
+- Code: `frontend/src/api/client.ts`
+- Tests: `frontend/src/api/client.test.ts` — `falsy body serialization (Bug 1)`
+  covers `0`, `false`, and an empty string; `empty / no-content response
+  handling (Bug 2)` covers empty successful responses
+- Commit: `9ac12bafedca636303923bf96a039d1f4b6b663d`
+- Verified: 2026-07-19 against the migration export for GitHub issue #449
 
 ### `src/api/types.ts`
 
@@ -459,9 +514,9 @@ Three folders:
   components.
 - `components/` — presentational + small bits of state. **Re-usable**
   across pages.
-- `components/ui/` — shadcn-generated primitives (button, dialog,
-  toast, tooltip, popover, select). **Don't hand-edit beyond what
-  shadcn allows.**
+- `components/ui/` — compatibility wrappers for shared primitives and local
+  primitives that remain application-specific. Keep wrappers only where the
+  labeler contract differs from `pdomain-ui`.
 
 Feature folders (`features/words/`, etc.) are NOT used in v1. Pages
 flat-by-kind, same as pgdp-prep. Revisit if the repo passes ~20 pages.

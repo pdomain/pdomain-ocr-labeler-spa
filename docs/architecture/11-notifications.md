@@ -138,6 +138,21 @@ The legacy uses a similar overlay (`project_view.py:78`) but couples it
 to a per-action context manager. The SPA computes it reactively from
 mutation + job state, no manual flag.
 
+The SPA retains the outer overlay as a local composition boundary and renders
+`OperationStatusPanel` from `@pdomain/pdomain-ui/status` inside it. It does not
+use the shared `BlockingOperationOverlay` because that component portals to
+`document.body`. The local wrapper keeps `busy-overlay` inside the image pane,
+as required by the driver contract and the containment test. It also retains
+the labeler's job-to-message mapping and cancel rules.
+
+Evidence:
+
+- Code: `frontend/src/components/BusyOverlay.tsx`
+- Tests: `frontend/src/components/BusyOverlay.test.tsx` and
+  `frontend/src/pages/ProjectPage.test.tsx`
+- Commit: `c238965`
+- Verified: 2026-07-19 against current code and tests
+
 ### 3.1 Project-loading overlay
 
 A separate `<ProjectLoadingOverlay />` for project-load specifically:

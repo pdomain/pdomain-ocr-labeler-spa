@@ -129,6 +129,23 @@ Used directly by `CharRangesSection` for per-range style and component chip
 palettes, with `data-testid-prefix` set to `char-range-{N}-style-chip` or
 `char-range-{N}-component-chip`.
 
+The palette uses `TriStateChip` from `@pdomain/pdomain-ui/primitives`; the SPA
+no longer owns a local tri-state chip implementation. `TriStateChip` exposes
+its value through `aria-pressed`: `off`
+maps to `false`, `on` maps to `true`, and `mixed` maps to `mixed`. It also keeps
+the driver-facing `data-tristate` and `data-tristate-value` attributes.
+
+Evidence:
+
+- Code: `frontend/src/components/right-panel/StylePalette.tsx`,
+  `frontend/src/components/right-panel/ComponentPalette.tsx`, and
+  `frontend/src/components/right-panel/sections/CharRangesSection.tsx` consume
+  `@pdomain/pdomain-ui` 0.11.0 as locked in `frontend/pnpm-lock.yaml`
+- Tests: `TriStateChip (pdui) — a11y (aria-pressed)`, `TriStateChip (pdui) —
+  cycle`, and `TriStateChip (pdui) — data-tristate attrs`
+- Commits: `caba90822c9238a55f6bbbc7081a4d35e801089a`, `fcab138`
+- Verified: 2026-07-19 against the migration export for GitHub issue #450
+
 ### UnicodePicker
 
 Props:

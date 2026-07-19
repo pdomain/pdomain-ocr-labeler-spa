@@ -54,6 +54,8 @@ This layout is workspace-standard; see
 - [`context/current-state.md`](context/current-state.md) — shipped behavior, open work, and risks
 - [`context/intent-map.md`](context/intent-map.md) — active, deferred, blocked, and rejected intent
 - [`context/decisions.md`](context/decisions.md) — durable decisions and retirement tombstones
+- [`context/completed-github-issues-ledger.md`](context/completed-github-issues-ledger.md)
+  — completed issue provenance, coverage, and deletion status
 - [`context/retirement-manifest.md`](context/retirement-manifest.md) — per-document outcomes and replacements
 - [`context/open-findings.md`](context/open-findings.md) — unresolved defects transferred from the retired bug ledger
 
@@ -66,7 +68,6 @@ This layout is workspace-standard; see
 - [`plans/2026-06-08-compute-settings-panel.md`](plans/2026-06-08-compute-settings-panel.md)
 - [`plans/2026-06-10-export-manifest-and-send-to-trainer.md`](plans/2026-06-10-export-manifest-and-send-to-trainer.md)
 - [`plans/2026-06-14-labeler-spa-pgdp-alignment-backlog.md`](plans/2026-06-14-labeler-spa-pgdp-alignment-backlog.md)
-- [`plans/2026-06-16-pdomain-ui-primitive-migration.md`](plans/2026-06-16-pdomain-ui-primitive-migration.md)
 
 ### specs/
 

@@ -266,7 +266,7 @@ def test_reload_ocr_with_production_context_wiring(tmp_path: Path, projects_root
         assert loader.calls == [0]
 
 
-# ── Task 2: OCR timeout (docs/plans/2026-07-14-review-fixes.md) ──────────
+# OCR timeout contract: docs/architecture/02-backend.md
 
 
 class _SlowPageLoader:

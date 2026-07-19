@@ -259,7 +259,7 @@ def test_settings_undo_depth_default_and_env(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_settings_ocr_timeout_s_default_and_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """docs/plans/2026-07-14-review-fixes.md Task 2: ``PDLABELER_OCR_TIMEOUT_S``.
+    """Verify the OCR timeout contract in ``docs/architecture/02-backend.md``.
 
     Default 900.0 seconds; env-overridable; <=0 disables the timeout.
     """
@@ -277,7 +277,7 @@ def test_settings_ocr_timeout_s_default_and_env(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_settings_max_concurrent_ocr_jobs_default_and_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """docs/plans/2026-07-14-review-fixes.md Task 3: ``PDLABELER_MAX_CONCURRENT_OCR_JOBS``.
+    """Verify the OCR concurrency contract in ``docs/architecture/02-backend.md``.
 
     Default 1; env-overridable; <=0 disables the cap.
     """

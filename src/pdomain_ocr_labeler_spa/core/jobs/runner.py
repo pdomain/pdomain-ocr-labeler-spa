@@ -63,7 +63,7 @@ _TERMINAL = {JobStatus.COMPLETE, JobStatus.ERROR, JobStatus.CANCELLED}
 
 Handler = Callable[["JobRunner", Job], Coroutine[Any, Any, None]]
 
-# Task 3 (docs/plans/2026-07-14-review-fixes.md): job types whose handlers
+# docs/architecture/02-backend.md: job types whose handlers
 # call ``loader.run_ocr`` on an ``asyncio.to_thread`` worker — the only
 # handlers gated by ``JobRunner``'s OCR concurrency semaphore. Verified
 # against the handlers registered below: ``reload_ocr.py``,

@@ -162,13 +162,19 @@ Major groups:
 | Package | Min version | Used for |
 |---------|-------------|----------|
 | `pdomain-book-tools` | `>=0.14.1` | OCR page models, glyph annotations (`pdomain_book_tools.ocr.page`) |
-| `pdomain-ops` | `>=0.4.0` | Port probing, app registry (`pdomain_ops.suite.bootstrap_spa`, `register_self`) |
+| `pdomain-ops` | `>=0.11.2` | Suite bootstrap/routes, device preferences, shared paths, page records and aggregates, local persistence, provenance, and export schemas |
 
 ### npm
 
 | Package | Version | Used for |
 |---------|---------|----------|
-| `@pdomain/pdomain-ui` | `^0.2.2` | `PageImageCanvas`, `AppShell`, `WordList`, `Dialog`/`Tabs` primitives, icons |
+| `@pdomain/pdomain-ui` | `^0.11.0` | `PageImageCanvas`, `AppShell`, `WordList`, shared primitives, status panels, and icons |
+
+Evidence:
+
+- Code: `pyproject.toml` and `frontend/package.json`
+- Lockfiles: `uv.lock` and `frontend/pnpm-lock.yaml`
+- Verified: 2026-07-19 against the current manifests and lockfiles
 
 ---
 

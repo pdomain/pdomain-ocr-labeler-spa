@@ -1,6 +1,6 @@
 """Unit tests for OCR-heavy job concurrency cap.
 
-Spec: ``docs/plans/2026-07-14-review-fixes.md`` Task 3. ``JobRunner`` gates
+Architecture: ``docs/architecture/02-backend.md``. ``JobRunner`` gates
 concurrent execution of OCR-heavy job types (``reload_ocr`` / ``rotate_page`` /
 ``auto_rotate_all`` — the handlers that call ``loader.run_ocr``) behind an
 ``asyncio.Semaphore`` sized by ``max_concurrent_ocr_jobs``. Other job types

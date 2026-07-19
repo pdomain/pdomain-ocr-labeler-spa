@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-07-14
+last_verified: 2026-07-19
 ---
 
 # Decisions
@@ -13,7 +13,7 @@ last_verified: 2026-07-14
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-07-14
+- **Last verified:** 2026-07-19
 - **Read when:** looking for durable migration, lifecycle, or changed-direction rationale.
 - **Search terms:** decisions, tombstones, retirement, changed direction, docgraph.
 
@@ -167,4 +167,90 @@ completed command checklist. Git history preserves the exact plan.
 - Removal commit: the commit containing this tombstone.
 - Rationale kept: shared ownership and evidence are in the architecture and
   decision records linked above.
+- Remaining work: none.
+
+## 2026-07-19 — Preserve typed resolver narrowing from GitHub issue #459
+
+### Context
+
+Commit `b66fc19` typed both page resolvers as `Page | None`, changed the loader
+payload boundary from `Any` to `object`, and removed six `reportAny`
+suppressions. It used casts after the envelope guard because tests supplied
+duck-typed page stubs. Later PageRecord work retained the typed boundary but
+replaced the cast with runtime and `.lines` narrowing.
+
+### Decision
+
+Keep `Page | None` as the resolver contract and narrow the `object` payload at
+the resolver boundary. Treat the historical cast as superseded implementation
+detail, not current architecture.
+
+### Consequences
+
+Callers use typed page, line, and word attributes without `reportAny`
+suppressions. Duck-typed test objects remain supported by the current `.lines`
+gate.
+
+### Supersedes / Superseded-by
+
+This records the durable outcome and later evolution of GitHub issue #459. The
+current implementation lives in `src/pdomain_ocr_labeler_spa/api/words.py` and
+`src/pdomain_ocr_labeler_spa/api/pages.py`.
+
+## 2026-07-19 — Retire the pdomain-ui primitive migration plan
+
+### Context
+
+All six migration slices shipped. The final implementation kept local
+composition boundaries for BusyOverlay, Tabs, and Accordion where the labeler
+contract differs from the shared primitives.
+
+### Decision
+
+Remove the completed execution checklist from live retrieval. Keep shared
+primitive ownership and the shipped wrapper deviations in current architecture.
+
+### Consequences
+
+Architecture now directs future wrapper work. The unresolved upstream-versus-
+local ownership question remains in [`intent-map.md`](intent-map.md).
+
+### Supersedes / Superseded-by
+
+- Old path: `docs/plans/2026-06-16-pdomain-ui-primitive-migration.md`.
+- Outcome: implemented and retired.
+- Superseded by: `docs/architecture/03-frontend.md`,
+  `docs/architecture/11-notifications.md`,
+  `docs/architecture/26-right-panel-detail.md`, and
+  `docs/architecture/28-palettes-pickers.md`.
+- Removal commit: the commit containing this tombstone.
+- Rationale kept: current architecture and Git history.
+- Remaining work: the wrapper ownership decision in `intent-map.md`.
+
+## 2026-07-19 — Retire the confirmed bug-fixes plan
+
+### Context
+
+The compute-device preference, reload OCR timeout, OCR concurrency cap,
+API-client correction, and dependency-pin follow-up all shipped. The temporary
+dependency deferral was later resolved by the current dependency floor.
+
+### Decision
+
+Remove the completed execution checklist from live retrieval. Keep the device,
+timeout, concurrency, and API contracts in current architecture.
+
+### Consequences
+
+Source and test provenance now points to architecture instead of a completed
+plan. No residual plan work remains.
+
+### Supersedes / Superseded-by
+
+- Old path: `docs/plans/2026-07-14-review-fixes.md`.
+- Outcome: implemented and retired.
+- Superseded by: `docs/architecture/02-backend.md` and
+  `docs/architecture/03-frontend.md`.
+- Removal commit: the commit containing this tombstone.
+- Rationale kept: current architecture and Git history.
 - Remaining work: none.

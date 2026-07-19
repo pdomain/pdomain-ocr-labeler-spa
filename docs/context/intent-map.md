@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-07-14
+last_verified: 2026-07-19
 ---
 
 # Intent map
@@ -13,7 +13,7 @@ last_verified: 2026-07-14
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-07-14
+- **Last verified:** 2026-07-19
 - **Read when:** deciding what to build next, what remains intentionally
   parked, or how shared page-schema convergence should proceed.
 - **Search terms:** active intent, deferred, blocked, rejected, owner decision,
@@ -28,6 +28,8 @@ last_verified: 2026-07-14
 - Keep behavior contracts and their coverage map aligned with executable tests.
 - Implement the approved glyph-annotation design when prioritized; Q-A5–Q-A7
   no longer block it.
+- Reconcile driver-contract section 2.11 and its E2E coverage with the shipped
+  right-panel editing model before deleting migrated GitHub issue #454.
 
 ## Done
 
@@ -62,8 +64,14 @@ No product-direction blocker is established by current repository evidence.
 
 ## Needs owner decision
 
-- Decide which remaining local UI wrappers require upstream `pdomain-ui`
-  enhancements versus permanent local ownership.
+- Decide whether the remaining Tabs and Accordion compatibility wrappers need
+  upstream `pdomain-ui` enhancements or permanent local ownership. Current
+  composition is recorded in `docs/architecture/03-frontend.md` and
+  `docs/architecture/26-right-panel-detail.md`.
+- Decide whether the broad directory-level RUF002 exceptions in
+  `pyproject.toml` are intentional policy. GitHub issue #456 removed the global
+  ignore, but the remaining exceptions conflict with `CONVENTIONS.md`, which
+  requires escaped ambiguous Unicode and rejects suppression as the remedy.
 
 ## Legacy-unverified sweep
 

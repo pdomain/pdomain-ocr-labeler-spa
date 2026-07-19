@@ -165,6 +165,34 @@ class Settings(BaseSettings):
 the SPA fixes the pgdp-prep
 `__main__.py:44` mutation smell — close that gap).
 
+### OCR execution controls
+
+OCR honors the suite compute-device preference for the
+`pdomain-ocr-labeler-spa` app. `resolve_ocr_device_override()` maps an unset,
+empty, or `local` preference to `None`, which preserves DocTR auto-detection.
+An explicit device string is applied with `predictor.to(device)` after both a
+new predictor build and a cache hit. Preference reads and device moves are
+best-effort; either failure leaves the predictor usable without the override.
+
+`PDLABELER_OCR_TIMEOUT_S` controls the wall-clock wait for reload OCR and
+defaults to 900 seconds. A value at or below zero disables the timeout. A
+timeout emits a negative notification and fails the job, but it cannot stop the
+Python worker thread: the underlying `run_ocr` call continues until it returns
+or crashes.
+
+Evidence:
+
+- Code: `src/pdomain_ocr_labeler_spa/core/ocr/device_pref.py`,
+  `src/pdomain_ocr_labeler_spa/core/ocr/predictor.py`,
+  `src/pdomain_ocr_labeler_spa/bootstrap.py`,
+  `src/pdomain_ocr_labeler_spa/settings.py`, and
+  `src/pdomain_ocr_labeler_spa/core/jobs/handlers/reload_ocr.py`
+- Tests: `tests/unit/core/ocr/test_device_pref.py`,
+  `tests/unit/core/ocr/test_predictor.py`, `tests/unit/test_settings.py`, and
+  `tests/integration/test_reload_ocr_job.py`
+- Commits: `91b415b` (device preference) and `82b0491` (OCR timeout)
+- Verified: 2026-07-19 against current code and tests
+
 ---
 
 ## 4. Routers
@@ -615,6 +643,23 @@ or persistence across restarts.
 No SQLite. No batch dispatcher. No per-owner enumeration. The job
 table is in-memory and lost on server restart — but the on-disk state
 (envelopes + cache) is the durable record, not the job runner.
+
+OCR-heavy concurrency is capped independently of other jobs.
+`PDLABELER_MAX_CONCURRENT_OCR_JOBS` defaults to 1 and sizes an
+`asyncio.Semaphore`. Only `reload_ocr`, `rotate_page`, and
+`auto_rotate_all` acquire it because those handlers call `loader.run_ocr`.
+Save, export, and bbox-refinement jobs remain ungated. A value at or below zero
+disables the cap.
+
+Evidence:
+
+- Code: `src/pdomain_ocr_labeler_spa/core/jobs/runner.py`,
+  `src/pdomain_ocr_labeler_spa/settings.py`, and
+  `src/pdomain_ocr_labeler_spa/bootstrap.py`
+- Tests: `tests/unit/core/jobs/test_runner_concurrency.py` and
+  `tests/unit/test_settings.py`
+- Commit: `2354e4f`
+- Verified: 2026-07-19 against current code and tests
 
 ---
 
