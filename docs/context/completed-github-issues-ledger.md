@@ -39,9 +39,9 @@ outcome, evidence, and destination on the remote default branch.
 ## Batch verification
 
 - The export contained 429 issues at batch start: 425 closed and 4 open.
-- The temporary archive at
-  `docs/decisions/2026-07-19-closed-github-issues-archive.md` preserves all 425
-  closed issue bodies and public comments before retirement.
+- Commit `5cdb276` preserves all 425 closed issue bodies and public comments.
+  Recover the archive with
+  `git show 5cdb276:docs/decisions/2026-07-19-closed-github-issues-archive.md`.
 - The migration workspace stores raw records in
   `/tmp/pdomain-ocr-labeler-spa-issue-migration-20260719/raw/`. The table stores
   their immutable digests.

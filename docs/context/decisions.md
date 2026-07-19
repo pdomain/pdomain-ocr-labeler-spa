@@ -197,6 +197,38 @@ This records the durable outcome and later evolution of GitHub issue #459. The
 current implementation lives in `src/pdomain_ocr_labeler_spa/api/words.py` and
 `src/pdomain_ocr_labeler_spa/api/pages.py`.
 
+## 2026-07-19 — Retire the closed GitHub issues archive
+
+### Context
+
+Commit `5cdb276` captured all 425 closed GitHub issues in one lossless archive.
+The archive contains each issue's metadata, full body, public comments, and raw
+record digest. Its SHA-256 is
+`6f27ae91252d0d0470cab287b4cf184aeca785fdb5c41a1bf5b949ebb55f3e99`.
+
+### Decision
+
+Remove the 852 KB archive from live retrieval after its dedicated commit. Keep
+the compact reconciliation ledger live and use Git history for verbatim issue
+recovery.
+
+### Consequences
+
+Current docgraph searches avoid 425 historical issue bodies. Migration review
+can still recover the exact archive before any GitHub deletion.
+
+### Supersedes / Superseded-by
+
+- Old path: `docs/decisions/2026-07-19-closed-github-issues-archive.md`.
+- Outcome: archived in Git and retired from the live tree.
+- Superseded by: `docs/context/completed-github-issues-ledger.md`, current
+  architecture, and context decisions.
+- Archive commit: `5cdb276`.
+- Recovery command:
+  `git show 5cdb276:docs/decisions/2026-07-19-closed-github-issues-archive.md`.
+- Remaining work: complete architecture coverage and deletion readiness for
+  every ledger row before remote issue deletion.
+
 ## 2026-07-19 — Retire the pdomain-ui primitive migration plan
 
 ### Context
