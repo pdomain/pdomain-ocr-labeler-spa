@@ -2,7 +2,7 @@
 Status: active
 Owner: maintainers
 Created: 2026-07-19
-Last verified: 2026-07-19
+Last verified: 2026-07-21
 Kind: process
 Level: I1
 ---
@@ -14,7 +14,7 @@ Level: I1
 - **Kind:** process
 - **Status:** active
 - **Level:** I1
-- **Last verified:** 2026-07-19
+- **Last verified:** 2026-07-21
 - **Read when:** filing a bug / defect / investigation report, or looking up an
   open issue's status, evidence, or resolution.
 - **Search terms:** issues folder, bug report, defect report, issue template,
@@ -67,15 +67,75 @@ Recommended next steps · What is NOT broken (scopes the fix) · Resolution.
 Lead with the **smallest decisive evidence**, separate **observation** from
 **hypothesis**, and always include a **What is NOT broken** section.
 
-## GitHub-open issue records
+## GitHub-migrated issue records
 
 - [`2026-05-22-gh-430-ci-equivalence.md`](2026-05-22-gh-430-ci-equivalence.md)
+  — open (pre-commit + knip missing from GH).
 - [`2026-05-22-gh-433-openapi-drift.md`](2026-05-22-gh-433-openapi-drift.md)
+  — open (drift job vs gitignored openapi.json).
 - [`2026-05-22-gh-437-openapi-schema-quality.md`](2026-05-22-gh-437-openapi-schema-quality.md)
-  — implemented locally; GitHub closure remains.
+  — implemented locally; GitHub closure may lag.
 - [`2026-05-23-gh-460-resolver-narrowing.md`](2026-05-23-gh-460-resolver-narrowing.md)
-  — implemented locally; GitHub closure remains.
+  — implemented locally; GitHub closure may lag.
+
+## Deep-review split issues (2026-07-21)
+
+Prioritization authority:
+[`../plans/2026-07-21-deep-code-review-continuation.md`](../plans/2026-07-21-deep-code-review-continuation.md).
+
+Open findings (keyboard, XDG, RELOAD, HIER) remain in
+[`../context/open-findings.md`](../context/open-findings.md) + plan
+[`../plans/2026-07-21-open-findings-fixes.md`](../plans/2026-07-21-open-findings-fixes.md)
+— not re-filed as separate issues.
+
+### Wave 0 — data integrity
+
+| Issue | ID | Sev |
+| --- | --- | --- |
+| [`2026-07-21-sidecar-char-maps-not-durable.md`](2026-07-21-sidecar-char-maps-not-durable.md) | P0-SIDECAR-MAP | High |
+| [`2026-07-21-rematch-gt-not-durable.md`](2026-07-21-rematch-gt-not-durable.md) | P0-REMATCH | High |
+| [`2026-07-21-save-project-false-clean.md`](2026-07-21-save-project-false-clean.md) | P0-SAVE-DIRTY | High |
+| [`2026-07-21-mutation-store-silent-200.md`](2026-07-21-mutation-store-silent-200.md) | P1-MUTATION-200 | High |
+
+### Wave 1 — export loop
+
+| Issue | ID | Sev |
+| --- | --- | --- |
+| [`2026-07-21-export-list-api-empty.md`](2026-07-21-export-list-api-empty.md) | P0-EXPORT-LIST | High |
+| [`2026-07-21-cli-export-not-store-first.md`](2026-07-21-cli-export-not-store-first.md) | P0-CLI-STORE | High |
+| [`2026-07-21-export-normalize-flag-dead.md`](2026-07-21-export-normalize-flag-dead.md) | P1-NORMALIZE | Medium |
+
+### Wave 2 — M11 glyph
+
+| Issue | ID | Sev |
+| --- | --- | --- |
+| [`2026-07-21-glyph-m11-usable-path-incomplete.md`](2026-07-21-glyph-m11-usable-path-incomplete.md) | P0-GLYPH-* | High |
+
+### Wave 3a — job SSE
+
+| Issue | ID | Sev |
+| --- | --- | --- |
+| [`2026-07-21-job-sse-fe-be-shape-mismatch.md`](2026-07-21-job-sse-fe-be-shape-mismatch.md) | P1-JOB-SSE / TYPE | High |
+
+### Wave 3b — product honesty
+
+| Issue | ID | Sev |
+| --- | --- | --- |
+| [`2026-07-21-canvas-erase-mode-noop.md`](2026-07-21-canvas-erase-mode-noop.md) | P1-CANVAS-ERASE | High |
+| [`2026-07-21-image-drift-banner-hard-off.md`](2026-07-21-image-drift-banner-hard-off.md) | P1-IMAGE-DRIFT | Medium |
+| [`2026-07-21-job-cancel-incomplete.md`](2026-07-21-job-cancel-incomplete.md) | P1-CANCEL | Medium |
+| [`2026-07-21-match-nav-selection-desync.md`](2026-07-21-match-nav-selection-desync.md) | P1-MATCH-NAV | Medium |
+| [`2026-07-21-bbox-refine-crop-misleading.md`](2026-07-21-bbox-refine-crop-misleading.md) | P1-BBOX-UI | Medium |
+
+### Wave 4–5 — CI confidence + suite chrome
+
+| Issue | ID | Sev |
+| --- | --- | --- |
+| [`2026-07-21-e2e-non-blocking-soft-skips.md`](2026-07-21-e2e-non-blocking-soft-skips.md) | P0-CI-SOFT / P2-E2E-GATE | High |
+| [`2026-07-21-suite-launcher-app-shims.md`](2026-07-21-suite-launcher-app-shims.md) | P1-SUITE | Medium |
+| [`2026-07-21-jobs-api-openapi-mismatch.md`](2026-07-21-jobs-api-openapi-mismatch.md) | P1-JOBS-API | Medium |
+| [`2026-07-21-project-list-metadata-filters-noop.md`](2026-07-21-project-list-metadata-filters-noop.md) | P2-ROOT | Medium |
 
 ## Resolved issues
 
-- *None yet.*
+- *None yet for the deep-review split set.*
