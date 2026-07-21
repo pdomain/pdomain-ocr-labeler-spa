@@ -340,3 +340,35 @@ present) but blocks Wave 0 char durability on an upstream release.
 **C — maps only on LabelerEdited changelog outside the content blob.** Undo
 restores content via `blob_refs` only; out-of-blob maps need a separate
 clear/rehydrate protocol and drift more easily from the restored page.
+
+## 2026-07-21 — Export list API ↔ disk manifest (Wave 1.0)
+
+### Context
+
+`GET .../exports` was an empty stub. On-disk
+`<data_root>/doctr-export/manifest.json` uses schema
+`pdomain.doctr-export-manifest` with a per-project map
+(`exported_at`, `page_count`, `tasks`). The OpenAPI placeholder
+`ExportManifest` used `job_id`, `scope`, `created_at` only.
+
+### Decision
+
+**Remap disk → API** (keep list of `ExportManifest`, one row per project
+entry; disk currently stores a single latest export per project):
+
+| API field | Source |
+| --- | --- |
+| `created_at` | `projects[id].exported_at` |
+| `page_count` | `projects[id].page_count` |
+| `tasks` | `projects[id].tasks` (task → `{item_count}`) |
+| `job_id` | synthetic `doctr-export:{project_id}:{exported_at}` (no job id on disk) |
+| `scope` | fixed `"project"` (disk is project-level merge, not per-scope history) |
+
+Expand the pydantic model with `page_count` and `tasks`; keep
+`job_id`/`scope`/`created_at` for FE compatibility.
+
+### Rejected
+
+**Expand OpenAPI to the full multi-project disk document.** Would break the
+`list[ExportManifest]` route shape and FE history consumers for little gain;
+history is already keyed by `project_id` in the path.

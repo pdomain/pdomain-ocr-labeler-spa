@@ -151,16 +151,70 @@ class ExportResponse(BaseModel):
 
 
 class ExportManifest(BaseModel):
-    """One past export manifest entry — spec §5.9 line 326.
+    """One past export for a project — Wave 1.0 remap of doctr-export disk.
 
-    Shape is best-effort: the export handler will write manifests in M3.
-    Until then this model is a placeholder that matches the empty-list stub.
-    Fields are intentionally minimal; the handler will expand them.
+    Disk source: ``<data_root>/doctr-export/manifest.json`` entry under
+    ``projects[project_id]``. Remap documented in
+    ``docs/context/decisions.md`` (2026-07-21 Export list API).
     """
 
     job_id: str
     scope: str
     created_at: str
+    page_count: int = 0
+    tasks: dict[str, dict[str, int]] = {}
+
+
+def _manifest_path(data_root: Path) -> Path:
+    return Path(data_root) / "doctr-export" / "manifest.json"
+
+
+def _export_manifests_for_project(data_root: Path, project_id: str) -> list[ExportManifest]:
+    """Read on-disk doctr-export manifest and map this project's entry to API rows.
+
+    Disk stores one latest export per project (merge/replace). Missing or
+    corrupt files yield an empty list (best-effort list contract).
+    """
+    import json
+
+    path = _manifest_path(data_root)
+    if not path.is_file():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(raw, dict):
+        return []
+    projects = raw.get("projects")
+    if not isinstance(projects, dict):
+        return []
+    entry = projects.get(project_id)
+    if not isinstance(entry, dict):
+        return []
+    exported_at = entry.get("exported_at")
+    if not isinstance(exported_at, str) or not exported_at:
+        return []
+    page_count_raw = entry.get("page_count", 0)
+    page_count = int(page_count_raw) if isinstance(page_count_raw, int | float) else 0
+    tasks_field = entry.get("tasks")
+    tasks_raw: dict[str, object] = tasks_field if isinstance(tasks_field, dict) else {}
+    tasks: dict[str, dict[str, int]] = {}
+    for task_name, task_body in tasks_raw.items():
+        if not isinstance(task_name, str) or not isinstance(task_body, dict):
+            continue
+        count = task_body.get("item_count", 0)
+        if isinstance(count, int | float):
+            tasks[task_name] = {"item_count": int(count)}
+    return [
+        ExportManifest(
+            job_id=f"doctr-export:{project_id}:{exported_at}",
+            scope="project",
+            created_at=exported_at,
+            page_count=page_count,
+            tasks=tasks,
+        )
+    ]
 
 
 @router.post("/{project_id}/export", response_model=ExportResponse, status_code=202)
@@ -173,10 +227,7 @@ def start_export(
 
     Spec §5.9 line 325. Returns 202 Accepted with ``{job_id}``; the
     caller opens ``EventSource(/api/jobs/{job_id}/events)`` to receive
-    progress and the terminal event. The actual DocTR export pipeline
-    is wired in the ``export`` job handler (``core/jobs/runner.py``
-    ``_HANDLERS["export"]``); until full M3 wiring the handler completes
-    immediately (stub body, no I/O).
+    progress and the terminal event.
     """
     job_id = runner.submit(
         "export",
@@ -189,6 +240,7 @@ def start_export(
             "include_classification": body.include_classification,
             "detection_only": body.detection_only,
             "recognition_only": body.recognition_only,
+            "normalize_recognition_labels": body.normalize_recognition_labels,
         },
     )
     return JSONResponse(
@@ -260,14 +312,21 @@ def list_export_styles(
 
 
 @router.get("/{project_id}/exports", response_model=list[ExportManifest])
-def list_exports(project_id: str) -> JSONResponse:
+def list_exports(
+    project_id: str,
+    settings: Settings = Depends(get_settings),
+) -> JSONResponse:
     """``GET /api/projects/{id}/exports`` — past exports (best-effort).
 
-    Spec §5.9 line 326. Returns a list of past export manifests read
-    from disk. Until the export handler writes manifests, always returns
-    an empty list (spec says "best-effort").
+    Spec §5.9 line 326. Reads ``doctr-export/manifest.json`` and remaps this
+    project's entry to ``ExportManifest`` (Wave 1.0–1.1). Missing manifest or
+    unknown project → empty list.
     """
-    return JSONResponse(status_code=200, content=[])
+    rows = _export_manifests_for_project(Path(settings.data_root), project_id)
+    return JSONResponse(
+        status_code=200,
+        content=[row.model_dump(mode="json") for row in rows],
+    )
 
 
 def install_export_router(app) -> None:  # type: ignore[no-untyped-def]
@@ -276,10 +335,13 @@ def install_export_router(app) -> None:  # type: ignore[no-untyped-def]
 
 
 __all__ = [
+    "ExportManifest",
     "ExportRequest",
     "ExportResponse",
     "ExportScope",
+    "_export_manifests_for_project",
     "install_export_router",
     "list_export_styles",
+    "list_exports",
     "router",
 ]

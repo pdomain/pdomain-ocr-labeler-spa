@@ -247,6 +247,9 @@ export default function ProjectPage() {
   const pageQ = usePage(projectId, idx0);
   // Active job tracking — fed by mutation hooks when they return job_ids.
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  // Wave 3a / P1-JOB-TYPE: real job type for BusyOverlay cancel policy.
+  const [activeJobType, setActiveJobType] =
+    useState<components["schemas"]["JobType"]>("reload_ocr_page");
   const jobProgress = useJobProgress(activeJobId);
 
   // ── Store subscribers ──────────────────────────────────────────────────
@@ -518,11 +521,14 @@ export default function ProjectPage() {
   // tsc happy without inventing data.
   const nowIso = new Date(0).toISOString();
   const activeJob: components["schemas"]["Job"] | null =
-    jobProgress && jobProgress.status !== "complete" && jobProgress.status !== "error"
+    jobProgress &&
+    jobProgress.status !== "complete" &&
+    jobProgress.status !== "error" &&
+    (jobProgress.status as string) !== "cancelled"
       ? {
           id: jobProgress.job_id,
           project_id: projectId ?? null,
-          type: "reload_ocr_page" as components["schemas"]["JobType"],
+          type: activeJobType,
           status: jobProgress.status,
           progress: jobProgress.progress,
           error_message: jobProgress.error_message ?? null,
@@ -560,9 +566,15 @@ export default function ProjectPage() {
     void qc.invalidateQueries({ queryKey: ["page", projectId, idx0] });
   }
 
-  function trackJob(result: { job_id?: string | null } | undefined | null) {
+  function trackJob(
+    result: { job_id?: string | null } | undefined | null,
+    jobType: components["schemas"]["JobType"] = "reload_ocr_page",
+  ) {
     const jobId = result?.job_id ?? null;
-    if (jobId) setActiveJobId(jobId);
+    if (jobId) {
+      setActiveJobType(jobType);
+      setActiveJobId(jobId);
+    }
   }
 
   // U-6 (spec 2026-06-12-event-store-undo): re-OCR creates a NEW page
@@ -579,7 +591,7 @@ export default function ProjectPage() {
       onConfirm: () => {
         reloadOcr.mutate(undefined, {
           onSuccess: (data) => {
-            trackJob(data as { job_id?: string | null } | undefined | null);
+            trackJob(data as { job_id?: string | null } | undefined | null, "reload_ocr_page");
           },
           onSettled: () => {
             invalidatePage();
@@ -604,7 +616,7 @@ export default function ProjectPage() {
   function handleSaveProject() {
     saveProject.mutate(undefined, {
       onSuccess: (data) => {
-        trackJob(data);
+        trackJob(data, "save_project");
       },
       onSettled: () => {
         invalidatePage();

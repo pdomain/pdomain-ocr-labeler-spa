@@ -814,10 +814,7 @@ export interface paths {
          *
          *     Spec §5.9 line 325. Returns 202 Accepted with ``{job_id}``; the
          *     caller opens ``EventSource(/api/jobs/{job_id}/events)`` to receive
-         *     progress and the terminal event. The actual DocTR export pipeline
-         *     is wired in the ``export`` job handler (``core/jobs/runner.py``
-         *     ``_HANDLERS["export"]``); until full M3 wiring the handler completes
-         *     immediately (stub body, no I/O).
+         *     progress and the terminal event.
          */
         post: operations["start_export_api_projects__project_id__export_post"];
         delete?: never;
@@ -875,9 +872,9 @@ export interface paths {
          * List Exports
          * @description ``GET /api/projects/{id}/exports`` — past exports (best-effort).
          *
-         *     Spec §5.9 line 326. Returns a list of past export manifests read
-         *     from disk. Until the export handler writes manifests, always returns
-         *     an empty list (spec says "best-effort").
+         *     Spec §5.9 line 326. Reads ``doctr-export/manifest.json`` and remaps this
+         *     project's entry to ``ExportManifest`` (Wave 1.0–1.1). Missing manifest or
+         *     unknown project → empty list.
          */
         get: operations["list_exports_api_projects__project_id__exports_get"];
         put?: never;
@@ -2838,11 +2835,11 @@ export interface components {
         };
         /**
          * ExportManifest
-         * @description One past export manifest entry — spec §5.9 line 326.
+         * @description One past export for a project — Wave 1.0 remap of doctr-export disk.
          *
-         *     Shape is best-effort: the export handler will write manifests in M3.
-         *     Until then this model is a placeholder that matches the empty-list stub.
-         *     Fields are intentionally minimal; the handler will expand them.
+         *     Disk source: ``<data_root>/doctr-export/manifest.json`` entry under
+         *     ``projects[project_id]``. Remap documented in
+         *     ``docs/context/decisions.md`` (2026-07-21 Export list API).
          */
         ExportManifest: {
             /** Job Id */
@@ -2851,6 +2848,20 @@ export interface components {
             scope: string;
             /** Created At */
             created_at: string;
+            /**
+             * Page Count
+             * @default 0
+             */
+            page_count: number;
+            /**
+             * Tasks
+             * @default {}
+             */
+            tasks: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
         };
         /**
          * ExportRequest

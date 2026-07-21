@@ -598,6 +598,36 @@ def _build_task_stats(
 # ---------------------------------------------------------------------------
 
 
+def _normalize_recognition_labels_json(labels_path: Path) -> None:
+    """Rewrite recognition labels.json strings when export requests normalization.
+
+    Image bytes are unchanged; only label text is remapped (architecture 18).
+    Best-effort: missing file or parse errors are logged and ignored.
+    """
+    import json
+
+    from ...text_normalize import normalize_string
+
+    if not labels_path.is_file():
+        return
+    try:
+        data = json.loads(labels_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        log.warning("export: could not read labels for normalize at %s: %s", labels_path, exc)
+        return
+    if not isinstance(data, dict):
+        return
+    changed = False
+    for key, value in list(data.items()):
+        if isinstance(value, str):
+            new = normalize_string(value, profile="ascii")
+            if new != value:
+                data[key] = new
+                changed = True
+    if changed:
+        labels_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
 async def handle_export(runner: JobRunner, job: Job) -> None:
     """Async export handler — registered as ``_HANDLERS["export"]``.
 
@@ -618,6 +648,7 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
     detection_only: bool = bool(payload.get("detection_only", False))
     recognition_only: bool = bool(payload.get("recognition_only", False))
     page_index: int | None = payload.get("page_index")
+    normalize_recognition_labels: bool = bool(payload.get("normalize_recognition_labels", False))
 
     detection = not recognition_only
     recognition = not detection_only
@@ -769,6 +800,20 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
             "pages_skipped_not_validated": pages_skipped_not_validated,
         },
     )
+
+    # Wave 1.4: optional recognition label normalization (ASCII long-s/ligatures).
+    if normalize_recognition_labels and recognition and exported_count > 0:
+        for subfolder, output_root in output_roots.items():
+            labels_path = output_root / "recognition" / "labels.json"
+            try:
+                _normalize_recognition_labels_json(labels_path)
+            except Exception as exc:  # pragma: no cover - defensive
+                log.warning(
+                    "export: normalize_recognition_labels failed for %s/%s: %s",
+                    project_id,
+                    subfolder,
+                    exc,
+                )
 
     # --- Track C: write / update the export manifest ---
     # Runs after the terminal SSE event so a manifest failure never

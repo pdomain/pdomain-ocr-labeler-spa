@@ -108,7 +108,46 @@ describe("useJobProgress", () => {
     expect(lastSource).toBeNull();
   });
 
-  it("updates with progress events", async () => {
+  it("normalizes flat backend wire events on progress", async () => {
+    const { result } = renderHook(() => useJobProgress("job-abc"));
+
+    act(() => {
+      lastSource!._emit("progress", {
+        type: "progress",
+        status: "running",
+        current: 3,
+        total: 10,
+        message: "Processing…",
+        error: null,
+      });
+    });
+
+    await waitFor(() => expect(result.current).not.toBeNull());
+    expect(result.current?.status).toBe("running");
+    expect(result.current?.progress.current).toBe(3);
+    expect(result.current?.progress.total).toBe(10);
+    expect(result.current?.job_id).toBe("job-abc");
+  });
+
+  it("handles snapshot event type (first frame)", async () => {
+    const { result } = renderHook(() => useJobProgress("job-abc"));
+
+    act(() => {
+      lastSource!._emit("snapshot", {
+        type: "progress",
+        status: "running",
+        current: 1,
+        total: 5,
+        message: "Starting",
+        error: null,
+      });
+    });
+
+    await waitFor(() => expect(result.current).not.toBeNull());
+    expect(result.current?.progress.current).toBe(1);
+  });
+
+  it("updates with nested progress events", async () => {
     const { result } = renderHook(() => useJobProgress("job-abc"));
 
     act(() => {
