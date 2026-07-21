@@ -3,7 +3,7 @@ kind: process
 status: active
 owner: maintainers
 created: 2026-05-09
-last_verified: 2026-07-13
+last_verified: 2026-07-21
 ---
 
 # AGENTS — pdomain-ocr-labeler-spa
@@ -77,10 +77,37 @@ available in Git history. The legacy `pd-ocr-labeler` is superseded.
 
 **Open work:**
 
-- M11 glyph annotations (#267–#270, `status:backlog`): Q-A5–Q-A7 are resolved,
-  but the frontend glyph surface has not shipped.
-- #366 tighten tsconfig.test.json relaxations (`status:backlog`).
-- #404 lint-deviations.md documentation (`kind:chore`).
+Prioritization authority (Waves 0–6):
+[`docs/plans/2026-07-21-deep-code-review-continuation.md`](docs/plans/2026-07-21-deep-code-review-continuation.md).
+
+Implementable work packages:
+[`docs/issues/README.md`](docs/issues/README.md) (18 deep-review issues under
+`docs/issues/2026-07-21-*`).
+
+Standing overnight stream index:
+[`docs/plans/2026-07-21-overnight-work-index.md`](docs/plans/2026-07-21-overnight-work-index.md).
+
+High-level status:
+[`docs/context/current-state.md`](docs/context/current-state.md).
+
+Summary:
+
+- **Wave 0 data integrity first** — char sidecars, rematch, save dirty-bit,
+  mutation silent-200 (`docs/issues/2026-07-21-sidecar-*` etc.).
+- M11 glyph annotations: scaffold exists; residual payload inject + WordDetail
+  wire-up — `docs/plans/2026-07-21-glyph-annotations-completion.md` /
+  `docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md`.
+- Export list + CLI store-first — corresponding `docs/issues/2026-07-21-export-*`
+  / `cli-export-*` issues.
+- Job SSE FE↔BE shape, canvas erase, image-drift, cancel — Wave 3 issues.
+- CI gates (#430/#433) + e2e soft-skips —
+  `docs/plans/2026-07-21-ci-openapi-gates.md`.
+- Open findings (KBD/XDG/RELOAD/HIER) —
+  `docs/plans/2026-07-21-open-findings-fixes.md`.
+- Residual `tsconfig.test.json` strictness —
+  `docs/plans/2026-07-21-tsconfig-test-strictness.md`.
+- PGDP alignment remaining —
+  `docs/plans/2026-07-21-pgdp-alignment-remaining.md`.
 
 Per-slice history is preserved in git log and GitHub closed milestones.
 
