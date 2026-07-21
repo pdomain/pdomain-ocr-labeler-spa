@@ -44,9 +44,9 @@ class LabelerPageExtension(BaseModel):
     selection_mode: Literal["paragraph", "line", "word"] = "word"
     line_filter: Literal["unvalidated", "mismatched", "all"] = "all"
 
-    # Future: char_bboxes, char_ranges, glyph_annotations live on PageState
-    # in-memory (not in the extension) — they survive within a session but
-    # are carried via PageAggregate.LabelerEdited events when saved.
+    # Char bboxes/ranges (and later glyph maps) are NOT on this extension.
+    # They live on PageState in-session and are embedded under
+    # ``labeler_sidecars`` in the content blob (Wave 0.1 decision).
 
 
 __all__ = ["LabelerPageExtension"]

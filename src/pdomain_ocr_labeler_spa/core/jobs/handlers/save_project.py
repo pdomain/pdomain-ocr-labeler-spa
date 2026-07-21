@@ -160,6 +160,7 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
                         page=payload,
                         store=page_store,
                         changes=changes,
+                        labeler_sidecars=pstate,
                     )
                 else:
                     # No live Page to re-serialize — record changelog only.

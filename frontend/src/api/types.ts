@@ -1285,8 +1285,8 @@ export interface paths {
          * @description ``POST .../words/{li}/{wi}/char-ranges`` — set positioned char-range styles (FO-2).
          *
          *     Replaces all char-range annotations for the word in one atomic
-         *     operation.  The ranges are stored as ``word.char_ranges`` (a plain
-         *     Python attribute — lost on envelope round-trip).
+         *     operation. Maps are written to ``PageState`` and best-effort persisted
+         *     into the content blob via ``labeler_sidecars``.
          *
          *     When no PageState is seeded the route falls through to a stub
          *     PagePayload (same pattern as other mutation endpoints).
@@ -1312,12 +1312,9 @@ export interface paths {
          * @description ``POST .../words/{li}/{wi}/char-bboxes`` — persist CharFixer per-char bboxes.
          *
          *     Stores the per-character bounding boxes from the CharFixer Apply button
-         *     into ``PageState.char_bboxes_map`` and the cached-lane envelope's
-         *     ``word_attributes`` dict.
-         *
-         *     Unlike most word mutations this does not touch the ``pdomain_book_tools``
-         *     ``Page`` object — pdomain-book-tools has no first-class char-bbox concept.
-         *     The data lives entirely in the SPA sidecar layer.
+         *     into ``PageState.char_bboxes_map`` and best-effort content-blob
+         *     ``labeler_sidecars``. Does not mutate book-tools word fields (no
+         *     first-class char-bbox concept there).
          */
         post: operations["set_char_bboxes_api_projects__project_id__pages__page_index__words__line_index___word_index__char_bboxes_post"];
         delete?: never;
@@ -4055,17 +4052,9 @@ export interface components {
          *     Replaces all per-character bounding-box annotations for the given word
          *     with *char_bboxes* (one ``BBox`` per character, in image-pixel coords).
          *
-         *     The bboxes are stored in two places:
-         *
-         *     1. ``pstate.char_bboxes_map["{li}_{wi}"]`` — the in-memory sidecar on
-         *        ``PageState``, keyed by the composite ``line_index_word_index`` string.
-         *        This is surfaced onto ``WordMatch.char_bboxes`` at payload-build time
-         *        so the frontend sees the stored bboxes immediately.
-         *
-         *     2. ``pstate``'s envelope ``word_attributes["{li}_{wi}"]["char_bboxes"]`` —
-         *        written to the cached-lane envelope via the standard best-effort write,
-         *        so the values survive a page reload.  On reload, ``from_dict`` deserialises
-         *        the list verbatim (the ``char_bboxes`` key is exempted from bool coercion).
+         *     Stored in ``PageState.char_bboxes_map`` and embedded under
+         *     ``labeler_sidecars`` in the event-store content blob (Wave 0.1). Surfaced
+         *     onto ``WordMatch.char_bboxes`` at payload-build time.
          */
         SetCharBboxesRequest: {
             /** Char Bboxes */
@@ -4078,14 +4067,10 @@ export interface components {
          *     Replaces all character-range annotations for the given word.  An
          *     empty ``ranges`` list clears all existing ranges.
          *
-         *     The backend stores the ranges as a Python attribute on the word
-         *     object (``word.char_ranges``).  pdomain-book-tools does not have a
-         *     first-class ``char_ranges`` concept today; the data is lost on
-         *     ``Word.to_dict`` → ``from_dict`` round-trip (documented limitation —
-         *     note ``is_validated`` escaped this fate via the ``word_labels``
-         *     carrier, P1.1).  When pdomain-book-tools grows a
-         *     ``char_ranges`` field, the route can be updated to call the
-         *     appropriate setter.
+         *     Ranges are stored on ``PageState.char_ranges_map`` and embedded under
+         *     ``labeler_sidecars`` in the event-store content blob (Wave 0.1). They are
+         *     also set as ``word.char_ranges`` for in-session convenience; book-tools
+         *     does not yet serialize that attribute on ``Word.to_dict``.
          */
         SetCharRangesRequest: {
             /** Ranges */

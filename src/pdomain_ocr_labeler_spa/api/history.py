@@ -13,7 +13,6 @@ free: the marker node's ``blob_refs[0]`` is what the restart read path
 
 from __future__ import annotations
 
-import json
 import logging
 
 from fastapi import APIRouter, Depends
@@ -124,8 +123,16 @@ def _execute_history_op(
     try:
         from pdomain_book_tools.ocr.page import Page
 
+        from ..core.labeler_sidecars import (
+            apply_sidecars_to_page_state,
+            parse_content_blob,
+            stamp_sidecars_on_page,
+        )
+
         page_bytes = store.blobs.read(restored_hash)
-        restored_page = Page.from_dict(json.loads(page_bytes.decode("utf-8")))
+        page_dict, restored_sidecars = parse_content_blob(page_bytes)
+        restored_page = Page.from_dict(page_dict)
+        stamp_sidecars_on_page(restored_page, restored_sidecars)
     except Exception as exc:
         log.exception("%s: restore blob read failed for page=%d", op, page_index)
         return JSONResponse(
@@ -153,6 +160,8 @@ def _execute_history_op(
     # Swap the in-memory payload under the per-page lock; re-stamp the
     # aggregate id so subsequent mutations target the same aggregate
     # (same stamp discipline as the restart read path, local_doctr.py:374).
+    # Wave 0.1: rehydrate char sidecars from the restored blob so maps never
+    # overlay a different content version after undo/redo.
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
         object.__setattr__(restored_page, "_labeler_page_id", page_id)
@@ -161,6 +170,7 @@ def _execute_history_op(
             source=PageSource.FILESYSTEM,
             payload=restored_page,
         )
+        apply_sidecars_to_page_state(pstate, restored_sidecars)
         pstate.generation += 1
     # Bump the project-state generation so SSE consumers refresh.
     project_state.set_page_state(page_index, pstate)

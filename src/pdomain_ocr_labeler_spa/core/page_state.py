@@ -254,6 +254,19 @@ def ensure_page_model(
         labeler_page_id = getattr(payload_obj, "_labeler_page_id", None)
         if labeler_page_id is not None:
             existing.page_id = labeler_page_id
+        # Wave 0.1: replace char sidecars whenever the page payload is replaced.
+        # Store loads stamp ``_labeler_sidecars``; fresh OCR has no stamp → clear.
+        from .labeler_sidecars import (
+            apply_sidecars_from_payload,
+            apply_sidecars_to_page_state,
+            sidecars_from_page,
+        )
+
+        stamped = sidecars_from_page(payload_obj) if payload_obj is not None else None
+        if stamped is not None:
+            apply_sidecars_from_payload(existing, payload_obj)
+        else:
+            apply_sidecars_to_page_state(existing, None)
         state._generation += 1
         return outcome
 
@@ -335,6 +348,7 @@ def save_page_content_to_store(
     page: Any,
     store: Any,  # LabelerPageStore — avoid circular import at runtime
     changes: list[dict[str, Any]] | None = None,
+    labeler_sidecars: Any | None = None,
 ) -> str:
     """Persist edited page *content* so it survives a fresh-store reload.
 
@@ -343,7 +357,8 @@ def save_page_content_to_store(
     reading the head provenance node's content blob would return the original
     OCR content and silently drop every edit (the #1 audit finding).
 
-    This function closes that gap: it serializes ``page.to_dict()`` to a new
+    This function closes that gap: it serializes ``page.to_dict()`` (plus an
+    optional ``labeler_sidecars`` section for char maps — Wave 0.1) to a new
     content-addressed blob and fires a ``LabelerEdited`` event whose provenance
     node carries that blob as its ``blob_refs``. Because the labeler node becomes
     the aggregate's new provenance head, ``load_page_from_store`` (which reads
@@ -359,6 +374,11 @@ def save_page_content_to_store(
         The project's ``LabelerPageStore``.
     changes:
         Optional typed-dict edit log appended to the aggregate's changelog.
+    labeler_sidecars:
+        Optional ``LabelerSidecars`` (or object accepted by
+        ``content_dict_with_sidecars``) embedded under ``labeler_sidecars`` in
+        the content blob. Pass the live ``PageState`` maps on every content
+        save so later GT edits do not wipe CharFixer data.
 
     Returns
     -------
@@ -370,8 +390,20 @@ def save_page_content_to_store(
 
     from pdomain_ops.pages import ProvenanceNode
 
+    from .labeler_sidecars import LabelerSidecars, content_dict_with_sidecars
+
+    sidecars: LabelerSidecars | None
+    if labeler_sidecars is None:
+        sidecars = None
+    elif isinstance(labeler_sidecars, LabelerSidecars):
+        sidecars = labeler_sidecars
+    else:
+        # Accept a PageState-like object with char_*_map attributes.
+        sidecars = LabelerSidecars.from_page_state(labeler_sidecars)
+
     agg = store.get_page(page_id)
-    content_hash = store.blobs.write(json.dumps(page.to_dict()).encode("utf-8"))
+    content = content_dict_with_sidecars(page, sidecars)
+    content_hash = store.blobs.write(json.dumps(content).encode("utf-8"))
     prov_node = ProvenanceNode(
         id=f"labeler-{datetime.now(UTC).isoformat()}",
         source="labeler",

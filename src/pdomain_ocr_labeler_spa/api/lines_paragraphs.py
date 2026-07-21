@@ -555,7 +555,13 @@ def _persist_content_best_effort(
     try:
         from ..core.page_state import save_page_content_to_store
 
-        save_page_content_to_store(page_id=pstate.page_id, page=page, store=store, changes=changes)
+        save_page_content_to_store(
+            page_id=pstate.page_id,
+            page=page,
+            store=store,
+            changes=changes,
+            labeler_sidecars=pstate,
+        )
     except Exception as exc:  # pragma: no cover - best-effort persistence
         log.warning("_persist_content_best_effort: store write failed page_id=%s: %s", pstate.page_id, exc)
 
@@ -1189,6 +1195,7 @@ def copy_gt_batch(
                     page=page,
                     store=store,
                     changes=[{"type": "copy_gt_batch", "scope": body.scope, "direction": body.direction}],
+                    labeler_sidecars=pstate,
                 )
             except Exception as exc:  # pragma: no cover - best-effort
                 log.warning("copy_gt_batch: store write failed page_id=%s: %s", pstate.page_id, exc)

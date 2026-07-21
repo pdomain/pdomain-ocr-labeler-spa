@@ -149,6 +149,7 @@ def handle_refine_bboxes(runner: JobRunner, job: Job) -> None:
                     page=page,
                     store=store,
                     changes=[{"type": "refine_bboxes", "scope": scope, "mode": mode, "refined": refined}],
+                    labeler_sidecars=pstate,
                 )
             except Exception as exc:  # pragma: no cover - best-effort persistence
                 log.warning("refine_bboxes: store write failed page_id=%s: %s", pstate.page_id, exc)

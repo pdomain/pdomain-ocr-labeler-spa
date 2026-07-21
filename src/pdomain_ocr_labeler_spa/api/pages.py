@@ -946,6 +946,7 @@ def save_page(
                     page=payload,
                     store=store,
                     changes=changes,
+                    labeler_sidecars=pstate,
                 )
             else:
                 # No live Page to re-serialize — record changelog only.
