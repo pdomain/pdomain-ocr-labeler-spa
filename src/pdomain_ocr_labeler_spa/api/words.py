@@ -1620,11 +1620,13 @@ def set_glyph_annotations(
     project_state: ProjectState = Depends(get_project_state),  # pyright: ignore[reportCallInDefaultInitializer]
     settings: Settings = Depends(get_settings),  # pyright: ignore[reportCallInDefaultInitializer]
     app_config: AppConfig = Depends(get_app_config),  # pyright: ignore[reportCallInDefaultInitializer]
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/glyph-annotations`` — set/clear word glyph annotations.
 
-    Sets ``WordMatch.glyph_annotations`` for the word and auto-saves to cache.
-    ``annotations=None`` clears back to "not reviewed" without touching predictions.
+    Writes ``PageState.glyph_annotations_map`` and best-effort content-blob
+    ``labeler_sidecars`` (Wave 2 T3). ``annotations=None`` clears back to
+    "not reviewed" without touching predictions.
 
     Spec: ``specs/20-glyph-annotations.md`` §6.1.
     """
@@ -1648,7 +1650,18 @@ def set_glyph_annotations(
             _ = pstate.glyph_annotations_map.pop(sidecar_key, None)
 
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        if not _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {
+                    "type": "set_glyph_annotations",
+                    "line_index": line_index,
+                    "word_index": word_index,
+                }
+            ],
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -1672,6 +1685,7 @@ def accept_glyph_prediction(
     project_state: ProjectState = Depends(get_project_state),  # pyright: ignore[reportCallInDefaultInitializer]
     settings: Settings = Depends(get_settings),  # pyright: ignore[reportCallInDefaultInitializer]
     app_config: AppConfig = Depends(get_app_config),  # pyright: ignore[reportCallInDefaultInitializer]
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/accept-prediction`` — confirm glyph predictions.
 
@@ -1715,7 +1729,18 @@ def accept_glyph_prediction(
         pstate.glyph_annotations_map[sidecar_key] = confirmed
 
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        if not _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {
+                    "type": "accept_glyph_prediction",
+                    "line_index": line_index,
+                    "word_index": word_index,
+                }
+            ],
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
 
     return _refresh_payload_response(
         project_id=project_id,
