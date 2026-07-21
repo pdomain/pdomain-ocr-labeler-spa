@@ -1333,8 +1333,9 @@ export interface paths {
          * Set Glyph Annotations
          * @description ``POST .../words/{li}/{wi}/glyph-annotations`` — set/clear word glyph annotations.
          *
-         *     Sets ``WordMatch.glyph_annotations`` for the word and auto-saves to cache.
-         *     ``annotations=None`` clears back to "not reviewed" without touching predictions.
+         *     Writes ``PageState.glyph_annotations_map`` and best-effort content-blob
+         *     ``labeler_sidecars`` (Wave 2 T3). ``annotations=None`` clears back to
+         *     "not reviewed" without touching predictions.
          *
          *     Spec: ``specs/20-glyph-annotations.md`` §6.1.
          */
