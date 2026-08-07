@@ -1,0 +1,7 @@
+{
+  "app_id": "pdomain-ocr-labeler-spa",
+  "display_name": "OCR Labeler",
+  "package": "pdomain-ocr-labeler-spa",
+  "default_port": 8080,
+  "icon": "ocr-labeler"
+}
