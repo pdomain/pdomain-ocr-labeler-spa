@@ -18,7 +18,7 @@ $(_goals):
 else
 
 .PHONY: help setup refresh-version install uninstall reset remove-venv lint fast-check format \
-        pre-commit-check test integration e2e exercise-real build clean ci dev run \
+        pre-commit-check update-hooks test integration e2e exercise-real build clean ci dev run \
         behavior-coverage \
         frontend-install frontend-build frontend-dev frontend-test frontend-knip \
         frontend-lint frontend-format frontend-format-check \
@@ -94,6 +94,7 @@ upgrade-deps: ## Upgrade dependency lockfile (refuses in a dev-local venv)
 	uv lock --upgrade
 	@echo "Syncing upgraded dependencies..."
 	uv sync --group dev
+	@$(MAKE) --no-print-directory update-hooks
 	@echo "Dependencies upgraded and environment synced."
 
 upgrade-deps-local: ## [deprecated] Use 'make local-upgrade-deps' instead
@@ -332,6 +333,13 @@ format: ## Format code with ruff
 
 pre-commit-check: ## Run pre-commit on all files
 	uv run pre-commit run --all-files
+
+update-hooks: ## Bump pinned pre-commit hook revisions in .pre-commit-config.yaml
+	@echo "⬆️  Updating pinned pre-commit hook revisions..."
+	@# The hook exits non-zero when it rewrites the config, which is the success
+	@# case here, so its status is not the target's status.
+	-@uv run pre-commit run pre-commit-update --all-files --hook-stage manual
+	@echo "✅ Hook revisions updated — review the .pre-commit-config.yaml diff."
 
 test: ## Run pytest (excludes e2e/ and slow/integration markers)
 	uv run pytest tests/ -v --ignore=tests/e2e -m "not slow and not integration" -n auto
