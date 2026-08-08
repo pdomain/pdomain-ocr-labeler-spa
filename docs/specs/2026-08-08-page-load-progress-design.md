@@ -31,12 +31,20 @@ Measured on 2026-08-07 and 2026-08-08 in this repo, on a machine reporting
 
 | What | Cost | How often |
 |---|---|---|
-| Detection model load (`db_resnet50`) | 15s | once per predictor-cache key |
-| Recognition model load (`crnn_vgg16_bn`) | 5s | once per predictor-cache key |
-| One page's OCR pass | 13s to 30s | once per page, per store miss |
+| Building the doctr predictor | 26.22s | once per predictor-cache key |
+| One page's OCR pass, predictor warm | 3s to 17s | once per page, per store miss |
 
-A first page open therefore costs about 33 seconds, and each later page costs 13 to 30 seconds.
-Three separate measurements of later pages on a clean store gave 30.18s, 17.06s, and 13.26s.
+A first page open therefore costs about 33 seconds. Later pages vary widely. One run of five
+consecutive uncached pages gave 22.17s, 3.08s, 3.76s, 9.98s, and 9.91s, where the first figure
+includes the predictor build. An earlier run on the same machine gave 30.18s, 17.06s, and 13.26s.
+That spread matters for the design: the cost of a single warm page is not predictable in advance.
+
+The predictor build is not a download. Measured in isolation with both weight files already on
+disk, at 102 MB for `db_resnet50` and 63 MB for `crnn_vgg16_bn` under `~/.cache/doctr/models`, the
+build still took 26.22s. Importing torch accounted for 3.59s and initialising the CUDA context for
+0.28s. The remaining time is deserialising the weights, constructing the model graph, and moving it
+to the device. A first-ever run pays a download on top of this, but a warm cache does not avoid the
+cost.
 
 The app has no way to say any of this. The page request runs OCR synchronously and returns only
 when everything is done.
@@ -95,9 +103,14 @@ channel.
 
 The page request keeps its existing synchronous check. It looks in the in-memory page state, then
 the store. When either hits, it returns the page as it does today, with no job and no added
-latency. Only a genuine miss, the case that would have blocked for 13 to 30 seconds, creates a job
-and returns a pending record with a job id. The SPA then subscribes to the stream it already
+latency. Only a genuine miss, the case that would have blocked for seconds to half a minute, creates
+a job and returns a pending record with a job id. The SPA then subscribes to the stream it already
 consumes and renders the stages above.
+
+A job here does not mean the work moves to the background and the user carries on elsewhere. The
+page view still waits, because there is nothing to show until the words arrive. The job exists so
+the wait can be described, not so it can be dismissed. What changes is that the waiting is confined
+to the page region instead of the whole app.
 
 `reload_ocr` is the working reference. It runs OCR on a worker thread through `asyncio.to_thread`,
 reports progress as it goes, and takes the project lock only afterwards to apply the outcome.
@@ -115,8 +128,20 @@ implementation. It is also adjacent to the Wave 3 job SSE work already tracked b
 backend.
 
 Create a job only when the work is known to be slow. That rule has a reliable trigger here, which is
-why the design works: a store miss means OCR must run, and OCR is the 13-to-30-second cost. A hit
-means the answer is already in hand. Nothing has to guess or predict a duration.
+why the design works: a store miss means OCR must run, and OCR is the multi-second cost. A hit means
+the answer is already in hand. Nothing has to guess or predict a duration.
+
+Do not branch further than that. It is tempting to skip the job when the predictor is already warm
+and the device is a GPU, on the theory that one page is then fast enough to just block. The
+measurements do not support it. Warm GPU pages ranged from 3.08s to 17.06s on the same machine and
+the same book, so the fast case is neither fast enough to hide nor predictable enough to bet on. A
+job costs milliseconds against a floor of three seconds, and a second code path costs a permanent
+maintenance burden plus a class of bug that only appears on slow hardware.
+
+The device and predictor state still matter, but as content rather than control flow. Report them.
+"Loading the OCR model, about 25 seconds" and "Running OCR on page 4" are different messages, and
+"Running on CPU" explains a wait that "Running OCR" does not. That is a display decision the SPA
+makes from the reported stage, not a branch the backend takes.
 
 Project open does not meet that bar and should not get a job. `POST /api/projects/load` measured
 12ms to 76ms on an 8-page book and 14ms to 81ms on a synthetic 500-page book. Wrapping that in a job
@@ -143,7 +168,7 @@ there.
 
 The minimum useful addition is an optional callback invoked at stage boundaries: weights resolved,
 detection model ready, recognition model ready, OCR pass starting, OCR pass complete. Without it,
-the labeler can only report "preparing the OCR engine" as one opaque 20-second block, because the
+the labeler can only report "preparing the OCR engine" as one opaque 26-second block, because the
 only signal available is doctr's own root-logger lines.
 
 This repo passes `auto_rotate=False` explicitly, so a page is one OCR pass. The cost does not
@@ -205,7 +230,7 @@ because it currently hides errors.
 ## Open questions
 
 Whether the OCR engine should warm up eagerly at server start is unresolved. Doing so moves the
-20-second model load off the first page open and into startup. That is better if the user always
+26-second predictor build off the first page open and into startup. That is better if the user always
 opens a page, and worse if they do not.
 
 Whether `pdomain-book-tools` should take a callback or emit structured events is also unresolved.
