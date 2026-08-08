@@ -94,20 +94,18 @@ Open findings (keyboard, XDG, RELOAD, HIER) remain in
 
 ### Wave 0 — data integrity
 
-| Issue | ID | Sev |
-| --- | --- | --- |
-| [`2026-07-21-sidecar-char-maps-not-durable.md`](2026-07-21-sidecar-char-maps-not-durable.md) | P0-SIDECAR-MAP | High |
-| [`2026-07-21-rematch-gt-not-durable.md`](2026-07-21-rematch-gt-not-durable.md) | P0-REMATCH | High |
-| [`2026-07-21-save-project-false-clean.md`](2026-07-21-save-project-false-clean.md) | P0-SAVE-DIRTY | High |
-| [`2026-07-21-mutation-store-silent-200.md`](2026-07-21-mutation-store-silent-200.md) | P1-MUTATION-200 | High |
+All four reports are resolved and deleted. See the 2026-08-08 tombstones in
+[`../context/decisions.md`](../context/decisions.md).
 
 ### Wave 1 — export loop
 
 | Issue | ID | Sev |
 | --- | --- | --- |
-| [`2026-07-21-export-list-api-empty.md`](2026-07-21-export-list-api-empty.md) | P0-EXPORT-LIST | High |
-| [`2026-07-21-cli-export-not-store-first.md`](2026-07-21-cli-export-not-store-first.md) | P0-CLI-STORE | High |
 | [`2026-07-21-export-normalize-flag-dead.md`](2026-07-21-export-normalize-flag-dead.md) | P1-NORMALIZE | Medium |
+
+The export-list and store-first-CLI reports are resolved and deleted; see the
+2026-08-08 tombstones in [`../context/decisions.md`](../context/decisions.md).
+The normalize report stays open on its frontend half.
 
 ### Wave 2 — M11 glyph
 

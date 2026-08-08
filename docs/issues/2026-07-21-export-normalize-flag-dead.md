@@ -108,9 +108,16 @@ can be set `True`; it does not assert job payload or export handler behavior.
 
 ## Defects to fix
 
-1. **Payload drop** — `start_export` does not put `normalize_recognition_labels` in the job payload.
-2. **Handler ignore** — export path never applies recognition-label normalization when requested.
+1. ~~**Payload drop** — `start_export` does not put `normalize_recognition_labels` in the job payload.~~
+   Fixed 2026-08-08 by the `fix/wave0-sidecar-durability` merge (`e59140d`).
+2. ~~**Handler ignore** — export path never applies recognition-label normalization when requested.~~
+   Fixed 2026-08-08 by the same merge; the export job now applies a
+   `labels.json` post-pass.
 3. **FE dead constant** — no control; always `false` (either wire a real option or stop sending a fake capability).
+   **Still open.** `frontend/src/components/ExportDialog.tsx:198` and
+   `frontend/src/components/drawer/BulkActions.tsx:109` both still hardcode
+   `normalize_recognition_labels: false`, so the backend capability is
+   unreachable from the UI. This is the only remaining work on this issue.
 
 ## Next steps
 
@@ -128,7 +135,9 @@ can be set `True`; it does not assert job payload or export handler behavior.
 - Text-normalization helpers elsewhere (if used by other features) are out of scope unless shared by this wire-up.
 - P0 export list and CLI store findings are independent
   (`2026-07-21-export-list-api-empty.md`,
-  `2026-07-21-cli-export-not-store-first.md`).
+  `2026-07-21-cli-export-not-store-first.md`). Both were resolved on
+  2026-08-08 and deleted; see the tombstones in
+  [`../context/decisions.md`](../context/decisions.md).
 
 ## Resolution
 

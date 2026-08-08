@@ -255,12 +255,12 @@ Each row is a governed issue under `docs/issues/`. Prefer implementing by issue
 
 | Wave | Issue file | Plan IDs |
 | --- | --- | --- |
-| 0 | [`docs/issues/2026-07-21-sidecar-char-maps-not-durable.md`](../issues/2026-07-21-sidecar-char-maps-not-durable.md) | P0-SIDECAR-MAP (char), 0.1–0.2, 0.6 |
-| 0 | [`docs/issues/2026-07-21-rematch-gt-not-durable.md`](../issues/2026-07-21-rematch-gt-not-durable.md) | P0-REMATCH, 0.3 |
-| 0 | [`docs/issues/2026-07-21-save-project-false-clean.md`](../issues/2026-07-21-save-project-false-clean.md) | P0-SAVE-DIRTY, 0.4 |
-| 0 | [`docs/issues/2026-07-21-mutation-store-silent-200.md`](../issues/2026-07-21-mutation-store-silent-200.md) | P1-MUTATION-200, 0.5 |
-| 1 | [`docs/issues/2026-07-21-export-list-api-empty.md`](../issues/2026-07-21-export-list-api-empty.md) | P0-EXPORT-LIST, 1.0–1.1 |
-| 1 | [`docs/issues/2026-07-21-cli-export-not-store-first.md`](../issues/2026-07-21-cli-export-not-store-first.md) | P0-CLI-STORE, 1.2–1.5 |
+| 0 | `2026-07-21-sidecar-char-maps-not-durable.md` — **resolved 2026-08-08**, deleted; see tombstone | P0-SIDECAR-MAP (char), 0.1–0.2, 0.6 |
+| 0 | `2026-07-21-rematch-gt-not-durable.md` — **resolved 2026-08-08**, deleted; see tombstone | P0-REMATCH, 0.3 |
+| 0 | `2026-07-21-save-project-false-clean.md` — **resolved 2026-08-08**, deleted; see tombstone | P0-SAVE-DIRTY, 0.4 |
+| 0 | `2026-07-21-mutation-store-silent-200.md` — **resolved 2026-08-08**, deleted; see tombstone | P1-MUTATION-200, 0.5 |
+| 1 | `2026-07-21-export-list-api-empty.md` — **resolved 2026-08-08**, deleted; see tombstone | P0-EXPORT-LIST, 1.0–1.1 |
+| 1 | `2026-07-21-cli-export-not-store-first.md` — **resolved 2026-08-08**, deleted; see tombstone | P0-CLI-STORE, 1.2–1.5 |
 | 1 | [`docs/issues/2026-07-21-export-normalize-flag-dead.md`](../issues/2026-07-21-export-normalize-flag-dead.md) | P1-NORMALIZE, 1.4 |
 | 2 | [`docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md`](../issues/2026-07-21-glyph-m11-usable-path-incomplete.md) | P0-GLYPH-*, Wave 2 / T1–T11 |
 | 3a | [`docs/issues/2026-07-21-job-sse-fe-be-shape-mismatch.md`](../issues/2026-07-21-job-sse-fe-be-shape-mismatch.md) | P1-JOB-SSE, P1-JOB-TYPE |

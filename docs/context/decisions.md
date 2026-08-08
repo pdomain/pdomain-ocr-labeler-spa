@@ -372,3 +372,97 @@ Expand the pydantic model with `page_count` and `tasks`; keep
 **Expand OpenAPI to the full multi-project disk document.** Would break the
 `list[ExportManifest]` route shape and FE history consumers for little gain;
 history is already keyed by `project_id` in the path.
+
+## 2026-08-08 — Wave 0 and Wave 1 issue reports retired
+
+The `fix/wave0-sidecar-durability` branch merged into master as `439fd15`,
+resolving six deep-review reports. Each is deleted per this repo's issue
+convention, which keeps `docs/issues/` as an index of open work only.
+
+Verified before retirement: `make ci` passes on the merged tree, and every
+report has a matching integration test in the merge.
+
+### [2026-08-08] Retired: char-fixer maps are not durable
+
+- Old path: `docs/issues/2026-07-21-sidecar-char-maps-not-durable.md`
+- Outcome: implemented
+- Superseded by: `src/pdomain_ocr_labeler_spa/core/labeler_sidecars.py`
+- Resolved by: `439fd15` (merge of `fix/wave0-sidecar-durability`)
+- Rationale kept: char range and bbox maps now serialize under
+  `labeler_sidecars` in the same `LabelerEdited` content blob as
+  `Page.to_dict`, hydrate on load and undo, and re-attach on every content
+  save. Evidence: `tests/integration/test_char_sidecar_store_roundtrip.py`.
+- Remaining work: none
+
+### [2026-08-08] Retired: rematch GT is not durable
+
+- Old path: `docs/issues/2026-07-21-rematch-gt-not-durable.md`
+- Outcome: implemented
+- Superseded by: `src/pdomain_ocr_labeler_spa/api/pages.py` (`rematch_gt`)
+- Resolved by: `439fd15` (merge of `fix/wave0-sidecar-durability`)
+- Rationale kept: rematch writes a content blob instead of the old no-op
+  envelope stub, and returns 503 `store_persist_failed` when the store write
+  fails rather than reporting success. Evidence:
+  `tests/integration/test_rematch_store_roundtrip.py`.
+- Remaining work: none
+
+### [2026-08-08] Retired: save-project reports false clean
+
+- Old path: `docs/issues/2026-07-21-save-project-false-clean.md`
+- Outcome: implemented
+- Superseded by:
+  `src/pdomain_ocr_labeler_spa/core/jobs/handlers/save_project.py`
+- Resolved by: `439fd15` (merge of `fix/wave0-sidecar-durability`)
+- Rationale kept: the dirty bit clears only after a content blob is written,
+  or after a deliberate no-store path. A skipped page and a changelog-only
+  save no longer advance the clean marker. Evidence:
+  `tests/integration/test_save_dirty_bit.py`.
+- Remaining work: none
+
+### [2026-08-08] Retired: word mutations return 200 on store failure
+
+- Old path: `docs/issues/2026-07-21-mutation-store-silent-200.md`
+- Outcome: implemented
+- Superseded by: `src/pdomain_ocr_labeler_spa/api/words.py`
+- Resolved by: `439fd15` (merge of `fix/wave0-sidecar-durability`)
+- Rationale kept: word mutators surface store write failures as 503
+  `store_persist_failed` instead of swallowing them behind a 200. Evidence:
+  `tests/integration/test_mutation_store_failure_status.py`.
+- Remaining work: none
+
+### [2026-08-08] Retired: export list API always empty
+
+- Old path: `docs/issues/2026-07-21-export-list-api-empty.md`
+- Outcome: implemented
+- Superseded by: `src/pdomain_ocr_labeler_spa/api/export.py` (`list_exports`)
+- Resolved by: `439fd15` (merge of `fix/wave0-sidecar-durability`)
+- Rationale kept: `list_exports` reads `doctr-export/manifest.json` from disk
+  through `_export_manifests_for_project` and remaps this project's entry to
+  `ExportManifest`, replacing the empty stub. Evidence:
+  `tests/integration/test_export_list_and_cli_store.py`.
+- Remaining work: none
+
+### [2026-08-08] Retired: export CLI is not store-first
+
+- Old path: `docs/issues/2026-07-21-cli-export-not-store-first.md`
+- Outcome: implemented
+- Superseded by:
+  `src/pdomain_ocr_labeler_spa/core/jobs/handlers/export_cli.py`
+- Resolved by: `439fd15` (merge of `fix/wave0-sidecar-durability`)
+- Rationale kept: the CLI opens the SPA event store for page discovery rather
+  than scanning envelopes only, and writes the doctr-export manifest after a
+  successful run. Evidence:
+  `tests/integration/test_export_list_and_cli_store.py`.
+- Remaining work: none
+
+### Kept open
+
+`docs/issues/2026-07-21-export-normalize-flag-dead.md` is NOT retired. The
+merge fixed its first two defects, the payload drop and the handler ignore,
+but the third stands: `ExportDialog.tsx:198` and `BulkActions.tsx:109` still
+hardcode `normalize_recognition_labels: false`, so the backend capability has
+no UI control. The report is annotated in place.
+
+`docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md` is NOT retired.
+The merge landed M11 T1 and T3 only, which its own commit message calls
+partial.
