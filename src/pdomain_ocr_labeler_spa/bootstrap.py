@@ -207,7 +207,7 @@ def _make_lifespan(
                 app="pdomain-ocr-labeler-spa",
             )
             log.debug("published shared path: doctr-export-root → %s", _export_root)
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.warning("publish_shared_path failed; continuing startup", exc_info=True)
 
         runner_task = asyncio.create_task(runner.run_forever())

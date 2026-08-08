@@ -525,6 +525,7 @@ def _write_cached_envelope_best_effort(
     response_model=PagePayload,
 )
 def update_word_ground_truth(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -579,6 +580,7 @@ def update_word_ground_truth(
     response_model=PagePayload,
 )
 def apply_style(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -647,6 +649,7 @@ def apply_style(
     response_model=PagePayload,
 )
 def apply_component(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -709,6 +712,7 @@ def apply_component(
     response_model=PagePayload,
 )
 def toggle_validated(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -781,6 +785,7 @@ def toggle_validated(
     response_model=PagePayload,
 )
 def validate_batch(
+    *,
     project_id: str,
     page_index: int,
     body: ValidateBatchRequest,
@@ -882,6 +887,7 @@ def _collect_validate_batch_targets(page: Any, body: ValidateBatchRequest) -> li
     response_model=PagePayload,
 )
 def delete_words_batch(
+    *,
     project_id: str,
     page_index: int,
     body: DeleteWordsBatchRequest,
@@ -937,6 +943,7 @@ def delete_words_batch(
     response_model=PagePayload,
 )
 def add_word(
+    *,
     project_id: str,
     page_index: int,
     body: AddWordRequest,
@@ -994,6 +1001,7 @@ def add_word(
     response_model=PagePayload,
 )
 def rebox_word(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -1059,6 +1067,7 @@ def rebox_word(
     response_model=PagePayload,
 )
 def nudge_bbox(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -1133,6 +1142,7 @@ def nudge_bbox(
     response_model=PagePayload,
 )
 def split_word(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -1207,6 +1217,7 @@ def split_word(
     response_model=PagePayload,
 )
 def merge_words(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -1280,6 +1291,7 @@ def merge_words(
     response_model=PagePayload,
 )
 def erase_pixels(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -1444,6 +1456,7 @@ class SetCharRangesRequest(BaseModel):
     response_model=PagePayload,
 )
 def set_char_ranges(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -1531,6 +1544,7 @@ class SetCharBboxesRequest(BaseModel):
     response_model=PagePayload,
 )
 def set_char_bboxes(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -1613,6 +1627,7 @@ class AcceptGlyphPredictionRequest(BaseModel):
     response_model=PagePayload,
 )
 def set_glyph_annotations(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -1678,6 +1693,7 @@ def set_glyph_annotations(
     response_model=PagePayload,
 )
 def accept_glyph_prediction(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,

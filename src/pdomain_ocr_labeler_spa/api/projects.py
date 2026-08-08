@@ -359,6 +359,7 @@ def discover_projects(
 
 @router.post("/load", response_model=LoadProjectResponse)
 def load_project(
+    *,
     body: LoadProjectRequest,
     request: Request,
     settings: Settings = Depends(get_settings),

@@ -694,6 +694,7 @@ def _line_mutation_handler(
     response_model=PagePayload,
 )
 def copy_line_gt_to_ocr(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -732,6 +733,7 @@ def copy_line_gt_to_ocr(
     response_model=PagePayload,
 )
 def copy_line_ocr_to_gt(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -767,6 +769,7 @@ def copy_line_ocr_to_gt(
     response_model=PagePayload,
 )
 def validate_line(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -823,6 +826,7 @@ def validate_line(
     response_model=PagePayload,
 )
 def delete_line(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -859,6 +863,7 @@ def delete_line(
     response_model=PagePayload,
 )
 def split_line_after_word_d1(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -913,6 +918,7 @@ def split_line_after_word_d1(
     response_model=PagePayload,
 )
 def set_line_gt(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -964,6 +970,7 @@ def set_line_gt(
     response_model=PagePayload,
 )
 def merge_lines(
+    *,
     project_id: str,
     page_index: int,
     body: MergeLinesRequest,
@@ -1017,6 +1024,7 @@ def merge_lines(
     response_model=PagePayload,
 )
 def split_by_words(
+    *,
     project_id: str,
     page_index: int,
     body: SplitByWordsRequest,
@@ -1149,6 +1157,7 @@ def _collect_copy_gt_targets(page: Any, body: CopyGtBatchRequest) -> list[Any]:
     response_model=PagePayload,
 )
 def copy_gt_batch(
+    *,
     project_id: str,
     page_index: int,
     body: CopyGtBatchRequest,
@@ -1214,6 +1223,7 @@ def copy_gt_batch(
     response_model=PagePayload,
 )
 def delete_lines_batch(
+    *,
     project_id: str,
     page_index: int,
     body: DeleteLinesBatchRequest,
@@ -1261,6 +1271,7 @@ def delete_lines_batch(
     response_model=PagePayload,
 )
 def delete_paragraphs_batch(
+    *,
     project_id: str,
     page_index: int,
     body: DeleteParagraphsBatchRequest,
@@ -1308,6 +1319,7 @@ def delete_paragraphs_batch(
     response_model=PagePayload,
 )
 def split_selected_paragraphs(
+    *,
     project_id: str,
     page_index: int,
     body: SplitSelectedParagraphsRequest,
@@ -1355,6 +1367,7 @@ def split_selected_paragraphs(
     response_model=PagePayload,
 )
 def group_selected_words_into_paragraph(
+    *,
     project_id: str,
     page_index: int,
     body: GroupSelectedWordsIntoParagraphRequest,
@@ -1469,6 +1482,7 @@ def _paragraph_mutation_handler(
     response_model=PagePayload,
 )
 def copy_paragraph_gt_to_ocr(
+    *,
     project_id: str,
     page_index: int,
     paragraph_index: int,
@@ -1507,6 +1521,7 @@ def copy_paragraph_gt_to_ocr(
     response_model=PagePayload,
 )
 def copy_paragraph_ocr_to_gt(
+    *,
     project_id: str,
     page_index: int,
     paragraph_index: int,
@@ -1542,6 +1557,7 @@ def copy_paragraph_ocr_to_gt(
     response_model=PagePayload,
 )
 def validate_paragraph(
+    *,
     project_id: str,
     page_index: int,
     paragraph_index: int,
@@ -1597,6 +1613,7 @@ def validate_paragraph(
     response_model=PagePayload,
 )
 def delete_paragraph(
+    *,
     project_id: str,
     page_index: int,
     paragraph_index: int,
@@ -1634,6 +1651,7 @@ def delete_paragraph(
     response_model=PagePayload,
 )
 def merge_paragraphs(
+    *,
     project_id: str,
     page_index: int,
     body: MergeParagraphsRequest,
@@ -1687,6 +1705,7 @@ def merge_paragraphs(
     response_model=PagePayload,
 )
 def patch_paragraph(
+    *,
     project_id: str,
     page_index: int,
     paragraph_index: int,
@@ -1755,6 +1774,7 @@ def patch_paragraph(
     response_model=PagePayload,
 )
 def copy_line_gt(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,
@@ -1854,6 +1874,7 @@ def merge_scope(
     response_model=PagePayload,
 )
 def split_paragraph_after_line(
+    *,
     project_id: str,
     page_index: int,
     paragraph_index: int,
@@ -1953,6 +1974,7 @@ def split_paragraph_after_line(
     response_model=PagePayload,
 )
 def split_line_with_selected_words(
+    *,
     project_id: str,
     page_index: int,
     line_index: int,

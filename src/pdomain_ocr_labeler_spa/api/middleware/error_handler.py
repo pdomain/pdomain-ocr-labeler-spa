@@ -134,13 +134,23 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
-        # ``logger.exception`` emits the full traceback at ERROR level
+        # ``exc_info=exc`` emits the full traceback at ERROR level
         # — combined with ``RequestIdFilter`` the operator gets one log
         # line per request with the correlation id and the full stack.
         # This fires UNCONDITIONALLY: the client-side response is always
         # a generic message (F-003 / #408), but operators correlate via
         # the X-Request-ID header against this log line.
-        log.exception("unhandled exception in %s %s", request.method, request.url.path)
+        #
+        # ``log.exception`` would read the traceback from ``sys.exc_info()``.
+        # That works inside an ``except`` block but this is an exception
+        # HANDLER, where the exception arrives as a parameter (LOG004).
+        # Passing ``exc`` explicitly does not depend on interpreter state.
+        log.error(
+            "unhandled exception in %s %s",
+            request.method,
+            request.url.path,
+            exc_info=exc,
+        )
         # The ``details`` field is gated on
         # ``Settings.debug_unhandled_traceback`` (D-040, Q-A11). Default
         # False (secure): no exception text or traceback crosses the wire.

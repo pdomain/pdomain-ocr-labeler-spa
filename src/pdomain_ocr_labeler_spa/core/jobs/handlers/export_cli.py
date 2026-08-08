@@ -176,6 +176,7 @@ def _open_store_and_images(
 
 
 async def _run_export(
+    *,
     data_root: Path,
     project_id: str,
     style_filters: list[str],

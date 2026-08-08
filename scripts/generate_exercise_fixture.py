@@ -164,6 +164,7 @@ def _make_png(width: int, height: int, page_num: int) -> bytes:
 def _word_node(
     text: str,
     gt_text: str,
+    *,
     x1: float,
     y1: float,
     x2: float,
@@ -266,7 +267,18 @@ def _build_page_items(page_index: int, gt_text: str) -> list[dict]:
             # exercise "Save Page → source badge flips" workflow)
             validated = page_index == 0 and i == 0
             confidence = 0.72 if ocr_word != gt_word else 0.94
-            word_nodes.append(_word_node(ocr_word, gt_word, wx1, y1, wx2, y2, confidence, validated))
+            word_nodes.append(
+                _word_node(
+                    ocr_word,
+                    gt_word,
+                    x1=wx1,
+                    y1=y1,
+                    x2=wx2,
+                    y2=y2,
+                    confidence=confidence,
+                    validated=validated,
+                )
+            )
 
         line_nodes.append(_line_node(word_nodes, left, y1, right, y2))
 

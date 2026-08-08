@@ -795,6 +795,7 @@ def _page_payload(
 
 @router.get("/{page_index}", response_model=PagePayload)
 def get_page(
+    *,
     project_id: str,
     page_index: int,
     background_tasks: BackgroundTasks,
@@ -873,6 +874,7 @@ def get_page(
 
 @router.post("/{page_index}/save", response_model=SavePageResponse)
 def save_page(
+    *,
     project_id: str,
     page_index: int,
     body: SavePageRequest,
@@ -1016,6 +1018,7 @@ def save_page(
 
 @router.post("/{page_index}/load", response_model=PagePayload)
 def load_page(
+    *,
     project_id: str,
     page_index: int,
     project_state: ProjectState = Depends(get_project_state),
@@ -1102,6 +1105,7 @@ def reload_ocr(
 
 @router.post("/{page_index}/rematch-gt", response_model=PagePayload)
 def rematch_gt(
+    *,
     project_id: str,
     page_index: int,
     body: RematchGtRequest,
@@ -1303,6 +1307,7 @@ def rotate_page(
 
 @router.post("/{page_index}/selection", response_model=PagePayload)
 def update_selection(
+    *,
     project_id: str,
     page_index: int,
     body: UpdateSelectionRequest,
@@ -1481,6 +1486,7 @@ class GlyphBulkMarkResponse(BaseModel):
 
 @router.post("/{page_index}/glyph-bulk-mark", response_model=GlyphBulkMarkResponse)
 def glyph_bulk_mark(
+    *,
     project_id: str,
     page_index: int,
     body: GlyphBulkMarkRequest,

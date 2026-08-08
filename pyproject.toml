@@ -63,7 +63,12 @@ dev = [
     "pytest-cov>=5.0",
     "pytest-xdist>=3.6",
     "psutil>=6.0",
-    "ruff>=0.15.13",
+    # Floor tracks the .pre-commit-config.yaml ruff-pre-commit pin. A lower
+    # floor lets the venv and the hook disagree: 0.16 promoted PLR0917 out of
+    # preview and re-scoped BLE001, so `make ci` ran pre-commit (0.16) which
+    # stripped a now-unused `# noqa: BLE001`, then `make lint` (0.15) raised
+    # BLE001 because the suppression was gone. Bump both together.
+    "ruff>=0.16.2",
     "httpx>=0.28",
     # httpx2 must be installed so starlette>=1.2's TestClient imports it
     # (starlette 1.2 does `import httpx2 as httpx` and emits StarletteDeprecationWarning

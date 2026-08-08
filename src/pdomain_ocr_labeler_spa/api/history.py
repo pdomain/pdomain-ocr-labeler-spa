@@ -188,6 +188,7 @@ def _execute_history_op(
 
 @router.post("/{page_index}/undo", response_model=PagePayload)
 def undo_page(
+    *,
     project_id: str,
     page_index: int,
     project_state: ProjectState = Depends(get_project_state),  # pyright: ignore[reportCallInDefaultInitializer]
@@ -214,6 +215,7 @@ def undo_page(
 
 @router.post("/{page_index}/redo", response_model=PagePayload)
 def redo_page(
+    *,
     project_id: str,
     page_index: int,
     project_state: ProjectState = Depends(get_project_state),  # pyright: ignore[reportCallInDefaultInitializer]
