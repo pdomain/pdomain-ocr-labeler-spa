@@ -12,6 +12,7 @@ panel) to render, then saves a 1920x1080 PNG to
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -19,6 +20,20 @@ import threading
 import time
 import urllib.request
 from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# DISPLAY hygiene — same guard as tests/e2e/conftest.py::pytest_configure.
+#
+# A stale DISPLAY (the devcontainer X-forwarding socket VS Code injects as
+# DISPLAY=:0 / REMOTE_CONTAINERS_DISPLAY_SOCK, with no X server answering on
+# it) wedges headless chromium's frame production: requestAnimationFrame
+# never fires, so the screenshot below hangs until its timeout instead of
+# failing loudly. Chromium flags do not override this; only removing the
+# variable does. Headless chromium needs no X server at all, so drop DISPLAY
+# before the browser subprocess inherits it. This script does not load the
+# e2e conftest, so it needs its own copy of the guard.
+# ---------------------------------------------------------------------------
+_ = os.environ.pop("DISPLAY", None)
 
 # ---------------------------------------------------------------------------
 # Resolve project root (works whether script is run from repo root or
