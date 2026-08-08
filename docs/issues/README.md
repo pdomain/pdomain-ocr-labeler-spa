@@ -144,6 +144,7 @@ Open findings (keyboard, XDG, RELOAD, HIER) remain in
 
 | Issue | ID | Sev |
 | --- | --- | --- |
+| [`2026-08-08-page-load-progress-unbuilt.md`](2026-08-08-page-load-progress-unbuilt.md) | P0-PAGE-PROGRESS | High |
 | [`2026-08-08-get-page-hides-ocr-failures.md`](2026-08-08-get-page-hides-ocr-failures.md) | P1-PAGE-SILENT | Medium |
 
 Resolved reports are deleted, so this index tracks open work only. Past
