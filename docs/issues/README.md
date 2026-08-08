@@ -147,6 +147,12 @@ Open findings (keyboard, XDG, RELOAD, HIER) remain in
 | [`2026-08-08-page-load-progress-unbuilt.md`](2026-08-08-page-load-progress-unbuilt.md) | P0-PAGE-PROGRESS | High |
 | [`2026-08-08-get-page-hides-ocr-failures.md`](2026-08-08-get-page-hides-ocr-failures.md) | P1-PAGE-SILENT | Medium |
 
+## Tooling (2026-08-08)
+
+| Issue | ID | Sev |
+| --- | --- | --- |
+| [`2026-08-08-ruff-version-skew.md`](2026-08-08-ruff-version-skew.md) | P1-RUFF-SKEW | Medium |
+
 Resolved reports are deleted, so this index tracks open work only. Past
 resolutions live in the `docs/context/decisions.md` tombstones and in git
 history.
