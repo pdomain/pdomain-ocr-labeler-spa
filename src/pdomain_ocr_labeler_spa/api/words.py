@@ -27,9 +27,10 @@ Pd-book-tools method mapping (spec §9 names → actual pdomain-book-tools API):
 - ``page.add_word(bbox, text)`` → ``Page.add_word_to_page(x1, y1, x2, y2, text)``
   (closest-line picked automatically; ``line_index`` request field is
   informational, not enforced).
-- ``word.rebox(bbox)`` → ``Page.rebox_word(li, wi, x1, y1, x2, y2)``.
+- ``word.rebox(bbox)`` → ``Page.rebox_word(li, wi, x1=x1, y1=y1, x2=x2, y2=y2)``.
 - ``word.nudge(left, right, top, bottom)`` →
-  ``Page.nudge_word_bbox(li, wi, left, right, top, bottom, refine_after)``.
+  ``Page.nudge_word_bbox(li, wi, left_delta=left, right_delta=right,
+  top_delta=top, bottom_delta=bottom, refine_after=refine_after)``.
 - ``word.split(orientation, marker_position)`` →
   ``Page.split_word(li, wi, split_fraction)`` — horizontal only;
   vertical split returns 400 ``mutation_failed``.
@@ -977,8 +978,8 @@ def rebox_word(
     """``POST .../words/{li}/{wi}/rebox`` — replace the word's bounding box.
 
     Spec 23 §9 row 7: ``word.rebox(bbox)`` →
-    ``Page.rebox_word(li, wi, x1, y1, x2, y2)`` in pdomain-book-tools
-    (``pdomain_book_tools/ocr/page.py:2043``).
+    ``Page.rebox_word(li, wi, x1=x1, y1=y1, x2=x2, y2=y2)`` in
+    pdomain-book-tools (``pdomain_book_tools/ocr/page.py:2043``).
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -995,7 +996,7 @@ def rebox_word(
         if word is None:
             return _word_not_found(line_index, word_index)
         x1, y1, x2, y2 = _bbox_to_coords(body.bbox)
-        ok = page.rebox_word(line_index, word_index, x1, y1, x2, y2)
+        ok = page.rebox_word(line_index, word_index, x1=x1, y1=y1, x2=x2, y2=y2)
         if not ok:
             return _mutation_failed(
                 f"rebox_word rejected line={line_index} word={word_index} bbox=({x1}, {y1}, {x2}, {y2})"
@@ -1041,9 +1042,9 @@ def nudge_bbox(
     """``POST .../words/{li}/{wi}/nudge`` — nudge bbox edges by pixel offsets.
 
     Spec 23 §9 row 8: ``word.nudge(left, right, top, bottom)`` →
-    ``Page.nudge_word_bbox(li, wi, left, right, top, bottom,
-    refine_after)`` in pdomain-book-tools
-    (``pdomain_book_tools/ocr/page.py:2571``).
+    ``Page.nudge_word_bbox(li, wi, left_delta=left, right_delta=right,
+    top_delta=top, bottom_delta=bottom, refine_after=refine_after)`` in
+    pdomain-book-tools (``pdomain_book_tools/ocr/page.py:2571``).
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -1062,11 +1063,11 @@ def nudge_bbox(
         ok = page.nudge_word_bbox(
             line_index,
             word_index,
-            body.left,
-            body.right,
-            body.top,
-            body.bottom,
-            body.refine_after,
+            left_delta=body.left,
+            right_delta=body.right,
+            top_delta=body.top,
+            bottom_delta=body.bottom,
+            refine_after=body.refine_after,
         )
         if not ok:
             return _mutation_failed(
