@@ -72,9 +72,9 @@ Name the stage, not a percentage. The user needs to know which slow thing is hap
 it is progressing.
 
 1. **Opening the project** — enumerating images, reading the page manifest, probing for
-   ground truth, opening the event store. This stage belongs to `POST /api/projects/load`, not to
-   the page endpoint, so it needs the same treatment applied there. See the note under the
-   recommendation.
+   ground truth, opening the event store. This one needs a label, not a job. Measured on
+   2026-08-08, `POST /api/projects/load` took 12ms to 76ms on an 8-page book and 14ms to 81ms on a
+   synthetic 500-page book, so it does not scale with page count in any way a user notices.
 2. **Preparing the OCR engine** — resolving the compute device, fetching or verifying model
    weights, loading the detection model, loading the recognition model. Report this only when it
    runs. The predictor cache is keyed on detection model, recognition model, and revision, so the
@@ -114,10 +114,21 @@ This does change the page endpoint's contract on the miss path, so the shape nee
 implementation. It is also adjacent to the Wave 3 job SSE work already tracked between frontend and
 backend.
 
-Stage 1 sits on a different endpoint. `POST /api/projects/load` does the project-open work and needs
-the same treatment. It should report through the same stream, so the SPA renders one continuous
-sequence rather than two disconnected waits. Doing the page endpoint alone would leave the first
-half of the delay unexplained, so both belong in the same piece of work.
+Create a job only when the work is known to be slow. That rule has a reliable trigger here, which is
+why the design works: a store miss means OCR must run, and OCR is the 13-to-30-second cost. A hit
+means the answer is already in hand. Nothing has to guess or predict a duration.
+
+Project open does not meet that bar and should not get a job. `POST /api/projects/load` measured
+12ms to 76ms on an 8-page book and 14ms to 81ms on a synthetic 500-page book. Wrapping that in a job
+would add machinery, a round trip, and a stream subscription to work that finishes faster than the
+subscription is set up.
+
+The mislabelling is the actual defect for stage 1. The SPA shows "Loading project" from
+`BusyOverlay` and `ProjectRouteGate` while the page fetch is what blocks. In the reproduction on
+2026-08-08 the load call returned in the same second it started, and the following 33 seconds were
+the page request. So a user watching "Loading project" for half a minute is reading a message about
+a step that finished immediately. Naming the real stage fixes most of the confusion before any job
+work lands.
 
 ## Coordination with the sibling libraries
 
@@ -150,6 +161,24 @@ exists here, as `describe_device()`.
 The gap is local and small. `__main__.py` prints `describe_device()` once as a CLI boot banner and
 nothing exposes it over HTTP. Surfacing it is labeler work, not a coordination item.
 
+## Where each status appears
+
+These are two different waits and they belong in two different places.
+
+Project open is a whole-view wait, and it is over in milliseconds. It keeps the existing overlay
+treatment. Nothing about it needs to change except that it should stop claiming the page-load time
+as its own.
+
+First-page OCR is a region wait. The project is open by then, so the shell should render and be
+usable: the rail, header, page list, and panels are all backed by data that has already arrived.
+Only the page view is waiting. Put the OCR status there, in the canvas region, and leave the rest
+of the app interactive.
+
+That distinction is not only cosmetic. During a 13-to-30-second OCR pass a user can reasonably want
+to scan the page list, change the OCR config, or switch to a page whose results are already stored.
+A full-view overlay blocks all of it for no reason, since the only thing actually unavailable is one
+page's words.
+
 ## Acceptance criteria
 
 - Opening a page that needs OCR shows a named stage within one second, not a bare spinner.
@@ -158,8 +187,10 @@ nothing exposes it over HTTP. Surfacing it is labeler work, not a coordination i
 - An OCR failure reaches the screen with its error, and is distinguishable from a page with no text.
 - A page served from a warm store still returns immediately, with no added latency from the
   progress machinery, and creates no job.
-- Opening a project reports its stages through the same stream as the page load, so the two waits
-  read as one sequence.
+- Project open creates no job, and its overlay clears as soon as the project data arrives rather
+  than persisting through the page fetch.
+- While a page is being OCR'd, the OCR status sits in the page region and the rest of the shell
+  stays interactive.
 
 ## Non-goals
 
