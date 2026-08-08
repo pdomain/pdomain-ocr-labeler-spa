@@ -136,6 +136,12 @@ Open findings (keyboard, XDG, RELOAD, HIER) remain in
 | [`2026-07-21-jobs-api-openapi-mismatch.md`](2026-07-21-jobs-api-openapi-mismatch.md) | P1-JOBS-API | Medium |
 | [`2026-07-21-project-list-metadata-filters-noop.md`](2026-07-21-project-list-metadata-filters-noop.md) | P2-ROOT | Medium |
 
+## Page-load status (2026-08-08)
+
+| Issue | ID | Sev |
+| --- | --- | --- |
+| [`2026-08-08-get-page-hides-ocr-failures.md`](2026-08-08-get-page-hides-ocr-failures.md) | P1-PAGE-SILENT | Medium |
+
 ## Resolved issues
 
 - *None yet for the deep-review split set.*
