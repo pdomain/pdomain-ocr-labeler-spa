@@ -142,22 +142,76 @@ $ gh api repos/pdomain/pdomain-ocr-labeler-spa --jq '.delete_branch_on_merge'
 false
 ```
 
+### 6. GitHub Actions is disabled for the entire repository — this is the confirmed root cause
+
+```text
+$ gh api repos/pdomain/pdomain-ocr-labeler-spa/actions/permissions --jq '.enabled'
+false
+
+$ gh run list --repo pdomain/pdomain-ocr-labeler-spa --limit 1 --json createdAt,workflowName
+[{"createdAt":"2026-07-12T10:08:58Z","workflowName":"Dependency Graph"}]
+
+$ gh api repos/pdomain/pdomain-book-tools/actions/permissions --jq '.enabled'
+true
+```
+
+Actions is disabled at the repository level, not per-workflow, so the block
+applies to every workflow — `dep-refresh` included — not to dep-refresh
+specifically. The repository's last recorded run of any kind, of any
+workflow, is the `Dependency Graph` auto-workflow on 2026-07-12; nothing has
+run since. For contrast, the peer repo `pdomain-book-tools` has Actions
+enabled (`.enabled` = `true`) and its own `dep-refresh` has run on schedule
+through 2026-08-02.
+
+The consequence is larger than this report's original design-gap scope: this
+repository has had no CI of any kind for nearly a month. Every pull request
+merged here since 2026-07-12 was merged without a single status check
+running.
+
 ## Root-cause hypotheses
 
-1. **(Most likely) The schedule trigger has not fired since the workflow was
-   added.** Zero runs across ~10 possible Sunday windows, combined with zero
-   PRs or branches of any dep-refresh shape, is consistent only with "never
-   invoked," not with "ran and cleaned up correctly." Why the schedule has not
-   fired could not be confirmed from repo-scoped data — candidates include an
+1. **(Confirmed) GitHub Actions is disabled for the entire repository, which
+   blocks every workflow including `dep-refresh`.** See Evidence item 6.
+   `actions/permissions.enabled` is `false`; the last workflow run of any kind
+   was 2026-07-12. This fully accounts for the "zero runs" observation in
+   items 1 and 3 — no token or permissions-gap investigation is needed. The
+   cron in `dep-refresh.yml` (`0 2 * * 0`) is unchanged and identical to the
+   seven repos still running weekly, so no workflow-file edit is needed to
+   restore the schedule; re-enabling Actions is sufficient.
+
+   Five repos went dark on the same date, 2026-07-12: this repo,
+   `pdomain-ocr-synth`, `pdomain-ocr-trainer-spa`, `pdomain-ocr-training`, and
+   `pdomain-prep-for-pgdp`. The other seven repos in the workspace have run
+   weekly through 2026-08-02. One date across five repos points at a single
+   deliberate action rather than five coincidences. 2026-07-12 is also the
+   date of the main-to-master default-branch rename and of a batch closure of
+   stale dependency pull requests across several repos — but a causal link
+   between either of those events and the Actions-disable has not been
+   established from repo-scoped data.
+
+   Whether disabling Actions was intentional and temporary, or a side effect
+   of that day's other work, cannot be answered from this repo's data alone.
+   If it was deliberate, the resolution to this issue should say so, and the
+   remaining recommendations become dormant pending that decision rather than
+   wrong.
+
+2. **(Demoted — cause now confirmed as #1) The schedule trigger has not fired
+   since the workflow was added.** Zero runs across ~10 possible Sunday
+   windows, combined with zero PRs or branches of any dep-refresh shape, is
+   consistent only with "never invoked," not with "ran and cleaned up
+   correctly." At the time this was first written, why the schedule had not
+   fired could not be confirmed from repo-scoped data — candidates included an
    org-level Actions/schedule restriction or a `DEP_REFRESH_TOKEN` /
-   permissions gap that prevents the run from even starting, but no run record
-   exists to inspect for either.
-2. **The accumulate-and-stick design defect is present regardless of #1.**
-   Independent of why the schedule hasn't fired, the workflow as written
-   (dated branch name, `delete_branch_on_merge: false`, no PR-reuse or re-arm
-   logic) is structurally identical to the pre-fix `pdomain-ui` workflow that
-   produced four stuck PRs. Fixing #1 without fixing this would just delay the
-   first occurrence of the same failure.
+   permissions gap. Evidence item 6 resolves this: Actions is disabled
+   repository-wide, which blocks the schedule (and every other trigger)
+   outright, so no token or permissions investigation is needed.
+3. **The accumulate-and-stick design defect is present independent of #1.**
+   Independent of why Actions was disabled, the workflow as written (dated
+   branch name, `delete_branch_on_merge: false`, no PR-reuse or re-arm logic)
+   is structurally identical to the pre-fix `pdomain-ui` workflow that
+   produced four stuck PRs. If Actions is re-enabled without also fixing this
+   design gap, the same failure mode would appear on the first red or
+   unmerged week.
 
 ## Defects to fix
 
@@ -178,6 +232,15 @@ false
 
 ## Next steps
 
+0. **Decide whether to re-enable GitHub Actions — before anything else.** This
+   is a workspace-level decision, not a per-repo one: the same disable event
+   affects five repos (this one, `pdomain-ocr-synth`, `pdomain-ocr-trainer-spa`,
+   `pdomain-ocr-training`, and `pdomain-prep-for-pgdp`), so it should be
+   answered for all five together, not piecemeal. Nothing else in this report
+   is testable until this decision is made — steps 1 and 2 below both require
+   Actions to be running before their effects can be observed. If the disable
+   is confirmed deliberate and meant to stay, steps 1 and 2 become dormant
+   rather than wrong.
 1. Apply the `pdomain-ui` design fix ahead of the first real failure, per the
    design spec at `pdomain-ui/docs/specs/2026-07-16-dep-refresh-auto-land-design.md`
    (a different repo; read-only reference, not adopted by this repo). Its
