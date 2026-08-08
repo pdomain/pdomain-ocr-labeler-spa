@@ -359,8 +359,7 @@ def _write_export_manifest(
         )
 
         task_map: dict[str, DoctrExportTaskStats] = {
-            ts.task: DoctrExportTaskStats(task=ts.task, item_count=ts.item_count)
-            for ts in task_stats
+            ts.task: DoctrExportTaskStats(task=ts.task, item_count=ts.item_count) for ts in task_stats
         }
         existing_projects[project_id] = DoctrExportProject(
             exported_at=exported_at,
@@ -602,10 +601,7 @@ def test_export_writes_manifest(client_with_export) -> None:  # pyright: ignore[
                 break
 
     manifest_path = data_root / "doctr-export" / "manifest.json"
-    assert manifest_path.exists(), (
-        f"manifest.json not created at {manifest_path}; "
-        f"SSE events seen: {events}"
-    )
+    assert manifest_path.exists(), f"manifest.json not created at {manifest_path}; SSE events seen: {events}"
     data = json.loads(manifest_path.read_text())
     assert data["schema"] == "pdomain.doctr-export-manifest"
     assert "test-proj" in data["projects"]
@@ -1278,9 +1274,7 @@ def test_send_to_trainer_hidden_when_not_installed(page: Page, live_server: Live
     # The live server's registry has no trainer app registered — check directly
     installed_resp = httpx.get(f"{live_server.base_url}/api/suite/installed", timeout=5)
     installed = installed_resp.json()
-    trainer_present = any(
-        a.get("app_id") == "pdomain-ocr-trainer-spa" for a in installed
-    )
+    trainer_present = any(a.get("app_id") == "pdomain-ocr-trainer-spa" for a in installed)
     if trainer_present:
         pytest.skip("trainer app is installed in this environment — skip 'hidden' test")
 

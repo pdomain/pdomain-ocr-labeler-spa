@@ -83,7 +83,7 @@ manual rotate buttons stack on top.
 ```python
 class PageRecord(BaseModel):
     ...
-    rotation_degrees: int = 0           # canonical rotation applied
+    rotation_degrees: int = 0  # canonical rotation applied
     rotation_source: Literal["none", "auto", "manual"] = "none"
 ```
 

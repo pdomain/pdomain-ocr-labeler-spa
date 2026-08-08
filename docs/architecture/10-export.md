@@ -144,12 +144,12 @@ async def export_pages(
 ```python
 class ExportRequest(BaseModel):
     scope: Literal["current", "all_validated"]
-    style_filters: list[str] = []     # empty == "All"
+    style_filters: list[str] = []  # empty == "All"
     component_filter: str | None = None
     include_classification: bool = False
     detection_only: bool = False
     recognition_only: bool = False
-    page_index: int | None = None     # required when scope=="current"
+    page_index: int | None = None  # required when scope=="current"
 ```
 
 The handler in `core/jobs/handlers/export.py`:
@@ -168,8 +168,9 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
 
         # WordFilter applied per style group
         for style_filter in req.style_filters or [None]:
-            wf = WordFilter(style_labels=[style_filter] if style_filter else None,
-                            component=req.component_filter)
+            wf = WordFilter(
+                style_labels=[style_filter] if style_filter else None, component=req.component_filter
+            )
             DocTRExportOperations.export_for_page(
                 page=page_state.page,
                 output_dir=output_dir_for(req, style_filter, project),

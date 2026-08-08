@@ -134,20 +134,22 @@ class Settings(BaseSettings):
     log_format: Literal["plain", "json"] = "plain"
     request_id_header: str = "X-Request-ID"
 
-    config_root: Path = ...      # OS default; see 01-data-models §5
+    config_root: Path = ...  # OS default; see 01-data-models §5
     data_root: Path = ...
     cache_root: Path = ...
 
-    storage_backend: Literal["filesystem", "s3"] = "filesystem"   # s3 = NotImplementedYet (D-019)
+    storage_backend: Literal["filesystem", "s3"] = "filesystem"  # s3 = NotImplementedYet (D-019)
     auth_mode: Literal["none"] = "none"
-    ocr_engine: Literal["local_doctr", "modal", "shared_container"] = "local_doctr"  # modal/shared_container = NotImplementedYet (D-018)
+    ocr_engine: Literal["local_doctr", "modal", "shared_container"] = (
+        "local_doctr"  # modal/shared_container = NotImplementedYet (D-018)
+    )
 
     # Project discovery
     source_projects_root: Path | None = None
-    cli_project_dir: Path | None = None        # set by --project-dir
+    cli_project_dir: Path | None = None  # set by --project-dir
 
     # Frontend dev
-    frontend_dev_url: str | None = None        # e.g. http://localhost:5173
+    frontend_dev_url: str | None = None  # e.g. http://localhost:5173
 
     # Job runner
     poll_interval_seconds: float = 0.5
@@ -156,7 +158,7 @@ class Settings(BaseSettings):
     hf_repo: str = "pdomain/pdomain-ocr-models"
     no_prefetch: bool = False
 
-    mode: Literal["normal", "api_only"] = "normal"   # api_only skips SPA mount
+    mode: Literal["normal", "api_only"] = "normal"  # api_only skips SPA mount
 ```
 
 `Settings` is read **once** in `__main__.main()` and passed into
@@ -433,23 +435,30 @@ delete). Single-word style/validate/nudge/crop/refine return just the updated
 def get_settings(request: Request) -> Settings:
     return request.app.state.settings
 
+
 def get_storage(request: Request) -> IStorage:
     return request.app.state.storage
+
 
 def get_auth(request: Request) -> IAuth:
     return request.app.state.auth
 
+
 def get_ocr_engine(request: Request) -> IOCREngine:
     return request.app.state.ocr_engine
+
 
 def get_app_state(request: Request) -> AppState:
     return request.app.state.app_state
 
+
 def get_job_runner(request: Request) -> JobRunner:
     return request.app.state.job_runner
 
+
 def get_job_events(request: Request) -> JobEventBroker:
     return request.app.state.job_events
+
 
 async def get_user(request: Request) -> UserContext:
     auth: IAuth = request.app.state.auth
@@ -470,8 +479,7 @@ async def get_page(
     line_filter: LineFilter = LineFilter.UNVALIDATED,
     user: UserContext = Depends(get_user),
     state: AppState = Depends(get_app_state),
-) -> PagePayload:
-    ...
+) -> PagePayload: ...
 ```
 
 `get_user` is consumed by every route; `auth.none_` returns the same
@@ -510,6 +518,7 @@ unused. Keep the seam.
 ```python
 class IAuth(Protocol):
     async def verify(self, creds: HTTPAuthorizationCredentials | None) -> UserContext: ...
+
 
 class UserContext(BaseModel):
     user_id: str

@@ -339,6 +339,7 @@ def _default_data_root() -> Path:
     base = Path(xdg).expanduser() if xdg else Path.home() / ".local" / "share"
     return base / "pdomain-ocr-labeler-spa"
 
+
 data_root: Path = Field(default_factory=_default_data_root)
 ```
 
@@ -537,8 +538,7 @@ of skip:
 
 ```python
 assert _select_first_word_via_hierarchy(page), (
-    "exercise-fixture page 1 must expose hierarchy word nodes; "
-    "got empty tree (BUG-HIER-1)"
+    "exercise-fixture page 1 must expose hierarchy word nodes; got empty tree (BUG-HIER-1)"
 )
 ```
 

@@ -66,15 +66,17 @@ Docstring: when `True`, recognition `labels.json` strings are normalised
 Same file — `start_export` submits:
 
 ```python
-payload={
-    "scope": body.scope.value,
-    "page_index": body.page_index,
-    "style_filters": body.style_filters,
-    "component_filter": body.component_filter,
-    "include_classification": body.include_classification,
-    "detection_only": body.detection_only,
-    "recognition_only": body.recognition_only,
-},
+payload = (
+    {
+        "scope": body.scope.value,
+        "page_index": body.page_index,
+        "style_filters": body.style_filters,
+        "component_filter": body.component_filter,
+        "include_classification": body.include_classification,
+        "detection_only": body.detection_only,
+        "recognition_only": body.recognition_only,
+    },
+)
 ```
 
 No `normalize_recognition_labels`.

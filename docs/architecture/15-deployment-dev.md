@@ -266,9 +266,7 @@ class SpaCheckHook(BuildHookInterface):
             return
         index = Path("src/pdomain_ocr_labeler_spa/static/index.html")
         if not index.exists():
-            raise RuntimeError(
-                "SPA bundle not found. Run `make frontend-build` first."
-            )
+            raise RuntimeError("SPA bundle not found. Run `make frontend-build` first.")
 ```
 
 ### 5.3 Sdist

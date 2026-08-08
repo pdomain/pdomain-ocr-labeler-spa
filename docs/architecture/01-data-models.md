@@ -40,20 +40,21 @@ Conventions:
 
 ```python
 class Project(BaseModel):
-    project_id: str             # derived from project_root.name
-    project_root: Path          # absolute path to project dir
-    image_paths: list[Path]     # sorted list of page image files
+    project_id: str  # derived from project_root.name
+    project_root: Path  # absolute path to project dir
+    image_paths: list[Path]  # sorted list of page image files
     ground_truth_map: dict[str, str]  # normalized mapping
     version: str = "1.0"
     source_lib: str = "doctr-pdomain-labeled"
-    total_pages: int            # == len(image_paths)
+    total_pages: int  # == len(image_paths)
     saved_pages: int = 0
     current_page_index: int = 0
     include_images: bool = True
     copied_images: bool = False
 
     @property
-    def page_count(self) -> int: return len(self.image_paths)
+    def page_count(self) -> int:
+        return len(self.image_paths)
 ```
 
 `from_dict` / `to_dict` for `project.json` round-trip
@@ -97,16 +98,16 @@ Same five values as legacy `WordMatch.match_status`.
 ```python
 class WordMatch(BaseModel):
     line_index: int
-    word_index: int | None    # None when unmatched_gt
+    word_index: int | None  # None when unmatched_gt
     ocr_text: str
     ground_truth_text: str
     match_status: MatchStatus
     fuzz_score: float | None = None
     is_validated: bool = False
-    text_style_labels: list[str] = []        # italics, small_caps, ...
-    word_components: list[str] = []          # footnote_marker, drop_cap, ...
-    bbox: BBox                               # always present (placeholder for unmatched_gt)
-    word_id: str | None = None               # stable id from pdomain_book_tools
+    text_style_labels: list[str] = []  # italics, small_caps, ...
+    word_components: list[str] = []  # footnote_marker, drop_cap, ...
+    bbox: BBox  # always present (placeholder for unmatched_gt)
+    word_id: str | None = None  # stable id from pdomain_book_tools
 ```
 
 `text_style_labels` / `word_components` come from
@@ -156,9 +157,9 @@ display pixels). The SPA scales for display via the
 class EncodedDims(BaseModel):
     src_width: int
     src_height: int
-    display_width: int     # == src_width clamped to 1200
-    display_height: int    # proportional, integer math
-    scale: float           # display_width / src_width
+    display_width: int  # == src_width clamped to 1200
+    display_height: int  # proportional, integer math
+    scale: float  # display_width / src_width
 ```
 
 Same algorithm as legacy
@@ -185,7 +186,7 @@ Tuple-set serialises as list-of-pairs over the wire.
 
 ```python
 class LineFilter(StrEnum):
-    UNVALIDATED = "unvalidated"   # default
+    UNVALIDATED = "unvalidated"  # default
     MISMATCHED = "mismatched"
     ALL = "all"
 ```
@@ -204,26 +205,31 @@ strict: `<Verb><Noun>Request` / `<Verb><Noun>Response`.
 
 ```python
 class ListProjectsResponse(BaseModel):
-    projects: list[ProjectKey]   # see below
+    projects: list[ProjectKey]  # see below
     selected: str | None
     projects_root: Path
     config_source: Literal["yaml", "cli", "default"]
 
+
 class ProjectKey(BaseModel):
     project_id: str
     project_root: Path
-    label: str                  # display label (project_id with dedup suffix)
+    label: str  # display label (project_id with dedup suffix)
+
 
 class LoadProjectRequest(BaseModel):
     project_root: Path
     initial_page_index: int = 0
 
+
 class LoadProjectResponse(BaseModel):
     project: Project
-    current_page: PagePayload   # eagerly fetched first page
+    current_page: PagePayload  # eagerly fetched first page
+
 
 class SetSourceProjectsRootRequest(BaseModel):
     path: Path
+
 
 class SetSourceProjectsRootResponse(BaseModel):
     projects_root: Path
@@ -237,23 +243,28 @@ class PagePayload(BaseModel):
     record: PageRecord
     encoded: EncodedDims
     line_matches: list[LineMatch]
-    paragraph_indices: list[int]   # which paragraph_index each line is part of
-    page_text_ocr: str              # pre-built OCR plaintext
-    page_text_gt: str               # pre-built GT plaintext
-    image_url: str                  # /image-cache/<project>_<page>_original_<hash>.jpg
-    overlay_urls: dict[str, str]    # {"lines":"/image-cache/...", ...}
-    has_edited_image: bool          # True when a user-cropped or user-edited image exists in the image cache for this page, enabling the "Reload OCR (Edited)" button.
+    paragraph_indices: list[int]  # which paragraph_index each line is part of
+    page_text_ocr: str  # pre-built OCR plaintext
+    page_text_gt: str  # pre-built GT plaintext
+    image_url: str  # /image-cache/<project>_<page>_original_<hash>.jpg
+    overlay_urls: dict[str, str]  # {"lines":"/image-cache/...", ...}
+    has_edited_image: bool  # True when a user-cropped or user-edited image exists in the image cache for this page, enabling the "Reload OCR (Edited)" button.
+
 
 class GetPageRequest(BaseModel):
     project_id: str
-    page_index: int                # 0-based
+    page_index: int  # 0-based
     line_filter: LineFilter = LineFilter.UNVALIDATED
+
 
 class SavePageRequest(BaseModel):
     saved_by: str = "Save Page"
+
+
 class SavePageResponse(BaseModel):
     page: PagePayload
     saved_path: Path
+
 
 class SaveProjectResponse(BaseModel):
     saved_count: int
@@ -262,13 +273,16 @@ class SaveProjectResponse(BaseModel):
     total_count: int
     failures: list[SaveFailure] = []
 
+
 class SaveFailure(BaseModel):
     page_index: int
     page_number: int
     reason: str
 
+
 class ReloadOCRRequest(BaseModel):
     use_edited_image: bool = False
+
 
 class RematchGtRequest(BaseModel):
     pass
@@ -280,50 +294,60 @@ class RematchGtRequest(BaseModel):
 class UpdateWordGroundTruthRequest(BaseModel):
     text: str
 
+
 class ApplyStyleRequest(BaseModel):
-    style: str          # one of ALLOWED_TEXT_STYLE_LABELS
+    style: str  # one of ALLOWED_TEXT_STYLE_LABELS
     scope: Literal["whole", "part"] = "whole"
 
+
 class ApplyComponentRequest(BaseModel):
-    component: str      # one of ALLOWED_WORD_COMPONENT_LABELS
+    component: str  # one of ALLOWED_WORD_COMPONENT_LABELS
     enabled: bool
 
+
 class ToggleValidatedRequest(BaseModel):
-    validated: bool | None = None   # None means "toggle"
+    validated: bool | None = None  # None means "toggle"
+
 
 class ValidateBatchRequest(BaseModel):
     scope: Literal["page", "paragraph", "line", "word"]
     line_index: int | None = None
-    word_indices: list[tuple[int,int]] = []
+    word_indices: list[tuple[int, int]] = []
     paragraph_indices: list[int] = []
     line_indices: list[int] = []
     validated: bool
 
+
 class AddWordRequest(BaseModel):
-    line_index: int | None = None     # None means "auto-pick nearest"
+    line_index: int | None = None  # None means "auto-pick nearest"
     bbox: BBox
     text: str = ""
+
 
 class ReboxWordRequest(BaseModel):
     bbox: BBox
 
+
 class NudgeBboxRequest(BaseModel):
-    left: int = 0   # signed pixel deltas; positive expands outward
+    left: int = 0  # signed pixel deltas; positive expands outward
     right: int = 0
     top: int = 0
     bottom: int = 0
     refine_after: bool = False
 
+
 class SplitWordRequest(BaseModel):
-    x_fraction: float                  # 0..1
+    x_fraction: float  # 0..1
     direction: Literal["horizontal", "vertical"]
 
+
 class MergeWordsRequest(BaseModel):
-    direction: Literal["left", "right"]   # merge with neighbour
+    direction: Literal["left", "right"]  # merge with neighbour
+
 
 class ErasePixelsRequest(BaseModel):
     bbox: BBox
-    fill_value: int = 255              # 0..255 grayscale fill
+    fill_value: int = 255  # 0..255 grayscale fill
 ```
 
 ### Line/paragraph routes
@@ -332,32 +356,38 @@ class ErasePixelsRequest(BaseModel):
 class CopyLineGtRequest(BaseModel):
     direction: Literal["gt_to_ocr", "ocr_to_gt"]
 
+
 class DeleteScopeRequest(BaseModel):
     scope: Literal["paragraph", "line", "word"]
     paragraph_indices: list[int] = []
     line_indices: list[int] = []
-    word_indices: list[tuple[int,int]] = []
+    word_indices: list[tuple[int, int]] = []
+
 
 class MergeScopeRequest(BaseModel):
     scope: Literal["paragraph", "line"]
     paragraph_indices: list[int] = []  # ≥2
-    line_indices: list[int] = []       # ≥2
+    line_indices: list[int] = []  # ≥2
+
 
 class SplitParagraphAfterLineRequest(BaseModel):
     paragraph_index: int
     after_line_index: int
 
+
 class SplitLineAfterWordRequest(BaseModel):
     line_index: int
     after_word_index: int
+
 
 class SplitLineWithSelectedWordsRequest(BaseModel):
     line_index: int
     word_indices: list[int]
     mode: Literal["extract_to_new", "split_into_two"]
 
+
 class GroupSelectedWordsIntoNewParagraphRequest(BaseModel):
-    word_indices: list[tuple[int,int]]
+    word_indices: list[tuple[int, int]]
 ```
 
 ### Refine routes
@@ -369,19 +399,20 @@ class RefineScopeRequest(BaseModel):
     padding_px: int = 2
     paragraph_indices: list[int] = []
     line_indices: list[int] = []
-    word_indices: list[tuple[int,int]] = []
+    word_indices: list[tuple[int, int]] = []
 ```
 
 ### OCR config
 
 ```python
 class OCRModelOption(BaseModel):
-    key: str               # opaque id; "stock" / "hf:<name>" / "local:<path>"
-    label: str             # display
+    key: str  # opaque id; "stock" / "hf:<name>" / "local:<path>"
+    label: str  # display
     source: Literal["stock", "huggingface", "local"]
     revision: str | None = None
     is_default: bool = False
     weights_id: str | None = None
+
 
 class GetOCRConfigResponse(BaseModel):
     detection_options: list[OCRModelOption]
@@ -390,10 +421,14 @@ class GetOCRConfigResponse(BaseModel):
     selected_recognition: str
     hf_pinned_revision: str | None
     selection_reason: Literal[
-        "hf-latest", "hf-only", "local-newer-than-hf",
-        "local-only-hf-unreachable", "hf-unreachable-no-local",
-        "stock-fallback"
+        "hf-latest",
+        "hf-only",
+        "local-newer-than-hf",
+        "local-only-hf-unreachable",
+        "hf-unreachable-no-local",
+        "stock-fallback",
     ]
+
 
 class SetOCRModelsRequest(BaseModel):
     detection_key: str
@@ -408,16 +443,18 @@ class ExportScope(StrEnum):
     CURRENT = "current"
     ALL_VALIDATED = "all_validated"
 
+
 class ExportRequest(BaseModel):
     scope: ExportScope
-    style_filters: list[str] = []     # empty == "All (no style filter)"
+    style_filters: list[str] = []  # empty == "All (no style filter)"
     component_filter: str | None = None
     include_classification: bool = False
     detection_only: bool = False
     recognition_only: bool = False
 
+
 class ExportResponse(BaseModel):
-    job_id: str        # SSE channel /api/jobs/{job_id}/events
+    job_id: str  # SSE channel /api/jobs/{job_id}/events
 ```
 
 ### Jobs
@@ -431,6 +468,7 @@ class JobStatus(StrEnum):
     COMPLETE = "complete"
     ERROR = "error"
 
+
 class JobType(StrEnum):
     REFINE_BBOXES_PAGE = "refine_bboxes_page"
     EXPAND_REFINE_BBOXES_PAGE = "expand_refine_bboxes_page"
@@ -439,11 +477,13 @@ class JobType(StrEnum):
     SAVE_PROJECT = "save_project"
     REFINE_BBOXES_PROJECT = "refine_bboxes_project"
 
+
 class JobProgress(BaseModel):
     current: int = 0
     total: int = 0
     current_page: int | None = None
     message: str = ""
+
 
 class Job(BaseModel):
     id: str
@@ -465,6 +505,7 @@ class NotificationKind(StrEnum):
     WARNING = "warning"
     INFO = "info"
 
+
 class Notification(BaseModel):
     id: str
     kind: NotificationKind
@@ -479,7 +520,7 @@ Same shape as pgdp-prep
 
 ```python
 class ApiError(BaseModel):
-    error: str            # snake_case stable code
+    error: str  # snake_case stable code
     message: str
     details: Any = None
 ```

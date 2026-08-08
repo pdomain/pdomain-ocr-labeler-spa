@@ -57,7 +57,7 @@ def get_page(
     project = _require_project(project_id, project_state)
     _validate_page_index(page_index, project)
 
-    page = ensure_page_model(project, page_index)   # labeled → cached → OCR precedence
+    page = ensure_page_model(project, page_index)  # labeled → cached → OCR precedence
     pstate = project_state.page_states.get(page_index, PageState.empty())
 
     return PagePayload(

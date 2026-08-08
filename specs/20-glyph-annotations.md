@@ -90,23 +90,25 @@ The Pydantic shape consumed by the envelope and wire types:
 ```python
 # pdomain_book_tools.ocr.glyph_annotations
 class LigatureKind(StrEnum):
-    CT = "CT"     # c + t
-    ST = "ST"     # s + t  (printed-s + t, i.e. the st-ligature)
+    CT = "CT"  # c + t
+    ST = "ST"  # s + t  (printed-s + t, i.e. the st-ligature)
     LONG_ST = "LONG_ST"  # ſ + t (long-s + t, the ﬅ form)
     FI = "FI"
     FL = "FL"
     FFI = "FFI"
     FFL = "FFL"
-    OE = "OE"     # œ (when printed as a ligature)
-    AE = "AE"     # æ (when printed as a ligature)
+    OE = "OE"  # œ (when printed as a ligature)
+    AE = "AE"  # æ (when printed as a ligature)
+
 
 class LigatureMark(BaseModel):
     kind: LigatureKind
-    char_span: tuple[int, int] | None = None   # [start, end) in GT chars; None = whole word
+    char_span: tuple[int, int] | None = None  # [start, end) in GT chars; None = whole word
+
 
 class GlyphAnnotations(BaseModel):
     ligatures: list[LigatureMark] = []
-    long_s_positions: list[int] = []      # char offsets in GT where printed glyph is ſ
+    long_s_positions: list[int] = []  # char offsets in GT where printed glyph is ſ
     swash: bool = False
 
     # Provenance: how each top-level signal got here.
@@ -351,14 +353,16 @@ All under `api/words.py` and `api/pages.py`. Wire shapes added to
 ```python
 # POST /api/projects/{project_id}/pages/{idx0}/words/{line}/{word}/glyph-annotations
 class SetGlyphAnnotationsRequest(BaseModel):
-    annotations: GlyphAnnotations | None    # None = unset (back to "not reviewed")
+    annotations: GlyphAnnotations | None  # None = unset (back to "not reviewed")
+
 
 class SetGlyphAnnotationsResponse(BaseModel):
-    word: WordMatch     # echoes updated state, including any predictions
+    word: WordMatch  # echoes updated state, including any predictions
+
 
 # POST .../accept-prediction
 class AcceptGlyphPredictionRequest(BaseModel):
-    pass    # confirms current predictions wholesale → annotations with source="human_confirmed"
+    pass  # confirms current predictions wholesale → annotations with source="human_confirmed"
 ```
 
 Setting annotations = None on a word with active predictions does NOT
@@ -372,13 +376,14 @@ the classifier clears them).
 class GlyphBulkMarkRequest(BaseModel):
     recipe: Literal["ct_substring", "st_substring", "long_s_typeset_era"]
     skip_already_annotated: bool = True
-    accept_predictions: bool = False    # if true, also confirm matching predictions
-    dry_run: bool = False               # if true, return preview without mutating
+    accept_predictions: bool = False  # if true, also confirm matching predictions
+    dry_run: bool = False  # if true, return preview without mutating
+
 
 class GlyphBulkMarkResponse(BaseModel):
     affected_word_ids: list[str]
     skipped_word_ids: list[str]
-    page: PagePayload | None    # populated unless dry_run
+    page: PagePayload | None  # populated unless dry_run
 ```
 
 **No new SSE jobs in v1.** Page-scope bulk is fast (≤ a few thousand
@@ -395,7 +400,8 @@ adapter pattern ([`02-backend.md`](../docs/architecture/02-backend.md) §adapter
 ```python
 # core/glyph/predictions.py (NEW)
 class IGlyphPredictor(Protocol):
-    def predict(self, page: Page) -> dict[str, GlyphAnnotations]: ...
+    def predict(self, page: Page) -> dict[str, GlyphAnnotations]:
+        ...
         # keyed by word_id; values have source="predicted"
 ```
 

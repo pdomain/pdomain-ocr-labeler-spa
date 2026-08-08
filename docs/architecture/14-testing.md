@@ -117,15 +117,18 @@ def settings(tmp_path: Path) -> Settings:
         log_format="plain",
     )
 
+
 @pytest.fixture
 def client(settings):
     with TestClient(build_app(settings)) as c:
         yield c
 
+
 @pytest.fixture
 def gpu_available() -> bool:
     try:
         import torch
+
         return torch.cuda.is_available()
     except Exception:
         return False
@@ -239,7 +242,7 @@ Mirrors pgdp-prep `tests/e2e/conftest.py:47-89`:
 ```python
 @pytest.fixture(scope="session")
 def server_url(tmp_path_factory):
-    settings = ...   # hermetic
+    settings = ...  # hermetic
     app = build_app(settings)
     port = _pick_free_port()
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error")
@@ -251,9 +254,11 @@ def server_url(tmp_path_factory):
     server.should_exit = True
     thread.join(timeout=5)
 
+
 @pytest.fixture(scope="session")
 def browser_instance(playwright):
     return playwright.chromium.launch(headless=True, args=["--no-sandbox"])
+
 
 @pytest.fixture
 def page(browser_instance, server_url):
