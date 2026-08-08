@@ -124,13 +124,12 @@ class PageState:
     # Per-character bbox sidecar — keyed by ``"{line_index}_{word_index}"``.
     # Written by ``POST .../words/{li}/{wi}/char-bboxes`` and surfaced
     # onto ``WordMatch.char_bboxes`` in ``_page_payload``.
-    # Persisted into ``word_attributes[key]["char_bboxes"]`` in the
-    # saved envelope so they survive page reloads.
+    # Durable under content-blob ``labeler_sidecars.char_bboxes_map`` (Wave 0.1).
     char_bboxes_map: dict[str, object] = field(default_factory=dict)
     # Per-word char-range sidecar — keyed by ``"{line_index}_{word_index}"``.
     # Written by ``POST .../words/{li}/{wi}/char-ranges`` and surfaced
     # onto ``WordMatch.char_ranges`` in ``_page_payload``.
-    # Mirrors the char_bboxes_map pattern; stored as list[dict] (API shape).
+    # Durable under content-blob ``labeler_sidecars.char_ranges_map`` (Wave 0.1).
     char_ranges_map: dict[str, object] = field(default_factory=dict)
     # Per-word glyph-annotation sidecar — keyed by ``"{line_index}_{word_index}"``.
     # Written by ``POST .../words/{li}/{wi}/glyph-annotations`` and by

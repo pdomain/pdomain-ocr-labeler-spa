@@ -140,8 +140,11 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
         if pstate is None or pstate.page_record is None:  # pragma: no cover - race-defense
             continue
         # Event-store save path: persist each dirty page to the store.
-        # Skip pages without a registered page_id (not yet in the store —
-        # no-op is safe; they'll be saved when OCR writes them to the store).
+        # Wave 0.4 (P0-SAVE-DIRTY): advance last_saved_generation only when a
+        # content blob was written, or when there is intentionally no store
+        # (in-memory session). Do not mark clean for missing page_id or
+        # changelog-only fallback — those leave content non-reloadable.
+        content_saved = False
         if page_store is not None and pstate.page_id is not None:
             try:
                 changes = [{"type": "save_project", "page_index": page_index}]
@@ -149,10 +152,7 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
                 # re-serialized into a content blob.  save_page_to_store only
                 # records a changelog entry (no blob_refs), which causes
                 # load_page_from_store to return None after a fresh-store
-                # reload — the #1 audit finding.  Fall back to
-                # save_page_to_store only when no live Page object is
-                # available (e.g. the page was marked dirty by a changelog-
-                # only path with no cached payload).
+                # reload — the #1 audit finding.
                 payload = pstate.page_record.payload if pstate.page_record is not None else None
                 if payload is not None and callable(getattr(payload, "to_dict", None)):
                     save_page_content_to_store(
@@ -160,12 +160,14 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
                         page=payload,
                         store=page_store,
                         changes=changes,
+                        labeler_sidecars=pstate,
                     )
+                    content_saved = True
                 else:
-                    # No live Page to re-serialize — record changelog only.
+                    # No live Page to re-serialize — changelog only is not durable.
                     log.debug(
                         "save_project: page %d has no serializable payload — "
-                        "falling back to changelog-only store write",
+                        "changelog-only write; leaving dirty bit set",
                         page_index,
                     )
                     save_page_to_store(
@@ -173,6 +175,7 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
                         changes=changes,
                         store=page_store,
                     )
+                    skipped.append(page_index)
             except Exception as exc:
                 log.warning(
                     "save_project: store persist failed page=%d project=%s: %s",
@@ -192,18 +195,25 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
         elif page_store is None:
             # No store available — treat as clean success (in-memory only session).
             log.debug("save_project: no page_store in context — skipping store write for page %d", page_index)
+            content_saved = True
         else:
             # page_id not set — page not yet registered in store; track as skipped.
             log.debug("save_project: page %d has no page_id — skipping store write", page_index)
             skipped.append(page_index)
-        pstate.last_saved_generation = pstate.generation
+
+        if content_saved:
+            pstate.last_saved_generation = pstate.generation
 
         completed += 1
         await runner.update_progress(
             job.job_id,
             current=completed,
             total=total,
-            message=f"Saved page {page_index + 1}/{total}",
+            message=(
+                f"Saved page {page_index + 1}/{total}"
+                if content_saved
+                else f"Skipped page {page_index + 1}/{total} (not durably saved)"
+            ),
         )
 
     job.payload["failures"] = failures

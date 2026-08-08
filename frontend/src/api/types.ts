@@ -814,10 +814,7 @@ export interface paths {
          *
          *     Spec §5.9 line 325. Returns 202 Accepted with ``{job_id}``; the
          *     caller opens ``EventSource(/api/jobs/{job_id}/events)`` to receive
-         *     progress and the terminal event. The actual DocTR export pipeline
-         *     is wired in the ``export`` job handler (``core/jobs/runner.py``
-         *     ``_HANDLERS["export"]``); until full M3 wiring the handler completes
-         *     immediately (stub body, no I/O).
+         *     progress and the terminal event.
          */
         post: operations["start_export_api_projects__project_id__export_post"];
         delete?: never;
@@ -875,9 +872,9 @@ export interface paths {
          * List Exports
          * @description ``GET /api/projects/{id}/exports`` — past exports (best-effort).
          *
-         *     Spec §5.9 line 326. Returns a list of past export manifests read
-         *     from disk. Until the export handler writes manifests, always returns
-         *     an empty list (spec says "best-effort").
+         *     Spec §5.9 line 326. Reads ``doctr-export/manifest.json`` and remaps this
+         *     project's entry to ``ExportManifest`` (Wave 1.0–1.1). Missing manifest or
+         *     unknown project → empty list.
          */
         get: operations["list_exports_api_projects__project_id__exports_get"];
         put?: never;
@@ -1285,8 +1282,8 @@ export interface paths {
          * @description ``POST .../words/{li}/{wi}/char-ranges`` — set positioned char-range styles (FO-2).
          *
          *     Replaces all char-range annotations for the word in one atomic
-         *     operation.  The ranges are stored as ``word.char_ranges`` (a plain
-         *     Python attribute — lost on envelope round-trip).
+         *     operation. Maps are written to ``PageState`` and best-effort persisted
+         *     into the content blob via ``labeler_sidecars``.
          *
          *     When no PageState is seeded the route falls through to a stub
          *     PagePayload (same pattern as other mutation endpoints).
@@ -1312,12 +1309,9 @@ export interface paths {
          * @description ``POST .../words/{li}/{wi}/char-bboxes`` — persist CharFixer per-char bboxes.
          *
          *     Stores the per-character bounding boxes from the CharFixer Apply button
-         *     into ``PageState.char_bboxes_map`` and the cached-lane envelope's
-         *     ``word_attributes`` dict.
-         *
-         *     Unlike most word mutations this does not touch the ``pdomain_book_tools``
-         *     ``Page`` object — pdomain-book-tools has no first-class char-bbox concept.
-         *     The data lives entirely in the SPA sidecar layer.
+         *     into ``PageState.char_bboxes_map`` and best-effort content-blob
+         *     ``labeler_sidecars``. Does not mutate book-tools word fields (no
+         *     first-class char-bbox concept there).
          */
         post: operations["set_char_bboxes_api_projects__project_id__pages__page_index__words__line_index___word_index__char_bboxes_post"];
         delete?: never;
@@ -1339,8 +1333,9 @@ export interface paths {
          * Set Glyph Annotations
          * @description ``POST .../words/{li}/{wi}/glyph-annotations`` — set/clear word glyph annotations.
          *
-         *     Sets ``WordMatch.glyph_annotations`` for the word and auto-saves to cache.
-         *     ``annotations=None`` clears back to "not reviewed" without touching predictions.
+         *     Writes ``PageState.glyph_annotations_map`` and best-effort content-blob
+         *     ``labeler_sidecars`` (Wave 2 T3). ``annotations=None`` clears back to
+         *     "not reviewed" without touching predictions.
          *
          *     Spec: ``specs/20-glyph-annotations.md`` §6.1.
          */
@@ -2841,11 +2836,11 @@ export interface components {
         };
         /**
          * ExportManifest
-         * @description One past export manifest entry — spec §5.9 line 326.
+         * @description One past export for a project — Wave 1.0 remap of doctr-export disk.
          *
-         *     Shape is best-effort: the export handler will write manifests in M3.
-         *     Until then this model is a placeholder that matches the empty-list stub.
-         *     Fields are intentionally minimal; the handler will expand them.
+         *     Disk source: ``<data_root>/doctr-export/manifest.json`` entry under
+         *     ``projects[project_id]``. Remap documented in
+         *     ``docs/context/decisions.md`` (2026-07-21 Export list API).
          */
         ExportManifest: {
             /** Job Id */
@@ -2854,6 +2849,20 @@ export interface components {
             scope: string;
             /** Created At */
             created_at: string;
+            /**
+             * Page Count
+             * @default 0
+             */
+            page_count: number;
+            /**
+             * Tasks
+             * @default {}
+             */
+            tasks: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
         };
         /**
          * ExportRequest
@@ -4055,17 +4064,9 @@ export interface components {
          *     Replaces all per-character bounding-box annotations for the given word
          *     with *char_bboxes* (one ``BBox`` per character, in image-pixel coords).
          *
-         *     The bboxes are stored in two places:
-         *
-         *     1. ``pstate.char_bboxes_map["{li}_{wi}"]`` — the in-memory sidecar on
-         *        ``PageState``, keyed by the composite ``line_index_word_index`` string.
-         *        This is surfaced onto ``WordMatch.char_bboxes`` at payload-build time
-         *        so the frontend sees the stored bboxes immediately.
-         *
-         *     2. ``pstate``'s envelope ``word_attributes["{li}_{wi}"]["char_bboxes"]`` —
-         *        written to the cached-lane envelope via the standard best-effort write,
-         *        so the values survive a page reload.  On reload, ``from_dict`` deserialises
-         *        the list verbatim (the ``char_bboxes`` key is exempted from bool coercion).
+         *     Stored in ``PageState.char_bboxes_map`` and embedded under
+         *     ``labeler_sidecars`` in the event-store content blob (Wave 0.1). Surfaced
+         *     onto ``WordMatch.char_bboxes`` at payload-build time.
          */
         SetCharBboxesRequest: {
             /** Char Bboxes */
@@ -4078,14 +4079,10 @@ export interface components {
          *     Replaces all character-range annotations for the given word.  An
          *     empty ``ranges`` list clears all existing ranges.
          *
-         *     The backend stores the ranges as a Python attribute on the word
-         *     object (``word.char_ranges``).  pdomain-book-tools does not have a
-         *     first-class ``char_ranges`` concept today; the data is lost on
-         *     ``Word.to_dict`` → ``from_dict`` round-trip (documented limitation —
-         *     note ``is_validated`` escaped this fate via the ``word_labels``
-         *     carrier, P1.1).  When pdomain-book-tools grows a
-         *     ``char_ranges`` field, the route can be updated to call the
-         *     appropriate setter.
+         *     Ranges are stored on ``PageState.char_ranges_map`` and embedded under
+         *     ``labeler_sidecars`` in the event-store content blob (Wave 0.1). They are
+         *     also set as ``word.char_ranges`` for in-session convenience; book-tools
+         *     does not yet serialize that attribute on ``Word.to_dict``.
          */
         SetCharRangesRequest: {
             /** Ranges */

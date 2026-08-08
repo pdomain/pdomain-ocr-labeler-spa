@@ -640,6 +640,8 @@ def _page_payload(
                 _fuzz = app_config.fuzz_threshold if app_config is not None else 0.8
                 _char_bboxes_map = pstate.char_bboxes_map if pstate is not None else None
                 _char_ranges_map = pstate.char_ranges_map if pstate is not None else None
+                _glyph_ann_map = pstate.glyph_annotations_map if pstate is not None else None
+                _glyph_pred_map = pstate.glyph_predictions_map if pstate is not None else None
                 _rec, _lms = page_to_line_matches(
                     payload_obj,
                     page_index,
@@ -648,6 +650,8 @@ def _page_payload(
                     fuzz_threshold=_fuzz,
                     char_bboxes_map=_char_bboxes_map if _char_bboxes_map else None,  # pyright: ignore[reportArgumentType]
                     char_ranges_map=_char_ranges_map if _char_ranges_map else None,  # pyright: ignore[reportArgumentType]
+                    glyph_annotations_map=_glyph_ann_map if _glyph_ann_map else None,
+                    glyph_predictions_map=_glyph_pred_map if _glyph_pred_map else None,
                 )
                 if _lms or _rec is not None:
                     page_record = _rec
@@ -935,7 +939,11 @@ def save_page(
     # so the Page is re-serialized into a content blob whose hash becomes the
     # head provenance node's blob_refs.  Fall back to save_page_to_store only
     # when no live serializable Page object is available.
-    # When store is None (test env without store wiring), treat as a no-op.
+    # When store is None (test env without store wiring), treat as a clean
+    # in-memory save. Wave 0.4: only advance last_saved_generation when a
+    # content blob was written, or when no store is wired intentionally.
+    # Changelog-only fallback and missing page_id must leave the page dirty.
+    content_saved = False
     if store is not None and pstate.page_id is not None:
         try:
             changes = [{"type": "save_page", "page_index": page_index}]
@@ -946,12 +954,14 @@ def save_page(
                     page=payload,
                     store=store,
                     changes=changes,
+                    labeler_sidecars=pstate,
                 )
+                content_saved = True
             else:
-                # No live Page to re-serialize — record changelog only.
+                # No live Page to re-serialize — changelog only is not durable.
                 log.debug(
                     "save_page: page %d has no serializable payload — "
-                    "falling back to changelog-only store write",
+                    "changelog-only write; leaving dirty bit set",
                     page_index,
                 )
                 save_page_to_store(
@@ -968,8 +978,16 @@ def save_page(
                     message=f"failed to persist page {page_index}: {exc}",
                 ).model_dump(),
             )
+    elif store is None:
+        content_saved = True
+    else:
+        log.debug(
+            "save_page: page %d has no page_id — not marking clean",
+            page_index,
+        )
 
-    pstate.last_saved_generation = pstate.generation
+    if content_saved:
+        pstate.last_saved_generation = pstate.generation
 
     # Glyph-review gate: warn (but never block) when required and incomplete.
     # Counts reviewed words via glyph_annotations_map vs total page words.
@@ -1197,15 +1215,35 @@ def rematch_gt(
             )
         pstate.generation += 1
 
-        # Best-effort cached-envelope autosave — spec §12 + §13.
-        # Inside the lock so the cache write is serialised with the
-        # mutation (prevents torn writes from concurrent rematches).
-        _write_cached_envelope_best_effort(
-            page=page,
-            project_state=project_state,
-            page_index=page_index,
-            settings=settings,
-        )
+        # Content-blob autosave (Wave 0.3 / P0-REMATCH). The retired envelope
+        # helper was a no-op after M5b; rematch mutates live Page GT and must
+        # re-serialize like word mutators. Intentionally skipped when no store
+        # or page_id (test / pre-registration paths).
+        if page_store is not None and pstate.page_id is not None and callable(getattr(page, "to_dict", None)):
+            try:
+                save_page_content_to_store(
+                    page_id=pstate.page_id,
+                    page=page,
+                    store=page_store,
+                    changes=[{"type": "rematch_gt", "page_index": page_index}],
+                    labeler_sidecars=pstate,
+                )
+            except Exception as exc:
+                log.warning(
+                    "rematch_gt: store write failed page_id=%s: %s",
+                    pstate.page_id,
+                    exc,
+                )
+                return JSONResponse(
+                    status_code=503,
+                    content=ApiError(
+                        error="store_persist_failed",
+                        message=(
+                            f"rematch applied in memory but failed to persist page "
+                            f"{page_index} to the event store: {exc}"
+                        ),
+                    ).model_dump(),
+                )
 
     payload = _page_payload(
         project_id=project_id,

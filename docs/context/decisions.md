@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-07-19
+last_verified: 2026-07-21
 ---
 
 # Decisions
@@ -13,9 +13,10 @@ last_verified: 2026-07-19
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-07-19
+- **Last verified:** 2026-07-21
 - **Read when:** looking for durable migration, lifecycle, or changed-direction rationale.
-- **Search terms:** decisions, tombstones, retirement, changed direction, docgraph.
+- **Search terms:** decisions, tombstones, retirement, changed direction, docgraph,
+  sidecar durability, char_ranges_map, labeler_sidecars.
 
 ## 2026-07-13 — Retire retrieval-hostile historical scaffolding
 
@@ -286,3 +287,88 @@ plan. No residual plan work remains.
 - Removal commit: the commit containing this tombstone.
 - Rationale kept: current architecture and Git history.
 - Remaining work: none.
+
+## 2026-07-21 — Char sidecar durability (Wave 0.1)
+
+### Context
+
+CharFixer `char_ranges_map` / `char_bboxes_map` lived only on in-memory
+`PageState` after M5b retired the envelope write. Routes returned HTTP 200
+without event-store serialization, so maps vanished on restart even after
+Save Project. Deep-review Wave 0.1 required choosing among embed-in-word-dicts
+(A), extension/side blob (B), and separate LabelerEdited fields (C), with an
+explicit undo story.
+
+Probe: book-tools `Word.to_dict` / `from_dict` drops unknown keys; there is no
+first-class `char_ranges` / `char_bboxes` field (unlike `glyph_annotations`).
+Content durability already uses whole-page `page.to_dict()` blobs under
+`LabelerEdited`. Undo restores those blobs into the live `Page` but did not
+rehydrate `PageState` maps.
+
+### Decision
+
+**Content-blob sidecar section (B-shaped carrier, A-shaped undo).**
+
+1. Serialize maps under a reserved top-level key `labeler_sidecars` in the same
+   content JSON blob written by `save_page_content_to_store` (alongside
+   `Page.to_dict()` fields). `Page.from_dict` ignores unknown keys, so OCR
+   structure round-trips unchanged.
+2. On every content save from a live `PageState`, re-attach the current
+   char maps so later GT/structure saves do not wipe CharFixer data.
+3. On load from store, undo, and redo: extract `labeler_sidecars` and replace
+   `PageState.char_ranges_map` / `char_bboxes_map` (clear + rehydrate — never
+   leave maps from a different version).
+4. Glyph annotation maps stay out of scope until Wave 2 T3; they will reuse
+   this key when implemented.
+
+### Consequences
+
+- CharFixer Apply + rematch (content path) and undo share one blob for
+  coherence; no second blob_ref or extension-only path for char maps.
+- Export and `Page.from_dict` consumers keep working without book-tools
+  changes.
+- Implementers must pass current sidecars through all
+  `save_page_content_to_store` call sites that hold a `PageState`.
+
+### Rejected alternative
+
+**A — embed on `Word` dict fields without book-tools changes.** Unknown keys
+are dropped on round-trip; pure setattr does not survive `to_dict`. Adding
+first-class fields in book-tools would be cleaner long-term for glyphs (already
+present) but blocks Wave 0 char durability on an upstream release.
+
+**C — maps only on LabelerEdited changelog outside the content blob.** Undo
+restores content via `blob_refs` only; out-of-blob maps need a separate
+clear/rehydrate protocol and drift more easily from the restored page.
+
+## 2026-07-21 — Export list API ↔ disk manifest (Wave 1.0)
+
+### Context
+
+`GET .../exports` was an empty stub. On-disk
+`<data_root>/doctr-export/manifest.json` uses schema
+`pdomain.doctr-export-manifest` with a per-project map
+(`exported_at`, `page_count`, `tasks`). The OpenAPI placeholder
+`ExportManifest` used `job_id`, `scope`, `created_at` only.
+
+### Decision
+
+**Remap disk → API** (keep list of `ExportManifest`, one row per project
+entry; disk currently stores a single latest export per project):
+
+| API field | Source |
+| --- | --- |
+| `created_at` | `projects[id].exported_at` |
+| `page_count` | `projects[id].page_count` |
+| `tasks` | `projects[id].tasks` (task → `{item_count}`) |
+| `job_id` | synthetic `doctr-export:{project_id}:{exported_at}` (no job id on disk) |
+| `scope` | fixed `"project"` (disk is project-level merge, not per-scope history) |
+
+Expand the pydantic model with `page_count` and `tasks`; keep
+`job_id`/`scope`/`created_at` for FE compatibility.
+
+### Rejected
+
+**Expand OpenAPI to the full multi-project disk document.** Would break the
+`list[ExportManifest]` route shape and FE history consumers for little gain;
+history is already keyed by `project_id` in the path.

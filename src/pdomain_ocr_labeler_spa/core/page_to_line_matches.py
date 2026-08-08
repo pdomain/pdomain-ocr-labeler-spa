@@ -188,6 +188,21 @@ def _bbox_to_model(
     )
 
 
+def _glyph_from_sidecar(raw: object | None) -> GlyphAnnotationsModel | None:
+    """Build GlyphAnnotationsModel from a PageState sidecar dict/list payload."""
+    if raw is None:
+        return None
+    if isinstance(raw, GlyphAnnotationsModel):
+        return raw
+    if isinstance(raw, dict):
+        try:
+            return GlyphAnnotationsModel.model_validate(raw)
+        except Exception:
+            log.debug("_glyph_from_sidecar: invalid dict payload", exc_info=True)
+            return None
+    return _convert_glyph_annotations(raw)
+
+
 def _word_to_word_match(
     word_index: int,
     line_index: int,
@@ -195,6 +210,8 @@ def _word_to_word_match(
     fuzz_threshold: float = _FUZZ_THRESHOLD,
     char_bboxes_map: dict[str, list[dict[str, int]]] | None = None,
     char_ranges_map: dict[str, list[dict[str, object]]] | None = None,
+    glyph_annotations_map: dict[str, object] | None = None,
+    glyph_predictions_map: dict[str, object] | None = None,
     page_width: int | None = None,
     page_height: int | None = None,
 ) -> WordMatch | None:
@@ -287,11 +304,17 @@ def _word_to_word_match(
                     if isinstance(r, dict)
                 ]
 
-        # Glyph annotations — propagated from ``Word.glyph_annotations`` (spec §3).
-        # ``source`` defaults to "human" for envelope-loaded pages.
-        # ``glyph_predictions`` is left as None here; it is injected by the
-        # ``IGlyphPredictor`` adapter at payload-build time (not yet wired).
-        glyph_annotations = _convert_glyph_annotations(getattr(word_obj, "glyph_annotations", None))
+        # Glyph annotations — PageState sidecar wins (Wave 2 T1 / M11); fall
+        # back to book-tools Word.glyph_annotations when present.
+        glyph_annotations: GlyphAnnotationsModel | None = None
+        if glyph_annotations_map is not None and sidecar_key in glyph_annotations_map:
+            glyph_annotations = _glyph_from_sidecar(glyph_annotations_map.get(sidecar_key))
+        else:
+            glyph_annotations = _convert_glyph_annotations(getattr(word_obj, "glyph_annotations", None))
+
+        glyph_predictions: GlyphAnnotationsModel | None = None
+        if glyph_predictions_map is not None and sidecar_key in glyph_predictions_map:
+            glyph_predictions = _glyph_from_sidecar(glyph_predictions_map.get(sidecar_key))
 
         return WordMatch(
             line_index=line_index,
@@ -308,6 +331,7 @@ def _word_to_word_match(
             char_bboxes=char_bboxes,
             char_ranges=char_ranges,
             glyph_annotations=glyph_annotations,
+            glyph_predictions=glyph_predictions,
         )
     except Exception:
         log.debug("_word_to_word_match: failed for line=%d word=%d", line_index, word_index, exc_info=True)
@@ -400,6 +424,8 @@ def page_to_line_matches(
     fuzz_threshold: float = _FUZZ_THRESHOLD,
     char_bboxes_map: dict[str, list[dict[str, int]]] | None = None,
     char_ranges_map: dict[str, list[dict[str, object]]] | None = None,
+    glyph_annotations_map: dict[str, object] | None = None,
+    glyph_predictions_map: dict[str, object] | None = None,
 ) -> tuple[PageRecord, list[LineMatch]]:
     """Convert a ``pdomain_book_tools.ocr.page.Page`` to ``(PageRecord, [LineMatch])``.
 
@@ -505,6 +531,8 @@ def page_to_line_matches(
                         fuzz_threshold=fuzz_threshold,
                         char_bboxes_map=char_bboxes_map,
                         char_ranges_map=char_ranges_map,
+                        glyph_annotations_map=glyph_annotations_map,
+                        glyph_predictions_map=glyph_predictions_map,
                         page_width=page_width,
                         page_height=page_height,
                     )

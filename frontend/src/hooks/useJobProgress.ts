@@ -1,15 +1,14 @@
 // useJobProgress.ts — EventSource hook for GET /api/jobs/{jobId}/events.
 //
 // Spec: docs/specs/2026-05-12-frontend-shell-design.md §Hooks
-// Issue #192
+// Issue #192; Wave 3a / P1-JOB-SSE — adapt flat backend wire to nested FE shape.
 //
-// Opens an EventSource on mount (when jobId is provided) and closes it on
-// unmount or when the job reaches a terminal state (complete / error).
+// Backend SSE frames (flat):
+//   event: snapshot | progress | complete | error | cancelled
+//   data: { type, status, current, total, message, error, ...result }
 //
-// Event shape sent by the backend SSE stream (JobProgressEvent):
-//   { job_id, status, progress: { current, total, current_page, message } }
-//
-// Returns null until the first progress event arrives.
+// FE consumers expect nested JobProgressEvent:
+//   { job_id, status, progress: { current, total, message }, error_message }
 
 import { useEffect, useRef, useState } from "react";
 import type { components } from "../api/types";
@@ -29,7 +28,91 @@ export interface JobProgressEvent {
   pages_skipped_not_validated?: number;
 }
 
-const TERMINAL: ReadonlySet<JobStatus> = new Set(["complete", "error"]);
+/** Wire payload from the backend (flat) or already-nested OpenAPI shape. */
+interface WireJobEvent {
+  type?: string;
+  status?: string;
+  current?: number;
+  total?: number;
+  message?: string | null;
+  error?: string | null;
+  job_id?: string;
+  progress?: Partial<JobProgress> | null;
+  error_message?: string | null;
+  words_exported_detection?: number;
+  words_exported_recognition?: number;
+  pages_skipped_not_validated?: number;
+}
+
+const TERMINAL: ReadonlySet<string> = new Set(["complete", "error", "cancelled"]);
+
+/**
+ * Normalize a backend flat SSE payload (or a nested fixture) into JobProgressEvent.
+ */
+function normalizeJobProgressEvent(
+  raw: WireJobEvent,
+  fallbackJobId: string,
+): JobProgressEvent | null {
+  const statusRaw = raw.status ?? raw.type ?? "";
+  if (!statusRaw) {
+    return null;
+  }
+
+  const nested = raw.progress;
+  const current =
+    typeof nested?.current === "number"
+      ? nested.current
+      : typeof raw.current === "number"
+        ? raw.current
+        : 0;
+  const total =
+    typeof nested?.total === "number"
+      ? nested.total
+      : typeof raw.total === "number"
+        ? raw.total
+        : 0;
+  let message = "";
+  if (typeof nested?.message === "string") {
+    message = nested.message;
+  } else if (typeof raw.message === "string") {
+    message = raw.message;
+  }
+
+  let error_message: string | null | undefined;
+  if (raw.error_message !== undefined) {
+    error_message = raw.error_message;
+  } else if (raw.error !== undefined) {
+    error_message = raw.error;
+  }
+
+  // Keep cancelled as a terminal status string even if OpenAPI JobStatus is narrower.
+  const normalizedStatus = statusRaw as JobStatus;
+
+  const progress: JobProgress = {
+    current,
+    total,
+    message,
+  };
+
+  const event: JobProgressEvent = {
+    job_id: typeof raw.job_id === "string" && raw.job_id ? raw.job_id : fallbackJobId,
+    status: normalizedStatus,
+    progress,
+  };
+  if (error_message !== undefined) {
+    event.error_message = error_message;
+  }
+  if (typeof raw.words_exported_detection === "number") {
+    event.words_exported_detection = raw.words_exported_detection;
+  }
+  if (typeof raw.words_exported_recognition === "number") {
+    event.words_exported_recognition = raw.words_exported_recognition;
+  }
+  if (typeof raw.pages_skipped_not_validated === "number") {
+    event.pages_skipped_not_validated = raw.pages_skipped_not_validated;
+  }
+  return event;
+}
 
 /**
  * Subscribe to SSE progress events for a background job.
@@ -39,7 +122,7 @@ const TERMINAL: ReadonlySet<JobStatus> = new Set(["complete", "error"]);
  *
  * Cleanup contract: the EventSource is closed when
  * (a) the component unmounts, or
- * (b) a terminal status (`complete` / `error`) is received — whichever comes first.
+ * (b) a terminal status (`complete` / `error` / `cancelled`) is received.
  */
 export function useJobProgress(jobId: string | null | undefined): JobProgressEvent | null {
   const [latest, setLatest] = useState<JobProgressEvent | null>(null);
@@ -51,38 +134,42 @@ export function useJobProgress(jobId: string | null | undefined): JobProgressEve
       return;
     }
 
-    const es = new EventSource(`/api/jobs/${encodeURIComponent(jobId)}/events`);
+    const trackedJobId: string = jobId;
+    const es = new EventSource(`/api/jobs/${encodeURIComponent(trackedJobId)}/events`);
     esRef.current = es;
 
     function handleProgress(e: MessageEvent) {
-      let event: JobProgressEvent;
+      let raw: WireJobEvent;
       try {
-        event = JSON.parse(e.data as string) as JobProgressEvent;
+        raw = JSON.parse(e.data as string) as WireJobEvent;
       } catch {
+        return;
+      }
+
+      const event = normalizeJobProgressEvent(raw, trackedJobId);
+      if (!event) {
         return;
       }
 
       setLatest(event);
 
-      if (TERMINAL.has(event.status)) {
+      if (TERMINAL.has(event.status) || TERMINAL.has(String(raw.type ?? ""))) {
         es.close();
         esRef.current = null;
       }
     }
 
-    // "progress" covers running updates; "complete"/"error" are the terminal
-    // SSE event types the backend sends (event: complete / event: error).
-    // Without these, jobProgress.status never reaches "complete" and any
-    // downstream invalidateQueries call is never triggered.
-    es.addEventListener("progress", handleProgress);
-    es.addEventListener("complete", handleProgress);
-    es.addEventListener("error", handleProgress);
+    // Backend first frame is often `event: snapshot`; progress/complete/error
+    // follow. Listen for cancelled too (Wave 3a.2).
+    const names = ["snapshot", "progress", "complete", "error", "cancelled"] as const;
+    for (const name of names) {
+      es.addEventListener(name, handleProgress);
+    }
 
     return () => {
-      es.removeEventListener("progress", handleProgress);
-      es.removeEventListener("complete", handleProgress);
-      es.removeEventListener("error", handleProgress);
-      // EventSource.readyState: 0=CONNECTING, 1=OPEN, 2=CLOSED
+      for (const name of names) {
+        es.removeEventListener(name, handleProgress);
+      }
       if (es.readyState !== EventSource.CLOSED) {
         es.close();
       }

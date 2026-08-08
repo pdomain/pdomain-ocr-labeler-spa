@@ -397,8 +397,8 @@ def _save_to_store_best_effort(
     pstate: PageState,
     store: Any,  # LabelerPageStore | None
     changes: list[dict[str, Any]],
-) -> None:
-    """Persist a word-mutation event to the store; swallow errors.
+) -> bool:
+    """Persist a word-mutation event to the store.
 
     Persists the edited page *content* (so the edit survives a fresh-store
     reload — the #1 audit finding) when the resolved page exposes ``to_dict``;
@@ -406,26 +406,50 @@ def _save_to_store_best_effort(
     content must be re-serialized, not just diffed, or a fresh store would
     replay the original OCR content and silently drop the edit.
 
-    Best-effort: a store write failure must not turn a successful in-memory
-    mutation into a 500.  Logs at WARNING so problems are visible without
-    being fatal.
-
-    ``store=None`` is a no-op (test environments without a wired store).
-    ``pstate.page_id=None`` is also a no-op (page not yet registered in the
-    event store — e.g. the fake-loader test path).
+    Returns
+    -------
+    bool
+        ``True`` when the write succeeded, or when there is intentionally no
+        store / no ``page_id`` (tests and pre-registration). ``False`` when
+        ``store`` and ``page_id`` were present but the write failed — callers
+        must surface that (Wave 0.5 / P1-MUTATION-200: no silent HTTP 200).
     """
     if store is None or pstate.page_id is None:
-        return
+        return True
     try:
         from ..core.page_state import save_page_content_to_store, save_page_to_store
 
         page = _resolve_page_object(pstate)
         if page is not None and callable(getattr(page, "to_dict", None)):
-            save_page_content_to_store(page_id=pstate.page_id, page=page, store=store, changes=changes)
+            save_page_content_to_store(
+                page_id=pstate.page_id,
+                page=page,
+                store=store,
+                changes=changes,
+                labeler_sidecars=pstate,
+            )
         else:
             save_page_to_store(page_id=pstate.page_id, changes=changes, store=store)
+        return True
     except Exception as exc:  # pragma: no cover - defensive
         log.warning("_save_to_store_best_effort: failed page_id=%s: %s", pstate.page_id, exc)
+        return False
+
+
+def _store_persist_failed_response(*, page_id: Any, detail: str = "") -> JSONResponse:
+    """503 when a store-backed mutation could not durably persist (Wave 0.5)."""
+    message = "edit applied in memory but failed to persist to the event store"
+    if page_id is not None:
+        message = f"{message} (page_id={page_id})"
+    if detail:
+        message = f"{message}: {detail}"
+    return JSONResponse(
+        status_code=503,
+        content=ApiError(
+            error="store_persist_failed",
+            message=message,
+        ).model_dump(),
+    )
 
 
 def _refresh_payload_response(
@@ -534,11 +558,12 @@ def update_word_ground_truth(
             return _word_not_found(line_index, word_index)
         word.ground_truth_text = body.text
         pstate.generation += 1
-        _save_to_store_best_effort(
+        if not _save_to_store_best_effort(
             pstate=pstate,
             store=store,
             changes=[{"type": "word_gt", "line": line_index, "word": word_index, "text": body.text}],
-        )
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -592,7 +617,7 @@ def apply_style(
         else:
             word.remove_style_label(body.style)
         pstate.generation += 1
-        _save_to_store_best_effort(
+        if not _save_to_store_best_effort(
             pstate=pstate,
             store=store,
             changes=[
@@ -605,7 +630,8 @@ def apply_style(
                     "enabled": body.enabled,
                 }
             ],
-        )
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -654,7 +680,7 @@ def apply_component(
             return _word_not_found(line_index, word_index)
         word.apply_component(body.component, enabled=body.enabled)
         pstate.generation += 1
-        _save_to_store_best_effort(
+        if not _save_to_store_best_effort(
             pstate=pstate,
             store=store,
             changes=[
@@ -666,7 +692,8 @@ def apply_component(
                     "enabled": body.enabled,
                 }
             ],
-        )
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -726,7 +753,7 @@ def toggle_validated(
         new_value = (not current) if body.validated is None else bool(body.validated)
         _apply_word_validated(word, new_value)
         pstate.generation += 1
-        _save_to_store_best_effort(
+        if not _save_to_store_best_effort(
             pstate=pstate,
             store=store,
             changes=[
@@ -737,7 +764,8 @@ def toggle_validated(
                     "validated": new_value,
                 }
             ],
-        )
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -796,11 +824,12 @@ def validate_batch(
         # the SPA as "I sent a validate-batch and got an updated
         # generation back".
         pstate.generation += 1
-        _save_to_store_best_effort(
+        if not _save_to_store_best_effort(
             pstate=pstate,
             store=store,
             changes=[{"type": "validate_batch", "scope": body.scope, "validated": body.validated}],
-        )
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -1002,7 +1031,7 @@ def rebox_word(
                 f"rebox_word rejected line={line_index} word={word_index} bbox=({x1}, {y1}, {x2}, {y2})"
             )
         pstate.generation += 1
-        _save_to_store_best_effort(
+        if not _save_to_store_best_effort(
             pstate=pstate,
             store=store,
             changes=[
@@ -1013,7 +1042,8 @@ def rebox_word(
                     "bbox": [x1, y1, x2, y2],
                 }
             ],
-        )
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -1075,7 +1105,7 @@ def nudge_bbox(
                 f"deltas=({body.left}, {body.right}, {body.top}, {body.bottom})"
             )
         pstate.generation += 1
-        _save_to_store_best_effort(
+        if not _save_to_store_best_effort(
             pstate=pstate,
             store=store,
             changes=[
@@ -1086,7 +1116,8 @@ def nudge_bbox(
                     "deltas": [body.left, body.right, body.top, body.bottom],
                 }
             ],
-        )
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -1349,7 +1380,7 @@ def erase_pixels(
         # Persist the post-erase image as a blob so "Reload OCR (Edited)" can
         # re-OCR the erased pixels (Lane A / Task A4).
         _persist_edited_image_blob(pstate=pstate, store=store, image=image)
-        _save_to_store_best_effort(
+        if not _save_to_store_best_effort(
             pstate=pstate,
             store=store,
             changes=[
@@ -1360,7 +1391,8 @@ def erase_pixels(
                     "bbox": [x1, y1, x2, y2],
                 }
             ],
-        )
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -1398,14 +1430,10 @@ class SetCharRangesRequest(BaseModel):
     Replaces all character-range annotations for the given word.  An
     empty ``ranges`` list clears all existing ranges.
 
-    The backend stores the ranges as a Python attribute on the word
-    object (``word.char_ranges``).  pdomain-book-tools does not have a
-    first-class ``char_ranges`` concept today; the data is lost on
-    ``Word.to_dict`` → ``from_dict`` round-trip (documented limitation —
-    note ``is_validated`` escaped this fate via the ``word_labels``
-    carrier, P1.1).  When pdomain-book-tools grows a
-    ``char_ranges`` field, the route can be updated to call the
-    appropriate setter.
+    Ranges are stored on ``PageState.char_ranges_map`` and embedded under
+    ``labeler_sidecars`` in the event-store content blob (Wave 0.1). They are
+    also set as ``word.char_ranges`` for in-session convenience; book-tools
+    does not yet serialize that attribute on ``Word.to_dict``.
     """
 
     ranges: list[CharRange]
@@ -1424,12 +1452,13 @@ def set_char_ranges(
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/char-ranges`` — set positioned char-range styles (FO-2).
 
     Replaces all char-range annotations for the word in one atomic
-    operation.  The ranges are stored as ``word.char_ranges`` (a plain
-    Python attribute — lost on envelope round-trip).
+    operation. Maps are written to ``PageState`` and best-effort persisted
+    into the content blob via ``labeler_sidecars``.
 
     When no PageState is seeded the route falls through to a stub
     PagePayload (same pattern as other mutation endpoints).
@@ -1451,14 +1480,25 @@ def set_char_ranges(
             return _word_not_found(line_index, word_index)
 
         range_dicts = [r.model_dump() for r in body.ranges]
-        # Store as a plain Python attribute — no pdomain-book-tools API yet.
+        # In-session attr for code that reads the live word object.
         word.char_ranges = range_dicts
-        # Write into the in-memory sidecar so the payload builder can surface
-        # the values onto WordMatch.char_ranges on the next page load.
+        # Sidecar is the durable carrier (content blob labeler_sidecars).
         pstate.char_ranges_map[sidecar_key] = range_dicts
 
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        if not _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {
+                    "type": "set_char_ranges",
+                    "line_index": line_index,
+                    "word_index": word_index,
+                    "count": len(range_dicts),
+                }
+            ],
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -1478,17 +1518,9 @@ class SetCharBboxesRequest(BaseModel):
     Replaces all per-character bounding-box annotations for the given word
     with *char_bboxes* (one ``BBox`` per character, in image-pixel coords).
 
-    The bboxes are stored in two places:
-
-    1. ``pstate.char_bboxes_map["{li}_{wi}"]`` — the in-memory sidecar on
-       ``PageState``, keyed by the composite ``line_index_word_index`` string.
-       This is surfaced onto ``WordMatch.char_bboxes`` at payload-build time
-       so the frontend sees the stored bboxes immediately.
-
-    2. ``pstate``'s envelope ``word_attributes["{li}_{wi}"]["char_bboxes"]`` —
-       written to the cached-lane envelope via the standard best-effort write,
-       so the values survive a page reload.  On reload, ``from_dict`` deserialises
-       the list verbatim (the ``char_bboxes`` key is exempted from bool coercion).
+    Stored in ``PageState.char_bboxes_map`` and embedded under
+    ``labeler_sidecars`` in the event-store content blob (Wave 0.1). Surfaced
+    onto ``WordMatch.char_bboxes`` at payload-build time.
     """
 
     char_bboxes: list[BBox]
@@ -1507,16 +1539,14 @@ def set_char_bboxes(
     project_state: ProjectState = Depends(get_project_state),
     settings: Settings = Depends(get_settings),
     app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/char-bboxes`` — persist CharFixer per-char bboxes.
 
     Stores the per-character bounding boxes from the CharFixer Apply button
-    into ``PageState.char_bboxes_map`` and the cached-lane envelope's
-    ``word_attributes`` dict.
-
-    Unlike most word mutations this does not touch the ``pdomain_book_tools``
-    ``Page`` object — pdomain-book-tools has no first-class char-bbox concept.
-    The data lives entirely in the SPA sidecar layer.
+    into ``PageState.char_bboxes_map`` and best-effort content-blob
+    ``labeler_sidecars``. Does not mutate book-tools word fields (no
+    first-class char-bbox concept there).
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -1533,11 +1563,22 @@ def set_char_bboxes(
 
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
-        # Write into the in-memory sidecar on PageState.
         pstate.char_bboxes_map[sidecar_key] = bbox_dicts
 
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        if not _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {
+                    "type": "set_char_bboxes",
+                    "line_index": line_index,
+                    "word_index": word_index,
+                    "count": len(bbox_dicts),
+                }
+            ],
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -1580,11 +1621,13 @@ def set_glyph_annotations(
     project_state: ProjectState = Depends(get_project_state),  # pyright: ignore[reportCallInDefaultInitializer]
     settings: Settings = Depends(get_settings),  # pyright: ignore[reportCallInDefaultInitializer]
     app_config: AppConfig = Depends(get_app_config),  # pyright: ignore[reportCallInDefaultInitializer]
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/glyph-annotations`` — set/clear word glyph annotations.
 
-    Sets ``WordMatch.glyph_annotations`` for the word and auto-saves to cache.
-    ``annotations=None`` clears back to "not reviewed" without touching predictions.
+    Writes ``PageState.glyph_annotations_map`` and best-effort content-blob
+    ``labeler_sidecars`` (Wave 2 T3). ``annotations=None`` clears back to
+    "not reviewed" without touching predictions.
 
     Spec: ``specs/20-glyph-annotations.md`` §6.1.
     """
@@ -1608,7 +1651,18 @@ def set_glyph_annotations(
             _ = pstate.glyph_annotations_map.pop(sidecar_key, None)
 
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        if not _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {
+                    "type": "set_glyph_annotations",
+                    "line_index": line_index,
+                    "word_index": word_index,
+                }
+            ],
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -1632,6 +1686,7 @@ def accept_glyph_prediction(
     project_state: ProjectState = Depends(get_project_state),  # pyright: ignore[reportCallInDefaultInitializer]
     settings: Settings = Depends(get_settings),  # pyright: ignore[reportCallInDefaultInitializer]
     app_config: AppConfig = Depends(get_app_config),  # pyright: ignore[reportCallInDefaultInitializer]
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/accept-prediction`` — confirm glyph predictions.
 
@@ -1675,7 +1730,18 @@ def accept_glyph_prediction(
         pstate.glyph_annotations_map[sidecar_key] = confirmed
 
         pstate.generation += 1
-        pass  # STUB: cached-lane retired (M5b)
+        if not _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {
+                    "type": "accept_glyph_prediction",
+                    "line_index": line_index,
+                    "word_index": word_index,
+                }
+            ],
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
 
     return _refresh_payload_response(
         project_id=project_id,
