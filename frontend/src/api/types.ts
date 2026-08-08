@@ -1148,8 +1148,8 @@ export interface paths {
          * @description ``POST .../words/{li}/{wi}/rebox`` — replace the word's bounding box.
          *
          *     Spec 23 §9 row 7: ``word.rebox(bbox)`` →
-         *     ``Page.rebox_word(li, wi, x1, y1, x2, y2)`` in pdomain-book-tools
-         *     (``pdomain_book_tools/ocr/page.py:2043``).
+         *     ``Page.rebox_word(li, wi, x1=x1, y1=y1, x2=x2, y2=y2)`` in
+         *     pdomain-book-tools (``pdomain_book_tools/ocr/page.py:2043``).
          */
         post: operations["rebox_word_api_projects__project_id__pages__page_index__words__line_index___word_index__rebox_post"];
         delete?: never;
@@ -1172,9 +1172,9 @@ export interface paths {
          * @description ``POST .../words/{li}/{wi}/nudge`` — nudge bbox edges by pixel offsets.
          *
          *     Spec 23 §9 row 8: ``word.nudge(left, right, top, bottom)`` →
-         *     ``Page.nudge_word_bbox(li, wi, left, right, top, bottom,
-         *     refine_after)`` in pdomain-book-tools
-         *     (``pdomain_book_tools/ocr/page.py:2571``).
+         *     ``Page.nudge_word_bbox(li, wi, left_delta=left, right_delta=right,
+         *     top_delta=top, bottom_delta=bottom, refine_after=refine_after)`` in
+         *     pdomain-book-tools (``pdomain_book_tools/ocr/page.py:2571``).
          */
         post: operations["nudge_bbox_api_projects__project_id__pages__page_index__words__line_index___word_index__nudge_post"];
         delete?: never;
