@@ -13,9 +13,15 @@ Repository guidance is in [`AGENTS.md`](AGENTS.md); release history is in
 [`docs/README.md`](docs/README.md).
 
 A FastAPI + React/Vite/TypeScript replacement for the NiceGUI-based
-`pd-ocr-labeler` legacy sibling repository. Functionally identical to the
-current labeler, structurally modelled on
+`pd-ocr-labeler` legacy sibling repository. It preserves the driver contract
+except for explicitly retired clean-break surfaces, including character ranges
+and direct typography style controls. It is structurally modelled on
 the `pdomain-prep-for-pgdp` sibling repository.
+
+Typography review uses `TypographySection` and the append-only correction
+journal. Legacy character-range and direct word-style authoring routes are
+removed. Text validation remains independent; page completion and export require
+both persisted text validation and current-epoch typography review.
 
 > **Status (2026-05-21):** Cut-over complete. Hi-fi P1–P5 shipped;
 > smoke run triaged; legacy `pd-ocr-labeler` superseded. The retired cut-over
@@ -143,8 +149,8 @@ Specs are split into two trees as of 2026-05-14:
 | [`24-shell-layout.md`](docs/architecture/24-shell-layout.md) | Studio shell — Rail, Drawer, Breadcrumb, QuickSearch |
 | [`25-drawer-worklist.md`](docs/architecture/25-drawer-worklist.md) | Drawer — Worklist, Hierarchy, BulkActions |
 | [`26-right-panel-detail.md`](docs/architecture/26-right-panel-detail.md) | Right-panel detail views — Word / Line / Block |
-| [`27-right-panel-sections.md`](docs/architecture/27-right-panel-sections.md) | Right-panel action sections — BBox / Rebox / Erase / CharRanges / CharFixer / Structure |
-| [`28-palettes-pickers.md`](docs/architecture/28-palettes-pickers.md) | StylePalette, ComponentPalette, UnicodePicker, useLayerColors |
+| [`27-right-panel-sections.md`](docs/architecture/27-right-panel-sections.md) | Right-panel action sections — BBox / Rebox / Erase / Typography / CharFixer / Structure |
+| [`28-palettes-pickers.md`](docs/architecture/28-palettes-pickers.md) | ChipPalette, ComponentPalette, UnicodePicker, useLayerColors |
 
 ## Quick start (just run the labeler)
 

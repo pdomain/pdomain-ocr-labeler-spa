@@ -466,3 +466,40 @@ no UI control. The report is annotated in place.
 `docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md` is NOT retired.
 The merge landed M11 T1 and T3 only, which its own commit message calls
 partial.
+
+## 2026-08-22 — Typography uses current persisted-page epochs
+
+### Context
+
+Legacy character ranges and direct OCR style labels could not provide stable
+Unicode grapheme spans, immutable correction history, or safe concurrent
+export. Text edits also change stable word identities, so old heads must remain
+auditable without satisfying current completion.
+
+### Decision
+
+Use `TypographySection` as the sole inline-typography authoring surface and an
+append-only v1 correction journal as review history. The server derives the
+structured persisted-page lineage epoch from ordered line and word boundaries,
+stable active word IDs, corrected text, geometry, and image/page bindings.
+Typography review and correction-bundle export use only active heads rooted in
+the current epoch. General export gates on the review result but does not carry
+journal heads. Older epochs remain audit-only.
+
+Keep text validation independently achievable. Require both persisted text
+validation and required SPA v1 typography review only for final completion and
+export. General export freezes content-addressed page JSON and image bytes.
+Correction-bundle export separately selects and carries exact reviewed heads.
+Retire range routes, direct word-style routes, toolbar style authoring, and
+dual writes.
+
+Suggestion acceptance/editing and predecessor-based compensating undo remain
+unimplemented and must not be described as shipped.
+
+### Clarification
+
+General export freezes content-addressed page JSON and image bytes, but does not
+carry correction heads. Correction-bundle export is the separate artifact that
+selects and carries current journal heads and portable provenance. The phrase
+“freeze exact reviewed heads” above applies to correction-bundle export, not the
+general export job.

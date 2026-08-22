@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -48,18 +47,48 @@ def _seed_project_files(data_root: Path, project_id: str, page_count: int = 1) -
         png_path.write_bytes(b"\x89PNG\r\n\x1a\n")  # just the PNG magic bytes
 
 
-def _make_fake_page(n_words: int = 2) -> SimpleNamespace:
-    """Build a minimal page-like object with validated words."""
-    word = SimpleNamespace(
-        text="hello",
-        ground_truth_text="hello",
-        word_labels=["validated"],
-        bounding_box=SimpleNamespace(x=0.1, y=0.1, width=0.2, height=0.05),
-        ground_truth_bounding_box=SimpleNamespace(x=0.1, y=0.1, width=0.2, height=0.05),
-        text_style_labels=[],
-        word_components=[],
+def _make_fake_page(n_words: int = 2) -> object:
+    """Build a serializable page with validated words."""
+    from pdomain_book_tools.ocr.page import Page
+
+    bbox = {
+        "top_left": {"x": 0, "y": 0},
+        "bottom_right": {"x": 20, "y": 20},
+        "is_normalized": False,
+    }
+    words = [
+        {
+            "type": "Word",
+            "text": f"hello-{index}",
+            "ground_truth_text": f"hello-{index}",
+            "word_labels": ["validated"],
+            "bounding_box": bbox,
+        }
+        for index in range(n_words)
+    ]
+    return Page.from_dict(
+        {
+            "width": 20,
+            "height": 20,
+            "page_index": 0,
+            "bounding_box": bbox,
+            "items": [
+                {
+                    "type": "Block",
+                    "child_type": "BLOCKS",
+                    "items": [
+                        {
+                            "type": "Block",
+                            "child_type": "WORDS",
+                            "items": words,
+                            "bounding_box": bbox,
+                        }
+                    ],
+                    "bounding_box": bbox,
+                }
+            ],
+        }
     )
-    return SimpleNamespace(words=[word] * n_words)
 
 
 def _parse_sse_events(raw: bytes) -> list[dict]:  # pyright: ignore[reportExplicitAny]
@@ -100,6 +129,23 @@ def test_export_writes_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 
     app = build_app(settings)
     with TestClient(app) as client:
+        from types import SimpleNamespace
+
+        from pdomain_ocr_labeler_spa.core.models import Project
+
+        client.app.state.project_state.set_loaded_project(  # type: ignore[attr-defined]
+            Project(
+                project_id=project_id,
+                project_root=settings.data_root,
+                image_paths=[settings.data_root / f"{index}.png" for index in range(2)],
+                ground_truth_map={},
+                total_pages=2,
+            )
+        )
+        monkeypatch.setattr(
+            "pdomain_ocr_labeler_spa.api.typography.typography_page_review",
+            lambda *_args, **_kwargs: SimpleNamespace(complete=True),
+        )
         resp = client.post(
             f"/api/projects/{project_id}/export",
             json={
@@ -157,7 +203,24 @@ def test_manifest_merge_on_re_export(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
     app = build_app(settings)
     with TestClient(app) as client:
+        from types import SimpleNamespace
+
+        from pdomain_ocr_labeler_spa.core.models import Project
+
+        monkeypatch.setattr(
+            "pdomain_ocr_labeler_spa.api.typography.typography_page_review",
+            lambda *_args, **_kwargs: SimpleNamespace(complete=True),
+        )
         # Export proj-a
+        client.app.state.project_state.set_loaded_project(  # type: ignore[attr-defined]
+            Project(
+                project_id=proj_a,
+                project_root=settings.data_root,
+                image_paths=[settings.data_root / "0.png"],
+                ground_truth_map={},
+                total_pages=1,
+            )
+        )
         resp = client.post(
             f"/api/projects/{proj_a}/export",
             json={
@@ -174,6 +237,15 @@ def test_manifest_merge_on_re_export(tmp_path: Path, monkeypatch: pytest.MonkeyP
         client.get(f"/api/jobs/{job_id}/events")  # drain to completion
 
         # Export proj-b
+        client.app.state.project_state.set_loaded_project(  # type: ignore[attr-defined]
+            Project(
+                project_id=proj_b,
+                project_root=settings.data_root,
+                image_paths=[settings.data_root / f"{index}.png" for index in range(3)],
+                ground_truth_map={},
+                total_pages=3,
+            )
+        )
         resp = client.post(
             f"/api/projects/{proj_b}/export",
             json={
@@ -190,6 +262,15 @@ def test_manifest_merge_on_re_export(tmp_path: Path, monkeypatch: pytest.MonkeyP
         client.get(f"/api/jobs/{job_id}/events")  # drain to completion
 
         # Re-export proj-a — should update its entry without touching proj-b
+        client.app.state.project_state.set_loaded_project(  # type: ignore[attr-defined]
+            Project(
+                project_id=proj_a,
+                project_root=settings.data_root,
+                image_paths=[settings.data_root / "0.png"],
+                ground_truth_map={},
+                total_pages=1,
+            )
+        )
         resp = client.post(
             f"/api/projects/{proj_a}/export",
             json={

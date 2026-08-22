@@ -15,10 +15,16 @@ last_verified: 2026-07-13
 The `pd-ocr-labeler-driver` agent operates the labeler UI through
 Playwright. It uses **stable `data-testid` attributes** and **stable
 URL paths** to find and click things. The SPA must preserve every
-testid and URL shape from the legacy labeler.
+testid and URL shape from the legacy labeler except the typography clean-break
+surfaces explicitly retired below.
 
 This document is the canonical list. If the SPA implementation
 diverges, **the SPA is wrong**, not this document.
+
+The clean-break typography contract removes legacy character-range test IDs,
+toolbar style controls, and the direct word-style route. Drivers use
+`TypographySection` plus the typography head, correction, review, and progress
+APIs. Export remains disabled until both progress gates load and pass.
 
 > Cross-refs:
 > Legacy testid catalogue —
@@ -293,7 +299,7 @@ For each word at `(line_index=l, word_index=w)`:
 | `word-status-icon-{l}-{w}` | Status icon (check/warning/cancel/help/info) |
 | `word-image-cell-{l}-{w}` | Image cell wrapper (for hover/click handlers) |
 | `word-tag-chip-{l}-{w}-{label}` | Style/component chip (one per active label, label is normalised key like `italics`) |
-| `word-tag-clear-button-{l}-{w}-{label}` | × on a chip |
+| `word-tag-clear-button-{l}-{w}-{label}` | × on a structural component chip; legacy style chips are read-only |
 
 The `{l}-{w}` suffix matches the legacy convention. The driver
 agent already parses these.
@@ -316,17 +322,11 @@ word-merge is in the dialog) are `display: none` but the testid
 still exists, with `data-testid-stub="true"` so the driver can
 distinguish "not present" from "stubbed".
 
-### 2.10 Apply Style toolbar row
+### 2.10 Typography authoring
 
-| Testid | What it is |
-|---|---|
-| `apply-style-select` | Style select |
-| `scope-select` | Scope select (whole / part) |
-| `apply-style-button` | Apply Style |
-| `apply-component-select` | Component select |
-| `apply-component-button` | Apply Component |
-| `clear-component-button` | Clear Component |
-| `word-add-button` | Add Word |
+The legacy toolbar style row and its test IDs are retired. Typography driver
+flows select a word, open `typography-section`, fetch its head, and submit a
+correction. Structural component and Add Word controls retain their own IDs.
 
 ### 2.11 Word edit dialog
 
@@ -342,10 +342,7 @@ distinguish "not present" from "stubbed".
 | `dialog-tag-chips-slot` | Container for tag chips |
 | `dialog-current-zoom-toggle` | 1x/2x/5x/10x toggle |
 | `dialog-gt-input` | GT input inside dialog |
-| `dialog-style-select` | Style select |
-| `dialog-scope-select` | Scope select |
 | `dialog-component-select` | Component select |
-| `dialog-apply-style-button` | Apply Style |
 | `dialog-apply-component-button` | Apply Component |
 | `dialog-clear-component-button` | Clear Component |
 | `dialog-merge-prev-button` | Merge Prev |
@@ -543,7 +540,7 @@ CSS classes we DO preserve (for any external script that may style):
 - `.monospace` — applied to OCR text labels and GT inputs
 - `.ocr-drag-rect` — drag rectangle on the viewport
 - `.word-tag-chip` — style/component chip outer
-- `.word-tag-clear-button` — × button on a chip
+- `.word-tag-clear-button` — × button on a structural component chip
 
 ---
 

@@ -599,7 +599,7 @@ describe("STB-3: LineDetail LineCard action buttons perform their mutations", ()
   // P1.4 (B-43): the WordCell tag-chip × must remove the style/component.
   // LineDetail previously passed no onClearWordTag → the × was a no-op,
   // and the backend had no style-remove path at all.
-  it("word-tag-clear-button (style) POSTs words/{li}/{wi}/style with enabled:false", async () => {
+  it("does not render legacy style-clear controls", () => {
     const calls: Record<string, unknown>[] = [];
     server.use(
       http.post("/api/projects/p1/pages/0/words/:li/:wi/style", async ({ request, params }) => {
@@ -613,20 +613,10 @@ describe("STB-3: LineDetail LineCard action buttons perform their mutations", ()
     );
     const page = makePage();
     page.line_matches![0]!.word_matches[0]!.text_style_labels = ["italics"];
-    const user = userEvent.setup();
     selectLine(3);
     renderWithQuery(<LineDetail page={page} projectId="p1" pageIndex={0} />);
-    await user.click(screen.getByTestId("word-tag-clear-button-3-0-italics"));
-    await waitFor(() => expect(calls.length).toBe(1));
-    expect(calls[0]).toEqual(
-      expect.objectContaining({
-        li: "3",
-        wi: "0",
-        style: "italics",
-        scope: "whole",
-        enabled: false,
-      }),
-    );
+    expect(screen.queryByTestId("word-tag-clear-button-3-0-italics")).not.toBeInTheDocument();
+    expect(calls).toHaveLength(0);
   });
 
   it("word-tag-clear-button (component) POSTs words/{li}/{wi}/component enabled:false", async () => {

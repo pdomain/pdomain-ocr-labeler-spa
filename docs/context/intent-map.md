@@ -21,6 +21,11 @@ last_verified: 2026-07-19
 
 ## Active
 
+- Finish suggestion accept/edit flows and predecessor-based compensating undo
+  for the shipped typography correction journal. Phase-one manual review,
+  current-epoch progress, combined completion gates, and immutable export are
+  implemented.
+
 - Maintain the shipped FastAPI/React labeler and its driver contract.
 - Complete the still-relevant items in the
   [PGDP alignment backlog](../plans/2026-06-14-labeler-spa-pgdp-alignment-backlog.md)

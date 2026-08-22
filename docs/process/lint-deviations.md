@@ -12,6 +12,10 @@ Standing suppressions and per-file rule overrides in this repo.
 Each entry records: the rule, the tool, the file(s) affected, and
 the justification. Update this file whenever a new suppression is added.
 
+Retired character-range maps and endpoints no longer justify lint or type
+exceptions. Typography code uses the standard Ruff and basedpyright gates; no
+typography-specific suppression is approved.
+
 ---
 
 ## Python — ruff
@@ -279,13 +283,10 @@ declared model return type.
 - `src/pdomain_ocr_labeler_spa/api/static_mounts.py:258` —
   `resources.as_file(traversable)` context-manager entry typed as `Path`
   by importlib.resources stubs but the stack expects `str | Path`.
-- `src/pdomain_ocr_labeler_spa/api/pages.py:586, :587` — `char_bboxes_map` /
-  `char_ranges_map` conditional expressions: `x if x else None` produces a
-  wider type than the callee expects; guarded at runtime.
 
 **Justification.** Narrowing gaps between importlib.resources stubs and the
-runtime types, and between conditional-expression result types and callee
-expectations. The runtime types are compatible.
+runtime types. The runtime types are compatible. The former character-range
+map deviation was removed with the clean-break backend.
 
 ---
 

@@ -15,6 +15,12 @@ last_verified: 2026-07-13
 The right pane shows OCR-vs-GT comparisons line by line. It's the
 densest piece of UI in the labeler and the most performance-sensitive.
 
+Word cards do not host or display correction-journal typography state. They may
+show legacy `text_style_labels` as read-only chips. Authors instead use the
+selection-driven right-panel `TypographySection` and correction API. Text validation
+does not require typography completion; only page completion and export combine
+the two gates.
+
 > Cross-refs:
 > Legacy implementation —
 > `pd-ocr-labeler/pd_ocr_labeler/views/projects/pages/text_tabs.py`,
@@ -31,7 +37,6 @@ densest piece of UI in the labeler and the most performance-sensitive.
 ```
 <TextTabs>                                  (components/TextTabs.tsx)
   <ToolbarActionGrid />                     (see 06-toolbar-actions.md)
-  <ApplyStyleRow />
   <AddWordRow />
   <Tabs defaultValue="matches">
     <TabsTrigger value="matches">           data-testid="text-tab-matches"
@@ -197,14 +202,13 @@ This lets all words on a page share one cached image — no per-word
 image fetches. Same algorithm as legacy
 `WordMatchBbox.get_word_image_slice:42`.
 
-#### Row 3 — OCR text + tag chips
+#### Row 3 — OCR text + structural chips
 
 ```tsx
 <div data-testid={`ocr-text-label-${l}-${w}`} className="font-mono">
   {word.ocr_text}
 </div>
 <div className="flex flex-wrap gap-1">
-  {word.text_style_labels.map((s) => <StyleChip key={s} word={word} label={s} />)}
   {word.word_components.map((c) => <ComponentChip key={c} word={word} label={c} />)}
 </div>
 ```
@@ -212,10 +216,9 @@ image fetches. Same algorithm as legacy
 Tooltip on the OCR label: match status, fuzz score, OCR/GT diff.
 Implemented with shadcn `<Tooltip />`.
 
-Chip styles per [`04-image-viewport.md`](04-image-viewport.md) §2
-(style chips blue family, component chips green family). Each chip has
-a hover-revealed × button (testid `word-tag-clear-button-{l}-{w}-{label}`)
-that POSTs `style` or `component` with the cleared value.
+Chip styles follow [`04-image-viewport.md`](04-image-viewport.md) §2. Legacy
+style chips are read-only. Structural component chips have a hover-revealed ×
+button (`word-tag-clear-button-{l}-{w}-{label}`) that clears the component.
 
 #### Row 4 — GT input
 
@@ -288,7 +291,7 @@ Fuzz score (when not exact) shown as a tiny text below the icon:
 | GT→OCR (line) | `POST /api/.../lines/{n}/copy-gt {direction:"gt_to_ocr"}` | `PagePayload` |
 | OCR→GT (line) | `POST /api/.../lines/{n}/copy-gt {direction:"ocr_to_gt"}` | `PagePayload` |
 | Delete (line) | `POST /api/.../lines/delete-batch {line_indices: [n]}` | `PagePayload` |
-| Clear chip | `POST /api/.../words/{l}/{w}/style {style: "x", scope:"clear"}` | `WordMatch` |
+| Review typography | typography correction POST with `expected_head` | `TypographyHeadResponse` |
 
 Optimistic-update semantics:
 

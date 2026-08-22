@@ -142,9 +142,57 @@ def _load_page_from_envelope_file(json_path: Path) -> Any | None:
 def _page_is_validated(page: Any) -> bool:
     """Return True when ALL words in ``page`` carry ``'validated'`` in ``word_labels``."""
     words = getattr(page, "words", []) or []
-    if not words:
-        return False
     return all("validated" in (getattr(w, "word_labels", None) or []) for w in words)
+
+
+def freeze_export_page(
+    *,
+    page: Any,
+    image_path: Path,
+    page_index: int,
+    prefix: str,
+    blob_project_dir: Path,
+) -> dict[str, object]:
+    """Persist content-addressed page and image bytes for one reviewed export head."""
+    from pdomain_ops.blob_store import BlobStore
+
+    page_payload = json.dumps(
+        page.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode()
+    image_payload = image_path.read_bytes()
+    blobs = BlobStore(blob_project_dir)
+    page_sha256 = blobs.write(page_payload)
+    image_sha256 = blobs.write(image_payload)
+    return {
+        "page_index": page_index,
+        "prefix": prefix,
+        "blob_project_dir": str(blob_project_dir),
+        "page_sha256": page_sha256,
+        "image_sha256": image_sha256,
+    }
+
+
+def load_frozen_export_page(snapshot: dict[str, object]) -> tuple[Any, Path]:
+    """Reload and verify an immutable page/image snapshot from its declared hashes."""
+    import hashlib
+
+    from pdomain_book_tools.ocr.page import Page
+    from pdomain_ops.blob_store import BlobStore
+
+    blob_project_dir = Path(str(snapshot["blob_project_dir"]))
+    page_sha256 = str(snapshot["page_sha256"])
+    image_sha256 = str(snapshot["image_sha256"])
+    for digest in (page_sha256, image_sha256):
+        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+            raise ValueError("invalid frozen export content hash")
+    blobs = BlobStore(blob_project_dir)
+    page_payload = blobs.read(page_sha256)
+    image_payload = blobs.read(image_sha256)
+    if hashlib.sha256(page_payload).hexdigest() != page_sha256:
+        raise ValueError("frozen export page hash mismatch")
+    if hashlib.sha256(image_payload).hexdigest() != image_sha256:
+        raise ValueError("frozen export image hash mismatch")
+    return Page.from_dict(json.loads(page_payload)), blob_project_dir / "blobs" / image_sha256
 
 
 def _prepare_page_gt_first(page: Any) -> None:
@@ -648,6 +696,7 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
     detection_only: bool = bool(payload.get("detection_only", False))
     recognition_only: bool = bool(payload.get("recognition_only", False))
     page_index: int | None = payload.get("page_index")
+    frozen_pages = payload.get("frozen_pages")
     normalize_recognition_labels: bool = bool(payload.get("normalize_recognition_labels", False))
 
     detection = not recognition_only
@@ -672,24 +721,39 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
     else:
         store = None
 
-    refs = resolve_export_page_refs(
-        data_root,
-        project_id,
-        store,
-        page_index=page_index if scope == "current" else None,
-    )
-
-    pages_to_export: list[tuple[ExportPageRef, Path]] = []  # (ref, image_path)
-    for ref in refs:
-        img = _resolve_ref_image(ref, image_paths)
-        if img is not None:
-            pages_to_export.append((ref, img))
-        else:
-            log.warning(
-                "export: no image resolvable for page_index=%d (prefix=%s) — skipping",
-                ref.page_index,
-                ref.prefix,
+    pages_to_export: list[tuple[ExportPageRef, Path, Any]] = []
+    if isinstance(frozen_pages, list):
+        for raw_snapshot in frozen_pages:
+            if not isinstance(raw_snapshot, dict):
+                raise ValueError("invalid frozen export snapshot")
+            page, image_path = load_frozen_export_page(raw_snapshot)
+            pages_to_export.append(
+                (
+                    ExportPageRef(
+                        page_index=int(raw_snapshot["page_index"]),
+                        prefix=str(raw_snapshot["prefix"]),
+                    ),
+                    image_path,
+                    page,
+                )
             )
+    else:
+        refs = resolve_export_page_refs(
+            data_root,
+            project_id,
+            store,
+            page_index=page_index if scope == "current" else None,
+        )
+        for ref in refs:
+            img = _resolve_ref_image(ref, image_paths)
+            if img is not None:
+                pages_to_export.append((ref, img, None))
+            else:
+                log.warning(
+                    "export: no image resolvable for page_index=%d (prefix=%s) — skipping",
+                    ref.page_index,
+                    ref.prefix,
+                )
 
     total_pages = len(pages_to_export)
 
@@ -704,7 +768,7 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
     words_exported_detection = 0
     words_exported_recognition = 0
     pages_skipped_not_validated = 0
-    for page_num, (ref, image_path) in enumerate(pages_to_export):
+    for page_num, (ref, image_path, frozen_page) in enumerate(pages_to_export):
         # Cooperative cancel check.
         current_job = runner._jobs.get(job.job_id)
         if current_job and current_job.status == JobStatus.CANCELLED:
@@ -714,7 +778,7 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
                 shutil.rmtree(project_export_root, ignore_errors=True)
             return
 
-        page = load_export_page(ref, store)
+        page = frozen_page if frozen_page is not None else load_export_page(ref, store)
         if page is None:
             log.warning(
                 "export: could not load page_index=%d (prefix=%s) — skipping", ref.page_index, ref.prefix

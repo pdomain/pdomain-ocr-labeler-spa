@@ -10,23 +10,25 @@ last_verified: 2026-07-13
 
 > **Status**: Active (shipped — hi-fi redesign P2.d, P2.e, P4.c)
 > **Last updated**: 2026-05-16
-> **Components documented**: `StylePalette`, `ComponentPalette`, `UnicodePicker`,
+> **Components documented**: `ChipPalette`, `ComponentPalette`, `UnicodePicker`,
 > `useLayerColors`
 
 ## 1. Overview
 
-These three components provide the labeler with selection surfaces for tagging
-words and inserting special characters. `StylePalette` and `ComponentPalette`
-are chip rows that toggle text-style and component labels on a word. `UnicodePicker`
+These components provide selection surfaces for structural component tagging
+and special-character insertion. `ComponentPalette` uses `ChipPalette` to
+toggle structural labels on a word. `UnicodePicker`
 is a browsable glyph inserter that appears inline wherever a GT text field needs
 a special character. `useLayerColors` is a supporting utility hook that reads
 CSS custom properties for the four OCR layer colors so Konva canvases and
 label chips use theme-accurate colors.
 
+`ChipPalette` is used by `ComponentPalette` only. `TypographySection` renders
+its own server-taxonomy buttons. The frontend has no fallback typography
+taxonomy.
+
 ## 2. User-facing goals
 
-- I need to mark a word as bold, italic, superscript, etc. with a single chip
-  click rather than navigating to a menu or typing a tag string.
 - I need to tag structural word components (drop caps, footnote references,
   page numbers) that distinguish word roles beyond text styling.
 - I need to insert em-dashes, accented characters, Greek letters, and other
@@ -39,10 +41,6 @@ label chips use theme-accurate colors.
 
 ```
 WordDetail
-├── StylePalette            data-testid="style-palette"
-│   └── ChipPalette (reusable building block)
-│       └── Chip (tristate) × N   data-testid="style-chip-{key}"
-│
 └── ComponentPalette        data-testid="component-palette"
     └── ChipPalette
         └── Chip (tristate) × N   data-testid="component-chip-{key}"
@@ -56,8 +54,8 @@ OcrGtCompareRow
 CharFixerSection
 └── UnicodePicker (inline, collapsible, same component)
 
-CharRangesSection
-└── ChipPalette (style or component, per range card kind)
+TypographySection
+└── Native buttons from TypographyHeadResponse.taxonomy.labels
 ```
 
 `useLayerColors` is consumed by `Rail`, `BBoxOverlay`, `ReboxCanvas`,
@@ -65,30 +63,20 @@ CharRangesSection
 
 ## 4. Data model
 
-### StylePalette
+### ChipPalette
 
 Props:
 ```typescript
-interface StylePaletteProps {
-  activeStyles: string[];         // WordMatch.text_style_labels
-  onStyleChange: (styleKey: string, next: TristateValue) => void;
+interface ChipPaletteProps {
+  items: Array<{ key: string; label: string }>;
+  activeKeys: Set<string>;
+  "data-testid-prefix": string;
+  onChange: (key: string, next: TristateValue) => void;
 }
 ```
 
-Supported style keys (in display order):
-
-| key | label |
-|---|---|
-| `bold` | B |
-| `italic` | I |
-| `small-caps` | Sc |
-| `superscript` | Sup |
-| `subscript` | Sub |
-| `strikethrough` | Strike |
-| `underline` | U |
-
-Each chip value is derived as `activeStyles.includes(key) ? "on" : "off"`.
-The `"mixed"` state is never emitted by this component (whole-word styling only).
+Each chip is on when `activeKeys` contains its key. User clicks toggle on/off;
+an externally supplied `mixed` transition is normalized to off.
 
 ### ComponentPalette
 
@@ -100,19 +88,18 @@ interface ComponentPaletteProps {
 }
 ```
 
-Supported component keys:
+The runtime keys come from `useLabelVocabulary().wordComponents`. Known display
+overrides are:
 
 | key | label |
 |---|---|
-| `drop-cap` | Drop Cap |
-| `footnote-ref` | Fn Ref |
-| `page-num` | Page # |
-| `running-head` | Run Hd |
-| `abbreviation` | Abbr |
-| `proper-noun` | Proper |
+| `drop cap` | Drop Cap |
+| `drop cap unrecovered` | Drop Cap? |
+| `footnote marker` | Fn Mark |
+| `subscript` | Sub |
+| `superscript` | Sup |
 
-Same derivation as StylePalette. `"mixed"` state is skipped for whole-word
-component toggles (per `WordDetail`'s `onComponentChange` handler).
+Other server keys display verbatim. Chip test IDs replace spaces with hyphens.
 
 ### ChipPalette (shared building block)
 
@@ -125,9 +112,8 @@ interface ChipPaletteProps {
 }
 ```
 
-Used directly by `CharRangesSection` for per-range style and component chip
-palettes, with `data-testid-prefix` set to `char-range-{N}-style-chip` or
-`char-range-{N}-component-chip`.
+Used by `ComponentPalette` for structural component chips. Typography label
+buttons are implemented directly in `TypographySection`.
 
 The palette uses `TriStateChip` from `@pdomain/pdomain-ui/primitives`; the SPA
 no longer owns a local tri-state chip implementation. `TriStateChip` exposes
@@ -137,9 +123,8 @@ the driver-facing `data-tristate` and `data-tristate-value` attributes.
 
 Evidence:
 
-- Code: `frontend/src/components/right-panel/StylePalette.tsx`,
-  `frontend/src/components/right-panel/ComponentPalette.tsx`, and
-  `frontend/src/components/right-panel/sections/CharRangesSection.tsx` consume
+- Code: `frontend/src/components/right-panel/ChipPalette.tsx` and
+  `frontend/src/components/right-panel/ComponentPalette.tsx` consume
   `@pdomain/pdomain-ui` 0.11.0 as locked in `frontend/pnpm-lock.yaml`
 - Tests: `TriStateChip (pdui) — a11y (aria-pressed)`, `TriStateChip (pdui) —
   cycle`, and `TriStateChip (pdui) — data-tristate attrs`
@@ -208,16 +193,14 @@ compatibility (the type was originally defined there).
 
 ## 5. Interactions and behaviors
 
-### StylePalette / ComponentPalette
+### ComponentPalette
 
 - Each `Chip` cycles through `"off"` → `"on"` → `"off"` on successive clicks
   (tristate, but `"mixed"` is only externally assignable, not reached by user
   clicks in this context).
-- `onChange(key, next)` fires immediately on each click; `WordDetail` wires this
-  to `applyStyle.mutate(...)` or `applyComponent.mutate(...)` which POST to the
-  server and invalidate the page cache.
-- The `activeStyles` / `activeComponents` arrays come from the server-fetched
-  `WordMatch`, so the chip state always reflects the persisted value.
+- `onChange(key, next)` fires immediately; `WordDetail` wires this to the
+  structural component mutation and invalidates the page cache.
+- Active components come from the server-fetched `WordMatch`.
 
 ### UnicodePicker
 
@@ -262,25 +245,16 @@ compatibility (the type was originally defined there).
 
 ## 6. data-testid contract
 
-### StylePalette / ComponentPalette
+### ComponentPalette
 
 | testid | element | description |
 |---|---|---|
-| `style-palette` | div | Style palette outer container |
-| `style-chip-bold` | Chip button | Bold toggle |
-| `style-chip-italic` | Chip button | Italic toggle |
-| `style-chip-small-caps` | Chip button | Small-caps toggle |
-| `style-chip-superscript` | Chip button | Superscript toggle |
-| `style-chip-subscript` | Chip button | Subscript toggle |
-| `style-chip-strikethrough` | Chip button | Strikethrough toggle |
-| `style-chip-underline` | Chip button | Underline toggle |
 | `component-palette` | div | Component palette outer container |
-| `component-chip-drop-cap` | Chip button | Drop Cap toggle |
-| `component-chip-footnote-ref` | Chip button | Footnote reference toggle |
-| `component-chip-page-num` | Chip button | Page number toggle |
-| `component-chip-running-head` | Chip button | Running head toggle |
-| `component-chip-abbreviation` | Chip button | Abbreviation toggle |
-| `component-chip-proper-noun` | Chip button | Proper noun toggle |
+| `component-chip-drop-cap` | Chip button | `drop cap` toggle |
+| `component-chip-drop-cap-unrecovered` | Chip button | `drop cap unrecovered` toggle |
+| `component-chip-footnote-marker` | Chip button | `footnote marker` toggle |
+| `component-chip-subscript` | Chip button | `subscript` toggle |
+| `component-chip-superscript` | Chip button | `superscript` toggle |
 
 ### UnicodePicker
 
@@ -308,10 +282,7 @@ digits: e.g. `unicode-char-U+2014` for em-dash.
 
 ## 8. Edge cases
 
-- **All styles off**: all chips render in "off" state. No default selection.
-- **Unknown style in `activeStyles`**: the chip for that key will not be found
-  in `STYLE_ITEMS`, so it will not be rendered (unknown keys are silently dropped
-  from display, not errored).
+- **All components off**: all component chips render in "off" state.
 - **UnicodePicker empty set**: no set in `CHAR_SETS` should be empty, but if one
   is, the card grid renders nothing and no error is thrown.
 - **Unresolvable slash command**: `resolveSlashCommand` returns `null`; no
@@ -319,38 +290,26 @@ digits: e.g. `unicode-char-U+2014` for em-dash.
 - **useLayerColors in jsdom**: `getComputedStyle` returns empty strings for custom
   properties; fallback values are used. Tests should not assert exact hex values
   unless they set the CSS variables explicitly.
-- **Mixed state from CharRangesSection**: `ChipPalette` in `CharRangesSection`
-  uses `activeKeys.has(key) ? "on" : "off"`. The `"mixed"` state in
-  CharRangesSection comes only from the legacy `pendingStyles` map in the pending
-  panel — it is never emitted by `ChipPalette` itself.
+- **Mixed component state**: `ChipPalette` normalizes a mixed click transition
+  to off. `TypographySection` does not use this component.
 
 ## 9. Open questions
 
-1. **Style chip "mixed" in word context**: the `TristateValue` type supports
-   `"mixed"` to indicate that some (but not all) characters in the word carry a
-   style. WordDetail skips `"mixed"` updates (guard `if (next === "mixed")
-   return`). When should `"mixed"` appear for a whole-word chip? E.g. when the
-   word has both bold and non-bold characters via `CharRanges`. Currently
-   `activeStyles` comes from `word.text_style_labels` which is an all-or-nothing
-   list — there is no mixed-state representation in the API schema.
-
-2. **UnicodePicker size / scroll**: the card grid has a hard-coded `maxHeight:
+1. **UnicodePicker size / scroll**: the card grid has a hard-coded `maxHeight:
    160px`. Whether this is appropriate for all deployment contexts (small laptop
    screens vs. external monitors) has not been validated.
 
-3. **Slash-command coverage**: the SLASH_MAP covers ~80 names. Common OCR book
+2. **Slash-command coverage**: the SLASH_MAP covers ~80 names. Common OCR book
    characters (e.g. `\pound`, `\asterism`, Old English letters) may be missing.
    A process for extending the map (community-maintained? user-configurable?) is
    not defined.
 
-4. **useLayerColors reactivity**: reading CSS tokens once per render is correct
+3. **useLayerColors reactivity**: reading CSS tokens once per render is correct
    for initial load and for most interactions. If the user switches theme (e.g.
    via a settings panel) mid-session, Konva canvases that cache the color values
    will not automatically update. A subscription mechanism (MutationObserver on
    `document.documentElement`'s `data-theme` attribute) would solve this.
 
-5. **ComponentPalette scope**: `ApplyComponentRequest.enabled` toggles
-   `component` on or off for the whole word. There is no per-character component
-   annotation path at the whole-word level. The relationship between
-   `ComponentPalette` at the word level and the `CharRangesSection` "Component"
-   kind is not fully specified.
+4. **ComponentPalette scope**: `ApplyComponentRequest.enabled` toggles a
+   structural component for the whole word. `TypographySection` does not author
+   structural components.

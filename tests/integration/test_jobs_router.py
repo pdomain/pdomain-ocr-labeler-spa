@@ -63,7 +63,7 @@ def _submit_export(client: TestClient, project_id: str = "test-proj") -> str:
     """Helper: submit an export job and return its job_id."""
     resp = client.post(
         f"/api/projects/{project_id}/export",
-        json={"scope": "current", "page_index": 0},
+        json={"scope": "all_validated"},
     )
     assert resp.status_code == 202, resp.text
     return resp.json()["job_id"]
@@ -179,7 +179,7 @@ def test_cancel_queued_job_returns_200(tmp_path: Path) -> None:
     # Submit a job (stays QUEUED — runner not running).
     resp = c.post(
         "/api/projects/test-proj/export",
-        json={"scope": "current", "page_index": 0},
+        json={"scope": "all_validated"},
     )
     assert resp.status_code == 202
     job_id = resp.json()["job_id"]
@@ -204,7 +204,7 @@ def test_cancel_updates_job_status_to_cancelled(tmp_path: Path) -> None:
 
     resp = c.post(
         "/api/projects/test-proj/export",
-        json={"scope": "current", "page_index": 0},
+        json={"scope": "all_validated"},
     )
     job_id = resp.json()["job_id"]
 

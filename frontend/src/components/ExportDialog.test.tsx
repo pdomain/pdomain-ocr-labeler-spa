@@ -141,6 +141,33 @@ describe("ExportDialog", () => {
     expect(screen.getByTestId("export-button")).toBeTruthy();
   });
 
+  it("blocks export until both text and typography review are complete", async () => {
+    server.use(
+      http.get(`${BASE_URL}/pages/0/typography/review`, () =>
+        HttpResponse.json({
+          project_id: PROJECT_ID,
+          page_index: 0,
+          logical_page_id: "page-0",
+          reviewed_words: 1,
+          text_reviewed_words: 1,
+          typography_reviewed_words: 0,
+          blocked_words: 1,
+          total_words: 2,
+          complete: false,
+          heads: [],
+        }),
+      ),
+    );
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(screen.getByTestId("export-button")).toBeDisabled());
+    expect(screen.getByTestId("export-review-progress")).toHaveTextContent(
+      "Text 1/2 · Typography 0/2",
+    );
+  });
+
   it("clicking Export sends POST and enters running state", async () => {
     let postedBody: unknown = null;
     server.use(
@@ -154,6 +181,7 @@ describe("ExportDialog", () => {
       wrapper: makeWrapper(),
     });
 
+    await waitFor(() => expect(screen.getByTestId("export-button")).toBeEnabled());
     await act(async () => {
       fireEvent.click(screen.getByTestId("export-button"));
     });
@@ -249,6 +277,7 @@ describe("ExportDialog", () => {
       wrapper: makeWrapper(),
     });
 
+    await waitFor(() => expect(screen.getByTestId("export-button")).toBeEnabled());
     await act(async () => {
       fireEvent.click(screen.getByTestId("export-button"));
     });

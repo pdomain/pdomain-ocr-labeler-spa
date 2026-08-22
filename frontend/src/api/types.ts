@@ -964,33 +964,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{project_id}/pages/{page_index}/words/{line_index}/{word_index}/style": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Apply Style
-         * @description ``POST .../words/{li}/{wi}/style`` — apply/remove a text style label.
-         *
-         *     Spec 23 §9 row 2: ``word.apply_style(style_id, scope)`` →
-         *     ``word.apply_style_scope(style, scope)`` in pdomain-book-tools.
-         *     ``enabled=False`` (P1.4) removes the label via
-         *     ``word.remove_style_label(style)`` instead — the off-state for the
-         *     toolbar clear-style button, the WordDetail chip toggle and the
-         *     WordCell tag-x.
-         */
-        post: operations["apply_style_api_projects__project_id__pages__page_index__words__line_index___word_index__style_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/projects/{project_id}/pages/{page_index}/words/{line_index}/{word_index}/component": {
         parameters: {
             query?: never;
@@ -1262,33 +1235,6 @@ export interface paths {
          *     word-relative).
          */
         post: operations["erase_pixels_api_projects__project_id__pages__page_index__words__line_index___word_index__erase_pixels_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{project_id}/pages/{page_index}/words/{line_index}/{word_index}/char-ranges": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Set Char Ranges
-         * @description ``POST .../words/{li}/{wi}/char-ranges`` — set positioned char-range styles (FO-2).
-         *
-         *     Replaces all char-range annotations for the word in one atomic
-         *     operation. Maps are written to ``PageState`` and best-effort persisted
-         *     into the content blob via ``labeler_sidecars``.
-         *
-         *     When no PageState is seeded the route falls through to a stub
-         *     PagePayload (same pattern as other mutation endpoints).
-         */
-        post: operations["set_char_ranges_api_projects__project_id__pages__page_index__words__line_index___word_index__char_ranges_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2538,31 +2484,6 @@ export interface components {
             enabled: boolean;
         };
         /**
-         * ApplyStyleRequest
-         * @description Spec §2 lines 288-290.
-         *
-         *     ``enabled`` (P1.4, B-39/41/43) mirrors ``ApplyComponentRequest``:
-         *     ``True`` (default, back-compat) adds the style via book-tools'
-         *     add-only ``apply_style_scope``; ``False`` removes it via
-         *     ``remove_style_label``. Before this flag the SPA had no style-remove
-         *     path at all, so every clear-style surface silently no-oped.
-         */
-        ApplyStyleRequest: {
-            /** Style */
-            style: string;
-            /**
-             * Scope
-             * @default whole
-             * @enum {string}
-             */
-            scope: "whole" | "part";
-            /**
-             * Enabled
-             * @default true
-             */
-            enabled: boolean;
-        };
-        /**
          * ArtifactReference
          * @description Path-safe content-addressed artifact metadata with no filesystem I/O.
          */
@@ -2616,46 +2537,6 @@ export interface components {
             width: number;
             /** Height */
             height: number;
-        };
-        /**
-         * CharRange
-         * @description A single positioned character range — FO-2.
-         *
-         *     ``start`` and ``end`` are character indices into the word's OCR text
-         *     (0-based, inclusive on both ends).  ``styles`` is the list of style
-         *     labels that apply to this range (e.g. ``["italic", "bold"]``).
-         *
-         *     Pydantic validates that ``start`` and ``end`` are non-negative; the
-         *     route does not validate that they fall within the word's actual text
-         *     length (the word text may change between client render and server
-         *     receipt, and the old positions are still meaningful as metadata).
-         */
-        "CharRange-Input": {
-            /** Start */
-            start: number;
-            /** End */
-            end: number;
-            /** Styles */
-            styles: string[];
-        };
-        /**
-         * CharRange
-         * @description A single positioned character range within a word — FO-2.
-         *
-         *     ``start`` and ``end`` are character indices into the word's OCR text
-         *     (0-based, inclusive on both ends).  ``styles`` is the list of style
-         *     labels that apply to this range (e.g. ``["italic", "bold"]``).
-         *
-         *     Stored in ``PageState.char_ranges_map`` and surfaced onto
-         *     ``WordMatch.char_ranges`` at payload-build time.
-         */
-        "CharRange-Output": {
-            /** Start */
-            start: number;
-            /** End */
-            end: number;
-            /** Styles */
-            styles: string[];
         };
         /**
          * CommonUIPrefs
@@ -4500,22 +4381,6 @@ export interface components {
             char_bboxes: components["schemas"]["BBox"][];
         };
         /**
-         * SetCharRangesRequest
-         * @description ``POST .../words/{li}/{wi}/char-ranges`` body — FO-2.
-         *
-         *     Replaces all character-range annotations for the given word.  An
-         *     empty ``ranges`` list clears all existing ranges.
-         *
-         *     Ranges are stored on ``PageState.char_ranges_map`` and embedded under
-         *     ``labeler_sidecars`` in the event-store content blob (Wave 0.1). They are
-         *     also set as ``word.char_ranges`` for in-session convenience; book-tools
-         *     does not yet serialize that attribute on ``Word.to_dict``.
-         */
-        SetCharRangesRequest: {
-            /** Ranges */
-            ranges: components["schemas"]["CharRange-Input"][];
-        };
-        /**
          * SetCurrentPageIndexRequest
          * @description Body for ``POST /api/projects/{id}/current-page-index`` — F1 fix.
          */
@@ -4690,6 +4555,7 @@ export interface components {
             review_contract_version: string;
             /** Grapheme Map Version */
             grapheme_map_version: string;
+            taxonomy: components["schemas"]["TypographyTaxonomy"];
             label_states_schema?: components["schemas"]["LabelStates"] | null;
             word_typography?: components["schemas"]["WordTypography-Output"] | null;
             correction?: components["schemas"]["TypographyCorrection"] | null;
@@ -4819,6 +4685,13 @@ export interface components {
             page_head_sha256: string;
             /** Word Revision */
             word_revision: number;
+            /** Text */
+            text: string;
+            /** Graphemes */
+            graphemes: string[];
+            /** Grapheme Map Version */
+            grapheme_map_version: string;
+            taxonomy: components["schemas"]["TypographyTaxonomy"];
             /** Revision */
             revision: number;
             correction: components["schemas"]["TypographyCorrection"] | null;
@@ -5101,8 +4974,6 @@ export interface components {
             word_id?: string | null;
             /** Char Bboxes */
             char_bboxes?: components["schemas"]["BBox"][] | null;
-            /** Char Ranges */
-            char_ranges?: components["schemas"]["CharRange-Output"][] | null;
             glyph_annotations?: components["schemas"]["GlyphAnnotationsModel"] | null;
             glyph_predictions?: components["schemas"]["GlyphAnnotationsModel"] | null;
         };
@@ -6254,44 +6125,6 @@ export interface operations {
             };
         };
     };
-    apply_style_api_projects__project_id__pages__page_index__words__line_index___word_index__style_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-                page_index: number;
-                line_index: number;
-                word_index: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ApplyStyleRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PagePayload"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     apply_component_api_projects__project_id__pages__page_index__words__line_index___word_index__component_post: {
         parameters: {
             query?: never;
@@ -6643,44 +6476,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ErasePixelsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PagePayload"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_char_ranges_api_projects__project_id__pages__page_index__words__line_index___word_index__char_ranges_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-                page_index: number;
-                line_index: number;
-                word_index: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetCharRangesRequest"];
             };
         };
         responses: {

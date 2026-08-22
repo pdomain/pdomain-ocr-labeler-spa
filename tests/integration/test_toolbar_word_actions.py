@@ -104,8 +104,8 @@ def test_word_delete(toolbar_loaded: Any) -> None:
     assert len(page.lines[0].words) == before - 1
 
 
-def test_word_apply_style(toolbar_loaded: Any) -> None:
-    client, _ps, page = toolbar_loaded
+def test_word_apply_style_route_is_removed(toolbar_loaded: Any) -> None:
+    client, _ps, _page = toolbar_loaded
     # Backend uses the book-tools canonical label "italics" (plural). The
     # frontend grid's hardcoded label list uses "italic" (singular) — flagged
     # as a latent parity bug in OPEN_QUESTIONS.
@@ -113,13 +113,10 @@ def test_word_apply_style(toolbar_loaded: Any) -> None:
         f"{_BASE}/words/0/0/style",
         json={"style": "italics", "scope": "whole"},
     )
-    assert r.status_code != 404
-    assert r.status_code == 200, r.text
-    labels = [s.lower() for s in (page.lines[0].words[0].text_style_labels or [])]
-    assert "italics" in labels
+    assert r.status_code == 404
 
 
-def test_word_remove_style(toolbar_loaded: Any) -> None:
+def test_word_remove_style_route_is_removed(toolbar_loaded: Any) -> None:
     """P1.4 (B-39/41/43): ``enabled:false`` removes a style label.
 
     book-tools' ``apply_style_scope`` is ADD-ONLY; before this slice the
@@ -128,34 +125,21 @@ def test_word_remove_style(toolbar_loaded: Any) -> None:
     off-toggle, WordCell tag-x) silently no-oped. Mirrors the component
     route's ``enabled`` flag.
     """
-    client, _ps, page = toolbar_loaded
+    client, _ps, _page = toolbar_loaded
     r = client.post(
         f"{_BASE}/words/0/0/style",
         json={"style": "italics", "scope": "whole"},
     )
-    assert r.status_code == 200, r.text
-    labels = [s.lower() for s in (page.lines[0].words[0].text_style_labels or [])]
-    assert "italics" in labels
-
-    r = client.post(
-        f"{_BASE}/words/0/0/style",
-        json={"style": "italics", "scope": "whole", "enabled": False},
-    )
-    assert r.status_code == 200, r.text
-    labels = [s.lower() for s in (page.lines[0].words[0].text_style_labels or [])]
-    assert "italics" not in labels
+    assert r.status_code == 404
 
 
-def test_word_apply_style_enabled_defaults_true(toolbar_loaded: Any) -> None:
-    """Back-compat: bodies without ``enabled`` keep the add semantics."""
-    client, _ps, page = toolbar_loaded
+def test_word_apply_style_schema_is_not_accepted(toolbar_loaded: Any) -> None:
+    client, _ps, _page = toolbar_loaded
     r = client.post(
         f"{_BASE}/words/0/1/style",
         json={"style": "bold", "scope": "whole"},
     )
-    assert r.status_code == 200, r.text
-    labels = [s.lower() for s in (page.lines[0].words[1].text_style_labels or [])]
-    assert "bold" in labels
+    assert r.status_code == 404
 
 
 def test_word_apply_component(toolbar_loaded: Any) -> None:

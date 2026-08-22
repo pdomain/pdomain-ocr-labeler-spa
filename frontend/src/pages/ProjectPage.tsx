@@ -69,12 +69,7 @@ import {
   useDeleteLine,
   useMergeLines,
 } from "../hooks/useLineMutations";
-import {
-  useApplyStyle,
-  useApplyComponent,
-  useAddWord,
-  useReboxWord,
-} from "../hooks/useWordMutations";
+import { useApplyComponent, useAddWord, useReboxWord } from "../hooks/useWordMutations";
 // Lane D reuses `toggleAddWordMode` / `exitToSelectMode` (viewport-store
 // helpers) + the `handleAddWord` handler below to add an add-word button
 // outside the toolbar grid without duplicating the mutation wiring.
@@ -322,7 +317,6 @@ export default function ProjectPage() {
   const mergeLines = useMergeLines(pid, idx0);
 
   // ── Word mutations for the Apply-Style / Component / Add-Word controls (B2) ─
-  const applyStyle = useApplyStyle(pid, idx0);
   const applyComponent = useApplyComponent(pid, idx0);
   const addWord = useAddWord(pid, idx0);
 
@@ -696,36 +690,9 @@ export default function ProjectPage() {
     return wp ? [wp] : [];
   }
 
-  function handleApplyStyle(style: string, scope: string) {
-    if (!style) return;
-    const targets = selectedWordTargets();
-    if (targets.length === 0) {
-      toast.warn("Select one or more words before applying a style.");
-      return;
-    }
-    const applyScope = scope === "part" ? "part" : "whole";
-    for (const [lineIndex, wordIndex] of targets) {
-      applyStyle.mutate({ lineIndex, wordIndex, style, scope: applyScope });
-    }
-  }
   // P1.4 (B-39): clearing REMOVES the selected style via enabled:false.
   // The old behavior applied "regular" — a silent no-op, because
   // pdomain-book-tools' `apply_style_scope` is add-only and discards "regular".
-  function handleClearStyle(style: string, scope: string) {
-    if (!style) {
-      toast.warn("Pick the style to clear in the Style… dropdown first.");
-      return;
-    }
-    const targets = selectedWordTargets();
-    if (targets.length === 0) {
-      toast.warn("Select one or more words before clearing a style.");
-      return;
-    }
-    const applyScope = scope === "part" ? "part" : "whole";
-    for (const [lineIndex, wordIndex] of targets) {
-      applyStyle.mutate({ lineIndex, wordIndex, style, scope: applyScope, enabled: false });
-    }
-  }
   function handleApplyComponent(component: string) {
     if (!component) return;
     const targets = selectedWordTargets();
@@ -969,8 +936,6 @@ export default function ProjectPage() {
               selection={toolbarSelection}
               pageData={toolbarPageData}
               onAction={handleToolbarAction}
-              onApplyStyle={handleApplyStyle}
-              onClearStyle={handleClearStyle}
               onApplyComponent={handleApplyComponent}
               onClearComponent={handleClearComponent}
               addWordActive={addWordActive}

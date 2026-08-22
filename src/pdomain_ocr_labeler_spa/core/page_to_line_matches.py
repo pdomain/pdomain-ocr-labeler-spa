@@ -40,7 +40,6 @@ if TYPE_CHECKING:
 
 from .models import (
     BBox,
-    CharRange,
     GlyphAnnotationsModel,
     LigatureMarkModel,
     LineMatch,
@@ -210,7 +209,6 @@ def _word_to_word_match(
     *,
     fuzz_threshold: float = _FUZZ_THRESHOLD,
     char_bboxes_map: dict[str, list[dict[str, int]]] | None = None,
-    char_ranges_map: dict[str, list[dict[str, object]]] | None = None,
     glyph_annotations_map: dict[str, object] | None = None,
     glyph_predictions_map: dict[str, object] | None = None,
     page_width: int | None = None,
@@ -228,11 +226,6 @@ def _word_to_word_match(
         Optional per-word char-bbox sidecar from ``PageState.char_bboxes_map``,
         keyed by ``"{line_index}_{word_index}"``.  When present, the matching
         entry is surfaced onto ``WordMatch.char_bboxes``.
-    char_ranges_map :
-        Optional per-word char-range sidecar from ``PageState.char_ranges_map``,
-        keyed by ``"{line_index}_{word_index}"``.  When present, the matching
-        entry is surfaced onto ``WordMatch.char_ranges``.
-
     Returns ``None`` on any attribute error so the caller can skip.
     """
     try:
@@ -291,21 +284,6 @@ def _word_to_word_match(
                     if isinstance(b, dict)
                 ]
 
-        # Char-range sidecar: look up by composite key.
-        char_ranges: list[CharRange] | None = None
-        if char_ranges_map is not None:
-            raw_ranges = char_ranges_map.get(sidecar_key)
-            if raw_ranges is not None:
-                char_ranges = [
-                    CharRange(
-                        start=int(r.get("start", 0)),  # pyright: ignore[reportArgumentType]
-                        end=int(r.get("end", 0)),  # pyright: ignore[reportArgumentType]
-                        styles=list(r.get("styles", [])),  # pyright: ignore[reportArgumentType]
-                    )
-                    for r in raw_ranges
-                    if isinstance(r, dict)
-                ]
-
         # Glyph annotations — PageState sidecar wins (Wave 2 T1 / M11); fall
         # back to book-tools Word.glyph_annotations when present.
         glyph_annotations: GlyphAnnotationsModel | None = None
@@ -343,7 +321,6 @@ def _word_to_word_match(
             bbox=bb,
             word_id=word_id,
             char_bboxes=char_bboxes,
-            char_ranges=char_ranges,
             glyph_annotations=glyph_annotations,
             glyph_predictions=glyph_predictions,
         )
@@ -438,7 +415,6 @@ def page_to_line_matches(
     source: PageSource = PageSource.OCR,
     fuzz_threshold: float = _FUZZ_THRESHOLD,
     char_bboxes_map: dict[str, list[dict[str, int]]] | None = None,
-    char_ranges_map: dict[str, list[dict[str, object]]] | None = None,
     glyph_annotations_map: dict[str, object] | None = None,
     glyph_predictions_map: dict[str, object] | None = None,
     project_id: str | None = None,
@@ -469,11 +445,6 @@ def page_to_line_matches(
         Optional per-word char-bbox sidecar from ``PageState.char_bboxes_map``,
         keyed by ``"{line_index}_{word_index}"``.  When provided, matching
         entries are surfaced onto each ``WordMatch.char_bboxes``.
-    char_ranges_map :
-        Optional per-word char-range sidecar from ``PageState.char_ranges_map``,
-        keyed by ``"{line_index}_{word_index}"``.  When provided, matching
-        entries are surfaced onto each ``WordMatch.char_ranges``.
-
     Returns
     -------
     ``(PageRecord, list[LineMatch])``
@@ -549,7 +520,6 @@ def page_to_line_matches(
                         word,
                         fuzz_threshold=fuzz_threshold,
                         char_bboxes_map=char_bboxes_map,
-                        char_ranges_map=char_ranges_map,
                         glyph_annotations_map=glyph_annotations_map,
                         glyph_predictions_map=glyph_predictions_map,
                         page_width=page_width,

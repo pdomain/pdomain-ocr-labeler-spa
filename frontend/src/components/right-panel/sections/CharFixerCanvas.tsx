@@ -4,7 +4,7 @@
 //
 // Renders a fixed ~240×120 px Konva Stage that shows the word's cropped image
 // (when an imageUrl is wired) as the background, then overlays one labelled
-// coloured rectangle per char-range bbox. Each rectangle carries 8 drag
+// coloured rectangle per character bbox. Each rectangle carries 8 drag
 // handles (4 corners + 4 midpoints). Dragging a handle reports a new bbox
 // for that range through onChange. Clicking a rectangle selects it (parent
 // renders an accent border + detail strip).
@@ -34,10 +34,10 @@ import { readCssToken, hexToRgba } from "../../../hooks/useLayerColors";
 type BBox = components["schemas"]["BBox"];
 
 /** Per-range bbox shown on the canvas (P4.b local state). */
-export interface CharRangeBBox {
-  /** Inclusive char index range start (matches CharRange.start). */
+export interface CharacterBBox {
+  /** Inclusive character index covered by this bbox. */
   start: number;
-  /** Inclusive char index range end (matches CharRange.end). */
+  /** Inclusive character index at the end of this bbox. */
   end: number;
   /** Bounding box in image-pixel coords. */
   bbox: BBox;
@@ -47,7 +47,7 @@ export interface CharFixerCanvasProps {
   /** Source word bbox (image-pixel coords) — used to fit the Stage view. */
   wordBbox: BBox;
   /** Current per-range bboxes (image-pixel coords). */
-  charBboxes: CharRangeBBox[];
+  charBboxes: CharacterBBox[];
   /** Optional URL of the cropped word image; falls back to a neutral fill. */
   imageUrl?: string | undefined;
   /** Index of the currently-selected range (or null). */
@@ -304,15 +304,15 @@ export function CharFixerCanvas({
 
 /**
  * Synthesize an initial per-range bbox table from a word bbox + char count.
- * Each char range gets a uniform horizontal slice of the word bbox. Caller
- * passes in the char-range start/end pairs; this helper just computes a
+ * Each character gets a uniform horizontal slice of the word bbox. Caller
+ * passes in the character bbox start/end pairs; this helper just computes a
  * sensible default bbox to display until the user moves a handle.
  */
 export function initialCharBboxes(
   wordBbox: BBox,
   ranges: readonly { start: number; end: number }[],
   totalChars: number,
-): CharRangeBBox[] {
+): CharacterBBox[] {
   if (totalChars <= 0 || ranges.length === 0) return [];
   const charW = wordBbox.width / totalChars;
   return ranges.map((r) => {

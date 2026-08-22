@@ -25,6 +25,13 @@ last_verified: 2026-07-13
 
 ## Prerequisites / Setup
 
+Typography exercises use `TypographySection`, not range or toolbar-style
+controls. Validate text independently, review every active word's required SPA
+v1 typography labels, then verify the combined done/export gate. General export
+gates on typography review. It freezes content-addressed page JSON and image
+bytes but does not carry journal heads. Correction-bundle export separately
+selects current reviewed heads. Loading or review errors keep export disabled.
+
 Before executing any phase, the following conditions must be satisfied.
 
 ### P0.1 — Server running
@@ -303,13 +310,14 @@ the word region from the scan. No HTTP request per word (all use the same
 - Style chip (`word-tag-chip-{l}-{w}-italics`) appears in blue-family color
   (bg `#e7f0ff`, border `#b8ccf3`).
 - Component chip (if present) appears in green-family color (bg `#e7f8ee`).
-- Hovering a chip reveals a `×` button (`word-tag-clear-button-{l}-{w}-{label}`).
+- Legacy style chips are read-only. Hovering a structural component chip reveals
+  a `×` button (`word-tag-clear-button-{l}-{w}-{label}`).
 
 **Testids.** `ocr-text-label-{l}-{w}`, `word-tag-chip-{l}-{w}-{label}`,
 `word-tag-clear-button-{l}-{w}-{label}`.
 
-**Pass criterion.** All active style/component labels have visible chips. Chip
-colors match the spec palettes.
+**Pass criterion.** Legacy style labels and active components have visible
+chips. Only structural component chips expose the clear button.
 
 ---
 
@@ -717,40 +725,42 @@ glyph.
 
 ---
 
-### 4.3 — Open CharRanges section
+### 4.3 — Open Typography section
 
-**Action.** Expand the "Char Ranges" accordion item in WordDetail.
+**Action.** Expand the "Typography" accordion item in WordDetail.
 
-**Expected.** `CharRangesSection` shows range controls allowing the user to mark
-character-level style spans within the word (start, end, style list).
+**Expected.** `TypographySection` shows controls that let the user mark
+extended-grapheme typography spans within the word.
 
-**Pass criterion.** Section is visible. At minimum one "Add range" affordance is
+**Pass criterion.** Section is visible. At minimum one "Add span" affordance is
 present.
 
 ---
 
-### 4.4 — Add a character range
+### 4.4 — Add a grapheme span
 
-**Action.** In CharRangesSection, specify a start/end character index and select
-a style label. Confirm.
+**Action.** In TypographySection, select adjacent graphemes and choose
+a taxonomy label, then click Add span.
 
 **Expected.**
 
 - The range is added to the list.
-- `POST .../words/{l}/{w}/char-ranges` fires with the new range data.
+- No POST occurs before Save typography.
 
-**Pass criterion.** New range row appears in the section. No error toast.
+**Pass criterion.** A new draft span row appears in the section. No error toast.
 
 ---
 
-### 4.5 — Delete a character range
+### 4.5 — Delete a grapheme span
 
-**Action.** Click the × or delete button on an existing char range row.
+**Action.** Click the delete button on an existing draft span row.
 
-**Expected.** Range is removed from the list and the backend is updated.
+**Expected.** The span is removed from the local draft. Click Save typography;
+then the correction POST appends against the fetched current head.
 
-**Pass criterion.** The deleted row is gone. Word is re-rendered without the
-deleted range's style.
+**Pass criterion.** The refreshed typography head and span list omit the deleted
+span, and `typography-progress` reflects the returned review state. No WordCard
+style-chip rerender is expected.
 
 ---
 
@@ -893,19 +903,19 @@ value. Status icon in matches view updates.
 
 ---
 
-### 6.3 — Apply style in dialog
+### 6.3 — Review typography in the right panel
 
 **Action.**
 
-1. Select a style from `dialog-style-select` (e.g. "italics").
-2. Select scope from `dialog-scope-select` ("whole").
-3. Click `dialog-apply-style-button`.
+1. Open `TypographySection` for the word.
+2. Select a whole-word span or adjacent graphemes.
+3. Set the server-provided label states and save the review.
 
-**Expected.** `POST .../words/{l}/{w}/style {style:"italics", scope:"whole"}`.
-Style chip appears on the word in the matches view.
+**Expected.** The client fetches the current head and posts a correction with
+`expected_head`. The returned canonical head appears in the section.
 
-**Pass criterion.** Style chip `word-tag-chip-{l}-{w}-italics` is visible after
-dialog is applied or closed.
+**Pass criterion.** The review progress count updates. A stale `409` reloads
+the head and does not silently overwrite another correction.
 
 ---
 
@@ -1149,14 +1159,9 @@ edge.
 
 ---
 
-### 6.22 — Hotkey: Apply Style and Component in dialog
+### 6.22 — Hotkey: Apply structural component in dialog
 
-**Action.** Press `M` (while dialog is open, not in GT input).
-
-**Expected.** `dialog-apply-style-button` action fires — style from
-`dialog-style-select` is applied.
-
-**Action (variant).** Press `Shift+M`.
+**Action.** Press `Shift+M` while the dialog is open and focus is not in GT input.
 
 **Expected.** Component from `dialog-component-select` is applied.
 
@@ -2192,9 +2197,8 @@ of truth is `docs/architecture/13-driver-contract.md`.
 action ∈ `merge|refine|expand-refine|expand-bboxes|split-after|split-selected|
 word-to-line|to-paragraph|gt-to-ocr|ocr-to-gt|validate|unvalidate|delete`
 
-### Apply Style / Word Add Row
+### Component / Word Add Row
 
-`apply-style-select`, `scope-select`, `apply-style-button`,
 `apply-component-select`, `apply-component-button`, `clear-component-button`,
 `word-add-button`
 
@@ -2204,8 +2208,7 @@ word-to-line|to-paragraph|gt-to-ocr|ocr-to-gt|validate|unvalidate|delete`
 `dialog-close-button`, `dialog-previous-preview-column`,
 `dialog-current-preview-column`, `dialog-next-preview-column`,
 `dialog-tag-chips-slot`, `dialog-current-zoom-toggle`, `dialog-gt-input`,
-`dialog-style-select`, `dialog-scope-select`, `dialog-component-select`,
-`dialog-apply-style-button`, `dialog-apply-component-button`,
+`dialog-component-select`, `dialog-apply-component-button`,
 `dialog-clear-component-button`, `dialog-merge-prev-button`,
 `dialog-merge-next-button`, `dialog-split-h-button`, `dialog-split-v-button`,
 `dialog-delete-word-button`, `dialog-crop-above-button`,

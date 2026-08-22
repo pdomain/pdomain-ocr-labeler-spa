@@ -33,6 +33,18 @@ Conventions:
 
 ## 1. Domain models (in-memory)
 
+### Canonical typography state
+
+`WordMatch` and `PageState` no longer carry character-range maps or directly
+authored OCR style labels. Typography uses stable word IDs, Unicode extended
+grapheme spans, and v1 correction journal envelopes. The server supplies the
+trusted page binding, current lineage epoch, taxonomy, and allowed labels.
+
+SPA v1 requires `italic`, `bold`, `small_caps`, `letter_spaced`,
+`superscript`, `subscript`, `font_blackletter`, `font_antiqua`, and
+`font_upright_in_italic`. Only the first three are trainable. `underline` and
+`font_other_reviewed` are audit-only. `drop_cap` remains structural.
+
 ### `Project`
 
 `src/pdomain_ocr_labeler_spa/core/models.py`. Mirrors legacy
@@ -104,15 +116,14 @@ class WordMatch(BaseModel):
     match_status: MatchStatus
     fuzz_score: float | None = None
     is_validated: bool = False
-    text_style_labels: list[str] = []  # italics, small_caps, ...
     word_components: list[str] = []  # footnote_marker, drop_cap, ...
     bbox: BBox  # always present (placeholder for unmatched_gt)
     word_id: str | None = None  # stable id from pdomain_book_tools
 ```
 
-`text_style_labels` / `word_components` come from
-`pdomain_book_tools.ocr.label_normalization.ALLOWED_TEXT_STYLE_LABELS` /
-`ALLOWED_WORD_COMPONENT_LABELS`.
+Typography is not embedded in `WordMatch`; the typography head/review APIs
+return journal state keyed by `word_id`. `word_components` continues to use
+`ALLOWED_WORD_COMPONENT_LABELS` for structural roles.
 
 ### `LineMatch`
 

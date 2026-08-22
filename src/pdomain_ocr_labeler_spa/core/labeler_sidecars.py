@@ -1,7 +1,7 @@
 """Labeler-only maps embedded in the page content blob (Wave 0.1).
 
-Char ranges and char bboxes are not first-class book-tools ``Word`` fields.
-They are stored under a reserved top-level key in the same JSON blob that
+Character bboxes are not first-class book-tools ``Word`` fields. They are
+stored under a reserved top-level key in the same JSON blob that
 ``save_page_content_to_store`` writes, so undo/reload rehydrate from the
 versioned content hash.
 
@@ -23,30 +23,26 @@ LABELER_SIDECARS_KEY = "labeler_sidecars"
 PAGE_SIDECARS_ATTR = "_labeler_sidecars"
 
 
+class LegacyTypographyPayloadError(ValueError):
+    """Raised when removed typography sidecars are present in stored content."""
+
+
 @dataclass
 class LabelerSidecars:
     """Char/glyph map payload carried beside ``Page.to_dict`` (Wave 0.1 / 2 T3)."""
 
-    char_ranges_map: dict[str, Any] = field(default_factory=dict)
     char_bboxes_map: dict[str, Any] = field(default_factory=dict)
     glyph_annotations_map: dict[str, Any] = field(default_factory=dict)
     logical_page_id: str | None = None
 
     def is_empty(self) -> bool:
-        return (
-            not self.char_ranges_map
-            and not self.char_bboxes_map
-            and not self.glyph_annotations_map
-            and self.logical_page_id is None
-        )
+        return not self.char_bboxes_map and not self.glyph_annotations_map and self.logical_page_id is None
 
     def to_blob_section(self) -> dict[str, Any] | None:
         """Return the JSON object for ``labeler_sidecars``, or None if empty."""
         if self.is_empty():
             return None
         out: dict[str, Any] = {}
-        if self.char_ranges_map:
-            out["char_ranges_map"] = dict(self.char_ranges_map)
         if self.char_bboxes_map:
             out["char_bboxes_map"] = dict(self.char_bboxes_map)
         if self.glyph_annotations_map:
@@ -58,12 +54,10 @@ class LabelerSidecars:
     @classmethod
     def from_page_state(cls, pstate: Any) -> LabelerSidecars:
         """Snapshot maps from a ``PageState`` (or any object with the attrs)."""
-        ranges = getattr(pstate, "char_ranges_map", None) or {}
         bboxes = getattr(pstate, "char_bboxes_map", None) or {}
         glyphs = getattr(pstate, "glyph_annotations_map", None) or {}
         logical_page_id = getattr(pstate, "logical_page_id", None)
         return cls(
-            char_ranges_map=dict(ranges) if isinstance(ranges, Mapping) else {},
             char_bboxes_map=dict(bboxes) if isinstance(bboxes, Mapping) else {},
             glyph_annotations_map=dict(glyphs) if isinstance(glyphs, Mapping) else {},
             logical_page_id=str(logical_page_id) if logical_page_id is not None else None,
@@ -75,12 +69,12 @@ class LabelerSidecars:
         raw = content.get(LABELER_SIDECARS_KEY)
         if not isinstance(raw, Mapping):
             return cls()
-        ranges = raw.get("char_ranges_map")
+        if "char_ranges_map" in raw:
+            raise LegacyTypographyPayloadError("legacy char_ranges_map payload is unsupported")
         bboxes = raw.get("char_bboxes_map")
         glyphs = raw.get("glyph_annotations_map")
         logical_page_id = raw.get("logical_page_id")
         return cls(
-            char_ranges_map=dict(ranges) if isinstance(ranges, Mapping) else {},
             char_bboxes_map=dict(bboxes) if isinstance(bboxes, Mapping) else {},
             glyph_annotations_map=dict(glyphs) if isinstance(glyphs, Mapping) else {},
             logical_page_id=logical_page_id if isinstance(logical_page_id, str) else None,
@@ -124,11 +118,9 @@ def apply_sidecars_to_page_state(pstate: Any, sidecars: LabelerSidecars | None) 
     blob payload or a previous version.
     """
     if sidecars is None:
-        pstate.char_ranges_map = {}
         pstate.char_bboxes_map = {}
         pstate.glyph_annotations_map = {}
         return
-    pstate.char_ranges_map = dict(sidecars.char_ranges_map)
     pstate.char_bboxes_map = dict(sidecars.char_bboxes_map)
     pstate.glyph_annotations_map = dict(sidecars.glyph_annotations_map)
     if sidecars.logical_page_id is not None:

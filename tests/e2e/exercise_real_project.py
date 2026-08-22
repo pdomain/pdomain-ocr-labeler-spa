@@ -924,18 +924,6 @@ def test_phase_4_2_apply_char_fix(exercise_server: ExerciseServer, page: Page) -
     """P4.2 — click a character cell in CharFixer canvas, type replacement, confirm."""
 
 
-@pytest.mark.e2e
-@pytest.mark.skip("TODO: walk in browser — CU-2.2")
-def test_phase_4_4_add_char_range(exercise_server: ExerciseServer, page: Page) -> None:
-    """P4.4 — specify start/end/style in CharRangesSection; POST char-ranges fires."""
-
-
-@pytest.mark.e2e
-@pytest.mark.skip("TODO: walk in browser — CU-2.2")
-def test_phase_4_5_delete_char_range(exercise_server: ExerciseServer, page: Page) -> None:
-    """P4.5 — click delete on existing char range row; row gone; backend updated."""
-
-
 # --- Phase 5: Erase Tool ---
 
 

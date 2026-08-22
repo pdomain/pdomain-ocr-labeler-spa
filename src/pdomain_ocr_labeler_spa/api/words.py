@@ -54,7 +54,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pdomain_book_tools.ocr.page import Page
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 
 from ..core.models import BBox, GlyphAnnotationsModel
 from ..core.persistence.config_yaml import AppConfig
@@ -104,21 +104,6 @@ class UpdateWordGroundTruthRequest(BaseModel):
                 "Normalize ligatures and long-s to ASCII before saving GT."
             )
         return v
-
-
-class ApplyStyleRequest(BaseModel):
-    """Spec §2 lines 288-290.
-
-    ``enabled`` (P1.4, B-39/41/43) mirrors ``ApplyComponentRequest``:
-    ``True`` (default, back-compat) adds the style via book-tools'
-    add-only ``apply_style_scope``; ``False`` removes it via
-    ``remove_style_label``. Before this flag the SPA had no style-remove
-    path at all, so every clear-style surface silently no-oped.
-    """
-
-    style: str
-    scope: Literal["whole", "part"] = "whole"
-    enabled: bool = True
 
 
 class ApplyComponentRequest(BaseModel):
@@ -563,75 +548,6 @@ def update_word_ground_truth(
             pstate=pstate,
             store=store,
             changes=[{"type": "word_gt", "line": line_index, "word": word_index, "text": body.text}],
-        ):
-            return _store_persist_failed_response(page_id=pstate.page_id)
-
-    return _refresh_payload_response(
-        project_id=project_id,
-        page_index=page_index,
-        project_state=project_state,
-        settings=settings,
-        app_config=app_config,
-    )
-
-
-@router.post(
-    "/{project_id}/pages/{page_index}/words/{line_index}/{word_index}/style",
-    response_model=PagePayload,
-)
-def apply_style(
-    *,
-    project_id: str,
-    page_index: int,
-    line_index: int,
-    word_index: int,
-    body: ApplyStyleRequest,
-    project_state: ProjectState = Depends(get_project_state),
-    settings: Settings = Depends(get_settings),
-    app_config: AppConfig = Depends(get_app_config),
-    store: LabelerPageStore | None = Depends(get_page_store_optional),
-) -> JSONResponse:
-    """``POST .../words/{li}/{wi}/style`` — apply/remove a text style label.
-
-    Spec 23 §9 row 2: ``word.apply_style(style_id, scope)`` →
-    ``word.apply_style_scope(style, scope)`` in pdomain-book-tools.
-    ``enabled=False`` (P1.4) removes the label via
-    ``word.remove_style_label(style)`` instead — the off-state for the
-    toolbar clear-style button, the WordDetail chip toggle and the
-    WordCell tag-x.
-    """
-    err = _check_project_and_page(project_id, page_index, project_state)
-    if err is not None:
-        return err
-
-    pstate = project_state.get_page_state(page_index)
-    page = _resolve_page_object(pstate)
-    if pstate is None or page is None:
-        return _page_not_loaded(page_index)
-
-    page_lock = project_state.get_page_lock(page_index)
-    with page_lock:
-        word = _resolve_word(page, line_index, word_index)
-        if word is None:
-            return _word_not_found(line_index, word_index)
-        if body.enabled:
-            word.apply_style_scope(body.style, body.scope)
-        else:
-            word.remove_style_label(body.style)
-        pstate.generation += 1
-        if not _save_to_store_best_effort(
-            pstate=pstate,
-            store=store,
-            changes=[
-                {
-                    "type": "word_style",
-                    "line": line_index,
-                    "word": word_index,
-                    "style": body.style,
-                    "scope": body.scope,
-                    "enabled": body.enabled,
-                }
-            ],
         ):
             return _store_persist_failed_response(page_id=pstate.page_id)
 
@@ -1415,113 +1331,6 @@ def erase_pixels(
     )
 
 
-# ── FO-2: Char-ranges endpoint ─────────────────────────────────────────
-
-
-class CharRange(BaseModel):
-    """A single positioned character range — FO-2.
-
-    ``start`` and ``end`` are character indices into the word's OCR text
-    (0-based, inclusive on both ends).  ``styles`` is the list of style
-    labels that apply to this range (e.g. ``["italic", "bold"]``).
-
-    Pydantic validates that ``start`` and ``end`` are non-negative; the
-    route does not validate that they fall within the word's actual text
-    length (the word text may change between client render and server
-    receipt, and the old positions are still meaningful as metadata).
-    """
-
-    start: int = Field(ge=0)
-    end: int = Field(ge=0)
-    styles: list[str]
-
-
-class SetCharRangesRequest(BaseModel):
-    """``POST .../words/{li}/{wi}/char-ranges`` body — FO-2.
-
-    Replaces all character-range annotations for the given word.  An
-    empty ``ranges`` list clears all existing ranges.
-
-    Ranges are stored on ``PageState.char_ranges_map`` and embedded under
-    ``labeler_sidecars`` in the event-store content blob (Wave 0.1). They are
-    also set as ``word.char_ranges`` for in-session convenience; book-tools
-    does not yet serialize that attribute on ``Word.to_dict``.
-    """
-
-    ranges: list[CharRange]
-
-
-@router.post(
-    "/{project_id}/pages/{page_index}/words/{line_index}/{word_index}/char-ranges",
-    response_model=PagePayload,
-)
-def set_char_ranges(
-    *,
-    project_id: str,
-    page_index: int,
-    line_index: int,
-    word_index: int,
-    body: SetCharRangesRequest,
-    project_state: ProjectState = Depends(get_project_state),
-    settings: Settings = Depends(get_settings),
-    app_config: AppConfig = Depends(get_app_config),
-    store: LabelerPageStore | None = Depends(get_page_store_optional),
-) -> JSONResponse:
-    """``POST .../words/{li}/{wi}/char-ranges`` — set positioned char-range styles (FO-2).
-
-    Replaces all char-range annotations for the word in one atomic
-    operation. Maps are written to ``PageState`` and best-effort persisted
-    into the content blob via ``labeler_sidecars``.
-
-    When no PageState is seeded the route falls through to a stub
-    PagePayload (same pattern as other mutation endpoints).
-    """
-    err = _check_project_and_page(project_id, page_index, project_state)
-    if err is not None:
-        return err
-
-    pstate = project_state.get_page_state(page_index)
-    page = _resolve_page_object(pstate)
-    if pstate is None or page is None:
-        return _page_not_loaded(page_index)
-
-    page_lock = project_state.get_page_lock(page_index)
-    sidecar_key = f"{line_index}_{word_index}"
-    with page_lock:
-        word = _resolve_word(page, line_index, word_index)
-        if word is None:
-            return _word_not_found(line_index, word_index)
-
-        range_dicts = [r.model_dump() for r in body.ranges]
-        # In-session attr for code that reads the live word object.
-        word.char_ranges = range_dicts
-        # Sidecar is the durable carrier (content blob labeler_sidecars).
-        pstate.char_ranges_map[sidecar_key] = range_dicts
-
-        pstate.generation += 1
-        if not _save_to_store_best_effort(
-            pstate=pstate,
-            store=store,
-            changes=[
-                {
-                    "type": "set_char_ranges",
-                    "line_index": line_index,
-                    "word_index": word_index,
-                    "count": len(range_dicts),
-                }
-            ],
-        ):
-            return _store_persist_failed_response(page_id=pstate.page_id)
-
-    return _refresh_payload_response(
-        project_id=project_id,
-        page_index=page_index,
-        project_state=project_state,
-        settings=settings,
-        app_config=app_config,
-    )
-
-
 # ── Char-bboxes endpoint ──────────────────────────────────────────────
 
 
@@ -1776,15 +1585,12 @@ def install_words_router(app) -> None:  # type: ignore[no-untyped-def]
 __all__ = [
     "AddWordRequest",
     "ApplyComponentRequest",
-    "ApplyStyleRequest",
-    "CharRange",
     "DeleteWordsBatchRequest",
     "ErasePixelsRequest",
     "MergeWordsRequest",
     "NudgeBboxRequest",
     "ReboxWordRequest",
     "SetCharBboxesRequest",
-    "SetCharRangesRequest",
     "SplitWordRequest",
     "ToggleValidatedRequest",
     "UpdateWordGroundTruthRequest",

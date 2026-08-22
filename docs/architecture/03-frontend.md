@@ -20,6 +20,11 @@ This spec covers the **shell**: routing, state stores, generated API
 client, app chrome, and the page tree. Per-component specs (image
 viewport, word matches, toolbar, dialog, etc.) deepen each piece.
 
+`TypographySection` is the sole inline-typography authoring surface. It uses
+the server taxonomy and extended-grapheme map, fetches the current head before
+each append, and reloads after stale-head `409` responses. Retired style and
+character-range hooks are unsupported.
+
 ---
 
 ## 1. Project layout
@@ -77,7 +82,7 @@ frontend/
 │   │   ├── WordCell.tsx
 │   │   ├── WordEditDialog.tsx
 │   │   ├── ToolbarActionGrid.tsx
-│   │   ├── ApplyStyleRow.tsx
+│   │   ├── right-panel/sections/TypographySection.tsx
 │   │   ├── AddWordRow.tsx
 │   │   ├── ExportDialog.tsx
 │   │   ├── BusyOverlay.tsx
@@ -150,7 +155,7 @@ Evidence:
 
 - Code: `frontend/src/components/ui/tabs.tsx`,
   `frontend/src/components/right-panel/OcrGtCompareRow.tsx`,
-  `frontend/src/components/right-panel/StylePalette.tsx`,
+  `frontend/src/components/right-panel/ChipPalette.tsx`,
   `frontend/src/lib/toast.ts`, `frontend/src/hooks/useNotificationStream.tsx`,
   and `frontend/src/styles/tokens.css`; local `Input.tsx`, `Chip.tsx`, and
   `button.tsx` are absent
@@ -525,36 +530,41 @@ flat-by-kind, same as pgdp-prep. Revisit if the repo passes ~20 pages.
 
 ## 10. Mutation patterns
 
-Every server-mutating action follows this shape:
+Typography append uses its actual head-aware hook:
 
 ```tsx
-const qc = useQueryClient();
-const mutation = useMutation({
-  mutationFn: (req: ApplyStyleRequest) =>
-    api.post<WordMatch>(
-      `/api/projects/${pid}/pages/${idx}/words/${l}/${w}/style`,
-      { body: req }
-    ),
-  onMutate: async (req) => {
-    // optimistic: patch the cached PagePayload
-    await qc.cancelQueries({ queryKey: ["page", pid, idx] });
-    const prev = qc.getQueryData<PagePayload>(["page", pid, idx]);
-    if (prev) {
-      qc.setQueryData<PagePayload>(["page", pid, idx], optimisticApplyStyle(prev, req));
-    }
-    return { prev };
-  },
-  onError: (_e, _req, ctx) => {
-    if (ctx?.prev) qc.setQueryData(["page", pid, idx], ctx.prev);
-    toast.error("Apply style failed");
-  },
-  onSuccess: (updated) => {
-    // server canonicalised the WordMatch — patch into the cache
-    qc.setQueryData<PagePayload>(["page", pid, idx], (cur) =>
-      cur ? replaceWordMatch(cur, updated) : cur
-    );
-  },
-});
+export function useAppendTypographyCorrection(
+  projectId: string,
+  pageIndex: number,
+  wordId: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation<TypographyHead, TypographyApiError, TypographySubmission>({
+    retry: false,
+    mutationFn: (submission) =>
+      apiJson<TypographyHead>(
+        `${pageBase(projectId, pageIndex)}/words/${encodeURIComponent(wordId)}/corrections`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(submission),
+        },
+      ),
+    onSuccess: (head) => {
+      queryClient.setQueryData(["typography-head", projectId, pageIndex, wordId], head);
+      void queryClient.invalidateQueries({
+        queryKey: ["typography-review", projectId, pageIndex],
+      });
+    },
+    onError: (error) => {
+      if (error.status === 409) {
+        void queryClient.invalidateQueries({
+          queryKey: ["typography-head", projectId, pageIndex, wordId],
+        });
+      }
+    },
+  });
+}
 ```
 
 Key rules:
@@ -562,7 +572,8 @@ Key rules:
 - **Always** invalidate (or patch) the relevant query on success.
 - Never rely on `refetchOnWindowFocus`.
 - When the server returns `PagePayload` (multi-word effects),
-  `qc.setQueryData(["page", pid, idx], updated)` directly — no refetch.
+  `queryClient.setQueryData(["page", projectId, pageIndex], updated)` directly
+  — no refetch.
 
 ---
 

@@ -217,7 +217,6 @@ function pageFixtureWithWords() {
             char_bboxes: [],
             styles: [],
             components: [],
-            char_ranges: [],
           },
         ],
       },

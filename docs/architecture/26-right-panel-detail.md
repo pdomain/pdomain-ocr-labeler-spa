@@ -27,6 +27,12 @@ and a tree of child items. Together these views allow a labeler to inspect,
 correct, and annotate every OCR artifact at the right granularity without
 switching to a separate dialog.
 
+At word level, `TypographySection` replaces the former style palette and range
+editor. It uses server-provided extended grapheme boundaries and appends
+canonical corrections. Suggestion accept/edit and predecessor-based undo are
+not yet implemented; reject, quarantine, defer, reviewed, and reviewed-regular
+decisions are available.
+
 ## 2. User-facing goals
 
 - I need to see the OCR and GT text side-by-side for any word I click so I can
@@ -79,14 +85,13 @@ RightPanel (rendered inside StudioShell's "right" slot)
 │       ├── WordImagePreview        data-testid="word-image-preview"
 │       ├── OcrGtCompareRow         data-testid="ocr-gt-compare"
 │       │   └── UnicodePicker (inline, collapsible)
-│       ├── StylePalette            data-testid="style-palette"
 │       ├── ComponentPalette        data-testid="component-palette"
 │       ├── Accordion               data-testid="word-detail-accordion"
 │       │   ├── BBoxSection
 │       │   ├── ReboxSection (Konva canvas)
 │       │   ├── ErasePixelsSection
 │       │   ├── StructureSection
-│       │   ├── CharRangesSection
+│       │   ├── TypographySection
 │       │   └── CharFixerSection (Konva canvas)
 │       └── WordFooter              data-testid="word-footer"  (sticky bottom)
 │
@@ -113,7 +118,6 @@ interface WordMatch {
   fuzz_score?: number;          // 0–100
   is_validated?: boolean;
   bbox: BBox;                   // { x, y, width, height } in image pixels
-  text_style_labels?: string[]; // ["bold", "italic", ...]
   word_components?: string[];   // ["drop-cap", "footnote-ref", ...]
   char_bboxes?: BBox[];         // per-char boxes (SPA sidecar, optional)
 }
@@ -140,22 +144,24 @@ interface PagePayload {
 
 ### Mutations
 
-All mutations invalidate the `["page", projectId, pageIndex]` react-query cache
-on success, triggering a re-render of the right panel.
+Page mutations invalidate the page query on success. Typography is separate:
+append success replaces only the word-head cache and invalidates only the page
+typography-review query; stale `409` invalidates only that word head.
 
 | Hook | Endpoint | Notes |
 |---|---|---|
 | `useUpdateWordGroundTruth` | `POST .../words/{li}/{wi}/gt` | Blur-commit |
-| `useApplyStyle` | `POST .../words/{li}/{wi}/style` | `scope: "whole"\|"part"` |
+| `useTypographyHead` | `GET .../typography/words/{word_id}/head` | Current editable head |
+| `useTypographyReview` | `GET .../typography/review` | Page progress and heads |
+| `useAppendTypographyCorrection` | `POST .../typography/words/{word_id}/corrections` | Current-head append |
 | `useApplyComponent` | `POST .../words/{li}/{wi}/component` | Toggle |
 | `useReboxWord` | `POST .../words/{li}/{wi}/rebox` | BBoxSection + ReboxSection |
 | `useMergeWord` | `POST .../words/{li}/{wi}/merge` | `direction: "left"\|"right"` |
 | `useSplitWord` | `POST .../words/{li}/{wi}/split` | `x_fraction: float` |
 | `useErasePixels` | `POST .../words/{li}/{wi}/erase-pixels` | Sequential ops |
-| `useSetCharRanges` | `POST .../words/{li}/{wi}/char-ranges` | Full replace |
 | `useSetCharBboxes` | `POST .../words/{li}/{wi}/char-bboxes` | SPA sidecar |
 | `useToggleValidated` (WordFooter) | `POST .../words/{li}/{wi}/validated` | Toggle |
-| `useDeleteWord` (WordFooter) | `POST .../delete` with `scope:"word"` | Confirm first |
+| `useDeleteWord` (WordFooter) | `POST .../words/delete-batch` | One word index; confirm first |
 | `useValidateLine` | `POST .../words/validate-batch` | scope="line" |
 | `useMergeLines` | `POST .../lines/merge` | Two-element `line_indices` |
 | `usePatchParagraph` | `PATCH .../paragraphs/{pi}` | `layout_type` field |
@@ -213,7 +219,7 @@ to display. Renders an empty-state `"No word selected."` div when `level !==
 - The `localGt` state syncs back from `gtText` only when the input is not
   currently focused (prevents remote-update overwriting an in-progress edit).
 
-**StylePalette / ComponentPalette**
+**ComponentPalette**
 
 - See [`28-palettes-pickers.md`](28-palettes-pickers.md).
 
@@ -230,8 +236,8 @@ to display. Renders an empty-state `"No word selected."` div when `level !==
 - The accordion body has `paddingBottom: "52px"` so the sticky WordFooter does
   not obscure the bottom item.
 - Six items in order: Bounding Box (keycap B), Rebox (keycap R, tag="accent"),
-  Erase Pixels (keycap E, tag="mismatch"), Structure (keycap S), Char Ranges
-  (keycap C), Char Fixer (keycap F).
+  Erase Pixels (keycap E, tag="mismatch"), Structure (keycap S), Typography
+  (keycap T), Char Fixer (keycap F).
 - Accordion trigger hints: `BBoxSection` uses `bboxHint(word.bbox)` (formatted
   coords); Rebox shows `"W × H px"`; CharFixer shows `"N ranges"` or
   `"edit · fix · unicode"` when empty.
@@ -434,7 +440,8 @@ No component in this group registers document-level hotkeys directly.
 - **No block/para selected** (BlockDetail): renders `"No block selected."` or
   `"No paragraph selected."`.
 - **Word OCR text empty**: WordImagePreview shows italic `∅`; CharFixer shows no
-  cells; CharRanges shows no cells; StructureSection SplitPicker shows nothing.
+  cells; TypographySection fails closed without a server grapheme map;
+  StructureSection SplitPicker shows nothing.
 - **Line is fully validated**: `line-detail-validate-all` is disabled with text
   "All words validated ✓".
 - **Merge-prev at first line**: `line-detail-merge-prev` is disabled
