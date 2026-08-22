@@ -316,6 +316,10 @@ def _project_page(project_id: str, page_index: int, state: ProjectState) -> Proj
         raise HTTPException(status_code=404, detail="project not found")
     if page_index < 0 or page_index >= project.total_pages:
         raise HTTPException(status_code=404, detail="page not found")
+    try:
+        _ = state.resolve_labeling_page(page_index)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return project
 
 

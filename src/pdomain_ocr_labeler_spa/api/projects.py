@@ -69,9 +69,12 @@ from ..core.active_project import ActiveProjectCarrier, InvalidProjectDirError
 from ..core.jobs import JobRunner
 from ..core.models import Project
 from ..core.ocr_models import AutoRotateAllRequest
+from ..core.persistence.book_labeling_manifest import load_book_labeling_manifest_directory
+from ..core.persistence.book_labeling_session import BookLabelingSession
 from ..core.persistence.config_yaml import AppConfig, save_config
 from ..core.persistence.ground_truth import load_ground_truth_from_directory
 from ..core.persistence.labeling_bundle import (
+    LoadedLabelingBundle,
     build_project_from_labeling_bundle,
     load_labeling_bundle_directory,
 )
@@ -318,6 +321,30 @@ def _build_list_response(
     )
 
 
+def _build_project_from_book_labeling_manifest(
+    session: BookLabelingSession,
+    initial_page: LoadedLabelingBundle,
+) -> Project:
+    """Project the manifest metadata onto the ordinary project carrier lazily."""
+    loaded_manifest = session.loaded_manifest
+    manifest = loaded_manifest.manifest
+    page_id_parts = manifest.book_id.split(":")
+    project_id = page_id_parts[-1] if page_id_parts[-1] else loaded_manifest.root.name
+    image_paths = [
+        loaded_manifest.root / Path(page.materialization_relative_path) / "image.png"
+        for page in manifest.pages
+    ]
+    image_paths[0] = Path(f"/proc/self/fd/{initial_page.image_descriptor}")
+    return Project(
+        project_id=project_id,
+        project_root=loaded_manifest.root,
+        image_paths=image_paths,
+        ground_truth_map={},
+        source_lib="pdomain-book-labeling-manifest",
+        total_pages=len(manifest.pages),
+    )
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Routes
 # ──────────────────────────────────────────────────────────────────────
@@ -471,8 +498,23 @@ def load_project(
         )
 
     # Validate and construct before mutating either active-project carrier.
-    loaded_labeling_bundle = None
-    if (resolved / "labeling-bundle.json").exists():
+    loaded_labeling_bundle: LoadedLabelingBundle | None = None
+    book_labeling_session: BookLabelingSession | None = None
+    if (resolved / "book-labeling-manifest.json").exists():
+        try:
+            book_labeling_session = BookLabelingSession(load_book_labeling_manifest_directory(resolved))
+            loaded_labeling_bundle = book_labeling_session.open_page(0)
+            project = _build_project_from_book_labeling_manifest(
+                book_labeling_session,
+                loaded_labeling_bundle,
+            )
+        except (IndexError, OSError, ValueError) as exc:
+            if loaded_labeling_bundle is not None:
+                loaded_labeling_bundle.close()
+            if book_labeling_session is not None:
+                book_labeling_session.close()
+            return _api_error(422, "invalid_book_labeling_manifest", str(exc))
+    elif (resolved / "labeling-bundle.json").exists():
         try:
             loaded_labeling_bundle = load_labeling_bundle_directory(resolved)
             project = build_project_from_labeling_bundle(loaded_labeling_bundle)
@@ -493,6 +535,8 @@ def load_project(
     except InvalidProjectDirError:
         if loaded_labeling_bundle is not None:
             loaded_labeling_bundle.close()
+        if book_labeling_session is not None:
+            book_labeling_session.close()
         return _api_error(
             404,
             "project_not_found",
@@ -511,7 +555,11 @@ def load_project(
     # ``Project.current_page_index``. Bumps the state's generation
     # counter — separate from the carrier's, but moves in lockstep on
     # successful loads.
-    project_state.set_loaded_project(project, labeling_bundle=loaded_labeling_bundle)
+    project_state.set_loaded_project(
+        project,
+        labeling_bundle=loaded_labeling_bundle,
+        book_labeling_session=book_labeling_session,
+    )
 
     # Step 8a (M9): initialize and stash the LabelerPageStore for this project.
     # Creates the .pd-pages/ event store + blob store under the project dir.

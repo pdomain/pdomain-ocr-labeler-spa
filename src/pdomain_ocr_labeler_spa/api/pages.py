@@ -232,6 +232,13 @@ def _check_project_and_page(
         return _project_not_found(project_id)
     if page_index < 0 or page_index >= project.total_pages:
         return _page_not_found(page_index)
+    try:
+        _ = project_state.resolve_labeling_page(page_index)
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=422,
+            content=ApiError(error="invalid_labeling_page", message=str(exc)).model_dump(),
+        )
     return None
 
 

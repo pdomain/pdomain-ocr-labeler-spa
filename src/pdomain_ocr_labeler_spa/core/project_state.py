@@ -69,17 +69,17 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import UUID
 
 from .models import Project, Selection
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from pdomain_book_tools.typography import LabelingBundle
 
     from .page_state import PageLoadOutcome
+    from .persistence.book_labeling_session import BookLabelingSession
     from .persistence.labeling_bundle import LoadedLabelingBundle
 
 
@@ -172,6 +172,7 @@ class ProjectState:
         self._lock = threading.Lock()
         self._loaded_project: Project | None = None
         self._loaded_labeling_bundle: LoadedLabelingBundle | None = None
+        self._book_labeling_session: BookLabelingSession | None = None
         self._page_states: dict[int, PageState] = {}
         self._current_page_index: int = 0
         self._generation: int = 0
@@ -216,6 +217,12 @@ class ProjectState:
         return self._loaded_labeling_bundle
 
     @property
+    def book_page_cache_size(self) -> int:
+        """Return the bounded number of retained lazy-book page descriptors."""
+        session = self._book_labeling_session
+        return 0 if session is None else session.retained_page_count
+
+    @property
     def page_states(self) -> dict[int, PageState]:
         """The per-page-state map.
 
@@ -256,6 +263,7 @@ class ProjectState:
         project: Project,
         *,
         labeling_bundle: LoadedLabelingBundle | None = None,
+        book_labeling_session: BookLabelingSession | None = None,
     ) -> None:
         """Swap to a newly-loaded ``Project``; reset per-page state.
 
@@ -273,14 +281,13 @@ class ProjectState:
         Bumps ``generation`` by 1 (this whole swap is one observable
         state change, not multiple).
         """
+        if book_labeling_session is not None and labeling_bundle is None:
+            raise ValueError("a book labeling session requires its initial page lease")
         with self._lock:
-            if (
-                self._loaded_labeling_bundle is not None
-                and self._loaded_labeling_bundle is not labeling_bundle
-            ):
-                self._loaded_labeling_bundle.close()
+            self._close_labeling_resources_locked()
             self._loaded_project = project
             self._loaded_labeling_bundle = labeling_bundle
+            self._book_labeling_session = book_labeling_session
             self._page_states = {}
             self._page_locks = {}
             self._current_page_index = project.current_page_index
@@ -296,14 +303,48 @@ class ProjectState:
         generation, full stop").
         """
         with self._lock:
-            if self._loaded_labeling_bundle is not None:
-                self._loaded_labeling_bundle.close()
+            self._close_labeling_resources_locked()
             self._loaded_project = None
-            self._loaded_labeling_bundle = None
             self._page_states = {}
             self._page_locks = {}
             self._current_page_index = 0
             self._generation += 1
+
+    def resolve_labeling_page(self, page_index: int) -> LoadedLabelingBundle | None:
+        """Make ``page_index`` the active verified portable page, if this is a book.
+
+        A lazy-book request receives its own descriptor lease.  The previous
+        caller lease is closed only after the replacement has been verified,
+        so an invalid later page leaves the current page and the session usable.
+        """
+        with self._lock:
+            session = self._book_labeling_session
+            if session is None:
+                return self._loaded_labeling_bundle
+            project = self._loaded_project
+            if project is None:
+                raise ValueError("book labeling session has no loaded project")
+            try:
+                replacement = session.open_page(page_index)
+            except (IndexError, OSError, ValueError) as exc:
+                raise ValueError(f"unable to resolve verified book page {page_index}") from exc
+            previous = self._loaded_labeling_bundle
+            self._loaded_labeling_bundle = replacement
+            project.image_paths[page_index] = Path(f"/proc/self/fd/{replacement.image_descriptor}")
+            if previous is not None:
+                previous.close()
+            return replacement
+
+    def _close_labeling_resources_locked(self) -> None:
+        """Close the active lease before its optional session cache under ``_lock``."""
+        lease = self._loaded_labeling_bundle
+        session = self._book_labeling_session
+        self._loaded_labeling_bundle = None
+        self._book_labeling_session = None
+        if lease is not None:
+            lease.close()
+        if session is not None:
+            session.close()
 
     def get_page_lock(self, page_index: int) -> threading.Lock:
         """Return (creating if needed) the per-page mutation lock.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -38,6 +39,7 @@ from pdomain_book_tools.typography import (
     TypographyTaxonomyLabel,
     WordTypography,
 )
+from PIL import Image
 
 from pdomain_ocr_labeler_spa.core.persistence.book_labeling_manifest import (
     load_book_labeling_manifest_directory,
@@ -161,7 +163,20 @@ def _page_record(*, f2: bytes, image_sha256: str, page_id: str) -> TypographyPag
     )
 
 
-def _write_book(root: Path, *, page_count: int = 4) -> BookLabelingManifest:
+def _fixture_image(index: int) -> bytes:
+    """Return a small valid PNG whose pixels distinguish adjacent fixture pages."""
+    stream = io.BytesIO()
+    color = (255, 0, 0) if index % 2 == 0 else (0, 0, 255)
+    Image.new("RGB", (1, 1), color=color).save(stream, format="PNG")
+    return stream.getvalue()
+
+
+def _write_book(
+    root: Path,
+    *,
+    page_count: int = 4,
+    valid_images: bool = False,
+) -> BookLabelingManifest:
     root.mkdir()
     source = root / "source"
     source.mkdir()
@@ -200,7 +215,7 @@ def _write_book(root: Path, *, page_count: int = 4) -> BookLabelingManifest:
     pages: list[BookLabelingPage] = []
     for index, page_name in enumerate(page_names):
         page_id = f"pgdp:project:{page_name.removesuffix('.png')}"
-        image = f"image-{index}".encode()
+        image = _fixture_image(index) if valid_images else f"image-{index}".encode()
         image_sha256 = _sha(image)
         record = _page_record(f2=f2, image_sha256=image_sha256, page_id=page_id)
         record_bytes = record.to_json_bytes()

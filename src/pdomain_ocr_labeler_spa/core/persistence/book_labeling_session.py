@@ -245,6 +245,12 @@ class BookLabelingSession:
         """Return the manifest that this session retains."""
         return self._loaded_manifest
 
+    @property
+    def retained_page_count(self) -> int:
+        """Return the number of cached pages without exposing their descriptors."""
+        with self._lock:
+            return len(self._cache)
+
     def __enter__(self) -> Self:
         return self
 
