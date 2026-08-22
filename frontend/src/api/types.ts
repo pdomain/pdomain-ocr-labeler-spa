@@ -1393,6 +1393,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/typography/words/{word_id}/head": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Typography Head
+         * @description Resolve current page and word lineage from server-owned state.
+         */
+        get: operations["get_typography_head_api_projects__project_id__pages__page_index__typography_words__word_id__head_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/typography/words/{word_id}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Append Typography Correction
+         * @description Append canonical intent against the current server-derived head.
+         */
+        post: operations["append_typography_correction_api_projects__project_id__pages__page_index__typography_words__word_id__corrections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/typography/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Typography Review
+         * @description Return latest per-word heads and review progress for a page.
+         */
+        get: operations["get_typography_review_api_projects__project_id__pages__page_index__typography_review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/typography/correction-bundles/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export Typography Correction Bundle
+         * @description Create one deterministic immutable project-local correction bundle.
+         */
+        post: operations["export_typography_correction_bundle_api_projects__project_id__pages__page_index__typography_correction_bundles_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/pages/{page_index}/lines/{line_index}/copy-gt-to-ocr": {
         parameters: {
             query?: never;
@@ -2483,6 +2563,20 @@ export interface components {
             enabled: boolean;
         };
         /**
+         * ArtifactReference
+         * @description Path-safe content-addressed artifact metadata with no filesystem I/O.
+         */
+        ArtifactReference: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Relative Path */
+            relative_path: string;
+            /** Sha256 */
+            sha256: string;
+            /** Media Type */
+            media_type?: string | null;
+        };
+        /**
          * AutoRotateAllRequest
          * @description Body of ``POST /api/projects/{id}/auto-rotate-all`` — M9.2.
          *
@@ -2606,6 +2700,63 @@ export interface components {
          */
         ConfidenceTier: "gold" | "silver" | "bronze" | "quarantine";
         /**
+         * CoordinateTransform
+         * @description Named affine transform between portable coordinate spaces.
+         */
+        CoordinateTransform: {
+            /** Transform Id */
+            transform_id: string;
+            stage?: components["schemas"]["CoordinateTransformStage"] | null;
+            /** Source Space */
+            source_space: string;
+            /** Target Space */
+            target_space: string;
+            /** Source Coordinate Space Id */
+            source_coordinate_space_id: string;
+            /** Target Coordinate Space Id */
+            target_coordinate_space_id: string;
+            source_orientation: components["schemas"]["SourceOrientation"];
+            /** Source Artifact Sha256 */
+            source_artifact_sha256: string;
+            /** Target Artifact Sha256 */
+            target_artifact_sha256: string;
+            /** Crop Recipe */
+            crop_recipe: string;
+            /** Crop Recipe Version */
+            crop_recipe_version: string;
+            /** Padding Px */
+            padding_px: number;
+            /** Resampling */
+            resampling: string;
+            /** Preprocessing Sha256 */
+            preprocessing_sha256: string;
+            /** Transform Version */
+            transform_version: string;
+            /** Affine */
+            affine: [
+                number,
+                number,
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Source Width */
+            source_width?: number | null;
+            /** Source Height */
+            source_height?: number | null;
+            /** Target Width */
+            target_width?: number | null;
+            /** Target Height */
+            target_height?: number | null;
+        };
+        /**
+         * CoordinateTransformStage
+         * @description A required stage in the portable source-image geometry chain.
+         * @enum {string}
+         */
+        CoordinateTransformStage: "orientation" | "crop";
+        /**
          * CopyGtBatchRequest
          * @description Body for ``POST .../lines/copy-gt-batch`` — Lane A / Task A2.
          *
@@ -2653,6 +2804,62 @@ export interface components {
              * @enum {string}
              */
             direction: "gt_to_ocr" | "ocr_to_gt";
+        };
+        /**
+         * CorrectionBundle
+         * @description Content-addressed reviewed corrections and optional returned geometry.
+         */
+        CorrectionBundle: {
+            /** Bundle Id */
+            bundle_id?: string | null;
+            /** Schema Version */
+            schema_version: string;
+            /** Configuration Hash */
+            configuration_hash: string;
+            /** Labeling Bundle Id */
+            labeling_bundle_id: string;
+            /** Corrections */
+            corrections: components["schemas"]["TypographyCorrection"][];
+            /**
+             * Replacement Artifacts
+             * @default []
+             */
+            replacement_artifacts: components["schemas"]["ReplacementArtifact"][];
+            page_geometry?: components["schemas"]["PageGeometry"] | null;
+            /** Geometry */
+            geometry?: components["schemas"]["WordGeometry"][] | null;
+            /**
+             * Model Runs
+             * @default []
+             */
+            model_runs: components["schemas"]["ModelRun"][];
+            /**
+             * Coordinate Transforms
+             * @default []
+             */
+            coordinate_transforms: components["schemas"]["CoordinateTransform"][];
+        };
+        /**
+         * CorrectionBundleExportRequest
+         * @description Portable source bundle and optional frozen word-head selection.
+         */
+        CorrectionBundleExportRequest: {
+            labeling_bundle: components["schemas"]["LabelingBundle"];
+            /** Selected Word Ids */
+            selected_word_ids?: string[] | null;
+        };
+        /**
+         * CorrectionBundleExportResponse
+         * @description Immutable exported bundle and its project-local relative path.
+         */
+        CorrectionBundleExportResponse: {
+            bundle: components["schemas"]["CorrectionBundle"];
+            /** Relative Path */
+            relative_path: string;
+            /** Artifact Relative Paths */
+            artifact_relative_paths: {
+                [key: string]: string;
+            };
         };
         /**
          * CorrectionDecision
@@ -2865,6 +3072,24 @@ export interface components {
              * @enum {string}
              */
             shape: "rect" | "circle";
+        };
+        /**
+         * Evidence
+         * @description A precise half-open byte range supporting a label decision.
+         */
+        Evidence: {
+            /** Evidence Id */
+            evidence_id: string;
+            /** Artifact Id */
+            artifact_id: string;
+            /** Artifact Sha256 */
+            artifact_sha256: string;
+            /** Byte Start */
+            byte_start: number;
+            /** Byte End */
+            byte_end: number;
+            /** Note */
+            note?: string | null;
         };
         /**
          * ExportManifest
@@ -3220,6 +3445,51 @@ export interface components {
             word_components: string[];
         };
         /**
+         * LabelingBundle
+         * @description Complete portable review input for a page, optionally with geometry.
+         */
+        LabelingBundle: {
+            /** Bundle Id */
+            bundle_id?: string | null;
+            /** Schema Version */
+            schema_version: string;
+            /** Configuration Hash */
+            configuration_hash: string;
+            taxonomy: components["schemas"]["TypographyTaxonomy"];
+            /** Page Id */
+            page_id: string;
+            /** Page Sha256 */
+            page_sha256: string;
+            /** Image Sha256 */
+            image_sha256: string;
+            /** Text Sha256 */
+            text_sha256: string;
+            /** Page Head Sha256 */
+            page_head_sha256: string;
+            /** Artifacts */
+            artifacts: components["schemas"]["ArtifactReference"][];
+            /** Words */
+            words: components["schemas"]["WordTypography-Input"][];
+            page_geometry?: components["schemas"]["PageGeometry"] | null;
+            /** Geometry */
+            geometry?: components["schemas"]["WordGeometry"][] | null;
+            /**
+             * Evidence
+             * @default []
+             */
+            evidence: components["schemas"]["Evidence"][];
+            /**
+             * Model Runs
+             * @default []
+             */
+            model_runs: components["schemas"]["ModelRun"][];
+            /**
+             * Coordinate Transforms
+             * @default []
+             */
+            coordinate_transforms: components["schemas"]["CoordinateTransform"][];
+        };
+        /**
          * LayerColors
          * @description Hex color assignments for OCR layer overlays.
          */
@@ -3482,6 +3752,35 @@ export interface components {
             direction: "left" | "right";
         };
         /**
+         * ModelRun
+         * @description Reproducibility metadata for a model-generated proposal.
+         */
+        ModelRun: {
+            /** Run Id */
+            run_id: string;
+            /** Model Name */
+            model_name: string;
+            /** Model Version */
+            model_version: string;
+            purpose?: components["schemas"]["ModelRunPurpose"] | null;
+            /** Input Artifact Sha256 */
+            input_artifact_sha256?: string | null;
+            /** Output Artifact Sha256 */
+            output_artifact_sha256?: string | null;
+            /** Model Artifact Sha256 */
+            model_artifact_sha256?: string | null;
+            /** Config Sha256 */
+            config_sha256?: string | null;
+            /** Preprocessing Sha256 */
+            preprocessing_sha256?: string | null;
+        };
+        /**
+         * ModelRunPurpose
+         * @description The page-analysis role performed by a recorded model run.
+         * @enum {string}
+         */
+        ModelRunPurpose: "ocr" | "page_region";
+        /**
          * NormalizeAvailableResponse
          * @description Response for ``GET /api/normalize/available`` — spec §Toggle UI.
          */
@@ -3568,6 +3867,45 @@ export interface components {
             changes?: {
                 [key: string]: unknown;
             }[];
+        };
+        /**
+         * PageGeometry
+         * @description Reviewed page geometry and the model runs that generated it.
+         */
+        PageGeometry: {
+            /** Page Id */
+            page_id: string;
+            /** Page Sha256 */
+            page_sha256: string;
+            /** Source Image Artifact Sha256 */
+            source_image_artifact_sha256: string;
+            /** Source Image Width */
+            source_image_width: number;
+            /** Source Image Height */
+            source_image_height: number;
+            /** Image Artifact Sha256 */
+            image_artifact_sha256: string;
+            /** Page Head Sha256 */
+            page_head_sha256: string;
+            /** Ocr Artifact Sha256 */
+            ocr_artifact_sha256: string;
+            /** Page Region Artifact Sha256 */
+            page_region_artifact_sha256: string;
+            /** Coordinate Space */
+            coordinate_space: string;
+            /** Coordinate Space Id */
+            coordinate_space_id: string;
+            source_orientation: components["schemas"]["SourceOrientation"];
+            /** Transform Ids */
+            transform_ids: string[];
+            /** Ocr Model Run Id */
+            ocr_model_run_id: string;
+            /** Page Region Model Run Id */
+            page_region_model_run_id: string;
+            /** Image Width */
+            image_width: number;
+            /** Image Height */
+            image_height: number;
         };
         /**
          * PageHistoryInfo
@@ -3968,6 +4306,32 @@ export interface components {
          */
         RematchGtRequest: Record<string, never>;
         /**
+         * ReplacementArtifact
+         * @description Path-safe declared output artifact created by an approved correction.
+         */
+        ReplacementArtifact: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Relative Path */
+            relative_path: string;
+            /** Sha256 */
+            sha256: string;
+            /** Byte Size */
+            byte_size: number;
+            /** Media Type */
+            media_type: string;
+        };
+        /**
+         * ReplacementArtifactPayload
+         * @description Untrusted bytes paired with a declared replacement artifact.
+         */
+        ReplacementArtifactPayload: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Data Base64 */
+            data_base64: string;
+        };
+        /**
          * ReviewDecision
          * @description Decision recorded when a reviewer resolves a proposed label.
          * @enum {string}
@@ -4221,6 +4585,12 @@ export interface components {
             projects: components["schemas"]["ProjectKey"][];
         };
         /**
+         * SourceOrientation
+         * @description Orientation of the source image before a geometry transform.
+         * @enum {string}
+         */
+        SourceOrientation: "upright" | "rotate_90_clockwise" | "rotate_180" | "rotate_90_counterclockwise";
+        /**
          * SplitByWordsRequest
          * @description ``POST .../lines/split-by-words`` body — spec §9 row 18.
          *
@@ -4321,7 +4691,7 @@ export interface components {
             /** Grapheme Map Version */
             grapheme_map_version: string;
             label_states_schema?: components["schemas"]["LabelStates"] | null;
-            word_typography?: components["schemas"]["WordTypography"] | null;
+            word_typography?: components["schemas"]["WordTypography-Output"] | null;
             correction?: components["schemas"]["TypographyCorrection"] | null;
         };
         /**
@@ -4366,8 +4736,120 @@ export interface components {
             /** Labeler Id */
             labeler_id: string;
             decision: components["schemas"]["CorrectionDecision"];
-            replacement: components["schemas"]["WordTypography"] | null;
+            replacement: components["schemas"]["WordTypography-Output"] | null;
             metadata?: components["schemas"]["TypographyReviewMetadata"] | null;
+        };
+        /**
+         * TypographyCorrectionSubmission
+         * @description Correction intent; trusted lineage is deliberately absent.
+         */
+        TypographyCorrectionSubmission: {
+            /** Expected Head */
+            expected_head: string;
+            /** Correction Id */
+            correction_id: string;
+            /** Taxonomy Version */
+            taxonomy_version: string;
+            /** Taxonomy Hash */
+            taxonomy_hash: string;
+            /** Grapheme Map Version */
+            grapheme_map_version: string;
+            /**
+             * Labeler Id
+             * @default local
+             */
+            labeler_id: string;
+            decision: components["schemas"]["CorrectionDecision"];
+            replacement?: components["schemas"]["WordTypography-Input"] | null;
+            /** Replacement Text Sha256 */
+            replacement_text_sha256?: string | null;
+            /** Replacement Page Sha256 */
+            replacement_page_sha256?: string | null;
+            /** Replacement Image Sha256 */
+            replacement_image_sha256?: string | null;
+            /** Replacement Page Head Sha256 */
+            replacement_page_head_sha256?: string | null;
+            /** Replacement Word Revision */
+            replacement_word_revision?: number | null;
+            metadata?: components["schemas"]["TypographyReviewMetadata"] | null;
+            /**
+             * Replacement Artifacts
+             * @default []
+             */
+            replacement_artifacts: components["schemas"]["ReplacementArtifact"][];
+            /**
+             * Replacement Artifact Payloads
+             * @default []
+             */
+            replacement_artifact_payloads: components["schemas"]["ReplacementArtifactPayload"][];
+            page_geometry?: components["schemas"]["PageGeometry"] | null;
+            /** Geometry */
+            geometry?: components["schemas"]["WordGeometry"][] | null;
+            /**
+             * Model Runs
+             * @default []
+             */
+            model_runs: components["schemas"]["ModelRun"][];
+            /**
+             * Coordinate Transforms
+             * @default []
+             */
+            coordinate_transforms: components["schemas"]["CoordinateTransform"][];
+        };
+        /**
+         * TypographyHeadResponse
+         * @description Canonical current binding and latest correction for one word.
+         */
+        TypographyHeadResponse: {
+            /** Project Id */
+            project_id: string;
+            /** Page Index */
+            page_index: number;
+            /** Logical Page Id */
+            logical_page_id: string;
+            /** Word Id */
+            word_id: string;
+            /** Page Sha256 */
+            page_sha256: string;
+            /** Image Sha256 */
+            image_sha256: string;
+            /** Text Sha256 */
+            text_sha256: string;
+            /** Page Head Sha256 */
+            page_head_sha256: string;
+            /** Word Revision */
+            word_revision: number;
+            /** Revision */
+            revision: number;
+            correction: components["schemas"]["TypographyCorrection"] | null;
+            /** Head Token */
+            head_token: string;
+        };
+        /**
+         * TypographyPageReviewResponse
+         * @description Current per-page correction heads and completion counts.
+         */
+        TypographyPageReviewResponse: {
+            /** Project Id */
+            project_id: string;
+            /** Page Index */
+            page_index: number;
+            /** Logical Page Id */
+            logical_page_id: string;
+            /** Reviewed Words */
+            reviewed_words: number;
+            /** Text Reviewed Words */
+            text_reviewed_words: number;
+            /** Typography Reviewed Words */
+            typography_reviewed_words: number;
+            /** Blocked Words */
+            blocked_words: number;
+            /** Total Words */
+            total_words: number;
+            /** Complete */
+            complete: boolean;
+            /** Heads */
+            heads: components["schemas"]["TypographyCorrection"][];
         };
         /**
          * TypographyReviewMetadata
@@ -4401,6 +4883,35 @@ export interface components {
             alignment_evidence_id: string;
             /** Prediction Id */
             prediction_id?: string | null;
+        };
+        /**
+         * TypographyTaxonomy
+         * @description Versioned ordered taxonomy and its exact canonical-content hash.
+         */
+        TypographyTaxonomy: {
+            /** Version */
+            version: string;
+            /** Labels */
+            labels: components["schemas"]["TypographyTaxonomyLabel"][];
+            /**
+             * Taxonomy Hash
+             * @default
+             */
+            taxonomy_hash: string;
+        };
+        /**
+         * TypographyTaxonomyLabel
+         * @description One ordered label in the review taxonomy.
+         */
+        TypographyTaxonomyLabel: {
+            /** Value */
+            value: string;
+            /** Display Name */
+            display_name: string;
+            /** Required For Completion */
+            required_for_completion: boolean;
+            /** Trainable */
+            trainable: boolean;
         };
         /**
          * UpdateInfo
@@ -4522,6 +5033,40 @@ export interface components {
             ctx?: Record<string, never>;
         };
         /**
+         * WordGeometry
+         * @description Optional axis-aligned word geometry in the bundle's declared space.
+         */
+        WordGeometry: {
+            /** Word Id */
+            word_id: string;
+            /** Word Revision */
+            word_revision: number;
+            /** Page Sha256 */
+            page_sha256: string;
+            /** Page Head Sha256 */
+            page_head_sha256: string;
+            /** Image Artifact Sha256 */
+            image_artifact_sha256: string;
+            /** X0 */
+            x0: number;
+            /** Y0 */
+            y0: number;
+            /** X1 */
+            x1: number;
+            /** Y1 */
+            y1: number;
+            /**
+             * Coordinate Space
+             * @default image_pixels
+             */
+            coordinate_space: string;
+            /** Coordinate Space Id */
+            coordinate_space_id: string;
+            /** Transform Id */
+            transform_id: string;
+            source_orientation: components["schemas"]["SourceOrientation"];
+        };
+        /**
          * WordMatch
          * @description Per-word match result — spec §1 ``WordMatch``.
          */
@@ -4560,6 +5105,107 @@ export interface components {
             char_ranges?: components["schemas"]["CharRange-Output"][] | null;
             glyph_annotations?: components["schemas"]["GlyphAnnotationsModel"] | null;
             glyph_predictions?: components["schemas"]["GlyphAnnotationsModel"] | null;
+        };
+        /**
+         * WordTypography
+         * @description Typography labels for one stable OCR word.
+         *
+         *     A positive span requires a matching positive entry in ``label_states``.
+         *     A negative state is reviewed regular text; ``unknown`` is intentionally
+         *     incomplete and is never equivalent to regular text.
+         */
+        "WordTypography-Input": {
+            /** Word Id */
+            word_id: string;
+            /** Text */
+            text: string;
+            /** Text Sha256 */
+            text_sha256: string;
+            /** Page Content Sha256 */
+            page_content_sha256: string;
+            /** Image Artifact Sha256 */
+            image_artifact_sha256: string;
+            /** Grapheme Map Version */
+            grapheme_map_version: string;
+            /** Taxonomy Version */
+            taxonomy_version: string;
+            /** Taxonomy Hash */
+            taxonomy_hash: string;
+            /** Label States */
+            label_states: {
+                [key: string]: components["schemas"]["LabelState"];
+            };
+            /**
+             * Spans
+             * @default []
+             */
+            spans: components["schemas"]["TypographySpan"][];
+            /** Source Evidence Ids */
+            source_evidence_ids: string[];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+            /** Whole Word Labels */
+            whole_word_labels?: string[] | null;
+            /**
+             * Word Revision
+             * @default 0
+             */
+            word_revision: number;
+            /** @default unreviewed */
+            review_state: components["schemas"]["ReviewState"];
+            metadata?: components["schemas"]["TypographyReviewMetadata"] | null;
+        };
+        /**
+         * WordTypography
+         * @description Typography labels for one stable OCR word.
+         *
+         *     A positive span requires a matching positive entry in ``label_states``.
+         *     A negative state is reviewed regular text; ``unknown`` is intentionally
+         *     incomplete and is never equivalent to regular text.
+         */
+        "WordTypography-Output": {
+            /** Word Id */
+            word_id: string;
+            /** Text */
+            text: string;
+            /** Text Sha256 */
+            text_sha256: string;
+            /** Page Content Sha256 */
+            page_content_sha256: string;
+            /** Image Artifact Sha256 */
+            image_artifact_sha256: string;
+            /** Grapheme Map Version */
+            grapheme_map_version: string;
+            /** Taxonomy Version */
+            taxonomy_version: string;
+            /** Taxonomy Hash */
+            taxonomy_hash: string;
+            label_states: components["schemas"]["LabelStates"];
+            /**
+             * Spans
+             * @default []
+             */
+            spans: components["schemas"]["TypographySpan"][];
+            /** Source Evidence Ids */
+            source_evidence_ids: string[];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+            /** Whole Word Labels */
+            whole_word_labels?: string[] | null;
+            /**
+             * Word Revision
+             * @default 0
+             */
+            word_revision: number;
+            /** @default unreviewed */
+            review_state: components["schemas"]["ReviewState"];
+            metadata?: components["schemas"]["TypographyReviewMetadata"] | null;
         };
         /**
          * WordTypography
@@ -6188,6 +6834,144 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TypographyContractDescriptor"];
+                };
+            };
+        };
+    };
+    get_typography_head_api_projects__project_id__pages__page_index__typography_words__word_id__head_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                word_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TypographyHeadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    append_typography_correction_api_projects__project_id__pages__page_index__typography_words__word_id__corrections_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                word_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TypographyCorrectionSubmission"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TypographyHeadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_typography_review_api_projects__project_id__pages__page_index__typography_review_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TypographyPageReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_typography_correction_bundle_api_projects__project_id__pages__page_index__typography_correction_bundles_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorrectionBundleExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorrectionBundleExportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

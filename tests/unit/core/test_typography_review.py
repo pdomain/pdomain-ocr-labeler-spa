@@ -3,6 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import signal
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from pathlib import Path
 
 import pytest
@@ -419,3 +422,57 @@ def test_log_rejects_interior_corruption(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError):
         log.append(_correction(), logical_page_id=_PAGE_ONE_ID, current=_binding())
+
+
+def test_publish_export_failure_leaves_no_final_or_temporary_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log = TypographyCorrectionLog(tmp_path)
+
+    def fail_rename(*_args: object, **_kwargs: object) -> None:
+        raise OSError("simulated rename failure")
+
+    monkeypatch.setattr(os, "rename", fail_rename)
+    with pytest.raises(OSError, match="simulated rename failure"):
+        log.publish_export("bundle.json", b"complete export")
+
+    export_root = tmp_path / ".pd-pages" / "typography-exports"
+    assert not (export_root / "bundle.json").exists()
+    assert list(export_root.iterdir()) == []
+
+
+def test_concurrent_immutable_export_is_never_truncated(tmp_path: Path) -> None:
+    log = TypographyCorrectionLog(tmp_path)
+    payloads = (b"a" * 131_071, b"b" * 131_073)
+
+    def publish(payload: bytes) -> None:
+        with suppress(FileExistsError):
+            log.publish_export("bundle.json", payload)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        tuple(executor.map(publish, payloads))
+
+    published = (tmp_path / ".pd-pages" / "typography-exports" / "bundle.json").read_bytes()
+    assert published in payloads
+    assert not any(
+        path.name.endswith(".tmp") for path in (tmp_path / ".pd-pages" / "typography-exports").iterdir()
+    )
+
+
+def test_publish_export_rejects_existing_fifo_without_blocking(tmp_path: Path) -> None:
+    export_root = tmp_path / ".pd-pages" / "typography-exports"
+    export_root.mkdir(parents=True)
+    os.mkfifo(export_root / "bundle.json")
+    log = TypographyCorrectionLog(tmp_path)
+
+    def timeout_handler(_signal_number: int, _frame: object) -> None:
+        raise TimeoutError("export FIFO read blocked")
+
+    previous_handler = signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(1)
+    try:
+        with pytest.raises(OSError, match="regular file"):
+            log.publish_export("bundle.json", b"payload")
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous_handler)
