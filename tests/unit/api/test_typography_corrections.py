@@ -498,6 +498,45 @@ def test_bundle_worklist_preserves_native_identity_and_unvalidated_text(tmp_path
     assert mismatched.json()["text_reviewed_words"] == 0
 
 
+def test_geometry_free_bundle_text_validation_is_explicit_persistent_and_cas(tmp_path: Path) -> None:
+    client, _generated_page_id, generated_word_id = _client(tmp_path)
+    generated_head = client.get(
+        f"/api/projects/alpha/pages/0/typography/words/{generated_word_id}/head"
+    ).json()
+    native_word_id = "7ca20136-634e-5282-a071-0ff1c9467b8b"
+    bundle = _labeling_bundle(generated_head, native_word_id)
+    _attach_bundle(client, bundle)
+    base = f"/api/projects/alpha/pages/0/typography/words/{native_word_id}/text-validation"
+
+    initial = client.get(base)
+    assert initial.status_code == 200, initial.text
+    assert initial.json()["text"] == "Word"
+    assert initial.json()["validated"] is False
+
+    saved = client.post(
+        base,
+        json={"expected_head": initial.json()["head_token"], "validated": True},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["validated"] is True
+    assert client.get(base).json() == saved.json()
+    assert client.get("/api/projects/alpha/pages/0/typography/worklist").json()["text_reviewed_words"] == 1
+
+    stale = client.post(
+        base,
+        json={"expected_head": initial.json()["head_token"], "validated": False},
+    )
+    assert stale.status_code == 409
+
+    removed = client.post(
+        base,
+        json={"expected_head": saved.json()["head_token"], "validated": False},
+    )
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["validated"] is False
+    assert client.get("/api/projects/alpha/pages/0/typography/worklist").json()["text_reviewed_words"] == 0
+
+
 def test_bundle_reviewed_regular_request_exports_server_published_artifacts(tmp_path: Path) -> None:
     client, _generated_page_id, generated_word_id = _client(tmp_path)
     generated_head = client.get(
@@ -542,7 +581,7 @@ def test_bundle_reviewed_regular_request_exports_server_published_artifacts(tmp_
     word["page_content_sha256"] = page_sha
     bundle = LabelingBundle.model_validate(payload)
     _attach_bundle(client, bundle)
-    _set_current_page(client, words=[("Word", True)])
+    _set_current_page(client, words=[("Word", False)])
     page_state = client.app.state.project_state.get_page_state(0)  # type: ignore[attr-defined]
     assert page_state is not None and page_state.page_record is not None
     page_state.page_record.payload.words[0].word_id = native_word_id
@@ -584,6 +623,21 @@ def test_bundle_reviewed_regular_request_exports_server_published_artifacts(tmp_
         },
     )
     assert reviewed.status_code == 200, reviewed.text
+
+    blocked = client.post(
+        "/api/projects/alpha/pages/0/typography/correction-bundles/export",
+        json={},
+    )
+    assert blocked.status_code == 422, blocked.text
+
+    text_path = f"{path}/text-validation"
+    text_head = client.get(text_path)
+    assert text_head.status_code == 200, text_head.text
+    validated = client.post(
+        text_path,
+        json={"expected_head": text_head.json()["head_token"], "validated": True},
+    )
+    assert validated.status_code == 200, validated.text
 
     exported = client.post(
         "/api/projects/alpha/pages/0/typography/correction-bundles/export",

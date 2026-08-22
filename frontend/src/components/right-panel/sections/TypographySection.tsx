@@ -3,6 +3,8 @@ import type { components } from "../../../api/types";
 import {
   TypographyApiError,
   useAppendTypographyCorrection,
+  useImportedTextValidation,
+  useSetImportedTextValidation,
   useTypographyHead,
   useTypographyReview,
 } from "../../../hooks/useTypographyReview";
@@ -21,6 +23,13 @@ export function TypographySection({ projectId, pageIndex, wordId }: TypographySe
   const headQuery = useTypographyHead(projectId, pageIndex, wordId);
   const reviewQuery = useTypographyReview(projectId, pageIndex);
   const append = useAppendTypographyCorrection(projectId, pageIndex, wordId ?? "");
+  const textValidation = useImportedTextValidation(
+    projectId,
+    pageIndex,
+    wordId,
+    headQuery.data?.imported_text_validation_available === true,
+  );
+  const setTextValidation = useSetImportedTextValidation(projectId, pageIndex, wordId ?? "");
   const [anchor, setAnchor] = useState<number | null>(null);
   const [focus, setFocus] = useState<number | null>(null);
   const [labels, setLabels] = useState<Set<string>>(new Set());
@@ -151,6 +160,8 @@ export function TypographySection({ projectId, pageIndex, wordId }: TypographySe
   }
 
   const stale = append.error instanceof TypographyApiError && append.error.status === 409;
+  const staleText =
+    setTextValidation.error instanceof TypographyApiError && setTextValidation.error.status === 409;
   return (
     <section data-testid="typography-section" className="flex flex-col gap-2 py-1">
       {reviewQuery.data && (
@@ -158,6 +169,24 @@ export function TypographySection({ projectId, pageIndex, wordId }: TypographySe
           {reviewQuery.data.typography_reviewed_words}/{reviewQuery.data.total_words} typography
           reviewed
         </p>
+      )}
+      {textValidation.data && (
+        <div className="rounded border p-2">
+          <p>Confirm the exact imported text independently:</p>
+          <p className="font-serif">{textValidation.data.text}</p>
+          <button
+            type="button"
+            disabled={setTextValidation.isPending}
+            onClick={() =>
+              setTextValidation.mutate({
+                expected_head: textValidation.data.head_token,
+                validated: !textValidation.data.validated,
+              })
+            }
+          >
+            {textValidation.data.validated ? "Unvalidate text" : "Validate exact text"}
+          </button>
+        </div>
       )}
       <div className="flex flex-wrap gap-1" aria-label="Graphemes">
         {head.graphemes.map((grapheme, index) => (
@@ -260,6 +289,10 @@ export function TypographySection({ projectId, pageIndex, wordId }: TypographySe
         </p>
       )}
       {append.error && !stale && <p role="alert">{append.error.message}</p>}
+      {staleText && <p role="alert">Text validation changed. Reloaded the current decision.</p>}
+      {setTextValidation.error && !staleText && (
+        <p role="alert">{setTextValidation.error.message}</p>
+      )}
     </section>
   );
 }

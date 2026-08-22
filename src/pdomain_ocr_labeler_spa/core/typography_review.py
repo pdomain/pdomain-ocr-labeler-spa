@@ -69,6 +69,257 @@ class StaleTypographyBindingError(ValueError):
     """A correction was based on a page, image, text, or revision no longer current."""
 
 
+class StaleImportedTextValidationError(ValueError):
+    """An imported-text decision was based on a head that is no longer current."""
+
+
+class ImportedTextBinding(BaseModel):
+    """Exact immutable imported word occurrence presented for text review."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
+
+    bundle_id: str = Field(min_length=64, max_length=64)
+    page_id: str
+    page_sha256: str = Field(min_length=64, max_length=64)
+    page_head_sha256: str = Field(min_length=64, max_length=64)
+    word_id: str
+    text: str
+    text_sha256: str = Field(min_length=64, max_length=64)
+
+    @field_validator("text_sha256")
+    @classmethod
+    def _text_hash_matches(cls, value: str, info: object) -> str:
+        data = getattr(info, "data", {})
+        text = data.get("text") if isinstance(data, dict) else None
+        if isinstance(text, str) and hashlib.sha256(text.encode()).hexdigest() != value:
+            raise ValueError("text_sha256 must identify the exact imported text")
+        return value
+
+
+class ImportedTextValidationHead(BaseModel):
+    """Current persistent validation decision for one imported word occurrence."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
+
+    binding: ImportedTextBinding
+    occurrence_id: str
+    revision: int = Field(ge=0)
+    validated: bool
+    head_token: str = Field(min_length=64, max_length=64)
+
+
+@final
+class ImportedTextValidationLog:
+    """Separate append-only journal for explicit imported-bundle text review."""
+
+    _NAME: ClassVar[str] = "imported-text-validations.jsonl"
+    _RECOVERY_NAME: ClassVar[str] = "imported-text-validations.recovery.jsonl"
+
+    def __init__(self, project_root: Path, *, corpus_root: Path | None = None) -> None:
+        self._files = TypographyCorrectionLog(project_root, corpus_root=corpus_root)
+        self.path = self._files.path.with_name(self._NAME)
+
+    @staticmethod
+    def _page_key(binding: ImportedTextBinding) -> tuple[str, str, str, str]:
+        return (
+            binding.bundle_id,
+            binding.page_id,
+            binding.page_sha256,
+            binding.page_head_sha256,
+        )
+
+    @staticmethod
+    def _token(binding: ImportedTextBinding, *, occurrence_id: str, revision: int, validated: bool) -> str:
+        payload = {
+            "binding": binding.model_dump(mode="json"),
+            "occurrence_id": occurrence_id,
+            "revision": revision,
+            "validated": validated,
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+    def head(self, binding: ImportedTextBinding) -> ImportedTextValidationHead:
+        """Return the current head, recording a new page occurrence when needed."""
+        parent, descriptor = self._open(create=True)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            rows, needs_newline = self._read(descriptor, recover=True, parent=parent)
+            occurrence_id, changed = self._activate(rows, binding)
+            if changed:
+                self._append_row(
+                    descriptor,
+                    {
+                        "kind": "activation",
+                        "occurrence_id": occurrence_id,
+                        "page_key": self._page_key(binding),
+                    },
+                    needs_newline=needs_newline,
+                )
+                os.fsync(descriptor)
+            return self._head(rows, binding, occurrence_id)
+        finally:
+            os.close(descriptor)
+            os.close(parent)
+
+    def append(
+        self, binding: ImportedTextBinding, *, validated: bool, expected_head: str
+    ) -> ImportedTextValidationHead:
+        """CAS-append an explicit validate or unvalidate decision."""
+        parent, descriptor = self._open(create=True)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            rows, needs_newline = self._read(descriptor, recover=True, parent=parent)
+            occurrence_id, activated = self._activate(rows, binding)
+            if activated:
+                self._append_row(
+                    descriptor,
+                    {
+                        "kind": "activation",
+                        "occurrence_id": occurrence_id,
+                        "page_key": self._page_key(binding),
+                    },
+                    needs_newline=needs_newline,
+                )
+                needs_newline = False
+            current = self._head(rows, binding, occurrence_id)
+            if current.head_token != expected_head:
+                raise StaleImportedTextValidationError("expected_head is not current")
+            revision = current.revision + 1
+            self._append_row(
+                descriptor,
+                {
+                    "kind": "decision",
+                    "binding": binding.model_dump(mode="json"),
+                    "occurrence_id": occurrence_id,
+                    "revision": revision,
+                    "validated": validated,
+                },
+                needs_newline=needs_newline,
+            )
+            os.fsync(descriptor)
+            return self._make_head(binding, occurrence_id, revision, validated)
+        finally:
+            os.close(descriptor)
+            os.close(parent)
+
+    def _open(self, *, create: bool) -> tuple[int, int]:
+        parent = self._files._open_journal_directory(create=create)
+        try:
+            descriptor, created = self._files._open_regular_file(
+                parent, self._NAME, flags=os.O_RDWR | os.O_APPEND, create=create
+            )
+            if created:
+                os.fsync(parent)
+            return parent, descriptor
+        except Exception:
+            os.close(parent)
+            raise
+
+    def _read(self, descriptor: int, *, recover: bool, parent: int) -> tuple[list[dict[str, object]], bool]:
+        _ = os.lseek(descriptor, 0, os.SEEK_SET)
+        chunks: list[bytes] = []
+        while chunk := os.read(descriptor, 1024 * 1024):
+            chunks.append(chunk)
+        raw = b"".join(chunks)
+        if not raw:
+            return [], False
+        terminated = raw.endswith(b"\n")
+        lines = raw.split(b"\n")
+        if terminated:
+            lines.pop()
+        trailing = None if terminated else lines.pop()
+        rows = [self._parse_row(line) for line in lines]
+        if trailing is None:
+            return rows, False
+        try:
+            rows.append(self._parse_row(trailing))
+            return rows, True
+        except json.JSONDecodeError:
+            if not recover:
+                raise
+            truncate_at = len(raw) - len(trailing)
+            os.ftruncate(descriptor, truncate_at)
+            os.fsync(descriptor)
+            self._write_recovery(parent, trailing, truncate_at)
+            return rows, False
+
+    @staticmethod
+    def _parse_row(payload: bytes) -> dict[str, object]:
+        value = json.loads(payload)
+        if not isinstance(value, dict) or value.get("kind") not in {"activation", "decision"}:
+            raise ValueError("invalid imported text validation journal record")
+        return value
+
+    def _write_recovery(self, parent: int, removed: bytes, truncate_at: int) -> None:
+        descriptor, created = self._files._open_regular_file(
+            parent, self._RECOVERY_NAME, flags=os.O_WRONLY | os.O_APPEND, create=True
+        )
+        try:
+            self._append_row(
+                descriptor,
+                {
+                    "at": datetime.now(UTC).isoformat(),
+                    "removed_bytes": len(removed),
+                    "removed_sha256": hashlib.sha256(removed).hexdigest(),
+                    "truncate_at": truncate_at,
+                },
+                needs_newline=False,
+            )
+            os.fsync(descriptor)
+            if created:
+                os.fsync(parent)
+        finally:
+            os.close(descriptor)
+
+    @staticmethod
+    def _append_row(descriptor: int, row: object, *, needs_newline: bool) -> None:
+        if needs_newline:
+            TypographyCorrectionLog._write_all(descriptor, b"\n")
+        payload = (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        TypographyCorrectionLog._write_all(descriptor, payload)
+
+    def _activate(self, rows: list[dict[str, object]], binding: ImportedTextBinding) -> tuple[str, bool]:
+        last = next((row for row in reversed(rows) if row.get("kind") == "activation"), None)
+        page_key = list(self._page_key(binding))
+        if last is not None and last.get("page_key") == page_key:
+            occurrence = last.get("occurrence_id")
+            if isinstance(occurrence, str):
+                return occurrence, False
+        occurrence_id = str(uuid4())
+        rows.append({"kind": "activation", "occurrence_id": occurrence_id, "page_key": page_key})
+        return occurrence_id, True
+
+    def _head(
+        self, rows: list[dict[str, object]], binding: ImportedTextBinding, occurrence_id: str
+    ) -> ImportedTextValidationHead:
+        for row in reversed(rows):
+            if row.get("kind") != "decision" or row.get("occurrence_id") != occurrence_id:
+                continue
+            try:
+                candidate = ImportedTextBinding.model_validate(row.get("binding"))
+            except ValueError:
+                continue
+            if candidate == binding:
+                revision = row.get("revision")
+                validated = row.get("validated")
+                if isinstance(revision, int) and isinstance(validated, bool):
+                    return self._make_head(binding, occurrence_id, revision, validated)
+        return self._make_head(binding, occurrence_id, 0, False)
+
+    def _make_head(
+        self, binding: ImportedTextBinding, occurrence_id: str, revision: int, validated: bool
+    ) -> ImportedTextValidationHead:
+        return ImportedTextValidationHead(
+            binding=binding,
+            occurrence_id=occurrence_id,
+            revision=revision,
+            validated=validated,
+            head_token=self._token(
+                binding, occurrence_id=occurrence_id, revision=revision, validated=validated
+            ),
+        )
+
+
 def stable_word_id(*, project_id: str, page_id: str, reading_order: int, text: str) -> str:
     """Return the published UUIDv5 identity for an original OCR word."""
     return make_word_id(
@@ -653,6 +904,10 @@ class TypographyCorrectionLog:
 
 
 __all__ = [
+    "ImportedTextBinding",
+    "ImportedTextValidationHead",
+    "ImportedTextValidationLog",
+    "StaleImportedTextValidationError",
     "StaleTypographyBindingError",
     "TypographyBinding",
     "TypographyCorrectionLog",

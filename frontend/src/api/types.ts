@@ -1379,6 +1379,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/typography/words/{word_id}/text-validation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Imported Text Validation
+         * @description Return the explicit text-review head for one imported word.
+         */
+        get: operations["get_imported_text_validation_api_projects__project_id__pages__page_index__typography_words__word_id__text_validation_get"];
+        put?: never;
+        /**
+         * Set Imported Text Validation
+         * @description CAS-append an explicit validation or retraction for exact imported text.
+         */
+        post: operations["set_imported_text_validation_api_projects__project_id__pages__page_index__typography_words__word_id__text_validation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/pages/{page_index}/typography/review": {
         parameters: {
             query?: never;
@@ -3252,6 +3276,40 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * ImportedTextValidationResponse
+         * @description Persistent text-validation head for one imported bundle word.
+         */
+        ImportedTextValidationResponse: {
+            /** Project Id */
+            project_id: string;
+            /** Page Index */
+            page_index: number;
+            /** Word Id */
+            word_id: string;
+            /** Text */
+            text: string;
+            /** Text Sha256 */
+            text_sha256: string;
+            /** Occurrence Id */
+            occurrence_id: string;
+            /** Revision */
+            revision: number;
+            /** Validated */
+            validated: boolean;
+            /** Head Token */
+            head_token: string;
+        };
+        /**
+         * ImportedTextValidationSubmission
+         * @description Explicit CAS intent for the exact imported text currently displayed.
+         */
+        ImportedTextValidationSubmission: {
+            /** Expected Head */
+            expected_head: string;
+            /** Validated */
+            validated: boolean;
+        };
+        /**
          * Job
          * @description Background job record — spec §1 ``Job``. Mirrors pgdp-prep ``core/models.py``.
          */
@@ -4712,6 +4770,8 @@ export interface components {
             /** Grapheme Map Version */
             grapheme_map_version: string;
             taxonomy: components["schemas"]["TypographyTaxonomy"];
+            /** Imported Text Validation Available */
+            imported_text_validation_available: boolean;
             /** Revision */
             revision: number;
             correction: components["schemas"]["TypographyCorrection"] | null;
@@ -6766,6 +6826,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TypographyHeadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_imported_text_validation_api_projects__project_id__pages__page_index__typography_words__word_id__text_validation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                word_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportedTextValidationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_imported_text_validation_api_projects__project_id__pages__page_index__typography_words__word_id__text_validation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                word_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportedTextValidationSubmission"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportedTextValidationResponse"];
                 };
             };
             /** @description Validation Error */

@@ -4,6 +4,9 @@ import type { components } from "../api/types";
 export type TypographyHead = components["schemas"]["TypographyHeadResponse"];
 export type TypographySubmission = components["schemas"]["TypographyCorrectionSubmission"];
 export type TypographyReview = components["schemas"]["TypographyPageReviewResponse"];
+export type ImportedTextValidation = components["schemas"]["ImportedTextValidationResponse"];
+export type ImportedTextValidationSubmission =
+  components["schemas"]["ImportedTextValidationSubmission"];
 
 export type TypographyWorklistResponse = components["schemas"]["TypographyWorklistResponse"];
 
@@ -46,6 +49,54 @@ export function useTypographyReview(projectId: string, pageIndex: number) {
   return useQuery({
     queryKey: ["typography-review", projectId, pageIndex],
     queryFn: () => apiJson<TypographyReview>(`${pageBase(projectId, pageIndex)}/review`),
+  });
+}
+
+export function useImportedTextValidation(
+  projectId: string,
+  pageIndex: number,
+  wordId?: string | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["imported-text-validation", projectId, pageIndex, wordId],
+    enabled: Boolean(wordId) && enabled,
+    queryFn: () => {
+      if (!wordId) throw new TypographyApiError("Text validation needs a stable word ID.", 400);
+      return apiJson<ImportedTextValidation>(
+        `${pageBase(projectId, pageIndex)}/words/${encodeURIComponent(wordId)}/text-validation`,
+      );
+    },
+  });
+}
+
+export function useSetImportedTextValidation(projectId: string, pageIndex: number, wordId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<ImportedTextValidation, TypographyApiError, ImportedTextValidationSubmission>({
+    retry: false,
+    mutationFn: (submission) =>
+      apiJson<ImportedTextValidation>(
+        `${pageBase(projectId, pageIndex)}/words/${encodeURIComponent(wordId)}/text-validation`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(submission),
+        },
+      ),
+    onSuccess: (head) => {
+      queryClient.setQueryData(["imported-text-validation", projectId, pageIndex, wordId], head);
+      void queryClient.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
+      void queryClient.invalidateQueries({
+        queryKey: ["typography-worklist", projectId, pageIndex],
+      });
+    },
+    onError: (error) => {
+      if (error.status === 409) {
+        void queryClient.invalidateQueries({
+          queryKey: ["imported-text-validation", projectId, pageIndex, wordId],
+        });
+      }
+    },
   });
 }
 

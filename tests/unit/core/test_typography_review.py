@@ -15,12 +15,103 @@ from pdomain_book_tools.typography import (
 )
 
 from pdomain_ocr_labeler_spa.core.typography_review import (
+    ImportedTextBinding,
+    ImportedTextValidationLog,
+    StaleImportedTextValidationError,
     StaleTypographyBindingError,
     TypographyBinding,
     TypographyCorrectionLog,
     stable_page_id,
     stable_word_id,
 )
+
+
+def test_imported_text_validation_is_persistent_and_cas_bound(tmp_path: Path) -> None:
+    log = ImportedTextValidationLog(tmp_path, corpus_root=tmp_path)
+    binding = ImportedTextBinding(
+        bundle_id="a" * 64,
+        page_id="pgdp:alpha:001.png",
+        page_sha256="b" * 64,
+        page_head_sha256="c" * 64,
+        word_id="word-1",
+        text="Exact text",
+        text_sha256=hashlib.sha256(b"Exact text").hexdigest(),
+    )
+    head = log.head(binding)
+    assert head.validated is False
+
+    saved = log.append(binding, validated=True, expected_head=head.head_token)
+
+    assert ImportedTextValidationLog(tmp_path, corpus_root=tmp_path).head(binding) == saved
+    with pytest.raises(StaleImportedTextValidationError):
+        log.append(binding, validated=False, expected_head=head.head_token)
+
+
+def test_imported_text_validation_does_not_resurrect_across_a_b_a(tmp_path: Path) -> None:
+    log = ImportedTextValidationLog(tmp_path, corpus_root=tmp_path)
+
+    def binding(bundle: str, text: str) -> ImportedTextBinding:
+        return ImportedTextBinding(
+            bundle_id=bundle * 64,
+            page_id="pgdp:alpha:001.png",
+            page_sha256=hashlib.sha256(text.encode()).hexdigest(),
+            page_head_sha256=hashlib.sha256(f"head:{text}".encode()).hexdigest(),
+            word_id="word-1",
+            text=text,
+            text_sha256=hashlib.sha256(text.encode()).hexdigest(),
+        )
+
+    first_a = binding("a", "A")
+    log.append(first_a, validated=True, expected_head=log.head(first_a).head_token)
+    assert log.head(first_a).validated is True
+    assert log.head(binding("b", "B")).validated is False
+    assert log.head(first_a).validated is False
+
+
+def test_imported_text_validation_recovers_truncated_tail_and_rejects_symlink(
+    tmp_path: Path,
+) -> None:
+    binding = ImportedTextBinding(
+        bundle_id="a" * 64,
+        page_id="pgdp:alpha:001.png",
+        page_sha256="b" * 64,
+        page_head_sha256="c" * 64,
+        word_id="word-1",
+        text="Exact text",
+        text_sha256=hashlib.sha256(b"Exact text").hexdigest(),
+    )
+    log = ImportedTextValidationLog(tmp_path, corpus_root=tmp_path)
+    log.head(binding)
+    with log.path.open("ab") as stream:
+        stream.write(b'{"truncated"')
+    log.append(binding, validated=True, expected_head=log.head(binding).head_token)
+    assert log.head(binding).validated is True
+
+    other = tmp_path / "other"
+    other.write_text("")
+    log.path.unlink()
+    log.path.symlink_to(other)
+    with pytest.raises(OSError):
+        log.head(binding)
+
+
+def test_imported_text_validation_rejects_fifo_without_blocking(tmp_path: Path) -> None:
+    journal_root = tmp_path / ".pd-pages"
+    journal_root.mkdir()
+    os.mkfifo(journal_root / "imported-text-validations.jsonl")
+    binding = ImportedTextBinding(
+        bundle_id="a" * 64,
+        page_id="pgdp:alpha:001.png",
+        page_sha256="b" * 64,
+        page_head_sha256="c" * 64,
+        word_id="word-1",
+        text="Exact text",
+        text_sha256=hashlib.sha256(b"Exact text").hexdigest(),
+    )
+
+    with pytest.raises(OSError):
+        ImportedTextValidationLog(tmp_path, corpus_root=tmp_path).head(binding)
+
 
 _TEXT_SHA256 = hashlib.sha256("caf\u00e9".encode()).hexdigest()
 _PAGE_ONE_ID = "5c7e6cda-0f5e-4ced-9b61-c459f89e2ad1"

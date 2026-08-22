@@ -37,6 +37,10 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, ValidationError
 from ..core.models import Project
 from ..core.project_state import ProjectState
 from ..core.typography_review import (
+    ImportedTextBinding,
+    ImportedTextValidationHead,
+    ImportedTextValidationLog,
+    StaleImportedTextValidationError,
     StaleTypographyBindingError,
     TypographyBinding,
     TypographyCorrectionLog,
@@ -142,8 +146,31 @@ class TypographyHeadResponse(BaseModel):
     graphemes: tuple[str, ...]
     grapheme_map_version: str
     taxonomy: TypographyTaxonomy
+    imported_text_validation_available: bool
     revision: int
     correction: TypographyCorrection | None
+    head_token: str
+
+
+class ImportedTextValidationSubmission(BaseModel):
+    """Explicit CAS intent for the exact imported text currently displayed."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+    expected_head: str = Field(min_length=64, max_length=64)
+    validated: bool
+
+
+class ImportedTextValidationResponse(BaseModel):
+    """Persistent text-validation head for one imported bundle word."""
+
+    project_id: str
+    page_index: int
+    word_id: str
+    text: str
+    text_sha256: str
+    occurrence_id: str
+    revision: int
+    validated: bool
     head_token: str
 
 
@@ -379,21 +406,18 @@ def _text_validated_word_ids(
     state: ProjectState,
     page_override: object | None = None,
 ) -> set[str]:
+    bundle = state.labeling_bundle
+    if bundle is not None:
+        return {
+            word.word_id
+            for word in bundle.words
+            if _imported_text_head(project, page_index, state, word.word_id).validated
+        }
     page_words = _page_words(project, page_index, state, page_override)
     if page_words is None:
         return set()
-    bundle = state.labeling_bundle
     page_id = _logical_page_id(project, page_index, state)
     texts = _review_words(project, page_index, state, page_override)
-    if bundle is not None:
-        bundle_ids = {word.word_id for word in bundle.words}
-        return {
-            word_id
-            for word in page_words
-            if isinstance((word_id := getattr(word, "word_id", None)), str)
-            and word_id in bundle_ids
-            and "validated" in (getattr(word, "word_labels", None) or ())
-        }
     return {
         stable_word_id(
             project_id=project.project_id,
@@ -404,6 +428,53 @@ def _text_validated_word_ids(
         for index, word in enumerate(page_words)
         if "validated" in (getattr(word, "word_labels", None) or ())
     }
+
+
+def _imported_text_binding(
+    project: Project, page_index: int, state: ProjectState, word_id: str
+) -> ImportedTextBinding:
+    bundle = state.labeling_bundle
+    if bundle is None or bundle.bundle_id is None:
+        raise HTTPException(status_code=404, detail="labeling bundle not loaded")
+    word = next((candidate for candidate in bundle.words if candidate.word_id == word_id), None)
+    if word is None:
+        raise HTTPException(status_code=404, detail="word not found in labeling bundle")
+    return ImportedTextBinding(
+        bundle_id=bundle.bundle_id,
+        page_id=bundle.page_id,
+        page_sha256=bundle.page_sha256,
+        page_head_sha256=bundle.page_head_sha256,
+        word_id=word.word_id,
+        text=word.text,
+        text_sha256=word.text_sha256,
+    )
+
+
+def _imported_text_head(
+    project: Project, page_index: int, state: ProjectState, word_id: str
+) -> ImportedTextValidationHead:
+    binding = _imported_text_binding(project, page_index, state, word_id)
+    return ImportedTextValidationLog(project.project_root, corpus_root=project.project_root.parent).head(
+        binding
+    )
+
+
+def _imported_text_response(
+    project: Project,
+    page_index: int,
+    head: ImportedTextValidationHead,
+) -> ImportedTextValidationResponse:
+    return ImportedTextValidationResponse(
+        project_id=project.project_id,
+        page_index=page_index,
+        word_id=head.binding.word_id,
+        text=head.binding.text,
+        text_sha256=head.binding.text_sha256,
+        occurrence_id=head.occurrence_id,
+        revision=head.revision,
+        validated=head.validated,
+        head_token=head.head_token,
+    )
 
 
 def _current_page_content(
@@ -581,6 +652,7 @@ def _current_head(
         graphemes=split_graphemes(text),
         grapheme_map_version=GRAPHEME_SEGMENTATION_VERSION,
         taxonomy=(state.labeling_bundle.taxonomy if state.labeling_bundle else TYPOGRAPHY_TAXONOMY),
+        imported_text_validation_available=state.labeling_bundle is not None,
         revision=word_head.revision if word_head else 0,
         correction=word_head,
         head_token="0" * 64,
@@ -820,6 +892,51 @@ def _page_records(
     return TypographyCorrectionLog(project.project_root, corpus_root=project.project_root.parent).records(
         page_id
     )
+
+
+@router.get(
+    "/api/projects/{project_id}/pages/{page_index}/typography/words/{word_id}/text-validation",
+    response_model=ImportedTextValidationResponse,
+)
+def get_imported_text_validation(
+    project_id: str,
+    page_index: int,
+    word_id: str,
+    state: ProjectState = Depends(get_project_state),
+) -> ImportedTextValidationResponse:
+    """Return the explicit text-review head for one imported word."""
+    project = _project_page(project_id, page_index, state)
+    with state.get_page_lock(page_index):
+        return _imported_text_response(
+            project, page_index, _imported_text_head(project, page_index, state, word_id)
+        )
+
+
+@router.post(
+    "/api/projects/{project_id}/pages/{page_index}/typography/words/{word_id}/text-validation",
+    response_model=ImportedTextValidationResponse,
+)
+def set_imported_text_validation(
+    project_id: str,
+    page_index: int,
+    word_id: str,
+    submission: ImportedTextValidationSubmission,
+    state: ProjectState = Depends(get_project_state),
+) -> ImportedTextValidationResponse:
+    """CAS-append an explicit validation or retraction for exact imported text."""
+    project = _project_page(project_id, page_index, state)
+    with state.get_page_lock(page_index):
+        binding = _imported_text_binding(project, page_index, state, word_id)
+        log = ImportedTextValidationLog(project.project_root, corpus_root=project.project_root.parent)
+        try:
+            head = log.append(
+                binding,
+                validated=submission.validated,
+                expected_head=submission.expected_head,
+            )
+        except StaleImportedTextValidationError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return _imported_text_response(project, page_index, head)
 
 
 @router.get(
