@@ -48,7 +48,7 @@ from ..core.typography_review import (
     stable_page_id,
     stable_word_id,
 )
-from .dependencies import get_project_state
+from .dependencies import bind_page_labeling_lease, get_project_state
 
 router = APIRouter(tags=["typography"])
 
@@ -316,10 +316,6 @@ def _project_page(project_id: str, page_index: int, state: ProjectState) -> Proj
         raise HTTPException(status_code=404, detail="project not found")
     if page_index < 0 or page_index >= project.total_pages:
         raise HTTPException(status_code=404, detail="page not found")
-    try:
-        _ = state.resolve_labeling_page(page_index)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return project
 
 
@@ -337,8 +333,8 @@ def _bundle_word(state: ProjectState, word_id: str) -> WordTypography | None:
     return next((word for word in bundle.words if word.word_id == word_id), None)
 
 
-def _source_text(project: Project, page_index: int) -> str:
-    image = project.image_paths[page_index]
+def _source_text(project: Project, page_index: int, state: ProjectState) -> str:
+    image = state.labeling_image_path(page_index)
     return project.ground_truth_map.get(image.name, project.ground_truth_map.get(image.stem, ""))
 
 
@@ -393,7 +389,7 @@ def _review_words(
             else ""
             for word in page_words
         )
-    return tuple(_source_text(project, page_index).split())
+    return tuple(_source_text(project, page_index, state).split())
 
 
 def _corrected_word_text(word: object) -> str:
@@ -489,7 +485,7 @@ def _current_page_content(
 ) -> object:
     page = _current_page(project, page_index, state, page_override)
     if page is None:
-        line_words: list[list[object]] = [list(_source_text(project, page_index).split())]
+        line_words: list[list[object]] = [list(_source_text(project, page_index, state).split())]
     else:
         lines = getattr(page, "lines", None)
         line_words = (
@@ -599,7 +595,7 @@ def _initial_binding(
             page_head_sha256=bundle.page_head_sha256,
             word_revision=bundle_word.word_revision,
         )
-    image_sha = hashlib.sha256(project.image_paths[page_index].read_bytes()).hexdigest()
+    image_sha = hashlib.sha256(state.labeling_image_path(page_index).read_bytes()).hexdigest()
     text_sha = hashlib.sha256(
         _word_text(project, page_index, word_id, state, page_override).encode()
     ).hexdigest()
@@ -703,6 +699,7 @@ def get_typography_contract() -> TypographyContractDescriptor:
 @router.get(
     "/api/projects/{project_id}/pages/{page_index}/typography/words/{word_id}/head",
     response_model=TypographyHeadResponse,
+    dependencies=[Depends(bind_page_labeling_lease)],
 )
 def get_typography_head(
     project_id: str,
@@ -724,6 +721,7 @@ def get_typography_head(
 @router.post(
     "/api/projects/{project_id}/pages/{page_index}/typography/words/{word_id}/corrections",
     response_model=TypographyHeadResponse,
+    dependencies=[Depends(bind_page_labeling_lease)],
 )
 def append_typography_correction(
     project_id: str,
@@ -901,6 +899,7 @@ def _page_records(
 @router.get(
     "/api/projects/{project_id}/pages/{page_index}/typography/words/{word_id}/text-validation",
     response_model=ImportedTextValidationResponse,
+    dependencies=[Depends(bind_page_labeling_lease)],
 )
 def get_imported_text_validation(
     project_id: str,
@@ -919,6 +918,7 @@ def get_imported_text_validation(
 @router.post(
     "/api/projects/{project_id}/pages/{page_index}/typography/words/{word_id}/text-validation",
     response_model=ImportedTextValidationResponse,
+    dependencies=[Depends(bind_page_labeling_lease)],
 )
 def set_imported_text_validation(
     project_id: str,
@@ -946,6 +946,7 @@ def set_imported_text_validation(
 @router.get(
     "/api/projects/{project_id}/pages/{page_index}/typography/review",
     response_model=TypographyPageReviewResponse,
+    dependencies=[Depends(bind_page_labeling_lease)],
 )
 def get_typography_review(
     project_id: str,
@@ -1051,6 +1052,7 @@ def typography_page_review(
 @router.get(
     "/api/projects/{project_id}/pages/{page_index}/typography/worklist",
     response_model=TypographyWorklistResponse,
+    dependencies=[Depends(bind_page_labeling_lease)],
 )
 def get_typography_worklist(
     project_id: str,
@@ -1147,6 +1149,7 @@ def get_typography_worklist(
 @router.post(
     "/api/projects/{project_id}/pages/{page_index}/typography/correction-bundles/export",
     response_model=CorrectionBundleExportResponse,
+    dependencies=[Depends(bind_page_labeling_lease)],
 )
 def export_typography_correction_bundle(
     project_id: str,

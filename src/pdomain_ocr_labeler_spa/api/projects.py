@@ -323,7 +323,6 @@ def _build_list_response(
 
 def _build_project_from_book_labeling_manifest(
     session: BookLabelingSession,
-    initial_page: LoadedLabelingBundle,
 ) -> Project:
     """Project the manifest metadata onto the ordinary project carrier lazily."""
     loaded_manifest = session.loaded_manifest
@@ -334,7 +333,6 @@ def _build_project_from_book_labeling_manifest(
         loaded_manifest.root / Path(page.materialization_relative_path) / "image.png"
         for page in manifest.pages
     ]
-    image_paths[0] = Path(f"/proc/self/fd/{initial_page.image_descriptor}")
     return Project(
         project_id=project_id,
         project_root=loaded_manifest.root,
@@ -504,10 +502,9 @@ def load_project(
         try:
             book_labeling_session = BookLabelingSession(load_book_labeling_manifest_directory(resolved))
             loaded_labeling_bundle = book_labeling_session.open_page(0)
-            project = _build_project_from_book_labeling_manifest(
-                book_labeling_session,
-                loaded_labeling_bundle,
-            )
+            project = _build_project_from_book_labeling_manifest(book_labeling_session)
+            loaded_labeling_bundle.close()
+            loaded_labeling_bundle = None
         except (IndexError, OSError, ValueError) as exc:
             if loaded_labeling_bundle is not None:
                 loaded_labeling_bundle.close()
@@ -919,6 +916,15 @@ def post_auto_rotate_all(
             content=ApiError(
                 error="project_not_found",
                 message=f"project not found or not loaded: {project_id}",
+            ).model_dump(),
+        )
+
+    if project_state.has_book_labeling_session:
+        return JSONResponse(
+            status_code=422,
+            content=ApiError(
+                error="book_source_rotation_unsupported",
+                message="rotation is unavailable for immutable book source pages",
             ).model_dump(),
         )
 

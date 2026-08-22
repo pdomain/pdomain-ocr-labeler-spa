@@ -70,6 +70,22 @@ class LoadedLabelingBundle:
         object.__setattr__(self, "_image_descriptor", None)
         os.close(descriptor)
 
+    def duplicate(self) -> LoadedLabelingBundle:
+        """Return an independent caller-owned descriptor lease for this bundle."""
+        descriptor = os.dup(self.image_descriptor)
+        try:
+            os.set_inheritable(descriptor, False)
+            return LoadedLabelingBundle(
+                root=self.root,
+                bundle=self.bundle,
+                artifact_paths=dict(self.artifact_paths),
+                artifact_payloads=dict(self.artifact_payloads),
+                image_descriptor=descriptor,
+            )
+        except BaseException:
+            os.close(descriptor)
+            raise
+
 
 def _safe_parts(relative_path: str) -> tuple[str, ...]:
     path = PurePosixPath(relative_path)

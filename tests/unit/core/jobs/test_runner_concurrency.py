@@ -34,6 +34,33 @@ class _ConcurrencyTracker:
         self.current -= 1
 
 
+class _ClosingLease:
+    """Small descriptor-owner stand-in for the runner's terminal cleanup test."""
+
+    def __init__(self) -> None:
+        self.closed = False
+
+    @property
+    def image_descriptor(self) -> int:
+        """The test handler only needs a stable descriptor-shaped value."""
+        return 1
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _LeaseTracker:
+    """Confirms the queued job retains its independently owned page lease."""
+
+    def __init__(self, lease: _ClosingLease) -> None:
+        self._lease = lease
+        self.observed_open_lease = False
+
+    async def handler(self, runner: JobRunner, job: Job) -> None:
+        self.observed_open_lease = runner.get_labeling_page_lease(job.job_id) is self._lease
+        assert not self._lease.closed
+
+
 def _make_job(job_type: str) -> Job:
     return Job(
         job_id=uuid4().hex,
@@ -81,3 +108,24 @@ async def test_max_concurrent_ocr_jobs_disabled_when_non_positive(monkeypatch: p
     await asyncio.gather(*(job_runner._run_one(job) for job in jobs))
 
     assert tracker.peak == 3
+
+
+@pytest.mark.asyncio
+async def test_queued_ocr_job_keeps_its_page_lease_until_handler_finishes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """HTTP cleanup cannot close the duplicate source descriptor owned by OCR."""
+    lease = _ClosingLease()
+    tracker = _LeaseTracker(lease)
+    monkeypatch.setitem(runner_module._HANDLERS, "reload_ocr", tracker.handler)
+    job_runner = JobRunner(JobEventBroker())
+
+    job_id = job_runner.submit("reload_ocr", labeling_page_lease=lease)
+    job = job_runner.get_job(job_id)
+    assert job is not None
+
+    await job_runner._run_one(job)
+
+    assert tracker.observed_open_lease
+    assert lease.closed
+    assert job_runner.get_labeling_page_lease(job_id) is None
