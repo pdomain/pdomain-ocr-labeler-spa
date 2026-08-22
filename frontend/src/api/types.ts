@@ -1373,6 +1373,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/typography/contract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Typography Contract
+         * @description Return released contract versions and expose its types in OpenAPI.
+         */
+        get: operations["get_typography_contract_api_typography_contract_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/pages/{page_index}/lines/{line_index}/copy-gt-to-ocr": {
         parameters: {
             query?: never;
@@ -2580,6 +2600,12 @@ export interface components {
             layer_colors?: components["schemas"]["LayerColors"];
         };
         /**
+         * ConfidenceTier
+         * @description Reviewed confidence tiers for label evidence.
+         * @enum {string}
+         */
+        ConfidenceTier: "gold" | "silver" | "bronze" | "quarantine";
+        /**
          * CopyGtBatchRequest
          * @description Body for ``POST .../lines/copy-gt-batch`` — Lane A / Task A2.
          *
@@ -2628,6 +2654,12 @@ export interface components {
              */
             direction: "gt_to_ocr" | "ocr_to_gt";
         };
+        /**
+         * CorrectionDecision
+         * @description Decision that determines whether a correction carries a replacement.
+         * @enum {string}
+         */
+        CorrectionDecision: "approved_edit" | "reviewed_regular" | "reject_source" | "reject_alignment" | "unusable_image" | "defer" | "accept";
         /**
          * CurrentPageIndexResponse
          * @description Response for ``POST /api/projects/{id}/current-page-index`` — F1 fix.
@@ -3153,6 +3185,25 @@ export interface components {
          * @enum {string}
          */
         JobType: "refine_bboxes_page" | "expand_refine_bboxes_page" | "reload_ocr_page" | "export" | "save_project" | "refine_bboxes_project";
+        /**
+         * LabelSource
+         * @description Evidence sources that can assign a canonical label.
+         * @enum {string}
+         */
+        LabelSource: "f2" | "gutenberg_html" | "se_computed_css" | "human" | "synthetic";
+        /**
+         * LabelState
+         * @description Review knowledge for one taxonomy label on a word.
+         * @enum {string}
+         */
+        LabelState: "unknown" | "positive" | "negative";
+        /**
+         * LabelStates
+         * @description Exact tri-state map retained by FastAPI's OpenAPI compatibility pass.
+         */
+        LabelStates: {
+            [key: string]: "unknown" | "positive" | "negative";
+        };
         /**
          * LabelVocabularyResponse
          * @description Canonical label vocabulary sourced from pdomain_book_tools.
@@ -3917,6 +3968,18 @@ export interface components {
          */
         RematchGtRequest: Record<string, never>;
         /**
+         * ReviewDecision
+         * @description Decision recorded when a reviewer resolves a proposed label.
+         * @enum {string}
+         */
+        ReviewDecision: "approved" | "rejected" | "needs_changes";
+        /**
+         * ReviewState
+         * @description Lifecycle state for a word review.
+         * @enum {string}
+         */
+        ReviewState: "unreviewed" | "reviewed" | "reviewed_regular" | "quarantined" | "deferred";
+        /**
          * RotatePageRequest
          * @description Body for ``POST .../rotate`` — spec §19 (M9.1).
          *
@@ -4249,6 +4312,97 @@ export interface components {
             validated?: boolean | null;
         };
         /**
+         * TypographyContractDescriptor
+         * @description Runtime descriptor plus nullable fields that publish canonical schemas.
+         */
+        TypographyContractDescriptor: {
+            /** Review Contract Version */
+            review_contract_version: string;
+            /** Grapheme Map Version */
+            grapheme_map_version: string;
+            label_states_schema?: components["schemas"]["LabelStates"] | null;
+            word_typography?: components["schemas"]["WordTypography"] | null;
+            correction?: components["schemas"]["TypographyCorrection"] | null;
+        };
+        /**
+         * TypographyCorrection
+         * @description One immutable revision of a stable word's typography review.
+         */
+        TypographyCorrection: {
+            /** Correction Id */
+            correction_id: string;
+            /** Word Id */
+            word_id: string;
+            /** Revision */
+            revision: number;
+            /** Supersedes Id */
+            supersedes_id: string | null;
+            /** Base Page Sha256 */
+            base_page_sha256: string;
+            /** Base Image Sha256 */
+            base_image_sha256: string;
+            /** Base Text Sha256 */
+            base_text_sha256: string;
+            /** Base Word Revision */
+            base_word_revision: number;
+            /** Replacement Text Sha256 */
+            replacement_text_sha256: string | null;
+            /** Replacement Page Sha256 */
+            replacement_page_sha256: string | null;
+            /** Replacement Image Sha256 */
+            replacement_image_sha256: string | null;
+            /** Replacement Page Head Sha256 */
+            replacement_page_head_sha256: string | null;
+            /** Replacement Word Revision */
+            replacement_word_revision: number | null;
+            /** Taxonomy Version */
+            taxonomy_version: string;
+            /** Taxonomy Hash */
+            taxonomy_hash: string;
+            /** Grapheme Map Version */
+            grapheme_map_version: string;
+            /** Page Head Sha256 */
+            page_head_sha256: string;
+            /** Labeler Id */
+            labeler_id: string;
+            decision: components["schemas"]["CorrectionDecision"];
+            replacement: components["schemas"]["WordTypography"] | null;
+            metadata?: components["schemas"]["TypographyReviewMetadata"] | null;
+        };
+        /**
+         * TypographyReviewMetadata
+         * @description Optional actor and time metadata for a review operation.
+         */
+        TypographyReviewMetadata: {
+            /** Reviewer Id */
+            reviewer_id?: string | null;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Note */
+            note?: string | null;
+            decision?: components["schemas"]["ReviewDecision"] | null;
+        };
+        /**
+         * TypographySpan
+         * @description A positive taxonomy label over a nonempty half-open grapheme range.
+         */
+        TypographySpan: {
+            /** Span Id */
+            span_id: string;
+            /** Label */
+            label: string;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            label_source: components["schemas"]["LabelSource"];
+            confidence_tier: components["schemas"]["ConfidenceTier"];
+            /** Alignment Evidence Id */
+            alignment_evidence_id: string;
+            /** Prediction Id */
+            prediction_id?: string | null;
+        };
+        /**
          * UpdateInfo
          * @description Shape returned by GET /api/suite/update.
          */
@@ -4406,6 +4560,55 @@ export interface components {
             char_ranges?: components["schemas"]["CharRange-Output"][] | null;
             glyph_annotations?: components["schemas"]["GlyphAnnotationsModel"] | null;
             glyph_predictions?: components["schemas"]["GlyphAnnotationsModel"] | null;
+        };
+        /**
+         * WordTypography
+         * @description Typography labels for one stable OCR word.
+         *
+         *     A positive span requires a matching positive entry in ``label_states``.
+         *     A negative state is reviewed regular text; ``unknown`` is intentionally
+         *     incomplete and is never equivalent to regular text.
+         */
+        WordTypography: {
+            /** Word Id */
+            word_id: string;
+            /** Text */
+            text: string;
+            /** Text Sha256 */
+            text_sha256: string;
+            /** Page Content Sha256 */
+            page_content_sha256: string;
+            /** Image Artifact Sha256 */
+            image_artifact_sha256: string;
+            /** Grapheme Map Version */
+            grapheme_map_version: string;
+            /** Taxonomy Version */
+            taxonomy_version: string;
+            /** Taxonomy Hash */
+            taxonomy_hash: string;
+            label_states: components["schemas"]["LabelStates"];
+            /**
+             * Spans
+             * @default []
+             */
+            spans: components["schemas"]["TypographySpan"][];
+            /** Source Evidence Ids */
+            source_evidence_ids: string[];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+            /** Whole Word Labels */
+            whole_word_labels?: string[] | null;
+            /**
+             * Word Revision
+             * @default 0
+             */
+            word_revision: number;
+            /** @default unreviewed */
+            review_state: components["schemas"]["ReviewState"];
+            metadata?: components["schemas"]["TypographyReviewMetadata"] | null;
         };
     };
     responses: never;
@@ -5965,6 +6168,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_typography_contract_api_typography_contract_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TypographyContractDescriptor"];
                 };
             };
         };

@@ -267,6 +267,16 @@ def ensure_page_model(
             apply_sidecars_from_payload(existing, payload_obj)
         else:
             apply_sidecars_to_page_state(existing, None)
+        if existing.logical_page_id is None:
+            from uuid import UUID
+
+            from .typography_review import stable_page_id
+
+            project = state._loaded_project
+            if project is not None:
+                existing.logical_page_id = UUID(
+                    stable_page_id(project_id=project.project_id, page_index=page_index)
+                )
         state._generation += 1
         return outcome
 

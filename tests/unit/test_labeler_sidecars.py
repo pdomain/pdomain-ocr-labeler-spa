@@ -47,7 +47,10 @@ def test_content_dict_omits_key_when_sidecars_empty() -> None:
 
 
 def test_parse_content_blob_round_trip() -> None:
-    sidecars = LabelerSidecars(char_ranges_map={"1_2": [{"start": 0, "end": 2, "styles": []}]})
+    sidecars = LabelerSidecars(
+        char_ranges_map={"1_2": [{"start": 0, "end": 2, "styles": []}]},
+        logical_page_id="bd9e9b33-2c33-53f2-ac8f-a532c5c1686d",
+    )
     raw = content_dict_with_sidecars(_FakePage("p"), sidecars)
     import json
 
@@ -55,6 +58,7 @@ def test_parse_content_blob_round_trip() -> None:
     assert page_dict["label"] == "p"
     assert extracted.char_ranges_map == sidecars.char_ranges_map
     assert extracted.char_bboxes_map == {}
+    assert extracted.logical_page_id == sidecars.logical_page_id
 
 
 def test_from_page_state_and_apply() -> None:

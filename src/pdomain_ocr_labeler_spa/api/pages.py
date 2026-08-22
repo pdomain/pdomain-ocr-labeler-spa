@@ -642,6 +642,13 @@ def _page_payload(
                 _char_ranges_map = pstate.char_ranges_map if pstate is not None else None
                 _glyph_ann_map = pstate.glyph_annotations_map if pstate is not None else None
                 _glyph_pred_map = pstate.glyph_predictions_map if pstate is not None else None
+                from ..core.typography_review import stable_page_id as _stable_page_id
+
+                _logical_page_id = (
+                    str(pstate.logical_page_id)
+                    if pstate is not None and pstate.logical_page_id is not None
+                    else _stable_page_id(project_id=project_id, page_index=page_index)
+                )
                 _rec, _lms = page_to_line_matches(
                     payload_obj,
                     page_index,
@@ -652,6 +659,8 @@ def _page_payload(
                     char_ranges_map=_char_ranges_map if _char_ranges_map else None,  # pyright: ignore[reportArgumentType]
                     glyph_annotations_map=_glyph_ann_map if _glyph_ann_map else None,
                     glyph_predictions_map=_glyph_pred_map if _glyph_pred_map else None,
+                    project_id=project_id,
+                    stable_page_id=_logical_page_id,
                 )
                 if _lms or _rec is not None:
                     page_record = _rec
@@ -664,8 +673,15 @@ def _page_payload(
                     page_index,
                 )
                 # Degraded path: no Page available yet (fresh server before OCR runs).
+                from ..core.typography_review import stable_page_id as _stable_page_id
+
+                _logical_page_id = (
+                    str(pstate.logical_page_id)
+                    if pstate is not None and pstate.logical_page_id is not None
+                    else _stable_page_id(project_id=project_id, page_index=page_index)
+                )
                 page_record = PageRecord(
-                    page_id=__import__("uuid").uuid4(),
+                    page_id=__import__("uuid").UUID(_logical_page_id),
                     page_index=page_index,
                     image_path=image_path,
                     source=page_source.value if hasattr(page_source, "value") else str(page_source),

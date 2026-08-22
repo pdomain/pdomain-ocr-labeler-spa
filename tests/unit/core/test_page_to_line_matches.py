@@ -143,6 +143,39 @@ def test_single_line_exact_match() -> None:
     assert wm.word_index == 0
 
 
+def test_stable_word_id_uses_project_page_and_reading_order() -> None:
+    logical_page_id = "bd9e9b33-2c33-53f2-ac8f-a532c5c1686d"
+    line = _StubLine(
+        words=[
+            _StubWord(text="first", ground_truth_text="first"),
+            _StubWord(text="second", ground_truth_text="second"),
+        ]
+    )
+    page = _StubPage(lines_=[line])
+
+    first_record, first = page_to_line_matches(
+        page,
+        0,
+        _IMAGE,
+        project_id="project",
+        stable_page_id=logical_page_id,
+    )
+    second_record, second = page_to_line_matches(
+        page,
+        0,
+        _IMAGE,
+        project_id="project",
+        stable_page_id=logical_page_id,
+    )
+
+    first_ids = [word.word_id for word in first[0].word_matches]
+    assert first_ids == [word.word_id for word in second[0].word_matches]
+    assert all(word_id is not None for word_id in first_ids)
+    assert first_ids[0] != first_ids[1]
+    assert first_record.page_id == second_record.page_id
+    assert str(first_record.page_id) == logical_page_id
+
+
 def test_single_line_unmatched_ocr_when_no_gt() -> None:
     word = _StubWord(text="hello", ground_truth_text="")
     line = _StubLine(words=[word])

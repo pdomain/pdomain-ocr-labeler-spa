@@ -215,6 +215,7 @@ def _word_to_word_match(
     glyph_predictions_map: dict[str, object] | None = None,
     page_width: int | None = None,
     page_height: int | None = None,
+    stable_identity: tuple[str, str, int] | None = None,
 ) -> WordMatch | None:
     """Convert one ``pdomain_book_tools.ocr.word.Word`` to a ``WordMatch``.
 
@@ -317,6 +318,18 @@ def _word_to_word_match(
         if glyph_predictions_map is not None and sidecar_key in glyph_predictions_map:
             glyph_predictions = _glyph_from_sidecar(glyph_predictions_map.get(sidecar_key))
 
+        word_id: str | None = None
+        if stable_identity is not None:
+            from .typography_review import stable_word_id
+
+            project_id, page_id, reading_order = stable_identity
+            word_id = stable_word_id(
+                project_id=project_id,
+                page_id=page_id,
+                reading_order=reading_order,
+                text=ocr_text,
+            )
+
         return WordMatch(
             line_index=line_index,
             word_index=word_index,
@@ -328,7 +341,7 @@ def _word_to_word_match(
             text_style_labels=text_style_labels,
             word_components=word_components,
             bbox=bb,
-            word_id=None,  # pdomain_book_tools doesn't expose a stable word-id today
+            word_id=word_id,
             char_bboxes=char_bboxes,
             char_ranges=char_ranges,
             glyph_annotations=glyph_annotations,
@@ -428,6 +441,8 @@ def page_to_line_matches(
     char_ranges_map: dict[str, list[dict[str, object]]] | None = None,
     glyph_annotations_map: dict[str, object] | None = None,
     glyph_predictions_map: dict[str, object] | None = None,
+    project_id: str | None = None,
+    stable_page_id: str | None = None,
 ) -> tuple[PageRecord, list[LineMatch]]:
     """Convert a ``pdomain_book_tools.ocr.page.Page`` to ``(PageRecord, [LineMatch])``.
 
@@ -465,10 +480,11 @@ def page_to_line_matches(
         ``PageRecord`` holds page-level metadata.
         ``list[LineMatch]`` is empty when *page* has no lines or is ``None``.
     """
+    from uuid import UUID
     from uuid import uuid4 as _uuid4
 
     record = PageRecord(
-        page_id=_uuid4(),
+        page_id=UUID(stable_page_id) if stable_page_id is not None else _uuid4(),
         page_index=page_index,
         image_path=image_path,
         source=source.value if hasattr(source, "value") else str(source),
@@ -521,6 +537,7 @@ def page_to_line_matches(
             )
             block_lookup = {}
 
+        reading_order = 0
         for line_idx, line in enumerate(lines):
             try:
                 words = getattr(line, "words", []) or []
@@ -537,7 +554,11 @@ def page_to_line_matches(
                         glyph_predictions_map=glyph_predictions_map,
                         page_width=page_width,
                         page_height=page_height,
+                        stable_identity=(project_id, stable_page_id, reading_order)
+                        if project_id is not None and stable_page_id is not None
+                        else None,
                     )
+                    reading_order += 1
                     if wm is not None:
                         word_matches.append(wm)
 
