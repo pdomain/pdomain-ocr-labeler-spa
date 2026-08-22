@@ -39,6 +39,7 @@ import { CudaSetupGuidance } from "./components/CudaSetupGuidance";
 import { Rail } from "./components/shell/Rail";
 import RootPage from "./pages/RootPage";
 import ProjectPage from "./pages/ProjectPage";
+import TypographyWorklistPage from "./pages/TypographyWorklistPage";
 import { ProjectRouteGate } from "./components/ProjectRouteGate";
 import { ROUTES } from "./lib/routes";
 import { useThemePreference } from "./stores/ui-prefs";
@@ -165,19 +166,22 @@ function ProjectPageIndexRedirect() {
  * only meaningful inside a project route).
  */
 function useRouteProjectContext(): { projectId: string | null; pageIndex: number } {
+  const matchTypographyPage = useMatch("/projects/:projectId/pages/pageno/:pageNo/typography");
   const matchPageNo = useMatch("/projects/:projectId/pages/pageno/:pageNo");
   const matchPageIdx = useMatch("/projects/:projectId/pages/index/:idx0");
   const matchProject = useMatch("/projects/:projectId");
 
   const projectId =
+    matchTypographyPage?.params.projectId ??
     matchPageNo?.params.projectId ??
     matchPageIdx?.params.projectId ??
     matchProject?.params.projectId ??
     null;
 
   let pageIndex = 0;
-  if (matchPageNo?.params.pageNo) {
-    const n = parseInt(matchPageNo.params.pageNo, 10);
+  const pageNo = matchTypographyPage?.params.pageNo ?? matchPageNo?.params.pageNo;
+  if (pageNo) {
+    const n = parseInt(pageNo, 10);
     pageIndex = Number.isFinite(n) && n > 0 ? n - 1 : 0;
   } else if (matchPageIdx?.params.idx0) {
     const n = parseInt(matchPageIdx.params.idx0, 10);
@@ -306,6 +310,14 @@ function AppInner() {
                 element={
                   <ProjectRouteGate>
                     <ProjectPage />
+                  </ProjectRouteGate>
+                }
+              />
+              <Route
+                path={ROUTES.PROJECT_TYPOGRAPHY_PAGE_NO}
+                element={
+                  <ProjectRouteGate>
+                    <TypographyWorklistPage />
                   </ProjectRouteGate>
                 }
               />

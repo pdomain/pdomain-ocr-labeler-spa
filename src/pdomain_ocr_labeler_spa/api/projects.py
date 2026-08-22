@@ -57,6 +57,7 @@ What this layer deliberately does NOT do (deferred):
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 from pathlib import Path
 from typing import Literal
@@ -71,6 +72,10 @@ from ..core.models import Project
 from ..core.ocr_models import AutoRotateAllRequest
 from ..core.persistence.config_yaml import AppConfig, save_config
 from ..core.persistence.ground_truth import load_ground_truth_from_directory
+from ..core.persistence.labeling_bundle import (
+    build_project_from_labeling_bundle,
+    load_labeling_bundle_directory,
+)
 from ..core.persistence.paths import labeled_projects_root
 from ..core.persistence.project_envelope import build_project_from_directory
 from ..core.persistence.session_state import (
@@ -466,6 +471,20 @@ def load_project(
             f"path is not a directory: {target}",
         )
 
+    # Validate and construct before mutating either active-project carrier.
+    loaded_labeling_bundle = None
+    if (resolved / "labeling-bundle.json").exists():
+        try:
+            loaded_labeling_bundle = load_labeling_bundle_directory(resolved)
+            project = build_project_from_labeling_bundle(loaded_labeling_bundle)
+        except (OSError, ValueError) as exc:
+            if loaded_labeling_bundle is not None:
+                os.close(loaded_labeling_bundle.image_descriptor)
+            return _api_error(422, "invalid_labeling_bundle", str(exc))
+    else:
+        ground_truth_map = load_ground_truth_from_directory(resolved)
+        project = build_project_from_directory(resolved, ground_truth_map=ground_truth_map)
+
     # Step 5: swap. Carrier validates again (TOCTOU defense) and may
     # raise InvalidProjectDirError if the dir vanished between the
     # is_dir() above and the carrier's check; surface that as
@@ -473,6 +492,8 @@ def load_project(
     try:
         carrier.set_active_project(resolved)
     except InvalidProjectDirError:
+        if loaded_labeling_bundle is not None:
+            os.close(loaded_labeling_bundle.image_descriptor)
         return _api_error(
             404,
             "project_not_found",
@@ -485,21 +506,13 @@ def load_project(
             "carrier.snapshot() returned None immediately after set_active_project — this is a bug"
         )
 
-    # Step 6 (slice 5): build the full ``Project`` from disk — image
-    # scan + ground-truth load + optional ``project.json`` metadata.
-    # We fetch GT first (cheap, even on a no-GT project) and feed it
-    # into the builder; the builder owns the on-disk-overrides + clamp
-    # logic.
-    ground_truth_map = load_ground_truth_from_directory(resolved)
-    project = build_project_from_directory(resolved, ground_truth_map=ground_truth_map)
-
     # Step 7 (slice 5): stash the loaded project on ``ProjectState``.
     # ``set_loaded_project`` resets the per-page state map (page indices
     # are scoped to ONE project) and seeds ``current_page_index`` from
     # ``Project.current_page_index``. Bumps the state's generation
     # counter — separate from the carrier's, but moves in lockstep on
     # successful loads.
-    project_state.set_loaded_project(project)
+    project_state.set_loaded_project(project, labeling_bundle=loaded_labeling_bundle)
 
     # Step 8a (M9): initialize and stash the LabelerPageStore for this project.
     # Creates the .pd-pages/ event store + blob store under the project dir.
