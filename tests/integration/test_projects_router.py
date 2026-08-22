@@ -57,11 +57,24 @@ spec-mandated behavior.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from pdomain_book_tools.typography import (
+    GRAPHEME_SEGMENTATION_VERSION,
+    REVIEW_CONTRACT_VERSION,
+    ArtifactReference,
+    Evidence,
+    LabelingBundle,
+    LabelState,
+    TypographyTaxonomy,
+    TypographyTaxonomyLabel,
+    WordTypography,
+)
 
 from pdomain_ocr_labeler_spa.bootstrap import build_app
 from pdomain_ocr_labeler_spa.settings import Settings
@@ -247,6 +260,136 @@ def test_get_projects_selected_omitted_if_loaded_outside_root(tmp_path: Path, pr
 # ──────────────────────────────────────────────────────────────────────
 # POST /api/projects/load
 # ──────────────────────────────────────────────────────────────────────
+
+
+def _write_labeling_bundle_project(root: Path) -> LabelingBundle:
+    root.mkdir()
+    artifacts = root / "artifacts"
+    artifacts.mkdir()
+    image_payload = b"image-payload"
+    (artifacts / "images").mkdir()
+    (artifacts / "images" / "001.png").write_bytes(image_payload)
+    image_sha = hashlib.sha256(image_payload).hexdigest()
+    page_payload = b"page-record"
+    (artifacts / "page-record.json").write_bytes(page_payload)
+    page_sha = hashlib.sha256(page_payload).hexdigest()
+    text_sha = hashlib.sha256(b"Word").hexdigest()
+    page_head_payload = (
+        json.dumps(
+            {
+                "configuration_hash": "c" * 64,
+                "image_sha256": image_sha,
+                "page_id": "pgdp:bundle-project:001.png",
+                "page_sha256": page_sha,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode()
+    taxonomy = TypographyTaxonomy(
+        version="labeler-v1",
+        labels=(
+            TypographyTaxonomyLabel(
+                value="italic",
+                display_name="Italic",
+                required_for_completion=True,
+                trainable=True,
+            ),
+        ),
+    )
+    bundle = LabelingBundle(
+        schema_version=REVIEW_CONTRACT_VERSION,
+        configuration_hash="c" * 64,
+        taxonomy=taxonomy,
+        page_id="pgdp:bundle-project:001.png",
+        page_sha256=page_sha,
+        image_sha256=image_sha,
+        text_sha256=text_sha,
+        page_head_sha256=hashlib.sha256(page_head_payload).hexdigest(),
+        artifacts=(
+            ArtifactReference(
+                artifact_id="image",
+                relative_path="images/001.png",
+                sha256=image_sha,
+                media_type="image/png",
+            ),
+            ArtifactReference(
+                artifact_id="page-record",
+                relative_path="page-record.json",
+                sha256=page_sha,
+                media_type="application/json",
+            ),
+        ),
+        evidence=(
+            Evidence(
+                evidence_id="source-evidence",
+                artifact_id="image",
+                artifact_sha256=image_sha,
+                byte_start=0,
+                byte_end=1,
+            ),
+        ),
+        words=(
+            WordTypography(
+                word_id="7ca20136-634e-5282-a071-0ff1c9467b8b",
+                text="Word",
+                text_sha256=text_sha,
+                page_content_sha256=page_sha,
+                image_artifact_sha256=image_sha,
+                grapheme_map_version=GRAPHEME_SEGMENTATION_VERSION,
+                taxonomy_version=taxonomy.version,
+                taxonomy_hash=taxonomy.taxonomy_hash,
+                label_states={"italic": LabelState.UNKNOWN},
+                source_evidence_ids=("source-evidence",),
+            ),
+        ),
+    )
+    (root / "labeling-bundle.json").write_text(bundle.model_dump_json(indent=2))
+    return bundle
+
+
+def test_post_load_auto_detects_and_retains_labeling_bundle(tmp_path: Path) -> None:
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    bundle_root = projects_root / "bundle-project"
+    bundle = _write_labeling_bundle_project(bundle_root)
+    app = build_app(_make_settings(tmp_path, source_projects_root=projects_root))
+
+    with TestClient(app) as client:
+        response = client.post("/api/projects/load", json={"project_root": str(bundle_root)})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["project"]["project_id"] == "bundle-project"
+    image_path = response.json()["project"]["image_paths"][0]
+    assert image_path.startswith("/proc/self/fd/")
+    assert app.state.project_state.labeling_bundle == bundle
+    assert app.state.project_state.labeling_bundle_root == bundle_root.resolve()
+    (bundle_root / "artifacts" / "images" / "001.png").write_bytes(b"replaced-after-load")
+    loaded_project = app.state.project_state.loaded_project
+    assert loaded_project is not None
+    assert loaded_project.image_paths[0].read_bytes() == b"image-payload"
+
+
+def test_invalid_labeling_bundle_load_does_not_swap_active_project(tmp_path: Path) -> None:
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    ordinary = projects_root / "ordinary"
+    ordinary.mkdir()
+    bundle_root = projects_root / "bad-bundle"
+    _write_labeling_bundle_project(bundle_root)
+    (bundle_root / "artifacts" / "images" / "001.png").write_bytes(b"tampered")
+    app = build_app(_make_settings(tmp_path, source_projects_root=projects_root))
+
+    with TestClient(app) as client:
+        assert client.post("/api/projects/load", json={"project_root": str(ordinary)}).status_code == 200
+        response = client.post("/api/projects/load", json={"project_root": str(bundle_root)})
+
+    assert response.status_code == 422
+    assert app.state.project_state.loaded_project is not None
+    assert app.state.project_state.loaded_project.project_id == "ordinary"
+    assert app.state.active_project_carrier.snapshot() is not None
+    assert app.state.active_project_carrier.snapshot().path == ordinary.resolve()
 
 
 def test_post_load_swaps_carrier_and_returns_project(

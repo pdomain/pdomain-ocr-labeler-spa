@@ -8,7 +8,6 @@ from base64 import b64decode
 from binascii import Error as Base64Error
 from pathlib import Path
 from typing import ClassVar, Literal
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from pdomain_book_tools.typography import (
@@ -26,6 +25,7 @@ from pdomain_book_tools.typography import (
     StyleLabel,
     TypographyCorrection,
     TypographyReviewMetadata,
+    TypographySpan,
     TypographyTaxonomy,
     TypographyTaxonomyLabel,
     WordGeometry,
@@ -162,10 +162,43 @@ class TypographyPageReviewResponse(BaseModel):
     heads: tuple[TypographyCorrection, ...]
 
 
+class TypographyWorklistWord(BaseModel):
+    """One bundle-native word plus its current local review state."""
+
+    word_id: str
+    text: str
+    graphemes: tuple[str, ...]
+    source_review_state: ReviewState
+    source_label_states: dict[str, LabelState]
+    source_spans: tuple[TypographySpan, ...]
+    warnings: tuple[str, ...]
+    current_correction: TypographyCorrection | None
+    decision: CorrectionDecision | None
+    reviewed: bool
+    typography_reviewed: bool
+    text_reviewed: bool
+
+
+class TypographyWorklistResponse(BaseModel):
+    """Ordered geometry-free review input for the active portable bundle."""
+
+    project_id: str
+    page_index: int
+    logical_page_id: str
+    bundle_id: str
+    taxonomy: TypographyTaxonomy
+    words: tuple[TypographyWorklistWord, ...]
+    total_words: int
+    text_reviewed_words: int
+    typography_reviewed_words: int
+    blocked_words: int
+    complete: bool
+
+
 class CorrectionBundleExportRequest(BaseModel):
     """Portable source bundle and optional frozen word-head selection."""
 
-    labeling_bundle: LabelingBundle
+    labeling_bundle: LabelingBundle | None = None
     selected_word_ids: tuple[str, ...] | None = None
 
 
@@ -183,6 +216,73 @@ def _canonical_hash(value: object) -> str:
     ).hexdigest()
 
 
+def _canonical_bytes(value: object) -> bytes:
+    return (
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode()
+
+
+def _bundle_payload_by_hash(state: ProjectState, sha256: str) -> bytes:
+    loaded = state.loaded_labeling_bundle
+    if loaded is None:
+        raise ValueError("labeling bundle is not loaded")
+    matches = [
+        loaded.artifact_payloads[artifact.artifact_id]
+        for artifact in loaded.bundle.artifacts
+        if artifact.sha256 == sha256
+    ]
+    if len(matches) != 1:
+        raise ValueError("labeling bundle does not expose one exact artifact payload")
+    return matches[0]
+
+
+def _server_replacement_artifacts(
+    *,
+    correction_id: str,
+    state: ProjectState,
+    current: TypographyBinding,
+) -> tuple[tuple[ReplacementArtifact, ...], tuple[tuple[ReplacementArtifact, bytes], ...]]:
+    bundle = state.labeling_bundle
+    if bundle is None:
+        return (), ()
+    page_payload = _bundle_payload_by_hash(state, current.page_sha256)
+    image_payload = _bundle_payload_by_hash(state, current.image_sha256)
+    page_head_payload = _canonical_bytes(
+        {
+            "configuration_hash": bundle.configuration_hash,
+            "image_sha256": bundle.image_sha256,
+            "page_id": bundle.page_id,
+            "page_sha256": bundle.page_sha256,
+        }
+    )
+    payloads = (
+        ("page", current.page_sha256, page_payload, "application/json"),
+        ("image", current.image_sha256, image_payload, "image/png"),
+        ("page-head", current.page_head_sha256, page_head_payload, "application/json"),
+    )
+    artifacts: list[ReplacementArtifact] = []
+    verified: list[tuple[ReplacementArtifact, bytes]] = []
+    for role, expected_sha256, payload, media_type in payloads:
+        if hashlib.sha256(payload).hexdigest() != expected_sha256:
+            raise ValueError(f"current {role} artifact does not match its binding")
+        artifact = ReplacementArtifact(
+            artifact_id=f"{correction_id}:{role}",
+            relative_path=f"{correction_id}.{role}",
+            sha256=expected_sha256,
+            byte_size=len(payload),
+            media_type=media_type,
+        )
+        artifacts.append(artifact)
+        verified.append((artifact, payload))
+    return tuple(artifacts), tuple(verified)
+
+
 def _project_page(project_id: str, page_index: int, state: ProjectState) -> Project:
     project = state.loaded_project
     if project is None or project.project_id != project_id:
@@ -190,6 +290,20 @@ def _project_page(project_id: str, page_index: int, state: ProjectState) -> Proj
     if page_index < 0 or page_index >= project.total_pages:
         raise HTTPException(status_code=404, detail="page not found")
     return project
+
+
+def _logical_page_id(project: Project, page_index: int, state: ProjectState) -> str:
+    bundle = state.labeling_bundle
+    if bundle is not None:
+        return bundle.page_id
+    return stable_page_id(project_id=project.project_id, page_index=page_index)
+
+
+def _bundle_word(state: ProjectState, word_id: str) -> WordTypography | None:
+    bundle = state.labeling_bundle
+    if bundle is None:
+        return None
+    return next((word for word in bundle.words if word.word_id == word_id), None)
 
 
 def _source_text(project: Project, page_index: int) -> str:
@@ -235,6 +349,9 @@ def _review_words(
     state: ProjectState,
     page_override: object | None = None,
 ) -> tuple[str, ...]:
+    bundle = state.labeling_bundle
+    if bundle is not None:
+        return tuple(word.text for word in bundle.words)
     page_words = _page_words(project, page_index, state, page_override)
     if page_words is not None:
         return tuple(
@@ -265,8 +382,18 @@ def _text_validated_word_ids(
     page_words = _page_words(project, page_index, state, page_override)
     if page_words is None:
         return set()
-    page_id = stable_page_id(project_id=project.project_id, page_index=page_index)
+    bundle = state.labeling_bundle
+    page_id = _logical_page_id(project, page_index, state)
     texts = _review_words(project, page_index, state, page_override)
+    if bundle is not None:
+        bundle_ids = {word.word_id for word in bundle.words}
+        return {
+            word_id
+            for word in page_words
+            if isinstance((word_id := getattr(word, "word_id", None)), str)
+            and word_id in bundle_ids
+            and "validated" in (getattr(word, "word_labels", None) or ())
+        }
     return {
         stable_word_id(
             project_id=project.project_id,
@@ -295,7 +422,7 @@ def _current_page_content(
             if lines is not None
             else [list(_page_words(project, page_index, state, page_override) or ())]
         )
-    page_id = stable_page_id(project_id=project.project_id, page_index=page_index)
+    page_id = _logical_page_id(project, page_index, state)
     reading_order = 0
     projected_lines: list[list[dict[str, object]]] = []
     for line in line_words:
@@ -346,7 +473,10 @@ def _word_text(
     state: ProjectState,
     page_override: object | None = None,
 ) -> str:
-    page_id = stable_page_id(project_id=project.project_id, page_index=page_index)
+    bundle_word = _bundle_word(state, word_id)
+    if bundle_word is not None:
+        return bundle_word.text
+    page_id = _logical_page_id(project, page_index, state)
     for index, text in enumerate(_review_words(project, page_index, state, page_override)):
         candidate = stable_word_id(
             project_id=project.project_id, page_id=page_id, reading_order=index, text=text
@@ -362,7 +492,10 @@ def _active_word_ids(
     state: ProjectState,
     page_override: object | None = None,
 ) -> set[str]:
-    page_id = stable_page_id(project_id=project.project_id, page_index=page_index)
+    bundle = state.labeling_bundle
+    if bundle is not None:
+        return {word.word_id for word in bundle.words}
+    page_id = _logical_page_id(project, page_index, state)
     return {
         stable_word_id(
             project_id=project.project_id,
@@ -381,6 +514,16 @@ def _initial_binding(
     state: ProjectState,
     page_override: object | None = None,
 ) -> TypographyBinding:
+    bundle = state.labeling_bundle
+    bundle_word = _bundle_word(state, word_id)
+    if bundle is not None and bundle_word is not None:
+        return TypographyBinding(
+            page_sha256=bundle.page_sha256,
+            image_sha256=bundle.image_sha256,
+            text_sha256=bundle_word.text_sha256,
+            page_head_sha256=bundle.page_head_sha256,
+            word_revision=bundle_word.word_revision,
+        )
     image_sha = hashlib.sha256(project.image_paths[page_index].read_bytes()).hexdigest()
     text_sha = hashlib.sha256(
         _word_text(project, page_index, word_id, state, page_override).encode()
@@ -395,7 +538,7 @@ def _initial_binding(
     )
     page_head = _canonical_hash(
         {
-            "logical_page": stable_page_id(project_id=project.project_id, page_index=page_index),
+            "logical_page": _logical_page_id(project, page_index, state),
             "page_sha256": page_sha,
         }
     )
@@ -415,11 +558,11 @@ def _current_head(
     log: TypographyCorrectionLog,
     state: ProjectState,
 ) -> TypographyHeadResponse:
-    logical_page_id = stable_page_id(project_id=project.project_id, page_index=page_index)
+    logical_page_id = _logical_page_id(project, page_index, state)
     initial = _initial_binding(project, page_index, word_id, state)
     records = log.current_epoch(
         log.records(logical_page_id),
-        logical_page_id=UUID(logical_page_id),
+        logical_page_id=logical_page_id,
         current=initial,
     )
     word_head = next((row.correction for row in reversed(records) if row.correction.word_id == word_id), None)
@@ -437,7 +580,7 @@ def _current_head(
         text=text,
         graphemes=split_graphemes(text),
         grapheme_map_version=GRAPHEME_SEGMENTATION_VERSION,
-        taxonomy=TYPOGRAPHY_TAXONOMY,
+        taxonomy=(state.labeling_bundle.taxonomy if state.labeling_bundle else TYPOGRAPHY_TAXONOMY),
         revision=word_head.revision if word_head else 0,
         correction=word_head,
         head_token="0" * 64,
@@ -515,31 +658,32 @@ def append_typography_correction(
 ) -> TypographyHeadResponse:
     """Append canonical intent against the current server-derived head."""
     project = _project_page(project_id, page_index, state)
-    logical_page_id = stable_page_id(project_id=project_id, page_index=page_index)
+    logical_page_id = _logical_page_id(project, page_index, state)
+    taxonomy = state.labeling_bundle.taxonomy if state.labeling_bundle else TYPOGRAPHY_TAXONOMY
     log = TypographyCorrectionLog(project.project_root, corpus_root=project.project_root.parent)
     with state.get_page_lock(page_index):
         head = _current_head(project, page_index, word_id, log, state)
         initial = _initial_binding(project, page_index, word_id, state)
         records = log.current_epoch(
             log.records(logical_page_id),
-            logical_page_id=UUID(logical_page_id),
+            logical_page_id=logical_page_id,
             current=initial,
         )
         lineage = _correction_lineage_binding(initial, records, word_id)
         if submission.expected_head != head.head_token:
             raise HTTPException(status_code=409, detail="typography head is stale")
         if (
-            submission.taxonomy_version != TYPOGRAPHY_TAXONOMY.version
-            or submission.taxonomy_hash != TYPOGRAPHY_TAXONOMY.taxonomy_hash
+            submission.taxonomy_version != taxonomy.version
+            or submission.taxonomy_hash != taxonomy.taxonomy_hash
             or submission.grapheme_map_version != GRAPHEME_SEGMENTATION_VERSION
         ):
             raise HTTPException(status_code=422, detail="typography contract is stale or tampered")
         if submission.replacement is not None:
             try:
-                submission.replacement.validate_taxonomy(TYPOGRAPHY_TAXONOMY)
+                submission.replacement.validate_taxonomy(taxonomy)
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail="invalid typography taxonomy states") from exc
-            allowed_labels = set(TYPOGRAPHY_TAXONOMY.label_values())
+            allowed_labels = set(taxonomy.label_values())
             used_labels = set(submission.replacement.label_states) | {
                 span.label for span in submission.replacement.spans
             }
@@ -571,6 +715,33 @@ def append_typography_correction(
             )
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail="invalid typography correction") from exc
+        replacement_artifacts = submission.replacement_artifacts
+        server_verified_payloads: tuple[tuple[ReplacementArtifact, bytes], ...] = ()
+        if (
+            not replacement_artifacts
+            and correction.decision
+            in {
+                CorrectionDecision.ACCEPT,
+                CorrectionDecision.APPROVED_EDIT,
+                CorrectionDecision.REVIEWED_REGULAR,
+            }
+            and correction.replacement is not None
+            and correction.replacement_text_sha256 == initial.text_sha256
+            and correction.replacement_page_sha256 == initial.page_sha256
+            and correction.replacement_image_sha256 == initial.image_sha256
+            and correction.replacement_page_head_sha256 == initial.page_head_sha256
+        ):
+            try:
+                replacement_artifacts, server_verified_payloads = _server_replacement_artifacts(
+                    correction_id=correction.correction_id,
+                    state=state,
+                    current=initial,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail="current replacement artifacts are unavailable",
+                ) from exc
         try:
             correction_history = (
                 *(record.correction for record in records),
@@ -581,7 +752,7 @@ def append_typography_correction(
                 configuration_hash="0" * 64,
                 labeling_bundle_id="0" * 64,
                 corrections=correction_history,
-                replacement_artifacts=submission.replacement_artifacts,
+                replacement_artifacts=replacement_artifacts,
                 page_geometry=submission.page_geometry,
                 geometry=submission.geometry,
                 model_runs=submission.model_runs,
@@ -589,14 +760,16 @@ def append_typography_correction(
             )
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail="invalid portable correction components") from exc
-        artifacts_by_id = {artifact.artifact_id: artifact for artifact in submission.replacement_artifacts}
-        if len(artifacts_by_id) != len(submission.replacement_artifacts):
+        artifacts_by_id = {artifact.artifact_id: artifact for artifact in replacement_artifacts}
+        if len(artifacts_by_id) != len(replacement_artifacts):
             raise HTTPException(status_code=422, detail="replacement artifact ids must be unique")
         payloads_by_id = {
             artifact_payload.artifact_id: artifact_payload
             for artifact_payload in submission.replacement_artifact_payloads
         }
-        if (
+        if server_verified_payloads:
+            verified_payloads = list(server_verified_payloads)
+        elif (
             len(payloads_by_id) != len(submission.replacement_artifact_payloads)
             or payloads_by_id.keys() != artifacts_by_id.keys()
         ):
@@ -604,21 +777,27 @@ def append_typography_correction(
                 status_code=422,
                 detail="replacement artifact payloads must match declarations",
             )
-        verified_payloads: list[tuple[ReplacementArtifact, bytes]] = []
-        for artifact_id, artifact in artifacts_by_id.items():
-            try:
-                payload = b64decode(payloads_by_id[artifact_id].data_base64, validate=True)
-            except (Base64Error, ValueError) as exc:
-                raise HTTPException(status_code=422, detail="invalid replacement artifact payload") from exc
-            if len(payload) != artifact.byte_size or hashlib.sha256(payload).hexdigest() != artifact.sha256:
-                raise HTTPException(status_code=422, detail="replacement artifact hash mismatch")
-            verified_payloads.append((artifact, payload))
+        else:
+            verified_payloads = []
+            for artifact_id, artifact in artifacts_by_id.items():
+                try:
+                    payload = b64decode(payloads_by_id[artifact_id].data_base64, validate=True)
+                except (Base64Error, ValueError) as exc:
+                    raise HTTPException(
+                        status_code=422, detail="invalid replacement artifact payload"
+                    ) from exc
+                if (
+                    len(payload) != artifact.byte_size
+                    or hashlib.sha256(payload).hexdigest() != artifact.sha256
+                ):
+                    raise HTTPException(status_code=422, detail="replacement artifact hash mismatch")
+                verified_payloads.append((artifact, payload))
         try:
             log.append(
                 correction,
                 logical_page_id=logical_page_id,
                 current=initial,
-                replacement_artifacts=submission.replacement_artifacts,
+                replacement_artifacts=replacement_artifacts,
                 page_geometry=submission.page_geometry,
                 geometry=submission.geometry,
                 model_runs=submission.model_runs,
@@ -632,8 +811,12 @@ def append_typography_correction(
         return _current_head(project, page_index, word_id, log, state)
 
 
-def _page_records(project: Project, page_index: int) -> tuple[TypographyJournalEnvelope, ...]:
-    page_id = stable_page_id(project_id=project.project_id, page_index=page_index)
+def _page_records(
+    project: Project,
+    page_index: int,
+    state: ProjectState,
+) -> tuple[TypographyJournalEnvelope, ...]:
+    page_id = _logical_page_id(project, page_index, state)
     return TypographyCorrectionLog(project.project_root, corpus_root=project.project_root.parent).records(
         page_id
     )
@@ -662,13 +845,13 @@ def typography_page_review(
 ) -> TypographyPageReviewResponse:
     """Evaluate the review gate for the page's current word identities."""
     project = _project_page(project_id, page_index, state)
-    records = _page_records(project, page_index)
+    records = _page_records(project, page_index, state)
     active_word_ids = _active_word_ids(project, page_index, state, page)
     if active_word_ids:
         epoch_word_id = next(iter(active_word_ids))
         records = TypographyCorrectionLog.current_epoch(
             records,
-            logical_page_id=UUID(stable_page_id(project_id=project_id, page_index=page_index)),
+            logical_page_id=_logical_page_id(project, page_index, state),
             current=_initial_binding(project, page_index, epoch_word_id, state, page),
         )
     else:
@@ -733,7 +916,7 @@ def typography_page_review(
     return TypographyPageReviewResponse(
         project_id=project_id,
         page_index=page_index,
-        logical_page_id=stable_page_id(project_id=project_id, page_index=page_index),
+        logical_page_id=_logical_page_id(project, page_index, state),
         reviewed_words=len(heads),
         text_reviewed_words=text_reviewed,
         typography_reviewed_words=typography_reviewed,
@@ -741,6 +924,102 @@ def typography_page_review(
         total_words=total,
         complete=(text_reviewed == total and typography_reviewed == total and blocked == 0),
         heads=heads,
+    )
+
+
+@router.get(
+    "/api/projects/{project_id}/pages/{page_index}/typography/worklist",
+    response_model=TypographyWorklistResponse,
+)
+def get_typography_worklist(
+    project_id: str,
+    page_index: int,
+    state: ProjectState = Depends(get_project_state),
+) -> TypographyWorklistResponse:
+    """Return the ordered, bundle-native typography review worklist."""
+    project = _project_page(project_id, page_index, state)
+    bundle = state.labeling_bundle
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="labeling bundle not loaded")
+    bundle_id = bundle.bundle_id
+    if bundle_id is None:
+        raise HTTPException(status_code=422, detail="labeling bundle content id is unavailable")
+    with state.get_page_lock(page_index):
+        records = _page_records(project, page_index, state)
+        if bundle.words:
+            records = TypographyCorrectionLog.current_epoch(
+                records,
+                logical_page_id=bundle.page_id,
+                current=_initial_binding(project, page_index, bundle.words[0].word_id, state),
+            )
+        heads = {
+            record.correction.word_id: record.correction
+            for record in records
+            if any(word.word_id == record.correction.word_id for word in bundle.words)
+        }
+        text_validated = _text_validated_word_ids(project, page_index, state)
+        required_labels = {label.value for label in bundle.taxonomy.labels if label.required_for_completion}
+        words: list[TypographyWorklistWord] = []
+        typography_reviewed_words = 0
+        blocked_words = 0
+        for source_word in bundle.words:
+            correction = heads.get(source_word.word_id)
+            replacement = correction.replacement if correction is not None else None
+            typography_reviewed = bool(
+                correction is not None
+                and correction.decision
+                in {
+                    CorrectionDecision.ACCEPT,
+                    CorrectionDecision.APPROVED_EDIT,
+                    CorrectionDecision.REVIEWED_REGULAR,
+                }
+                and replacement is not None
+                and replacement.review_state in {ReviewState.REVIEWED, ReviewState.REVIEWED_REGULAR}
+                and all(
+                    replacement.label_states.get(label) in {LabelState.POSITIVE, LabelState.NEGATIVE}
+                    for label in required_labels
+                )
+            )
+            text_reviewed = source_word.word_id in text_validated
+            reviewed = correction is not None
+            if typography_reviewed:
+                typography_reviewed_words += 1
+            if not text_reviewed or not typography_reviewed:
+                blocked_words += 1
+            words.append(
+                TypographyWorklistWord(
+                    word_id=source_word.word_id,
+                    text=source_word.text,
+                    graphemes=split_graphemes(source_word.text),
+                    source_review_state=source_word.review_state,
+                    source_label_states=dict(source_word.label_states),
+                    source_spans=source_word.spans,
+                    warnings=source_word.warnings,
+                    current_correction=correction,
+                    decision=correction.decision if correction is not None else None,
+                    reviewed=reviewed,
+                    typography_reviewed=typography_reviewed,
+                    text_reviewed=text_reviewed,
+                )
+            )
+        text_reviewed_words = len(text_validated & {word.word_id for word in bundle.words})
+    total_words = len(words)
+    return TypographyWorklistResponse(
+        project_id=project_id,
+        page_index=page_index,
+        logical_page_id=bundle.page_id,
+        bundle_id=bundle_id,
+        taxonomy=bundle.taxonomy,
+        words=tuple(words),
+        total_words=total_words,
+        text_reviewed_words=text_reviewed_words,
+        typography_reviewed_words=typography_reviewed_words,
+        blocked_words=blocked_words,
+        complete=(
+            text_reviewed_words == total_words
+            and typography_reviewed_words == total_words
+            and blocked_words == 0
+        ),
     )
 
 
@@ -756,15 +1035,27 @@ def export_typography_correction_bundle(
 ) -> CorrectionBundleExportResponse:
     """Create one deterministic immutable project-local correction bundle."""
     project = _project_page(project_id, page_index, state)
+    stored_labeling_bundle = state.labeling_bundle
+    if stored_labeling_bundle is not None:
+        if (
+            request.labeling_bundle is not None
+            and request.labeling_bundle.bundle_id != stored_labeling_bundle.bundle_id
+        ):
+            raise HTTPException(status_code=409, detail="labeling bundle does not match loaded project")
+        labeling_bundle = stored_labeling_bundle
+    elif request.labeling_bundle is not None:
+        labeling_bundle = request.labeling_bundle
+    else:
+        raise HTTPException(status_code=422, detail="labeling bundle is required")
     log = TypographyCorrectionLog(project.project_root, corpus_root=project.project_root.parent)
     with state.get_page_lock(page_index):
-        records = _page_records(project, page_index)
+        records = _page_records(project, page_index, state)
         active_word_ids = _active_word_ids(project, page_index, state)
         if active_word_ids:
             epoch_word_id = next(iter(active_word_ids))
             records = log.current_epoch(
                 records,
-                logical_page_id=UUID(stable_page_id(project_id=project_id, page_index=page_index)),
+                logical_page_id=_logical_page_id(project, page_index, state),
                 current=_initial_binding(project, page_index, epoch_word_id, state),
             )
         else:
@@ -858,7 +1149,7 @@ def export_typography_correction_bundle(
             if len(payload) != artifact.byte_size:
                 raise HTTPException(status_code=422, detail="replacement artifact size mismatch")
         try:
-            labeling_bundle_id = request.labeling_bundle.bundle_id
+            labeling_bundle_id = labeling_bundle.bundle_id
             if labeling_bundle_id is None:
                 raise ValueError("labeling bundle content id was not derived")
             exported_artifacts = tuple(
@@ -867,7 +1158,7 @@ def export_typography_correction_bundle(
             )
             bundle = CorrectionBundle(
                 schema_version=REVIEW_CONTRACT_VERSION,
-                configuration_hash=request.labeling_bundle.configuration_hash,
+                configuration_hash=labeling_bundle.configuration_hash,
                 labeling_bundle_id=labeling_bundle_id,
                 corrections=tuple(record.correction for record in selected),
                 replacement_artifacts=exported_artifacts,
@@ -876,7 +1167,7 @@ def export_typography_correction_bundle(
                 model_runs=tuple(model_runs.values()),
                 coordinate_transforms=tuple(transforms.values()),
             )
-            bundle.validate_against(request.labeling_bundle)
+            bundle.validate_against(labeling_bundle)
         except (ValidationError, ValueError) as exc:
             raise HTTPException(
                 status_code=422,

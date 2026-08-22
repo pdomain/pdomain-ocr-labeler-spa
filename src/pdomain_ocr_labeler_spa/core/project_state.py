@@ -67,6 +67,7 @@ for the symmetric view from the route side.)
 
 from __future__ import annotations
 
+import os
 import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -75,7 +76,12 @@ from uuid import UUID
 from .models import Project, Selection
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
+    from pdomain_book_tools.typography import LabelingBundle
+
     from .page_state import PageLoadOutcome
+    from .persistence.labeling_bundle import LoadedLabelingBundle
 
 
 @dataclass
@@ -166,6 +172,7 @@ class ProjectState:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._loaded_project: Project | None = None
+        self._loaded_labeling_bundle: LoadedLabelingBundle | None = None
         self._page_states: dict[int, PageState] = {}
         self._current_page_index: int = 0
         self._generation: int = 0
@@ -191,6 +198,23 @@ class ProjectState:
         truth at the moment a caller asks.
         """
         return self._loaded_project
+
+    @property
+    def labeling_bundle(self) -> LabelingBundle | None:
+        """The immutable portable review input for the active project, if any."""
+        loaded = self._loaded_labeling_bundle
+        return None if loaded is None else loaded.bundle
+
+    @property
+    def labeling_bundle_root(self) -> Path | None:
+        """External materialized bundle directory retained without copying it."""
+        loaded = self._loaded_labeling_bundle
+        return None if loaded is None else loaded.root
+
+    @property
+    def loaded_labeling_bundle(self) -> LoadedLabelingBundle | None:
+        """Validated bundle, resolved paths, and verified source bytes."""
+        return self._loaded_labeling_bundle
 
     @property
     def page_states(self) -> dict[int, PageState]:
@@ -228,7 +252,12 @@ class ProjectState:
 
     # ── mutations ────────────────────────────────────────────────────────
 
-    def set_loaded_project(self, project: Project) -> None:
+    def set_loaded_project(
+        self,
+        project: Project,
+        *,
+        labeling_bundle: LoadedLabelingBundle | None = None,
+    ) -> None:
         """Swap to a newly-loaded ``Project``; reset per-page state.
 
         Per-page state ``PageState`` instances are scoped to a single
@@ -246,7 +275,13 @@ class ProjectState:
         state change, not multiple).
         """
         with self._lock:
+            if (
+                self._loaded_labeling_bundle is not None
+                and self._loaded_labeling_bundle is not labeling_bundle
+            ):
+                os.close(self._loaded_labeling_bundle.image_descriptor)
             self._loaded_project = project
+            self._loaded_labeling_bundle = labeling_bundle
             self._page_states = {}
             self._page_locks = {}
             self._current_page_index = project.current_page_index
@@ -262,7 +297,10 @@ class ProjectState:
         generation, full stop").
         """
         with self._lock:
+            if self._loaded_labeling_bundle is not None:
+                os.close(self._loaded_labeling_bundle.image_descriptor)
             self._loaded_project = None
+            self._loaded_labeling_bundle = None
             self._page_states = {}
             self._page_locks = {}
             self._current_page_index = 0

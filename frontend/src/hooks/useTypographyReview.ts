@@ -5,6 +5,8 @@ export type TypographyHead = components["schemas"]["TypographyHeadResponse"];
 export type TypographySubmission = components["schemas"]["TypographyCorrectionSubmission"];
 export type TypographyReview = components["schemas"]["TypographyPageReviewResponse"];
 
+export type TypographyWorklistResponse = components["schemas"]["TypographyWorklistResponse"];
+
 export class TypographyApiError extends Error {
   constructor(
     message: string,
@@ -31,10 +33,12 @@ export function useTypographyHead(projectId: string, pageIndex: number, wordId?:
   return useQuery({
     queryKey: ["typography-head", projectId, pageIndex, wordId],
     enabled: Boolean(wordId),
-    queryFn: () =>
-      apiJson<TypographyHead>(
-        `${pageBase(projectId, pageIndex)}/words/${encodeURIComponent(wordId!)}/head`,
-      ),
+    queryFn: () => {
+      if (!wordId) throw new TypographyApiError("Typography needs a stable word ID.", 400);
+      return apiJson<TypographyHead>(
+        `${pageBase(projectId, pageIndex)}/words/${encodeURIComponent(wordId)}/head`,
+      );
+    },
   });
 }
 
@@ -42,6 +46,14 @@ export function useTypographyReview(projectId: string, pageIndex: number) {
   return useQuery({
     queryKey: ["typography-review", projectId, pageIndex],
     queryFn: () => apiJson<TypographyReview>(`${pageBase(projectId, pageIndex)}/review`),
+  });
+}
+
+export function useTypographyWorklist(projectId: string, pageIndex: number) {
+  return useQuery({
+    queryKey: ["typography-worklist", projectId, pageIndex],
+    queryFn: () =>
+      apiJson<TypographyWorklistResponse>(`${pageBase(projectId, pageIndex)}/worklist`),
   });
 }
 
@@ -65,6 +77,9 @@ export function useAppendTypographyCorrection(
     onSuccess: (head) => {
       queryClient.setQueryData(["typography-head", projectId, pageIndex, wordId], head);
       void queryClient.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
+      void queryClient.invalidateQueries({
+        queryKey: ["typography-worklist", projectId, pageIndex],
+      });
     },
     onError: (error) => {
       if (error.status === 409) {

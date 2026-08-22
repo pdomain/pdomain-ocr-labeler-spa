@@ -1399,6 +1399,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/typography/worklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Typography Worklist
+         * @description Return the ordered, bundle-native typography review worklist.
+         */
+        get: operations["get_typography_worklist_api_projects__project_id__pages__page_index__typography_worklist_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/pages/{page_index}/typography/correction-bundles/export": {
         parameters: {
             query?: never;
@@ -2725,7 +2745,7 @@ export interface components {
          * @description Portable source bundle and optional frozen word-head selection.
          */
         CorrectionBundleExportRequest: {
-            labeling_bundle: components["schemas"]["LabelingBundle"];
+            labeling_bundle?: components["schemas"]["LabelingBundle"] | null;
             /** Selected Word Ids */
             selected_word_ids?: string[] | null;
         };
@@ -4787,6 +4807,62 @@ export interface components {
             trainable: boolean;
         };
         /**
+         * TypographyWorklistResponse
+         * @description Ordered geometry-free review input for the active portable bundle.
+         */
+        TypographyWorklistResponse: {
+            /** Project Id */
+            project_id: string;
+            /** Page Index */
+            page_index: number;
+            /** Logical Page Id */
+            logical_page_id: string;
+            /** Bundle Id */
+            bundle_id: string;
+            taxonomy: components["schemas"]["TypographyTaxonomy"];
+            /** Words */
+            words: components["schemas"]["TypographyWorklistWord"][];
+            /** Total Words */
+            total_words: number;
+            /** Text Reviewed Words */
+            text_reviewed_words: number;
+            /** Typography Reviewed Words */
+            typography_reviewed_words: number;
+            /** Blocked Words */
+            blocked_words: number;
+            /** Complete */
+            complete: boolean;
+        };
+        /**
+         * TypographyWorklistWord
+         * @description One bundle-native word plus its current local review state.
+         */
+        TypographyWorklistWord: {
+            /** Word Id */
+            word_id: string;
+            /** Text */
+            text: string;
+            /** Graphemes */
+            graphemes: string[];
+            source_review_state: components["schemas"]["ReviewState"];
+            /** Source Label States */
+            source_label_states: {
+                [key: string]: components["schemas"]["LabelState"];
+            };
+            /** Source Spans */
+            source_spans: components["schemas"]["TypographySpan"][];
+            /** Warnings */
+            warnings: string[];
+            current_correction: components["schemas"]["TypographyCorrection"] | null;
+            decision: components["schemas"]["CorrectionDecision"] | null;
+            /** Reviewed */
+            reviewed: boolean;
+            /** Typography Reviewed */
+            typography_reviewed: boolean;
+            /** Text Reviewed */
+            text_reviewed: boolean;
+        };
+        /**
          * UpdateInfo
          * @description Shape returned by GET /api/suite/update.
          */
@@ -6722,6 +6798,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TypographyPageReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_typography_worklist_api_projects__project_id__pages__page_index__typography_worklist_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TypographyWorklistResponse"];
                 };
             };
             /** @description Validation Error */

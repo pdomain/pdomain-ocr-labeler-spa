@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -25,6 +27,7 @@ from pdomain_ocr_labeler_spa.api.typography import TYPOGRAPHY_TAXONOMY
 from pdomain_ocr_labeler_spa.bootstrap import build_app
 from pdomain_ocr_labeler_spa.core.models import PageSource, Project
 from pdomain_ocr_labeler_spa.core.page_state import PageLoadOutcome
+from pdomain_ocr_labeler_spa.core.persistence.labeling_bundle import LoadedLabelingBundle
 from pdomain_ocr_labeler_spa.core.project_state import PageState
 from pdomain_ocr_labeler_spa.core.typography_review import (
     TypographyCorrectionLog,
@@ -385,6 +388,221 @@ def _labeling_bundle(head: dict[str, object], word_id: str, *, text: str = "Word
             ),
         ),
     )
+
+
+def _attach_bundle(client: TestClient, bundle: LabelingBundle) -> None:
+    project = client.app.state.project_state.loaded_project  # type: ignore[attr-defined]
+    assert project is not None
+    image = project.image_paths[0]
+    page_payload = b"page-record"
+    artifact_paths = {"source-image": image}
+    artifact_payloads = {"source-image": image.read_bytes()}
+    if hashlib.sha256(page_payload).hexdigest() == bundle.page_sha256:
+        page_path = project.project_root / "page-record.json"
+        page_path.write_bytes(page_payload)
+        artifact_paths["page-record"] = page_path
+        artifact_payloads["page-record"] = page_payload
+    loaded = LoadedLabelingBundle(
+        root=project.project_root,
+        bundle=bundle,
+        artifact_paths=artifact_paths,
+        artifact_payloads=artifact_payloads,
+        image_descriptor=os.open(image, os.O_RDONLY),
+    )
+    client.app.state.project_state.set_loaded_project(  # type: ignore[attr-defined]
+        project,
+        labeling_bundle=loaded,
+    )
+
+
+def test_bundle_worklist_preserves_native_identity_and_unvalidated_text(tmp_path: Path) -> None:
+    client, _generated_page_id, generated_word_id = _client(tmp_path)
+    generated_head = client.get(
+        f"/api/projects/alpha/pages/0/typography/words/{generated_word_id}/head"
+    ).json()
+    native_word_id = "7ca20136-634e-5282-a071-0ff1c9467b8b"
+    payload = _labeling_bundle(generated_head, native_word_id).model_dump(mode="python")
+    page_payload = b"page-record"
+    page_sha = hashlib.sha256(page_payload).hexdigest()
+    page_id = "pgdp:alpha:001.png"
+    page_head_payload = (
+        json.dumps(
+            {
+                "configuration_hash": payload["configuration_hash"],
+                "image_sha256": payload["image_sha256"],
+                "page_id": page_id,
+                "page_sha256": page_sha,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode()
+    payload.update(
+        bundle_id=None,
+        page_id=page_id,
+        page_sha256=page_sha,
+        page_head_sha256=hashlib.sha256(page_head_payload).hexdigest(),
+    )
+    payload["artifacts"] = (
+        *payload["artifacts"],
+        ArtifactReference(
+            artifact_id="page-record",
+            relative_path="page-record.json",
+            sha256=page_sha,
+            media_type="application/json",
+        ),
+    )
+    word = payload["words"][0]
+    assert isinstance(word, dict)
+    word["page_content_sha256"] = page_sha
+    bundle = LabelingBundle.model_validate(payload)
+    _attach_bundle(client, bundle)
+
+    response = client.get("/api/projects/alpha/pages/0/typography/worklist")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["logical_page_id"] == bundle.page_id
+    assert body["bundle_id"] == bundle.bundle_id
+    assert (
+        body["words"][0]
+        | {
+            "word_id": native_word_id,
+            "text": "Word",
+            "graphemes": ["W", "o", "r", "d"],
+            "source_review_state": "unreviewed",
+            "text_reviewed": False,
+            "typography_reviewed": False,
+            "reviewed": False,
+            "current_correction": None,
+            "decision": None,
+        }
+        == body["words"][0]
+    )
+    assert body["total_words"] == 1
+    assert body["complete"] is False
+
+    head = client.get(f"/api/projects/alpha/pages/0/typography/words/{native_word_id}/head")
+    assert head.status_code == 200, head.text
+    assert head.json()["logical_page_id"] == bundle.page_id
+    assert head.json()["page_sha256"] == bundle.page_sha256
+    assert head.json()["image_sha256"] == bundle.image_sha256
+    assert head.json()["text_sha256"] == bundle.words[0].text_sha256
+    assert head.json()["page_head_sha256"] == bundle.page_head_sha256
+
+    _set_current_page(client, words=[("Wo", True), ("rd", True)])
+    mismatched = client.get("/api/projects/alpha/pages/0/typography/worklist")
+    assert mismatched.status_code == 200
+    assert mismatched.json()["text_reviewed_words"] == 0
+
+
+def test_bundle_reviewed_regular_request_exports_server_published_artifacts(tmp_path: Path) -> None:
+    client, _generated_page_id, generated_word_id = _client(tmp_path)
+    generated_head = client.get(
+        f"/api/projects/alpha/pages/0/typography/words/{generated_word_id}/head"
+    ).json()
+    native_word_id = "7ca20136-634e-5282-a071-0ff1c9467b8b"
+    page_payload = b"page-record"
+    page_sha = hashlib.sha256(page_payload).hexdigest()
+    page_id = "pgdp:alpha:001.png"
+    payload = _labeling_bundle(generated_head, native_word_id).model_dump(mode="python")
+    page_head_payload = (
+        json.dumps(
+            {
+                "configuration_hash": payload["configuration_hash"],
+                "image_sha256": payload["image_sha256"],
+                "page_id": page_id,
+                "page_sha256": page_sha,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode()
+    payload.update(
+        bundle_id=None,
+        page_id=page_id,
+        page_sha256=page_sha,
+        page_head_sha256=hashlib.sha256(page_head_payload).hexdigest(),
+    )
+    payload["artifacts"] = (
+        *payload["artifacts"],
+        ArtifactReference(
+            artifact_id="page-record",
+            relative_path="page-record.json",
+            sha256=page_sha,
+            media_type="application/json",
+        ),
+    )
+    word = payload["words"][0]
+    assert isinstance(word, dict)
+    word["page_content_sha256"] = page_sha
+    bundle = LabelingBundle.model_validate(payload)
+    _attach_bundle(client, bundle)
+    _set_current_page(client, words=[("Word", True)])
+    page_state = client.app.state.project_state.get_page_state(0)  # type: ignore[attr-defined]
+    assert page_state is not None and page_state.page_record is not None
+    page_state.page_record.payload.words[0].word_id = native_word_id
+    path = f"/api/projects/alpha/pages/0/typography/words/{native_word_id}"
+    head = client.get(f"{path}/head").json()
+    taxonomy = head["taxonomy"]
+
+    reviewed = client.post(
+        f"{path}/corrections",
+        json={
+            "expected_head": head["head_token"],
+            "correction_id": "ui-reviewed-regular",
+            "taxonomy_version": taxonomy["version"],
+            "taxonomy_hash": taxonomy["taxonomy_hash"],
+            "grapheme_map_version": head["grapheme_map_version"],
+            "decision": "reviewed_regular",
+            "replacement": {
+                "word_id": native_word_id,
+                "text": "Word",
+                "text_sha256": head["text_sha256"],
+                "page_content_sha256": head["page_sha256"],
+                "image_artifact_sha256": head["image_sha256"],
+                "grapheme_map_version": head["grapheme_map_version"],
+                "taxonomy_version": taxonomy["version"],
+                "taxonomy_hash": taxonomy["taxonomy_hash"],
+                "label_states": {label["value"]: "negative" for label in taxonomy["labels"]},
+                "spans": [],
+                "source_evidence_ids": ["source-evidence"],
+                "word_revision": 1,
+                "review_state": "reviewed_regular",
+            },
+            "replacement_text_sha256": head["text_sha256"],
+            "replacement_page_sha256": head["page_sha256"],
+            "replacement_image_sha256": head["image_sha256"],
+            "replacement_page_head_sha256": head["page_head_sha256"],
+            "replacement_word_revision": 1,
+            "replacement_artifacts": [],
+            "replacement_artifact_payloads": [],
+        },
+    )
+    assert reviewed.status_code == 200, reviewed.text
+
+    exported = client.post(
+        "/api/projects/alpha/pages/0/typography/correction-bundles/export",
+        json={},
+    )
+
+    assert exported.status_code == 200, exported.text
+    artifacts = exported.json()["bundle"]["replacement_artifacts"]
+    assert {artifact["sha256"] for artifact in artifacts} == {
+        bundle.page_sha256,
+        bundle.image_sha256,
+        bundle.page_head_sha256,
+    }
+    export_root = tmp_path / "alpha" / ".pd-pages" / "typography-exports"
+    for artifact in artifacts:
+        assert (
+            hashlib.sha256((export_root / artifact["relative_path"]).read_bytes()).hexdigest()
+            == artifact["sha256"]
+        )
 
 
 def _accepted_edit(head: dict[str, object], *, correction_id: str, text: str) -> dict[str, object]:

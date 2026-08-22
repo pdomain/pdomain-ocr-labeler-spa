@@ -22,7 +22,7 @@ from pdomain_book_tools.typography import (
     WordGeometry,
     make_word_id,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 _PAGE_ID_NAMESPACE = UUID("87638c97-711a-536d-80d2-6963f85ef543")
 
@@ -45,13 +45,24 @@ class TypographyJournalEnvelope(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: int = Field(default=1, ge=1, le=1)
-    logical_page_id: UUID
+    logical_page_id: str
     correction: TypographyCorrection
     replacement_artifacts: tuple[ReplacementArtifact, ...] = ()
     page_geometry: PageGeometry | None = None
     geometry: tuple[WordGeometry, ...] | None = None
     model_runs: tuple[ModelRun, ...] = ()
     coordinate_transforms: tuple[CoordinateTransform, ...] = ()
+
+    @field_validator("logical_page_id")
+    @classmethod
+    def _validate_logical_page_id(cls, value: str) -> str:
+        try:
+            UUID(value)
+        except ValueError:
+            parts = value.split(":")
+            if len(parts) != 3 or parts[0] != "pgdp" or not all(parts[1:]):
+                raise ValueError("logical_page_id must be a UUID or canonical PGDP page id") from None
+        return value
 
 
 class StaleTypographyBindingError(ValueError):
@@ -136,7 +147,7 @@ class TypographyCorrectionLog:
                 recover_trailing=True,
                 parent_descriptor=parent_descriptor,
             )
-            page_id = UUID(logical_page_id)
+            page_id = logical_page_id
             self._validate_append(
                 correction,
                 logical_page_id=page_id,
@@ -281,7 +292,7 @@ class TypographyCorrectionLog:
         finally:
             os.close(descriptor)
             os.close(parent_descriptor)
-        envelope = self._word_head(records, UUID(logical_page_id), word_id)
+        envelope = self._word_head(records, logical_page_id, word_id)
         return envelope.correction if envelope is not None else None
 
     def records(self, logical_page_id: str | None = None) -> tuple[TypographyJournalEnvelope, ...]:
@@ -310,7 +321,7 @@ class TypographyCorrectionLog:
             os.close(parent_descriptor)
         if logical_page_id is None:
             return tuple(records)
-        page_id = UUID(logical_page_id)
+        page_id = logical_page_id
         return tuple(record for record in records if record.logical_page_id == page_id)
 
     def publish_export(self, name: str, payload: bytes) -> None:
@@ -522,7 +533,7 @@ class TypographyCorrectionLog:
     def current_epoch(
         records: list[TypographyJournalEnvelope] | tuple[TypographyJournalEnvelope, ...],
         *,
-        logical_page_id: UUID,
+        logical_page_id: str,
         current: TypographyBinding,
     ) -> tuple[TypographyJournalEnvelope, ...]:
         """Return the latest journal segment rooted in the persisted page."""
@@ -569,7 +580,7 @@ class TypographyCorrectionLog:
     @staticmethod
     def _word_head(
         records: list[TypographyJournalEnvelope],
-        logical_page_id: UUID,
+        logical_page_id: str,
         word_id: str,
     ) -> TypographyJournalEnvelope | None:
         return next(
@@ -586,7 +597,7 @@ class TypographyCorrectionLog:
         cls,
         correction: TypographyCorrection,
         *,
-        logical_page_id: UUID,
+        logical_page_id: str,
         current: TypographyBinding,
         records: list[TypographyJournalEnvelope],
     ) -> None:

@@ -13,6 +13,9 @@ export const ROUTES = {
   /** Primary labeling route (1-based page number, human-friendly). */
   PROJECT_PAGE_NO: "/projects/:projectId/pages/pageno/:pageNo",
 
+  /** Geometry-free typography review for producer-supplied stable words. */
+  PROJECT_TYPOGRAPHY_PAGE_NO: "/projects/:projectId/pages/pageno/:pageNo/typography",
+
   /** 0-based index variant — used by internal navigation after redirect. */
   PROJECT_PAGE_IDX: "/projects/:projectId/pages/index/:idx0",
 } as const;
@@ -20,4 +23,9 @@ export const ROUTES = {
 /** Build a page URL from project ID and 1-based page number. */
 export function pageNoUrl(projectId: string, pageNo: number): string {
   return `/projects/${encodeURIComponent(projectId)}/pages/pageno/${encodeURIComponent(String(pageNo))}`;
+}
+
+/** Build the geometry-free typography-review URL for a 1-based page number. */
+export function typographyPageNoUrl(projectId: string, pageNo: number): string {
+  return `${pageNoUrl(projectId, pageNo)}/typography`;
 }
