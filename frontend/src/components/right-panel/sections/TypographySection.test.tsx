@@ -34,6 +34,7 @@ const head = {
       }),
     ),
   },
+  imported_text_validation_available: false,
 };
 
 function renderSection() {
@@ -47,6 +48,55 @@ function renderSection() {
 }
 
 describe("TypographySection", () => {
+  it("requires an explicit independent imported-text validation decision", async () => {
+    let submitted: unknown;
+    server.use(
+      http.get("/api/projects/p1/pages/0/typography/words/w1/head", () =>
+        HttpResponse.json({ ...head, imported_text_validation_available: true }),
+      ),
+      http.get("/api/projects/p1/pages/0/typography/words/w1/text-validation", () =>
+        HttpResponse.json({
+          project_id: "p1",
+          page_index: 0,
+          word_id: "w1",
+          text: head.text,
+          text_sha256: head.text_sha256,
+          occurrence_id: "occurrence",
+          revision: 0,
+          validated: false,
+          head_token: "7".repeat(64),
+        }),
+      ),
+      http.post(
+        "/api/projects/p1/pages/0/typography/words/w1/text-validation",
+        async ({ request }) => {
+          submitted = await request.json();
+          return HttpResponse.json({
+            project_id: "p1",
+            page_index: 0,
+            word_id: "w1",
+            text: head.text,
+            text_sha256: head.text_sha256,
+            occurrence_id: "occurrence",
+            revision: 1,
+            validated: true,
+            head_token: "8".repeat(64),
+          });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderSection();
+
+    expect(await screen.findByText(head.text, { exact: true })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Validate exact text" }));
+
+    await waitFor(() =>
+      expect(submitted).toEqual({ expected_head: "7".repeat(64), validated: true }),
+    );
+    expect(await screen.findByRole("button", { name: "Unvalidate text" })).toBeInTheDocument();
+  });
+
   it("renders backend graphemes and creates adjacent half-open spans with multiple labels", async () => {
     let body: Record<string, unknown> | undefined;
     server.use(
