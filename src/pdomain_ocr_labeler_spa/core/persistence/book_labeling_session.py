@@ -7,17 +7,19 @@ import hashlib
 import json
 import os
 import stat
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from threading import RLock
-from typing import ClassVar, Literal, Self, final
+from typing import TYPE_CHECKING, ClassVar, Literal, Self, final
 
 from pdomain_book_tools.typography import LabelingBundle, TypographyPageRecord
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .book_labeling_manifest import LoadedBookLabelingManifest
 from .labeling_bundle import LoadedLabelingBundle
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 _F_ADD_SEALS = 1033
 _F_SEAL_SEAL = 0x0001
