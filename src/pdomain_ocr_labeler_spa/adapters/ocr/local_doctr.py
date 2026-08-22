@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ...core.labeler_sidecars import LegacyTypographyPayloadError
 from ...core.models import Project
 from ...core.ocr.predictor import PredictorCache
 from ...core.page_state import (
@@ -377,6 +378,10 @@ class LocalDoctrPageLoader:
                 source=PageSource.FILESYSTEM,
                 payload=page_obj,
             )
+        except LegacyTypographyPayloadError:
+            # Removed review data must never be mistaken for a cache miss: the
+            # caller must stop instead of replacing it with a fresh OCR result.
+            raise
         except Exception as exc:  # pragma: no cover - defensive fall-through
             # WARNING not DEBUG: in production (INFO default), a corrupt/truncated
             # blob or deserialization error must be visible so operators can

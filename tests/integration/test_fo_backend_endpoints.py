@@ -1,7 +1,6 @@
-"""Integration tests for FO-1, FO-2, FO-3, FO-9 backend endpoints.
+"""Integration tests for FO-1, FO-3, FO-9 backend endpoints.
 
 FO-1: PATCH /api/projects/{id}/pages/{idx}/paragraphs/{pi} — layout_type save.
-FO-2: POST /api/projects/{id}/pages/{idx}/words/{li}/{wi}/char-ranges — positioned char ranges.
 FO-3: Already-wired merge-lines endpoint; this file tests the frontend-facing merge
       affordance works (the backend route at lines/merge already exists — see
       test_lines_paragraphs_router.py; this test validates the correct
@@ -16,16 +15,12 @@ Spec authority:
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from pdomain_ocr_labeler_spa.bootstrap import build_app
-from pdomain_ocr_labeler_spa.core.page_state import PageLoadOutcome, PageSource
-from pdomain_ocr_labeler_spa.core.project_state import PageState
 from pdomain_ocr_labeler_spa.settings import Settings
 
 
@@ -158,71 +153,6 @@ def test_patch_paragraph_rejects_unknown_layout_type(loaded_client: TestClient) 
     assert resp.json()["error"] == "validation_error"
 
 
-# ── FO-2: POST /api/projects/{id}/pages/{idx}/words/{li}/{wi}/char-ranges ────
-
-
-def test_char_ranges_returns_404_when_no_project(bare_client: TestClient) -> None:
-    resp = bare_client.post(
-        "/api/projects/book1/pages/0/words/0/0/char-ranges",
-        json={"ranges": [{"start": 0, "end": 2, "styles": ["italic"]}]},
-    )
-    assert resp.status_code == 404
-    assert resp.json()["error"] == "project_not_found"
-
-
-def test_char_ranges_returns_404_for_bad_page(loaded_client: TestClient) -> None:
-    resp = loaded_client.post(
-        "/api/projects/book1/pages/99/words/0/0/char-ranges",
-        json={"ranges": [{"start": 0, "end": 2, "styles": ["italic"]}]},
-    )
-    assert resp.status_code == 404
-    assert resp.json()["error"] == "page_not_found"
-
-
-def test_char_ranges_returns_400_page_not_loaded_when_no_pagestate(
-    loaded_client: TestClient,
-) -> None:
-    """No PageState seeded → 400 page_not_loaded (page must be OCR'd first).
-
-    Unlike the lines/paragraphs mutation routes (which fall through to a
-    stub PagePayload for backward compat), the char-ranges route requires
-    an in-memory word object to exist. Without a seeded PageState the word
-    cannot be resolved, so the route surfaces 400 page_not_loaded.
-    """
-    resp = loaded_client.post(
-        "/api/projects/book1/pages/0/words/0/0/char-ranges",
-        json={"ranges": [{"start": 0, "end": 3, "styles": ["italic", "bold"]}]},
-    )
-    assert resp.status_code == 400
-    assert resp.json()["error"] == "page_not_loaded"
-
-
-def test_char_ranges_accepts_empty_ranges_list_when_no_pagestate(
-    loaded_client: TestClient,
-) -> None:
-    """Empty ranges list with no PageState also returns 400 page_not_loaded."""
-    resp = loaded_client.post(
-        "/api/projects/book1/pages/0/words/0/0/char-ranges",
-        json={"ranges": []},
-    )
-    assert resp.status_code == 400
-    assert resp.json()["error"] == "page_not_loaded"
-
-
-def test_char_ranges_rejects_invalid_range_missing_fields(loaded_client: TestClient) -> None:
-    """Ranges missing required fields get a 400 validation error.
-
-    The repo's error_handler maps RequestValidationError → 400 (not the
-    FastAPI default 422) — see test_projects_router.py:452 for the pinning note.
-    """
-    resp = loaded_client.post(
-        "/api/projects/book1/pages/0/words/0/0/char-ranges",
-        json={"ranges": [{"start": 0}]},  # missing end + styles
-    )
-    assert resp.status_code == 400
-    assert resp.json()["error"] == "validation_error"
-
-
 # ── FO-3: Line-adjacent merge (useMergeLines wires to lines/merge) ─────────────
 # Backend: POST /api/projects/{id}/pages/{idx}/lines/merge already exists.
 # These tests confirm the endpoint accepts the per-line-adjacent request shape
@@ -314,108 +244,3 @@ def test_char_bboxes_accepts_empty_list(loaded_client: TestClient) -> None:
     # No PageState seeded → page_not_loaded (route checks page before shape)
     assert resp.status_code == 400
     assert resp.json()["error"] == "page_not_loaded"
-
-
-# ── FO-2 persistence: char_ranges survive page reload ─────────────────────────
-
-# Minimal stubs so we can seed a PageState without pulling in pdomain_book_tools.
-
-
-@dataclass
-class _StubBBox:
-    """Minimal bounding-box stub matching pdomain_book_tools geometry shape.
-
-    Field names are deliberately mixedCase to mirror the pdomain_book_tools
-    ``BoundingBox`` attribute names accessed by ``_word_to_word_match``.
-    """
-
-    minX: int = 0  # noqa: N815
-    minY: int = 0  # noqa: N815
-    maxX: int = 10  # noqa: N815
-    maxY: int = 10  # noqa: N815
-
-
-@dataclass
-class _StubWord:
-    text: str = "hello"
-    ground_truth_text: str = "hello"
-    text_style_labels: list[str] = field(default_factory=list)
-    word_components: list[str] = field(default_factory=list)
-    is_validated: bool = False
-    bounding_box: _StubBBox = field(default_factory=_StubBBox)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "type": "Word",
-            "text": self.text,
-            "ground_truth_text": self.ground_truth_text,
-            "text_style_labels": list(self.text_style_labels),
-            "word_components": list(self.word_components),
-            "is_validated": self.is_validated,
-        }
-
-
-@dataclass
-class _StubLine:
-    words: list[_StubWord] = field(default_factory=list)
-
-
-@dataclass
-class _StubPage:
-    lines_: list[_StubLine] = field(default_factory=list)
-    label: str = "stub"
-
-    @property
-    def lines(self) -> list[_StubLine]:
-        return self.lines_
-
-    @property
-    def paragraphs(self) -> list[_StubLine]:
-        return self.lines_
-
-    @property
-    def words(self) -> list[_StubWord]:
-        return [w for ln in self.lines_ for w in ln.words]
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "lines": [{"words": [w.to_dict() for w in ln.words]} for ln in self.lines_],
-            "paragraphs": [],
-            "words": [w.to_dict() for w in self.words],
-            "source_identifier": f"{self.label}.png",
-        }
-
-
-def _seed_page_state(client: TestClient, *, page_index: int, page: _StubPage) -> PageState:
-    """Inject a populated ``PageState`` for ``page_index`` into the running app."""
-    project_state = client.app.state.project_state  # type: ignore[attr-defined]
-    outcome = PageLoadOutcome(
-        page_index=page_index,
-        source=PageSource.OCR,
-        payload=page,
-    )
-    pstate = PageState(page_index=page_index, page_record=outcome)
-    pstate.generation = 1
-    pstate.last_saved_generation = 0
-    project_state._page_states[page_index] = pstate
-    return pstate
-
-
-def test_char_ranges_succeeds_with_seeded_page_state(loaded_client: TestClient) -> None:
-    """POST char-ranges returns 200 when PageState has a Page-like payload.
-
-    After the _resolve_page_object fix (event-store adoption M5b), the endpoint
-    resolves the page from the in-memory PageState payload directly (duck-type
-    check on .lines). Char-ranges data is stored on the pstate sidecar.
-    """
-    page = _StubPage(
-        lines_=[_StubLine(words=[_StubWord(text="hello"), _StubWord(text="world")])],
-        label="r3test",
-    )
-    _seed_page_state(loaded_client, page_index=0, page=page)
-
-    resp = loaded_client.post(
-        "/api/projects/book1/pages/0/words/0/0/char-ranges",
-        json={"ranges": [{"start": 0, "end": 2, "styles": ["bold"]}]},
-    )
-    assert resp.status_code == 200, f"expected 200 but got {resp.status_code}: {resp.text}"

@@ -106,22 +106,6 @@ class EncodedDims(BaseModel):
         )
 
 
-class CharRange(BaseModel):
-    """A single positioned character range within a word — FO-2.
-
-    ``start`` and ``end`` are character indices into the word's OCR text
-    (0-based, inclusive on both ends).  ``styles`` is the list of style
-    labels that apply to this range (e.g. ``["italic", "bold"]``).
-
-    Stored in ``PageState.char_ranges_map`` and surfaced onto
-    ``WordMatch.char_ranges`` at payload-build time.
-    """
-
-    start: int = Field(ge=0)
-    end: int = Field(ge=0)
-    styles: list[str]
-
-
 class LigatureMarkModel(BaseModel):
     """One ligature occurrence within a word — spec ``specs/20-glyph-annotations.md`` §3.
 
@@ -165,6 +149,8 @@ class GlyphAnnotationsModel(BaseModel):
 class WordMatch(BaseModel):
     """Per-word match result — spec §1 ``WordMatch``."""
 
+    model_config = ConfigDict(extra="forbid")
+
     line_index: int
     word_index: int | None
     ocr_text: str
@@ -188,11 +174,6 @@ class WordMatch(BaseModel):
     # Persisted in ``word_attributes["{li}_{wi}"]["char_bboxes"]`` in the
     # saved envelope so they survive page reloads.
     char_bboxes: list[BBox] | None = None
-    # Per-word char-range annotations set via the CharRangesSection
-    # (POST .../char-ranges).  ``None`` until the user saves ranges for this
-    # word; empty list means ranges were cleared.  Persisted in
-    # ``PageState.char_ranges_map`` sidecar so they survive page reloads.
-    char_ranges: list[CharRange] | None = None
     # Glyph-level annotations — spec ``specs/20-glyph-annotations.md`` §3.
     # None = "not yet reviewed"; GlyphAnnotationsModel() = "reviewed, nothing".
     # Persisted in the v2.2 envelope word dict (``glyph_annotations`` key).
@@ -289,7 +270,6 @@ class Job(BaseModel):
 
 __all__ = [
     "BBox",
-    "CharRange",
     "EncodedDims",
     "GlyphAnnotationsModel",
     "Job",

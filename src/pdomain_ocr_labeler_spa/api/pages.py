@@ -639,7 +639,6 @@ def _page_payload(
                 )
                 _fuzz = app_config.fuzz_threshold if app_config is not None else 0.8
                 _char_bboxes_map = pstate.char_bboxes_map if pstate is not None else None
-                _char_ranges_map = pstate.char_ranges_map if pstate is not None else None
                 _glyph_ann_map = pstate.glyph_annotations_map if pstate is not None else None
                 _glyph_pred_map = pstate.glyph_predictions_map if pstate is not None else None
                 from ..core.typography_review import stable_page_id as _stable_page_id
@@ -656,7 +655,6 @@ def _page_payload(
                     source=page_source,
                     fuzz_threshold=_fuzz,
                     char_bboxes_map=_char_bboxes_map if _char_bboxes_map else None,  # pyright: ignore[reportArgumentType]
-                    char_ranges_map=_char_ranges_map if _char_ranges_map else None,  # pyright: ignore[reportArgumentType]
                     glyph_annotations_map=_glyph_ann_map if _glyph_ann_map else None,
                     glyph_predictions_map=_glyph_pred_map if _glyph_pred_map else None,
                     project_id=project_id,

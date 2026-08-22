@@ -1,6 +1,6 @@
-"""Wave 0.2/0.6: char ranges/bboxes survive a fresh-store reload.
+"""Wave 0.2/0.6: character bboxes survive a fresh-store reload.
 
-POST char-ranges / char-bboxes must embed maps under ``labeler_sidecars`` in
+POST char-bboxes must embed maps under ``labeler_sidecars`` in
 the content blob so a new process loading the same events.db/blobs sees them
 on ``PageState`` and the page payload.
 
@@ -30,7 +30,6 @@ from pdomain_ocr_labeler_spa.core.labeler_sidecars import (
     sidecars_from_page,
 )
 from pdomain_ocr_labeler_spa.core.page_state import PageLoadOutcome, PageSource
-from pdomain_ocr_labeler_spa.core.page_to_line_matches import page_to_line_matches
 from pdomain_ocr_labeler_spa.core.persistence.page_store import LabelerPageStore
 from pdomain_ocr_labeler_spa.core.project_state import PageState
 from pdomain_ocr_labeler_spa.settings import Settings
@@ -172,39 +171,6 @@ def _drive_and_reload_maps(
 
 
 @pytest.mark.integration
-def test_char_ranges_persist_across_fresh_store_reload(tmp_path: Path) -> None:
-    """P0-SIDECAR-MAP: set char-ranges → restart → maps present."""
-
-    def mutate(client: TestClient) -> None:
-        resp = client.post(
-            "/api/projects/book1/pages/0/words/0/0/char-ranges",
-            json={"ranges": [{"start": 0, "end": 2, "styles": ["bold"]}]},
-        )
-        assert resp.status_code == 200, f"set_char_ranges failed: {resp.text}"
-        # In-session payload should surface ranges immediately.
-        body = resp.json()
-        words = body["line_matches"][0]["word_matches"]
-        assert words[0].get("char_ranges") == [{"start": 0, "end": 2, "styles": ["bold"]}], words[0]
-
-    sidecars = _drive_and_reload_maps(tmp_path, mutate)
-    assert sidecars.char_ranges_map.get("0_0") == [{"start": 0, "end": 2, "styles": ["bold"]}], (
-        sidecars.char_ranges_map
-    )
-
-    # Payload builder agreement without live PageState: inject maps.
-    page = _make_page()
-    _record, line_matches = page_to_line_matches(
-        page,
-        0,
-        Path("001.png"),
-        char_ranges_map=sidecars.char_ranges_map,  # type: ignore[arg-type]
-    )
-    assert line_matches[0].word_matches[0].char_ranges is not None
-    assert line_matches[0].word_matches[0].char_ranges[0].start == 0
-    assert line_matches[0].word_matches[0].char_ranges[0].styles == ["bold"]
-
-
-@pytest.mark.integration
 def test_char_bboxes_persist_across_fresh_store_reload(tmp_path: Path) -> None:
     """P0-SIDECAR-MAP: set char-bboxes → restart → maps present."""
 
@@ -225,25 +191,3 @@ def test_char_bboxes_persist_across_fresh_store_reload(tmp_path: Path) -> None:
         {"x": 1, "y": 2, "width": 3, "height": 4},
         {"x": 5, "y": 6, "width": 7, "height": 8},
     ], sidecars.char_bboxes_map
-
-
-@pytest.mark.integration
-def test_gt_edit_after_char_ranges_preserves_sidecars(tmp_path: Path) -> None:
-    """A later content mutator must re-attach sidecars, not wipe them."""
-
-    def mutate(client: TestClient) -> None:
-        r1 = client.post(
-            "/api/projects/book1/pages/0/words/0/0/char-ranges",
-            json={"ranges": [{"start": 1, "end": 3, "styles": ["italic"]}]},
-        )
-        assert r1.status_code == 200, r1.text
-        r2 = client.post(
-            "/api/projects/book1/pages/0/words/0/0/gt",
-            json={"text": "HELLO"},
-        )
-        assert r2.status_code == 200, r2.text
-
-    sidecars = _drive_and_reload_maps(tmp_path, mutate)
-    assert sidecars.char_ranges_map.get("0_0") == [{"start": 1, "end": 3, "styles": ["italic"]}], (
-        sidecars.char_ranges_map
-    )

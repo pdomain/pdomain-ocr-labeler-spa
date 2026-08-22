@@ -546,3 +546,42 @@ def test_interleaved_page_global_edits_validate_and_export(tmp_path: Path) -> No
             resolved = export_root / artifact.relative_path
             assert resolved.is_file()
             assert hashlib.sha256(resolved.read_bytes()).hexdigest() == artifact.sha256
+
+
+def test_canonical_typography_edit_reloads_and_is_undone_by_successor(tmp_path: Path) -> None:
+    client, page_id, word_id = _client(tmp_path)
+    path = f"/api/projects/alpha/pages/0/typography/words/{word_id}"
+    with client:
+        initial = client.get(f"{path}/head").json()
+        edited = client.post(
+            f"{path}/corrections",
+            json=_accepted_edit(initial, correction_id="edit", text="Edited"),
+        )
+        assert edited.status_code == 200
+
+    project_root = tmp_path / "alpha"
+    image = project_root / "page001.png"
+    restarted = build_app(Settings(mode="api_only", data_root=tmp_path / "restarted-data"))
+    restarted.state.project_state.set_loaded_project(
+        Project(
+            project_id="alpha",
+            project_root=project_root,
+            image_paths=[image],
+            ground_truth_map={image.name: "Word"},
+            total_pages=1,
+        )
+    )
+    restarted.state.active_project_carrier.set_active_project(project_root)
+    with TestClient(restarted) as restarted_client:
+        reloaded = restarted_client.get(f"{path}/head")
+        assert reloaded.status_code == 200
+        assert reloaded.json()["logical_page_id"] == page_id
+        assert reloaded.json()["correction"]["replacement"]["text"] == "Edited"
+
+        undone = restarted_client.post(
+            f"{path}/corrections",
+            json=_accepted_edit(reloaded.json(), correction_id="undo", text="Word"),
+        )
+        assert undone.status_code == 200
+        assert undone.json()["correction"]["supersedes_id"] == "edit"
+        assert undone.json()["correction"]["replacement"]["text"] == "Word"

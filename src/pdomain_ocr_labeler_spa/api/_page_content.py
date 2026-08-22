@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from pdomain_ocr_labeler_spa.core.labeler_sidecars import LegacyTypographyPayloadError
+
 if TYPE_CHECKING:
     from pdomain_book_tools.ocr.page import Page
 
@@ -28,8 +30,8 @@ def load_page_from_store(
     carries a ``labeler_sidecars`` section so callers can hydrate
     ``PageState`` char maps (Wave 0.1).
 
-    Returns ``None`` on any failure (missing aggregate, missing blob, corrupt JSON).
-    Never raises.
+    Returns ``None`` on ordinary load failures. Removed legacy typography
+    payloads raise so callers cannot silently replace stored review data.
     """
     try:
         from pdomain_book_tools.ocr.page import Page
@@ -51,6 +53,8 @@ def load_page_from_store(
         page = Page.from_dict(page_dict)
         stamp_sidecars_on_page(page, sidecars)
         return page
+    except LegacyTypographyPayloadError:
+        raise
     except Exception as exc:  # pragma: no cover - defensive
         log.debug("load_page_from_store: failed for page_id=%s: %s", page_id, exc)
         return None

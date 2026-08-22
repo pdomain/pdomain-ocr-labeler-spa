@@ -128,11 +128,6 @@ class PageState:
     # onto ``WordMatch.char_bboxes`` in ``_page_payload``.
     # Durable under content-blob ``labeler_sidecars.char_bboxes_map`` (Wave 0.1).
     char_bboxes_map: dict[str, object] = field(default_factory=dict)
-    # Per-word char-range sidecar — keyed by ``"{line_index}_{word_index}"``.
-    # Written by ``POST .../words/{li}/{wi}/char-ranges`` and surfaced
-    # onto ``WordMatch.char_ranges`` in ``_page_payload``.
-    # Durable under content-blob ``labeler_sidecars.char_ranges_map`` (Wave 0.1).
-    char_ranges_map: dict[str, object] = field(default_factory=dict)
     # Per-word glyph-annotation sidecar — keyed by ``"{line_index}_{word_index}"``.
     # Written by ``POST .../words/{li}/{wi}/glyph-annotations`` and by
     # ``POST .../pages/{idx}/glyph-bulk-mark``.  Surfaced onto

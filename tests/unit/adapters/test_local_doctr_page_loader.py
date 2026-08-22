@@ -20,9 +20,15 @@ from typing import Any
 import pytest
 
 from pdomain_ocr_labeler_spa.adapters.ocr.local_doctr import LocalDoctrPageLoader
+from pdomain_ocr_labeler_spa.core.labeler_sidecars import LegacyTypographyPayloadError
 from pdomain_ocr_labeler_spa.core.models import Project
 from pdomain_ocr_labeler_spa.core.ocr.predictor import PredictorCache
-from pdomain_ocr_labeler_spa.core.page_state import PageLoadOutcome, PageSource
+from pdomain_ocr_labeler_spa.core.page_state import (
+    PageLoadOutcome,
+    PageSource,
+    ensure_page_model,
+)
+from pdomain_ocr_labeler_spa.core.project_state import ProjectState
 
 
 def _make_project(tmp_path: Path, n_pages: int = 3) -> Project:
@@ -39,6 +45,44 @@ def _make_project(tmp_path: Path, n_pages: int = 3) -> Project:
         total_pages=len(image_paths),
         current_page_index=0,
     )
+
+
+def test_load_labeled_propagates_removed_typography_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    page_id = object()
+    store = SimpleNamespace(
+        get_project=lambda _project_id: SimpleNamespace(record=SimpleNamespace(page_ids=[page_id]))
+    )
+    loader = LocalDoctrPageLoader(
+        project=_make_project(tmp_path, n_pages=1),
+        predictor_cache=SimpleNamespace(),
+        detection_key="stock",
+        recognition_key="stock",
+        hf_revision=None,
+        store=store,
+    )
+
+    def reject_legacy(_store: object, _page_id: object) -> None:
+        raise LegacyTypographyPayloadError("legacy char_ranges_map payload is unsupported")
+
+    monkeypatch.setattr(
+        "pdomain_ocr_labeler_spa.api._page_content.load_page_from_store",
+        reject_legacy,
+    )
+    run_ocr_calls = 0
+
+    def record_ocr(_page_index: int, *, edited_image_bytes: bytes | None = None) -> None:
+        nonlocal run_ocr_calls
+        run_ocr_calls += 1
+
+    monkeypatch.setattr(loader, "run_ocr", record_ocr)
+    state = ProjectState()
+    state.set_loaded_project(loader.project)
+
+    with pytest.raises(LegacyTypographyPayloadError, match="char_ranges_map"):
+        ensure_page_model(state, 0, loader=loader)
+    assert run_ocr_calls == 0
 
 
 @pytest.fixture
