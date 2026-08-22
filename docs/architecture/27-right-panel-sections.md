@@ -11,16 +11,21 @@ last_verified: 2026-07-13
 > **Status**: Active (shipped — hi-fi redesign Slices 16–20, P3.a–P4.b)
 > **Last updated**: 2026-05-16
 > **Components documented**: `BBoxSection`, `ReboxSection`, `ReboxCanvas`,
-> `ErasePixelsSection`, `EraseCanvas`, `CharRangesSection`, `CharFixerSection`,
+> `ErasePixelsSection`, `EraseCanvas`, `TypographySection`, `CharFixerSection`,
 > `CharFixerCanvas`, `StructureSection`
 
 ## 1. Overview
 
 The accordion sections are specialist editing tools mounted inside `WordDetail`.
+
+`TypographySection` is the canonical typography accordion. It supports
+adjacent, overlapping, and whole-word extended-grapheme spans by appending to
+the correction journal. It does not write character-range sidecars or whole-word
+OCR style labels. Suggestion acceptance and predecessor undo remain future work.
 Each lives in its own `Accordion.Item` and opens on demand. They cover the five
 geometric and structural operations a labeler performs on a word: bounding-box
 nudging, interactive rebox via a Konva mini-canvas, pixel erasure, word merge /
-split / gap adjustment, per-character style ranges, and per-character GT
+split / gap adjustment, extended-grapheme typography spans, and per-character GT
 correction with a character-bbox canvas. Collectively they replace the legacy
 `word_edit_dialog.py`'s historical inline tool rows (superseded by
 [`26-right-panel-detail.md`](26-right-panel-detail.md)
@@ -36,8 +41,8 @@ for the legacy reference).
   selection) and erase them server-side to clean up the image for OCR retraining.
 - I need to merge two accidentally-split words or split a joined word at the
   right character position.
-- I need to tag individual character ranges within a word with bold, italic, or
-  other styles when the styles differ per character (e.g. a superscript digit
+- I need to tag grapheme spans within a word with bold, italic, or
+  other labels when typography differs within the word (e.g. a superscript digit
   inside a word).
 - I need to fix per-character OCR errors in a grid where each cell shows the
   OCR character above an editable input for the GT character.
@@ -71,10 +76,11 @@ WordDetail > Accordion
 │   ├── Gap slider (−10…+10 px)
 │   └── Split affordance (character picker + Split button)
 │
-├── CharRangesSection        [Accordion.Item value="char-ranges"]
-│   ├── Char cell row (clickable per OCR character)
-│   ├── Pending panel (range readout + style chips + Add range button)
-│   └── Rich editor cards (per range: glyph card + positions + kind + palette)
+├── TypographySection        [Accordion.Item value="typography"]
+│   ├── Grapheme buttons from corrected text in the server head
+│   ├── Grapheme selection + server-taxonomy label buttons
+│   ├── Local draft span list (split / merge / delete)
+│   └── Save + review-decision buttons
 │
 └── CharFixerSection         [Accordion.Item value="char-fixer"]
     ├── CharFixerCanvas (react-konva Stage, per-char bbox rectangles)
@@ -150,38 +156,15 @@ Merge direction API field: `"left"` (merge with prev) / `"right"` (merge with ne
 Split: `x_fraction = splitPos / charCount` where `splitPos` is the 1-based
 character boundary index.
 
-### CharRangesSection
+### TypographySection
 
 Input: `word: WordMatch`.
 
-The section owns:
-
-- `anchor: number | null`, `endPos: number | null` — pending selection.
-- `pendingStyles: Record<PendingStyleKey, TristateValue>` — styles for the
-  pending range.
-- `ranges: CharRange[]` — persisted range cards (local state only until
-  persisted via `useSetCharRanges`).
-
-```typescript
-interface CharRange {
-  start: number;
-  end: number;
-  styles: Record<PendingStyleKey, TristateValue>; // legacy field
-  kind: "style" | "component";
-  activeStyles: Set<string>;
-  activeComponents: Set<string>;
-}
-```
-
-API payload: `{ ranges: [{ start, end, styles: string[] }] }` via
-`POST .../words/{li}/{wi}/char-ranges`. The `styles` array merges both the
-legacy `styles` map and `activeStyles` set, deduplicated.
-
-Overlap detection: O(n²) comparison; overlapping ranges get amber borders and
-an `overlap` badge.
-
-Note: The compat alias rows (`char-ranges-row-{i}`, `char-ranges-delete-{i}`)
-are `sr-only` and `aria-hidden` — they exist solely for legacy test selectors.
+The section consumes the server head's extended-grapheme array and taxonomy.
+Selections are half-open grapheme spans and may be adjacent, overlapping, or
+whole-word. Saving appends a canonical correction with `expected_head`; no
+range replacement route or compatibility selector remains. A stale `409`
+reloads the head before the user retries.
 
 ### CharFixerSection
 
@@ -191,7 +174,7 @@ Two independent local states:
 
 1. `draft: string[]` — per-char GT edits. Debounced 500 ms then committed via
    `useUpdateWordGroundTruth` (reconstructing the full GT string by joining).
-2. `charBboxes: CharRangeBBox[]` — one bbox per OCR character. Initial layout
+2. `charBboxes: CharacterBBox[]` — one bbox per OCR character. Initial layout
    divides `word.bbox` evenly across characters. Dirty when any bbox differs
    from initial. Committed via `useSetCharBboxes` (stores in SPA sidecar,
    `POST .../char-bboxes`).
@@ -266,26 +249,19 @@ that split position (highlighted in accent). The Split button label changes to
 "Split at position N". Click fires `splitWord.mutate({ xFraction })`.
 When no position selected, splits at midpoint by default.
 
-### CharRangesSection
+### TypographySection
 
-Char cells: first click sets anchor. Second click sets `endPos`. Third click
-restarts from the new anchor. Pending range is highlighted with accent background.
+The first grapheme click sets the anchor and the second sets focus. The selected
+interval is half-open `[min, max + 1)`. A third click starts a new selection.
+Whole word selects the complete server-provided grapheme array.
 
-Add range button: enabled when both `anchor` and `endPos` are set. Creates a
-new range card with the pending position + styles, persists immediately, clears
-the pending state.
-
-Range cards (P4.a additions):
-
-- **Glyph card**: shows the characters from `text[start..end+1]` in serif 13px.
-- **Position inputs** (S, E): editable 0-based character offsets. S is clamped
-  ≤ end; E is clamped ≥ start.
-- **Kind switcher**: toggles the palette shown below between "Style" chips and
-  "Component" chips.
-- **Overlap badge**: shown when this range intersects any other range.
-- **Delete** (x): removes the range and persists immediately.
-- **Blank Add range button** (`char-range-add`): appends a new full-word blank
-  range (0..maxIdx).
+Taxonomy buttons come directly from the head response. Add span creates one
+local draft span for each selected label. Draft rows support split, merge-next,
+and delete. None of these operations writes to the server. Save typography
+appends one `approved_edit` correction with the fetched `expected_head`.
+Reviewed regular saves an empty reviewed replacement. Reject source, Quarantine,
+and Defer append their corresponding decisions. A stale `409` reloads the head
+and requires review before retry.
 
 ### CharFixerSection
 
@@ -373,24 +349,18 @@ Unicode picker toggle (`char-fixer-open-picker-button`): shows/hides inline
 | `structure-gap-slider` | input[type=range] | Inter-word gap slider |
 | `structure-split-button` | button | Split word at selected position |
 
-### CharRangesSection
+### TypographySection
 
 | testid | element | description |
 |---|---|---|
-| `char-ranges-section` | div | Outer container |
-| `char-cell-{i}` | button | Clickable OCR character cell |
-| `char-ranges-pending` | p | Pending range readout |
-| `char-ranges-chip-{style}` | Chip | Style chip in pending panel |
-| `char-ranges-add-button` | button | Add range from pending selection |
-| `char-range-{N}` | div | Rich editor card for range N |
-| `char-range-{N}-glyph` | div | Glyph preview card |
-| `char-range-{N}-delete` | button | Delete range N |
-| `char-range-{N}-overlap-warning` | span | Overlap badge (when overlapping) |
-| `char-range-{N}-kind-style` | button | Switch kind to Style |
-| `char-range-{N}-kind-component` | button | Switch kind to Component |
-| `char-range-add` | button | Append blank full-word range |
-| `char-ranges-row-{i}` | div (sr-only) | Compat alias for range row |
-| `char-ranges-delete-{i}` | button (sr-only) | Compat alias for delete |
+| `typography-section` | div | Outer container |
+| `typography-grapheme-{i}` | button | Server-segmented grapheme selector |
+| `typography-progress` | p | Page typography reviewed / total count |
+| `typography-span-{i}` | li | Local draft span with split, merge, delete |
+
+The taxonomy, Whole word, Add span, Save typography, Reviewed regular, Reject
+source, Quarantine, and Defer buttons are selected by accessible name. No
+legacy range-card or compatibility test IDs remain.
 
 ### CharFixerSection / CharFixerCanvas
 
@@ -415,7 +385,7 @@ Unicode picker toggle (`char-fixer-open-picker-button`): shows/hides inline
 ## 7. Keyboard shortcuts
 
 No section registers document-level hotkeys directly. The `AccordionTrigger`
-renders a `<KeyCap>` hint for each section (B / R / E / S / C / F) but the
+renders a `<KeyCap>` hint for each section (B / R / E / S / T / F) but the
 actual hotkey bindings live in `useGlobalHotkeys` at the ProjectPage level.
 
 Enter in `char-fixer-input-{i}` does not submit — the input is single-character
@@ -423,10 +393,8 @@ cells, not form fields.
 
 ## 8. Edge cases
 
-- **`word.ocr_text` is empty** (CharRangesSection): no char cells are rendered.
-  Pending panel shows "Click a char to start a range" but the Add range button
-  is disabled (no pending range can be formed). The bottom `char-range-add`
-  button is still enabled and creates a `start=0, end=0` range.
+- **No stable word ID or server head** (TypographySection): the editor fails
+  closed with an alert. An empty grapheme map offers no selectable span.
 - **`word.ocr_text` is empty** (CharFixerSection): `charBboxes` is empty; the
   CharFixerCanvas is not rendered. `cellCount = max(0, gtChars.length)` — cells
   only appear if GT is non-empty.
@@ -463,10 +431,9 @@ cells, not form fields.
    locally. The spec for "what uses char-bboxes" (e.g. char-level segmentation
    training export) has not been written.
 
-4. **CharRangesSection local state**: `ranges` is pure component state initialized
-   empty on every mount. Previously-saved ranges from the backend (stored in
-   `WordMatch.char_bboxes_map` sidecar) are not loaded back into this section on
-   open. A round-trip load path needs to be defined.
+4. **Typography suggestions and undo**: suggestion accept/edit and
+   predecessor-based compensating undo are not yet implemented. Current heads
+   do reload their saved spans into local draft state.
 
 5. **StructureSection confirm on merge**: the ConfirmDialog message shows a preview
    of the merged text. But the message content mentions "This cannot be undone" —

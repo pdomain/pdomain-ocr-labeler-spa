@@ -26,6 +26,27 @@ and export immutable records for model training.
 
 ## The labeler must capture complete text and typography
 
+## Implemented SPA boundary
+
+Phase one is implemented as a clean break. `TypographySection` and the v1
+correction journal replace character ranges, page range maps, direct word-style
+mutation, and toolbar style authoring. The server derives trusted page bindings,
+current persisted-page lineage epochs, word heads, grapheme maps, and taxonomy.
+Old epochs remain immutable audit history but do not count toward current review
+or default export.
+
+SPA v1 requires review of `italic`, `bold`, `small_caps`, `letter_spaced`,
+`superscript`, `subscript`, `font_blackletter`, `font_antiqua`, and
+`font_upright_in_italic`. Only `italic`, `bold`, and `small_caps` are trainable.
+`underline` and `font_other_reviewed` are audit-only; `drop_cap` is structural.
+
+Text validation remains independently achievable. Page completion, general
+export, and correction-bundle export require persisted text validation and
+current-epoch typography completion. General export freezes page content and
+image bytes. Correction-bundle export separately carries exact selected heads.
+Suggestion acceptance/editing and predecessor-based compensating
+undo are not yet implemented in the SPA.
+
 A labeled page is useful only when it records both what the page says and how its inline text appears. The labeler must
 not mark a page done while retained words still have unknown typography.
 
@@ -74,26 +95,29 @@ catch-all style schema.
 
 ## The existing range editor becomes the typography span editor
 
-The SPA will refactor `frontend/src/components/right-panel/sections/CharRangesSection.tsx` rather than add a competing
-editor. Its current clickable cells, overlapping ranges, and multi-label selection provide the interaction foundation.
+The SPA refactored the former range editor into
+`frontend/src/components/right-panel/sections/TypographySection.tsx`. Its
+clickable graphemes, overlapping spans, and multi-label selection provide the
+interaction foundation.
 
 The replacement editor operates on Unicode extended grapheme clusters from corrected ground-truth text. It never indexes
 `ocr_text` with JavaScript `Array.from`. Every stored interval is half-open `[start, end)` in grapheme indices.
 
-The editor supports:
+The shipped editor supports:
 
 - selecting one or more adjacent graphemes;
 - assigning several labels to one span;
 - preserving overlapping spans;
-- adjusting, splitting, merging, and deleting spans;
+- splitting, merging, and deleting local draft spans;
 - choosing punctuation boundaries precisely;
 - applying a whole-word label as `[0, grapheme_count)`;
-- collapsing uniform full-word spans for compact display without losing the canonical span;
 - marking the word reviewed regular;
-- reviewing source-derived and model-predicted suggestions;
 - rejecting or quarantining bad source evidence;
 - correcting ground-truth text before final typography review;
-- keyboard operation for every action available by pointer.
+
+Generic span-boundary adjustment, compact full-word collapse, suggestion
+review/accept/edit, predecessor-based undo, and keyboard controls beyond native
+button behavior are planned, not implemented.
 
 The editor groups labels by kind. Inline styles and baseline shifts appear in the span palette. Structural components
 such as drop caps do not.
@@ -101,7 +125,8 @@ such as drop caps do not.
 ## Suggestions remain distinct from human decisions
 
 PGDP F2 parsing, Gutenberg or Standard Ebooks projection, rules, and model inference can prefill suggestions. A
-suggestion never counts as reviewed until a human accepts or edits it.
+suggestion must never count as reviewed until a human accepts or edits it.
+Suggestion accept/edit controls are not yet implemented in the SPA.
 
 Each suggestion displays:
 
@@ -231,12 +256,12 @@ and records. This inventory informs cleanup only; it does not create a migration
 The completed inventory found no persisted records. See
 [`../research/2026-08-22-char-range-deletion-inventory.md`](../research/2026-08-22-char-range-deletion-inventory.md).
 
-The change will:
+The clean break:
 
-- replace `CharRange` with canonical typography types;
-- replace `WordMatch.char_ranges` with typography review state and spans;
-- remove the `/char-ranges` endpoint after the replacement endpoint lands;
-- replace `PageState.char_ranges_map` with stable-ID typography state;
+- replaced `CharRange` with canonical typography types;
+- replaced `WordMatch.char_ranges` with typography heads and spans;
+- removed the legacy range endpoint;
+- replaced `PageState.char_ranges_map` with stable-ID journal state;
 - delete inclusive code-point semantics;
 - remove the old frontend range model and tests;
 - regenerate OpenAPI types from the new FastAPI contract;
@@ -274,28 +299,18 @@ TypographyCorrection
 Decisions include `accept`, `edit`, `reviewed_regular`, `reject_source`, `reject_alignment`, `unusable_image`, and
 `defer`. Rejected, unusable, and deferred records remain available for audit but do not become training negatives.
 
-`accept` copies the accepted positive spans and preserves explicit label states from the suggestion review. `edit`
+Planned `accept` will copy accepted positive spans and preserve explicit label states from suggestion review. Planned `edit`
 stores the reviewer spans and explicit states. `reviewed_regular` sets every required launch label to negative and
 leaves audit-only labels unchanged unless the reviewer decided them. Rejecting one suggested label sets only that label
 to negative when the reviewer explicitly confirms its absence. `reject_source`, `reject_alignment`, `unusable_image`,
 and `defer` do not infer any negative state.
 
-The existing content-addressed event-store path must be extended to persist annotation state and correction provenance
-atomically. The stored page content adds a versioned `typography` extension keyed by stable word ID. Each value contains
-the current `WordTypography` and its latest correction ID. The appended `LabelerEdited` provenance node contains the
-correction ID, decision, superseded correction ID, reviewer ID, base hashes, and new content-blob hash.
-
-One backend operation validates the base hashes, writes the new content-addressed page blob, appends the
-correction-bearing event, and advances the aggregate head. The API returns success only after the store confirms the new
-head. If blob writing, event append, or head advancement fails, the operation returns an error. It does not update the
-in-memory page and cannot report the correction as saved.
-
-Reload reconstructs typography only from the selected event-store head and its referenced page blob. It does not merge
-mutable process state into stored truth. Before the feature can be enabled, integration tests must prove mutation,
-process-state eviction, reload, and exact reconstruction. They must also prove failure without a false success response.
-
-Undo and redo use the existing page-history mechanism. An undo appends a new event that restores a prior content state.
-It does not erase the correction record that was undone.
+The shipped backend stores v1 correction envelopes in the hardened append-only
+typography journal. It validates server-derived current bindings and publishes
+any declared replacement artifacts durably. It fsyncs the journal before
+returning the canonical head. Reload derives the active head from the current
+persisted-page lineage epoch. Older epochs remain audit-only. Predecessor-based
+compensating undo is planned and is not supplied by page-history undo.
 
 The mutation API requires the current page content hash and corrected-text hash. A stale browser tab receives a conflict
 response and must reload or reapply its draft. This prevents concurrent tabs from silently replacing each other's spans.
@@ -305,13 +320,14 @@ response and must reload or reapply its draft. This prevents concurrent tabs fro
 Reviewers can work word by word or navigate only unresolved words. The page worklist supports filters for unreviewed,
 suggested, mixed-style, quarantined, stale, rare-label, and low-confidence words.
 
-A reviewer may confirm all remaining predicted-regular words after visually reviewing the page. The action:
+A planned reviewer action may confirm remaining predicted-regular words after visual review. It is not implemented.
+The design:
 
 - applies only to words whose current suggestion is regular;
 - excludes stale, warned, quarantined, mixed-style, and low-confidence words;
 - records one bulk-confirmation event plus the exact affected word IDs;
 - records reviewer, page version, model version, threshold, and timestamp;
-- remains undoable;
+- would remain undoable when predecessor-based undo is implemented;
 - contributes reviewed-regular states to page completion;
 - marks the resulting examples for sampled quality audit.
 
@@ -403,8 +419,11 @@ accepts only deterministic high-confidence agreement. Every ambiguity enters the
 
 Typography export is a first-class task. It does not overload the existing DocTR recognition and detection export.
 
-The exporter reads explicit event-store heads. It never reads mutable in-memory sidecars as training truth. Each run
-writes a content-addressed canonical manifest with the input project, page heads, schema versions, tool version,
+The general export job freezes content-addressed page JSON and image bytes before
+enqueueing. It does not embed correction heads. Correction-bundle export
+separately selects current active correction heads. It carries the journal
+envelopes and portable provenance. Each correction-bundle run writes a
+content-addressed canonical manifest with the input project, selected heads, schema versions, tool version,
 configuration hash, deterministic source-version metadata, and output hashes. A separate run receipt may record
 wall-clock creation time, operator, destination, and job ID. The receipt is not part of the canonical manifest hash.
 
@@ -452,8 +471,8 @@ The loop is:
 3. The SPA loads the image and source evidence, then runs OCR when reviewed geometry is absent.
 4. The SPA aligns source evidence to its OCR result.
 5. A reviewer corrects text, geometry, and typography or records why the item cannot be used.
-6. The event store appends the correction and advances the page head.
-7. Typography export freezes selected page heads into a candidate correction bundle.
+6. The correction journal appends the correction and returns its canonical head.
+7. Correction-bundle export freezes selected current correction heads into a candidate bundle.
 8. Source-data import validates bundle IDs, hashes, splits, schemas, and review completeness.
 9. Audit and adjudication promote accepted records into a new source-data version.
 10. Training records the exact promoted-manifest hash in every run.
@@ -528,16 +547,16 @@ The shared contract is accepted when:
 - stable word identities survive page serialization;
 - no source evidence is overwritten by a correction.
 
-The manual editor is accepted when a reviewer can:
+The shipped manual editor supports:
 
 1. Correct text.
-2. Inspect the word and its surrounding line.
-3. Create overlapping grapheme spans.
-4. Accept or reject a suggestion.
-5. Mark a word reviewed regular.
-6. Save and reload the exact state.
-7. Undo and redo the correction.
-8. See stale annotations after changing text.
+2. Create overlapping grapheme spans.
+3. Mark a word reviewed regular.
+4. Save and reload the exact state.
+5. See stale annotations after changing text.
+
+Contextual line inspection, suggestion accept/edit, and predecessor undo/redo
+remain planned acceptance work.
 
 The page gate is accepted when:
 
@@ -547,9 +566,9 @@ The page gate is accepted when:
 - a page reaches done only when text and typography are both complete;
 - bulk regular confirmation records its exact scope and excludes unsafe words.
 
-The exporter is accepted when:
+The correction-bundle exporter is accepted when:
 
-- it reads frozen event-store heads;
+- it reads selected current correction-journal heads;
 - every record contains both target and contextual evidence;
 - every positive, negative, and unknown label state remains explicit;
 - page, text, image, correction, model, and schema versions are present;
@@ -573,8 +592,8 @@ The model integration is accepted when:
 Implementation starts with canonical types and backend validation. The SPA then replaces the range editor, adds the page
 gate, and adds export. Model suggestions arrive only after the manual path passes end-to-end tests.
 
-The feature remains disabled until typography persistence, reload, undo, and export are proven together. During
-development, pages keep their existing text-validation state and do not claim the new combined done state.
+Phase one is enabled with journal persistence, reload, review, and export.
+Suggestion acceptance and predecessor undo remain outside the enabled slice.
 
 Rollback disables the typography feature and combined completion gate while preserving event-store records and exported
 manifests. It does not reinterpret typography as whole-word OCR style labels or write spans back into the retired
@@ -601,8 +620,6 @@ character-range format.
 
 ## Unresolved owner decisions
 
-- Choose the exact owner and format for stable word IDs before implementation.
-- Choose the first label taxonomy version. Underline remains audit-only until a later owner decision makes it trainable.
 - Choose which confidence and warning conditions exclude a word from bulk regular confirmation.
 - Choose whether a quarantined word can be excluded from page completion by an explicit adjudicator waiver, or must
   always keep the page incomplete.
@@ -615,12 +632,14 @@ character-range format.
 
 - Current right-panel host:
   [`frontend/src/components/right-panel/WordDetail.tsx`](../../frontend/src/components/right-panel/WordDetail.tsx)
-- Current range editor:
-  [`frontend/src/components/right-panel/sections/CharRangesSection.tsx`](../../frontend/src/components/right-panel/sections/CharRangesSection.tsx)
-- Current mutations: [`frontend/src/hooks/useWordMutations.ts`](../../frontend/src/hooks/useWordMutations.ts)
-- Current API contract: [`src/pdomain_ocr_labeler_spa/api/words.py`](../../src/pdomain_ocr_labeler_spa/api/words.py)
-- Current sidecar state:
-  [`src/pdomain_ocr_labeler_spa/core/project_state.py`](../../src/pdomain_ocr_labeler_spa/core/project_state.py)
+- Current typography editor:
+  [`frontend/src/components/right-panel/sections/TypographySection.tsx`](../../frontend/src/components/right-panel/sections/TypographySection.tsx)
+- Current typography hooks:
+  [`frontend/src/hooks/useTypographyReview.ts`](../../frontend/src/hooks/useTypographyReview.ts)
+- Current API contract:
+  [`src/pdomain_ocr_labeler_spa/api/typography.py`](../../src/pdomain_ocr_labeler_spa/api/typography.py)
+- Current correction journal:
+  [`src/pdomain_ocr_labeler_spa/core/typography_review.py`](../../src/pdomain_ocr_labeler_spa/core/typography_review.py)
 - Event-store sidecars:
   [`src/pdomain_ocr_labeler_spa/core/labeler_sidecars.py`](../../src/pdomain_ocr_labeler_spa/core/labeler_sidecars.py)
 - Current exporter:

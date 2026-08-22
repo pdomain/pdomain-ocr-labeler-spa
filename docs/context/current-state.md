@@ -19,6 +19,17 @@ last_verified: 2026-07-21
 
 ## Shipped system
 
+Fine-grained typography phase one is shipped on this branch. The SPA uses
+`TypographySection`, server-authoritative grapheme/taxonomy metadata, and an
+append-only v1 correction journal. Persisted-page lineage epochs keep old heads
+as audit history while typography review and correction-bundle export select
+only current active heads. General export gates on that review result but does
+not carry journal heads.
+Text validation is independent. Page completion and export combine text and
+typography gates. General export freezes content-addressed page and image
+snapshots. Correction-bundle export separately carries selected journal heads.
+Suggestion acceptance/editing and predecessor undo remain open.
+
 The FastAPI and React SPA is the production labeler. The cut-over, hi-fi work,
 selection operations, right-panel editing, event-store undo/redo, manual
 rotation, and batch auto-rotation are implemented. Current architecture lives

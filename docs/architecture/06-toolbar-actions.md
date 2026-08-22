@@ -12,9 +12,9 @@ last_verified: 2026-07-13
 > **Last updated**: 2026-05-11
 > **Spec-Issue**: pdomain/pdomain-ocr-labeler-spa#16
 
-The 14-column grid above the matches view, with one row per scope
-(page / paragraph / line / word). Plus the Apply Style row and the
-Add Word row.
+The 14-column grid has one row per scope and an Add Word row. Direct style
+authoring is retired from the toolbar. Inline typography is authored only in
+`TypographySection` through correction-journal appends.
 
 > Cross-refs:
 > Legacy implementation —
@@ -119,44 +119,17 @@ grid has an entry.
 
 ---
 
-## 3. Apply Style row
+## 3. Typography authoring is not a toolbar action
 
-Below the action grid, a horizontal row:
-
-```
-[Style ▼] [Scope ▼] [Apply Style]   [Component ▼] [Apply Component] [Clear Component]
-```
-
-| Element | data-testid | Notes |
-|---|---|---|
-| Style select | `apply-style-select` | shadcn `<Select />`, options from `ALLOWED_TEXT_STYLE_LABELS` |
-| Scope select | `scope-select` | options: `whole`, `part` |
-| Apply Style button | `apply-style-button` | POST `/api/.../words/style-batch {style, scope, word_keys}` |
-| Component select | `apply-component-select` | options from `ALLOWED_WORD_COMPONENT_LABELS` |
-| Apply Component button | `apply-component-button` | POST `/api/.../words/component-batch {component, enabled:true, word_keys}` |
-| Clear Component button | `clear-component-button` | POST `/api/.../words/component-batch {component, enabled:false, word_keys}` |
-
-`word_keys` is taken from `useSelectionStore.selectedWords`. If empty,
-all three Apply/Clear buttons are disabled.
-
-Style values (verbatim from `ALLOWED_TEXT_STYLE_LABELS`):
-`italics`, `small_caps`, `blackletter`, `all_caps`, `bold`,
-`underline`, `strikethrough`, `monospace`, `handwritten`.
-
-Component values: `footnote_marker`, `drop_cap`, `subscript`,
-`superscript`, `header`, `footer`, `marginalia`, `abandoned`.
-
-Important: the **legacy** routes the first three styles
-(`italics`/`small_caps`/`blackletter`) through a legacy 5-bool API.
-The SPA backend collapses this into a single `apply_style` API; the
-SPA frontend doesn't need to know about the legacy split. ([Q14
-Reso](../../OPEN_QUESTIONS.md))
+The toolbar has no style selector or direct style endpoint. Select a word and
+use `TypographySection`. Structural component controls remain separate and do
+not contribute inline typography labels.
 
 ---
 
 ## 4. Add Word row
 
-Below the Apply Style row:
+Below the Typography review section:
 
 ```
 [Add Word]

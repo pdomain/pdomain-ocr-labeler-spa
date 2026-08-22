@@ -22,9 +22,16 @@ last_verified: 2026-07-13
   `frontend/src/components/right-panel/*.tsx`,
   `frontend/src/components/right-panel/sections/*.tsx`,
   `frontend/src/hooks/useWordMutations.ts`, `useLineMutations.ts`
-- **Backend / collaborators touched:** word GT/style/component/validate/delete
-  endpoints, line validation/merge endpoints, paragraph patch endpoint, char
-  ranges/char bboxes mutation endpoints
+- **Backend / collaborators touched:** word GT/component/validate/delete
+  endpoints, typography head/review/correction endpoints, line
+  validation/merge endpoints, paragraph patch endpoint, and char-bboxes
+  mutation endpoint
+
+Typography is a clean break: `TypographySection` uses the server grapheme map
+and taxonomy and appends to the correction journal. Character-range and direct
+word-style endpoints are removed. Text validation is independent; done and
+export require both text and typography. Suggestion acceptance and
+predecessor undo are not yet implemented.
 
 ## Behavior records
 
@@ -35,7 +42,8 @@ last_verified: 2026-07-13
 - **Trigger:** Selection store level becomes `word`.
 - **Preconditions:** Page payload contains the selected word.
 - **Observable output:** `word-detail` renders header, preview, OCR/GT compare,
-  style/component palettes, edit sections, and sticky footer for that word.
+  structural component palette, edit sections including TypographySection, and
+  sticky footer for that word.
 - **Backend / side-effects:** No write on render; data comes from
   `PagePayload.line_matches`.
 - **Bad-state / error:** Missing selected word shows "No word selected." or a
@@ -44,19 +52,18 @@ last_verified: 2026-07-13
 - **Regression:** no
 - **Test:** `tests/e2e/test_image_click_selection.py::test_click_word_bbox_on_image_opens_word_detail`
 
-### B-RIGHT-002 - Word GT/style/component edits update page payload and dirty state
+### B-RIGHT-002 - Word GT and component edits update page payload and dirty state
 
 - **Flow(s):** F-LABEL-SAVE-EXPORT-01
 - **Composed by:** B-RIGHT-001
-- **Trigger:** User edits `ocr-gt-input`, clicks a style chip, or clicks a
-  component chip.
+- **Trigger:** User edits `ocr-gt-input` or clicks a component chip.
 - **Preconditions:** A word is selected.
-- **Observable output:** Edited GT text or chip state updates after success;
+- **Observable output:** Edited GT text or component state updates after success;
   page dirty/save status indicates unsaved changes.
 - **Backend / side-effects:** Corresponding word mutation endpoint updates
   server page state, performs best-effort event-store persistence where wired,
   and returns/refetches `PagePayload`.
-- **Bad-state / error:** Backend rejection leaves prior text/chip state visible
+- **Bad-state / error:** Backend rejection leaves prior text/component state visible
   or restores it after optimistic update; user sees an error state/toast.
 - **Tier(s):** A
 - **Regression:** no
@@ -66,13 +73,13 @@ last_verified: 2026-07-13
 
 - **Flow(s):** -
 - **Composed by:** B-RIGHT-001
-- **Trigger:** User applies BBox, Rebox, Erase Pixels, Char Ranges, or Char
+- **Trigger:** User applies BBox, Rebox, Erase Pixels, or Char
   Fixer changes.
 - **Preconditions:** A word is selected; operation-specific draft is dirty.
 - **Observable output:** Apply buttons enable only when dirty; successful apply
   updates bbox/readout/canvas/chip display; reset restores current page data.
 - **Backend / side-effects:** Mutation posts to rebox, erase-pixels,
-  char-ranges, or char-bboxes endpoint; page data is invalidated/refetched;
+  or char-bboxes endpoint; page data is invalidated/refetched;
   page remains dirty until Save Page.
 - **Bad-state / error:** Unavailable refine/erase displays the documented
   not-available message; failed mutation keeps the draft recoverable.
@@ -129,14 +136,14 @@ last_verified: 2026-07-13
 - **Regression:** no
 - **Test:** -
 
-### B-RIGHT-007 - Whole-word style and component palettes persist chips
+### B-RIGHT-007 - Whole-word structural component palette persists chips
 
 - **Flow(s):** F-LABEL-SAVE-EXPORT-01
 - **Composed by:** B-RIGHT-001
-- **Trigger:** User clicks a style or component chip.
+- **Trigger:** User clicks a structural component chip.
 - **Preconditions:** A word is selected.
 - **Observable output:** Chip state reflects refetched server payload.
-- **Backend / side-effects:** Posts style/component word mutation; page remains
+- **Backend / side-effects:** Posts the component word mutation; page remains
   dirty until save.
 - **Bad-state / error:** Mixed state is ignored in word context; failed mutation
   leaves persisted state visible.
@@ -202,18 +209,19 @@ last_verified: 2026-07-13
 - **Regression:** no
 - **Test:** -
 
-### B-RIGHT-012 - CharRanges add, edit, delete, and persist ranges
+### B-RIGHT-012 - Typography spans append canonical review corrections
 
 - **Flow(s):** -
 - **Composed by:** B-RIGHT-003
-- **Trigger:** User selects chars, adds range, edits kind/style/component, or
-  deletes a range.
-- **Preconditions:** A word is selected.
-- **Observable output:** Pending range, glyph preview, chips, and overlap badge
-  update.
-- **Backend / side-effects:** Full replacement posts to char-ranges endpoint.
-- **Bad-state / error:** Empty OCR disables pending add; invalid POST keeps UI
-  recoverable.
+- **Trigger:** User selects graphemes and labels, changes local draft spans with
+  add/split/merge/delete, then chooses Save typography or a review decision.
+- **Preconditions:** A stable word ID and a server head with taxonomy/graphemes exist.
+- **Observable output:** Grapheme selection and local draft rows update without
+  a POST. Save or a decision returns the canonical head and refreshes progress.
+- **Backend / side-effects:** `useAppendTypographyCorrection` posts against the
+  fetched `expected_head`; `useTypographyReview` refetches page progress.
+- **Bad-state / error:** Missing head fails closed; stale `409` reloads the head
+  and requires review before retry.
 - **Tier(s):** A
 - **Regression:** no
 - **Test:** -
