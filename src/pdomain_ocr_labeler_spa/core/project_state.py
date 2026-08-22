@@ -67,7 +67,6 @@ for the symmetric view from the route side.)
 
 from __future__ import annotations
 
-import os
 import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -279,7 +278,7 @@ class ProjectState:
                 self._loaded_labeling_bundle is not None
                 and self._loaded_labeling_bundle is not labeling_bundle
             ):
-                os.close(self._loaded_labeling_bundle.image_descriptor)
+                self._loaded_labeling_bundle.close()
             self._loaded_project = project
             self._loaded_labeling_bundle = labeling_bundle
             self._page_states = {}
@@ -298,7 +297,7 @@ class ProjectState:
         """
         with self._lock:
             if self._loaded_labeling_bundle is not None:
-                os.close(self._loaded_labeling_bundle.image_descriptor)
+                self._loaded_labeling_bundle.close()
             self._loaded_project = None
             self._loaded_labeling_bundle = None
             self._page_states = {}

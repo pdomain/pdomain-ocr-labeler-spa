@@ -65,6 +65,16 @@ class _SharedSources:
 
     f2: bytes
     p3: bytes
+    identity: _SourceIdentity
+
+
+@dataclass(frozen=True, slots=True)
+class _SourceIdentity:
+    """The book-wide source bytes named by every lazily opened page."""
+
+    resolver_sha256: str
+    f2_sha256: str
+    p3_sha256: str
 
 
 def _safe_parts(relative_path: str) -> tuple[str, ...]:
@@ -226,6 +236,7 @@ class BookLabelingSession:
         self._cache: dict[int, LoadedLabelingBundle] = {}
         self._closed = False
         self._lock = RLock()
+        self._source_identity: _SourceIdentity | None = None
 
     @property
     def loaded_manifest(self) -> LoadedBookLabelingManifest:
@@ -245,11 +256,11 @@ class BookLabelingSession:
                 return
             self._closed = True
             for loaded in self._cache.values():
-                os.close(loaded.image_descriptor)
+                loaded.close()
             self._cache.clear()
 
     def open_page(self, page_index: int) -> LoadedLabelingBundle:
-        """Load and retain exactly one manifest-indexed page bundle."""
+        """Load one page lease that the caller must close when finished."""
         with self._lock:
             if self._closed:
                 raise ValueError("book labeling session is closed")
@@ -257,14 +268,19 @@ class BookLabelingSession:
             if cached is not None:
                 self._cache[page_index] = cached
                 return self._lease(cached)
-            loaded = self._load_page(page_index)
+            loaded, source_identity = self._load_page(page_index)
+            try:
+                self._pin_source_identity(source_identity)
+            except BaseException:
+                loaded.close()
+                raise
             self._cache[page_index] = loaded
             if len(self._cache) > _CACHE_CAPACITY:
                 evicted = self._cache.pop(next(iter(self._cache)))
-                os.close(evicted.image_descriptor)
+                evicted.close()
             return self._lease(loaded)
 
-    def _load_page(self, page_index: int) -> LoadedLabelingBundle:
+    def _load_page(self, page_index: int) -> tuple[LoadedLabelingBundle, _SourceIdentity]:
         pages = self._loaded_manifest.manifest.pages
         if page_index < 0 or page_index >= len(pages):
             raise IndexError("book page index is outside the manifest")
@@ -298,16 +314,26 @@ class BookLabelingSession:
         resolver = _load_shared_source_resolver(resolver_payload)
         f2 = _read_regular_at(root_descriptor, ("source", "F2.json"))
         p3 = _read_regular_at(root_descriptor, ("source", "P3.json"))
+        f2_sha256 = hashlib.sha256(f2).hexdigest()
+        p3_sha256 = hashlib.sha256(p3).hexdigest()
         if (
-            hashlib.sha256(f2).hexdigest() != resolver.artifacts["source/F2.json"]
-            or hashlib.sha256(p3).hexdigest() != resolver.artifacts["source/P3.json"]
+            f2_sha256 != resolver.artifacts["source/F2.json"]
+            or p3_sha256 != resolver.artifacts["source/P3.json"]
         ):
             raise ValueError("shared source hash does not match its resolver pin")
-        return _SharedSources(f2=f2, p3=p3)
+        return _SharedSources(
+            f2=f2,
+            p3=p3,
+            identity=_SourceIdentity(
+                resolver_sha256=reference.sha256,
+                f2_sha256=f2_sha256,
+                p3_sha256=p3_sha256,
+            ),
+        )
 
     def _load_page_at(
         self, root_descriptor: int, page_descriptor: int, page_index: int
-    ) -> LoadedLabelingBundle:
+    ) -> tuple[LoadedLabelingBundle, _SourceIdentity]:
         page = self._loaded_manifest.manifest.pages[page_index]
         materialization_bytes = _read_regular_at(page_descriptor, ("materialization.json",))
         if hashlib.sha256(materialization_bytes).hexdigest() != page.materialization_sha256:
@@ -334,19 +360,32 @@ class BookLabelingSession:
             sources=sources,
         )
         image_descriptor = _sealed_descriptor(image_payload)
-        return LoadedLabelingBundle(
-            root=self._loaded_manifest.root / Path(*_safe_parts(page.materialization_relative_path)),
-            bundle=bundle,
-            artifact_paths={
-                artifact.artifact_id: self._artifact_path(page_index, artifact.relative_path)
-                for artifact in bundle.artifacts
-            },
-            artifact_payloads={
-                artifact.artifact_id: self._artifact_payload(artifact.relative_path, file_payloads, sources)
-                for artifact in bundle.artifacts
-            },
-            image_descriptor=image_descriptor,
+        return (
+            LoadedLabelingBundle(
+                root=self._loaded_manifest.root / Path(*_safe_parts(page.materialization_relative_path)),
+                bundle=bundle,
+                artifact_paths={
+                    artifact.artifact_id: self._artifact_path(page_index, artifact.relative_path)
+                    for artifact in bundle.artifacts
+                },
+                artifact_payloads={
+                    artifact.artifact_id: self._artifact_payload(
+                        artifact.relative_path, file_payloads, sources
+                    )
+                    for artifact in bundle.artifacts
+                },
+                image_descriptor=image_descriptor,
+            ),
+            sources.identity,
         )
+
+    def _pin_source_identity(self, source_identity: _SourceIdentity) -> None:
+        pinned = self._source_identity
+        if pinned is None:
+            self._source_identity = source_identity
+            return
+        if pinned != source_identity:
+            raise ValueError("book source identity changed between lazy pages")
 
     @staticmethod
     def _lease(loaded: LoadedLabelingBundle) -> LoadedLabelingBundle:

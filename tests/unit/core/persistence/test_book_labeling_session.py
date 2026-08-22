@@ -351,7 +351,7 @@ def test_opens_one_real_producer_shaped_page_without_eagerly_loading_others(
         path[-1] for path in read_paths
     }
     assert "image.png" in {path[-1] for path in read_paths}
-    os.close(loaded.image_descriptor)
+    loaded.close()
     session.close()
 
 
@@ -433,6 +433,42 @@ def test_rejects_page_materialization_that_does_not_pin_its_shared_source_resolv
     session.close()
 
 
+def test_rejects_later_page_with_a_different_resolver_identity(tmp_path: Path) -> None:
+    root = tmp_path / "book"
+    manifest = _write_book(root)
+    resolver_path = root / "shared-source-resolver.json"
+    alternate_resolver_bytes = (
+        json.dumps(
+            json.loads(resolver_path.read_text()),
+            indent=2,
+            sort_keys=False,
+        )
+        + "\n"
+    ).encode()
+    page_directory = root / manifest.pages[1].materialization_relative_path
+    materialization = json.loads((page_directory / "materialization.json").read_text())
+    materialization["shared_source_resolver"]["sha256"] = _sha(alternate_resolver_bytes)
+    materialization_bytes = (
+        json.dumps(materialization, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
+    (page_directory / "materialization.json").write_bytes(materialization_bytes)
+    _write_replaced_manifest(
+        root,
+        manifest,
+        page_index=1,
+        materialization_sha256=_sha(materialization_bytes),
+    )
+    session = _session(root)
+    first = session.open_page(0)
+    resolver_path.write_bytes(alternate_resolver_bytes)
+
+    with pytest.raises(ValueError, match="source identity"):
+        session.open_page(1)
+
+    first.close()
+    session.close()
+
+
 def test_rejects_bundle_without_exact_page_record_and_image_references(
     tmp_path: Path,
 ) -> None:
@@ -477,13 +513,13 @@ def test_retained_page_lease_survives_cache_eviction_and_descriptor_reuse(tmp_pa
     first = session.open_page(0)
     for index in (1, 2, 3):
         opened = session.open_page(index)
-        os.close(opened.image_descriptor)
+        opened.close()
     reused_descriptor = os.open(root / "book-labeling-manifest.json", os.O_RDONLY)
     os.close(reused_descriptor)
 
     assert os.read(first.image_descriptor, 1024) == b"image-0"
     assert os.get_inheritable(first.image_descriptor) is False
-    os.close(first.image_descriptor)
+    first.close()
     session.close()
 
 

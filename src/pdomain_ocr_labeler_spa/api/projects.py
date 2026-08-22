@@ -57,7 +57,6 @@ What this layer deliberately does NOT do (deferred):
 from __future__ import annotations
 
 import logging
-import os
 import shutil
 from pathlib import Path
 from typing import Literal
@@ -479,7 +478,7 @@ def load_project(
             project = build_project_from_labeling_bundle(loaded_labeling_bundle)
         except (OSError, ValueError) as exc:
             if loaded_labeling_bundle is not None:
-                os.close(loaded_labeling_bundle.image_descriptor)
+                loaded_labeling_bundle.close()
             return _api_error(422, "invalid_labeling_bundle", str(exc))
     else:
         ground_truth_map = load_ground_truth_from_directory(resolved)
@@ -493,7 +492,7 @@ def load_project(
         carrier.set_active_project(resolved)
     except InvalidProjectDirError:
         if loaded_labeling_bundle is not None:
-            os.close(loaded_labeling_bundle.image_descriptor)
+            loaded_labeling_bundle.close()
         return _api_error(
             404,
             "project_not_found",
