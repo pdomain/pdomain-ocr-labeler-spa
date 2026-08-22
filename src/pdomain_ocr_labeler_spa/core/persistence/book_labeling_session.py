@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import stat
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from threading import RLock
@@ -26,6 +27,17 @@ _F_SEAL_WRITE = 0x0008
 _CACHE_CAPACITY = 3
 
 
+class _SharedSourceResolverReference(BaseModel):
+    """A page-local pin for the book-root source resolver."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
+
+    relative_path: Literal["shared-source-resolver.json"]
+    resolution_scope: Literal["book_root_v1"]
+    schema_version: Literal["1.0"]
+    sha256: str
+
+
 class _Materialization(BaseModel):
     """Exact page-local file pins emitted by the producer."""
 
@@ -33,6 +45,7 @@ class _Materialization(BaseModel):
 
     files: dict[str, str]
     schema_version: Literal["1.0"]
+    shared_source_resolver: _SharedSourceResolverReference
 
 
 class _SharedSourceResolver(BaseModel):
@@ -132,7 +145,10 @@ def _read_regular_at(root_descriptor: int, parts: tuple[str, ...]) -> bytes:
 
 
 def _sealed_descriptor(payload: bytes) -> int:
-    descriptor = os.memfd_create("pdomain-book-labeling-page-image", os.MFD_ALLOW_SEALING)
+    descriptor = os.memfd_create(
+        "pdomain-book-labeling-page-image",
+        os.MFD_ALLOW_SEALING | os.MFD_CLOEXEC,
+    )
     try:
         view = memoryview(payload)
         written = 0
@@ -160,6 +176,8 @@ def _load_materialization(payload: bytes) -> _Materialization:
     for name, value in materialization.files.items():
         if _safe_parts(name) != (name,) or not _is_sha256(value):
             raise ValueError("page materialization contains an invalid file pin")
+    if not _is_sha256(materialization.shared_source_resolver.sha256):
+        raise ValueError("page materialization contains an invalid shared source resolver pin")
     return materialization
 
 
@@ -238,13 +256,13 @@ class BookLabelingSession:
             cached = self._cache.pop(page_index, None)
             if cached is not None:
                 self._cache[page_index] = cached
-                return cached
+                return self._lease(cached)
             loaded = self._load_page(page_index)
             self._cache[page_index] = loaded
             if len(self._cache) > _CACHE_CAPACITY:
                 evicted = self._cache.pop(next(iter(self._cache)))
                 os.close(evicted.image_descriptor)
-            return loaded
+            return self._lease(loaded)
 
     def _load_page(self, page_index: int) -> LoadedLabelingBundle:
         pages = self._loaded_manifest.manifest.pages
@@ -259,21 +277,25 @@ class BookLabelingSession:
                 or root_stat.st_ino != self._loaded_manifest.root_inode
             ):
                 raise ValueError("book root identity changed after manifest intake")
-            sources = self._load_shared_sources(root_descriptor)
             page_descriptor = _open_directory_at(
                 root_descriptor, _safe_parts(page.materialization_relative_path)
             )
             try:
-                return self._load_page_at(page_descriptor, page_index, sources)
+                return self._load_page_at(root_descriptor, page_descriptor, page_index)
             finally:
                 os.close(page_descriptor)
         finally:
             os.close(root_descriptor)
 
-    def _load_shared_sources(self, root_descriptor: int) -> _SharedSources:
-        resolver = _load_shared_source_resolver(
-            _read_regular_at(root_descriptor, ("shared-source-resolver.json",))
-        )
+    def _load_shared_sources(
+        self,
+        root_descriptor: int,
+        reference: _SharedSourceResolverReference,
+    ) -> _SharedSources:
+        resolver_payload = _read_regular_at(root_descriptor, _safe_parts(reference.relative_path))
+        if hashlib.sha256(resolver_payload).hexdigest() != reference.sha256:
+            raise ValueError("shared source resolver hash does not match its materialization pin")
+        resolver = _load_shared_source_resolver(resolver_payload)
         f2 = _read_regular_at(root_descriptor, ("source", "F2.json"))
         p3 = _read_regular_at(root_descriptor, ("source", "P3.json"))
         if (
@@ -284,13 +306,14 @@ class BookLabelingSession:
         return _SharedSources(f2=f2, p3=p3)
 
     def _load_page_at(
-        self, page_descriptor: int, page_index: int, sources: _SharedSources
+        self, root_descriptor: int, page_descriptor: int, page_index: int
     ) -> LoadedLabelingBundle:
         page = self._loaded_manifest.manifest.pages[page_index]
         materialization_bytes = _read_regular_at(page_descriptor, ("materialization.json",))
         if hashlib.sha256(materialization_bytes).hexdigest() != page.materialization_sha256:
             raise ValueError("page materialization hash does not match its manifest pin")
         materialization = _load_materialization(materialization_bytes)
+        sources = self._load_shared_sources(root_descriptor, materialization.shared_source_resolver)
         file_payloads = {
             filename: _read_regular_at(page_descriptor, (filename,)) for filename in materialization.files
         }
@@ -325,6 +348,22 @@ class BookLabelingSession:
             image_descriptor=image_descriptor,
         )
 
+    @staticmethod
+    def _lease(loaded: LoadedLabelingBundle) -> LoadedLabelingBundle:
+        descriptor = os.dup(loaded.image_descriptor)
+        try:
+            os.set_inheritable(descriptor, False)
+            return LoadedLabelingBundle(
+                root=loaded.root,
+                bundle=loaded.bundle,
+                artifact_paths=dict(loaded.artifact_paths),
+                artifact_payloads=dict(loaded.artifact_payloads),
+                image_descriptor=descriptor,
+            )
+        except BaseException:
+            os.close(descriptor)
+            raise
+
     def _load_bundle(self, payload: bytes, page_index: int) -> LabelingBundle:
         try:
             bundle = LabelingBundle.model_validate_json(payload)
@@ -356,10 +395,11 @@ class BookLabelingSession:
         self,
         *,
         bundle: LabelingBundle,
-        file_payloads: dict[str, bytes],
+        file_payloads: Mapping[str, bytes],
         page_record: TypographyPageRecord,
         sources: _SharedSources,
     ) -> None:
+        self._validate_primary_page_artifacts(bundle, file_payloads)
         seen_artifact_ids: set[str] = set()
         source_payloads = {
             "source/F2.json": sources.f2,
@@ -382,6 +422,24 @@ class BookLabelingSession:
         ):
             raise ValueError("page record F2 reference does not match the shared source")
 
+    @staticmethod
+    def _validate_primary_page_artifacts(bundle: LabelingBundle, file_payloads: Mapping[str, bytes]) -> None:
+        expected = (
+            ("page_record", "page-record.json", bundle.page_sha256),
+            ("image", "image.png", bundle.image_sha256),
+        )
+        for artifact_id, relative_path, expected_sha256 in expected:
+            payload = file_payloads.get(relative_path)
+            matching = tuple(artifact for artifact in bundle.artifacts if artifact.sha256 == expected_sha256)
+            if (
+                payload is None
+                or hashlib.sha256(payload).hexdigest() != expected_sha256
+                or len(matching) != 1
+                or matching[0].artifact_id != artifact_id
+                or matching[0].relative_path != relative_path
+            ):
+                raise ValueError("labeling bundle must retain one exact page record and image reference")
+
     def _artifact_path(self, page_index: int, relative_path: str) -> Path:
         source_paths = {"source/F2.json", "source/P3.json"}
         if relative_path in source_paths:
@@ -393,7 +451,7 @@ class BookLabelingSession:
 
     @staticmethod
     def _artifact_payload(
-        relative_path: str, file_payloads: dict[str, bytes], sources: _SharedSources
+        relative_path: str, file_payloads: Mapping[str, bytes], sources: _SharedSources
     ) -> bytes:
         if relative_path == "source/F2.json":
             return sources.f2

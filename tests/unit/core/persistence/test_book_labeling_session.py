@@ -289,6 +289,12 @@ def _write_book(root: Path, *, page_count: int = 4) -> BookLabelingManifest:
                 "source-provenance.json": _sha(provenance),
             },
             "schema_version": "1.0",
+            "shared_source_resolver": {
+                "relative_path": "shared-source-resolver.json",
+                "resolution_scope": "book_root_v1",
+                "schema_version": "1.0",
+                "sha256": _sha((root / "shared-source-resolver.json").read_bytes()),
+            },
         }
         materialization_bytes = (
             json.dumps(materialization, sort_keys=True, separators=(",", ":")) + "\n"
@@ -345,6 +351,7 @@ def test_opens_one_real_producer_shaped_page_without_eagerly_loading_others(
         path[-1] for path in read_paths
     }
     assert "image.png" in {path[-1] for path in read_paths}
+    os.close(loaded.image_descriptor)
     session.close()
 
 
@@ -401,15 +408,111 @@ def test_rejects_drifting_shared_f2_bytes(tmp_path: Path) -> None:
     session.close()
 
 
-def test_evicts_oldest_sealed_image_descriptor_when_capacity_is_exceeded(tmp_path: Path) -> None:
+def test_rejects_page_materialization_that_does_not_pin_its_shared_source_resolver(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "book"
+    manifest = _write_book(root)
+    page_directory = root / manifest.pages[0].materialization_relative_path
+    materialization = json.loads((page_directory / "materialization.json").read_text())
+    materialization["shared_source_resolver"]["sha256"] = "0" * 64
+    materialization_bytes = (
+        json.dumps(materialization, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
+    (page_directory / "materialization.json").write_bytes(materialization_bytes)
+    _write_replaced_manifest(
+        root,
+        manifest,
+        page_index=0,
+        materialization_sha256=_sha(materialization_bytes),
+    )
+    session = _session(root)
+
+    with pytest.raises(ValueError, match="shared source resolver"):
+        session.open_page(0)
+    session.close()
+
+
+def test_rejects_bundle_without_exact_page_record_and_image_references(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "book"
+    manifest = _write_book(root)
+    page_directory = root / manifest.pages[0].materialization_relative_path
+    bundle = LabelingBundle.model_validate_json((page_directory / "labeling-bundle.json").read_bytes())
+    provenance = (page_directory / "source-provenance.json").read_bytes()
+    artifacts = tuple(
+        artifact.model_copy(update={"relative_path": "source-provenance.json", "sha256": _sha(provenance)})
+        if artifact.artifact_id in {"image", "page_record"}
+        else artifact
+        for artifact in bundle.artifacts
+    )
+    replacement_bundle = bundle.model_copy(update={"artifacts": artifacts})
+    bundle_bytes = replacement_bundle.to_json_bytes()
+    (page_directory / "labeling-bundle.json").write_bytes(bundle_bytes)
+    materialization = json.loads((page_directory / "materialization.json").read_text())
+    materialization["files"]["labeling-bundle.json"] = _sha(bundle_bytes)
+    materialization_bytes = (
+        json.dumps(materialization, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
+    (page_directory / "materialization.json").write_bytes(materialization_bytes)
+    _write_replaced_manifest(
+        root,
+        manifest,
+        page_index=0,
+        labeling_bundle_id=replacement_bundle.bundle_id or "",
+        materialization_sha256=_sha(materialization_bytes),
+    )
+    session = _session(root)
+
+    with pytest.raises(ValueError, match=r"invalid labeling bundle|page record and image"):
+        session.open_page(0)
+    session.close()
+
+
+def test_retained_page_lease_survives_cache_eviction_and_descriptor_reuse(tmp_path: Path) -> None:
     root = tmp_path / "book"
     _write_book(root)
     session = _session(root)
     first = session.open_page(0)
-    session.open_page(1)
-    session.open_page(2)
-    session.open_page(3)
+    for index in (1, 2, 3):
+        opened = session.open_page(index)
+        os.close(opened.image_descriptor)
+    reused_descriptor = os.open(root / "book-labeling-manifest.json", os.O_RDONLY)
+    os.close(reused_descriptor)
 
-    with pytest.raises(OSError):
-        os.fstat(first.image_descriptor)
+    assert os.read(first.image_descriptor, 1024) == b"image-0"
+    assert os.get_inheritable(first.image_descriptor) is False
+    os.close(first.image_descriptor)
     session.close()
+
+
+def _write_replaced_manifest(
+    root: Path,
+    manifest: BookLabelingManifest,
+    *,
+    page_index: int,
+    labeling_bundle_id: str | None = None,
+    materialization_sha256: str | None = None,
+) -> None:
+    page = manifest.pages[page_index]
+    replacement_page = page.model_copy(
+        update={
+            "labeling_bundle_id": page.labeling_bundle_id
+            if labeling_bundle_id is None
+            else labeling_bundle_id,
+            "materialization_sha256": page.materialization_sha256
+            if materialization_sha256 is None
+            else materialization_sha256,
+        }
+    )
+    replacement_manifest = manifest.model_copy(
+        update={
+            "pages": (
+                *manifest.pages[:page_index],
+                replacement_page,
+                *manifest.pages[page_index + 1 :],
+            )
+        }
+    )
+    (root / "book-labeling-manifest.json").write_bytes(replacement_manifest.to_json_bytes())
