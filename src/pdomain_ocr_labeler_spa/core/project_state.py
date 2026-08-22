@@ -67,21 +67,28 @@ for the symmetric view from the route side.)
 
 from __future__ import annotations
 
-import os
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import UUID
 
 from .models import Project, Selection
+from .persistence.labeling_bundle import LoadedLabelingBundle
+
+_REQUEST_LABELING_PAGE: ContextVar[tuple[int, LoadedLabelingBundle] | None] = ContextVar(
+    "request_labeling_page",
+    default=None,
+)
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from pdomain_book_tools.typography import LabelingBundle
 
     from .page_state import PageLoadOutcome
-    from .persistence.labeling_bundle import LoadedLabelingBundle
+    from .persistence.book_labeling_session import BookLabelingSession
 
 
 @dataclass
@@ -173,6 +180,7 @@ class ProjectState:
         self._lock = threading.Lock()
         self._loaded_project: Project | None = None
         self._loaded_labeling_bundle: LoadedLabelingBundle | None = None
+        self._book_labeling_session: BookLabelingSession | None = None
         self._page_states: dict[int, PageState] = {}
         self._current_page_index: int = 0
         self._generation: int = 0
@@ -202,19 +210,38 @@ class ProjectState:
     @property
     def labeling_bundle(self) -> LabelingBundle | None:
         """The immutable portable review input for the active project, if any."""
-        loaded = self._loaded_labeling_bundle
+        request_page = _REQUEST_LABELING_PAGE.get()
+        loaded = request_page[1] if request_page is not None else self._loaded_labeling_bundle
         return None if loaded is None else loaded.bundle
 
     @property
     def labeling_bundle_root(self) -> Path | None:
         """External materialized bundle directory retained without copying it."""
-        loaded = self._loaded_labeling_bundle
+        request_page = _REQUEST_LABELING_PAGE.get()
+        loaded = request_page[1] if request_page is not None else self._loaded_labeling_bundle
         return None if loaded is None else loaded.root
 
     @property
     def loaded_labeling_bundle(self) -> LoadedLabelingBundle | None:
         """Validated bundle, resolved paths, and verified source bytes."""
-        return self._loaded_labeling_bundle
+        request_page = _REQUEST_LABELING_PAGE.get()
+        return request_page[1] if request_page is not None else self._loaded_labeling_bundle
+
+    @property
+    def book_page_cache_size(self) -> int:
+        """Return the bounded number of retained lazy-book page descriptors."""
+        session = self._book_labeling_session
+        return 0 if session is None else session.retained_page_count
+
+    @property
+    def has_book_labeling_session(self) -> bool:
+        """Whether the active project is backed by a lazy immutable book source."""
+        return self._book_labeling_session is not None
+
+    def has_bound_labeling_page(self, page_index: int) -> bool:
+        """Return whether this context owns the requested lazy-book page lease."""
+        bound = _REQUEST_LABELING_PAGE.get()
+        return bound is not None and bound[0] == page_index
 
     @property
     def page_states(self) -> dict[int, PageState]:
@@ -257,6 +284,7 @@ class ProjectState:
         project: Project,
         *,
         labeling_bundle: LoadedLabelingBundle | None = None,
+        book_labeling_session: BookLabelingSession | None = None,
     ) -> None:
         """Swap to a newly-loaded ``Project``; reset per-page state.
 
@@ -274,14 +302,13 @@ class ProjectState:
         Bumps ``generation`` by 1 (this whole swap is one observable
         state change, not multiple).
         """
+        if book_labeling_session is not None and labeling_bundle is not None:
+            raise ValueError("a book labeling session retains no mutable active page lease")
         with self._lock:
-            if (
-                self._loaded_labeling_bundle is not None
-                and self._loaded_labeling_bundle is not labeling_bundle
-            ):
-                os.close(self._loaded_labeling_bundle.image_descriptor)
+            self._close_labeling_resources_locked()
             self._loaded_project = project
             self._loaded_labeling_bundle = labeling_bundle
+            self._book_labeling_session = book_labeling_session
             self._page_states = {}
             self._page_locks = {}
             self._current_page_index = project.current_page_index
@@ -297,14 +324,70 @@ class ProjectState:
         generation, full stop").
         """
         with self._lock:
-            if self._loaded_labeling_bundle is not None:
-                os.close(self._loaded_labeling_bundle.image_descriptor)
+            self._close_labeling_resources_locked()
             self._loaded_project = None
-            self._loaded_labeling_bundle = None
             self._page_states = {}
             self._page_locks = {}
             self._current_page_index = 0
             self._generation += 1
+
+    def open_labeling_page(self, page_index: int) -> LoadedLabelingBundle | None:
+        """Open a caller-owned verified page lease without mutating global state."""
+        with self._lock:
+            session = self._book_labeling_session
+            if session is None:
+                loaded = self._loaded_labeling_bundle
+                return None if loaded is None else loaded.duplicate()
+            if self._loaded_project is None:
+                raise ValueError("book labeling session has no loaded project")
+            try:
+                return session.open_page(page_index)
+            except (IndexError, OSError, ValueError) as exc:
+                raise ValueError(f"unable to resolve verified book page {page_index}") from exc
+
+    @contextmanager
+    def bind_labeling_page(
+        self,
+        page_index: int,
+        lease: LoadedLabelingBundle | None,
+    ) -> Iterator[None]:
+        """Bind one caller-owned lease to helpers in the current request context."""
+        if lease is None:
+            yield
+            return
+        token = _REQUEST_LABELING_PAGE.set((page_index, lease))
+        try:
+            yield
+        finally:
+            _REQUEST_LABELING_PAGE.reset(token)
+
+    def labeling_image_path(self, page_index: int) -> Path:
+        """Return the request-bound sealed image path for a book page.
+
+        Ordinary projects retain their disk-backed image paths.  Book callers
+        must bind a lease before consuming image bytes, preventing stale
+        descriptors from escaping into concurrent requests or background work.
+        """
+        project = self._loaded_project
+        if project is None:
+            raise ValueError("no project is loaded")
+        if self._book_labeling_session is None:
+            return project.image_paths[page_index]
+        bound = _REQUEST_LABELING_PAGE.get()
+        if bound is None or bound[0] != page_index:
+            raise ValueError(f"book page {page_index} has no bound caller lease")
+        return Path(f"/proc/self/fd/{bound[1].image_descriptor}")
+
+    def _close_labeling_resources_locked(self) -> None:
+        """Close the active lease before its optional session cache under ``_lock``."""
+        lease = self._loaded_labeling_bundle
+        session = self._book_labeling_session
+        self._loaded_labeling_bundle = None
+        self._book_labeling_session = None
+        if lease is not None:
+            lease.close()
+        if session is not None:
+            session.close()
 
     def get_page_lock(self, page_index: int) -> threading.Lock:
         """Return (creating if needed) the per-page mutation lock.

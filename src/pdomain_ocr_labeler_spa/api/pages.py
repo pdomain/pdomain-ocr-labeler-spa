@@ -30,6 +30,7 @@ from ..core.project_state import PageState, ProjectState
 from ..core.selection import SelectionMode, apply_selection
 from ..settings import Settings
 from .dependencies import (
+    bind_page_labeling_lease,
     get_app_config,
     get_job_runner,
     get_page_store_optional,
@@ -43,6 +44,7 @@ log = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/projects/{project_id}/pages",
     tags=["pages"],
+    dependencies=[Depends(bind_page_labeling_lease)],
 )
 
 
@@ -282,6 +284,7 @@ def _build_page_loader_from_context(
         data_root=settings.data_root,
         cache_root=settings.cache_root,
         store=ctx.get("page_store"),  # LabelerPageStore | None
+        image_path_resolver=project_state.labeling_image_path,
     )
 
 
@@ -622,7 +625,7 @@ def _page_payload(
         source = getattr(outcome, "source", None)
 
         if payload_obj is not None and 0 <= page_index < len(project.image_paths):
-            image_path = project.image_paths[page_index]
+            image_path = project_state.labeling_image_path(page_index)
             page_source = PageSource(str(source)) if source else PageSource.OCR
 
             # Event-store adoption (M5b): OCR lane stores a live Page object
@@ -759,7 +762,7 @@ def _page_payload(
     # bytes; the URL builder degrades gracefully.
     encoded_dims: EncodedDims | None = None
     if 0 <= page_index < len(project.image_paths):
-        dims = _read_source_dims(project.image_paths[page_index])
+        dims = _read_source_dims(project_state.labeling_image_path(page_index))
         if dims is not None:
             encoded_dims = EncodedDims.from_source_dims(*dims)
 
@@ -1105,6 +1108,17 @@ def reload_ocr(
     if err is not None:
         return err
 
+    try:
+        job_lease = project_state.open_labeling_page(page_index)
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=422,
+            content=ApiError(
+                error="invalid_labeling_page",
+                message=str(exc),
+            ).model_dump(),
+        )
+
     job_id = runner.submit(
         "reload_ocr",
         project_id=project_id,
@@ -1113,6 +1127,7 @@ def reload_ocr(
             "force": body.force,
             "use_edited_image": body.use_edited_image,
         },
+        labeling_page_lease=job_lease,
     )
     return JSONResponse(status_code=202, content={"job_id": job_id})
 
@@ -1193,7 +1208,7 @@ def rematch_gt(
     # ``_GroundTruthRematchSkippedError`` when GT is unavailable;
     # the SPA returns 400 so the frontend can surface a banner.
     image_name = (
-        project.image_paths[page_index].name
+        project_state.labeling_image_path(page_index).name
         if 0 <= page_index < len(project.image_paths)
         else ""  # pragma: no cover - bounds already enforced above
     )
@@ -1296,6 +1311,15 @@ def rotate_page(
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
         return err
+
+    if project_state.has_book_labeling_session:
+        return JSONResponse(
+            status_code=422,
+            content=ApiError(
+                error="book_source_rotation_unsupported",
+                message="rotation is unavailable for immutable book source pages",
+            ).model_dump(),
+        )
 
     if body.degrees not in (-90, 90, 180):
         return JSONResponse(
@@ -1434,7 +1458,7 @@ def get_page_image(
     if project is None:  # _check_project_and_page guarantees; explicit to survive -O
         raise RuntimeError("project is None after _check_project_and_page passed — invariant violated")
 
-    image_path = project.image_paths[page_index]
+    image_path = project_state.labeling_image_path(page_index)
 
     try:
         from PIL import Image  # lazy — PIL ships with pdomain-book-tools deps.

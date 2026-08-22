@@ -236,6 +236,11 @@ def start_export(
     from .typography import typography_page_review
 
     project = project_state.loaded_project
+    if project is not None and project.project_id == project_id and project_state.has_book_labeling_session:
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "export is unavailable for immutable book source pages"},
+        )
     from ..core.jobs.handlers.export import (
         _page_is_validated,
         _resolve_ref_image,

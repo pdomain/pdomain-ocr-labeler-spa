@@ -31,6 +31,7 @@ import json
 import logging
 import tempfile
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -324,6 +325,7 @@ class LocalDoctrPageLoader:
     data_root: Path | None = None
     cache_root: Path | None = None
     store: Any = None  # LabelerPageStore | None — write OCR result to event store
+    image_path_resolver: Callable[[int], Path] | None = None
 
     def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
         """Reload a stored page from the event store (the restart read path).
@@ -403,7 +405,11 @@ class LocalDoctrPageLoader:
             raise IndexError(
                 f"page_index {page_index} out of range (total_pages={len(self.project.image_paths)})"
             )
-        source_path = self.project.image_paths[page_index]
+        source_path = (
+            self.image_path_resolver(page_index)
+            if self.image_path_resolver is not None
+            else self.project.image_paths[page_index]
+        )
 
         # Lane A / Task A4: when the caller supplies the post-erase edited image
         # bytes (legacy "Reload OCR (Edited)"), OCR against those instead of the

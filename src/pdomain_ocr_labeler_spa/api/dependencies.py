@@ -21,7 +21,9 @@ about wiring the spec doesn't yet describe.
 
 from __future__ import annotations
 
-from fastapi import Request
+from collections.abc import AsyncIterator
+
+from fastapi import Depends, HTTPException, Request
 
 from ..adapters.auth import IAuth
 from ..adapters.ocr import IOCREngine
@@ -32,6 +34,7 @@ from ..core.jobs import JobEventBroker, JobRunner
 from ..core.notifications import NotificationQueue
 from ..core.ocr_config_state import OCRConfigCarrier
 from ..core.persistence.config_yaml import AppConfig
+from ..core.persistence.labeling_bundle import LoadedLabelingBundle
 from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import ProjectState
 from ..core.source_root_state import SourceRootCarrier
@@ -172,6 +175,36 @@ def get_project_state(request: Request) -> ProjectState:
     return state
 
 
+async def bind_page_labeling_lease(
+    project_id: str,
+    page_index: int,
+    project_state: ProjectState = Depends(get_project_state),
+) -> AsyncIterator[LoadedLabelingBundle | None]:
+    """Bind a verified page bundle to one request and close it after the response.
+
+    The binding is a ``ContextVar`` rather than mutable ``ProjectState`` data,
+    so simultaneous page requests cannot replace or close each other's image
+    descriptors.  Background jobs acquire their own lease separately.
+    """
+    project = project_state.loaded_project
+    if project is None or project.project_id != project_id:
+        yield None
+        return
+    if page_index < 0 or page_index >= project.total_pages:
+        yield None
+        return
+    try:
+        lease = project_state.open_labeling_page(page_index)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"invalid_labeling_page: {exc}") from exc
+    with project_state.bind_labeling_page(page_index, lease):
+        try:
+            yield lease
+        finally:
+            if lease is not None:
+                lease.close()
+
+
 def get_job_runner(request: Request) -> JobRunner:
     """The in-process ``JobRunner`` — spec §5.10 / §11."""
     runner = _state_attr(request, "job_runner")
@@ -273,6 +306,7 @@ def get_page_store_optional(request: Request) -> LabelerPageStore | None:
 
 
 __all__ = [
+    "bind_page_labeling_lease",
     "get_active_project",
     "get_active_project_carrier",
     "get_app_config",

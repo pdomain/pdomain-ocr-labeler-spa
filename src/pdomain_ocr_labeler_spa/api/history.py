@@ -26,6 +26,7 @@ from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import ProjectState
 from ..settings import Settings
 from .dependencies import (
+    bind_page_labeling_lease,
     get_app_config,
     get_page_store_optional,
     get_project_state,
@@ -45,6 +46,7 @@ log = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/projects/{project_id}/pages",
     tags=["pages"],
+    dependencies=[Depends(bind_page_labeling_lease)],
 )
 
 

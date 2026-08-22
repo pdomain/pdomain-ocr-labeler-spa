@@ -9,6 +9,7 @@ import os
 import stat
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Self
 
 from pdomain_book_tools.typography import LabelingBundle
 from pydantic import ValidationError
@@ -22,7 +23,7 @@ _F_SEAL_GROW = 0x0004
 _F_SEAL_WRITE = 0x0008
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class LoadedLabelingBundle:
     """An authoritative bundle and the exact external artifact bytes it names."""
 
@@ -30,7 +31,60 @@ class LoadedLabelingBundle:
     bundle: LabelingBundle
     artifact_paths: dict[str, Path]
     artifact_payloads: dict[str, bytes]
-    image_descriptor: int
+    _image_descriptor: int | None
+
+    def __init__(
+        self,
+        *,
+        root: Path,
+        bundle: LabelingBundle,
+        artifact_paths: dict[str, Path],
+        artifact_payloads: dict[str, bytes],
+        image_descriptor: int,
+    ) -> None:
+        object.__setattr__(self, "root", root)
+        object.__setattr__(self, "bundle", bundle)
+        object.__setattr__(self, "artifact_paths", artifact_paths)
+        object.__setattr__(self, "artifact_payloads", artifact_payloads)
+        object.__setattr__(self, "_image_descriptor", image_descriptor)
+
+    @property
+    def image_descriptor(self) -> int:
+        """Return the caller-owned image descriptor while it remains open."""
+        descriptor = self._image_descriptor
+        if descriptor is None:
+            raise ValueError("labeling bundle image descriptor is closed")
+        return descriptor
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, _exc_type: object, _exc_value: object, _traceback: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Close the caller-owned image descriptor once."""
+        descriptor = self._image_descriptor
+        if descriptor is None:
+            return
+        object.__setattr__(self, "_image_descriptor", None)
+        os.close(descriptor)
+
+    def duplicate(self) -> LoadedLabelingBundle:
+        """Return an independent caller-owned descriptor lease for this bundle."""
+        descriptor = os.dup(self.image_descriptor)
+        try:
+            os.set_inheritable(descriptor, False)
+            return LoadedLabelingBundle(
+                root=self.root,
+                bundle=self.bundle,
+                artifact_paths=dict(self.artifact_paths),
+                artifact_payloads=dict(self.artifact_payloads),
+                image_descriptor=descriptor,
+            )
+        except BaseException:
+            os.close(descriptor)
+            raise
 
 
 def _safe_parts(relative_path: str) -> tuple[str, ...]:

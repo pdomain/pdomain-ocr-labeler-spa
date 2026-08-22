@@ -122,6 +122,27 @@ def test_load_validates_and_retains_external_artifacts(tmp_path: Path) -> None:
     assert loaded.bundle == expected
     assert loaded.artifact_paths["image"] == root / "artifacts" / "page.png"
     assert loaded.artifact_payloads["image"] == b"png"
+    descriptor = loaded.image_descriptor
+
+    loaded.close()
+    loaded.close()
+
+    with pytest.raises(ValueError, match="closed"):
+        _ = loaded.image_descriptor
+    with pytest.raises(OSError):
+        os.fstat(descriptor)
+
+
+def test_loaded_bundle_context_manager_closes_its_image_descriptor(tmp_path: Path) -> None:
+    root = tmp_path / "bundle"
+    _write_bundle(root)
+
+    with load_labeling_bundle_directory(root) as loaded:
+        descriptor = loaded.image_descriptor
+        assert os.fstat(descriptor)
+
+    with pytest.raises(ValueError, match="closed"):
+        _ = loaded.image_descriptor
 
 
 def test_load_rejects_referenced_artifact_hash_mismatch(tmp_path: Path) -> None:

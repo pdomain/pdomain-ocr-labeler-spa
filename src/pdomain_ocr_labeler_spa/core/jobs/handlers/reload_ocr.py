@@ -75,6 +75,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ....settings import Settings
@@ -115,6 +116,9 @@ def _get_page_loader(
     runner: JobRunner,
     project_state: ProjectState,
     settings: Settings,
+    *,
+    job_id: str | None = None,
+    page_index: int | None = None,
 ) -> PageLoader:
     """Return the active ``PageLoader``, building one on-demand if needed.
 
@@ -146,6 +150,14 @@ def _get_page_loader(
     ocr_carrier = ctx["ocr_config_carrier"]
     detection_key, recognition_key, hf_revision = ocr_carrier.snapshot()
 
+    page_lease = runner.get_labeling_page_lease(job_id) if job_id is not None else None
+    image_descriptor = None if page_lease is None else page_lease.image_descriptor
+
+    def resolve_job_image(requested_page_index: int) -> Path:
+        if image_descriptor is None or page_index is None or requested_page_index != page_index:
+            raise ValueError("reload_ocr job has no verified source image for this page")
+        return Path(f"/proc/self/fd/{image_descriptor}")
+
     return LocalDoctrPageLoader(
         project=project_state.loaded_project,
         predictor_cache=predictor_cache,
@@ -155,6 +167,7 @@ def _get_page_loader(
         data_root=settings.data_root,
         cache_root=settings.cache_root,
         store=ctx.get("page_store"),  # LabelerPageStore | None
+        image_path_resolver=resolve_job_image if page_lease is not None else None,
     )
 
 
@@ -264,7 +277,13 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
     current, message = _PROGRESS_STAGES[0]
     await runner.update_progress(job.job_id, current=current, total=_PROGRESS_TOTAL, message=message)
 
-    loader = _get_page_loader(runner, project_state, settings)
+    loader = _get_page_loader(
+        runner,
+        project_state,
+        settings,
+        job_id=job.job_id,
+        page_index=page_index,
+    )
 
     # Stage 2 — 0.1 / "Running OCR".
     current, message = _PROGRESS_STAGES[1]

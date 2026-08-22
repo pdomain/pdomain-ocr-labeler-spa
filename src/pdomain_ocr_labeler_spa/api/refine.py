@@ -33,7 +33,7 @@ from pydantic import BaseModel
 
 from ..core.jobs import JobRunner
 from ..core.project_state import ProjectState
-from .dependencies import get_job_runner, get_project_state
+from .dependencies import bind_page_labeling_lease, get_job_runner, get_project_state
 from .middleware.error_handler import ApiError
 
 # Two routers: the per-project refine route keeps its prefix; the capability
@@ -107,7 +107,12 @@ def _check_project_and_page(
     return None
 
 
-@router.post("/{project_id}/pages/{page_index}/refine", status_code=202, response_model=RefineJobResponse)
+@router.post(
+    "/{project_id}/pages/{page_index}/refine",
+    status_code=202,
+    response_model=RefineJobResponse,
+    dependencies=[Depends(bind_page_labeling_lease)],
+)
 def refine_scope(
     project_id: str,
     page_index: int,

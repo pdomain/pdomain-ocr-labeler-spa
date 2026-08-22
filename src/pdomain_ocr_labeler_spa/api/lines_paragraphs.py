@@ -105,6 +105,7 @@ from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import ProjectState
 from ..settings import Settings
 from .dependencies import (
+    bind_page_labeling_lease,
     get_app_config,
     get_job_runner,
     get_page_store_optional,
@@ -124,7 +125,11 @@ from .words import (
 
 log = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/projects", tags=["lines", "paragraphs"])
+router = APIRouter(
+    prefix="/api/projects",
+    tags=["lines", "paragraphs"],
+    dependencies=[Depends(bind_page_labeling_lease)],
+)
 
 
 # ── Request models — legacy (frontend pinned) ──────────────────────────

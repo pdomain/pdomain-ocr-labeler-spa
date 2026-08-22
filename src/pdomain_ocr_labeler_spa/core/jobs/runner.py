@@ -22,7 +22,7 @@ import uuid
 from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -63,6 +63,20 @@ _TERMINAL = {JobStatus.COMPLETE, JobStatus.ERROR, JobStatus.CANCELLED}
 
 Handler = Callable[["JobRunner", Job], Coroutine[Any, Any, None]]
 
+
+class LabelingPageLease(Protocol):
+    """The descriptor lease a queued job owns until reaching a terminal state."""
+
+    @property
+    def image_descriptor(self) -> int:
+        """Return the open descriptor backing this immutable page image."""
+        ...
+
+    def close(self) -> None:
+        """Release the caller-owned descriptor exactly once."""
+        ...
+
+
 # docs/architecture/02-backend.md: job types whose handlers
 # call ``loader.run_ocr`` on an ``asyncio.to_thread`` worker — the only
 # handlers gated by ``JobRunner``'s OCR concurrency semaphore. Verified
@@ -96,6 +110,7 @@ class JobRunner:
         # Populated by ``build_app`` so handlers can access app-level config
         # without a full DI graph (handlers run outside FastAPI request context).
         self.context: dict[str, Any] = context or {}
+        self._labeling_page_leases: dict[str, LabelingPageLease] = {}
         # Task 3: caps concurrent OCR-heavy jobs (see ``_OCR_HEAVY_JOB_TYPES``).
         # ``<= 0`` disables the cap — no semaphore, unbounded like every
         # other job type.
@@ -115,6 +130,7 @@ class JobRunner:
         *,
         project_id: str | None = None,
         payload: dict[str, Any] | None = None,
+        labeling_page_lease: LabelingPageLease | None = None,
     ) -> str:
         """Enqueue a new job and return its ``job_id``."""
         job_id = uuid.uuid4().hex
@@ -127,8 +143,20 @@ class JobRunner:
             created_at=datetime.now(UTC),
         )
         self._jobs[job_id] = job
+        if labeling_page_lease is not None:
+            self._labeling_page_leases[job_id] = labeling_page_lease
         self._queue.put_nowait(job)
         return job_id
+
+    def get_labeling_page_lease(self, job_id: str) -> LabelingPageLease | None:
+        """Return the page lease owned by one queued/running job, if any."""
+        return self._labeling_page_leases.get(job_id)
+
+    def _close_labeling_page_lease(self, job_id: str) -> None:
+        """Release an OCR job's descriptor after its handler reaches a terminal state."""
+        lease = self._labeling_page_leases.pop(job_id, None)
+        if lease is not None:
+            lease.close()
 
     async def run_forever(self) -> None:
         """Consume jobs from the queue until ``stop()`` is called."""
@@ -144,8 +172,27 @@ class JobRunner:
             task.add_done_callback(self._running_tasks.discard)
 
     async def stop(self) -> None:
-        """Signal ``run_forever`` to exit at the next iteration boundary."""
+        """Cancel running jobs and drain queued jobs before the runner stops."""
         self._stop.set()
+        while not self._queue.empty():
+            queued = self._queue.get_nowait()
+            current = self._jobs.get(queued.job_id)
+            if current is None or current.status is not JobStatus.QUEUED:
+                continue
+            cancelled = current.model_copy(
+                update={
+                    "status": JobStatus.CANCELLED,
+                    "completed_at": datetime.now(UTC),
+                }
+            )
+            self._jobs[queued.job_id] = cancelled
+            self._close_labeling_page_lease(queued.job_id)
+            await self._emit(cancelled)
+        tasks = tuple(self._running_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def request_cancel(self, job_id: str) -> Job | None:
         """Cooperatively cancel a queued or running job.
@@ -169,6 +216,7 @@ class JobRunner:
             return None
         if job.status in _TERMINAL:
             return job  # already terminal — return as-is
+        was_queued = job.status is JobStatus.QUEUED
         cancelled = job.model_copy(
             update={
                 "status": JobStatus.CANCELLED,
@@ -176,6 +224,8 @@ class JobRunner:
             }
         )
         self._jobs[job_id] = cancelled
+        if was_queued:
+            self._close_labeling_page_lease(job_id)
         await self._emit(cancelled)
         return cancelled
 
@@ -228,6 +278,10 @@ class JobRunner:
             await self._broker.close(job.job_id)
 
     async def _run_one(self, job: Job) -> None:
+        current = self._jobs.get(job.job_id)
+        if current is not None and current.status is JobStatus.CANCELLED:
+            self._close_labeling_page_lease(job.job_id)
+            return
         log.info("running job %s (%s)", job.job_id, job.job_type)
         running = job.model_copy(
             update={
@@ -239,39 +293,58 @@ class JobRunner:
         await self._emit(running)
 
         try:
-            handler = _HANDLERS.get(job.job_type)
-            if handler is None:
-                raise NotImplementedError(f"no handler for job type {job.job_type!r}")
-            # Task 3: only OCR-heavy job types wait on the semaphore; every
-            # other job type runs unbounded exactly as before.
-            if self._ocr_semaphore is not None and job.job_type in _OCR_HEAVY_JOB_TYPES:
-                async with self._ocr_semaphore:
+            try:
+                handler = _HANDLERS.get(job.job_type)
+                if handler is None:
+                    raise NotImplementedError(f"no handler for job type {job.job_type!r}")
+                # Task 3: only OCR-heavy job types wait on the semaphore; every
+                # other job type runs unbounded exactly as before.
+                if self._ocr_semaphore is not None and job.job_type in _OCR_HEAVY_JOB_TYPES:
+                    async with self._ocr_semaphore:
+                        await handler(self, running)
+                else:
                     await handler(self, running)
-            else:
-                await handler(self, running)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            log.exception("job %s failed", job.job_id)
-            failed = self._jobs[job.job_id].model_copy(
+            except asyncio.CancelledError:
+                current = self._jobs.get(job.job_id)
+                if current is None or current.status is not JobStatus.CANCELLED:
+                    cancelled = running.model_copy(
+                        update={
+                            "status": JobStatus.CANCELLED,
+                            "completed_at": datetime.now(UTC),
+                        }
+                    )
+                    self._jobs[job.job_id] = cancelled
+                    await self._emit(cancelled)
+                raise
+            except Exception as exc:
+                current = self._jobs.get(job.job_id)
+                if current is not None and current.status is JobStatus.CANCELLED:
+                    return
+                log.exception("job %s failed", job.job_id)
+                failed = self._jobs[job.job_id].model_copy(
+                    update={
+                        "status": JobStatus.ERROR,
+                        "completed_at": datetime.now(UTC),
+                        "error_message": str(exc),
+                    }
+                )
+                self._jobs[failed.job_id] = failed
+                await self._emit(failed)
+                return
+
+            current = self._jobs.get(job.job_id)
+            if current is not None and current.status is JobStatus.CANCELLED:
+                return
+            completed = self._jobs[job.job_id].model_copy(
                 update={
-                    "status": JobStatus.ERROR,
+                    "status": JobStatus.COMPLETE,
                     "completed_at": datetime.now(UTC),
-                    "error_message": str(exc),
                 }
             )
-            self._jobs[failed.job_id] = failed
-            await self._emit(failed)
-            return
-
-        completed = self._jobs[job.job_id].model_copy(
-            update={
-                "status": JobStatus.COMPLETE,
-                "completed_at": datetime.now(UTC),
-            }
-        )
-        self._jobs[completed.job_id] = completed
-        await self._emit(completed)
+            self._jobs[completed.job_id] = completed
+            await self._emit(completed)
+        finally:
+            self._close_labeling_page_lease(job.job_id)
 
 
 async def _handle_reload_ocr(runner: JobRunner, job: Job) -> None:

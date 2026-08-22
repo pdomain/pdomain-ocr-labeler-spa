@@ -120,6 +120,8 @@ async def handle_rotate_page(runner: JobRunner, job: Job) -> None:
     project = project_state.loaded_project
     if project is None:
         raise RuntimeError("rotate_page: no project loaded")
+    if project_state.has_book_labeling_session:
+        raise RuntimeError("rotate_page: immutable book source rotation is unsupported")
 
     log.info(
         "rotate_page: project=%s page=%d degrees=%d manual=%s",
