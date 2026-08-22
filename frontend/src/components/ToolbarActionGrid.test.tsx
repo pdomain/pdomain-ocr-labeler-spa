@@ -51,16 +51,12 @@ const emptySelection: Selection = {
 const emptyPage: PageData = { lines: [] };
 
 const mockOnAction = vi.fn();
-const mockOnApplyStyle = vi.fn();
-const mockOnClearStyle = vi.fn();
 const mockOnAddWordToggle = vi.fn();
 
 const defaultProps = {
   selection: emptySelection,
   pageData: emptyPage,
   onAction: mockOnAction,
-  onApplyStyle: mockOnApplyStyle,
-  onClearStyle: mockOnClearStyle,
   addWordActive: false,
   onAddWordToggle: mockOnAddWordToggle,
 };
@@ -93,28 +89,6 @@ describe("ToolbarActionGrid — structure", () => {
     expect(btn).toBeDisabled();
   });
 
-  // Q-B2-STYLE-LABELS RESOLVED (option b): style labels now sourced from backend.
-  // Guard: only canonical book-tools ALLOWED_TEXT_STYLE_LABELS appear in the style select.
-  it("uses canonical book-tools style label 'italics' (not 'italic')", () => {
-    render(<ToolbarActionGrid {...defaultProps} />);
-    const select = screen.getByTestId("apply-style-select");
-    const values = Array.from(select.querySelectorAll("option")).map(
-      (o) => (o as HTMLOptionElement).value,
-    );
-    expect(values).toContain("italics");
-    expect(values).not.toContain("italic");
-  });
-
-  it("style select does NOT contain superscript (it is a component)", () => {
-    render(<ToolbarActionGrid {...defaultProps} />);
-    const select = screen.getByTestId("apply-style-select");
-    const values = Array.from(select.querySelectorAll("option")).map(
-      (o) => (o as HTMLOptionElement).value,
-    );
-    expect(values).not.toContain("superscript");
-    expect(values).not.toContain("subscript");
-  });
-
   it("component select contains superscript and subscript (they are components)", () => {
     render(<ToolbarActionGrid {...defaultProps} />);
     const select = screen.getByTestId("apply-component-select");
@@ -123,29 +97,6 @@ describe("ToolbarActionGrid — structure", () => {
     );
     expect(values).toContain("superscript");
     expect(values).toContain("subscript");
-  });
-
-  it("style select contains only canonical ALLOWED_TEXT_STYLE_LABELS (no unknown values)", () => {
-    const canonicalStyles = new Set([
-      "all caps",
-      "blackletter",
-      "bold",
-      "handwritten",
-      "italics",
-      "monospace",
-      "regular",
-      "small caps",
-      "strikethrough",
-      "underline",
-    ]);
-    render(<ToolbarActionGrid {...defaultProps} />);
-    const select = screen.getByTestId("apply-style-select");
-    const values = Array.from(select.querySelectorAll("option"))
-      .map((o) => (o as HTMLOptionElement).value)
-      .filter((v) => v !== ""); // skip the placeholder ""
-    for (const v of values) {
-      expect(canonicalStyles.has(v)).toBe(true);
-    }
   });
 
   it("component select contains only canonical ALLOWED_COMPONENTS (no unknown values)", () => {
@@ -166,29 +117,9 @@ describe("ToolbarActionGrid — structure", () => {
     }
   });
 
-  it("renders apply-style-select", () => {
-    render(<ToolbarActionGrid {...defaultProps} />);
-    expect(screen.getByTestId("apply-style-select")).toBeTruthy();
-  });
-
-  it("renders scope-select (driver-contract §2.10 canonical id)", () => {
-    render(<ToolbarActionGrid {...defaultProps} />);
-    expect(screen.getByTestId("scope-select")).toBeTruthy();
-  });
-
   it("renders apply-component-select", () => {
     render(<ToolbarActionGrid {...defaultProps} />);
     expect(screen.getByTestId("apply-component-select")).toBeTruthy();
-  });
-
-  it("renders apply-style-button", () => {
-    render(<ToolbarActionGrid {...defaultProps} />);
-    expect(screen.getByTestId("apply-style-button")).toBeTruthy();
-  });
-
-  it("renders clear-style-button", () => {
-    render(<ToolbarActionGrid {...defaultProps} />);
-    expect(screen.getByTestId("clear-style-button")).toBeTruthy();
   });
 
   it("renders word-add-button (driver-contract §2.10 canonical id)", () => {
@@ -214,18 +145,11 @@ describe("ToolbarActionGrid — interactions", () => {
     expect(btn).toBeDisabled();
   });
 
-  it("Apply Style button calls onApplyStyle", () => {
-    const onApplyStyle = vi.fn();
-    render(<ToolbarActionGrid {...defaultProps} onApplyStyle={onApplyStyle} />);
-    fireEvent.click(screen.getByTestId("apply-style-button"));
-    expect(onApplyStyle).toHaveBeenCalledOnce();
-  });
-
-  it("Clear Style button calls onClearStyle", () => {
-    const onClearStyle = vi.fn();
-    render(<ToolbarActionGrid {...defaultProps} onClearStyle={onClearStyle} />);
-    fireEvent.click(screen.getByTestId("clear-style-button"));
-    expect(onClearStyle).toHaveBeenCalledOnce();
+  it("does not expose legacy style authoring controls", () => {
+    render(<ToolbarActionGrid {...defaultProps} />);
+    expect(screen.queryByTestId("apply-style-select")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("apply-style-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("clear-style-button")).not.toBeInTheDocument();
   });
 
   it("word-add-button calls onAddWordToggle", () => {

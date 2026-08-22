@@ -1,13 +1,11 @@
 // useWordMutations.ts — TanStack Query mutations for word-level actions.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 16 (BBoxSection).
-// FO-2: useSetCharRanges — positioned char-range styles endpoint.
 // S1.1: useDeleteWord + useNudgeWord (parity-gap-completion plan).
 //
 // Endpoints:
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/rebox         → PagePayload
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/merge         → PagePayload
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/split         → PagePayload
-//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/char-ranges   → PagePayload (FO-2)
 //   POST /api/projects/{pid}/pages/{idx}/words/delete-batch            → PagePayload (P1.3)
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/nudge         → PagePayload (S1.1)
 
@@ -19,12 +17,9 @@ type BBox = components["schemas"]["BBox"];
 type ReboxWordRequest = components["schemas"]["ReboxWordRequest"];
 type MergeWordsRequest = components["schemas"]["MergeWordsRequest"];
 type SplitWordRequest = components["schemas"]["SplitWordRequest"];
-type ApplyStyleRequest = components["schemas"]["ApplyStyleRequest"];
 type ApplyComponentRequest = components["schemas"]["ApplyComponentRequest"];
 type AddWordRequest = components["schemas"]["AddWordRequest"];
 type UpdateWordGroundTruthRequest = components["schemas"]["UpdateWordGroundTruthRequest"];
-type SetCharRangesRequest = components["schemas"]["SetCharRangesRequest"];
-type CharRange = components["schemas"]["CharRange-Input"];
 type NudgeBboxRequest = components["schemas"]["NudgeBboxRequest"];
 
 // ─── internal helpers ──────────────────────────────────────────────────────
@@ -107,6 +102,7 @@ export function useMergeWord(projectId: string, pageIndex: number) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -140,46 +136,7 @@ export function useSplitWord(projectId: string, pageIndex: number) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
-    },
-  });
-}
-
-// ─── useApplyStyle ─────────────────────────────────────────────────────────
-
-/**
- * Apply or remove a text style label on a word (Slice 19 — Char Ranges).
- *
- * Backend endpoint accepts ``scope: "whole" | "part"``. Char-range
- * position metadata is held as local state in ``CharRangesSection``
- * until the backend grows positioned ranges; for now we send the
- * style label with ``scope: "part"`` to signal partial application.
- *
- * ``enabled`` (P1.4, B-39/41/43): ``true`` (default) adds the style;
- * ``false`` removes it (backend calls ``remove_style_label``). Mirrors
- * ``useApplyComponent``.
- */
-export function useApplyStyle(projectId: string, pageIndex: number) {
-  const qc = useQueryClient();
-  return useMutation<
-    PagePayload,
-    Error,
-    {
-      lineIndex: number;
-      wordIndex: number;
-      style: string;
-      scope?: ApplyStyleRequest["scope"];
-      enabled?: boolean;
-    }
-  >({
-    mutationFn: ({ lineIndex, wordIndex, style, scope = "whole", enabled = true }) => {
-      const body: ApplyStyleRequest = { style, scope, enabled };
-      return apiPost<PagePayload>(
-        `${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/style`,
-        body,
-      );
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -203,6 +160,7 @@ export function useUpdateWordGroundTruth(projectId: string, pageIndex: number) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -226,36 +184,6 @@ export function useApplyComponent(projectId: string, pageIndex: number) {
       const body: ApplyComponentRequest = { component, enabled };
       return apiPost<PagePayload>(
         `${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/component`,
-        body,
-      );
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
-    },
-  });
-}
-
-// ─── useSetCharRanges (FO-2) ──────────────────────────────────────────────
-
-/**
- * Set positioned character-range styles for a word (FO-2).
- *
- * Replaces all char-range annotations for the word in a single atomic
- * operation.  An empty ``ranges`` list clears all existing ranges.
- *
- * Endpoint: ``POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/char-ranges``
- */
-export function useSetCharRanges(projectId: string, pageIndex: number) {
-  const qc = useQueryClient();
-  return useMutation<
-    PagePayload,
-    Error,
-    { lineIndex: number; wordIndex: number; ranges: CharRange[] }
-  >({
-    mutationFn: ({ lineIndex, wordIndex, ranges }) => {
-      const body: SetCharRangesRequest = { ranges };
-      return apiPost<PagePayload>(
-        `${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/char-ranges`,
         body,
       );
     },
@@ -367,6 +295,7 @@ export function useAddWord(projectId: string, pageIndex: number) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -422,6 +351,7 @@ export function useDeleteWord(projectId: string, pageIndex: number) {
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }

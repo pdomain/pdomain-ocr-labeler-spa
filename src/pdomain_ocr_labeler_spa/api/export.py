@@ -219,9 +219,13 @@ def _export_manifests_for_project(data_root: Path, project_id: str) -> list[Expo
 
 @router.post("/{project_id}/export", response_model=ExportResponse, status_code=202)
 def start_export(
+    *,
     project_id: str,
     body: ExportRequest,
     runner: JobRunner = Depends(get_job_runner),
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    page_store: LabelerPageStore | None = Depends(get_page_store_optional),
 ) -> JSONResponse:
     """``POST /api/projects/{id}/export`` — enqueue an export job.
 
@@ -229,12 +233,89 @@ def start_export(
     caller opens ``EventSource(/api/jobs/{job_id}/events)`` to receive
     progress and the terminal event.
     """
+    from .typography import typography_page_review
+
+    project = project_state.loaded_project
+    from ..core.jobs.handlers.export import (
+        _page_is_validated,
+        _resolve_ref_image,
+        freeze_export_page,
+        load_export_page,
+        resolve_export_page_refs,
+    )
+
+    target_store = page_store if project is not None and project.project_id == project_id else None
+    loaded_refs = [
+        (ref, page)
+        for ref in resolve_export_page_refs(Path(settings.data_root), project_id, target_store)
+        if (page := load_export_page(ref, target_store)) is not None
+    ]
+    validated_refs = [(ref, page) for ref, page in loaded_refs if _page_is_validated(page)]
+    if (loaded_refs or body.scope is ExportScope.CURRENT) and (
+        project is None or project.project_id != project_id
+    ):
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "Project must be loaded before reviewed pages can be exported"},
+        )
+    if body.scope is ExportScope.ALL_VALIDATED and any(ref.page_index < 0 for ref, _ in validated_refs):
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "Unindexed validated pages cannot be typography-reviewed for export"},
+        )
+    if body.scope is ExportScope.CURRENT:
+        assert body.page_index is not None
+        selected = [(ref, page) for ref, page in validated_refs if ref.page_index == body.page_index]
+        if not selected:
+            return JSONResponse(
+                status_code=409,
+                content={"detail": "current page must be persisted and text-validated before export"},
+            )
+    else:
+        selected = [(ref, page) for ref, page in validated_refs if ref.page_index >= 0]
+
+    frozen_pages: list[dict[str, object]] = []
+    for ref, _page in selected:
+        with project_state.get_page_lock(ref.page_index):
+            page = load_export_page(ref, target_store)
+            if page is None or not _page_is_validated(page):
+                return JSONResponse(
+                    status_code=409,
+                    content={"detail": "persisted page changed before immutable export snapshot"},
+                )
+            review = typography_page_review(project_id, ref.page_index, project_state, page=page)
+            if not review.complete:
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "detail": "text and typography review must be complete before export",
+                        "review": review.model_dump(mode="json"),
+                    },
+                )
+            assert project is not None
+            image_path = _resolve_ref_image(ref, [Path(path) for path in project.image_paths])
+            if image_path is None:
+                return JSONResponse(
+                    status_code=409,
+                    content={"detail": "reviewed page image is unavailable for immutable export"},
+                )
+            frozen_pages.append(
+                freeze_export_page(
+                    page=page,
+                    image_path=image_path,
+                    page_index=ref.page_index,
+                    prefix=ref.prefix,
+                    blob_project_dir=project.project_root / ".pd-pages",
+                )
+            )
+
     job_id = runner.submit(
         "export",
         project_id=project_id,
         payload={
             "scope": body.scope.value,
             "page_index": body.page_index,
+            "frozen_pages": frozen_pages,
             "style_filters": body.style_filters,
             "component_filter": body.component_filter,
             "include_classification": body.include_classification,

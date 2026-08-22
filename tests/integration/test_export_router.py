@@ -88,7 +88,7 @@ def test_export_returns_202(client: TestClient) -> None:
     """``POST /api/projects/test-project/export`` returns 202 Accepted."""
     resp = client.post(
         "/api/projects/test-project/export",
-        json={"scope": "current", "page_index": 0},
+        json={"scope": "all_validated"},
     )
     assert resp.status_code == 202, resp.text
 
@@ -110,7 +110,7 @@ def test_export_job_is_visible_in_job_list(client: TestClient) -> None:
     """A submitted export job appears in ``GET /api/jobs``."""
     resp = client.post(
         "/api/projects/test-project/export",
-        json={"scope": "current", "page_index": 0},
+        json={"scope": "all_validated"},
     )
     job_id = resp.json()["job_id"]
     jobs = client.get("/api/jobs").json()
@@ -121,7 +121,7 @@ def test_export_job_has_correct_type(client: TestClient) -> None:
     """The submitted job has ``job_type == "export"``."""
     resp = client.post(
         "/api/projects/test-project/export",
-        json={"scope": "current", "page_index": 0},
+        json={"scope": "all_validated"},
     )
     job_id = resp.json()["job_id"]
     job = client.get(f"/api/jobs/{job_id}").json()
@@ -132,7 +132,7 @@ def test_export_job_carries_project_id(client: TestClient) -> None:
     """The submitted job has ``project_id`` matching the URL parameter."""
     resp = client.post(
         "/api/projects/my-project/export",
-        json={"scope": "current", "page_index": 0},
+        json={"scope": "all_validated"},
     )
     job_id = resp.json()["job_id"]
     job = client.get(f"/api/jobs/{job_id}").json()
@@ -184,7 +184,7 @@ def test_export_sse_cycle_completes(client: TestClient) -> None:
     # Submit the export job.
     resp = client.post(
         "/api/projects/test-project/export",
-        json={"scope": "current", "page_index": 0},
+        json={"scope": "all_validated"},
     )
     assert resp.status_code == 202
     job_id = resp.json()["job_id"]
@@ -213,7 +213,7 @@ def test_export_sse_snapshot_event_has_correct_job_id(client: TestClient) -> Non
     """The first SSE frame (snapshot) contains the correct job state."""
     resp = client.post(
         "/api/projects/test-project/export",
-        json={"scope": "current", "page_index": 0},
+        json={"scope": "all_validated"},
     )
     job_id = resp.json()["job_id"]
 
@@ -260,13 +260,13 @@ def test_export_current_without_page_index_returns_400(client: TestClient) -> No
     assert body.get("error") == "validation_error"
 
 
-def test_export_current_with_page_index_accepted(client: TestClient) -> None:
-    """``scope="current"`` with ``page_index`` returns 202."""
+def test_export_current_requires_loaded_persisted_reviewed_page(client: TestClient) -> None:
+    """``scope="current"`` cannot bypass text and typography review."""
     resp = client.post(
         "/api/projects/test-project/export",
         json={"scope": "current", "page_index": 0},
     )
-    assert resp.status_code == 202
+    assert resp.status_code == 409
 
 
 def test_export_all_validated_without_page_index_accepted(client: TestClient) -> None:
@@ -304,11 +304,10 @@ def test_export_styles_returns_list(client: TestClient) -> None:
 # ── Skipped-page count in terminal message (#task-7) ─────────────────────────
 
 
-def test_export_surfaces_skipped_pages(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """When pages fail to load during export, terminal message mentions skipped count.
-
-    Task 7 acceptance: "Exported N pages (M skipped due to load errors)" when M > 0.
-    """
+def test_export_excludes_pages_that_fail_to_load_before_enqueue(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A page that cannot be reviewed is absent from the frozen export set."""
     import pdomain_ocr_labeler_spa.core.jobs.handlers.export as _export_mod
 
     # Inject two fake pages into the scan list so the handler enters the load loop.
@@ -347,9 +346,7 @@ def test_export_surfaces_skipped_pages(tmp_path: Path, monkeypatch: pytest.Monke
                     break
 
     assert terminal_message is not None, "SSE stream never delivered a terminal event"
-    assert "skip" in terminal_message.lower(), (
-        f"Expected 'skip' in completion message, got: {terminal_message!r}"
-    )
+    assert terminal_message == "Exported 0 pages"
 
 
 # ── Export stats breakdown in terminal SSE event (Lane E3) ───────────────────
@@ -398,6 +395,23 @@ def test_export_terminal_event_carries_stats(tmp_path: Path, monkeypatch: pytest
     terminal_events = {"complete", "error", "cancelled"}
 
     with TestClient(app) as c:
+        from types import SimpleNamespace
+
+        from pdomain_ocr_labeler_spa.core.models import Project
+
+        c.app.state.project_state.set_loaded_project(  # type: ignore[attr-defined]
+            Project(
+                project_id="stats-project",
+                project_root=proj_dir,
+                image_paths=[img, img],
+                ground_truth_map={},
+                total_pages=2,
+            )
+        )
+        monkeypatch.setattr(
+            "pdomain_ocr_labeler_spa.api.typography.typography_page_review",
+            lambda *_args, **_kwargs: SimpleNamespace(complete=True),
+        )
         # Point the runner's settings at our data_root.
         c.app.state.settings.__dict__["data_root"] = data_root  # type: ignore[attr-defined]
         c.app.state.job_runner.context["settings"] = MagicMock(data_root=data_root)  # type: ignore[attr-defined]
@@ -419,10 +433,118 @@ def test_export_terminal_event_carries_stats(tmp_path: Path, monkeypatch: pytest
 
     assert terminal_data is not None, "no terminal event received"
     assert terminal_data["status"] == "complete", terminal_data
-    # Two validated words exported for detection and recognition; one page skipped.
+    # Only the reviewed, validated page is queued. The unvalidated page is not part
+    # of the frozen export set, so the worker cannot count it as a runtime skip.
     assert terminal_data.get("words_exported_detection") == 2, terminal_data
     assert terminal_data.get("words_exported_recognition") == 2, terminal_data
-    assert terminal_data.get("pages_skipped_not_validated") == 1, terminal_data
+    assert terminal_data.get("pages_skipped_not_validated") == 0, terminal_data
+
+
+def test_export_rejects_unindexed_validated_legacy_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every validated legacy page must map to an index that can be reviewed."""
+    import pdomain_ocr_labeler_spa.core.jobs.handlers.export as _export_mod
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.export import ExportPageRef
+    from pdomain_ocr_labeler_spa.core.models import Project
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    image_path = project_root / "page.png"
+    image_path.write_bytes(b"")
+    legacy_path = project_root / "legacy.json"
+    legacy_path.write_text("{}", encoding="utf-8")
+    validated_page = _stats_page([_stats_word(True, "alpha", True)])
+
+    monkeypatch.setattr(
+        _export_mod,
+        "resolve_export_page_refs",
+        lambda *_args: [ExportPageRef(page_index=-1, prefix="legacy", json_path=legacy_path)],
+    )
+    monkeypatch.setattr(_export_mod, "load_export_page", lambda *_args: validated_page)
+
+    settings = _make_settings(tmp_path)
+    app = build_app(settings)
+    with TestClient(app) as test_client:
+        test_client.app.state.project_state.set_loaded_project(  # type: ignore[attr-defined]
+            Project(
+                project_id="test-project",
+                project_root=project_root,
+                image_paths=[image_path],
+                ground_truth_map={},
+                total_pages=1,
+            )
+        )
+        response = test_client.post(
+            "/api/projects/test-project/export",
+            json={"scope": "all_validated"},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == ("Unindexed validated pages cannot be typography-reviewed for export")
+
+
+def test_frozen_export_page_reloads_reviewed_content_after_sources_mutate(tmp_path: Path) -> None:
+    """The worker input is content-addressed page and image bytes, not mutable heads."""
+    from pdomain_book_tools.ocr.page import Page
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.export import (
+        freeze_export_page,
+        load_frozen_export_page,
+    )
+
+    bbox = {
+        "top_left": {"x": 0, "y": 0},
+        "bottom_right": {"x": 20, "y": 20},
+        "is_normalized": False,
+    }
+    page = Page.from_dict(
+        {
+            "width": 20,
+            "height": 20,
+            "page_index": 0,
+            "bounding_box": bbox,
+            "items": [
+                {
+                    "type": "Block",
+                    "child_type": "BLOCKS",
+                    "items": [
+                        {
+                            "type": "Block",
+                            "child_type": "WORDS",
+                            "items": [
+                                {
+                                    "type": "Word",
+                                    "text": "OCR",
+                                    "ground_truth_text": "Reviewed",
+                                    "word_labels": ["validated"],
+                                    "bounding_box": bbox,
+                                }
+                            ],
+                            "bounding_box": bbox,
+                        }
+                    ],
+                    "bounding_box": bbox,
+                }
+            ],
+        }
+    )
+    image_path = tmp_path / "source.png"
+    image_path.write_bytes(b"reviewed-image")
+    snapshot = freeze_export_page(
+        page=page,
+        image_path=image_path,
+        page_index=0,
+        prefix="page-0",
+        blob_project_dir=tmp_path / ".pd-pages",
+    )
+
+    page.words[0].ground_truth_text = "Later mutation"
+    image_path.write_bytes(b"later-image")
+    frozen_page, frozen_image = load_frozen_export_page(snapshot)
+
+    assert frozen_page.words[0].ground_truth_text == "Reviewed"
+    assert frozen_image.read_bytes() == b"reviewed-image"
 
 
 def _stats_word(validated: bool, text: str, has_bbox: bool):
@@ -440,9 +562,44 @@ def _stats_word(validated: bool, text: str, has_bbox: bool):
 
 
 def _stats_page(words):
-    """Build a MagicMock page with the given words (Lane E3 stats test)."""
-    from unittest.mock import MagicMock
+    """Build a serializable book-tools page with the given word attributes."""
+    from pdomain_book_tools.ocr.page import Page
 
-    p = MagicMock()
-    p.words = words
-    return p
+    bbox = {
+        "top_left": {"x": 0, "y": 0},
+        "bottom_right": {"x": 20, "y": 20},
+        "is_normalized": False,
+    }
+    word_dicts = [
+        {
+            "type": "Word",
+            "text": word.text,
+            "ground_truth_text": word.ground_truth_text,
+            "word_labels": list(word.word_labels),
+            "bounding_box": bbox,
+        }
+        for word in words
+    ]
+    return Page.from_dict(
+        {
+            "width": 20,
+            "height": 20,
+            "page_index": 0,
+            "bounding_box": bbox,
+            "items": [
+                {
+                    "type": "Block",
+                    "child_type": "BLOCKS",
+                    "items": [
+                        {
+                            "type": "Block",
+                            "child_type": "WORDS",
+                            "items": word_dicts,
+                            "bounding_box": bbox,
+                        }
+                    ],
+                    "bounding_box": bbox,
+                }
+            ],
+        }
+    )

@@ -16,7 +16,7 @@
 
 import { useState } from "react";
 import { useValidateWords, useDeleteWordsBatch } from "../../hooks/useLineMutations";
-import { useApplyStyle, useApplyComponent } from "../../hooks/useWordMutations";
+import { useApplyComponent } from "../../hooks/useWordMutations";
 import { useLabelVocabulary } from "../../hooks/useLabelVocabulary";
 import type { components } from "../../api/types";
 
@@ -91,13 +91,10 @@ export function MultiWordDetail({
 }: MultiWordDetailProps) {
   const validateWords = useValidateWords(projectId, pageIndex);
   const deleteWords = useDeleteWordsBatch(projectId, pageIndex);
-  const applyStyle = useApplyStyle(projectId, pageIndex);
   const applyComponent = useApplyComponent(projectId, pageIndex);
 
-  const { textStyleLabels, wordComponents } = useLabelVocabulary();
-  const styleLabels = textStyleLabels.filter((s) => s !== "regular");
+  const { wordComponents } = useLabelVocabulary();
 
-  const [style, setStyle] = useState("");
   const [component, setComponent] = useState("");
 
   const grouped = groupByBlock(selectedWords, page.line_matches ?? []);
@@ -106,11 +103,7 @@ export function MultiWordDetail({
     "text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 " +
     "hover:border-accent transition-colors disabled:opacity-40";
 
-  const isPending =
-    validateWords.isPending ||
-    deleteWords.isPending ||
-    applyStyle.isPending ||
-    applyComponent.isPending;
+  const isPending = validateWords.isPending || deleteWords.isPending || applyComponent.isPending;
 
   return (
     <div data-testid="multi-word-detail" className="flex flex-col gap-3 p-3 text-xs">
@@ -217,42 +210,6 @@ export function MultiWordDetail({
         </button>
 
         {/* Apply style */}
-        <div className="flex items-center gap-1.5">
-          <select
-            data-testid="multi-word-style-select"
-            aria-label="Text style"
-            className="text-[11px] border border-border-2 rounded px-1 py-0.5 bg-bg-sunk flex-1"
-            value={style}
-            onChange={(e) => {
-              setStyle(e.target.value);
-            }}
-          >
-            <option value="" disabled>
-              Style…
-            </option>
-            {styleLabels.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            data-testid="multi-word-style-apply"
-            className={btn}
-            disabled={!style || isPending}
-            title="Apply this style to every selected word"
-            onClick={() => {
-              if (!style) return;
-              for (const [lineIndex, wordIndex] of selectedWords) {
-                applyStyle.mutate({ lineIndex, wordIndex, style, scope: "whole" });
-              }
-            }}
-          >
-            Apply
-          </button>
-        </div>
-
         {/* Apply component */}
         <div className="flex items-center gap-1.5">
           <select

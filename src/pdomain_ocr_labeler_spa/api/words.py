@@ -106,21 +106,6 @@ class UpdateWordGroundTruthRequest(BaseModel):
         return v
 
 
-class ApplyStyleRequest(BaseModel):
-    """Spec §2 lines 288-290.
-
-    ``enabled`` (P1.4, B-39/41/43) mirrors ``ApplyComponentRequest``:
-    ``True`` (default, back-compat) adds the style via book-tools'
-    add-only ``apply_style_scope``; ``False`` removes it via
-    ``remove_style_label``. Before this flag the SPA had no style-remove
-    path at all, so every clear-style surface silently no-oped.
-    """
-
-    style: str
-    scope: Literal["whole", "part"] = "whole"
-    enabled: bool = True
-
-
 class ApplyComponentRequest(BaseModel):
     """Spec §2 lines 293-295."""
 
@@ -563,75 +548,6 @@ def update_word_ground_truth(
             pstate=pstate,
             store=store,
             changes=[{"type": "word_gt", "line": line_index, "word": word_index, "text": body.text}],
-        ):
-            return _store_persist_failed_response(page_id=pstate.page_id)
-
-    return _refresh_payload_response(
-        project_id=project_id,
-        page_index=page_index,
-        project_state=project_state,
-        settings=settings,
-        app_config=app_config,
-    )
-
-
-@router.post(
-    "/{project_id}/pages/{page_index}/words/{line_index}/{word_index}/style",
-    response_model=PagePayload,
-)
-def apply_style(
-    *,
-    project_id: str,
-    page_index: int,
-    line_index: int,
-    word_index: int,
-    body: ApplyStyleRequest,
-    project_state: ProjectState = Depends(get_project_state),
-    settings: Settings = Depends(get_settings),
-    app_config: AppConfig = Depends(get_app_config),
-    store: LabelerPageStore | None = Depends(get_page_store_optional),
-) -> JSONResponse:
-    """``POST .../words/{li}/{wi}/style`` — apply/remove a text style label.
-
-    Spec 23 §9 row 2: ``word.apply_style(style_id, scope)`` →
-    ``word.apply_style_scope(style, scope)`` in pdomain-book-tools.
-    ``enabled=False`` (P1.4) removes the label via
-    ``word.remove_style_label(style)`` instead — the off-state for the
-    toolbar clear-style button, the WordDetail chip toggle and the
-    WordCell tag-x.
-    """
-    err = _check_project_and_page(project_id, page_index, project_state)
-    if err is not None:
-        return err
-
-    pstate = project_state.get_page_state(page_index)
-    page = _resolve_page_object(pstate)
-    if pstate is None or page is None:
-        return _page_not_loaded(page_index)
-
-    page_lock = project_state.get_page_lock(page_index)
-    with page_lock:
-        word = _resolve_word(page, line_index, word_index)
-        if word is None:
-            return _word_not_found(line_index, word_index)
-        if body.enabled:
-            word.apply_style_scope(body.style, body.scope)
-        else:
-            word.remove_style_label(body.style)
-        pstate.generation += 1
-        if not _save_to_store_best_effort(
-            pstate=pstate,
-            store=store,
-            changes=[
-                {
-                    "type": "word_style",
-                    "line": line_index,
-                    "word": word_index,
-                    "style": body.style,
-                    "scope": body.scope,
-                    "enabled": body.enabled,
-                }
-            ],
         ):
             return _store_persist_failed_response(page_id=pstate.page_id)
 
@@ -1669,7 +1585,6 @@ def install_words_router(app) -> None:  # type: ignore[no-untyped-def]
 __all__ = [
     "AddWordRequest",
     "ApplyComponentRequest",
-    "ApplyStyleRequest",
     "DeleteWordsBatchRequest",
     "ErasePixelsRequest",
     "MergeWordsRequest",

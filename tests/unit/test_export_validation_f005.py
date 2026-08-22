@@ -98,21 +98,23 @@ class TestPageIndexBounds:
         body = resp.json()
         assert body.get("error") == "validation_error"
 
-    def test_zero_page_index_accepted(self, client: TestClient) -> None:
-        """scope='current' with page_index=0 is the first page — valid."""
+    def test_zero_page_index_passes_shape_validation_then_requires_review(self, client: TestClient) -> None:
+        """A nonnegative index passes shape validation but cannot bypass review."""
         resp = client.post(
             "/api/projects/test-project/export",
             json={"scope": "current", "page_index": 0},
         )
-        assert resp.status_code == 202, resp.text
+        assert resp.status_code == 409, resp.text
 
-    def test_positive_page_index_accepted(self, client: TestClient) -> None:
-        """scope='current' with page_index=5 is valid."""
+    def test_positive_page_index_passes_shape_validation_then_requires_review(
+        self, client: TestClient
+    ) -> None:
+        """Any nonnegative index still requires a persisted reviewed page."""
         resp = client.post(
             "/api/projects/test-project/export",
             json={"scope": "current", "page_index": 5},
         )
-        assert resp.status_code == 202, resp.text
+        assert resp.status_code == 409, resp.text
 
 
 class TestContradictoryScope:

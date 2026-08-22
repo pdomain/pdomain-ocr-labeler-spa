@@ -1,18 +1,15 @@
 // CharFixerSection.tsx — Per-character GT editor for a word.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 20.
 // P4.b (Gap 39): per-char bbox visualisation + drag-handle canvas + selected-
-//                range coordinate detail strip + Apply commit button.
+//                character-bbox coordinate detail strip + Apply commit button.
 //
 // Renders (top to bottom):
 //   1. CharFixerCanvas — Konva mini-canvas with one coloured rectangle per
-//      char range. Each rectangle is clickable to select it; the selected
-//      range gets 8 drag handles (corners + midpoints) for direct bbox
-//      manipulation. The set of ranges is synthesised from the word's
-//      OCR text — one range per character — so the canvas works even
-//      when the server has not yet emitted CharRange metadata for this
-//      word. (CharRange.bbox is purely client-side state for now; the
-//      server schema is start/end/styles only.)
-//   2. Selected-range detail strip showing the range's character text and
+//      character bbox. Each rectangle is clickable to select it; the selected
+//      bbox gets 8 drag handles (corners + midpoints) for direct manipulation.
+//      The bboxes are loaded from the character-bbox sidecar or synthesised
+//      from OCR text when no saved geometry exists.
+//   2. Selected-bbox detail strip showing the character text and
 //      four editable x1/y1/x2/y2 numeric inputs (image-pixel coords).
 //   3. Apply button — disabled until at least one bbox has been modified.
 //      (Wiring to a real persistence endpoint lives in a later slice; the
@@ -23,7 +20,7 @@
 // Edits to the GT input grid are debounced (500ms) and saved by POSTing the
 // reconstructed GT string to the word-GT endpoint (Slice 20). Bbox edits are
 // purely local in P4.b — the Apply button is a placeholder for the future
-// CharRange-with-bbox persistence call.
+// character-bbox persistence call.
 //
 // data-testids (Slice 20):
 //   char-fixer-section                  — outer container
@@ -50,7 +47,7 @@ import { Input } from "@pdomain/pdomain-ui/primitives";
 import { UnicodePicker } from "../UnicodePicker";
 import { useUpdateWordGroundTruth, useSetCharBboxes } from "../../../hooks/useWordMutations";
 import type { components } from "../../../api/types";
-import { CharFixerCanvas, initialCharBboxes, type CharRangeBBox } from "./CharFixerCanvas";
+import { CharFixerCanvas, initialCharBboxes, type CharacterBBox } from "./CharFixerCanvas";
 import { toast } from "../../../lib/toast";
 
 type WordMatch = components["schemas"]["WordMatch"];
@@ -67,11 +64,11 @@ export interface CharFixerSectionProps {
 }
 
 /**
- * Build the initial per-char range set from a word's OCR text — one range
+ * Build the initial per-character bbox set from a word's OCR text — one bbox
  * per character. The set is *stable* across re-renders for a given word
  * (the wordKey effect resets state when the underlying word changes).
  */
-function buildInitialCharBboxes(word: WordMatch): CharRangeBBox[] {
+function buildInitialCharBboxes(word: WordMatch): CharacterBBox[] {
   const chars = Array.from(word.ocr_text ?? "");
   if (chars.length === 0) return [];
   const ranges = chars.map((_, i) => ({ start: i, end: i }));
@@ -177,7 +174,7 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
   // ---- P4.b: bbox state -----------------------------------------------------
 
   const initialBboxes = useMemo(() => buildInitialCharBboxes(word), [word]);
-  const [charBboxes, setCharBboxes] = useState<CharRangeBBox[]>(initialBboxes);
+  const [charBboxes, setCharBboxes] = useState<CharacterBBox[]>(initialBboxes);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(
     initialBboxes.length > 0 ? 0 : null,
   );

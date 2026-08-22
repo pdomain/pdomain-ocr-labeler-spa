@@ -18,6 +18,7 @@ import { KeyCap } from "@pdomain/pdomain-ui/primitives";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { walkSibling } from "../../stores/selection-store";
 import type { components } from "../../api/types";
+import { useTypographyReview } from "../../hooks/useTypographyReview";
 
 type PagePayload = components["schemas"]["PagePayload"];
 type ToggleValidatedRequest = components["schemas"]["ToggleValidatedRequest"];
@@ -62,6 +63,7 @@ function useToggleValidated(projectId: string, pageIndex: number) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -80,6 +82,7 @@ function useDeleteWord(projectId: string, pageIndex: number) {
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -107,6 +110,8 @@ export function WordFooter({
 
   const toggleValidated = useToggleValidated(projectId, pageIndex);
   const deleteWord = useDeleteWord(projectId, pageIndex);
+  const typographyReview = useTypographyReview(projectId, pageIndex);
+  const reviewComplete = typographyReview.data?.complete ?? false;
 
   function handleValidate() {
     toggleValidated.mutate({ lineIndex, wordIndex, validated: !isValidated });
@@ -130,7 +135,7 @@ export function WordFooter({
       <button
         data-testid="word-footer-validate"
         onClick={handleValidate}
-        disabled={toggleValidated.isPending}
+        disabled={toggleValidated.isPending || (!isValidated && !reviewComplete)}
         className={[
           "flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium transition-colors",
           "border",
@@ -143,6 +148,13 @@ export function WordFooter({
         <span>{isValidated ? "✓ Validated" : "Validate"}</span>
         <KeyCap keys="V" />
       </button>
+      {typographyReview.data && (
+        <span className="text-[10px] text-ink-3">
+          Text {typographyReview.data.text_reviewed_words}/{typographyReview.data.total_words} ·
+          Typography {typographyReview.data.typography_reviewed_words}/
+          {typographyReview.data.total_words}
+        </span>
+      )}
 
       {/* Skip to next word */}
       <button

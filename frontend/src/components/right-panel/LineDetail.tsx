@@ -40,7 +40,7 @@ import {
   useDeleteLine,
   useUpdateWordGt,
 } from "../../hooks/useLineMutations";
-import { useApplyStyle, useApplyComponent } from "../../hooks/useWordMutations";
+import { useApplyComponent } from "../../hooks/useWordMutations";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -234,7 +234,6 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
   // STB-3: delete action for the embedded LineCard.
   const deleteLine = useDeleteLine(projectId, pageIndex);
   // P1.4 (B-43): tag-chip x removal for the embedded LineCard's WordCells.
-  const applyStyle = useApplyStyle(projectId, pageIndex);
   const applyComponent = useApplyComponent(projectId, pageIndex);
   // P1.6 (B-22): per-word GT commit for the embedded LineCard's WordCells.
   const updateWordGt = useUpdateWordGt(projectId, pageIndex);
@@ -312,15 +311,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
                 // P1.4 (B-43): remove the clicked tag for real. Styles go
                 // through the style route's enabled:false (remove_style_label);
                 // components already supported enabled:false.
-                if (kind === "style") {
-                  applyStyle.mutate({
-                    lineIndex: li,
-                    wordIndex: wi,
-                    style: label,
-                    scope: "whole",
-                    enabled: false,
-                  });
-                } else {
+                if (kind === "component") {
                   applyComponent.mutate({
                     lineIndex: li,
                     wordIndex: wi,

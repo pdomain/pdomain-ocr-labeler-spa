@@ -221,16 +221,6 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
               title={`Style: ${label}`}
             >
               {label}
-              {/* STB-2: clear style tag */}
-              <button
-                data-testid={`word-tag-clear-button-${l}-${w}-${label}`}
-                className="word-tag-clear-button text-[8px] text-ink-3 hover:text-ink-1 leading-none"
-                aria-label={`Remove style ${label}`}
-                title={`Remove style ${label}`}
-                onClick={() => onClearTag?.(l, w, label, "style")}
-              >
-                ×
-              </button>
             </span>
           ))}
           {word.word_components?.map((comp) => (

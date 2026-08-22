@@ -92,8 +92,11 @@ export function useCopyLineGt(projectId: string, pageIndex: number) {
           direction,
         } satisfies CopyLineGtRequest,
       ),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      if (variables.direction === "ocr_to_gt") {
+        void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
+      }
     },
   });
 }
@@ -119,6 +122,7 @@ export function useDeleteLine(projectId: string, pageIndex: number) {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -138,6 +142,7 @@ export function useUpdateWordGt(projectId: string, pageIndex: number) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -191,6 +196,7 @@ export function useMergeLines(projectId: string, pageIndex: number) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -210,6 +216,7 @@ export function useSetLineGt(projectId: string, pageIndex: number) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -247,6 +254,7 @@ export function useDeleteWordsBatch(projectId: string, pageIndex: number) {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -264,6 +272,7 @@ export function useSplitLineAfterWord(projectId: string, pageIndex: number) {
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -278,6 +287,7 @@ export function useSplitLineByWords(projectId: string, pageIndex: number) {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -301,6 +311,7 @@ export function useMergeParagraphs(projectId: string, pageIndex: number) {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -316,6 +327,7 @@ export function useDeleteParagraph(projectId: string, pageIndex: number) {
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -331,6 +343,7 @@ export function useSplitParagraphAfterLine(projectId: string, pageIndex: number)
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
     },
   });
 }
@@ -350,8 +363,11 @@ export function useCopyParagraphGt(projectId: string, pageIndex: number) {
         {},
       );
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      if (variables.direction === "ocr_to_gt") {
+        void qc.invalidateQueries({ queryKey: ["typography-review", projectId, pageIndex] });
+      }
     },
   });
 }

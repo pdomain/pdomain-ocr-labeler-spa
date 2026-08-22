@@ -18,6 +18,37 @@ def test_typography_contract_versions_and_openapi_types() -> None:
     assert response.status_code == 200
     assert response.json()["review_contract_version"] == REVIEW_CONTRACT_VERSION
     assert response.json()["grapheme_map_version"] == GRAPHEME_SEGMENTATION_VERSION
+    taxonomy = response.json()["taxonomy"]
+    assert len(taxonomy["taxonomy_hash"]) == 64
+    assert [label["value"] for label in taxonomy["labels"]] == [
+        "italic",
+        "bold",
+        "small_caps",
+        "letter_spaced",
+        "superscript",
+        "subscript",
+        "underline",
+        "font_blackletter",
+        "font_antiqua",
+        "font_upright_in_italic",
+        "font_other_reviewed",
+    ]
+    assert "drop_cap" not in {label["value"] for label in taxonomy["labels"]}
+    assert [
+        (label["value"], label["required_for_completion"], label["trainable"]) for label in taxonomy["labels"]
+    ] == [
+        ("italic", True, True),
+        ("bold", True, True),
+        ("small_caps", True, True),
+        ("letter_spaced", True, False),
+        ("superscript", True, False),
+        ("subscript", True, False),
+        ("underline", False, False),
+        ("font_blackletter", True, False),
+        ("font_antiqua", True, False),
+        ("font_upright_in_italic", True, False),
+        ("font_other_reviewed", False, False),
+    ]
 
     schemas = app.openapi()["components"]["schemas"]
     assert "WordTypography" in schemas

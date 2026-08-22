@@ -14,10 +14,9 @@
 //   component-palette             — outer container
 //   component-chip-{componentKey} — individual chip (key = canonical component string, spaces → -)
 
-import { ChipPalette } from "./StylePalette";
+import { ChipPalette, type ChipPaletteItem } from "./ChipPalette";
 import type { TriStateValue } from "@pdomain/pdomain-ui/primitives";
-import type { ChipPaletteItem } from "./StylePalette";
-import { useLabelVocabulary, FALLBACK_COMPONENTS } from "../../hooks/useLabelVocabulary";
+import { useLabelVocabulary } from "../../hooks/useLabelVocabulary";
 
 // Display-name map: canonical component key → short label shown on chip.
 // Keys must exactly match ALLOWED_COMPONENTS from book-tools.
@@ -34,13 +33,8 @@ function componentDisplayLabel(canonical: string): string {
 }
 
 // COMPONENT_ITEMS — canonical fallback list for use by sibling components that need
-// a static reference (e.g. CharRangesSection key-set checks).
+// a static reference for local palette rendering.
 // Sourced from FALLBACK_COMPONENTS (mirrors book-tools ALLOWED_COMPONENTS).
-export const COMPONENT_ITEMS: ChipPaletteItem[] = FALLBACK_COMPONENTS.map((key) => ({
-  key,
-  label: COMPONENT_DISPLAY_NAMES[key] ?? key,
-}));
-
 export interface ComponentPaletteProps {
   /** Currently active component tags on the word. */
   activeComponents: string[];

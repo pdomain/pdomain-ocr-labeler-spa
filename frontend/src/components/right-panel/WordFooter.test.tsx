@@ -72,6 +72,28 @@ describe("WordFooter (P2.f)", () => {
     expect(screen.getByTestId("word-footer-validate")).toHaveTextContent("Validated");
   });
 
+  it("blocks positive validation until text and typography reviews are complete", async () => {
+    server.use(
+      http.get("/api/projects/proj-1/pages/0/typography/review", () =>
+        HttpResponse.json({
+          project_id: "proj-1",
+          page_index: 0,
+          logical_page_id: "page",
+          reviewed_words: 1,
+          text_reviewed_words: 1,
+          typography_reviewed_words: 0,
+          blocked_words: 1,
+          total_words: 2,
+          complete: false,
+          heads: [],
+        }),
+      ),
+    );
+    renderFooter(false);
+    expect(await screen.findByText(/Text 1\/2 · Typography 0\/2/)).toBeInTheDocument();
+    expect(screen.getByTestId("word-footer-validate")).toBeDisabled();
+  });
+
   it("calls walkSibling('next', page) when Skip is clicked", async () => {
     const spy = vi.spyOn(selectionStore, "walkSibling").mockImplementation(() => {});
     renderFooter();

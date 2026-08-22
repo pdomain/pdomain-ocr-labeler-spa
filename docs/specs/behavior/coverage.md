@@ -72,7 +72,7 @@ Run `make behavior-coverage` to regenerate.
 | B-PROJECT-007 | no | test-written |
 | B-RIGHT-001 | no | test-written |
 | B-RIGHT-002 | no | test-written |
-| B-RIGHT-003 | no | test-written |
+| B-RIGHT-003 | no | specified |
 | B-RIGHT-004 | no | test-written |
 | B-RIGHT-005 | no | test-written |
 | B-RIGHT-006 | no | test-written |

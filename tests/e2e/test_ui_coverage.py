@@ -884,30 +884,6 @@ def test_char_fixer_section_in_dom(exercise_server: ExerciseServer, page: Page) 
 
 
 # ---------------------------------------------------------------------------
-# CHARFIX-2  char-ranges-section in DOM
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.e2e
-def test_char_ranges_section_in_dom(exercise_server: ExerciseServer, page: Page) -> None:
-    """CHARFIX-2: char-ranges-section is in the DOM after word selection."""
-    _goto_project_page(page, exercise_server.base_url, 1)
-    _wait_for_line_cards(page)
-
-    selected = _select_first_word_via_hierarchy(page)
-    if not selected:
-        pytest.skip("No word-cell found in DOM — page data may not have words")
-
-    # Open the "Char Ranges" accordion item so its content enters the DOM.
-    _open_accordion_item(page, "Char Ranges")
-
-    page.wait_for_selector('[data-testid="char-ranges-section"]', state="attached", timeout=10_000)
-    assert page.locator('[data-testid="char-ranges-section"]').count() > 0, (
-        "char-ranges-section must be in DOM after word selection"
-    )
-
-
-# ---------------------------------------------------------------------------
 # BBOX-1  bbox-section in DOM after word selection
 # ---------------------------------------------------------------------------
 

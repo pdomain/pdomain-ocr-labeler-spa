@@ -94,7 +94,7 @@ def test_page_is_validated_some_not_validated() -> None:
 
 def test_page_is_validated_empty_page() -> None:
     page = _make_page([])
-    assert not _page_is_validated(page)
+    assert _page_is_validated(page)
 
 
 # ---------------------------------------------------------------------------

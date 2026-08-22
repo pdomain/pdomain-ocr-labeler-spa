@@ -192,8 +192,17 @@ def _labels(page: Page, li: int, wi: int) -> list[str]:
 
 
 @pytest.mark.integration
-def test_single_toggle_validate_persists_across_fresh_store_reload(tmp_path: Path) -> None:
+def test_single_toggle_validate_persists_across_fresh_store_reload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """P1.1 acceptance: validate one word → restart → still validated."""
+
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "pdomain_ocr_labeler_spa.api.typography.typography_page_review",
+        lambda *_args: SimpleNamespace(complete=True),
+    )
 
     def mutate(client: TestClient) -> None:
         resp = client.post(
@@ -237,8 +246,17 @@ def test_single_unvalidate_removes_label_across_fresh_store_reload(tmp_path: Pat
 
 
 @pytest.mark.integration
-def test_validate_batch_page_scope_persists_across_fresh_store_reload(tmp_path: Path) -> None:
+def test_validate_batch_page_scope_persists_across_fresh_store_reload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Bulk validate (scope=page) must persist for every word on the page."""
+
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "pdomain_ocr_labeler_spa.api.typography.typography_page_review",
+        lambda *_args: SimpleNamespace(complete=True),
+    )
 
     def mutate(client: TestClient) -> None:
         resp = client.post(

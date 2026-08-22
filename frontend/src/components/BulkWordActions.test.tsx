@@ -86,8 +86,8 @@ describe("BulkWordActions (Lane D / D3)", () => {
     ]);
     renderWithQuery(<BulkWordActions projectId="p1" pageIndex={0} />);
     expect(screen.getByTestId("bulk-word-delete")).toBeInTheDocument();
-    expect(screen.getByTestId("bulk-word-style-select")).toBeInTheDocument();
-    expect(screen.getByTestId("bulk-word-style-apply")).toBeInTheDocument();
+    expect(screen.queryByTestId("bulk-word-style-select")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("bulk-word-style-apply")).not.toBeInTheDocument();
     expect(screen.getByTestId("bulk-word-component-select")).toBeInTheDocument();
     expect(screen.getByTestId("bulk-word-component-apply")).toBeInTheDocument();
   });
@@ -112,31 +112,6 @@ describe("BulkWordActions (Lane D / D3)", () => {
       [0, 0],
       [1, 2],
     ]);
-  });
-
-  it("bulk-word-style-apply POSTs style per selected word", async () => {
-    const user = userEvent.setup();
-    const hits: string[] = [];
-    server.use(
-      http.post(
-        "/api/projects/:pid/pages/:idx/words/:li/:wi/style",
-        async ({ params, request }) => {
-          const b = (await request.json()) as { style: string };
-          hits.push(`${params.li as string}/${params.wi as string}:${b.style}`);
-          return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
-        },
-      ),
-    );
-    selectWords([
-      [0, 0],
-      [0, 1],
-    ]);
-    renderWithQuery(<BulkWordActions projectId="p1" pageIndex={0} />);
-    await user.selectOptions(screen.getByTestId("bulk-word-style-select"), "italics");
-    await user.click(screen.getByTestId("bulk-word-style-apply"));
-    await waitFor(() => expect(hits.length).toBe(2));
-    expect(hits).toContain("0/0:italics");
-    expect(hits).toContain("0/1:italics");
   });
 
   it("bulk-word-component-apply POSTs component per selected word", async () => {
@@ -179,18 +154,6 @@ describe("BulkWordActions — canonical vocab from useLabelVocabulary (Q-B2)", (
     await waitFor(() => {
       const options = Array.from((select as HTMLSelectElement).options).map((o) => o.value);
       expect(options).toContain("drop cap unrecovered");
-    });
-  });
-
-  it("style select offers canonical 'italics' (not 'italic') and excludes 'regular'", async () => {
-    renderWithQuery(<BulkWordActions projectId="p1" pageIndex={0} />);
-    const select = screen.getByTestId("bulk-word-style-select");
-    await waitFor(() => {
-      const options = Array.from((select as HTMLSelectElement).options).map((o) => o.value);
-      // Canonical style name.
-      expect(options).toContain("italics");
-      // "regular" = clear-style; should be excluded from the bulk-apply dropdown.
-      expect(options).not.toContain("regular");
     });
   });
 

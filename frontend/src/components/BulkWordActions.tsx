@@ -19,7 +19,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { selectionStore } from "../stores/selection-store";
 import { useValidatePage, useDeleteWordsBatch } from "../hooks/useLineMutations";
-import { useApplyStyle, useApplyComponent } from "../hooks/useWordMutations";
+import { useApplyComponent } from "../hooks/useWordMutations";
 import { useLabelVocabulary } from "../hooks/useLabelVocabulary";
 
 function subscribeSelection(cb: () => void): () => void {
@@ -46,16 +46,13 @@ export function BulkWordActions({ projectId, pageIndex }: BulkWordActionsProps) 
 
   const validatePage = useValidatePage(projectId, pageIndex);
   const deleteWords = useDeleteWordsBatch(projectId, pageIndex);
-  const applyStyle = useApplyStyle(projectId, pageIndex);
   const applyComponent = useApplyComponent(projectId, pageIndex);
 
   // Q-B2: source label vocab from backend so we never drift from book-tools'
   // canonical ALLOWED_TEXT_STYLE_LABELS / ALLOWED_COMPONENTS sets.
   // "regular" = clear-style sentinel — not a meaningful bulk-apply target, omit.
-  const { textStyleLabels, wordComponents } = useLabelVocabulary();
-  const styleLabels = textStyleLabels.filter((s) => s !== "regular");
+  const { wordComponents } = useLabelVocabulary();
 
-  const [style, setStyle] = useState("");
   const [component, setComponent] = useState("");
 
   const btn =
@@ -115,43 +112,6 @@ export function BulkWordActions({ projectId, pageIndex }: BulkWordActionsProps) 
           >
             Delete selected words
           </button>
-
-          {/* Apply style */}
-          <div className="flex items-center gap-1.5">
-            <select
-              data-testid="bulk-word-style-select"
-              aria-label="Text style"
-              className="text-[11px] border border-border-2 rounded px-1 py-0.5 bg-bg-sunk flex-1"
-              value={style}
-              onChange={(e) => {
-                setStyle(e.target.value);
-              }}
-            >
-              <option value="" disabled>
-                Style…
-              </option>
-              {styleLabels.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              data-testid="bulk-word-style-apply"
-              className={btn}
-              disabled={!style || applyStyle.isPending}
-              title="Apply this style to every selected word"
-              onClick={() => {
-                if (!style) return;
-                for (const [lineIndex, wordIndex] of selectedWords) {
-                  applyStyle.mutate({ lineIndex, wordIndex, style, scope: "whole" });
-                }
-              }}
-            >
-              Apply
-            </button>
-          </div>
 
           {/* Apply component */}
           <div className="flex items-center gap-1.5">

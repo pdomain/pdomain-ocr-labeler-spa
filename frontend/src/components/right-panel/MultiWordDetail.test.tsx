@@ -294,15 +294,15 @@ describe("MultiWordDetail (MUL-1, MUL-2, MUL-3 — Slice B)", () => {
     // changes to pending. Just verify the click doesn't throw.
   });
 
-  it("MUL-3: apply style select and button present", () => {
+  it("MUL-3: legacy style authoring is absent", () => {
     const page = makeTwoBlockPage();
     const selected: [number, number][] = [
       [0, 0],
       [2, 0],
     ];
     wrap(<MultiWordDetail page={page} projectId="proj1" pageIndex={0} selectedWords={selected} />);
-    expect(screen.getByTestId("multi-word-style-select")).toBeInTheDocument();
-    expect(screen.getByTestId("multi-word-style-apply")).toBeInTheDocument();
+    expect(screen.queryByTestId("multi-word-style-select")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("multi-word-style-apply")).not.toBeInTheDocument();
   });
 
   it("MUL-3: apply component select and button present", () => {

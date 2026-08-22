@@ -7,7 +7,7 @@
 //   2. Rebox         — wired (ReboxSection, tag="accent")   [Slice 17]
 //   3. Erase Pixels  — wired (ErasePixelsSection, tag="mismatch") [Slice 17]
 //   4. Structure     — wired (StructureSection)              [Slice 18]
-//   5. Char Ranges   — wired (CharRangesSection)              [Slice 19]
+//   5. Typography    — canonical grapheme review
 //   6. Char Fixer    — wired (CharFixerSection)                [Slice 20]
 //
 // The component receives the selected word via the selection-store path and
@@ -24,19 +24,17 @@ import { bboxHint } from "./sections/bboxUtils";
 import { ReboxSection } from "./sections/ReboxSection";
 import { ErasePixelsSection } from "./sections/ErasePixelsSection";
 import { StructureSection } from "./sections/StructureSection";
-import { CharRangesSection } from "./sections/CharRangesSection";
+import { TypographySection } from "./sections/TypographySection";
 import { CharFixerSection } from "./sections/CharFixerSection";
 import { WordHeader } from "./WordHeader";
 import { WordImagePreview } from "./WordImagePreview";
 import { OcrGtCompareRow } from "./OcrGtCompareRow";
-import { StylePalette } from "./StylePalette";
 import { ComponentPalette } from "./ComponentPalette";
 import { selectionStore, walkSibling } from "../../stores/selection-store";
 import { WordFooter } from "./WordFooter";
 import { useRefineAvailable } from "../../hooks/useRefineAvailable";
 import {
   useUpdateWordGroundTruth,
-  useApplyStyle,
   useApplyComponent,
   useErasePixels,
 } from "../../hooks/useWordMutations";
@@ -91,7 +89,6 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
   const { data: refineProbe } = useRefineAvailable();
   const refineAvailable = refineProbe?.available ?? false;
   const updateGt = useUpdateWordGroundTruth(projectId, pageIndex);
-  const applyStyle = useApplyStyle(projectId, pageIndex);
   const applyComponent = useApplyComponent(projectId, pageIndex);
   const erasePixels = useErasePixels(projectId, pageIndex);
 
@@ -170,23 +167,6 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
         }}
         onTab={(dir) => {
           walkSibling(dir, page);
-        }}
-      />
-
-      {/* P2.d: STYLE chip palette — whole-word styling.
-          P1.4 (B-41): the off-toggle removes the style (enabled:false);
-          it used to re-apply the same style, a silent no-op. */}
-      <StylePalette
-        activeStyles={word.text_style_labels ?? []}
-        onStyleChange={(styleKey, next) => {
-          if (next === "mixed") return; // skip mixed state for whole-word
-          applyStyle.mutate({
-            lineIndex: lineIdx,
-            wordIndex: wordIdx,
-            style: styleKey,
-            scope: "whole",
-            enabled: next === "on",
-          });
         }}
       />
 
@@ -269,13 +249,17 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
           </Accordion.Content>
         </Accordion.Item>
 
-        {/* 5 — Char Ranges (Slice 19) */}
-        <Accordion.Item value="char-ranges">
-          <Accordion.Trigger hint="per-char styles" keycap="C">
-            Char Ranges
+        {/* 5 — Canonical typography review */}
+        <Accordion.Item value="typography">
+          <Accordion.Trigger hint="grapheme spans · review" keycap="T">
+            Typography
           </Accordion.Trigger>
           <Accordion.Content>
-            <CharRangesSection word={word} projectId={projectId} pageIndex={pageIndex} />
+            <TypographySection
+              projectId={projectId}
+              pageIndex={pageIndex}
+              wordId={word.word_id ?? null}
+            />
           </Accordion.Content>
         </Accordion.Item>
 

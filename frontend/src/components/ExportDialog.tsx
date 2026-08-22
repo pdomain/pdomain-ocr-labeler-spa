@@ -27,6 +27,7 @@
 import { useEffect, useState } from "react";
 import { useJobProgress } from "../hooks/useJobProgress";
 import { useLabelVocabulary } from "../hooks/useLabelVocabulary";
+import { useTypographyReview } from "../hooks/useTypographyReview";
 import { fetchTrainerInstalled, launchTrainer } from "./ExportDialogUtils";
 import type { components } from "../api/types";
 import {
@@ -81,6 +82,8 @@ export function ExportDialog({
 }: ExportDialogProps) {
   // --- Canonical word-component vocabulary from the backend ---
   const { wordComponents } = useLabelVocabulary();
+  const typographyReview = useTypographyReview(projectId, currentPageIndex);
+  const reviewComplete = typographyReview.data?.complete ?? false;
 
   // --- Scope ---
   const [scope, setScope] = useState<ExportScope>("all_validated");
@@ -272,6 +275,13 @@ export function ExportDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          {typographyReview.data && (
+            <div className="text-xs text-ink-3" data-testid="export-review-progress">
+              Text {typographyReview.data.text_reviewed_words}/{typographyReview.data.total_words}
+              {" · "}Typography {typographyReview.data.typography_reviewed_words}/
+              {typographyReview.data.total_words}
+            </div>
+          )}
           {/* Scope */}
           <fieldset>
             <legend className="text-xs font-semibold text-ink-2 mb-1">Scope</legend>
@@ -508,10 +518,11 @@ export function ExportDialog({
           ) : (
             <button
               data-testid="export-button"
+              disabled={!reviewComplete}
               onClick={() => {
                 void handleExport();
               }}
-              className="px-3 py-1.5 text-sm rounded bg-accent text-accent-ink hover:opacity-90 transition-opacity"
+              className="px-3 py-1.5 text-sm rounded bg-accent text-accent-ink hover:opacity-90 transition-opacity disabled:opacity-40"
             >
               Export
             </button>

@@ -111,7 +111,6 @@ def test_apply_style_returns_404_when_no_project(bare_client: TestClient) -> Non
         json={"style": "italic"},
     )
     assert resp.status_code == 404
-    assert resp.json()["error"] == "project_not_found"
 
 
 def test_apply_style_returns_404_for_bad_page(loaded_client: TestClient) -> None:
@@ -120,17 +119,14 @@ def test_apply_style_returns_404_for_bad_page(loaded_client: TestClient) -> None
         json={"style": "italic"},
     )
     assert resp.status_code == 404
-    assert resp.json()["error"] == "page_not_found"
 
 
-def test_apply_style_returns_400_when_page_not_loaded(loaded_client: TestClient) -> None:
-    """Spec-23-C1: 400 ``page_not_loaded`` until PageState is seeded."""
+def test_apply_style_route_is_removed(loaded_client: TestClient) -> None:
     resp = loaded_client.post(
         "/api/projects/book1/pages/0/words/0/0/style",
         json={"style": "italic"},
     )
-    assert resp.status_code == 400
-    assert resp.json()["error"] == "page_not_loaded"
+    assert resp.status_code == 404
 
 
 # ── apply-component ───────────────────────────────────────────────────

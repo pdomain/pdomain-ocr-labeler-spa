@@ -141,10 +141,6 @@ export interface ToolbarActionGridProps {
   buttonStatesOverride?: Partial<ButtonStates>;
   /** Called when a non-stub, non-disabled action cell is clicked. */
   onAction: (key: keyof ButtonStates) => void;
-  /** Apply the chosen text style with the chosen scope to the selection. */
-  onApplyStyle: (style: string, scope: string) => void;
-  /** Clear the chosen text style (with the chosen scope) on the selection. */
-  onClearStyle: (style: string, scope: string) => void;
   /** Called when Apply Component is clicked (driver-contract §2.10). */
   onApplyComponent?: ((component: string) => void) | undefined;
   /** Called when Clear Component is clicked (driver-contract §2.10). */
@@ -168,8 +164,6 @@ export function ToolbarActionGrid({
   pageData,
   buttonStatesOverride,
   onAction,
-  onApplyStyle,
-  onClearStyle,
   onApplyComponent,
   onClearComponent,
   addWordActive,
@@ -179,12 +173,10 @@ export function ToolbarActionGrid({
   const states: ButtonStates = { ...computed, ...buttonStatesOverride };
 
   // Q-B2-STYLE-LABELS option (b): source canonical vocabulary from backend.
-  const { textStyleLabels, wordComponents } = useLabelVocabulary();
+  const { wordComponents } = useLabelVocabulary();
 
   // B2: controlled select state so Apply/Clear callbacks receive the chosen
   // style / scope / component. Defaults match the previous defaultValues.
-  const [styleValue, setStyleValue] = useState("");
-  const [scopeValue, setScopeValue] = useState("whole");
   const [componentValue, setComponentValue] = useState("");
 
   const ROWS: RowScope[] = ["page", "para", "line", "word"];
@@ -258,38 +250,6 @@ export function ToolbarActionGrid({
       {/* Apply Style row */}
       <div className="flex items-center gap-2 px-1 py-0.5 flex-wrap">
         <select
-          data-testid="apply-style-select"
-          className="text-xs border border-border-2 rounded px-1 py-0.5 bg-bg-sunk"
-          aria-label="Text style"
-          value={styleValue}
-          onChange={(e) => {
-            setStyleValue(e.target.value);
-          }}
-        >
-          <option value="" disabled>
-            Style…
-          </option>
-          {textStyleLabels.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-
-        <select
-          data-testid="scope-select"
-          className="text-xs border border-border-2 rounded px-1 py-0.5 bg-bg-sunk"
-          aria-label="Apply scope"
-          value={scopeValue}
-          onChange={(e) => {
-            setScopeValue(e.target.value);
-          }}
-        >
-          <option value="whole">whole</option>
-          <option value="part">part</option>
-        </select>
-
-        <select
           data-testid="apply-component-select"
           className="text-xs border border-border-2 rounded px-1 py-0.5 bg-bg-sunk"
           aria-label="Word component"
@@ -307,26 +267,6 @@ export function ToolbarActionGrid({
             </option>
           ))}
         </select>
-
-        <button
-          data-testid="apply-style-button"
-          onClick={() => {
-            onApplyStyle(styleValue, scopeValue);
-          }}
-          className="px-2 py-0.5 text-xs rounded border border-border-2 bg-bg-surface hover:bg-bg-raised hover:border-accent text-ink-2 transition-colors"
-        >
-          Apply
-        </button>
-
-        <button
-          data-testid="clear-style-button"
-          onClick={() => {
-            onClearStyle(styleValue, scopeValue);
-          }}
-          className="px-2 py-0.5 text-xs rounded border border-border-2 bg-bg-surface hover:bg-bg-raised hover:border-status-mismatch text-ink-2 transition-colors"
-        >
-          Clear
-        </button>
 
         <button
           data-testid="apply-component-button"

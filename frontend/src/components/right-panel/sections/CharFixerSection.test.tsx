@@ -255,7 +255,7 @@ describe("CharFixerSection — P4.b bbox canvas + handles (Gap 39)", () => {
     vi.useRealTimers();
   });
 
-  it("renders the canvas with one rect per char range", () => {
+  it("renders the canvas with one rect per character bbox", () => {
     renderSection(makeWord("abc", "abc"));
     expect(screen.getByTestId("charfixer-canvas")).toBeInTheDocument();
     expect(screen.getByTestId("charfixer-range-0")).toBeInTheDocument();

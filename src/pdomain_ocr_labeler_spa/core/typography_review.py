@@ -500,6 +500,7 @@ class TypographyCorrectionLog:
             flags=os.O_WRONLY | os.O_APPEND,
             create=True,
         )
+
         try:
             payload = {
                 "at": datetime.now(UTC).isoformat(),
@@ -516,6 +517,37 @@ class TypographyCorrectionLog:
                 os.fsync(parent_descriptor)
         finally:
             os.close(descriptor)
+
+    @staticmethod
+    def current_epoch(
+        records: list[TypographyJournalEnvelope] | tuple[TypographyJournalEnvelope, ...],
+        *,
+        logical_page_id: UUID,
+        current: TypographyBinding,
+    ) -> tuple[TypographyJournalEnvelope, ...]:
+        """Return the latest journal segment rooted in the persisted page."""
+        page_records = [record for record in records if record.logical_page_id == logical_page_id]
+        epoch_start = 0
+        for index in range(1, len(page_records)):
+            previous = page_records[index - 1].correction
+            candidate = page_records[index].correction
+            if (
+                candidate.base_page_sha256 != previous.effective_page_sha256
+                or candidate.base_image_sha256 != previous.effective_image_sha256
+                or candidate.page_head_sha256 != previous.effective_page_head_sha256
+            ):
+                epoch_start = index
+        epoch = tuple(page_records[epoch_start:])
+        if not epoch:
+            return ()
+        root = epoch[0].correction
+        if (
+            root.base_page_sha256 != current.page_sha256
+            or root.base_image_sha256 != current.image_sha256
+            or root.page_head_sha256 != current.page_head_sha256
+        ):
+            return ()
+        return epoch
 
     @staticmethod
     def _write_all(descriptor: int, payload: bytes) -> None:
@@ -558,10 +590,12 @@ class TypographyCorrectionLog:
         current: TypographyBinding,
         records: list[TypographyJournalEnvelope],
     ) -> None:
-        previous_envelope = cls._word_head(records, logical_page_id, correction.word_id)
+        epoch = cls.current_epoch(records, logical_page_id=logical_page_id, current=current)
+        epoch_records = list(epoch)
+        previous_envelope = cls._word_head(epoch_records, logical_page_id, correction.word_id)
         previous = previous_envelope.correction if previous_envelope is not None else None
         page_head_envelope = next(
-            (record for record in reversed(records) if record.logical_page_id == logical_page_id),
+            (record for record in reversed(epoch_records) if record.logical_page_id == logical_page_id),
             None,
         )
         page_head = page_head_envelope.correction if page_head_envelope is not None else None

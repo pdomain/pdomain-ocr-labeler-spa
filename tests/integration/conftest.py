@@ -112,10 +112,12 @@ def _tb_make_settings(tmp_path: Path, *, projects_root: Path) -> Any:
 
 
 @pytest.fixture
-def toolbar_loaded(tmp_path: Path) -> Any:
+def toolbar_loaded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     """Yield (client, project_state, page) with a project loaded and a real
     book-tools Page seeded into PageState + the event store. Base URL for the
     page is ``/api/projects/book1/pages/0``."""
+    from types import SimpleNamespace
+
     from fastapi.testclient import TestClient
     from pdomain_ops.page_aggregate import PageAggregate
     from pdomain_ops.pages import PageRecord
@@ -124,6 +126,11 @@ def toolbar_loaded(tmp_path: Path) -> Any:
     from pdomain_ocr_labeler_spa.core.page_state import PageLoadOutcome, PageSource
     from pdomain_ocr_labeler_spa.core.persistence.page_store import LabelerPageStore
     from pdomain_ocr_labeler_spa.core.project_state import PageState
+
+    monkeypatch.setattr(
+        "pdomain_ocr_labeler_spa.api.typography.typography_page_review",
+        lambda *_args: SimpleNamespace(complete=True),
+    )
 
     projects_root = tmp_path / "projects"
     projects_root.mkdir()

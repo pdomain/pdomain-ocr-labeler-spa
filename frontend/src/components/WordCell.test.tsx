@@ -296,7 +296,7 @@ describe("WordCell", () => {
 
   // STB-2: word-tag-clear-button wires to onClearTag
   describe("STB-2: word-tag-clear-button onClick", () => {
-    it("calls onClearTag(lineIdx, wordIdx, label, 'style') when style chip × is clicked", () => {
+    it("does not offer onClearTag for legacy style labels", () => {
       const onClearTag = vi.fn();
       const word = makeWordMatch({
         line_index: 2,
@@ -305,9 +305,8 @@ describe("WordCell", () => {
         word_components: [],
       });
       render(<WordCell word={word} onClearTag={onClearTag} />);
-      fireEvent.click(screen.getByTestId("word-tag-clear-button-2-1-bold"));
-      expect(onClearTag).toHaveBeenCalledOnce();
-      expect(onClearTag).toHaveBeenCalledWith(2, 1, "bold", "style");
+      expect(screen.queryByTestId("word-tag-clear-button-2-1-bold")).not.toBeInTheDocument();
+      expect(onClearTag).not.toHaveBeenCalled();
     });
 
     it("calls onClearTag(lineIdx, wordIdx, comp, 'component') when component chip × is clicked", () => {
@@ -324,7 +323,7 @@ describe("WordCell", () => {
       expect(onClearTag).toHaveBeenCalledWith(0, 0, "header", "component");
     });
 
-    it("does not throw when onClearTag is not provided and chip × is clicked", () => {
+    it("does not render legacy style-clear controls", () => {
       const word = makeWordMatch({
         line_index: 0,
         word_index: 0,
@@ -332,9 +331,7 @@ describe("WordCell", () => {
         word_components: [],
       });
       render(<WordCell word={word} />);
-      expect(() =>
-        fireEvent.click(screen.getByTestId("word-tag-clear-button-0-0-italic")),
-      ).not.toThrow();
+      expect(screen.queryByTestId("word-tag-clear-button-0-0-italic")).not.toBeInTheDocument();
     });
   });
 });

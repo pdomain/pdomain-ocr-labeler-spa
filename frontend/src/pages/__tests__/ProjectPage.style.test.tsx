@@ -188,86 +188,12 @@ describe("ProjectPage — style / component / add-word wiring (Lane B / B2)", ()
     );
   });
 
-  it("apply-style-button POSTs the chosen style + scope to the selected word", async () => {
-    const calls: { url: string; body: Record<string, unknown> }[] = [];
-    server.use(
-      http.post("/api/projects/:pid/pages/:idx/words/:li/:wi/style", async ({ request }) => {
-        calls.push({
-          url: request.url,
-          body: (await request.json()) as Record<string, unknown>,
-        });
-        return HttpResponse.json(pageFixture());
-      }),
-    );
-
+  it("does not render legacy style authoring controls", async () => {
     renderProjectPage();
-    await screen.findByTestId("apply-style-select");
-    selectWord(0, 0);
-    await waitFor(() => {
-      expect(selectionStore.getState().selectedWords).toEqual([[0, 0]]);
-    });
-
-    // Q-B2-STYLE-LABELS: the canonical book-tools label is the plural "italics".
-    fireEvent.change(screen.getByTestId("apply-style-select"), { target: { value: "italics" } });
-    fireEvent.change(screen.getByTestId("scope-select"), { target: { value: "whole" } });
-    fireEvent.click(screen.getByTestId("apply-style-button"));
-
-    await waitFor(() => {
-      expect(calls.length).toBeGreaterThanOrEqual(1);
-    });
-    expect(calls[0].url).toContain("/words/0/0/style");
-    expect(calls[0].body).toEqual(expect.objectContaining({ style: "italics", scope: "whole" }));
-  });
-
-  // P1.4 (B-39): clear must REMOVE the selected style via enabled:false.
-  // The old behavior POSTed style:"regular" — a no-op, because book-tools'
-  // apply_style_scope is add-only and discards "regular".
-  it("clear-style-button removes the selected style with enabled:false", async () => {
-    const calls: Record<string, unknown>[] = [];
-    server.use(
-      http.post("/api/projects/:pid/pages/:idx/words/:li/:wi/style", async ({ request }) => {
-        calls.push((await request.json()) as Record<string, unknown>);
-        return HttpResponse.json(pageFixture());
-      }),
-    );
-
-    renderProjectPage();
-    await screen.findByTestId("clear-style-button");
-    selectWord(0, 0);
-    await waitFor(() => {
-      expect(selectionStore.getState().selectedWords).toEqual([[0, 0]]);
-    });
-
-    fireEvent.change(screen.getByTestId("apply-style-select"), { target: { value: "italics" } });
-    fireEvent.click(screen.getByTestId("clear-style-button"));
-
-    await waitFor(() => {
-      expect(calls.length).toBeGreaterThanOrEqual(1);
-    });
-    expect(calls[0]).toEqual(expect.objectContaining({ style: "italics", enabled: false }));
-  });
-
-  it("clear-style-button with no style chosen warns and fires no request", async () => {
-    const calls: Record<string, unknown>[] = [];
-    server.use(
-      http.post("/api/projects/:pid/pages/:idx/words/:li/:wi/style", async ({ request }) => {
-        calls.push((await request.json()) as Record<string, unknown>);
-        return HttpResponse.json(pageFixture());
-      }),
-    );
-
-    renderProjectPage();
-    await screen.findByTestId("clear-style-button");
-    selectWord(0, 0);
-    await waitFor(() => {
-      expect(selectionStore.getState().selectedWords).toEqual([[0, 0]]);
-    });
-
-    // No style selected in apply-style-select (placeholder value "").
-    fireEvent.click(screen.getByTestId("clear-style-button"));
-
-    await new Promise((r) => setTimeout(r, 50));
-    expect(calls).toEqual([]);
+    await screen.findByTestId("toolbar-action-grid");
+    expect(screen.queryByTestId("apply-style-select")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("apply-style-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("clear-style-button")).not.toBeInTheDocument();
   });
 
   it("apply-component-button POSTs component with enabled:true", async () => {
