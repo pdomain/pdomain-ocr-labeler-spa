@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import os
+import re
 from hashlib import sha256
 from pathlib import Path
 
@@ -77,6 +77,11 @@ def test_loads_manifest_and_retains_its_exact_bytes(tmp_path: Path) -> None:
     assert loaded.root == root.resolve()
     assert loaded.manifest == expected
     assert loaded.manifest_bytes == payload
+    root_stat = root.stat()
+    assert (loaded.root_device, loaded.root_inode) == (
+        root_stat.st_dev,
+        root_stat.st_ino,
+    )
 
 
 def test_rejects_symlinked_book_root(tmp_path: Path) -> None:
@@ -106,9 +111,13 @@ def test_rejects_manifest_with_an_invalid_content_identity(tmp_path: Path) -> No
     root = tmp_path / "book"
     _write_book(root)
     manifest_path = root / "book-labeling-manifest.json"
-    payload = json.loads(manifest_path.read_text())
-    payload["manifest_id"] = "f" * 64
-    manifest_path.write_text(json.dumps(payload))
+    manifest_path.write_text(
+        re.sub(
+            r'"manifest_id":"[0-9a-f]{64}"',
+            '"manifest_id":"' + "f" * 64 + '"',
+            manifest_path.read_text(),
+        )
+    )
 
     with pytest.raises(ValueError, match="invalid book labeling manifest"):
         load_book_labeling_manifest_directory(root)
@@ -118,9 +127,12 @@ def test_rejects_traversing_materialization_path(tmp_path: Path) -> None:
     root = tmp_path / "book"
     _write_book(root)
     manifest_path = root / "book-labeling-manifest.json"
-    payload = json.loads(manifest_path.read_text())
-    payload["pages"][0]["materialization_relative_path"] = "../outside"
-    manifest_path.write_text(json.dumps(payload))
+    manifest_path.write_text(
+        manifest_path.read_text().replace(
+            '"materialization_relative_path":"pages/001"',
+            '"materialization_relative_path":"../outside"',
+        )
+    )
 
     with pytest.raises(ValueError, match="invalid book labeling manifest"):
         load_book_labeling_manifest_directory(root)

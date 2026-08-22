@@ -21,6 +21,8 @@ class LoadedBookLabelingManifest:
     root: Path
     manifest: BookLabelingManifest
     manifest_bytes: bytes
+    root_device: int
+    root_inode: int
 
 
 def _safe_parts(relative_path: str) -> tuple[str, ...]:
@@ -132,6 +134,7 @@ def load_book_labeling_manifest_directory(root: Path) -> LoadedBookLabelingManif
     """Load a book manifest and graph pins without opening page-bundle contents."""
     root_descriptor, resolved_root = _open_directory_nofollow(root)
     try:
+        root_stat = os.fstat(root_descriptor)
         manifest_bytes = _read_regular_at(root_descriptor, (_MANIFEST_FILENAME,))
         manifest = _load_manifest(manifest_bytes)
         _validate_materializations(root_descriptor, manifest)
@@ -142,6 +145,8 @@ def load_book_labeling_manifest_directory(root: Path) -> LoadedBookLabelingManif
         root=resolved_root,
         manifest=manifest,
         manifest_bytes=manifest_bytes,
+        root_device=root_stat.st_dev,
+        root_inode=root_stat.st_ino,
     )
 
 
