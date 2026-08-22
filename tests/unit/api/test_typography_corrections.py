@@ -1,0 +1,548 @@
+from __future__ import annotations
+
+import base64
+import hashlib
+from pathlib import Path
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from pdomain_book_tools.typography import (
+    GRAPHEME_SEGMENTATION_VERSION,
+    REVIEW_CONTRACT_VERSION,
+    ArtifactReference,
+    CorrectionBundle,
+    Evidence,
+    LabelingBundle,
+    LabelState,
+    ReviewState,
+    TypographyTaxonomy,
+    TypographyTaxonomyLabel,
+    WordTypography,
+)
+
+from pdomain_ocr_labeler_spa.bootstrap import build_app
+from pdomain_ocr_labeler_spa.core.models import Project
+from pdomain_ocr_labeler_spa.core.typography_review import (
+    TypographyCorrectionLog,
+    stable_page_id,
+    stable_word_id,
+)
+from pdomain_ocr_labeler_spa.settings import Settings
+
+
+def _sha(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _client(tmp_path: Path) -> tuple[TestClient, str, str]:
+    project_root = tmp_path / "alpha"
+    project_root.mkdir()
+    image = project_root / "page001.png"
+    image.write_bytes(b"image")
+    project_id = "alpha"
+    page_id = stable_page_id(project_id=project_id, page_index=0)
+    word_id = stable_word_id(project_id=project_id, page_id=page_id, reading_order=0, text="Word")
+    app = build_app(Settings(mode="api_only", data_root=tmp_path / "data"))
+    app.state.project_state.set_loaded_project(
+        Project(
+            project_id=project_id,
+            project_root=project_root,
+            image_paths=[image],
+            ground_truth_map={image.name: "Word"},
+            total_pages=1,
+        )
+    )
+    app.state.active_project_carrier.set_active_project(project_root)
+    return TestClient(app), page_id, word_id
+
+
+def _client_two_words(tmp_path: Path) -> tuple[TestClient, str, str, str]:
+    client, page_id, first_word_id = _client(tmp_path)
+    project = client.app.state.project_state.loaded_project
+    assert project is not None
+    project.ground_truth_map["page001.png"] = "Alpha Beta"
+    second_word_id = stable_word_id(project_id="alpha", page_id=page_id, reading_order=1, text="Beta")
+    first_word_id = stable_word_id(project_id="alpha", page_id=page_id, reading_order=0, text="Alpha")
+    return client, page_id, first_word_id, second_word_id
+
+
+def _taxonomy() -> TypographyTaxonomy:
+    return TypographyTaxonomy(
+        version="fixture-v1",
+        labels=(
+            TypographyTaxonomyLabel(
+                value="italic",
+                display_name="Italic",
+                required_for_completion=True,
+                trainable=True,
+            ),
+        ),
+    )
+
+
+def _labeling_bundle(head: dict[str, object], word_id: str) -> LabelingBundle:
+    taxonomy = _taxonomy()
+    return LabelingBundle(
+        schema_version=REVIEW_CONTRACT_VERSION,
+        configuration_hash="c" * 64,
+        taxonomy=taxonomy,
+        page_id=str(head["logical_page_id"]),
+        page_sha256=str(head["page_sha256"]),
+        image_sha256=str(head["image_sha256"]),
+        text_sha256=_sha("Word"),
+        page_head_sha256=str(head["page_head_sha256"]),
+        artifacts=(
+            ArtifactReference(
+                artifact_id="source-image",
+                relative_path="page001.png",
+                sha256=str(head["image_sha256"]),
+                media_type="image/png",
+            ),
+        ),
+        evidence=(
+            Evidence(
+                evidence_id="source-evidence",
+                artifact_id="source-image",
+                artifact_sha256=str(head["image_sha256"]),
+                byte_start=0,
+                byte_end=1,
+            ),
+        ),
+        words=(
+            WordTypography(
+                word_id=word_id,
+                text="Word",
+                text_sha256=_sha("Word"),
+                page_content_sha256=str(head["page_sha256"]),
+                image_artifact_sha256=str(head["image_sha256"]),
+                grapheme_map_version=GRAPHEME_SEGMENTATION_VERSION,
+                taxonomy_version=taxonomy.version,
+                taxonomy_hash=taxonomy.taxonomy_hash,
+                label_states={"italic": LabelState.UNKNOWN},
+                source_evidence_ids=("source-evidence",),
+            ),
+        ),
+    )
+
+
+def _accepted_edit(head: dict[str, object], *, correction_id: str, text: str) -> dict[str, object]:
+    page_payload = f"page:{correction_id}".encode()
+    text_payload = text.encode()
+    image_payload = b"image"
+    page_head_payload = f"page-head:{correction_id}".encode()
+    page_hash = hashlib.sha256(page_payload).hexdigest()
+    page_head_hash = _sha(f"page-head:{correction_id}")
+    word_revision = int(head["word_revision"]) + 1
+    replacement = WordTypography(
+        word_id=str(head["word_id"]),
+        text=text,
+        text_sha256=_sha(text),
+        page_content_sha256=page_hash,
+        image_artifact_sha256=str(head["image_sha256"]),
+        grapheme_map_version=GRAPHEME_SEGMENTATION_VERSION,
+        taxonomy_version="fixture-v1",
+        taxonomy_hash=_taxonomy().taxonomy_hash,
+        label_states={"italic": LabelState.NEGATIVE},
+        source_evidence_ids=("source-evidence",),
+        word_revision=word_revision,
+        review_state=ReviewState.REVIEWED,
+    )
+    return {
+        "expected_head": head["head_token"],
+        "correction_id": correction_id,
+        "taxonomy_version": "fixture-v1",
+        "taxonomy_hash": _taxonomy().taxonomy_hash,
+        "grapheme_map_version": GRAPHEME_SEGMENTATION_VERSION,
+        "decision": "approved_edit",
+        "replacement": replacement.model_dump(mode="json"),
+        "replacement_text_sha256": replacement.text_sha256,
+        "replacement_page_sha256": page_hash,
+        "replacement_image_sha256": head["image_sha256"],
+        "replacement_page_head_sha256": page_head_hash,
+        "replacement_word_revision": word_revision,
+        "replacement_artifacts": [
+            {
+                "artifact_id": f"{correction_id}:text",
+                "relative_path": f"{correction_id}.txt",
+                "sha256": replacement.text_sha256,
+                "byte_size": len(text_payload),
+                "media_type": "text/plain",
+            },
+            {
+                "artifact_id": f"{correction_id}:page",
+                "relative_path": f"{correction_id}.page",
+                "sha256": page_hash,
+                "byte_size": len(page_payload),
+                "media_type": "application/octet-stream",
+            },
+            {
+                "artifact_id": f"{correction_id}:image",
+                "relative_path": f"{correction_id}.png",
+                "sha256": head["image_sha256"],
+                "byte_size": len(image_payload),
+                "media_type": "image/png",
+            },
+            {
+                "artifact_id": f"{correction_id}:page-head",
+                "relative_path": f"{correction_id}.page-head",
+                "sha256": page_head_hash,
+                "byte_size": len(page_head_payload),
+                "media_type": "application/octet-stream",
+            },
+        ],
+        "replacement_artifact_payloads": [
+            {
+                "artifact_id": f"{correction_id}:text",
+                "data_base64": base64.b64encode(text_payload).decode(),
+            },
+            {
+                "artifact_id": f"{correction_id}:page",
+                "data_base64": base64.b64encode(page_payload).decode(),
+            },
+            {
+                "artifact_id": f"{correction_id}:image",
+                "data_base64": base64.b64encode(image_payload).decode(),
+            },
+            {
+                "artifact_id": f"{correction_id}:page-head",
+                "data_base64": base64.b64encode(page_head_payload).decode(),
+            },
+        ],
+    }
+
+
+def _two_word_labeling_bundle(
+    head: dict[str, object], first_word_id: str, second_word_id: str
+) -> LabelingBundle:
+    taxonomy = _taxonomy()
+    words = tuple(
+        WordTypography(
+            word_id=word_id,
+            text=text,
+            text_sha256=_sha(text),
+            page_content_sha256=str(head["page_sha256"]),
+            image_artifact_sha256=str(head["image_sha256"]),
+            grapheme_map_version=GRAPHEME_SEGMENTATION_VERSION,
+            taxonomy_version=taxonomy.version,
+            taxonomy_hash=taxonomy.taxonomy_hash,
+            label_states={"italic": LabelState.UNKNOWN},
+            source_evidence_ids=("source-evidence",),
+        )
+        for word_id, text in ((first_word_id, "Alpha"), (second_word_id, "Beta"))
+    )
+    payload = _labeling_bundle(head, first_word_id).model_dump(mode="python")
+    payload.update(bundle_id=None, text_sha256=_sha("Alpha Beta"), words=words)
+    return LabelingBundle.model_validate(payload)
+
+
+def test_head_is_server_derived_and_post_rejects_stale_concurrent_intent(tmp_path: Path) -> None:
+    client, page_id, word_id = _client(tmp_path)
+    path = f"/api/projects/alpha/pages/0/typography/words/{word_id}"
+    with client:
+        initial = client.get(f"{path}/head")
+        assert initial.status_code == 200
+        head = initial.json()
+        assert head["logical_page_id"] == page_id
+        assert head["revision"] == 0
+
+        body = {
+            "expected_head": head["head_token"],
+            "correction_id": "review-1",
+            "taxonomy_version": "fixture-v1",
+            "taxonomy_hash": _taxonomy().taxonomy_hash,
+            "grapheme_map_version": GRAPHEME_SEGMENTATION_VERSION,
+            "decision": "reject_source",
+        }
+        appended = client.post(f"{path}/corrections", json=body)
+        assert appended.status_code == 200
+        assert appended.json()["correction"]["base_page_sha256"] == head["page_sha256"]
+        assert appended.json()["revision"] == 1
+
+        stale = client.post(f"{path}/corrections", json={**body, "correction_id": "review-2"})
+        assert stale.status_code == 409
+
+        export_path = "/api/projects/alpha/pages/0/typography/correction-bundles/export"
+        export_body = {"labeling_bundle": _labeling_bundle(head, word_id).model_dump(mode="json")}
+        first_export = client.post(export_path, json=export_body)
+        second_export = client.post(export_path, json=export_body)
+        assert first_export.status_code == second_export.status_code == 200
+        assert first_export.json() == second_export.json()
+        bundle = CorrectionBundle.model_validate(first_export.json()["bundle"])
+        bundle.validate_against(_labeling_bundle(head, word_id))
+        assert bundle.bundle_id is not None
+        assert (tmp_path / "alpha" / first_export.json()["relative_path"]).is_file()
+
+
+def test_invalid_geometry_is_a_client_error_not_a_server_error(tmp_path: Path) -> None:
+    client, _page_id, word_id = _client(tmp_path)
+    path = f"/api/projects/alpha/pages/0/typography/words/{word_id}"
+    with client:
+        head = client.get(f"{path}/head").json()
+        response = client.post(
+            f"{path}/corrections",
+            json={
+                "expected_head": head["head_token"],
+                "correction_id": "bad-geometry",
+                "taxonomy_version": "fixture-v1",
+                "taxonomy_hash": _taxonomy().taxonomy_hash,
+                "grapheme_map_version": GRAPHEME_SEGMENTATION_VERSION,
+                "decision": "reject_source",
+                "geometry": [],
+            },
+        )
+        assert response.status_code == 422
+
+
+def test_export_rejects_symlinked_output_directory(tmp_path: Path) -> None:
+    client, _page_id, _word_id = _client(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    pages_dir = tmp_path / "alpha" / ".pd-pages"
+    pages_dir.mkdir()
+    (pages_dir / "typography-exports").symlink_to(outside, target_is_directory=True)
+    with client:
+        response = client.post(
+            "/api/projects/alpha/pages/0/typography/correction-bundles/export",
+            json={
+                "labeling_bundle": _labeling_bundle(
+                    client.get(f"/api/projects/alpha/pages/0/typography/words/{_word_id}/head").json(),
+                    _word_id,
+                ).model_dump(mode="json")
+            },
+        )
+    assert response.status_code >= 400
+    assert list(outside.iterdir()) == []
+
+
+def test_typography_routes_enforce_project_and_page_isolation(tmp_path: Path) -> None:
+    client, _page_id, word_id = _client(tmp_path)
+    with client:
+        assert client.get(f"/api/projects/beta/pages/0/typography/words/{word_id}/head").status_code == 404
+        assert client.get(f"/api/projects/alpha/pages/1/typography/words/{word_id}/head").status_code == 404
+        assert client.get("/api/projects/../pages/0/typography/review").status_code in {404, 405}
+
+
+def test_openapi_publishes_v024_geometry_and_model_enums(tmp_path: Path) -> None:
+    client, _page_id, _word_id = _client(tmp_path)
+    app = client.app
+    assert isinstance(app, FastAPI)
+    schema = app.openapi()["components"]["schemas"]
+    assert schema["ModelRunPurpose"]["enum"] == ["ocr", "page_region"]
+    assert schema["CoordinateTransformStage"]["enum"] == ["orientation", "crop"]
+    assert "source_width" in schema["CoordinateTransform"]["properties"]
+    assert "page_geometry" in schema["TypographyCorrectionSubmission"]["properties"]
+
+
+def test_generated_typescript_has_exact_v024_closed_enums() -> None:
+    typescript = Path("frontend/src/api/types.ts").read_text()
+    assert 'ModelRunPurpose: "ocr" | "page_region";' in typescript
+    assert 'CoordinateTransformStage: "orientation" | "crop";' in typescript
+
+
+def test_artifact_hash_failure_does_not_advance_head(tmp_path: Path) -> None:
+    client, _page_id, word_id = _client(tmp_path)
+    path = f"/api/projects/alpha/pages/0/typography/words/{word_id}"
+    payload = b"replacement image"
+    with client:
+        head = client.get(f"{path}/head").json()
+        response = client.post(
+            f"{path}/corrections",
+            json={
+                "expected_head": head["head_token"],
+                "correction_id": "bad-artifact",
+                "taxonomy_version": "fixture-v1",
+                "taxonomy_hash": "a" * 64,
+                "grapheme_map_version": GRAPHEME_SEGMENTATION_VERSION,
+                "decision": "reject_source",
+                "replacement_artifacts": [
+                    {
+                        "artifact_id": "replacement-image",
+                        "relative_path": "replacement.png",
+                        "sha256": "f" * 64,
+                        "byte_size": len(payload),
+                        "media_type": "image/png",
+                    }
+                ],
+                "replacement_artifact_payloads": [
+                    {
+                        "artifact_id": "replacement-image",
+                        "data_base64": base64.b64encode(payload).decode(),
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 422
+        assert client.get(f"{path}/head").json()["revision"] == 0
+
+
+def test_verified_artifact_is_published_before_head_advances(tmp_path: Path) -> None:
+    client, _page_id, word_id = _client(tmp_path)
+    path = f"/api/projects/alpha/pages/0/typography/words/{word_id}"
+    payload = b"replacement image"
+    payload_hash = hashlib.sha256(payload).hexdigest()
+    with client:
+        head = client.get(f"{path}/head").json()
+        response = client.post(
+            f"{path}/corrections",
+            json={
+                "expected_head": head["head_token"],
+                "correction_id": "verified-artifact",
+                "taxonomy_version": "fixture-v1",
+                "taxonomy_hash": _taxonomy().taxonomy_hash,
+                "grapheme_map_version": GRAPHEME_SEGMENTATION_VERSION,
+                "decision": "reject_source",
+                "replacement_artifacts": [
+                    {
+                        "artifact_id": "replacement-image",
+                        "relative_path": "replacement.png",
+                        "sha256": payload_hash,
+                        "byte_size": len(payload),
+                        "media_type": "image/png",
+                    }
+                ],
+                "replacement_artifact_payloads": [
+                    {
+                        "artifact_id": "replacement-image",
+                        "data_base64": base64.b64encode(payload).decode(),
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["revision"] == 1
+        exported = client.post(
+            "/api/projects/alpha/pages/0/typography/correction-bundles/export",
+            json={"labeling_bundle": _labeling_bundle(head, word_id).model_dump(mode="json")},
+        )
+        assert exported.status_code == 200
+        artifact_path = exported.json()["artifact_relative_paths"]["replacement-image"]
+    assert (tmp_path / "alpha" / ".pd-pages" / "typography-artifacts" / payload_hash).read_bytes() == payload
+    assert (tmp_path / "alpha" / artifact_path).read_bytes() == payload
+
+
+def test_export_manifest_is_not_visible_until_artifacts_are_durable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, _page_id, word_id = _client(tmp_path)
+    path = f"/api/projects/alpha/pages/0/typography/words/{word_id}"
+    with client:
+        head = client.get(f"{path}/head").json()
+        appended = client.post(
+            f"{path}/corrections",
+            json=_accepted_edit(head, correction_id="durable", text="Word"),
+        )
+        assert appended.status_code == 200
+        original_publish = TypographyCorrectionLog.publish_export
+
+        def fail_artifact(log: TypographyCorrectionLog, name: str, payload: bytes) -> None:
+            if name.endswith(".artifact"):
+                raise OSError("simulated artifact publication failure")
+            original_publish(log, name, payload)
+
+        monkeypatch.setattr(TypographyCorrectionLog, "publish_export", fail_artifact)
+        exported = client.post(
+            "/api/projects/alpha/pages/0/typography/correction-bundles/export",
+            json={"labeling_bundle": _labeling_bundle(head, word_id).model_dump(mode="json")},
+        )
+
+    assert exported.status_code == 422
+    export_root = tmp_path / "alpha" / ".pd-pages" / "typography-exports"
+    assert not export_root.exists() or not any(export_root.glob("*.json"))
+
+
+def test_portable_components_are_validated_without_geometry(tmp_path: Path) -> None:
+    client, _page_id, word_id = _client(tmp_path)
+    path = f"/api/projects/alpha/pages/0/typography/words/{word_id}"
+    with client:
+        head = client.get(f"{path}/head").json()
+        response = client.post(
+            f"{path}/corrections",
+            json={
+                "expected_head": head["head_token"],
+                "correction_id": "bad-run",
+                "taxonomy_version": "fixture-v1",
+                "taxonomy_hash": "a" * 64,
+                "grapheme_map_version": GRAPHEME_SEGMENTATION_VERSION,
+                "decision": "reject_source",
+                "model_runs": [
+                    {
+                        "run_id": "ocr-1",
+                        "model_name": "ocr",
+                        "model_version": "1",
+                        "purpose": "ocr",
+                        "input_artifact_sha256": "d" * 64,
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 422
+        assert client.get(f"{path}/head").json()["revision"] == 0
+
+
+def test_rejected_head_blocks_text_and_typography_completion(tmp_path: Path) -> None:
+    client, _page_id, word_id = _client(tmp_path)
+    path = f"/api/projects/alpha/pages/0/typography/words/{word_id}"
+    with client:
+        head = client.get(f"{path}/head").json()
+        response = client.post(
+            f"{path}/corrections",
+            json={
+                "expected_head": head["head_token"],
+                "correction_id": "reject",
+                "taxonomy_version": "fixture-v1",
+                "taxonomy_hash": "a" * 64,
+                "grapheme_map_version": GRAPHEME_SEGMENTATION_VERSION,
+                "decision": "reject_source",
+            },
+        )
+        assert response.status_code == 200
+        progress = client.get("/api/projects/alpha/pages/0/typography/review").json()
+        assert progress["reviewed_words"] == 1
+        assert progress["text_reviewed_words"] == 0
+        assert progress["typography_reviewed_words"] == 0
+        assert progress["blocked_words"] == 1
+        assert progress["complete"] is False
+
+
+def test_interleaved_page_global_edits_validate_and_export(tmp_path: Path) -> None:
+    client, _page_id, first_word_id, second_word_id = _client_two_words(tmp_path)
+    first_path = f"/api/projects/alpha/pages/0/typography/words/{first_word_id}"
+    second_path = f"/api/projects/alpha/pages/0/typography/words/{second_word_id}"
+    with client:
+        initial = client.get(f"{first_path}/head").json()
+        labeling_bundle = _two_word_labeling_bundle(initial, first_word_id, second_word_id)
+        first = client.post(
+            f"{first_path}/corrections",
+            json=_accepted_edit(initial, correction_id="A1", text="Alpha"),
+        )
+        assert first.status_code == 200
+        second_head = client.get(f"{second_path}/head").json()
+        second = client.post(
+            f"{second_path}/corrections",
+            json=_accepted_edit(second_head, correction_id="B1", text="Beta"),
+        )
+        assert second.status_code == 200
+        first_head = client.get(f"{first_path}/head").json()
+        third = client.post(
+            f"{first_path}/corrections",
+            json=_accepted_edit(first_head, correction_id="A2", text="Alpha"),
+        )
+        assert third.status_code == 200
+
+        exported = client.post(
+            "/api/projects/alpha/pages/0/typography/correction-bundles/export",
+            json={
+                "labeling_bundle": labeling_bundle.model_dump(mode="json"),
+                "selected_word_ids": [first_word_id],
+            },
+        )
+        assert exported.status_code == 200
+        bundle = CorrectionBundle.model_validate(exported.json()["bundle"])
+        assert [correction.correction_id for correction in bundle.corrections] == ["A1", "B1", "A2"]
+        bundle.validate_against(labeling_bundle)
+        export_root = tmp_path / "alpha" / Path(exported.json()["relative_path"]).parent
+        for artifact in bundle.replacement_artifacts:
+            resolved = export_root / artifact.relative_path
+            assert resolved.is_file()
+            assert hashlib.sha256(resolved.read_bytes()).hexdigest() == artifact.sha256

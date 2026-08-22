@@ -7,12 +7,21 @@ import hashlib
 import json
 import os
 import stat
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import ClassVar, final
-from uuid import UUID, uuid5
+from uuid import UUID, uuid4, uuid5
 
-from pdomain_book_tools.typography import TypographyCorrection, make_word_id
+from pdomain_book_tools.typography import (
+    CoordinateTransform,
+    ModelRun,
+    PageGeometry,
+    ReplacementArtifact,
+    TypographyCorrection,
+    WordGeometry,
+    make_word_id,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 _PAGE_ID_NAMESPACE = UUID("87638c97-711a-536d-80d2-6963f85ef543")
@@ -38,6 +47,11 @@ class TypographyJournalEnvelope(BaseModel):
     schema_version: int = Field(default=1, ge=1, le=1)
     logical_page_id: UUID
     correction: TypographyCorrection
+    replacement_artifacts: tuple[ReplacementArtifact, ...] = ()
+    page_geometry: PageGeometry | None = None
+    geometry: tuple[WordGeometry, ...] | None = None
+    model_runs: tuple[ModelRun, ...] = ()
+    coordinate_transforms: tuple[CoordinateTransform, ...] = ()
 
 
 class StaleTypographyBindingError(ValueError):
@@ -94,6 +108,12 @@ class TypographyCorrectionLog:
         *,
         logical_page_id: str,
         current: TypographyBinding,
+        replacement_artifacts: tuple[ReplacementArtifact, ...] = (),
+        page_geometry: PageGeometry | None = None,
+        geometry: tuple[WordGeometry, ...] | None = None,
+        model_runs: tuple[ModelRun, ...] = (),
+        coordinate_transforms: tuple[CoordinateTransform, ...] = (),
+        artifact_payloads: tuple[tuple[ReplacementArtifact, bytes], ...] = (),
     ) -> None:
         """Validate current bindings and durably append one correction."""
         parent_descriptor = self._open_journal_directory(create=True)
@@ -123,6 +143,8 @@ class TypographyCorrectionLog:
                 current=current,
                 records=records,
             )
+            for artifact, artifact_payload in artifact_payloads:
+                self._publish_artifact_locked(parent_descriptor, artifact, artifact_payload)
             if needs_newline:
                 self._write_all(descriptor, b"\n")
             payload = (
@@ -130,6 +152,11 @@ class TypographyCorrectionLog:
                     TypographyJournalEnvelope(
                         logical_page_id=page_id,
                         correction=correction,
+                        replacement_artifacts=replacement_artifacts,
+                        page_geometry=page_geometry,
+                        geometry=geometry,
+                        model_runs=model_runs,
+                        coordinate_transforms=coordinate_transforms,
                     ).model_dump(mode="json"),
                     ensure_ascii=False,
                     sort_keys=True,
@@ -142,6 +169,88 @@ class TypographyCorrectionLog:
         finally:
             os.close(descriptor)
             os.close(parent_descriptor)
+
+    def read_artifact(self, sha256: str) -> bytes:
+        """Read and revalidate one server-owned content-addressed artifact."""
+        if len(sha256) != 64 or any(character not in "0123456789abcdef" for character in sha256):
+            raise ValueError("invalid artifact hash")
+        journal_descriptor = self._open_journal_directory(create=False)
+        try:
+            artifact_descriptor = os.open(
+                "typography-artifacts",
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=journal_descriptor,
+            )
+        finally:
+            os.close(journal_descriptor)
+        try:
+            descriptor, _created = self._open_regular_file(
+                artifact_descriptor, sha256, flags=os.O_RDONLY, create=False
+            )
+            try:
+                chunks: list[bytes] = []
+                while chunk := os.read(descriptor, 1024 * 1024):
+                    chunks.append(chunk)
+                payload = b"".join(chunks)
+            finally:
+                os.close(descriptor)
+        finally:
+            os.close(artifact_descriptor)
+        if hashlib.sha256(payload).hexdigest() != sha256:
+            raise ValueError("stored artifact hash mismatch")
+        return payload
+
+    def _publish_artifact_locked(
+        self,
+        journal_descriptor: int,
+        artifact: ReplacementArtifact,
+        payload: bytes,
+    ) -> None:
+        if len(payload) != artifact.byte_size or hashlib.sha256(payload).hexdigest() != artifact.sha256:
+            raise ValueError("replacement artifact bytes do not match declared provenance")
+        try:
+            os.mkdir("typography-artifacts", mode=0o700, dir_fd=journal_descriptor)
+            os.fsync(journal_descriptor)
+        except FileExistsError:
+            pass
+        artifact_descriptor = os.open(
+            "typography-artifacts",
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+            dir_fd=journal_descriptor,
+        )
+        try:
+            try:
+                existing = self.read_artifact(artifact.sha256)
+            except FileNotFoundError:
+                temporary_name = f".{artifact.sha256}.{uuid4().hex}.tmp"
+                try:
+                    descriptor = os.open(
+                        temporary_name,
+                        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                        0o600,
+                        dir_fd=artifact_descriptor,
+                    )
+                    try:
+                        self._write_all(descriptor, payload)
+                        os.fsync(descriptor)
+                    finally:
+                        os.close(descriptor)
+                    os.rename(
+                        temporary_name,
+                        artifact.sha256,
+                        src_dir_fd=artifact_descriptor,
+                        dst_dir_fd=artifact_descriptor,
+                    )
+                    os.fsync(artifact_descriptor)
+                except Exception:
+                    with suppress(FileNotFoundError):
+                        os.unlink(temporary_name, dir_fd=artifact_descriptor)
+                    raise
+            else:
+                if existing != payload:
+                    raise ValueError("content-addressed artifact conflict")
+        finally:
+            os.close(artifact_descriptor)
 
     def head(self, logical_page_id: str, word_id: str) -> TypographyCorrection | None:
         """Return the latest appended correction for a stable word."""
@@ -174,6 +283,98 @@ class TypographyCorrectionLog:
             os.close(parent_descriptor)
         envelope = self._word_head(records, UUID(logical_page_id), word_id)
         return envelope.correction if envelope is not None else None
+
+    def records(self, logical_page_id: str | None = None) -> tuple[TypographyJournalEnvelope, ...]:
+        """Return a stable snapshot of valid journal records, optionally for one page."""
+        try:
+            parent_descriptor = self._open_journal_directory(create=False)
+        except FileNotFoundError:
+            return ()
+        try:
+            descriptor, _created = self._open_regular_file(
+                parent_descriptor, self.path.name, flags=os.O_RDONLY, create=False
+            )
+        except FileNotFoundError:
+            os.close(parent_descriptor)
+            return ()
+        except Exception:
+            os.close(parent_descriptor)
+            raise
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_SH)
+            records, _needs_newline = self._read_descriptor(
+                descriptor, recover_trailing=False, parent_descriptor=parent_descriptor
+            )
+        finally:
+            os.close(descriptor)
+            os.close(parent_descriptor)
+        if logical_page_id is None:
+            return tuple(records)
+        page_id = UUID(logical_page_id)
+        return tuple(record for record in records if record.logical_page_id == page_id)
+
+    def publish_export(self, name: str, payload: bytes) -> None:
+        """Publish immutable export bytes below the no-follow journal directory."""
+        if not name or name != Path(name).name:
+            raise ValueError("export name must be one safe path component")
+        journal_descriptor = self._open_journal_directory(create=True)
+        try:
+            try:
+                os.mkdir("typography-exports", mode=0o700, dir_fd=journal_descriptor)
+                os.fsync(journal_descriptor)
+            except FileExistsError:
+                pass
+            export_descriptor = os.open(
+                "typography-exports",
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=journal_descriptor,
+            )
+        finally:
+            os.close(journal_descriptor)
+        try:
+            fcntl.flock(export_descriptor, fcntl.LOCK_EX)
+            try:
+                descriptor, _created = self._open_regular_file(
+                    export_descriptor,
+                    name,
+                    flags=os.O_RDONLY,
+                    create=False,
+                )
+                try:
+                    chunks: list[bytes] = []
+                    while chunk := os.read(descriptor, 1024 * 1024):
+                        chunks.append(chunk)
+                    if b"".join(chunks) != payload:
+                        raise FileExistsError("content-addressed export path conflict")
+                finally:
+                    os.close(descriptor)
+            except FileNotFoundError:
+                temporary_name = f".{name}.{uuid4().hex}.tmp"
+                try:
+                    descriptor = os.open(
+                        temporary_name,
+                        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                        0o600,
+                        dir_fd=export_descriptor,
+                    )
+                    try:
+                        self._write_all(descriptor, payload)
+                        os.fsync(descriptor)
+                    finally:
+                        os.close(descriptor)
+                    os.rename(
+                        temporary_name,
+                        name,
+                        src_dir_fd=export_descriptor,
+                        dst_dir_fd=export_descriptor,
+                    )
+                    os.fsync(export_descriptor)
+                except Exception:
+                    with suppress(FileNotFoundError):
+                        os.unlink(temporary_name, dir_fd=export_descriptor)
+                    raise
+        finally:
+            os.close(export_descriptor)
 
     @staticmethod
     def _open_absolute_directory(path: Path) -> int:
@@ -368,18 +569,19 @@ class TypographyCorrectionLog:
             page_expected = {
                 "base_page_sha256": current.page_sha256,
                 "base_image_sha256": current.image_sha256,
-                "base_text_sha256": current.text_sha256,
                 "page_head_sha256": current.page_head_sha256,
             }
         else:
             page_expected = {
                 "base_page_sha256": page_head.effective_page_sha256,
                 "base_image_sha256": page_head.effective_image_sha256,
-                "base_text_sha256": page_head.effective_text_sha256,
                 "page_head_sha256": page_head.effective_page_head_sha256,
             }
         expected = {
             **page_expected,
+            "base_text_sha256": (
+                previous.effective_text_sha256 if previous is not None else current.text_sha256
+            ),
             "base_word_revision": (
                 previous.effective_word_revision
                 if previous is not None
@@ -409,6 +611,7 @@ __all__ = [
     "StaleTypographyBindingError",
     "TypographyBinding",
     "TypographyCorrectionLog",
+    "TypographyJournalEnvelope",
     "stable_page_id",
     "stable_word_id",
 ]

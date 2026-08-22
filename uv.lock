@@ -1467,7 +1467,7 @@ wheels = [
 
 [[package]]
 name = "pdomain-book-tools"
-version = "0.23.0"
+version = "0.25.0"
 source = { registry = "https://pdomain.github.io/pdomain-index-pip/simple/" }
 dependencies = [
     { name = "deskew" },
@@ -1492,9 +1492,9 @@ dependencies = [
     { name = "torchvision" },
     { name = "transformers" },
 ]
-sdist = { url = "https://github.com/pdomain/pdomain-book-tools/releases/download/v0.23.0/pdomain_book_tools-0.23.0.tar.gz", hash = "sha256:2a9687114339737202d9b860efda3135a25d233d1db749a1e59b6440b79c38cc" }
+sdist = { url = "https://github.com/pdomain/pdomain-book-tools/releases/download/v0.25.0/pdomain_book_tools-0.25.0.tar.gz", hash = "sha256:9f0bd66d4a234c0488e337f3e43e25172173f4ca34f659a60d74bff8873e205e" }
 wheels = [
-    { url = "https://github.com/pdomain/pdomain-book-tools/releases/download/v0.23.0/pdomain_book_tools-0.23.0-py3-none-any.whl", hash = "sha256:374724c3be0ffe03fdead13fc7cd36c0b8fb8e74ebe8fb30d2de292e0a73de7b" },
+    { url = "https://github.com/pdomain/pdomain-book-tools/releases/download/v0.25.0/pdomain_book_tools-0.25.0-py3-none-any.whl", hash = "sha256:f6a36b5ace827cd04496c211f187710f118ad3342e6d17b16bc5f3c6e765a7cf" },
 ]
 
 [[package]]
@@ -1548,7 +1548,7 @@ requires-dist = [
     { name = "huggingface-hub", specifier = ">=0.23" },
     { name = "idna", specifier = ">=3.15" },
     { name = "modal", marker = "extra == 'modal'", specifier = ">=0.66" },
-    { name = "pdomain-book-tools", specifier = "==0.23.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
+    { name = "pdomain-book-tools", specifier = "==0.25.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pdomain-ops", specifier = ">=0.11.2", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.5" },
