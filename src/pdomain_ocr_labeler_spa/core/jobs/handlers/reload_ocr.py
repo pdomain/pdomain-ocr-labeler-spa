@@ -216,6 +216,16 @@ def _apply_reocr_outcome(
                 labeler_page_id,
                 page_index,
             )
+        if existing.logical_page_id is None:
+            from uuid import UUID
+
+            from ...typography_review import stable_page_id
+
+            project = project_state._loaded_project
+            if project is not None:
+                existing.logical_page_id = UUID(
+                    stable_page_id(project_id=project.project_id, page_index=page_index)
+                )
         # Per-page generation bump (spec-23-B2 / spec §4 + §8): mark the
         # page dirty so subsequent ``POST .../save`` or ``save_project``
         # passes pick it up.

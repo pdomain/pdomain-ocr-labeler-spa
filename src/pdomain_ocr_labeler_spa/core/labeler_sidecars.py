@@ -30,9 +30,15 @@ class LabelerSidecars:
     char_ranges_map: dict[str, Any] = field(default_factory=dict)
     char_bboxes_map: dict[str, Any] = field(default_factory=dict)
     glyph_annotations_map: dict[str, Any] = field(default_factory=dict)
+    logical_page_id: str | None = None
 
     def is_empty(self) -> bool:
-        return not self.char_ranges_map and not self.char_bboxes_map and not self.glyph_annotations_map
+        return (
+            not self.char_ranges_map
+            and not self.char_bboxes_map
+            and not self.glyph_annotations_map
+            and self.logical_page_id is None
+        )
 
     def to_blob_section(self) -> dict[str, Any] | None:
         """Return the JSON object for ``labeler_sidecars``, or None if empty."""
@@ -45,6 +51,8 @@ class LabelerSidecars:
             out["char_bboxes_map"] = dict(self.char_bboxes_map)
         if self.glyph_annotations_map:
             out["glyph_annotations_map"] = dict(self.glyph_annotations_map)
+        if self.logical_page_id is not None:
+            out["logical_page_id"] = self.logical_page_id
         return out
 
     @classmethod
@@ -53,10 +61,12 @@ class LabelerSidecars:
         ranges = getattr(pstate, "char_ranges_map", None) or {}
         bboxes = getattr(pstate, "char_bboxes_map", None) or {}
         glyphs = getattr(pstate, "glyph_annotations_map", None) or {}
+        logical_page_id = getattr(pstate, "logical_page_id", None)
         return cls(
             char_ranges_map=dict(ranges) if isinstance(ranges, Mapping) else {},
             char_bboxes_map=dict(bboxes) if isinstance(bboxes, Mapping) else {},
             glyph_annotations_map=dict(glyphs) if isinstance(glyphs, Mapping) else {},
+            logical_page_id=str(logical_page_id) if logical_page_id is not None else None,
         )
 
     @classmethod
@@ -68,10 +78,12 @@ class LabelerSidecars:
         ranges = raw.get("char_ranges_map")
         bboxes = raw.get("char_bboxes_map")
         glyphs = raw.get("glyph_annotations_map")
+        logical_page_id = raw.get("logical_page_id")
         return cls(
             char_ranges_map=dict(ranges) if isinstance(ranges, Mapping) else {},
             char_bboxes_map=dict(bboxes) if isinstance(bboxes, Mapping) else {},
             glyph_annotations_map=dict(glyphs) if isinstance(glyphs, Mapping) else {},
+            logical_page_id=logical_page_id if isinstance(logical_page_id, str) else None,
         )
 
 
@@ -119,6 +131,10 @@ def apply_sidecars_to_page_state(pstate: Any, sidecars: LabelerSidecars | None) 
     pstate.char_ranges_map = dict(sidecars.char_ranges_map)
     pstate.char_bboxes_map = dict(sidecars.char_bboxes_map)
     pstate.glyph_annotations_map = dict(sidecars.glyph_annotations_map)
+    if sidecars.logical_page_id is not None:
+        from uuid import UUID
+
+        pstate.logical_page_id = UUID(sidecars.logical_page_id)
 
 
 def parse_content_blob(raw: bytes | str | Mapping[str, Any]) -> tuple[dict[str, Any], LabelerSidecars]:

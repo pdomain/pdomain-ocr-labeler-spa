@@ -63,6 +63,7 @@ from .api.projects import install_projects_router
 from .api.refine import install_refine_router
 from .api.session_state import install_session_state_router
 from .api.static_mounts import install_blob_route, install_spa_fallback
+from .api.typography import install_typography_router
 from .api.words import install_words_router
 from .core.active_project import (
     ActiveProjectCarrier,
@@ -525,6 +526,7 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     install_export_router(app)
     install_refine_router(app)
     install_words_router(app)
+    install_typography_router(app)
     install_lines_paragraphs_router(app)
 
     # Legacy SPA path redirects — spec §4 / issue #185 bullet 3.

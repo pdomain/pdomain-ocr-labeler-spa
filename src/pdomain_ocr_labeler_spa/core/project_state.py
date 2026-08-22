@@ -115,6 +115,8 @@ class PageState:
     last_saved_generation: int = 0
     page_id: UUID | None = field(default=None)
     """page_id of PageAggregate in LabelerPageStore. Set after OCR/load."""
+    logical_page_id: UUID | None = field(default=None)
+    """Stable page identity that does not change when OCR replaces the aggregate."""
     # Per-page UI selection (spec-23-E §10). Mutated by
     # ``POST /api/projects/{id}/pages/{idx}/selection`` via
     # ``core.selection.apply_selection``. Default is empty — both
@@ -326,6 +328,15 @@ class ProjectState:
         if state.page_index != page_index:
             raise ValueError(
                 f"page_index mismatch: dict key {page_index} != state.page_index {state.page_index}"
+            )
+        if state.logical_page_id is None and self._loaded_project is not None:
+            from .typography_review import stable_page_id
+
+            state.logical_page_id = UUID(
+                stable_page_id(
+                    project_id=self._loaded_project.project_id,
+                    page_index=page_index,
+                )
             )
         with self._lock:
             self._page_states[page_index] = state

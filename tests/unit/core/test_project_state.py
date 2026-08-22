@@ -160,6 +160,25 @@ def test_set_loaded_project_resets_per_page_state(tmp_path: Path) -> None:
     assert state.loaded_project is proj_b
 
 
+def test_page_state_gets_logical_identity_independent_of_ocr_page_id(tmp_path: Path) -> None:
+    state = ProjectState()
+    project = Project(
+        project_id="book",
+        project_root=tmp_path,
+        image_paths=[tmp_path / "001.png"],
+        ground_truth_map={},
+        total_pages=1,
+    )
+    state.set_loaded_project(project)
+    first = PageState(page_index=0)
+    state.set_page_state(0, first)
+    assert first.logical_page_id is not None
+
+    replacement = PageState(page_index=0)
+    state.set_page_state(0, replacement)
+    assert replacement.logical_page_id == first.logical_page_id
+
+
 def test_set_loaded_project_seeds_current_page_index(tmp_path: Path) -> None:
     """``current_page_index`` is taken from the loaded ``Project``.
 
