@@ -139,6 +139,8 @@ async def handle_auto_rotate_all(runner: JobRunner, job: Job) -> None:
     project = project_state.loaded_project
     if project is None:
         raise RuntimeError("auto_rotate_all: no project loaded")
+    if project_state.has_book_labeling_session:
+        raise RuntimeError("auto_rotate_all: immutable book source rotation is unsupported")
 
     log.info(
         "auto_rotate_all: project=%s method=%r overwrite_manual=%s pages=%d",

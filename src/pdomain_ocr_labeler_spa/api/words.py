@@ -61,7 +61,13 @@ from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import PageState, ProjectState
 from ..settings import Settings
-from .dependencies import get_app_config, get_page_store_optional, get_project_state, get_settings
+from .dependencies import (
+    bind_page_labeling_lease,
+    get_app_config,
+    get_page_store_optional,
+    get_project_state,
+    get_settings,
+)
 from .middleware.error_handler import ApiError
 from .pages import PagePayload, _page_payload
 
@@ -73,7 +79,11 @@ log = logging.getLogger(__name__)
 # Spec: docs/specs/2026-05-12-text-normalization-design.md - GT validation.
 _GT_FORBIDDEN_CODEPOINTS: frozenset[int] = frozenset(range(0xFB00, 0xFB07)) | {0x017F}
 
-router = APIRouter(prefix="/api/projects", tags=["words"])
+router = APIRouter(
+    prefix="/api/projects",
+    tags=["words"],
+    dependencies=[Depends(bind_page_labeling_lease)],
+)
 
 
 # ── Request models ─────────────────────────────────────────────────────

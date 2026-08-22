@@ -188,9 +188,11 @@ async def bind_page_labeling_lease(
     """
     project = project_state.loaded_project
     if project is None or project.project_id != project_id:
-        raise HTTPException(status_code=404, detail="project not found")
+        yield None
+        return
     if page_index < 0 or page_index >= project.total_pages:
-        raise HTTPException(status_code=404, detail="page not found")
+        yield None
+        return
     try:
         lease = project_state.open_labeling_page(page_index)
     except ValueError as exc:

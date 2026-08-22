@@ -238,6 +238,11 @@ class ProjectState:
         """Whether the active project is backed by a lazy immutable book source."""
         return self._book_labeling_session is not None
 
+    def has_bound_labeling_page(self, page_index: int) -> bool:
+        """Return whether this context owns the requested lazy-book page lease."""
+        bound = _REQUEST_LABELING_PAGE.get()
+        return bound is not None and bound[0] == page_index
+
     @property
     def page_states(self) -> dict[int, PageState]:
         """The per-page-state map.

@@ -8,6 +8,7 @@ from threading import Barrier
 
 from fastapi.testclient import TestClient
 
+from pdomain_ocr_labeler_spa.api.typography import typography_page_review
 from pdomain_ocr_labeler_spa.bootstrap import build_app
 from pdomain_ocr_labeler_spa.settings import Settings
 from tests.unit.core.persistence.test_book_labeling_session import _write_book
@@ -59,6 +60,10 @@ def test_loads_and_navigates_a_lazy_319_page_pgdp_book(tmp_path: Path) -> None:
         assert worklist.status_code == 200, worklist.text
         assert worklist.json()["bundle_id"] == manifest.pages[1].labeling_bundle_id
 
+        direct_review = typography_page_review(project["project_id"], 1, state)
+        assert direct_review.page_index == 1
+        assert state.labeling_bundle is None
+
         rotation = client.post(
             f"/api/projects/{project['project_id']}/pages/1/rotate",
             json={"degrees": 90},
@@ -72,6 +77,13 @@ def test_loads_and_navigates_a_lazy_319_page_pgdp_book(tmp_path: Path) -> None:
         )
         assert all_rotation.status_code == 422
         assert all_rotation.json()["error"] == "book_source_rotation_unsupported"
+
+        export = client.post(
+            f"/api/projects/{project['project_id']}/export",
+            json={"scope": "all_validated"},
+        )
+        assert export.status_code == 422
+        assert export.json()["detail"] == "export is unavailable for immutable book source pages"
 
         tampered_page = book_root / manifest.pages[2].materialization_relative_path / "materialization.json"
         tampered_page.write_bytes(b"{}\n")

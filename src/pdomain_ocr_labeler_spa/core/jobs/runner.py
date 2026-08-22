@@ -172,8 +172,27 @@ class JobRunner:
             task.add_done_callback(self._running_tasks.discard)
 
     async def stop(self) -> None:
-        """Signal ``run_forever`` to exit at the next iteration boundary."""
+        """Cancel running jobs and drain queued jobs before the runner stops."""
         self._stop.set()
+        while not self._queue.empty():
+            queued = self._queue.get_nowait()
+            current = self._jobs.get(queued.job_id)
+            if current is None or current.status is not JobStatus.QUEUED:
+                continue
+            cancelled = current.model_copy(
+                update={
+                    "status": JobStatus.CANCELLED,
+                    "completed_at": datetime.now(UTC),
+                }
+            )
+            self._jobs[queued.job_id] = cancelled
+            self._close_labeling_page_lease(queued.job_id)
+            await self._emit(cancelled)
+        tasks = tuple(self._running_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def request_cancel(self, job_id: str) -> Job | None:
         """Cooperatively cancel a queued or running job.
@@ -197,6 +216,7 @@ class JobRunner:
             return None
         if job.status in _TERMINAL:
             return job  # already terminal — return as-is
+        was_queued = job.status is JobStatus.QUEUED
         cancelled = job.model_copy(
             update={
                 "status": JobStatus.CANCELLED,
@@ -204,6 +224,8 @@ class JobRunner:
             }
         )
         self._jobs[job_id] = cancelled
+        if was_queued:
+            self._close_labeling_page_lease(job_id)
         await self._emit(cancelled)
         return cancelled
 
@@ -256,6 +278,10 @@ class JobRunner:
             await self._broker.close(job.job_id)
 
     async def _run_one(self, job: Job) -> None:
+        current = self._jobs.get(job.job_id)
+        if current is not None and current.status is JobStatus.CANCELLED:
+            self._close_labeling_page_lease(job.job_id)
+            return
         log.info("running job %s (%s)", job.job_id, job.job_type)
         running = job.model_copy(
             update={
@@ -279,8 +305,21 @@ class JobRunner:
                 else:
                     await handler(self, running)
             except asyncio.CancelledError:
+                current = self._jobs.get(job.job_id)
+                if current is None or current.status is not JobStatus.CANCELLED:
+                    cancelled = running.model_copy(
+                        update={
+                            "status": JobStatus.CANCELLED,
+                            "completed_at": datetime.now(UTC),
+                        }
+                    )
+                    self._jobs[job.job_id] = cancelled
+                    await self._emit(cancelled)
                 raise
             except Exception as exc:
+                current = self._jobs.get(job.job_id)
+                if current is not None and current.status is JobStatus.CANCELLED:
+                    return
                 log.exception("job %s failed", job.job_id)
                 failed = self._jobs[job.job_id].model_copy(
                     update={
@@ -293,6 +332,9 @@ class JobRunner:
                 await self._emit(failed)
                 return
 
+            current = self._jobs.get(job.job_id)
+            if current is not None and current.status is JobStatus.CANCELLED:
+                return
             completed = self._jobs[job.job_id].model_copy(
                 update={
                     "status": JobStatus.COMPLETE,

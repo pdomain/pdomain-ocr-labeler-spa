@@ -61,6 +61,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ...project_state import ProjectState
+
 if TYPE_CHECKING:
     from ..runner import Job, JobRunner
 
@@ -717,6 +719,8 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
     loaded_project = getattr(project_state, "loaded_project", None) if project_state else None
     image_paths: list[Path] = []
     if loaded_project is not None and loaded_project.project_id == project_id:
+        if isinstance(project_state, ProjectState) and project_state.has_book_labeling_session:
+            raise RuntimeError("export: immutable book source pages are unsupported")
         image_paths = [Path(p) for p in loaded_project.image_paths]
     else:
         store = None

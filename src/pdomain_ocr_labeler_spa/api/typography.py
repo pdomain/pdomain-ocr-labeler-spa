@@ -966,6 +966,15 @@ def typography_page_review(
     page: object | None = None,
 ) -> TypographyPageReviewResponse:
     """Evaluate the review gate for the page's current word identities."""
+    if state.has_book_labeling_session and not state.has_bound_labeling_page(page_index):
+        lease = state.open_labeling_page(page_index)
+        if lease is None:
+            raise RuntimeError("book typography review could not open a page lease")
+        try:
+            with state.bind_labeling_page(page_index, lease):
+                return typography_page_review(project_id, page_index, state, page=page)
+        finally:
+            lease.close()
     project = _project_page(project_id, page_index, state)
     records = _page_records(project, page_index, state)
     active_word_ids = _active_word_ids(project, page_index, state, page)

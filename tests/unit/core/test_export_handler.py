@@ -195,6 +195,47 @@ async def test_handle_export_no_pages_completes(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_handle_export_rejects_a_book_session_without_frozen_pages(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Internal job submission cannot bypass the route-level book export rejection."""
+    from datetime import UTC, datetime
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.export import handle_export
+    from pdomain_ocr_labeler_spa.core.jobs.runner import Job
+    from pdomain_ocr_labeler_spa.core.models import Project
+    from pdomain_ocr_labeler_spa.core.project_state import ProjectState
+
+    def is_book_source(_state: ProjectState) -> bool:
+        return True
+
+    monkeypatch.setattr(ProjectState, "has_book_labeling_session", property(is_book_source))
+    state = ProjectState()
+    state.set_loaded_project(
+        Project(
+            project_id="book",
+            project_root=tmp_path,
+            image_paths=[tmp_path / "page.png"],
+            ground_truth_map={},
+            total_pages=1,
+        )
+    )
+    runner, _settings = _make_runner_with_settings(tmp_path)
+    runner.context["project_state"] = state
+    job = Job(
+        job_id="book-export",
+        job_type="export",
+        project_id="book",
+        payload={"scope": "all_validated"},
+        created_at=datetime.now(UTC),
+    )
+
+    with pytest.raises(RuntimeError, match="immutable book source"):
+        await handle_export(runner, job)
+
+
+@pytest.mark.asyncio
 async def test_handle_export_style_subfolder(tmp_path: Path) -> None:
     """Style filter produces correct subfolder name."""
     data_root = tmp_path / "data"
