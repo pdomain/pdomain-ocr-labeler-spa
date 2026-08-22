@@ -228,6 +228,9 @@ over compatibility code. Before deletion, a read-only inventory must count every
 fixtures, page blobs, and event-store heads. The owner will approve a deletion report that lists the affected projects
 and records. This inventory informs cleanup only; it does not create a migration or compatibility requirement.
 
+The completed inventory found no persisted records. See
+[`../research/2026-08-22-char-range-deletion-inventory.md`](../research/2026-08-22-char-range-deletion-inventory.md).
+
 The change will:
 
 - replace `CharRange` with canonical typography types;
