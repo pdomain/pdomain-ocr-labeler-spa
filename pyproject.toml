@@ -92,6 +92,7 @@ required-version = ">=0.11.16"
 
 [tool.uv.sources]
 pdomain-book-tools = { index = "pdomain-index-pip" }
+pdomain-book-contracts = { index = "pdomain-index-pip" }
 pdomain-ops = { index = "pdomain-index-pip" }
 
 [tool.hatch.version]
