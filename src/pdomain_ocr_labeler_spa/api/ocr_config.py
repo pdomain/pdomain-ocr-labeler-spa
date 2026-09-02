@@ -91,9 +91,12 @@ except ImportError:
     _AUTO_ROTATE_AVAILABLE = False  # pyright: ignore[reportConstantRedefinition]
 
 MODEL_STORE_DIRNAME = "pdomain-ml-models"
-"""Trainer-managed weights directory name. Mirror of legacy
-``ModelSelectionOperations.MODEL_STORE_DIRNAME`` (legacy
-``pd_ocr_labeler/operations/ocr/model_selection_operations.py`` line 63).
+"""Trainer-managed weights directory name.
+
+This is a deliberate rename of the legacy ``pd-ml-models``, not a mirror of
+it. Do not "correct" it back: the two names differ and this is the current
+one. See ``docs/architecture/legacy-model-selection-contract.md``.
+
 The full path is ``<os-data-home>/pdomain-ml-models`` per
 ``_resolve_local_models_root`` below."""
 

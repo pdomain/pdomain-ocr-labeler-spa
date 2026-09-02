@@ -9,9 +9,11 @@ which treats a ``None`` HF probe as "HF unreachable" and prefers a
 local pair when one exists. Surfacing exceptions here would convert a
 benign offline state into a 5xx on every OCR-config snapshot.
 
-Source of truth: legacy
-``pd_ocr_labeler/operations/ocr/model_selection_operations.py``,
-``ModelSelectionOperations.fetch_hf_last_modified`` (lines 169-205).
+Source of truth: the behaviour of legacy
+``ModelSelectionOperations.fetch_hf_last_modified``, captured in
+``docs/architecture/legacy-model-selection-contract.md``. The repository it
+came from is being retired, so cite the captured contract rather than its
+line numbers.
 
 Slice scope: the network probe only. Discovery composition and the
 ``api/ocr_config._build_snapshot`` wiring (replacing the iter-10
