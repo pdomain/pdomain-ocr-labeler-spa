@@ -1483,7 +1483,7 @@ wheels = [
 
 [[package]]
 name = "pdomain-book-tools"
-version = "0.26.1"
+version = "0.27.0"
 source = { registry = "https://pdomain.github.io/pdomain-index-pip/simple/" }
 dependencies = [
     { name = "deskew" },
@@ -1494,6 +1494,7 @@ dependencies = [
     { name = "numpy" },
     { name = "opencv-contrib-python" },
     { name = "pandas" },
+    { name = "pdomain-book-contracts" },
     { name = "pillow" },
     { name = "pillow-avif-plugin" },
     { name = "pillow-heif" },
@@ -1508,9 +1509,9 @@ dependencies = [
     { name = "torchvision" },
     { name = "transformers" },
 ]
-sdist = { url = "https://github.com/pdomain/pdomain-book-tools/releases/download/v0.26.1/pdomain_book_tools-0.26.1.tar.gz", hash = "sha256:a7aac47ee3294b4c9794e7b7768e742d87c42fade7b7456cd16fbd0e66febcd3" }
+sdist = { url = "https://github.com/pdomain/pdomain-book-tools/releases/download/v0.27.0/pdomain_book_tools-0.27.0.tar.gz", hash = "sha256:12b276f64d64c9c11ecd646495f887beac8cac183e62a78c006df8a4c9f78466" }
 wheels = [
-    { url = "https://github.com/pdomain/pdomain-book-tools/releases/download/v0.26.1/pdomain_book_tools-0.26.1-py3-none-any.whl", hash = "sha256:e3af58c2ec4d218f8481900997a2329c330bcfe8ae1927a120fac27fe0a6b078" },
+    { url = "https://github.com/pdomain/pdomain-book-tools/releases/download/v0.27.0/pdomain_book_tools-0.27.0-py3-none-any.whl", hash = "sha256:8034e690b12e9dd05c6146ca2e98fc8f999d4d8236cc83de4b25c0a284f159c8" },
 ]
 
 [[package]]
@@ -1566,7 +1567,7 @@ requires-dist = [
     { name = "idna", specifier = ">=3.15" },
     { name = "modal", marker = "extra == 'modal'", specifier = ">=0.66" },
     { name = "pdomain-book-contracts", specifier = ">=0.1.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
-    { name = "pdomain-book-tools", specifier = "==0.26.1", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
+    { name = "pdomain-book-tools", specifier = "==0.27.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pdomain-ops", specifier = ">=0.11.2", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.5" },
