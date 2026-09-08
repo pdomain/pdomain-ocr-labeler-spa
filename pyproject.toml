@@ -32,6 +32,12 @@ dependencies = [
     "urllib3>=2.7.0",
     # OCR / image domain (wired in later milestones; harmless to declare now)
     "pdomain-book-tools==0.27.0",
+    # >=0.1.0 pinned to a specific unreleased commit below (tool.uv.sources) —
+    # pdomain-book-contracts.annotation (RegionRole, PageKind, LabelSource,
+    # KnowledgeState, ConfidenceTier) landed on master at bfcb7dd but has not
+    # yet been tagged/released to the pdomain-index-pip index (still v0.1.0
+    # there). Revert to the index source once a release containing bfcb7dd
+    # ships.
     "pdomain-book-contracts>=0.1.0",
     "huggingface_hub>=0.23",
     # Suite plumbing: port probing + registry (find_available_port, register_self)
@@ -93,7 +99,9 @@ required-version = ">=0.11.16"
 
 [tool.uv.sources]
 pdomain-book-tools = { index = "pdomain-index-pip" }
-pdomain-book-contracts = { index = "pdomain-index-pip" }
+# Pinned to the annotation-vocabularies merge commit until a release ships
+# from pdomain-index-pip that includes it. See the dependency comment above.
+pdomain-book-contracts = { git = "https://github.com/pdomain/pdomain-book-contracts", rev = "bfcb7dd71324bd3ba7e078f3d3898a47c188f314" }
 pdomain-ops = { index = "pdomain-index-pip" }
 
 [tool.hatch.version]
