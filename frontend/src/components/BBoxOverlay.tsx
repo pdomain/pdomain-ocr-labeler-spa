@@ -43,6 +43,8 @@ export type LayerName =
   | "paragraphs"
   | "lines"
   | "words"
+  | "regions-confirmed"
+  | "regions-proposed"
   | "drag-rect"
   | "selection-paragraphs"
   | "selection-lines"
@@ -81,6 +83,23 @@ export const LAYER_COLORS: Record<LayerName, LayerColorSpec> = {
   words: {
     fill: "rgba(59,130,246,0.18)",
     stroke: "rgba(29,78,216,0.65)",
+    strokeWidth: 1,
+  },
+  // Region layers (Task 7, region-routes-and-proposal-run): a confirmed
+  // region is a person's decision — solid, saturated amber, heavier stroke,
+  // higher-opacity fill, read at a glance as settled. A proposed region is
+  // a machine's guess — cooler blue, lighter, lower-opacity, thinner
+  // stroke. The two differ in hue as well as opacity/weight so a
+  // colorblind-safe (hue-based) screenshot diff still tells them apart;
+  // conflating them would invite treating model output as confirmed data.
+  "regions-confirmed": {
+    fill: "rgba(217,119,6,0.35)",
+    stroke: "rgba(180,83,9,0.90)",
+    strokeWidth: 2,
+  },
+  "regions-proposed": {
+    fill: "rgba(14,165,233,0.15)",
+    stroke: "rgba(3,105,161,0.55)",
     strokeWidth: 1,
   },
   "drag-rect": {
@@ -182,6 +201,11 @@ function resolveLayerColorSpec(
       return hexToLayerColorSpec(layerColors.line);
     case "words":
       return hexToLayerColorSpec(layerColors.word);
+    case "regions-confirmed":
+    case "regions-proposed":
+      // No theme token exists yet for region layers (Task 7); use the
+      // static LAYER_COLORS constants directly, same as drag-rect/selection.
+      return LAYER_COLORS[layer];
     case "drag-rect":
       // Gap 26: use --accent token instead of hardcoded blue.
       return buildDragRectLayerSpec();
