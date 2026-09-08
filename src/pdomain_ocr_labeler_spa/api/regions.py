@@ -989,12 +989,25 @@ def reject_region_proposal(
     Deleting the region first records the rejection itself (see
     ``delete_region``), so the 409 asks for the one action that keeps both stores
     in step.
+
+    The page must be loaded, exactly as every sibling route requires — this one
+    resolves it first and returns ``page_not_loaded`` otherwise. That guard is
+    not a formality here: with no live page there is nothing to check the
+    accepted region against, and proceeding would append the rejection while the
+    confirmed region survives in the persisted blob, which is the very
+    contradiction the 409 exists to prevent, reached by a request a caller can
+    make.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
         return err
     project = project_state.loaded_project
     assert project is not None
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
 
     proposal_log = RegionProposalLog(project.project_root)
     proposal = _find_proposal(proposal_log, page_index, proposal_id)
@@ -1004,12 +1017,7 @@ def reject_region_proposal(
     decision_log = RegionDecisionLog(project.project_root)
     latest = decision_log.decision_for(proposal_id, run_id=proposal.run_id)
     accepted_region_id = latest.region_id if latest is not None else None
-    page = _resolve_page_object(project_state.get_page_state(page_index))
-    if (
-        accepted_region_id is not None
-        and page is not None
-        and find_region_block(page, accepted_region_id) is not None
-    ):
+    if accepted_region_id is not None and find_region_block(page, accepted_region_id) is not None:
         return _proposal_already_accepted(proposal_id, accepted_region_id)
 
     decision_err = _append_decision_or_error(

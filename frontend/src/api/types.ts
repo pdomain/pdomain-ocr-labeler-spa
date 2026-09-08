@@ -1514,6 +1514,14 @@ export interface paths {
          *     Deleting the region first records the rejection itself (see
          *     ``delete_region``), so the 409 asks for the one action that keeps both stores
          *     in step.
+         *
+         *     The page must be loaded, exactly as every sibling route requires — this one
+         *     resolves it first and returns ``page_not_loaded`` otherwise. That guard is
+         *     not a formality here: with no live page there is nothing to check the
+         *     accepted region against, and proceeding would append the rejection while the
+         *     confirmed region survives in the persisted blob, which is the very
+         *     contradiction the 409 exists to prevent, reached by a request a caller can
+         *     make.
          */
         post: operations["reject_region_proposal"];
         delete?: never;

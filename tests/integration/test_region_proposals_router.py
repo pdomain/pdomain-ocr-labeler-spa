@@ -552,3 +552,23 @@ def test_the_decision_journal_is_read_once_per_page_payload(
     assert payload.status_code == 200, payload.text
     assert len(payload.json()["proposals"]) == 3
     assert reads == 1, f"journal read {reads} times for 3 proposals"
+
+
+def test_rejecting_on_a_page_that_is_not_loaded_writes_nothing(toolbar_loaded: Any) -> None:
+    """With no live page there is nothing to check the accepted region against.
+    Proceeding would append the rejection while the confirmed region survives in
+    the persisted blob — the journal-versus-blob contradiction the 409 exists to
+    prevent, reached through a request a caller can make. Every sibling route
+    refuses in this state; this one now refuses too, and refuses *before* writing.
+    """
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_proposal(client, project_root)
+    project_state._page_states.pop(0, None)
+
+    rejected = client.post(f"{_BASE}/regions/proposals/p1/reject")
+
+    assert rejected.status_code == 400, rejected.text
+    assert rejected.json()["error"] == "page_not_loaded"
+    # The assertion that matters: nothing was written on the way out.
+    assert _journal_bytes(project_root) == b""
