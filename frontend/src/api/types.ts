@@ -1401,6 +1401,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/regions/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Region Proposals
+         * @description List every proposal for this page, across every run, with confidence and evidence.
+         */
+        get: operations["list_region_proposals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/regions/proposals/{proposal_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Region Proposal
+         * @description Accept a proposal: create the confirmed region it describes and record the decision.
+         *
+         *     The proposal record itself is never touched — only a new confirmed ``Block`` and a
+         *     new ``RegionDecision`` are written. An override in the request body records
+         *     ``edited`` instead of ``accepted``, per ``Disposition.knowledge_state`` (both map to
+         *     ``KnowledgeState.POSITIVE``; only ``rejected`` is a refusal).
+         */
+        post: operations["accept_region_proposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/regions/proposals/{proposal_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Region Proposal
+         * @description Reject a proposal. Records ``rejected`` (``KnowledgeState.VERIFIED_NEGATIVE``);
+         *     never touches the page blob — the blob is written only by a human *confirming*
+         *     something, and a rejection confirms nothing new about the page. That is also why
+         *     this route, unlike ``accept_region_proposal``, has no ``bind_page_labeling_lease``
+         *     dependency.
+         */
+        post: operations["reject_region_proposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/typography/contract": {
         parameters: {
             query?: never;
@@ -2570,6 +2639,14 @@ export interface components {
          */
         AcceptGlyphPredictionRequest: Record<string, never>;
         /**
+         * AcceptRegionProposalRequest
+         * @description Optional overrides. Present -> disposition is ``edited``; absent -> ``accepted``.
+         */
+        AcceptRegionProposalRequest: {
+            role?: components["schemas"]["RegionRole"] | null;
+            box?: components["schemas"]["BBox"] | null;
+        };
+        /**
          * AddWordRequest
          * @description Spec §2 lines 308-311.
          */
@@ -3678,6 +3755,11 @@ export interface components {
              */
             config_source: "yaml" | "cli" | "default";
         };
+        /** ListRegionProposalsResponse */
+        ListRegionProposalsResponse: {
+            /** Proposals */
+            proposals: components["schemas"]["RegionProposalListItem"][];
+        };
         /**
          * LoadProjectRequest
          * @description Spec §2 lines 217-219.
@@ -4340,6 +4422,23 @@ export interface components {
                 number
             ][];
         };
+        /** RegionProposalListItem */
+        RegionProposalListItem: {
+            /** Proposal Id */
+            proposal_id: string;
+            /** Run Id */
+            run_id: string;
+            role: components["schemas"]["RegionRole"];
+            box: components["schemas"]["BBox"];
+            /** Confidence */
+            confidence: number;
+            /** Evidence */
+            evidence: {
+                [key: string]: unknown;
+            };
+            /** Disposition */
+            disposition?: string | null;
+        };
         /**
          * RegionProposalView
          * @description One proposal as the labeler's proposal list shows it — role, confidence, evidence.
@@ -4414,6 +4513,8 @@ export interface components {
              */
             stale: boolean;
         };
+        /** RejectRegionProposalRequest */
+        RejectRegionProposalRequest: Record<string, never>;
         /**
          * ReloadOCRRequest
          * @description Body for ``POST .../reload-ocr`` — spec §5.3.
@@ -7070,6 +7171,112 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SetRegionWordMembershipRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_region_proposals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListRegionProposalsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_region_proposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AcceptRegionProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_region_proposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RejectRegionProposalRequest"];
             };
         };
         responses: {

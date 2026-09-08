@@ -20,7 +20,8 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import TYPE_CHECKING, Literal
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -37,6 +38,9 @@ from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import ProjectState
 from ..core.regions.block_adapter import find_region_block
+from ..core.regions.decision_log import RegionDecisionLog
+from ..core.regions.models import Disposition, RegionDecision, RegionProposal
+from ..core.regions.proposal_log import RegionProposalLog
 from ..settings import Settings
 from .dependencies import (
     bind_page_labeling_lease,
@@ -104,11 +108,71 @@ class SetRegionWordMembershipRequest(BaseModel):
     word_refs: list[WordRef]
 
 
+class AcceptRegionProposalRequest(BaseModel):
+    """Optional overrides. Present -> disposition is ``edited``; absent -> ``accepted``."""
+
+    role: RegionRole | None = None
+    box: BBox | None = None
+
+
+class RejectRegionProposalRequest(BaseModel):
+    pass
+
+
+class RegionProposalListItem(BaseModel):
+    proposal_id: str
+    run_id: str
+    role: RegionRole
+    box: BBox
+    confidence: float
+    # Open-ended: shape varies per detector — mirrors ``RegionProposal.evidence``
+    # upstream, which is equally open-ended, so no single TypedDict fits.
+    evidence: dict[str, Any]
+    disposition: str | None = None
+
+
+class ListRegionProposalsResponse(BaseModel):
+    proposals: list[RegionProposalListItem]
+
+
 # ── Shared helpers ───────────────────────────────────────────────────────
 
 
 def _bbox_to_ltrb(box: BBox) -> tuple[int, int, int, int]:
     return box.x, box.y, box.x + box.width, box.y + box.height
+
+
+def _build_region_block(
+    *,
+    box: tuple[int, int, int, int],
+    is_content_normalized: bool,
+    child_type: BlockChildType,
+    role: RegionRole,
+    region_id: str,
+    source_proposal_id: str,
+) -> Block:
+    """Construct a new confirmed region ``Block``.
+
+    Shared by ``create_region`` (a person drew this region unprompted —
+    ``source_proposal_id`` is the hand-drawn sentinel) and
+    ``accept_region_proposal`` (a person confirmed a machine's proposal —
+    ``source_proposal_id`` is the real proposal id). Both stamp ``region_id``
+    and ``source_proposal_id`` into ``additional_block_attributes`` and let
+    ``Block.__init__`` raise ``ValueError`` for an unsupported role; the
+    caller maps that to the 400 ``invalid_region_role`` envelope.
+    """
+    left, top, right, bottom = box
+    return Block(
+        items=[],
+        bounding_box=BoundingBox.from_ltrb(left, top, right, bottom, is_normalized=is_content_normalized),
+        child_type=child_type,
+        block_category=BlockCategory.BLOCK,
+        block_role_labels=[role.value],
+        additional_block_attributes={
+            _REGION_ID_KEY: region_id,
+            _SOURCE_PROPOSAL_ID_KEY: source_proposal_id,
+        },
+    )
 
 
 def _resolve_target_word(page: Page, line_index: int, word_index: int) -> Word | None:
@@ -201,6 +265,22 @@ def _region_not_word_capable(region_id: str) -> JSONResponse:
     )
 
 
+def _find_proposal(store: RegionProposalLog, page_index: int, proposal_id: str) -> RegionProposal | None:
+    for proposal in store.proposals_for_page(page_index):
+        if proposal.proposal_id == proposal_id:
+            return proposal
+    return None
+
+
+def _proposal_not_found(proposal_id: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content=ApiError(
+            error="proposal_not_found", message=f"proposal not found: {proposal_id}"
+        ).model_dump(),
+    )
+
+
 # ── Routes: create / edit / delete ──────────────────────────────────────
 
 
@@ -252,18 +332,13 @@ def create_region(
                 return _parent_not_nesting_capable(body.parent_region_id)
 
         try:
-            region = Block(
-                items=[],
-                bounding_box=BoundingBox.from_ltrb(
-                    left, top, right, bottom, is_normalized=page.is_content_normalized
-                ),
+            region = _build_region_block(
+                box=(left, top, right, bottom),
+                is_content_normalized=page.is_content_normalized,
                 child_type=child_type,
-                block_category=BlockCategory.BLOCK,
-                block_role_labels=[body.role.value],
-                additional_block_attributes={
-                    _REGION_ID_KEY: region_id,
-                    _SOURCE_PROPOSAL_ID_KEY: _HAND_DRAWN_SENTINEL,
-                },
+                role=body.role,
+                region_id=region_id,
+                source_proposal_id=_HAND_DRAWN_SENTINEL,
             )
         except ValueError as exc:
             return _invalid_region_role(exc)
@@ -506,14 +581,204 @@ def set_region_word_membership(
     )
 
 
+# ── Routes: proposals — list / accept / reject ───────────────────────────
+
+
+@router.get(
+    "/{project_id}/pages/{page_index}/regions/proposals",
+    response_model=ListRegionProposalsResponse,
+    operation_id="list_region_proposals",
+)
+def list_region_proposals(
+    project_id: str,
+    page_index: int,
+    project_state: ProjectState = Depends(get_project_state),
+) -> JSONResponse:
+    """List every proposal for this page, across every run, with confidence and evidence."""
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+    project = project_state.loaded_project
+    assert project is not None  # narrowed by _check_project_and_page
+
+    proposal_log = RegionProposalLog(project.project_root)
+    decision_log = RegionDecisionLog(project.project_root)
+    items: list[RegionProposalListItem] = []
+    for p in proposal_log.proposals_for_page(page_index):
+        decision = decision_log.decision_for(p.proposal_id, run_id=p.run_id)
+        items.append(
+            RegionProposalListItem(
+                proposal_id=p.proposal_id,
+                run_id=p.run_id,
+                role=p.role,
+                box=BBox(x=p.box[0], y=p.box[1], width=p.box[2] - p.box[0], height=p.box[3] - p.box[1]),
+                confidence=p.confidence,
+                evidence=p.evidence,
+                disposition=decision.disposition.value if decision is not None else None,
+            )
+        )
+    response = ListRegionProposalsResponse(proposals=items)
+    return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/regions/proposals/{proposal_id}/accept",
+    response_model=PagePayload,
+    dependencies=[Depends(bind_page_labeling_lease)],
+    operation_id="accept_region_proposal",
+)
+def accept_region_proposal(
+    *,
+    project_id: str,
+    page_index: int,
+    proposal_id: str,
+    body: AcceptRegionProposalRequest = AcceptRegionProposalRequest(),
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
+) -> JSONResponse:
+    """Accept a proposal: create the confirmed region it describes and record the decision.
+
+    The proposal record itself is never touched — only a new confirmed ``Block`` and a
+    new ``RegionDecision`` are written. An override in the request body records
+    ``edited`` instead of ``accepted``, per ``Disposition.knowledge_state`` (both map to
+    ``KnowledgeState.POSITIVE``; only ``rejected`` is a refusal).
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+    project = project_state.loaded_project
+    assert project is not None
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    proposal_log = RegionProposalLog(project.project_root)
+    proposal = _find_proposal(proposal_log, page_index, proposal_id)
+    if proposal is None:
+        return _proposal_not_found(proposal_id)
+
+    role = body.role if body.role is not None else proposal.role
+    box = _bbox_to_ltrb(body.box) if body.box is not None else proposal.box
+    has_override = body.role is not None or body.box is not None
+    disposition = Disposition.EDITED if has_override else Disposition.ACCEPTED
+    region_id = uuid.uuid4().hex
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        try:
+            region = _build_region_block(
+                box=box,
+                is_content_normalized=page.is_content_normalized,
+                child_type=BlockChildType.WORDS,
+                role=role,
+                region_id=region_id,
+                source_proposal_id=proposal_id,
+            )
+        except ValueError as exc:
+            return _invalid_region_role(exc)
+        page.add_item(region)
+        pstate.generation += 1
+        if not _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {"type": "region_proposal_accepted", "proposal_id": proposal_id, "region_id": region_id}
+            ],
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
+
+    decision_log = RegionDecisionLog(project.project_root)
+    decision_log.append(
+        RegionDecision(
+            decision_id=uuid.uuid4().hex,
+            run_id=proposal.run_id,
+            proposal_id=proposal_id,
+            disposition=disposition,
+            region_id=region_id,
+            actor="default",
+            decided_at=datetime.now(UTC).isoformat(),
+        )
+    )
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+    )
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/regions/proposals/{proposal_id}/reject",
+    response_model=PagePayload,
+    operation_id="reject_region_proposal",
+)
+def reject_region_proposal(
+    *,
+    project_id: str,
+    page_index: int,
+    proposal_id: str,
+    _body: RejectRegionProposalRequest = RejectRegionProposalRequest(),
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+) -> JSONResponse:
+    """Reject a proposal. Records ``rejected`` (``KnowledgeState.VERIFIED_NEGATIVE``);
+    never touches the page blob — the blob is written only by a human *confirming*
+    something, and a rejection confirms nothing new about the page. That is also why
+    this route, unlike ``accept_region_proposal``, has no ``bind_page_labeling_lease``
+    dependency.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+    project = project_state.loaded_project
+    assert project is not None
+
+    proposal_log = RegionProposalLog(project.project_root)
+    proposal = _find_proposal(proposal_log, page_index, proposal_id)
+    if proposal is None:
+        return _proposal_not_found(proposal_id)
+
+    decision_log = RegionDecisionLog(project.project_root)
+    decision_log.append(
+        RegionDecision(
+            decision_id=uuid.uuid4().hex,
+            run_id=proposal.run_id,
+            proposal_id=proposal_id,
+            disposition=Disposition.REJECTED,
+            region_id=None,
+            actor="default",
+            decided_at=datetime.now(UTC).isoformat(),
+        )
+    )
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+    )
+
+
 def install_regions_router(app: FastAPI) -> None:
     """Register the regions router. Called from ``bootstrap.build_app``."""
     app.include_router(router)
 
 
 __all__ = [
+    "AcceptRegionProposalRequest",
     "CreateRegionRequest",
     "EditRegionRequest",
+    "ListRegionProposalsResponse",
+    "RegionProposalListItem",
+    "RejectRegionProposalRequest",
     "SetRegionWordMembershipRequest",
     "WordRef",
     "install_regions_router",
