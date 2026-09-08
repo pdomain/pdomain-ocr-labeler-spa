@@ -1319,6 +1319,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Region
+         * @description Create a new confirmed region, hand-drawn by a person — no members yet.
+         *
+         *     ``child_type="words"`` (the default) makes a leaf region that can hold words via
+         *     the membership route. ``child_type="blocks"`` makes a nesting-capable container
+         *     that can hold other regions but never words directly. ``parent_region_id`` nests
+         *     the new region under an existing container instead of adding it as a top-level
+         *     ``Page.items`` sibling.
+         */
+        post: operations["create_region"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/regions/{region_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Region
+         * @description Delete a region. Its member words (if any) are recovered, never dropped.
+         */
+        delete: operations["delete_region"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit Region
+         * @description Edit a region's role and/or box. Box is set directly — it is never re-derived from members.
+         */
+        patch: operations["edit_region"];
+        trace?: never;
+    };
     "/api/typography/contract": {
         parameters: {
             query?: never;
@@ -2793,6 +2843,25 @@ export interface components {
          */
         CorrectionDecision: "approved_edit" | "reviewed_regular" | "reject_source" | "reject_alignment" | "unusable_image" | "defer" | "accept";
         /**
+         * CreateRegionRequest
+         * @description ``child_type="blocks"`` creates a nesting-capable container region — one that
+         *     can hold other regions but no words of its own. ``parent_region_id`` nests the new
+         *     region as a child of an existing container region instead of adding it as a
+         *     top-level ``Page.items`` sibling; the parent must itself be a container.
+         */
+        CreateRegionRequest: {
+            role: components["schemas"]["RegionRole"];
+            box: components["schemas"]["BBox"];
+            /**
+             * Child Type
+             * @default words
+             * @enum {string}
+             */
+            child_type: "words" | "blocks";
+            /** Parent Region Id */
+            parent_region_id?: string | null;
+        };
+        /**
          * CurrentPageIndexResponse
          * @description Response for ``POST /api/projects/{id}/current-page-index`` — F1 fix.
          */
@@ -2944,6 +3013,11 @@ export interface components {
             scope: string;
             /** Device */
             device: string;
+        };
+        /** EditRegionRequest */
+        EditRegionRequest: {
+            role?: components["schemas"]["RegionRole"] | null;
+            box?: components["schemas"]["BBox"] | null;
         };
         /**
          * EmptyBody
@@ -6804,6 +6878,112 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AcceptGlyphPredictionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_region: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRegionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_region: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                region_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_region: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                region_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditRegionRequest"];
             };
         };
         responses: {
