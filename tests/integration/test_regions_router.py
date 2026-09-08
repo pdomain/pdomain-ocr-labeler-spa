@@ -135,6 +135,60 @@ def test_create_a_container_region_then_nest_a_child_under_it(toolbar_loaded: An
     assert parent_block is not None and child_block is not None
     assert child_block in parent_block.items
     assert child_block not in page.items
+    # ``Block.add_item`` recomputes the owner's bounding box from its items; without the
+    # create route's save/restore, nesting a small child would shrink the container's
+    # box to fit it instead of leaving what a person drew alone.
+    assert parent_block.bounding_box is not None
+    assert parent_block.bounding_box.to_ltrb() == (0.0, 0.0, 200.0, 300.0)
+
+
+def test_delete_nested_region_removes_it_from_its_parent_and_preserves_parent_box(
+    toolbar_loaded: Any,
+) -> None:
+    """Exercises ``_region_owner``'s tree-walking branch, not just its ``return page``
+    fallback — a region created with ``parent_region_id`` lives in the parent's
+    ``items``, and deleting it must not let ``Block.remove_item``'s bounding-box
+    recompute shrink the container to whatever it has left.
+    """
+    client, _ps, page = toolbar_loaded
+    container = client.post(
+        f"{_BASE}/regions",
+        json={
+            "role": "figure",
+            "box": {"x": 0, "y": 0, "width": 200, "height": 300},
+            "child_type": "blocks",
+        },
+    ).json()
+    parent_id = next(reg["region_id"] for reg in container["regions"] if reg["confirmed"])
+
+    nested = client.post(
+        f"{_BASE}/regions",
+        json={
+            "role": "caption",
+            "box": {"x": 10, "y": 10, "width": 20, "height": 20},
+            "parent_region_id": parent_id,
+        },
+    ).json()
+    child_id = next(
+        reg["region_id"] for reg in nested["regions"] if reg["confirmed"] and reg["role"] == "caption"
+    )
+
+    from pdomain_ocr_labeler_spa.api.regions import find_region_block
+
+    parent_block = find_region_block(page, parent_id)
+    child_block = find_region_block(page, child_id)
+    assert parent_block is not None and child_block is not None
+    assert parent_block.bounding_box is not None
+    original_parent_box = parent_block.bounding_box.to_ltrb()
+
+    r = client.delete(f"{_BASE}/regions/{child_id}")
+    assert r.status_code == 200, r.text
+    assert all(reg["region_id"] != child_id for reg in r.json()["regions"])
+
+    assert child_block not in parent_block.items
+    assert find_region_block(page, child_id) is None
+    assert parent_block.bounding_box is not None
+    assert parent_block.bounding_box.to_ltrb() == original_parent_box
 
 
 def test_nesting_under_a_non_container_parent_returns_400(toolbar_loaded: Any) -> None:
