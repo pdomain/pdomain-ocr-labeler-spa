@@ -223,3 +223,105 @@ def test_nesting_under_an_unknown_parent_returns_404(toolbar_loaded: Any) -> Non
     )
     assert r.status_code == 404, r.text
     assert r.json()["error"] == "region_not_found"
+
+
+def test_set_membership_moves_words_into_the_region(toolbar_loaded: Any) -> None:
+    client, _ps, page = toolbar_loaded
+    created = client.post(
+        f"{_BASE}/regions",
+        json={"role": "poetry", "box": {"x": 0, "y": 0, "width": 200, "height": 300}},
+    ).json()
+    region_id = next(reg["region_id"] for reg in created["regions"] if reg["confirmed"])
+
+    r = client.put(
+        f"{_BASE}/regions/{region_id}/words",
+        json={"word_refs": [{"line_index": 0, "word_index": 0}, {"line_index": 0, "word_index": 1}]},
+    )
+    assert r.status_code == 200, r.text
+    from pdomain_ocr_labeler_spa.api.regions import find_region_block
+
+    region = find_region_block(page, region_id)
+    assert region is not None
+    assert {w.text for w in region.words} == {"one", "two"}
+    assert len(page.lines[0].words) == 0
+
+
+def test_set_membership_preserves_the_explicit_box(toolbar_loaded: Any) -> None:
+    client, _ps, _page = toolbar_loaded
+    created = client.post(
+        f"{_BASE}/regions",
+        json={"role": "poetry", "box": {"x": 1, "y": 1, "width": 199, "height": 299}},
+    ).json()
+    region_id = next(reg["region_id"] for reg in created["regions"] if reg["confirmed"])
+
+    r = client.put(
+        f"{_BASE}/regions/{region_id}/words", json={"word_refs": [{"line_index": 0, "word_index": 0}]}
+    )
+    assert r.status_code == 200, r.text
+    region = next(reg for reg in r.json()["regions"] if reg["region_id"] == region_id)
+    # Box stays what was explicitly set — never re-derived from the union of member words.
+    assert region["box"] == {"x": 1, "y": 1, "width": 199, "height": 299}
+
+
+def test_set_membership_replaces_the_prior_set(toolbar_loaded: Any) -> None:
+    client, _ps, page = toolbar_loaded
+    created = client.post(
+        f"{_BASE}/regions",
+        json={"role": "poetry", "box": {"x": 0, "y": 0, "width": 200, "height": 300}},
+    ).json()
+    region_id = next(reg["region_id"] for reg in created["regions"] if reg["confirmed"])
+    client.put(f"{_BASE}/regions/{region_id}/words", json={"word_refs": [{"line_index": 0, "word_index": 0}]})
+
+    # "one" (word_index 0) was moved into the region above, so "two" — originally at
+    # word_index 1 on this line — has shifted down to word_index 0: positions are
+    # resolved against the *current* live tree, never a stored ordinal.
+    r = client.put(
+        f"{_BASE}/regions/{region_id}/words", json={"word_refs": [{"line_index": 0, "word_index": 0}]}
+    )
+    assert r.status_code == 200, r.text
+    from pdomain_ocr_labeler_spa.api.regions import find_region_block
+
+    region = find_region_block(page, region_id)
+    assert region is not None
+    assert {w.text for w in region.words} == {"two"}
+    # The released word ("one") comes back as a recovered block, not dropped.
+    assert any("recovered" in b.block_role_labels for b in page.items)
+
+
+def test_set_membership_on_unknown_region_returns_404(toolbar_loaded: Any) -> None:
+    client, _ps, _page = toolbar_loaded
+    r = client.put(f"{_BASE}/regions/does-not-exist/words", json={"word_refs": []})
+    assert r.status_code == 404, r.text
+
+
+def test_set_membership_on_unknown_word_returns_404(toolbar_loaded: Any) -> None:
+    client, _ps, _page = toolbar_loaded
+    created = client.post(
+        f"{_BASE}/regions",
+        json={"role": "poetry", "box": {"x": 0, "y": 0, "width": 200, "height": 300}},
+    ).json()
+    region_id = next(reg["region_id"] for reg in created["regions"] if reg["confirmed"])
+    r = client.put(
+        f"{_BASE}/regions/{region_id}/words", json={"word_refs": [{"line_index": 99, "word_index": 0}]}
+    )
+    assert r.status_code == 404, r.text
+    assert r.json()["error"] == "word_not_found"
+
+
+# Moved here from Task 2: it needs the membership route above to put words in the
+# region before deleting it. Under Task 2 alone the PUT 404s, the region has no
+# members, and the recovered-block assertion cannot pass.
+def test_delete_region_recovers_its_member_words(toolbar_loaded: Any) -> None:
+    client, _ps, page = toolbar_loaded
+    created = client.post(
+        f"{_BASE}/regions",
+        json={"role": "poetry", "box": {"x": 0, "y": 0, "width": 200, "height": 300}},
+    ).json()
+    region_id = next(reg["region_id"] for reg in created["regions"] if reg["confirmed"])
+    client.put(f"{_BASE}/regions/{region_id}/words", json={"word_refs": [{"line_index": 0, "word_index": 0}]})
+
+    before_word_count = len(page.words)
+    r = client.delete(f"{_BASE}/regions/{region_id}")
+    assert r.status_code == 200, r.text
+    assert len(page.words) == before_word_count
+    assert any("recovered" in b.block_role_labels for b in page.items)

@@ -29,6 +29,7 @@ from pdomain_book_contracts.geometry.bounding_box import BoundingBox
 from pdomain_book_tools.ocr.block import Block, BlockCategory, BlockChildType
 from pdomain_book_tools.ocr.page import Page
 from pdomain_book_tools.ocr.reorganize_page_utils import build_recovered_words_block
+from pdomain_book_tools.ocr.word import Word
 from pydantic import BaseModel
 
 from ..core.models import BBox
@@ -53,6 +54,7 @@ from .words import (
     _resolve_page_object,
     _save_to_store_best_effort,
     _store_persist_failed_response,
+    _word_not_found,
 )
 
 if TYPE_CHECKING:
@@ -88,11 +90,41 @@ class EditRegionRequest(BaseModel):
     box: BBox | None = None
 
 
+class WordRef(BaseModel):
+    """A word's position in the *current* live tree — never a stored key.
+
+    See ``_resolve_target_word`` for why line/word ordinals cannot be persisted.
+    """
+
+    line_index: int
+    word_index: int
+
+
+class SetRegionWordMembershipRequest(BaseModel):
+    word_refs: list[WordRef]
+
+
 # ── Shared helpers ───────────────────────────────────────────────────────
 
 
 def _bbox_to_ltrb(box: BBox) -> tuple[int, int, int, int]:
     return box.x, box.y, box.x + box.width, box.y + box.height
+
+
+def _resolve_target_word(page: Page, line_index: int, word_index: int) -> Word | None:
+    """Resolve the word at ``(line_index, word_index)`` in the *current* live tree.
+
+    Positional and resolved once, at request time, exactly like ``_resolve_word``
+    in ``api/words.py`` — never persisted as a stored key. Line numbering is
+    renumbered by the band-identification fixes, so nothing here stores this pair.
+    """
+    lines = page.lines
+    if not (0 <= line_index < len(lines)):
+        return None
+    words = lines[line_index].words
+    if not (0 <= word_index < len(words)):
+        return None
+    return words[word_index]
 
 
 def _normalized_role_labels(role: RegionRole) -> list[str]:
@@ -368,9 +400,105 @@ def delete_region(
     )
 
 
+@router.put(
+    "/{project_id}/pages/{page_index}/regions/{region_id}/words",
+    response_model=PagePayload,
+    dependencies=[Depends(bind_page_labeling_lease)],
+    operation_id="set_region_word_membership",
+)
+def set_region_word_membership(
+    *,
+    project_id: str,
+    page_index: int,
+    region_id: str,
+    body: SetRegionWordMembershipRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
+) -> JSONResponse:
+    """Replace a region's word membership exactly with the given set.
+
+    A word not listed is released back to a ``recovered`` block, never dropped; a
+    word newly listed is moved out of wherever it currently sits — another line or
+    another region. ``Block.add_item``/``remove_item`` recompute the block's
+    bounding box from its items as a side effect — the region's own explicitly-set
+    box is saved before the edit and restored after, because a region's box is not
+    its membership.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        region = find_region_block(page, region_id)
+        if region is None:
+            return _region_not_found(region_id)
+
+        target_words: list[Word] = []
+        for ref in body.word_refs:
+            word = _resolve_target_word(page, ref.line_index, ref.word_index)
+            if word is None:
+                return _word_not_found(ref.line_index, ref.word_index)
+            target_words.append(word)
+
+        saved_box = region.bounding_box
+
+        # Identity, not equality: ``Word`` may compare equal by value, and two words
+        # with the same text and box are still different objects on the page.
+        released = [w for w in region.words if not any(w is t for t in target_words)]
+        for word in released:
+            region.remove_item(word)
+        if released:
+            recovered = build_recovered_words_block(released)
+            if recovered is not None:
+                page.add_item(recovered)
+
+        for word in target_words:
+            if any(w is word for w in region.words):
+                continue
+            owner_line = next((ln for ln in page.lines if any(w is word for w in ln.words)), None)
+            if owner_line is not None:
+                owner_line.remove_item(word)
+            region.add_item(word)
+
+        region.bounding_box = saved_box
+
+        pstate.generation += 1
+        if not _save_to_store_best_effort(
+            pstate=pstate,
+            store=store,
+            changes=[
+                {"type": "region_membership_set", "region_id": region_id, "word_count": len(target_words)}
+            ],
+        ):
+            return _store_persist_failed_response(page_id=pstate.page_id)
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+    )
+
+
 def install_regions_router(app: FastAPI) -> None:
     """Register the regions router. Called from ``bootstrap.build_app``."""
     app.include_router(router)
 
 
-__all__ = ["CreateRegionRequest", "EditRegionRequest", "install_regions_router", "router"]
+__all__ = [
+    "CreateRegionRequest",
+    "EditRegionRequest",
+    "SetRegionWordMembershipRequest",
+    "WordRef",
+    "install_regions_router",
+    "router",
+]

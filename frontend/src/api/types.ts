@@ -1369,6 +1369,33 @@ export interface paths {
         patch: operations["edit_region"];
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/regions/{region_id}/words": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Region Word Membership
+         * @description Replace a region's word membership exactly with the given set.
+         *
+         *     A word not listed is released back to a ``recovered`` block, never dropped; a
+         *     word newly listed is moved out of wherever it currently sits — another line or
+         *     another region. ``Block.add_item``/``remove_item`` recompute the block's
+         *     bounding box from its items as a side effect — the region's own explicitly-set
+         *     box is saved before the edit and restored after, because a region's box is not
+         *     its membership.
+         */
+        put: operations["set_region_word_membership"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/typography/contract": {
         parameters: {
             query?: never;
@@ -4655,6 +4682,11 @@ export interface components {
             /** Hf Pinned Revision */
             hf_pinned_revision?: string | null;
         };
+        /** SetRegionWordMembershipRequest */
+        SetRegionWordMembershipRequest: {
+            /** Word Refs */
+            word_refs: components["schemas"]["WordRef"][];
+        };
         /**
          * SetSourceProjectsRootRequest
          * @description Body for ``POST /api/projects/source-root`` — spec §2 line 230.
@@ -5264,6 +5296,18 @@ export interface components {
             char_bboxes?: components["schemas"]["BBox"][] | null;
             glyph_annotations?: components["schemas"]["GlyphAnnotationsModel"] | null;
             glyph_predictions?: components["schemas"]["GlyphAnnotationsModel"] | null;
+        };
+        /**
+         * WordRef
+         * @description A word's position in the *current* live tree — never a stored key.
+         *
+         *     See ``_resolve_target_word`` for why line/word ordinals cannot be persisted.
+         */
+        WordRef: {
+            /** Line Index */
+            line_index: number;
+            /** Word Index */
+            word_index: number;
         };
         /**
          * WordTypography
@@ -6984,6 +7028,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["EditRegionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_region_word_membership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                region_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRegionWordMembershipRequest"];
             };
         };
         responses: {
