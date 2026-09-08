@@ -453,15 +453,25 @@ def _refresh_payload_response(
     page_index: int,
     project_state: ProjectState,
     settings: Settings,
+    page_store: LabelerPageStore | None,
     app_config: AppConfig | None = None,
 ) -> JSONResponse:
-    """Build the spec-23-A populated ``PagePayload`` response."""
+    """Build the spec-23-A populated ``PagePayload`` response.
+
+    ``page_store`` is required, not defaulted: ``_page_payload`` needs it to
+    read the page's image-provenance digest, and a route that omitted it
+    reported a *different* ``page_image`` facet — and so a different
+    ``RegionView.stale`` — than ``GET /pages/{idx}`` reported for the very
+    same page state. Pass the route's own ``get_page_store_optional``
+    dependency; ``None`` is honest only where no store is wired at all.
+    """
     payload = _page_payload(
         project_id=project_id,
         page_index=page_index,
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=page_store,
     )
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
@@ -567,6 +577,7 @@ def update_word_ground_truth(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -630,6 +641,7 @@ def apply_component(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -703,6 +715,7 @@ def toggle_validated(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -768,6 +781,7 @@ def validate_batch(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -861,6 +875,7 @@ def delete_words_batch(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -919,6 +934,7 @@ def add_word(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -985,6 +1001,7 @@ def rebox_word(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -1060,6 +1077,7 @@ def nudge_bbox(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -1135,6 +1153,7 @@ def split_word(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -1209,6 +1228,7 @@ def merge_words(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -1338,6 +1358,7 @@ def erase_pixels(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -1419,6 +1440,7 @@ def set_char_bboxes(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -1504,6 +1526,7 @@ def set_glyph_annotations(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -1584,6 +1607,7 @@ def accept_glyph_prediction(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 

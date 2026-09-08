@@ -65,14 +65,31 @@ class RegionDecisionLog:
                     found.append(RegionDecision.from_dict(loaded))
         return found
 
+    def latest_by_proposal(self) -> dict[tuple[str, str], RegionDecision]:
+        """Every proposal's most recent decision, keyed by ``(proposal_id, run_id)``.
+
+        One pass over the journal for a whole page. ``decision_for`` re-reads and
+        re-parses the entire file per call, and the page payload asks about every
+        proposal on the page on every load and after every mutating route — that
+        is O(proposals x journal) full-file reads on the hottest read path. A
+        caller resolving more than one proposal reads the journal once through
+        this method instead.
+
+        Later records supersede earlier ones, exactly as in ``decision_for``.
+        """
+        latest: dict[tuple[str, str], RegionDecision] = {}
+        for decision in self.decisions():
+            latest[decision.proposal_id, decision.run_id] = decision
+        return latest
+
     def decision_for(self, proposal_id: str, *, run_id: str) -> RegionDecision | None:
         """The most recent decision about one proposal within one run.
 
         Later records supersede earlier ones. Both stay on disk, so a change of
         mind is itself reviewable.
+
+        Single-lookup convenience: a caller resolving several proposals at once
+        should use ``latest_by_proposal`` and index it, so the journal is read
+        once rather than once per proposal.
         """
-        current: RegionDecision | None = None
-        for decision in self.decisions():
-            if decision.proposal_id == proposal_id and decision.run_id == run_id:
-                current = decision
-        return current
+        return self.latest_by_proposal().get((proposal_id, run_id))

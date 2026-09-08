@@ -447,6 +447,22 @@ export default function PageImageCanvas({
     };
   }, [page, encoded]);
 
+  // Task 7 (region-routes-and-proposal-run): confirmed regions and
+  // above-threshold proposals from PagePayload.regions, split by
+  // `confirmed` so BBoxOverlay can render them on visually distinct
+  // layers — a proposal must never look like a confirmed decision.
+  const regionOverlayItems = useMemo(() => {
+    const regions = page?.regions ?? [];
+    const toItem = (r: (typeof regions)[number]): BBoxItem => ({
+      id: r.region_id ?? r.proposal_id ?? "",
+      bbox: encoded ? rectToDisplay(r.box, encoded) : r.box,
+    });
+    return {
+      confirmed: regions.filter((r) => r.confirmed).map(toItem),
+      proposed: regions.filter((r) => !r.confirmed).map(toItem),
+    };
+  }, [page, encoded]);
+
   // Spec 21 §10 viewport hotkeys (#304).
   // Called unconditionally before any early return (Rules of Hooks).
   useViewportHotkeys({
@@ -668,6 +684,18 @@ export default function PageImageCanvas({
                 visible={layerVisibility.line}
               />
               <BBoxOverlay layer="words" items={wordOverlayItems} visible={layerVisibility.word} />
+              {/* Region layers (Task 7) — ride the "blocks" visibility toggle
+                  until slice 3 gives regions their own rail entry. */}
+              <BBoxOverlay
+                layer="regions-confirmed"
+                items={regionOverlayItems.confirmed}
+                visible={layerVisibility.block}
+              />
+              <BBoxOverlay
+                layer="regions-proposed"
+                items={regionOverlayItems.proposed}
+                visible={layerVisibility.block}
+              />
               {/* Selection highlight overlays (Slice 13 — rail target scoping) */}
               <BBoxOverlay
                 layer="selection-paragraphs"

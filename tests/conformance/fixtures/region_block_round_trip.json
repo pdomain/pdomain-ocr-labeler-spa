@@ -1,0 +1,21 @@
+{
+  "type": "Block",
+  "child_type": "WORDS",
+  "block_category": "BLOCK",
+  "block_labels": null,
+  "block_role_labels": ["poetry"],
+  "block_position_labels": [],
+  "line_role_labels": [],
+  "line_position_labels": [],
+  "baseline": null,
+  "bounding_box": {
+    "top_left": {"x": 10, "y": 20, "is_normalized": false},
+    "bottom_right": {"x": 300, "y": 400, "is_normalized": false},
+    "is_normalized": false
+  },
+  "items": [],
+  "override_page_sort_order": 3,
+  "unmatched_ground_truth_words": [],
+  "additional_block_attributes": {"region_id": "fixture-region-1"},
+  "base_ground_truth_text": ""
+}

@@ -691,6 +691,7 @@ def _line_mutation_handler(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        page_store=store,
     )
 
 
@@ -1021,6 +1022,7 @@ def merge_lines(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        page_store=store,
     )
 
 
@@ -1079,6 +1081,7 @@ def split_by_words(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        page_store=store,
     )
 
 
@@ -1220,6 +1223,7 @@ def copy_gt_batch(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -1268,6 +1272,7 @@ def delete_lines_batch(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -1316,6 +1321,7 @@ def delete_paragraphs_batch(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -1364,6 +1370,7 @@ def split_selected_paragraphs(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -1412,6 +1419,7 @@ def group_selected_words_into_paragraph(
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
 
 
@@ -1479,6 +1487,7 @@ def _paragraph_mutation_handler(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        page_store=store,
     )
 
 
@@ -1702,6 +1711,7 @@ def merge_paragraphs(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        page_store=store,
     )
 
 
@@ -1768,6 +1778,7 @@ def patch_paragraph(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        page_store=store,
     )
 
 
@@ -1971,6 +1982,7 @@ def split_paragraph_after_line(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        page_store=store,
     )
 
 
@@ -2033,6 +2045,7 @@ def split_line_with_selected_words(
         page_index=page_index,
         project_state=project_state,
         settings=settings,
+        page_store=store,
     )
 
 

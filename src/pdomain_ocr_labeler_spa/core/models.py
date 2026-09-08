@@ -15,8 +15,9 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
+from pdomain_book_contracts.annotation import RegionRole
 from pydantic import BaseModel, ConfigDict, Field
 
 _MAX_DISPLAY_DIMENSION = 1200
@@ -76,6 +77,52 @@ class BBox(BaseModel):
     y: int
     width: int
     height: int
+
+
+class RegionView(BaseModel):
+    """One resolved region as the labeler renders it — spec §"Reading order..." / resolver.
+
+    ``confirmed=True`` means a person put it there; ``confirmed=False`` means it is a
+    proposal above the labeler's display threshold (zero — the labeler shows everything
+    and renders the two differently). ``region_id`` is set only when confirmed.
+    ``proposal_id`` is set for an unconfirmed proposal (the proposal itself), and also for
+    a confirmed region promoted from one (its origin) — an explicit hand-drawn sentinel
+    when a person drew the region unprompted, or ``None`` when the origin was never
+    stamped. ``member_word_signatures`` is populated for a confirmed region (bounding-box
+    signatures, never a line/word ordinal); empty for a region resolved from a proposal,
+    which carries no membership of its own. ``stale`` is only ever True for an unconfirmed
+    proposal whose run read facets that have since changed on the page.
+    """
+
+    region_id: str | None = None
+    proposal_id: str | None = None
+    role: RegionRole
+    box: BBox
+    confirmed: bool
+    confidence: float | None = None
+    member_word_signatures: list[tuple[float, float, float, float, bool | None]] = Field(default_factory=list)
+    stale: bool = False
+
+
+class RegionProposalView(BaseModel):
+    """One proposal as the labeler's proposal list shows it — role, confidence, evidence.
+
+    ``disposition`` and ``decided_region_id`` are ``None`` until a person accepts or
+    rejects the proposal; that is what distinguishes "nobody has looked yet" from
+    "looked at and refused" once a decision is recorded.
+    """
+
+    proposal_id: str
+    run_id: str
+    page_index: int
+    role: RegionRole
+    box: BBox
+    confidence: float
+    # Open-ended: shape varies per detector (mirrors RegionProposal.evidence
+    # upstream, which is equally open-ended), so no single TypedDict fits.
+    evidence: dict[str, Any]
+    disposition: str | None = None
+    decided_region_id: str | None = None
 
 
 class EncodedDims(BaseModel):
@@ -282,6 +329,8 @@ __all__ = [
     "MatchStatus",
     "PageSource",
     "Project",
+    "RegionProposalView",
+    "RegionView",
     "Selection",
     "WordMatch",
 ]

@@ -1319,6 +1319,217 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Region
+         * @description Create a new confirmed region, hand-drawn by a person — no members yet.
+         *
+         *     ``child_type="words"`` (the default) makes a leaf region that can hold words via
+         *     the membership route. ``child_type="blocks"`` makes a nesting-capable container
+         *     that can hold other regions but never words directly. ``parent_region_id`` nests
+         *     the new region under an existing container instead of adding it as a top-level
+         *     ``Page.items`` sibling.
+         */
+        post: operations["create_region"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/regions/{region_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Region
+         * @description Delete a region. Its member words (if any) are recovered, never dropped.
+         *
+         *     Deleting a region a person accepted from a proposal records a ``rejected``
+         *     decision naming that proposal. Without it the ``accepted`` decision would go
+         *     on naming a ``region_id`` that no longer exists, and the resolver's "already
+         *     promoted into a confirmed region" branch would suppress the proposal forever:
+         *     it would vanish from the payload and the canvas with no record that anybody
+         *     removed it — a rejection expressed as an absence, which is the one thing this
+         *     design refuses to do.
+         *
+         *     ``Disposition.REJECTED`` is the only value that says a person declined the
+         *     proposal; the enum is owned upstream and gains no member here. Because the
+         *     journal is append-only, the earlier ``accepted`` record survives beside the
+         *     new one, so "rejected at review" and "accepted, then later deleted" stay
+         *     distinguishable by sequence.
+         *
+         *     A region with no proposal origin — hand-drawn, or written before the routes
+         *     stamped one — writes no decision, and the delete still succeeds.
+         */
+        delete: operations["delete_region"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit Region
+         * @description Edit a region's role and/or box. Box is set directly — it is never re-derived from members.
+         */
+        patch: operations["edit_region"];
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/regions/{region_id}/words": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Region Word Membership
+         * @description Replace a region's word membership exactly with the given set.
+         *
+         *     Only a leaf (``child_type=WORDS``) region can hold words directly; a container
+         *     region rejects this route with 400 ``region_not_word_capable``, checked right
+         *     after the region resolves and before any word is resolved or moved, mirroring
+         *     ``create_region``'s ``parent_not_nesting_capable`` check for the opposite shape.
+         *
+         *     A word not listed is released back to a ``recovered`` block, never dropped; a
+         *     word newly listed is moved out of wherever it currently sits — another line or
+         *     another region. ``Block.add_item``/``remove_item`` recompute the block's
+         *     bounding box from its items as a side effect, so *every* block this route
+         *     takes a word from or gives a word to — the target region, a source region,
+         *     a source line — has its box saved before the edit and restored after,
+         *     because a region's box is what a person drew, not a function of its
+         *     membership.
+         *
+         *     Known interaction, owned elsewhere: moving a word changes its published
+         *     ``word_id``. ``stable_word_id`` hashes a page-wide ``reading_order``
+         *     position, and a region joins ``page.lines``, so one membership write
+         *     renumbers every word on the page and detaches any
+         *     ``TypographyCorrectionLog`` record keyed to the old id — the record stays on
+         *     disk under an id no word carries. The flaw is in the keying, not in this
+         *     route: ``api/lines_paragraphs.py``'s merge, split and delete already
+         *     renumber ``page.lines`` the same way, so this route adds a trigger, not the
+         *     fragility. Re-keying word identity off something stable belongs to its own
+         *     plan; ``tests/integration/test_region_membership_word_identity.py`` pins
+         *     exactly what happens today, so the day it changes, it changes visibly.
+         */
+        put: operations["set_region_word_membership"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/regions/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Region Proposals
+         * @description List every proposal for this page, across every run, with confidence and evidence.
+         *
+         *     The decision journal is read once and indexed, not re-read per proposal.
+         */
+        get: operations["list_region_proposals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/regions/proposals/{proposal_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Region Proposal
+         * @description Accept a proposal: create the confirmed region it describes and record the decision.
+         *
+         *     The proposal record itself is never touched — only a new confirmed ``Block`` and a
+         *     new ``RegionDecision`` are written. An override in the request body records
+         *     ``edited`` instead of ``accepted``, per ``Disposition.knowledge_state`` (both map to
+         *     ``KnowledgeState.POSITIVE``; only ``rejected`` is a refusal).
+         *
+         *     Idempotent: if an earlier decision already named a region for this proposal and
+         *     that region still exists on the page, the accept already happened — the current
+         *     payload is returned unchanged rather than creating a second confirmed region. If
+         *     the decision exists but its region was since deleted, this is a legitimate fresh
+         *     accept, not a repeat.
+         *
+         *     The page blob is written before the decision, both under the page lock: a
+         *     confirmed region with no decision reads as "nobody has looked yet" (recoverable —
+         *     the block still names its own ``source_proposal_id``), but a decision naming a
+         *     region that was never written is not recoverable.
+         */
+        post: operations["accept_region_proposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/regions/proposals/{proposal_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Region Proposal
+         * @description Reject a proposal. Records ``rejected`` (``KnowledgeState.VERIFIED_NEGATIVE``);
+         *     never touches the page blob — the blob is written only by a human *confirming*
+         *     something, and a rejection confirms nothing new about the page. That is also why
+         *     this route, unlike ``accept_region_proposal``, has no ``bind_page_labeling_lease``
+         *     dependency.
+         *
+         *     Returns 409 when the latest decision for this proposal accepted it and the
+         *     region that accept produced is still on the page. Appending the rejection
+         *     would leave the payload showing a confirmed region whose proposal the journal
+         *     says a person refused — the journal and the page blob stating opposite facts.
+         *     Deleting the region first records the rejection itself (see
+         *     ``delete_region``), so the 409 asks for the one action that keeps both stores
+         *     in step.
+         *
+         *     The page must be loaded, exactly as every sibling route requires — this one
+         *     resolves it first and returns ``page_not_loaded`` otherwise. That guard is
+         *     not a formality here: with no live page there is nothing to check the
+         *     accepted region against, and proceeding would append the rejection while the
+         *     confirmed region survives in the persisted blob, which is the very
+         *     contradiction the 409 exists to prevent, reached by a request a caller can
+         *     make.
+         */
+        post: operations["reject_region_proposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/typography/contract": {
         parameters: {
             query?: never;
@@ -2488,6 +2699,14 @@ export interface components {
          */
         AcceptGlyphPredictionRequest: Record<string, never>;
         /**
+         * AcceptRegionProposalRequest
+         * @description Optional overrides. Present -> disposition is ``edited``; absent -> ``accepted``.
+         */
+        AcceptRegionProposalRequest: {
+            role?: components["schemas"]["RegionRole"] | null;
+            box?: components["schemas"]["BBox"] | null;
+        };
+        /**
          * AddWordRequest
          * @description Spec §2 lines 308-311.
          */
@@ -2793,6 +3012,25 @@ export interface components {
          */
         CorrectionDecision: "approved_edit" | "reviewed_regular" | "reject_source" | "reject_alignment" | "unusable_image" | "defer" | "accept";
         /**
+         * CreateRegionRequest
+         * @description ``child_type="blocks"`` creates a nesting-capable container region — one that
+         *     can hold other regions but no words of its own. ``parent_region_id`` nests the new
+         *     region as a child of an existing container region instead of adding it as a
+         *     top-level ``Page.items`` sibling; the parent must itself be a container.
+         */
+        CreateRegionRequest: {
+            role: components["schemas"]["RegionRole"];
+            box: components["schemas"]["BBox"];
+            /**
+             * Child Type
+             * @default words
+             * @enum {string}
+             */
+            child_type: "words" | "blocks";
+            /** Parent Region Id */
+            parent_region_id?: string | null;
+        };
+        /**
          * CurrentPageIndexResponse
          * @description Response for ``POST /api/projects/{id}/current-page-index`` — F1 fix.
          */
@@ -2944,6 +3182,11 @@ export interface components {
             scope: string;
             /** Device */
             device: string;
+        };
+        /** EditRegionRequest */
+        EditRegionRequest: {
+            role?: components["schemas"]["RegionRole"] | null;
+            box?: components["schemas"]["BBox"] | null;
         };
         /**
          * EmptyBody
@@ -3572,6 +3815,11 @@ export interface components {
              */
             config_source: "yaml" | "cli" | "default";
         };
+        /** ListRegionProposalsResponse */
+        ListRegionProposalsResponse: {
+            /** Proposals */
+            proposals: components["schemas"]["RegionProposalListItem"][];
+        };
         /**
          * LoadProjectRequest
          * @description Spec §2 lines 217-219.
@@ -3930,6 +4178,10 @@ export interface components {
             /** Page Text Gt */
             page_text_gt?: string | null;
             history?: components["schemas"]["PageHistoryInfo"] | null;
+            /** Regions */
+            regions?: components["schemas"]["RegionView"][];
+            /** Proposals */
+            proposals?: components["schemas"]["RegionProposalView"][];
             /** Extra */
             extra?: {
                 [key: string]: unknown;
@@ -4230,6 +4482,97 @@ export interface components {
                 number
             ][];
         };
+        /** RegionProposalListItem */
+        RegionProposalListItem: {
+            /** Proposal Id */
+            proposal_id: string;
+            /** Run Id */
+            run_id: string;
+            role: components["schemas"]["RegionRole"];
+            box: components["schemas"]["BBox"];
+            /** Confidence */
+            confidence: number;
+            /** Evidence */
+            evidence: {
+                [key: string]: unknown;
+            };
+            /** Disposition */
+            disposition?: string | null;
+        };
+        /**
+         * RegionProposalView
+         * @description One proposal as the labeler's proposal list shows it — role, confidence, evidence.
+         *
+         *     ``disposition`` and ``decided_region_id`` are ``None`` until a person accepts or
+         *     rejects the proposal; that is what distinguishes "nobody has looked yet" from
+         *     "looked at and refused" once a decision is recorded.
+         */
+        RegionProposalView: {
+            /** Proposal Id */
+            proposal_id: string;
+            /** Run Id */
+            run_id: string;
+            /** Page Index */
+            page_index: number;
+            role: components["schemas"]["RegionRole"];
+            box: components["schemas"]["BBox"];
+            /** Confidence */
+            confidence: number;
+            /** Evidence */
+            evidence: {
+                [key: string]: unknown;
+            };
+            /** Disposition */
+            disposition?: string | null;
+            /** Decided Region Id */
+            decided_region_id?: string | null;
+        };
+        /**
+         * RegionRole
+         * @description The meaning a page region carries.
+         * @enum {string}
+         */
+        RegionRole: "paragraph" | "sidenote" | "page header" | "page footer" | "page number" | "printers mark" | "blockquote" | "poetry" | "recovered" | "illustration" | "decoration" | "caption" | "figure" | "table" | "footnote" | "title" | "section" | "list" | "formula" | "artefact" | "signature mark" | "catchword" | "press figure" | "rule" | "brace" | "bracket" | "group label" | "plate" | "speaker label" | "stage direction" | "interlinear gloss" | "abandoned" | "decorated initial" | "unknown";
+        /**
+         * RegionView
+         * @description One resolved region as the labeler renders it — spec §"Reading order..." / resolver.
+         *
+         *     ``confirmed=True`` means a person put it there; ``confirmed=False`` means it is a
+         *     proposal above the labeler's display threshold (zero — the labeler shows everything
+         *     and renders the two differently). ``region_id`` is set only when confirmed.
+         *     ``proposal_id`` is set for an unconfirmed proposal (the proposal itself), and also for
+         *     a confirmed region promoted from one (its origin) — an explicit hand-drawn sentinel
+         *     when a person drew the region unprompted, or ``None`` when the origin was never
+         *     stamped. ``member_word_signatures`` is populated for a confirmed region (bounding-box
+         *     signatures, never a line/word ordinal); empty for a region resolved from a proposal,
+         *     which carries no membership of its own. ``stale`` is only ever True for an unconfirmed
+         *     proposal whose run read facets that have since changed on the page.
+         */
+        RegionView: {
+            /** Region Id */
+            region_id?: string | null;
+            /** Proposal Id */
+            proposal_id?: string | null;
+            role: components["schemas"]["RegionRole"];
+            box: components["schemas"]["BBox"];
+            /** Confirmed */
+            confirmed: boolean;
+            /** Confidence */
+            confidence?: number | null;
+            /** Member Word Signatures */
+            member_word_signatures?: [
+                number,
+                number,
+                number,
+                number,
+                boolean | null
+            ][];
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
+        };
         /**
          * ReloadOCRRequest
          * @description Body for ``POST .../reload-ocr`` — spec §5.3.
@@ -4502,6 +4845,11 @@ export interface components {
             recognition_key: string;
             /** Hf Pinned Revision */
             hf_pinned_revision?: string | null;
+        };
+        /** SetRegionWordMembershipRequest */
+        SetRegionWordMembershipRequest: {
+            /** Word Refs */
+            word_refs: components["schemas"]["WordRef"][];
         };
         /**
          * SetSourceProjectsRootRequest
@@ -5112,6 +5460,18 @@ export interface components {
             char_bboxes?: components["schemas"]["BBox"][] | null;
             glyph_annotations?: components["schemas"]["GlyphAnnotationsModel"] | null;
             glyph_predictions?: components["schemas"]["GlyphAnnotationsModel"] | null;
+        };
+        /**
+         * WordRef
+         * @description A word's position in the *current* live tree — never a stored key.
+         *
+         *     See ``_resolve_target_word`` for why line/word ordinals cannot be persisted.
+         */
+        WordRef: {
+            /** Line Index */
+            line_index: number;
+            /** Word Index */
+            word_index: number;
         };
         /**
          * WordTypography
@@ -6728,6 +7088,251 @@ export interface operations {
                 "application/json": components["schemas"]["AcceptGlyphPredictionRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_region: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRegionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_region: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                region_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_region: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                region_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditRegionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_region_word_membership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                region_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRegionWordMembershipRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_region_proposals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListRegionProposalsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_region_proposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AcceptRegionProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_region_proposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
