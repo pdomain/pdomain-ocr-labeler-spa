@@ -3374,7 +3374,7 @@ export interface components {
          * @description Evidence sources that can assign a canonical label.
          * @enum {string}
          */
-        LabelSource: "f2" | "gutenberg_html" | "se_computed_css" | "human" | "synthetic";
+        LabelSource: "f2" | "gutenberg_html" | "se_computed_css" | "human" | "synthetic" | "model";
         /**
          * LabelState
          * @description Review knowledge for one taxonomy label on a word.
