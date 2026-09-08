@@ -269,17 +269,20 @@ def test_image_digest_returns_none_without_a_store_or_page_id() -> None:
     assert _image_digest_for_page(page_store=store, page_id=None) is None
 
 
-def test_image_digest_falls_back_and_logs_when_the_store_raises(caplog: pytest.LogCaptureFixture) -> None:
-    """Finding 1: a failed read degrades the page (returns ``None``) but must
-    not do so silently — the failure is logged so a wrong/missing image
-    digest stays diagnosable."""
+def test_image_digest_logs_a_warning_when_the_store_raises(caplog: pytest.LogCaptureFixture) -> None:
+    """A failed read degrades the page (returns ``None``) but must not do so
+    silently — and not at DEBUG, which is off in production, where this runs.
+    The docstring's promise that the failure is "logged, not silenced" is only
+    true at WARNING or above."""
     page_id = uuid4()
-    with caplog.at_level(logging.DEBUG, logger="pdomain_ocr_labeler_spa.api.pages"):
+    with caplog.at_level(logging.WARNING, logger="pdomain_ocr_labeler_spa.api.pages"):
         result = _image_digest_for_page(page_store=_RaisingPageStore(), page_id=page_id)
 
     assert result is None
     assert any(
-        "image-digest read failed" in record.message and str(page_id) in record.message
+        record.levelno >= logging.WARNING
+        and "image-digest read failed" in record.message
+        and str(page_id) in record.message
         for record in caplog.records
     )
 
@@ -294,13 +297,15 @@ def test_image_digest_returns_none_when_head_has_no_blob_refs() -> None:
     assert _image_digest_for_page(page_store=store, page_id=uuid4()) is None
 
 
-def test_image_digest_falls_back_to_index_0_when_index_1_is_absent() -> None:
+def test_image_digest_returns_none_when_only_the_content_hash_is_present() -> None:
     """The OCR-ingest path writes ``[content_hash, image_hash]``; the
-    labeler-edit path writes ``[content_hash]`` alone. A run recorded against
-    the two-entry form but compared against a one-entry head must not crash —
-    it falls back to index 0."""
+    labeler-edit path writes ``[content_hash]`` alone. Index 0 is the page
+    *content*, so standing it in for the image would make every text edit
+    change the ``page_image`` facet and invalidate every geometry proposal on
+    the page. There is no image digest here, and saying so is the honest
+    answer — the caller omits the facet, which reads as stale."""
     store = _FakePageStore(_FakeAggregate(_FakeRecord(_FakeProvenance(_FakeHead(["content-hash-only"])))))
-    assert _image_digest_for_page(page_store=store, page_id=uuid4()) == "content-hash-only"
+    assert _image_digest_for_page(page_store=store, page_id=uuid4()) is None
 
 
 def test_image_digest_prefers_index_1_when_present() -> None:

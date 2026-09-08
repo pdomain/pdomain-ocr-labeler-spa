@@ -564,28 +564,32 @@ def _image_digest_for_page(*, page_store: LabelerPageStore | None, page_id: UUID
 
     Reads ``ProvenanceNode.blob_refs[1]`` off the aggregate's head node — index
     0 is the page-content JSON, index 1 the source image, per the convention
-    ``pdomain_ops.page_aggregate`` documents. Falls back to index 0 when a run
-    that recorded index 1 is now compared against a page whose head only has
-    index 0: a stand-in digest that still detects *some* image change is
-    better than none.
+    ``pdomain_ops.page_aggregate`` documents. Returns ``None`` when the head
+    has no index 1, so the caller omits the ``page_image`` facet rather than
+    publishing a wrong one: the labeler-edit path writes
+    ``blob_refs=[content_hash]`` alone, so index 0 is the page *content*, and
+    standing it in for the image would make fixing a typo invalidate every
+    geometry proposal on the page — the exact thing per-facet digests exist to
+    prevent. An omitted facet compares unequal to a recorded one, so it reads
+    as stale, never as falsely fresh.
 
     A page must always render even when this facet can't be read (a missing
     aggregate, an event-store hiccup) — spec §"Facet digests are computed,
     never declared" doesn't require the read to succeed, only that a change
-    is caught when it can be. The failure is logged, not silenced, so a
-    missing or stale image digest stays diagnosable later.
+    is caught when it can be. The failure is logged at WARNING, not silenced:
+    at DEBUG it would be invisible in production, where this runs.
     """
     if page_store is None or page_id is None:
         return None
     try:
         agg_record = page_store.get_page(page_id).record
     except Exception:
-        log.debug("_page_payload: image-digest read failed for page_id=%s", page_id, exc_info=True)
+        log.warning("_page_payload: image-digest read failed for page_id=%s", page_id, exc_info=True)
         return None
     head = agg_record.provenance.head if agg_record.provenance else None
-    if head is None or not head.blob_refs:
+    if head is None or len(head.blob_refs) < 2:
         return None
-    return head.blob_refs[1] if len(head.blob_refs) > 1 else head.blob_refs[0]
+    return head.blob_refs[1]
 
 
 def _resolve_regions_and_proposals(
@@ -604,6 +608,11 @@ def _resolve_regions_and_proposals(
     ``threshold=0.0`` — the labeler shows every proposal and renders it
     visibly differently from a confirmed region; the execution engine is the
     only caller that ever passes a real threshold.
+
+    The decision journal is read exactly once per call and indexed by
+    ``(proposal_id, run_id)``. Asking ``decision_for`` per proposal re-read and
+    re-parsed the whole JSONL each time, on every page load and after every
+    mutating route.
     """
     image_digest = _image_digest_for_page(page_store=page_store, page_id=page_id)
     current_facet_digests = compute_page_facet_digests(page, image_digest=image_digest)
@@ -613,9 +622,8 @@ def _resolve_regions_and_proposals(
     decision_log = RegionDecisionLog(project_root)
     raw_proposals: list[RegionProposal] = proposal_log.proposals_for_page(page_index)
     runs: dict[str, ProposalRun] = {run.run_id: run for run in proposal_log.runs()}
-    decisions = {
-        p.proposal_id: decision_log.decision_for(p.proposal_id, run_id=p.run_id) for p in raw_proposals
-    }
+    latest_decisions = decision_log.latest_by_proposal()
+    decisions = {p.proposal_id: latest_decisions.get((p.proposal_id, p.run_id)) for p in raw_proposals}
     live_decisions = {pid: d for pid, d in decisions.items() if d is not None}
     resolved = resolve_regions(
         confirmed,

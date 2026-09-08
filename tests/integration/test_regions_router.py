@@ -350,3 +350,160 @@ def test_delete_region_recovers_its_member_words(toolbar_loaded: Any) -> None:
     assert r.status_code == 200, r.text
     assert len(page.words) == before_word_count
     assert any("recovered" in b.block_role_labels for b in page.items)
+
+
+def _live_ref(page: Any, text: str) -> dict[str, int]:
+    """Resolve ``text``'s current ``(line_index, word_index)`` in the live tree.
+
+    The membership route resolves refs against ``page.lines`` as it stands right
+    now, and a region joins ``page.lines``, so a ref computed from the original
+    OCR layout goes stale the moment anything moves. Reading it back off the page
+    the fixture yields keeps these tests honest about that.
+    """
+    for line_index, line in enumerate(page.lines):
+        for word_index, word in enumerate(line.words):
+            if word.text == text:
+                return {"line_index": line_index, "word_index": word_index}
+    raise AssertionError(f"word {text!r} is not on the page")
+
+
+def _make_region(client: Any, *, role: str, box: dict[str, int]) -> str:
+    created = client.post(f"{_BASE}/regions", json={"role": role, "box": box}).json()
+    return next(
+        reg["region_id"]
+        for reg in created["regions"]
+        if reg["confirmed"] and reg["box"] == box and reg["role"] == role
+    )
+
+
+def test_moving_a_word_between_regions_leaves_the_source_box_alone(toolbar_loaded: Any) -> None:
+    """``Block.lines`` returns ``[self]`` for a WORDS-typed block, so a leaf region
+    is itself an entry in ``page.lines``: the block a claimed word is taken from can
+    be another *region*, and ``Block.remove_item`` ends in
+    ``recompute_bounding_box``. Without saving and restoring the source region's box,
+    a person's drawn region silently shrinks to whatever words it has left.
+    """
+    client, _ps, page = toolbar_loaded
+    source_id = _make_region(client, role="poetry", box={"x": 0, "y": 0, "width": 200, "height": 300})
+    target_id = _make_region(client, role="blockquote", box={"x": 5, "y": 5, "width": 20, "height": 20})
+
+    moved = client.put(
+        f"{_BASE}/regions/{source_id}/words",
+        json={"word_refs": [_live_ref(page, "one"), _live_ref(page, "two")]},
+    )
+    assert moved.status_code == 200, moved.text
+    source_box_before = next(reg["box"] for reg in moved.json()["regions"] if reg["region_id"] == source_id)
+
+    stolen = client.put(f"{_BASE}/regions/{target_id}/words", json={"word_refs": [_live_ref(page, "one")]})
+    assert stolen.status_code == 200, stolen.text
+
+    regions = {reg["region_id"]: reg for reg in stolen.json()["regions"] if reg["confirmed"]}
+    assert regions[source_id]["box"] == source_box_before == {"x": 0, "y": 0, "width": 200, "height": 300}
+    assert {w.text for w in _region_block_of(page, target_id).words} == {"one"}
+    assert {w.text for w in _region_block_of(page, source_id).words} == {"two"}
+
+
+def test_claiming_a_regions_last_word_does_not_erase_the_region(toolbar_loaded: Any) -> None:
+    """The worst case of the same bug: with no words left, ``recompute_bounding_box``
+    sets the source region's box to ``None``, and ``confirmed_regions_from_page``
+    skips any block whose box is ``None``. The region then vanishes from
+    ``PagePayload.regions`` while still living in the page blob — invisible on the
+    canvas, undeletable through the UI, and still serialized on every save.
+    """
+    client, _ps, page = toolbar_loaded
+    source_id = _make_region(client, role="poetry", box={"x": 0, "y": 0, "width": 200, "height": 300})
+    target_id = _make_region(client, role="blockquote", box={"x": 5, "y": 5, "width": 20, "height": 20})
+
+    client.put(f"{_BASE}/regions/{source_id}/words", json={"word_refs": [_live_ref(page, "one")]})
+    stolen = client.put(f"{_BASE}/regions/{target_id}/words", json={"word_refs": [_live_ref(page, "one")]})
+    assert stolen.status_code == 200, stolen.text
+
+    source_view = next((reg for reg in stolen.json()["regions"] if reg["region_id"] == source_id), None)
+    assert source_view is not None, "the emptied source region vanished from the payload"
+    assert source_view["box"] == {"x": 0, "y": 0, "width": 200, "height": 300}
+    assert _region_block_of(page, source_id).bounding_box is not None
+    assert _region_block_of(page, source_id).words == []
+
+
+def _region_block_of(page: Any, region_id: str) -> Any:
+    from pdomain_ocr_labeler_spa.api.regions import find_region_block
+
+    block = find_region_block(page, region_id)
+    assert block is not None, f"region {region_id} is not on the page"
+    return block
+
+
+def test_membership_moves_the_named_word_not_an_equal_looking_twin(toolbar_loaded: Any) -> None:
+    """``Block.remove_item`` tests ``item in self._items``, and ``Word`` is a plain
+    dataclass, so that is value equality: ``list.remove`` drops the *first* equal
+    word, not the one that was named. On a line holding two words with the same
+    text and the same box — a real shape in OCR output — claiming the second one
+    removed the first and handed the region the second, leaving one object in two
+    places on the page and losing the other outright.
+    """
+    from pdomain_book_contracts.geometry.bounding_box import BoundingBox
+    from pdomain_book_tools.ocr.word import Word
+
+    client, _ps, page = toolbar_loaded
+    twin_box = BoundingBox.from_ltrb(0, 0, 10, 10, is_normalized=False)
+    line = page.lines[0]
+    line.items = [Word(text="twin", bounding_box=twin_box), Word(text="twin", bounding_box=twin_box)]
+    first, second = line.words[0], line.words[1]
+    assert first == second and first is not second, "the two twins must be equal but distinct"
+
+    region_id = _make_region(client, role="poetry", box={"x": 0, "y": 0, "width": 200, "height": 300})
+    ref = {"line_index": page.lines.index(line), "word_index": 1}
+    r = client.put(f"{_BASE}/regions/{region_id}/words", json={"word_refs": [ref]})
+    assert r.status_code == 200, r.text
+
+    region = _region_block_of(page, region_id)
+    assert any(w is second for w in region.words), "the region did not get the word that was named"
+    assert [w is first for w in line.words] == [True], "the line kept the wrong twin"
+    assert sum(1 for w in page.words if w is first) == 1
+    assert sum(1 for w in page.words if w is second) == 1
+
+
+def test_creating_a_region_on_a_mixed_coordinate_page_names_the_real_problem(
+    toolbar_loaded: Any,
+) -> None:
+    """``Page.is_content_normalized`` raises ``ValueError`` on a page that mixes
+    normalized and pixel-space word boxes. Reading it inside the role-validation
+    catch reported that as ``invalid_region_role``, which names the wrong cause;
+    reading it outside any catch (what ``edit_region`` did) turned it into a 500.
+    """
+    from pdomain_book_contracts.geometry.bounding_box import BoundingBox
+    from pdomain_book_tools.ocr.word import Word
+
+    client, _ps, page = toolbar_loaded
+    page.lines[1].items = [
+        Word(text="norm", bounding_box=BoundingBox.from_ltrb(0, 0, 0.5, 0.5, is_normalized=True))
+    ]
+
+    created = client.post(
+        f"{_BASE}/regions", json={"role": "poetry", "box": {"x": 5, "y": 5, "width": 50, "height": 50}}
+    )
+    assert created.status_code == 400, created.text
+    assert created.json()["error"] == "mixed_page_coordinates"
+
+
+def test_editing_a_regions_box_on_a_mixed_coordinate_page_reports_400_not_500(
+    toolbar_loaded: Any,
+) -> None:
+    """``edit_region`` read ``page.is_content_normalized`` outside the catch its
+    sibling read it inside, so the same page 500'd from one route and 400'd from
+    the other. Both now report the real problem.
+    """
+    from pdomain_book_contracts.geometry.bounding_box import BoundingBox
+    from pdomain_book_tools.ocr.word import Word
+
+    client, _ps, page = toolbar_loaded
+    region_id = _make_region(client, role="poetry", box={"x": 0, "y": 0, "width": 50, "height": 50})
+    page.lines[1].items = [
+        Word(text="norm", bounding_box=BoundingBox.from_ltrb(0, 0, 0.5, 0.5, is_normalized=True))
+    ]
+
+    edited = client.patch(
+        f"{_BASE}/regions/{region_id}", json={"box": {"x": 1, "y": 1, "width": 10, "height": 10}}
+    )
+    assert edited.status_code == 400, edited.text
+    assert edited.json()["error"] == "mixed_page_coordinates"

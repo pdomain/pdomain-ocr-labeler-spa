@@ -1358,6 +1358,23 @@ export interface paths {
         /**
          * Delete Region
          * @description Delete a region. Its member words (if any) are recovered, never dropped.
+         *
+         *     Deleting a region a person accepted from a proposal records a ``rejected``
+         *     decision naming that proposal. Without it the ``accepted`` decision would go
+         *     on naming a ``region_id`` that no longer exists, and the resolver's "already
+         *     promoted into a confirmed region" branch would suppress the proposal forever:
+         *     it would vanish from the payload and the canvas with no record that anybody
+         *     removed it — a rejection expressed as an absence, which is the one thing this
+         *     design refuses to do.
+         *
+         *     ``Disposition.REJECTED`` is the only value that says a person declined the
+         *     proposal; the enum is owned upstream and gains no member here. Because the
+         *     journal is append-only, the earlier ``accepted`` record survives beside the
+         *     new one, so "rejected at review" and "accepted, then later deleted" stay
+         *     distinguishable by sequence.
+         *
+         *     A region with no proposal origin — hand-drawn, or written before the routes
+         *     stamped one — writes no decision, and the delete still succeeds.
          */
         delete: operations["delete_region"];
         options?: never;
@@ -1389,9 +1406,23 @@ export interface paths {
          *     A word not listed is released back to a ``recovered`` block, never dropped; a
          *     word newly listed is moved out of wherever it currently sits — another line or
          *     another region. ``Block.add_item``/``remove_item`` recompute the block's
-         *     bounding box from its items as a side effect — the region's own explicitly-set
-         *     box is saved before the edit and restored after, because a region's box is not
-         *     its membership.
+         *     bounding box from its items as a side effect, so *every* block this route
+         *     takes a word from or gives a word to — the target region, a source region,
+         *     a source line — has its box saved before the edit and restored after,
+         *     because a region's box is what a person drew, not a function of its
+         *     membership.
+         *
+         *     Known interaction, owned elsewhere: moving a word changes its published
+         *     ``word_id``. ``stable_word_id`` hashes a page-wide ``reading_order``
+         *     position, and a region joins ``page.lines``, so one membership write
+         *     renumbers every word on the page and detaches any
+         *     ``TypographyCorrectionLog`` record keyed to the old id — the record stays on
+         *     disk under an id no word carries. The flaw is in the keying, not in this
+         *     route: ``api/lines_paragraphs.py``'s merge, split and delete already
+         *     renumber ``page.lines`` the same way, so this route adds a trigger, not the
+         *     fragility. Re-keying word identity off something stable belongs to its own
+         *     plan; ``tests/integration/test_region_membership_word_identity.py`` pins
+         *     exactly what happens today, so the day it changes, it changes visibly.
          */
         put: operations["set_region_word_membership"];
         post?: never;
@@ -1411,6 +1442,8 @@ export interface paths {
         /**
          * List Region Proposals
          * @description List every proposal for this page, across every run, with confidence and evidence.
+         *
+         *     The decision journal is read once and indexed, not re-read per proposal.
          */
         get: operations["list_region_proposals"];
         put?: never;
@@ -1473,6 +1506,14 @@ export interface paths {
          *     something, and a rejection confirms nothing new about the page. That is also why
          *     this route, unlike ``accept_region_proposal``, has no ``bind_page_labeling_lease``
          *     dependency.
+         *
+         *     Returns 409 when the latest decision for this proposal accepted it and the
+         *     region that accept produced is still on the page. Appending the rejection
+         *     would leave the payload showing a confirmed region whose proposal the journal
+         *     says a person refused — the journal and the page blob stating opposite facts.
+         *     Deleting the region first records the rejection itself (see
+         *     ``delete_region``), so the 409 asks for the one action that keeps both stores
+         *     in step.
          */
         post: operations["reject_region_proposal"];
         delete?: never;
@@ -4524,8 +4565,6 @@ export interface components {
              */
             stale: boolean;
         };
-        /** RejectRegionProposalRequest */
-        RejectRegionProposalRequest: Record<string, never>;
         /**
          * ReloadOCRRequest
          * @description Body for ``POST .../reload-ocr`` — spec §5.3.
@@ -7285,11 +7324,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["RejectRegionProposalRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
