@@ -1381,6 +1381,11 @@ export interface paths {
          * Set Region Word Membership
          * @description Replace a region's word membership exactly with the given set.
          *
+         *     Only a leaf (``child_type=WORDS``) region can hold words directly; a container
+         *     region rejects this route with 400 ``region_not_word_capable``, checked right
+         *     after the region resolves and before any word is resolved or moved, mirroring
+         *     ``create_region``'s ``parent_not_nesting_capable`` check for the opposite shape.
+         *
          *     A word not listed is released back to a ``recovered`` block, never dropped; a
          *     word newly listed is moved out of wherever it currently sits — another line or
          *     another region. ``Block.add_item``/``remove_item`` recompute the block's

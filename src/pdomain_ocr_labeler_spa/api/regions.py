@@ -191,6 +191,16 @@ def _parent_not_nesting_capable(parent_region_id: str) -> JSONResponse:
     )
 
 
+def _region_not_word_capable(region_id: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content=ApiError(
+            error="region_not_word_capable",
+            message=f"region {region_id} holds regions, not words; address a leaf region instead",
+        ).model_dump(),
+    )
+
+
 # ── Routes: create / edit / delete ──────────────────────────────────────
 
 
@@ -419,6 +429,11 @@ def set_region_word_membership(
 ) -> JSONResponse:
     """Replace a region's word membership exactly with the given set.
 
+    Only a leaf (``child_type=WORDS``) region can hold words directly; a container
+    region rejects this route with 400 ``region_not_word_capable``, checked right
+    after the region resolves and before any word is resolved or moved, mirroring
+    ``create_region``'s ``parent_not_nesting_capable`` check for the opposite shape.
+
     A word not listed is released back to a ``recovered`` block, never dropped; a
     word newly listed is moved out of wherever it currently sits — another line or
     another region. ``Block.add_item``/``remove_item`` recompute the block's
@@ -440,6 +455,8 @@ def set_region_word_membership(
         region = find_region_block(page, region_id)
         if region is None:
             return _region_not_found(region_id)
+        if region.child_type is not BlockChildType.WORDS:
+            return _region_not_word_capable(region_id)
 
         target_words: list[Word] = []
         for ref in body.word_refs:

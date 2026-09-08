@@ -308,6 +308,31 @@ def test_set_membership_on_unknown_word_returns_404(toolbar_loaded: Any) -> None
     assert r.json()["error"] == "word_not_found"
 
 
+def test_set_membership_on_a_container_region_returns_400(toolbar_loaded: Any) -> None:
+    """A container region (``child_type=blocks``) holds regions, not words — the
+    mirror image of ``parent_not_nesting_capable``. The rejection must land before
+    any word is moved out of its line.
+    """
+    client, _ps, page = toolbar_loaded
+    container = client.post(
+        f"{_BASE}/regions",
+        json={
+            "role": "figure",
+            "box": {"x": 0, "y": 0, "width": 200, "height": 300},
+            "child_type": "blocks",
+        },
+    ).json()
+    container_id = next(reg["region_id"] for reg in container["regions"] if reg["confirmed"])
+
+    r = client.put(
+        f"{_BASE}/regions/{container_id}/words", json={"word_refs": [{"line_index": 0, "word_index": 0}]}
+    )
+    assert r.status_code == 400, r.text
+    assert r.json()["error"] == "region_not_word_capable"
+    # Nothing moved before the rejection — the word is still on its original line.
+    assert {w.text for w in page.lines[0].words} == {"one", "two"}
+
+
 # Moved here from Task 2: it needs the membership route above to put words in the
 # region before deleting it. Under Task 2 alone the PUT 404s, the region has no
 # members, and the recovered-block assertion cannot pass.
