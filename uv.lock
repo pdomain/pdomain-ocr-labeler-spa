@@ -1467,14 +1467,18 @@ wheels = [
 
 [[package]]
 name = "pdomain-book-contracts"
-version = "0.1.1.dev7+gbfcb7dd71"
-source = { git = "https://github.com/pdomain/pdomain-book-contracts?rev=bfcb7dd71324bd3ba7e078f3d3898a47c188f314#bfcb7dd71324bd3ba7e078f3d3898a47c188f314" }
+version = "0.2.0"
+source = { registry = "https://pdomain.github.io/pdomain-index-pip/simple/" }
 dependencies = [
     { name = "pydantic" },
     { name = "pydantic-core" },
     { name = "regex" },
     { name = "shapely" },
     { name = "typing-extensions" },
+]
+sdist = { url = "https://github.com/pdomain/pdomain-book-contracts/releases/download/v0.2.0/pdomain_book_contracts-0.2.0.tar.gz", hash = "sha256:6d35648a1e787618d30a0f2ef216a55eaa695f2292274fdbee447d6aed2de16b" }
+wheels = [
+    { url = "https://github.com/pdomain/pdomain-book-contracts/releases/download/v0.2.0/pdomain_book_contracts-0.2.0-py3-none-any.whl", hash = "sha256:1e30d57064b225b78841f9bcec0a392ee124bf00b3c3d1fd4a3e71e8018580d9" },
 ]
 
 [[package]]
@@ -1562,7 +1566,7 @@ requires-dist = [
     { name = "huggingface-hub", specifier = ">=0.23" },
     { name = "idna", specifier = ">=3.15" },
     { name = "modal", marker = "extra == 'modal'", specifier = ">=0.66" },
-    { name = "pdomain-book-contracts", git = "https://github.com/pdomain/pdomain-book-contracts?rev=bfcb7dd71324bd3ba7e078f3d3898a47c188f314" },
+    { name = "pdomain-book-contracts", specifier = ">=0.2.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pdomain-book-tools", specifier = "==0.27.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pdomain-ops", specifier = ">=0.11.2", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pydantic", specifier = ">=2.9" },
