@@ -3,7 +3,15 @@
 The guard against treating model output as data — the split design's own
 words. Seeds one confirmed region (a real Block with block_role_labels and a
 region_id) and one proposal (via RegionProposalLog) on the same page, loads
-it in a real browser, and samples two known screen points.
+it in a real browser, and samples a small patch at each region's center.
+
+Bare inequality between the two samples is not enough: two different alphas
+of the *same* hue are also unequal, and would pass a test that only checked
+``confirmed_pixel != proposed_pixel`` — exactly the regression this guards
+against (``regions-proposed`` fading from blue to a faint amber). Each
+sample is instead checked against a tolerance band around the color its own
+layer's fill composites to over the fixture's white background, so a
+same-hue regression fails with a message naming which layer painted wrong.
 """
 
 from __future__ import annotations
@@ -40,8 +48,35 @@ from tests.e2e.helpers import wait_for_project_ready
 _PROJECT_ID = "region-visibility-fixture"
 _IMAGE_W = 1200
 _IMAGE_H = 1600
-_CONFIRMED_LTRB = (100, 100, 400, 300)
-_PROPOSED_LTRB = (100, 500, 400, 700)
+
+# Placed well away from the canvas's top-left corner: PageImageCanvas renders
+# a persistent "canvas-mode-pill" viewport-mode indicator pinned at
+# `top-10 left-2` (a DOM sibling of the Stage, unrelated to blocks/regions —
+# see PageImageCanvas.tsx's "Mode-indicator pill"). A region placed near
+# image-space (100, 100) lands directly under that pill at this fixture's
+# viewport size, contaminating a pixel sample with the pill's own color
+# instead of the region's fill — confirmed by dumping a full-page screenshot
+# and the sampled patch as a 2D grid (see task-7-report.md).
+_CONFIRMED_LTRB = (600, 700, 900, 900)
+_PROPOSED_LTRB = (600, 1100, 900, 1300)
+
+# Fill rgba values from BBoxOverlay.tsx's LAYER_COLORS — "regions-confirmed"
+# (heavier, saturated amber) and "regions-proposed" (lighter, cooler blue).
+# Kept as separate hue + alpha components, not copy-pasted composited RGB,
+# so the expected color here is derived the same way the browser derives
+# it, not eyeballed independently.
+_CONFIRMED_FILL_RGB = (217, 119, 6)
+_CONFIRMED_FILL_ALPHA = 0.35
+_PROPOSED_FILL_RGB = (14, 165, 233)
+_PROPOSED_FILL_ALPHA = 0.15
+
+# RGB Euclidean-distance tolerance for the hue-band check. A clean sample
+# lands within ~1 unit of its expected composite (8-bit rounding only — see
+# task-7-report.md); a same-hue-different-alpha regression (e.g.
+# "regions-proposed" fading from blue to a faint amber) sits roughly 45-58
+# RGB-units from either expected color. 15 units comfortably separates a
+# real render from that regression while leaving headroom over rounding.
+_HUE_TOLERANCE = 15.0
 
 
 def _spa_built() -> bool:
@@ -80,14 +115,72 @@ def _make_png(width: int, height: int) -> bytes:
     )
 
 
-def _sample_center(
+def _sample_patch_mean(
     page: Page, ltrb: tuple[int, int, int, int], canvas_box: dict, fit_scale: float
-) -> tuple[int, int, int]:
+) -> tuple[float, float, float]:
+    """Mean RGB over a 9x9 patch centered on ``ltrb``'s midpoint.
+
+    A single pixel can land on anti-aliased stroke/fill edges; averaging a
+    small patch (same half-width as the established pattern in
+    ``test_image_click_selection.py``'s ``_assert_word_overlay_paints``) is
+    robust to that without blurring past the region's interior — both
+    seeded regions are hundreds of source pixels wide, so a 9x9 screen patch
+    centered on the midpoint never reaches a region's own edge.
+    """
     left, top, right, bottom = ltrb
     cx = int(canvas_box["x"] + (left + right) / 2 * fit_scale)
     cy = int(canvas_box["y"] + (top + bottom) / 2 * fit_scale)
     image = Image.open(BytesIO(page.screenshot(full_page=True))).convert("RGB")
-    return image.getpixel((cx, cy))
+    px0 = max(0, cx - 4)
+    py0 = max(0, cy - 4)
+    px1 = min(image.width, cx + 5)
+    py1 = min(image.height, cy + 5)
+    pixels = [image.getpixel((x, y)) for y in range(py0, py1) for x in range(px0, px1)]
+    assert pixels, f"sample point ({cx}, {cy}) fell outside screenshot {image.size}"
+    n = len(pixels)
+    return (
+        sum(p[0] for p in pixels) / n,
+        sum(p[1] for p in pixels) / n,
+        sum(p[2] for p in pixels) / n,
+    )
+
+
+def _composite_over_white(rgb: tuple[int, int, int], alpha: float) -> tuple[float, float, float]:
+    """Alpha-composite ``rgb`` over a solid white background."""
+    r, g, b = rgb
+    blend = 255.0 * (1.0 - alpha)
+    return (r * alpha + blend, g * alpha + blend, b * alpha + blend)
+
+
+def _color_distance(a: tuple[float, float, float], b: tuple[float, float, float]) -> float:
+    """Euclidean distance between two RGB triples."""
+    return sum((ac - bc) ** 2 for ac, bc in zip(a, b, strict=True)) ** 0.5
+
+
+def _assert_paints_expected_hue(
+    sampled: tuple[float, float, float],
+    expected: tuple[float, float, float],
+    *,
+    tolerance: float,
+    layer_name: str,
+) -> None:
+    """Assert ``sampled`` lands within ``tolerance`` (RGB Euclidean distance) of ``expected``.
+
+    Plain inequality between two samples is not enough: the same hue at two
+    different alphas produces two unequal RGB triples too, so it would still
+    pass if a layer regressed to the *other* layer's hue at some alpha. This
+    instead pins each sample to the color its own layer's fill is specified
+    to composite to over the fixture's white background, and names the
+    offending layer in the failure message.
+    """
+    distance = _color_distance(sampled, expected)
+    assert distance <= tolerance, (
+        f"{layer_name} region painted a color too far from its expected hue: "
+        f"sampled={tuple(round(c) for c in sampled)}, expected={tuple(round(c) for c in expected)}, "
+        f"distance={distance:.1f} > tolerance={tolerance} "
+        "— it must render its own layer's hue, not drift toward the other layer's, "
+        "or model output risks being mistaken for a confirmed decision"
+    )
 
 
 @dataclass
@@ -218,13 +311,28 @@ def test_a_proposed_region_renders_a_different_color_than_a_confirmed_one(
     assert canvas_box is not None
     fit_scale = canvas_box["width"] / encoded["display_width"]
 
-    confirmed_pixel = _sample_center(page, _CONFIRMED_LTRB, canvas_box, fit_scale)
-    proposed_pixel = _sample_center(page, _PROPOSED_LTRB, canvas_box, fit_scale)
-    white = (255, 255, 255)
+    confirmed_sample = _sample_patch_mean(page, _CONFIRMED_LTRB, canvas_box, fit_scale)
+    proposed_sample = _sample_patch_mean(page, _PROPOSED_LTRB, canvas_box, fit_scale)
+    white = (255.0, 255.0, 255.0)
 
-    assert confirmed_pixel != white, f"confirmed region did not paint: {confirmed_pixel}"
-    assert proposed_pixel != white, f"proposed region did not paint: {proposed_pixel}"
-    assert confirmed_pixel != proposed_pixel, (
-        f"confirmed and proposed regions rendered the same color: {confirmed_pixel} == {proposed_pixel} "
-        "— they must be visibly distinct or model output risks being treated as data"
+    # Rule out "nothing painted" first — a same-white pair would otherwise
+    # trivially satisfy the hue-band checks below at distance 0 from neither
+    # expected color, which is a different failure than the hue check exists
+    # to catch.
+    assert _color_distance(confirmed_sample, white) > 1.0, (
+        f"confirmed region did not paint: {confirmed_sample}"
+    )
+    assert _color_distance(proposed_sample, white) > 1.0, f"proposed region did not paint: {proposed_sample}"
+
+    # Prove hue, not just inequality. Two different alphas of the *same*
+    # amber would also satisfy `confirmed_sample != proposed_sample`; each
+    # sample must instead land near the color its own layer's fill is
+    # specified to composite to.
+    expected_confirmed = _composite_over_white(_CONFIRMED_FILL_RGB, _CONFIRMED_FILL_ALPHA)
+    expected_proposed = _composite_over_white(_PROPOSED_FILL_RGB, _PROPOSED_FILL_ALPHA)
+    _assert_paints_expected_hue(
+        confirmed_sample, expected_confirmed, tolerance=_HUE_TOLERANCE, layer_name="regions-confirmed"
+    )
+    _assert_paints_expected_hue(
+        proposed_sample, expected_proposed, tolerance=_HUE_TOLERANCE, layer_name="regions-proposed"
     )
