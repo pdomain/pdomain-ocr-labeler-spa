@@ -281,6 +281,43 @@ def _proposal_not_found(proposal_id: str) -> JSONResponse:
     )
 
 
+def _decision_persist_failed_response(*, proposal_id: str) -> JSONResponse:
+    """503 when a region decision could not be durably persisted (mirrors
+    ``_store_persist_failed_response`` in ``api/words.py``, for the decision log
+    rather than the page store).
+    """
+    return JSONResponse(
+        status_code=503,
+        content=ApiError(
+            error="decision_persist_failed",
+            message=f"decision could not be persisted to the decision log (proposal_id={proposal_id})",
+        ).model_dump(),
+    )
+
+
+def _append_decision_or_error(
+    decision_log: RegionDecisionLog, decision: RegionDecision
+) -> JSONResponse | None:
+    """Append ``decision``; return ``None`` on success or a 503 envelope on I/O failure.
+
+    A disk-full, permission, or concurrent-write failure on the decision log is a
+    reachable I/O failure, same as the page-store writes ``_save_to_store_best_effort``
+    guards — no route in this codebase lets a reachable request fall through to the
+    catch-all handler's 500.
+    """
+    try:
+        decision_log.append(decision)
+    except OSError as exc:
+        log.warning(
+            "decision log append failed proposal_id=%s run_id=%s: %s",
+            decision.proposal_id,
+            decision.run_id,
+            exc,
+        )
+        return _decision_persist_failed_response(proposal_id=decision.proposal_id)
+    return None
+
+
 # ── Routes: create / edit / delete ──────────────────────────────────────
 
 
@@ -644,6 +681,17 @@ def accept_region_proposal(
     new ``RegionDecision`` are written. An override in the request body records
     ``edited`` instead of ``accepted``, per ``Disposition.knowledge_state`` (both map to
     ``KnowledgeState.POSITIVE``; only ``rejected`` is a refusal).
+
+    Idempotent: if an earlier decision already named a region for this proposal and
+    that region still exists on the page, the accept already happened — the current
+    payload is returned unchanged rather than creating a second confirmed region. If
+    the decision exists but its region was since deleted, this is a legitimate fresh
+    accept, not a repeat.
+
+    The page blob is written before the decision, both under the page lock: a
+    confirmed region with no decision reads as "nobody has looked yet" (recoverable —
+    the block still names its own ``source_proposal_id``), but a decision naming a
+    region that was never written is not recoverable.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -665,10 +713,22 @@ def accept_region_proposal(
     box = _bbox_to_ltrb(body.box) if body.box is not None else proposal.box
     has_override = body.role is not None or body.box is not None
     disposition = Disposition.EDITED if has_override else Disposition.ACCEPTED
-    region_id = uuid.uuid4().hex
+    decision_log = RegionDecisionLog(project.project_root)
 
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
+        existing_decision = decision_log.decision_for(proposal_id, run_id=proposal.run_id)
+        existing_region_id = existing_decision.region_id if existing_decision is not None else None
+        if existing_region_id is not None and find_region_block(page, existing_region_id) is not None:
+            return _refresh_payload_response(
+                project_id=project_id,
+                page_index=page_index,
+                project_state=project_state,
+                settings=settings,
+                app_config=app_config,
+            )
+
+        region_id = uuid.uuid4().hex
         try:
             region = _build_region_block(
                 box=box,
@@ -691,18 +751,20 @@ def accept_region_proposal(
         ):
             return _store_persist_failed_response(page_id=pstate.page_id)
 
-    decision_log = RegionDecisionLog(project.project_root)
-    decision_log.append(
-        RegionDecision(
-            decision_id=uuid.uuid4().hex,
-            run_id=proposal.run_id,
-            proposal_id=proposal_id,
-            disposition=disposition,
-            region_id=region_id,
-            actor="default",
-            decided_at=datetime.now(UTC).isoformat(),
+        decision_err = _append_decision_or_error(
+            decision_log,
+            RegionDecision(
+                decision_id=uuid.uuid4().hex,
+                run_id=proposal.run_id,
+                proposal_id=proposal_id,
+                disposition=disposition,
+                region_id=region_id,
+                actor="default",
+                decided_at=datetime.now(UTC).isoformat(),
+            ),
         )
-    )
+        if decision_err is not None:
+            return decision_err
 
     return _refresh_payload_response(
         project_id=project_id,
@@ -746,7 +808,8 @@ def reject_region_proposal(
         return _proposal_not_found(proposal_id)
 
     decision_log = RegionDecisionLog(project.project_root)
-    decision_log.append(
+    decision_err = _append_decision_or_error(
+        decision_log,
         RegionDecision(
             decision_id=uuid.uuid4().hex,
             run_id=proposal.run_id,
@@ -755,8 +818,10 @@ def reject_region_proposal(
             region_id=None,
             actor="default",
             decided_at=datetime.now(UTC).isoformat(),
-        )
+        ),
     )
+    if decision_err is not None:
+        return decision_err
 
     return _refresh_payload_response(
         project_id=project_id,

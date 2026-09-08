@@ -1438,6 +1438,17 @@ export interface paths {
          *     new ``RegionDecision`` are written. An override in the request body records
          *     ``edited`` instead of ``accepted``, per ``Disposition.knowledge_state`` (both map to
          *     ``KnowledgeState.POSITIVE``; only ``rejected`` is a refusal).
+         *
+         *     Idempotent: if an earlier decision already named a region for this proposal and
+         *     that region still exists on the page, the accept already happened — the current
+         *     payload is returned unchanged rather than creating a second confirmed region. If
+         *     the decision exists but its region was since deleted, this is a legitimate fresh
+         *     accept, not a repeat.
+         *
+         *     The page blob is written before the decision, both under the page lock: a
+         *     confirmed region with no decision reads as "nobody has looked yet" (recoverable —
+         *     the block still names its own ``source_proposal_id``), but a decision naming a
+         *     region that was never written is not recoverable.
          */
         post: operations["accept_region_proposal"];
         delete?: never;
