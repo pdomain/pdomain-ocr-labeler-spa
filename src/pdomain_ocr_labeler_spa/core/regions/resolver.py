@@ -1,10 +1,16 @@
 """The one read path both the labeler and the execution engine use.
 
 Callers never touch the three stores directly. They ask for a page's resolved
-regions and get confirmed regions if any exist on that page — a page with a
-confirmed region has been reviewed, and proposals are the pre-review view, not
-a supplement to it. Failing that, proposals above a confidence threshold.
-Failing that, nothing.
+regions and get, region by region, whichever a person confirmed — then, for
+everything a person has not yet acted on, the proposals at or above a
+confidence threshold. Confirming one region on a page must not hide the rest
+of that page's proposals: review happens one region at a time, and a partially
+reviewed page has to stay workable until every region on it has a decision.
+
+A proposal is left out only for its own reason: its disposition is REJECTED,
+or an earlier decision already promoted it into one of the confirmed regions.
+Neither reason has anything to do with what happened to any other proposal on
+the same page.
 
 The labeler passes a threshold of zero and renders proposals visibly differently.
 The execution engine passes a real threshold and takes the result as the answer.
@@ -60,19 +66,14 @@ def resolve_regions(
             never invalidated by a text-only edit.
 
     Returns:
-        The confirmed regions, in the order given, if any exist on this page —
-        proposals are not shown once a page has been reviewed. Otherwise the
-        surviving proposals, in the order given: not rejected, not already
-        promoted into a confirmed region by an earlier decision, and at or
-        above `threshold`.
+        The confirmed regions, in the order given, followed by the surviving
+        proposals, in the order given: not rejected, not already promoted
+        into one of the confirmed regions by an earlier decision, and at or
+        above `threshold`. Precedence is per region, not per page — a
+        confirmed region only ever displaces the one proposal a person
+        promoted into it, never the rest of the page's proposals.
     """
-    if confirmed:
-        # A page with any confirmed regions has been reviewed by a person.
-        # Proposals are the pre-review view; once confirmed regions exist,
-        # they are what a caller sees, not a mix of the two.
-        return list(confirmed)
-
-    resolved: list[ResolvedRegion] = []
+    resolved: list[ResolvedRegion] = list(confirmed)
 
     for proposal in proposals:
         decision = decisions.get(proposal.proposal_id)
