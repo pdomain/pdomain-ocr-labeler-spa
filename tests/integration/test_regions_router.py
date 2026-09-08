@@ -57,6 +57,26 @@ def test_edit_unknown_region_returns_404(toolbar_loaded: Any) -> None:
     assert r.json()["error"] == "region_not_found"
 
 
+def test_edit_region_with_an_unsupported_role_returns_400(toolbar_loaded: Any) -> None:
+    """A rejected role must never reach the blob — a later ``from_dict`` would fail to load it."""
+    client, _ps, _page = toolbar_loaded
+    created = client.post(
+        f"{_BASE}/regions",
+        json={"role": "poetry", "box": {"x": 5, "y": 5, "width": 50, "height": 50}},
+    ).json()
+    region_id = next(reg["region_id"] for reg in created["regions"] if reg["confirmed"])
+
+    r = client.patch(f"{_BASE}/regions/{region_id}", json={"role": "catchword"})
+    assert r.status_code == 400, r.text
+    assert r.json()["error"] == "invalid_region_role"
+
+    # The rejection must never have reached the blob — the region still carries its
+    # original role, proving nothing was mutated before the 400 was returned.
+    payload = client.get(_BASE).json()
+    region = next(reg for reg in payload["regions"] if reg["region_id"] == region_id)
+    assert region["role"] == "poetry"
+
+
 def test_delete_region_removes_it_from_the_payload(toolbar_loaded: Any) -> None:
     client, _ps, _page = toolbar_loaded
     created = client.post(

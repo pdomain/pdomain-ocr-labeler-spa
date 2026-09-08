@@ -95,6 +95,29 @@ def _bbox_to_ltrb(box: BBox) -> tuple[int, int, int, int]:
     return box.x, box.y, box.x + box.width, box.y + box.height
 
 
+def _normalized_role_labels(role: RegionRole) -> list[str]:
+    """Validate and normalize ``role`` the same way ``Block.__init__`` does.
+
+    ``Block.block_role_labels`` is a plain attribute, not a validating property, so
+    assigning to it directly (as ``edit_region`` must, to avoid re-deriving the
+    region's box or membership from a full reconstruction) bypasses
+    ``Block._normalize_label`` entirely. A throwaway, memberless ``Block`` runs that
+    same normalization — including its alias and whitespace/underscore/hyphen
+    handling — and raises ``ValueError`` for an unsupported role exactly as
+    ``Block(block_role_labels=[...])`` does in ``create_region``. There is no public
+    single-label validator on ``Block``; running the real constructor is the only way
+    to get its exact normalization without duplicating (and risking drift from)
+    ``_normalize_label``.
+    """
+    probe = Block(
+        items=[],
+        child_type=BlockChildType.WORDS,
+        block_category=BlockCategory.BLOCK,
+        block_role_labels=[role.value],
+    )
+    return probe.block_role_labels
+
+
 def _region_not_found(region_id: str) -> JSONResponse:
     return JSONResponse(
         status_code=404,
@@ -260,8 +283,8 @@ def edit_region(
             return _region_not_found(region_id)
         if body.role is not None:
             try:
-                region.block_role_labels = [body.role.value]
-            except ValueError as exc:  # pragma: no cover - defensive; role already type-checked
+                region.block_role_labels = _normalized_role_labels(body.role)
+            except ValueError as exc:
                 return _invalid_region_role(exc)
         if body.box is not None:
             left, top, right, bottom = _bbox_to_ltrb(body.box)
