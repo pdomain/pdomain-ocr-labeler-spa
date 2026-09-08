@@ -31,14 +31,14 @@ def test_block_role_labels_and_sort_order_round_trip() -> None:
     assert round_tripped.additional_block_attributes.get("region_id") == "fixture-region-1"
 
 
-def test_the_fixture_itself_matches_the_golden_bytes() -> None:
-    """Guards the fixture file against silent hand-editing — re-serialize and diff."""
+def test_the_fixture_round_trips_to_an_identical_document() -> None:
+    """Guards the fixture against silent hand-editing, and ``Block`` against
+    quietly dropping or renaming *any* field — not just the three this suite
+    reads. The whole ``to_dict()`` is compared, key for key; the previous
+    version checked three keys while its name promised the golden document.
+    """
     from pdomain_book_tools.ocr.block import Block
 
     raw = json.loads(_FIXTURE.read_text())
-    block = Block.from_dict(raw)
-    dumped = block.to_dict()
 
-    assert dumped["block_role_labels"] == raw["block_role_labels"]
-    assert dumped["override_page_sort_order"] == raw["override_page_sort_order"]
-    assert dumped["additional_block_attributes"] == raw["additional_block_attributes"]
+    assert Block.from_dict(raw).to_dict() == raw

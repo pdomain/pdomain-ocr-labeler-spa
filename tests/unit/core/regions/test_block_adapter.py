@@ -176,13 +176,22 @@ def test_compute_page_facet_digests_returns_all_four_facets_deterministically() 
     assert digests_a == digests_b
 
 
-def test_compute_page_facet_digests_page_image_defaults_to_empty_string_when_none() -> None:
+def test_compute_page_facet_digests_omits_page_image_when_there_is_no_image_digest() -> None:
+    """No image digest means no ``page_image`` facet at all.
+
+    Publishing a stand-in (the page-*content* hash, which is all a
+    labeler-edited head carries) would make a typo fix change ``page_image``
+    and invalidate every geometry proposal on the page. An omitted facet
+    compares unequal to a run's recorded one, so it reads as stale — safe in
+    the direction that shows a warning rather than hiding one.
+    """
     from pdomain_ocr_labeler_spa.core.regions.block_adapter import compute_page_facet_digests
 
     page = _page_with_one_word("verse", (10, 10, 40, 20))
     digests = compute_page_facet_digests(page, image_digest=None)
 
-    assert digests["page_image"] == ""
+    assert "page_image" not in digests
+    assert set(digests) == {"word_boxes", "line_structure", "word_text"}
 
 
 def test_compute_page_facet_digests_word_text_change_does_not_move_word_boxes() -> None:
@@ -205,3 +214,65 @@ def test_compute_page_facet_digests_word_box_change_does_not_move_word_text() ->
 
     assert digests_a["word_text"] == digests_b["word_text"]
     assert digests_a["word_boxes"] != digests_b["word_boxes"]
+
+
+def _page_with_two_ocr_lines():
+    """A page whose lines are ordinary OCR structure — no region markers."""
+    from pdomain_book_contracts.geometry.bounding_box import BoundingBox
+    from pdomain_book_tools.ocr.block import Block, BlockCategory, BlockChildType
+    from pdomain_book_tools.ocr.page import Page
+    from pdomain_book_tools.ocr.word import Word
+
+    def line(text: str, ltrb: tuple[int, int, int, int]) -> Block:
+        left, top, right, bottom = ltrb
+        return Block(
+            items=[
+                Word(
+                    text=text,
+                    bounding_box=BoundingBox.from_ltrb(left, top, right, bottom, is_normalized=False),
+                )
+            ],
+            child_type=BlockChildType.WORDS,
+            block_category=BlockCategory.LINE,
+        )
+
+    return Page(
+        width=200,
+        height=300,
+        page_index=0,
+        blocks=[line("one", (0, 0, 50, 10)), line("two", (0, 20, 50, 30))],
+    )
+
+
+def test_confirming_a_region_does_not_change_the_line_structure_digest() -> None:
+    """``Block.lines`` returns ``[self]`` for a WORDS-typed block, so a leaf region
+    joins ``page.lines``. Counting it as line structure meant confirming one
+    proposal changed ``line_structure`` and marked every *other* proposal on that
+    page stale against its own run — self-inflicted staleness on the exact
+    workflow region review exists to support.
+    """
+    from pdomain_ocr_labeler_spa.core.regions.block_adapter import compute_page_facet_digests
+
+    page = _page_with_two_ocr_lines()
+    before = compute_page_facet_digests(page, image_digest="img-1")["line_structure"]
+
+    page.add_item(_region_block("r1", "poetry", (0, 0, 200, 300)))
+    after = compute_page_facet_digests(page, image_digest="img-1")["line_structure"]
+
+    assert after == before
+
+
+def test_a_real_line_structure_change_still_moves_the_digest() -> None:
+    """The skip must not turn ``line_structure`` into a digest that never changes."""
+    from pdomain_ocr_labeler_spa.core.regions.block_adapter import compute_page_facet_digests
+
+    page = _page_with_two_ocr_lines()
+    before = compute_page_facet_digests(page, image_digest="img-1")["line_structure"]
+
+    page.lines[0].override_page_sort_order = 7
+    reordered = compute_page_facet_digests(page, image_digest="img-1")["line_structure"]
+    assert reordered != before
+
+    page.remove_item(page.items[0])
+    removed = compute_page_facet_digests(page, image_digest="img-1")["line_structure"]
+    assert removed != reordered

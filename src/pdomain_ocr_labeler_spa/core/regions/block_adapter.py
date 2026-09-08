@@ -101,18 +101,39 @@ def _digest_of(payload: object) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def _carries_region_id(block: Block) -> bool:
+    """True when ``block`` is a region a person created, not OCR line structure."""
+    region_id = block.additional_block_attributes.get(_REGION_ID_KEY)
+    return isinstance(region_id, str) and bool(region_id)
+
+
 def compute_page_facet_digests(page: Page, *, image_digest: str | None) -> dict[str, str]:
-    """Digest each of the four facets a proposal run can depend on.
+    """Digest each facet a proposal run can depend on.
 
     Recomputed from the live page rather than declared by a mutation route —
     spec §"Facet digests are computed, never declared" — so a change is
-    caught no matter which route made it. ``image_digest`` is passed in
-    rather than derived here: the block tree carries no reference to the
-    source image blob, only the page's content-addressed provenance chain
-    does (``ProvenanceNode.blob_refs[1]``, by the convention
-    ``pdomain_ops.page_aggregate`` documents — index 0 is the page-content
-    JSON, index 1 the source image; callers that only have index 0 pass that
-    instead, since a stand-in digest still detects *some* image change).
+    caught no matter which route made it.
+
+    ``line_structure`` skips every block carrying a ``region_id``. A leaf
+    region is a ``WORDS``-typed ``Block``, and ``Block.lines`` returns
+    ``[self]`` for one, so a confirmed region joins ``page.lines`` — without
+    the skip, confirming one proposal would change ``line_structure`` and
+    mark every *other* proposal on that page stale against its own run. A
+    region is a person's decision layered over the line structure, not part
+    of it.
+
+    ``image_digest`` is passed in rather than derived here: the block tree
+    carries no reference to the source image blob, only the page's
+    content-addressed provenance chain does (``ProvenanceNode.blob_refs[1]``,
+    by the convention ``pdomain_ops.page_aggregate`` documents — index 0 is
+    the page-content JSON, index 1 the source image). When the caller has no
+    image digest the ``page_image`` facet is **omitted** rather than filled
+    with a stand-in: the labeler-edit path writes ``blob_refs=[content_hash]``
+    alone, so index 0 is the page *content*, and publishing it as
+    ``page_image`` would invalidate every geometry proposal on a typo fix —
+    exactly what per-facet digests exist to prevent. A missing facet compares
+    unequal to a recorded one, so an omitted ``page_image`` reads as stale,
+    never as falsely fresh.
 
     Word-box rows are serialized to strings and sorted as strings — not as
     raw signature tuples — because a signature's trailing ``is_normalized``
@@ -131,15 +152,18 @@ def compute_page_facet_digests(page: Page, *, image_digest: str | None) -> dict[
                 line.override_page_sort_order,
             ]
             for line in page.lines
+            if not _carries_region_id(line)
         ]
     )
     word_text = _digest_of([[word.text, word.ground_truth_text] for word in page.words])
-    return {
+    digests = {
         "word_boxes": word_boxes,
         "line_structure": line_structure,
-        "page_image": image_digest or "",
         "word_text": word_text,
     }
+    if image_digest:
+        digests["page_image"] = image_digest
+    return digests
 
 
 __all__ = ["compute_page_facet_digests", "confirmed_regions_from_page", "find_region_block"]
