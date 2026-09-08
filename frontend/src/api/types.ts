@@ -3930,6 +3930,10 @@ export interface components {
             /** Page Text Gt */
             page_text_gt?: string | null;
             history?: components["schemas"]["PageHistoryInfo"] | null;
+            /** Regions */
+            regions?: components["schemas"]["RegionView"][];
+            /** Proposals */
+            proposals?: components["schemas"]["RegionProposalView"][];
             /** Extra */
             extra?: {
                 [key: string]: unknown;
@@ -4229,6 +4233,80 @@ export interface components {
                 number,
                 number
             ][];
+        };
+        /**
+         * RegionProposalView
+         * @description One proposal as the labeler's proposal list shows it — role, confidence, evidence.
+         *
+         *     ``disposition`` and ``decided_region_id`` are ``None`` until a person accepts or
+         *     rejects the proposal; that is what distinguishes "nobody has looked yet" from
+         *     "looked at and refused" once a decision is recorded.
+         */
+        RegionProposalView: {
+            /** Proposal Id */
+            proposal_id: string;
+            /** Run Id */
+            run_id: string;
+            /** Page Index */
+            page_index: number;
+            role: components["schemas"]["RegionRole"];
+            box: components["schemas"]["BBox"];
+            /** Confidence */
+            confidence: number;
+            /** Evidence */
+            evidence: {
+                [key: string]: unknown;
+            };
+            /** Disposition */
+            disposition?: string | null;
+            /** Decided Region Id */
+            decided_region_id?: string | null;
+        };
+        /**
+         * RegionRole
+         * @description The meaning a page region carries.
+         * @enum {string}
+         */
+        RegionRole: "paragraph" | "sidenote" | "page header" | "page footer" | "page number" | "printers mark" | "blockquote" | "poetry" | "recovered" | "illustration" | "decoration" | "caption" | "figure" | "table" | "footnote" | "title" | "section" | "list" | "formula" | "artefact" | "signature mark" | "catchword" | "press figure" | "rule" | "brace" | "bracket" | "group label" | "plate" | "speaker label" | "stage direction" | "interlinear gloss" | "abandoned" | "decorated initial" | "unknown";
+        /**
+         * RegionView
+         * @description One resolved region as the labeler renders it — spec §"Reading order..." / resolver.
+         *
+         *     ``confirmed=True`` means a person put it there; ``confirmed=False`` means it is a
+         *     proposal above the labeler's display threshold (zero — the labeler shows everything
+         *     and renders the two differently). ``region_id`` is set only when confirmed.
+         *     ``proposal_id`` is set for an unconfirmed proposal (the proposal itself), and also for
+         *     a confirmed region promoted from one (its origin) — an explicit hand-drawn sentinel
+         *     when a person drew the region unprompted, or ``None`` when the origin was never
+         *     stamped. ``member_word_signatures`` is populated for a confirmed region (bounding-box
+         *     signatures, never a line/word ordinal); empty for a region resolved from a proposal,
+         *     which carries no membership of its own. ``stale`` is only ever True for an unconfirmed
+         *     proposal whose run read facets that have since changed on the page.
+         */
+        RegionView: {
+            /** Region Id */
+            region_id?: string | null;
+            /** Proposal Id */
+            proposal_id?: string | null;
+            role: components["schemas"]["RegionRole"];
+            box: components["schemas"]["BBox"];
+            /** Confirmed */
+            confirmed: boolean;
+            /** Confidence */
+            confidence?: number | null;
+            /** Member Word Signatures */
+            member_word_signatures?: [
+                number,
+                number,
+                number,
+                number,
+                boolean | null
+            ][];
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
         };
         /**
          * ReloadOCRRequest

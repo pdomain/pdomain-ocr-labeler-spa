@@ -20,13 +20,27 @@ from ..core.glyph.bulk_mark import GlyphBulkMarkParams, apply_bulk_mark
 from ..core.ground_truth_matcher import rematch_page
 from ..core.jobs import JobRunner
 from ..core.labeler_extension import LabelerPageExtension
-from ..core.models import EncodedDims, LineFilter, LineMatch, PageSource, Selection
+from ..core.models import (
+    BBox,
+    EncodedDims,
+    LineFilter,
+    LineMatch,
+    PageSource,
+    RegionProposalView,
+    RegionView,
+    Selection,
+)
 from ..core.page_state import PageLoader, ensure_page_model, save_page_content_to_store, save_page_to_store
 from ..core.page_to_line_matches import page_to_line_matches
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.ground_truth import find_ground_truth_text
 from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import PageState, ProjectState
+from ..core.regions.block_adapter import compute_page_facet_digests, confirmed_regions_from_page
+from ..core.regions.decision_log import RegionDecisionLog
+from ..core.regions.models import ProposalRun, RegionProposal
+from ..core.regions.proposal_log import RegionProposalLog
+from ..core.regions.resolver import resolve_regions
 from ..core.selection import SelectionMode, apply_selection
 from ..settings import Settings
 from .dependencies import (
@@ -90,6 +104,8 @@ class PagePayload(BaseModel):
     # Undo/redo cursor state — spec 2026-06-12-event-store-undo §"API surface".
     # ``None`` when no event store / page aggregate is wired (test envs).
     history: PageHistoryInfo | None = None
+    regions: list[RegionView] = Field(default_factory=list)
+    proposals: list[RegionProposalView] = Field(default_factory=list)
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -792,6 +808,83 @@ def _page_payload(
     # project-level counter caused every first save attempt to 409.
     page_generation = pstate.generation if pstate is not None else 0
 
+    # Region/proposal assembly. Only a genuine ``Page`` carries block
+    # structure — the duck-typed test stubs some payloads use elsewhere in
+    # this file expose ``.lines`` but not ``.items``/``.words``, so this is
+    # gated on a real ``isinstance`` check rather than the looser duck-typed
+    # ``is_page`` test used above for the line-matches path.
+    _resolved_page_for_regions: Page | None = None
+    if pstate is not None and pstate.page_record is not None:
+        _raw_payload = pstate.page_record.payload
+        if isinstance(_raw_payload, Page):
+            _resolved_page_for_regions = _raw_payload
+
+    regions: list[RegionView] = []
+    proposals: list[RegionProposalView] = []
+    if _resolved_page_for_regions is not None:
+        image_digest: str | None = None
+        if page_store is not None and pstate is not None and pstate.page_id is not None:
+            try:
+                agg_record = page_store.get_page(pstate.page_id).record
+                head = agg_record.provenance.head if agg_record.provenance else None
+                if head is not None and head.blob_refs:
+                    image_digest = head.blob_refs[1] if len(head.blob_refs) > 1 else head.blob_refs[0]
+            except Exception:  # pragma: no cover - defensive; a missing aggregate just skips the digest
+                image_digest = None
+        current_facet_digests = compute_page_facet_digests(
+            _resolved_page_for_regions, image_digest=image_digest
+        )
+
+        confirmed = confirmed_regions_from_page(_resolved_page_for_regions)
+        proposal_log = RegionProposalLog(project.project_root)
+        decision_log = RegionDecisionLog(project.project_root)
+        raw_proposals: list[RegionProposal] = proposal_log.proposals_for_page(page_index)
+        runs: dict[str, ProposalRun] = {run.run_id: run for run in proposal_log.runs()}
+        decisions = {
+            p.proposal_id: decision_log.decision_for(p.proposal_id, run_id=p.run_id) for p in raw_proposals
+        }
+        live_decisions = {pid: d for pid, d in decisions.items() if d is not None}
+        # threshold=0.0: the labeler shows every proposal and renders it visibly
+        # differently from a confirmed region — the execution engine is the only
+        # caller that ever passes a real threshold.
+        resolved = resolve_regions(
+            confirmed,
+            raw_proposals,
+            live_decisions,
+            runs,
+            threshold=0.0,
+            current_facet_digests=current_facet_digests,
+        )
+        regions = [
+            RegionView(
+                region_id=r.region_id,
+                proposal_id=r.proposal_id,
+                role=r.role,
+                box=BBox(x=r.box[0], y=r.box[1], width=r.box[2] - r.box[0], height=r.box[3] - r.box[1]),
+                confirmed=r.confirmed,
+                confidence=r.confidence,
+                member_word_signatures=list(r.member_word_signatures),
+                stale=r.stale,
+            )
+            for r in resolved
+        ]
+        proposals = []
+        for p in raw_proposals:
+            decision = decisions.get(p.proposal_id)
+            proposals.append(
+                RegionProposalView(
+                    proposal_id=p.proposal_id,
+                    run_id=p.run_id,
+                    page_index=p.page_index,
+                    role=p.role,
+                    box=BBox(x=p.box[0], y=p.box[1], width=p.box[2] - p.box[0], height=p.box[3] - p.box[1]),
+                    confidence=p.confidence,
+                    evidence=p.evidence,
+                    disposition=decision.disposition.value if decision is not None else None,
+                    decided_region_id=decision.region_id if decision is not None else None,
+                )
+            )
+
     return PagePayload(
         project_id=project_id,
         page_index=page_index,
@@ -804,6 +897,8 @@ def _page_payload(
         generation=page_generation,
         page_text_ocr=page_text_ocr,
         page_text_gt=page_text_gt,
+        regions=regions,
+        proposals=proposals,
     )
 
 
