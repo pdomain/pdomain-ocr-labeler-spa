@@ -118,6 +118,8 @@ class RegionProposalView(BaseModel):
     role: RegionRole
     box: BBox
     confidence: float
+    # Open-ended: shape varies per detector (mirrors RegionProposal.evidence
+    # upstream, which is equally open-ended), so no single TypedDict fits.
     evidence: dict[str, Any]
     disposition: str | None = None
     decided_region_id: str | None = None

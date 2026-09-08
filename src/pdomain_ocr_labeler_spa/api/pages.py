@@ -6,6 +6,7 @@ import io
 import logging
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import JSONResponse, Response
@@ -558,6 +559,104 @@ def _assemble_page_payload(
     )
 
 
+def _image_digest_for_page(*, page_store: LabelerPageStore | None, page_id: UUID | None) -> str | None:
+    """Best-effort image-provenance digest for a page's current head.
+
+    Reads ``ProvenanceNode.blob_refs[1]`` off the aggregate's head node — index
+    0 is the page-content JSON, index 1 the source image, per the convention
+    ``pdomain_ops.page_aggregate`` documents. Falls back to index 0 when a run
+    that recorded index 1 is now compared against a page whose head only has
+    index 0: a stand-in digest that still detects *some* image change is
+    better than none.
+
+    A page must always render even when this facet can't be read (a missing
+    aggregate, an event-store hiccup) — spec §"Facet digests are computed,
+    never declared" doesn't require the read to succeed, only that a change
+    is caught when it can be. The failure is logged, not silenced, so a
+    missing or stale image digest stays diagnosable later.
+    """
+    if page_store is None or page_id is None:
+        return None
+    try:
+        agg_record = page_store.get_page(page_id).record
+    except Exception:
+        log.debug("_page_payload: image-digest read failed for page_id=%s", page_id, exc_info=True)
+        return None
+    head = agg_record.provenance.head if agg_record.provenance else None
+    if head is None or not head.blob_refs:
+        return None
+    return head.blob_refs[1] if len(head.blob_refs) > 1 else head.blob_refs[0]
+
+
+def _resolve_regions_and_proposals(
+    *,
+    page: Page,
+    project_root: Path,
+    page_index: int,
+    page_store: LabelerPageStore | None,
+    page_id: UUID | None,
+) -> tuple[list[RegionView], list[RegionProposalView]]:
+    """Assemble ``PagePayload.regions``/``.proposals`` for one live page.
+
+    Confirmed regions come straight off ``page``'s block tree; proposals and
+    decisions come from the project's region stores, keyed by
+    ``project_root``. ``resolve_regions`` merges the three with
+    ``threshold=0.0`` — the labeler shows every proposal and renders it
+    visibly differently from a confirmed region; the execution engine is the
+    only caller that ever passes a real threshold.
+    """
+    image_digest = _image_digest_for_page(page_store=page_store, page_id=page_id)
+    current_facet_digests = compute_page_facet_digests(page, image_digest=image_digest)
+
+    confirmed = confirmed_regions_from_page(page)
+    proposal_log = RegionProposalLog(project_root)
+    decision_log = RegionDecisionLog(project_root)
+    raw_proposals: list[RegionProposal] = proposal_log.proposals_for_page(page_index)
+    runs: dict[str, ProposalRun] = {run.run_id: run for run in proposal_log.runs()}
+    decisions = {
+        p.proposal_id: decision_log.decision_for(p.proposal_id, run_id=p.run_id) for p in raw_proposals
+    }
+    live_decisions = {pid: d for pid, d in decisions.items() if d is not None}
+    resolved = resolve_regions(
+        confirmed,
+        raw_proposals,
+        live_decisions,
+        runs,
+        threshold=0.0,
+        current_facet_digests=current_facet_digests,
+    )
+    regions = [
+        RegionView(
+            region_id=r.region_id,
+            proposal_id=r.proposal_id,
+            role=r.role,
+            box=BBox(x=r.box[0], y=r.box[1], width=r.box[2] - r.box[0], height=r.box[3] - r.box[1]),
+            confirmed=r.confirmed,
+            confidence=r.confidence,
+            member_word_signatures=list(r.member_word_signatures),
+            stale=r.stale,
+        )
+        for r in resolved
+    ]
+    proposals: list[RegionProposalView] = []
+    for p in raw_proposals:
+        decision = decisions.get(p.proposal_id)
+        proposals.append(
+            RegionProposalView(
+                proposal_id=p.proposal_id,
+                run_id=p.run_id,
+                page_index=p.page_index,
+                role=p.role,
+                box=BBox(x=p.box[0], y=p.box[1], width=p.box[2] - p.box[0], height=p.box[3] - p.box[1]),
+                confidence=p.confidence,
+                evidence=p.evidence,
+                disposition=decision.disposition.value if decision is not None else None,
+                decided_region_id=decision.region_id if decision is not None else None,
+            )
+        )
+    return regions, proposals
+
+
 def _page_payload(
     *,
     project_id: str,
@@ -822,68 +921,13 @@ def _page_payload(
     regions: list[RegionView] = []
     proposals: list[RegionProposalView] = []
     if _resolved_page_for_regions is not None:
-        image_digest: str | None = None
-        if page_store is not None and pstate is not None and pstate.page_id is not None:
-            try:
-                agg_record = page_store.get_page(pstate.page_id).record
-                head = agg_record.provenance.head if agg_record.provenance else None
-                if head is not None and head.blob_refs:
-                    image_digest = head.blob_refs[1] if len(head.blob_refs) > 1 else head.blob_refs[0]
-            except Exception:  # pragma: no cover - defensive; a missing aggregate just skips the digest
-                image_digest = None
-        current_facet_digests = compute_page_facet_digests(
-            _resolved_page_for_regions, image_digest=image_digest
+        regions, proposals = _resolve_regions_and_proposals(
+            page=_resolved_page_for_regions,
+            project_root=project.project_root,
+            page_index=page_index,
+            page_store=page_store,
+            page_id=pstate.page_id if pstate is not None else None,
         )
-
-        confirmed = confirmed_regions_from_page(_resolved_page_for_regions)
-        proposal_log = RegionProposalLog(project.project_root)
-        decision_log = RegionDecisionLog(project.project_root)
-        raw_proposals: list[RegionProposal] = proposal_log.proposals_for_page(page_index)
-        runs: dict[str, ProposalRun] = {run.run_id: run for run in proposal_log.runs()}
-        decisions = {
-            p.proposal_id: decision_log.decision_for(p.proposal_id, run_id=p.run_id) for p in raw_proposals
-        }
-        live_decisions = {pid: d for pid, d in decisions.items() if d is not None}
-        # threshold=0.0: the labeler shows every proposal and renders it visibly
-        # differently from a confirmed region — the execution engine is the only
-        # caller that ever passes a real threshold.
-        resolved = resolve_regions(
-            confirmed,
-            raw_proposals,
-            live_decisions,
-            runs,
-            threshold=0.0,
-            current_facet_digests=current_facet_digests,
-        )
-        regions = [
-            RegionView(
-                region_id=r.region_id,
-                proposal_id=r.proposal_id,
-                role=r.role,
-                box=BBox(x=r.box[0], y=r.box[1], width=r.box[2] - r.box[0], height=r.box[3] - r.box[1]),
-                confirmed=r.confirmed,
-                confidence=r.confidence,
-                member_word_signatures=list(r.member_word_signatures),
-                stale=r.stale,
-            )
-            for r in resolved
-        ]
-        proposals = []
-        for p in raw_proposals:
-            decision = decisions.get(p.proposal_id)
-            proposals.append(
-                RegionProposalView(
-                    proposal_id=p.proposal_id,
-                    run_id=p.run_id,
-                    page_index=p.page_index,
-                    role=p.role,
-                    box=BBox(x=p.box[0], y=p.box[1], width=p.box[2] - p.box[0], height=p.box[3] - p.box[1]),
-                    confidence=p.confidence,
-                    evidence=p.evidence,
-                    disposition=decision.disposition.value if decision is not None else None,
-                    decided_region_id=decision.region_id if decision is not None else None,
-                )
-            )
 
     return PagePayload(
         project_id=project_id,
@@ -1760,9 +1804,11 @@ __all__ = [
     "_build_history_info",
     "_build_image_url",
     "_build_provenance_summary",
+    "_image_digest_for_page",
     "_page_payload",
     "_prefetch_adjacent_pages",
     "_render_plaintext",
+    "_resolve_regions_and_proposals",
     "get_page_image",
     "install_pages_router",
     "router",

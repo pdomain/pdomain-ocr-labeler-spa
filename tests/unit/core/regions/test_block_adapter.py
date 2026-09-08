@@ -149,3 +149,59 @@ def test_a_confirmed_region_with_no_stamped_origin_surfaces_none() -> None:
     resolved = confirmed_regions_from_page(page)
 
     assert resolved[0].proposal_id is None
+
+
+def _page_with_one_word(text: str, ltrb: tuple[int, int, int, int]):
+    from pdomain_book_contracts.geometry.bounding_box import BoundingBox
+    from pdomain_book_tools.ocr.page import Page
+    from pdomain_book_tools.ocr.word import Word
+
+    left, top, right, bottom = ltrb
+    region = _region_block("r1", "poetry", (0, 0, 200, 300))
+    bbox = BoundingBox.from_ltrb(left, top, right, bottom, is_normalized=False)
+    region.add_item(Word(text=text, bounding_box=bbox))
+    return Page(width=200, height=300, page_index=0, blocks=[region])
+
+
+def test_compute_page_facet_digests_returns_all_four_facets_deterministically() -> None:
+    from pdomain_ocr_labeler_spa.core.regions.block_adapter import compute_page_facet_digests
+
+    page_a = _page_with_one_word("verse", (10, 10, 40, 20))
+    page_b = _page_with_one_word("verse", (10, 10, 40, 20))
+
+    digests_a = compute_page_facet_digests(page_a, image_digest="img-1")
+    digests_b = compute_page_facet_digests(page_b, image_digest="img-1")
+
+    assert set(digests_a) == {"word_boxes", "line_structure", "page_image", "word_text"}
+    assert digests_a == digests_b
+
+
+def test_compute_page_facet_digests_page_image_defaults_to_empty_string_when_none() -> None:
+    from pdomain_ocr_labeler_spa.core.regions.block_adapter import compute_page_facet_digests
+
+    page = _page_with_one_word("verse", (10, 10, 40, 20))
+    digests = compute_page_facet_digests(page, image_digest=None)
+
+    assert digests["page_image"] == ""
+
+
+def test_compute_page_facet_digests_word_text_change_does_not_move_word_boxes() -> None:
+    from pdomain_ocr_labeler_spa.core.regions.block_adapter import compute_page_facet_digests
+
+    same_box = (10, 10, 40, 20)
+    digests_a = compute_page_facet_digests(_page_with_one_word("verse", same_box), image_digest=None)
+    digests_b = compute_page_facet_digests(_page_with_one_word("prose", same_box), image_digest=None)
+
+    assert digests_a["word_boxes"] == digests_b["word_boxes"]
+    assert digests_a["line_structure"] == digests_b["line_structure"]
+    assert digests_a["word_text"] != digests_b["word_text"]
+
+
+def test_compute_page_facet_digests_word_box_change_does_not_move_word_text() -> None:
+    from pdomain_ocr_labeler_spa.core.regions.block_adapter import compute_page_facet_digests
+
+    digests_a = compute_page_facet_digests(_page_with_one_word("verse", (10, 10, 40, 20)), image_digest=None)
+    digests_b = compute_page_facet_digests(_page_with_one_word("verse", (50, 50, 80, 60)), image_digest=None)
+
+    assert digests_a["word_text"] == digests_b["word_text"]
+    assert digests_a["word_boxes"] != digests_b["word_boxes"]
