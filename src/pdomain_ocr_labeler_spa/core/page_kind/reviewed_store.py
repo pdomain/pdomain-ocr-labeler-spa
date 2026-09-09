@@ -93,8 +93,13 @@ class PageKindReviewedStore:
                 except json.JSONDecodeError:
                     log.warning("page-kind-reviewed.jsonl: skipping malformed line %d", line_number)
                     continue
-                if isinstance(loaded, dict):
+                if not isinstance(loaded, dict):
+                    continue
+                try:
                     markers.append(PageKindReviewedMarker.from_dict(loaded))
+                except (KeyError, ValueError, TypeError):
+                    log.warning("page-kind-reviewed.jsonl: skipping wrong-shaped line %d", line_number)
+                    continue
         return markers
 
     def latest_for_page(self, page_index: int) -> PageKindReviewedMarker | None:
