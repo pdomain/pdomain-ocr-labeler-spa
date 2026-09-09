@@ -75,3 +75,21 @@ def test_a_valid_json_line_of_the_wrong_shape_is_skipped_too(tmp_path: Path) -> 
     assert marker is not None
     assert marker.reviewed_at == "2026-09-08T10:00:00+00:00"
     assert store.is_reviewed(0) is True
+
+
+def test_an_explicit_null_actor_falls_back_to_default_not_the_string_none(
+    tmp_path: Path,
+) -> None:
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+
+    store = PageKindReviewedStore(tmp_path)
+    path = tmp_path / ".pd-pages" / "page-kind-reviewed.jsonl"
+    path.parent.mkdir(parents=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(
+            '{"page_index": 0, "reviewed_at": "2026-09-08T10:00:00+00:00", "actor": null, "note": null}\n'
+        )
+
+    marker = store.latest_for_page(0)
+    assert marker is not None
+    assert marker.actor == "default"
