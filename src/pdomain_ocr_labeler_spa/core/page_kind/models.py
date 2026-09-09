@@ -4,8 +4,8 @@ person's confirmed answer.
 Page kind is classified per book, proposed here, and confirmed by a human
 directly onto ``Page.page_kind``. Unlike regions, page kind needs no decision
 log: a page has one kind, so the human's answer replaces the machine's whole.
-See docs/specs/2026-09-07-region-provenance-and-persistence-design.md "Page
-kind needs a marker, not a decision log".
+See pdomain-ocr-synth's docs/specs/2026-09-07-region-provenance-and-persistence-design.md
+"Page kind needs a marker, not a decision log".
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ class PageKindProposalRun:
     page_count: int
 
     def to_dict(self) -> dict[str, Any]:
+        """Render this run as a JSON-serializable mapping."""
         return {
             "run_id": self.run_id,
             "model_id": self.model_id,
@@ -37,6 +38,7 @@ class PageKindProposalRun:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> PageKindProposalRun:
+        """Restore a run from the mapping produced by :meth:`to_dict`."""
         return cls(
             run_id=str(d["run_id"]),
             model_id=str(d["model_id"]),
@@ -66,6 +68,7 @@ class PageKindProposal:
             raise ValueError(f"confidence {self.confidence} is outside 0.0 to 1.0")
 
     def to_dict(self) -> dict[str, Any]:
+        """Render this proposal as a JSON-serializable mapping."""
         return {
             "proposal_id": self.proposal_id,
             "run_id": self.run_id,
@@ -77,6 +80,7 @@ class PageKindProposal:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> PageKindProposal:
+        """Restore a proposal from the mapping produced by :meth:`to_dict`."""
         confidence = d.get("confidence")
         return cls(
             proposal_id=str(d["proposal_id"]),
