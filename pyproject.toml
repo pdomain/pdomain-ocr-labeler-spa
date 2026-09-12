@@ -301,6 +301,12 @@ markers = [
 filterwarnings = [
     # Treat all warnings as errors — surfaces deprecation issues at dev time.
     "error",
+    # starlette 1.6.0 reads `anyio.abc.BlockingPortal` at import time, an
+    # alias anyio 4.15.1 deprecated. Importing the FastAPI test client is
+    # enough to raise it and nothing here can avoid that. Matched on the
+    # message so every other DeprecationWarning still fails. Drop this once
+    # starlette stops reading the deprecated alias.
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
     # Unclosed sockets/event loops from TestClient async teardown.
     # PytestUnraisableExceptionWarning wraps ResourceWarning from asyncio
     # cleanup that races with pytest teardown — not actionable in test code.

@@ -10,6 +10,7 @@ Covers the five acceptance bullets:
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -19,6 +20,11 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# uv installs into UV_PROJECT_ENVIRONMENT when set and into .venv otherwise,
+# and the Makefile guard resolves the marker the same way. Reading the real
+# rule here keeps the test honest inside the devcontainer, which names the
+# environment ".venv-container".
+PROJECT_VENV = REPO_ROOT / (os.environ.get("UV_PROJECT_ENVIRONMENT") or ".venv")
 MAKEFILE = REPO_ROOT / "Makefile"
 
 
@@ -179,8 +185,8 @@ def test_upgrade_deps_refuses_when_pd_dev_local_set() -> None:
 @pytest.mark.skipif(not _have_make(), reason="`make` not on PATH")
 def test_upgrade_deps_refuses_when_marker_present() -> None:
     """`make upgrade-deps` must exit non-zero and print a refusal message
-    when .venv/.pdomain-dev-local marker exists (probe 2 of 3)."""
-    marker = REPO_ROOT / ".venv" / ".pdomain-dev-local"
+    when the .pdomain-dev-local marker exists (probe 2 of 3)."""
+    marker = PROJECT_VENV / ".pdomain-dev-local"
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.touch()
     try:
@@ -191,7 +197,7 @@ def test_upgrade_deps_refuses_when_marker_present() -> None:
             timeout=30,
         )
         assert result.returncode != 0, (
-            f"`make upgrade-deps` should exit non-zero when .venv/.pdomain-dev-local exists "
+            f"`make upgrade-deps` should exit non-zero when {marker} exists "
             f"(exited {result.returncode}):\n{result.stdout}"
         )
         combined = result.stdout + result.stderr
@@ -216,10 +222,10 @@ def test_upgrade_deps_local_declared_phony() -> None:
 
 def test_upgrade_deps_local_recipe_writes_pd_dev_local_marker() -> None:
     """The upgrade-deps-local recipe must contain a command that writes
-    the .venv/.pdomain-dev-local marker file."""
+    the .pdomain-dev-local marker file."""
     text = MAKEFILE.read_text()
     assert ".pdomain-dev-local" in text, (
-        "Makefile upgrade-deps-local recipe must write .venv/.pdomain-dev-local marker"
+        "Makefile upgrade-deps-local recipe must write the .pdomain-dev-local marker"
     )
 
 

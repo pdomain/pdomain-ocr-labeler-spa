@@ -6,6 +6,12 @@ LOG := .ci-ai.log
 # e.g. `make e2e PYTEST_N=1` (serial) or `make e2e PYTEST_N=auto`.
 PYTEST_N ?= 2
 
+# uv installs into UV_PROJECT_ENVIRONMENT when it is set and into .venv
+# otherwise, so mirror that rule rather than hardcoding either name. The
+# pd-suite devcontainer sets ".venv-container" because the workspace is a bind
+# mount shared with the host; a plain checkout outside a container gets .venv.
+VENV := $(if $(UV_PROJECT_ENVIRONMENT),$(UV_PROJECT_ENVIRONMENT),.venv)
+
 ifdef AI
 _goals := $(or $(MAKECMDGOALS),ci)
 .PHONY: $(_goals)
@@ -57,7 +63,7 @@ refresh-version: ## Force hatch-vcs to re-derive version from current git state
 	@# The wheel-side SPA check (build_hooks/spa_check.py) still gates real
 	@# wheel builds on the bundled index.html being present.
 	@mkdir -p src/pdomain_ocr_labeler_spa/static
-	@UV_LINK_MODE=copy uv pip install -e . --reinstall-package pdomain-ocr-labeler-spa
+	@uv sync --reinstall-package pdomain-ocr-labeler-spa
 	@uv run pdomain-ocr-labeler-ui --version 2>/dev/null || true
 
 install: ## Install pdomain-ocr-labeler-ui as a uv tool from local source
@@ -68,7 +74,7 @@ uninstall: ## Remove the installed pdomain-ocr-labeler-spa uv tool
 	@uv tool uninstall pdomain-ocr-labeler-spa || true
 
 remove-venv: ## Remove the virtual environment
-	rm -rf .venv
+	rm -rf $(VENV)
 
 reset: clean remove-venv setup ## Rebuild the virtual environment
 	@echo "Environment Reset!"
@@ -80,8 +86,8 @@ upgrade-deps: ## Upgrade dependency lockfile (refuses in a dev-local venv)
 		echo "  Use 'make upgrade-deps-local' to upgrade and re-install editable."; \
 		exit 1; \
 	fi
-	@if [ -f .venv/.pdomain-dev-local ]; then \
-		echo "upgrade-deps refused: .venv/.pdomain-dev-local marker present (probe 2)."; \
+	@if [ -f $(VENV)/.pdomain-dev-local ]; then \
+		echo "upgrade-deps refused: $(VENV)/.pdomain-dev-local marker present (probe 2)."; \
 		echo "  Use 'make upgrade-deps-local' to upgrade and preserve dev-local state."; \
 		exit 1; \
 	fi
