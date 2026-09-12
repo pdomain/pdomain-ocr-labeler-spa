@@ -10,6 +10,26 @@ from pathlib import Path
 from typing import Any
 
 
+def _current_umask() -> int:
+    """Read the process umask without leaving it changed."""
+    value = os.umask(0)
+    _ = os.umask(value)
+    return value
+
+
+def publish_atomic(tmp_name: str, path: Path) -> None:
+    """Widen the staged file to the umask default, then rename it into place.
+
+    ``tempfile.mkstemp`` hardcodes 0600 and ignores the umask by design, and
+    ``os.replace`` preserves the temp file's mode. Without this chmod every
+    file written here lands at 0600 regardless of the umask, which locks out
+    any reader running as a different uid — including the host's restic
+    backup. Start from 0666, never 0777: nothing written here is a program.
+    """
+    os.chmod(tmp_name, 0o666 & ~_current_umask())
+    os.replace(tmp_name, path)
+
+
 def write_json_atomic(path: Path, data: Any) -> None:
     """Write JSON data atomically via a unique temp file + os.replace.
 
@@ -27,7 +47,7 @@ def write_json_atomic(path: Path, data: Any) -> None:
     try:
         with os.fdopen(fd, "w") as f:
             json.dump(data, f)
-        os.replace(tmp_name, path)
+        publish_atomic(tmp_name, path)
     except Exception:
         with contextlib.suppress(OSError):
             os.unlink(tmp_name)
@@ -44,7 +64,7 @@ def write_bytes_atomic(path: Path, data: bytes) -> None:
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
-        os.replace(tmp_name, path)
+        publish_atomic(tmp_name, path)
     except Exception:
         with contextlib.suppress(OSError):
             os.unlink(tmp_name)

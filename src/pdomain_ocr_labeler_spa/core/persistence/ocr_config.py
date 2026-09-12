@@ -64,6 +64,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from pdomain_ocr_labeler_spa.core.ocr_config_state import AutoRotateMethod
 from pdomain_ocr_labeler_spa.core.persistence.paths import ocr_config_path
 
+from .atomic import publish_atomic
+
 logger = logging.getLogger(__name__)
 
 OCR_CONFIG_FILENAME = "ocr_config.json"
@@ -227,7 +229,7 @@ def save_ocr_config(data_root: Path, state: OCRConfigSidecar) -> None:
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(payload)
-            os.replace(tmp_name, path)
+            publish_atomic(tmp_name, path)
         except Exception:
             with contextlib.suppress(OSError):
                 os.unlink(tmp_name)

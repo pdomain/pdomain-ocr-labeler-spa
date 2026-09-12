@@ -59,6 +59,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from pdomain_ocr_labeler_spa.core.persistence.paths import session_state_path
 
+from .atomic import publish_atomic
+
 logger = logging.getLogger(__name__)
 
 SESSION_STATE_FILENAME = "session_state.json"
@@ -233,7 +235,7 @@ def save_session_state(data_root: Path, state: SessionState) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(payload)
-        os.replace(tmp_name, path)
+        publish_atomic(tmp_name, path)
     except Exception:
         with contextlib.suppress(OSError):
             os.unlink(tmp_name)

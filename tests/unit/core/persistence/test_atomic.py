@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from pdomain_ocr_labeler_spa.core.persistence.atomic import (
+    publish_atomic,
     write_bytes_atomic,
     write_json_atomic,
 )
@@ -335,3 +336,59 @@ except SystemExit:
         assert not target.exists()
         tmp_files = list(tmp_path.glob("*.tmp"))
         assert len(tmp_files) == 1
+
+
+class TestPublishedMode:
+    """A staged write must land at a mode other uids can read.
+
+    `tempfile.mkstemp` creates at 0600 and ignores the umask by design, and a
+    rename preserves that mode. Skipping the chmod once put 52,575 files
+    totalling 6.9 GiB outside every backup snapshot, because the host's restic
+    runs as a different uid. See the shared-devtools rule at
+    docs/process/shared-file-permissions.md.
+    """
+
+    @staticmethod
+    def _mode(path: Path) -> int:
+        return path.stat().st_mode & 0o777
+
+    def test_json_is_not_published_private(self, tmp_path: Path) -> None:
+        target = tmp_path / "config.json"
+        write_json_atomic(target, {"a": 1})
+
+        assert self._mode(target) != 0o600, "published at mkstemp's private mode"
+        assert self._mode(target) & 0o044, "group and other cannot read it"
+
+    def test_bytes_are_not_published_private(self, tmp_path: Path) -> None:
+        target = tmp_path / "blob.bin"
+        write_bytes_atomic(target, b"payload")
+
+        assert self._mode(target) != 0o600
+        assert self._mode(target) & 0o044
+
+    @pytest.mark.parametrize(("mask", "expected"), [(0o002, 0o664), (0o022, 0o644)])
+    def test_mode_follows_the_umask(self, tmp_path: Path, mask: int, expected: int) -> None:
+        """The published mode is 0666 minus the umask, never 0777."""
+        previous = os.umask(mask)
+        try:
+            target = tmp_path / "masked.json"
+            write_json_atomic(target, {"a": 1})
+        finally:
+            _ = os.umask(previous)
+
+        assert self._mode(target) == expected
+
+    def test_helper_leaves_the_umask_unchanged(self, tmp_path: Path) -> None:
+        """Reading the umask requires setting it; the helper must put it back."""
+        before = os.umask(0o022)
+        _ = os.umask(before)
+        try:
+            staged = tmp_path / "staged.tmp"
+            _ = staged.write_text("x")
+            publish_atomic(str(staged), tmp_path / "done.txt")
+
+            after = os.umask(0o022)
+            _ = os.umask(after)
+            assert after == before
+        finally:
+            _ = os.umask(before)
