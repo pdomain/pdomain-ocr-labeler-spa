@@ -22,7 +22,17 @@ def test_create_region_adds_a_confirmed_region_to_the_payload(toolbar_loaded: An
     assert regions[0]["region_id"]
 
 
-def test_create_region_with_an_unsupported_role_returns_400(toolbar_loaded: Any) -> None:
+def test_create_region_with_an_unsupported_role_returns_400(
+    toolbar_loaded: Any, narrowed_block_vocabulary: None
+) -> None:
+    """The guard still rejects a role the engine does not allow.
+
+    Since pdomain-book-tools 0.28.0 the engine allows all 34 ``RegionRole``
+    values, so no real role reaches this branch. The branch is the guard
+    against the two vocabularies drifting apart again, which is exactly what
+    had happened before 0.28.0, so the fixture narrows the engine's list to
+    reproduce that drift rather than deleting the coverage.
+    """
     client, _ps, _page = toolbar_loaded
     r = client.post(
         f"{_BASE}/regions",
@@ -57,8 +67,14 @@ def test_edit_unknown_region_returns_404(toolbar_loaded: Any) -> None:
     assert r.json()["error"] == "region_not_found"
 
 
-def test_edit_region_with_an_unsupported_role_returns_400(toolbar_loaded: Any) -> None:
-    """A rejected role must never reach the blob — a later ``from_dict`` would fail to load it."""
+def test_edit_region_with_an_unsupported_role_returns_400(
+    toolbar_loaded: Any, narrowed_block_vocabulary: None
+) -> None:
+    """A rejected role must never reach the blob — a later ``from_dict`` would fail to load it.
+
+    See ``test_create_region_with_an_unsupported_role_returns_400`` for why the
+    engine vocabulary is narrowed here.
+    """
     client, _ps, _page = toolbar_loaded
     created = client.post(
         f"{_BASE}/regions",

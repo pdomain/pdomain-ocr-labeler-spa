@@ -158,3 +158,21 @@ def toolbar_loaded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
 
     yield client, project_state, page
     client.__exit__(None, None, None)
+
+
+@pytest.fixture
+def narrowed_block_vocabulary(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Drop ``catchword`` from the engine's allowed block roles for one test.
+
+    ``pdomain-book-tools`` 0.28.0 widened ``Block.ALLOWED_BLOCK_ROLE_LABELS``
+    from 20 entries to the same 34 that ``RegionRole`` defines, so the two
+    vocabularies now agree and no real role can reach the routes'
+    ``invalid_region_role`` branch. That branch is the guard against the two
+    drifting apart again, which is the state this repository was in until the
+    0.28.0 pin bump, so the tests reproduce the drift instead of dropping the
+    coverage.
+    """
+    from pdomain_book_tools.ocr.block import Block
+
+    narrowed = frozenset(Block.ALLOWED_BLOCK_ROLE_LABELS - {"catchword"})
+    monkeypatch.setattr(Block, "ALLOWED_BLOCK_ROLE_LABELS", narrowed)

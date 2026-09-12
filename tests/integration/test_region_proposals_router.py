@@ -132,14 +132,17 @@ def test_accept_unknown_proposal_returns_404(toolbar_loaded: Any) -> None:
     assert r.status_code == 404, r.text
 
 
-def test_accept_proposal_with_unsupported_role_returns_400(toolbar_loaded: Any) -> None:
+def test_accept_proposal_with_unsupported_role_returns_400(
+    toolbar_loaded: Any, narrowed_block_vocabulary: None
+) -> None:
     from pdomain_book_contracts.annotation import RegionRole
 
     client, project_state, page = toolbar_loaded
     before_items = len(page.items)
-    # CATCHWORD is one of the 14 RegionRole values Block.ALLOWED_BLOCK_ROLE_LABELS
-    # does not yet allow — same non-mutation proof as create_region's equivalent
-    # test in test_regions_router.py.
+    # Since pdomain-book-tools 0.28.0 the engine allows all 34 RegionRole values,
+    # so the fixture narrows its list to reproduce the drift this branch guards
+    # against — same non-mutation proof as create_region's equivalent test in
+    # test_regions_router.py.
     _seed_proposal(client, project_state.loaded_project.project_root, role=RegionRole.CATCHWORD)
 
     r = client.post(f"{_BASE}/regions/proposals/p1/accept")
