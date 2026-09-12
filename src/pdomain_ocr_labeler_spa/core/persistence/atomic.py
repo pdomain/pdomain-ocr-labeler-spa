@@ -10,11 +10,21 @@ from pathlib import Path
 from typing import Any
 
 
-def _current_umask() -> int:
-    """Read the process umask without leaving it changed."""
+def _shared_file_mode() -> int:
+    """The mode a plain ``open()`` would produce here: 0666 minus the umask.
+
+    ``os.umask`` has no read-only form, so reading the umask means setting it
+    to zero and putting it back, and that is process-global. Calling this per
+    write would expose a zero umask to every other thread for those two
+    syscalls. Call it once at import instead, while the module is still
+    single-threaded, and reuse the result.
+    """
     value = os.umask(0)
     _ = os.umask(value)
-    return value
+    return 0o666 & ~value
+
+
+_FILE_MODE = _shared_file_mode()
 
 
 def publish_atomic(tmp_name: str, path: Path) -> None:
@@ -26,7 +36,7 @@ def publish_atomic(tmp_name: str, path: Path) -> None:
     any reader running as a different uid — including the host's restic
     backup. Start from 0666, never 0777: nothing written here is a program.
     """
-    os.chmod(tmp_name, 0o666 & ~_current_umask())
+    os.chmod(tmp_name, _FILE_MODE)
     os.replace(tmp_name, path)
 
 

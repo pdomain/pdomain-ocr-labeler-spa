@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 
 from pdomain_ocr_labeler_spa.core.persistence.atomic import (
+    _FILE_MODE,  # pyright: ignore[reportPrivateUsage]  # the mode under test
+    _shared_file_mode,  # pyright: ignore[reportPrivateUsage]
     publish_atomic,
     write_bytes_atomic,
     write_json_atomic,
@@ -367,19 +369,28 @@ class TestPublishedMode:
         assert self._mode(target) & 0o044
 
     @pytest.mark.parametrize(("mask", "expected"), [(0o002, 0o664), (0o022, 0o644)])
-    def test_mode_follows_the_umask(self, tmp_path: Path, mask: int, expected: int) -> None:
-        """The published mode is 0666 minus the umask, never 0777."""
+    def test_mode_follows_the_umask(self, mask: int, expected: int) -> None:
+        """The mode is 0666 minus the umask, never 0777."""
         previous = os.umask(mask)
         try:
-            target = tmp_path / "masked.json"
-            write_json_atomic(target, {"a": 1})
+            assert _shared_file_mode() == expected
         finally:
             _ = os.umask(previous)
 
-        assert self._mode(target) == expected
+    def test_published_mode_matches_the_import_time_mode(self, tmp_path: Path) -> None:
+        """Writes use the mode captured at import, not a fresh umask read.
 
-    def test_helper_leaves_the_umask_unchanged(self, tmp_path: Path) -> None:
-        """Reading the umask requires setting it; the helper must put it back."""
+        Reading the umask means setting it, which is process-global. A threaded
+        server doing that per write would briefly expose a zero umask to every
+        other thread, so the value is captured once while importing.
+        """
+        target = tmp_path / "captured.json"
+        write_json_atomic(target, {"a": 1})
+
+        assert self._mode(target) == _FILE_MODE
+
+    def test_publishing_does_not_touch_the_umask(self, tmp_path: Path) -> None:
+        """Publishing must not mutate the process umask other threads rely on."""
         before = os.umask(0o022)
         _ = os.umask(before)
         try:
