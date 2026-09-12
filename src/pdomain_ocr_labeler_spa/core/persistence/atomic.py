@@ -5,77 +5,63 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import tempfile
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 
-def _shared_file_mode() -> int:
-    """The mode a plain ``open()`` would produce here: 0666 minus the umask.
+def open_staged(path: Path) -> tuple[int, Path]:
+    """Create a staging file beside *path*, open for writing.
 
-    ``os.umask`` has no read-only form, so reading the umask means setting it
-    to zero and putting it back, and that is process-global. Calling this per
-    write would expose a zero umask to every other thread for those two
-    syscalls. Call it once at import instead, while the module is still
-    single-threaded, and reuse the result.
+    Returns the file descriptor and the staging path. The caller writes, then
+    renames it over *path*; the rename is a same-filesystem move because the
+    staging file is a sibling, so it is atomic on POSIX and on Windows via
+    ``MoveFileExW(MOVEFILE_REPLACE_EXISTING)``.
+
+    This does not use ``tempfile.mkstemp``. That hardcodes 0600 and ignores
+    the umask, which is right for a private scratch file and wrong for one
+    about to be published: a rename preserves the mode, so the result was
+    unreadable to any other uid, the host's backup included. Passing the mode
+    to ``os.open`` lets the kernel apply the umask exactly as it does for a
+    plain ``open()``, so no chmod and no umask read are needed. 0666 rather
+    than 0777 because nothing published this way is a program.
+
+    ``O_EXCL`` gives the same guarantee ``mkstemp`` provides: creation fails
+    rather than opening an existing file or following a symlink into one. The
+    random name makes a collision between concurrent writers vanishingly
+    unlikely, and the retry makes it harmless if it ever happens.
     """
-    value = os.umask(0)
-    _ = os.umask(value)
-    return 0o666 & ~value
-
-
-_FILE_MODE = _shared_file_mode()
-
-
-def publish_atomic(tmp_name: str, path: Path) -> None:
-    """Widen the staged file to the umask default, then rename it into place.
-
-    ``tempfile.mkstemp`` hardcodes 0600 and ignores the umask by design, and
-    ``os.replace`` preserves the temp file's mode. Without this chmod every
-    file written here lands at 0600 regardless of the umask, which locks out
-    any reader running as a different uid — including the host's restic
-    backup. Start from 0666, never 0777: nothing written here is a program.
-    """
-    os.chmod(tmp_name, _FILE_MODE)
-    os.replace(tmp_name, path)
+    while True:
+        staged = path.parent / f".{path.name}.{uuid4().hex}.tmp"
+        try:
+            return os.open(staged, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o666), staged
+        except FileExistsError:  # pragma: no cover - needs a uuid4 collision
+            continue
 
 
 def write_json_atomic(path: Path, data: Any) -> None:
-    """Write JSON data atomically via a unique temp file + os.replace.
-
-    The temp file is created in the same directory as ``path`` so that
-    ``os.replace`` is a same-filesystem rename (atomic on POSIX; atomic
-    on Windows via ``MoveFileExW(MOVEFILE_REPLACE_EXISTING)``).
-
-    Using a random temp name (via ``tempfile.NamedTemporaryFile``) avoids
-    the deterministic-name collision that would occur when two processes
-    write the same target file concurrently — each writer gets its own
-    private temp file and the last ``os.replace`` wins atomically.
-    """
+    """Write JSON data atomically: staged sibling file, then rename."""
     path = Path(path)
-    fd, tmp_name = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    fd, staged = open_staged(path)
     try:
         with os.fdopen(fd, "w") as f:
             json.dump(data, f)
-        publish_atomic(tmp_name, path)
+        staged.replace(path)
     except Exception:
         with contextlib.suppress(OSError):
-            os.unlink(tmp_name)
+            staged.unlink()
         raise
 
 
 def write_bytes_atomic(path: Path, data: bytes) -> None:
-    """Write bytes data atomically via a unique temp file + os.replace.
-
-    See ``write_json_atomic`` for the rationale behind the random temp name.
-    """
+    """Write bytes atomically: staged sibling file, then rename."""
     path = Path(path)
-    fd, tmp_name = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    fd, staged = open_staged(path)
     try:
         with os.fdopen(fd, "wb") as f:
-            f.write(data)
-        publish_atomic(tmp_name, path)
+            _ = f.write(data)
+        staged.replace(path)
     except Exception:
         with contextlib.suppress(OSError):
-            os.unlink(tmp_name)
+            staged.unlink()
         raise

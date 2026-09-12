@@ -12,9 +12,7 @@ from pathlib import Path
 import pytest
 
 from pdomain_ocr_labeler_spa.core.persistence.atomic import (
-    _FILE_MODE,  # pyright: ignore[reportPrivateUsage]  # the mode under test
-    _shared_file_mode,  # pyright: ignore[reportPrivateUsage]
-    publish_atomic,
+    open_staged,
     write_bytes_atomic,
     write_json_atomic,
 )
@@ -343,11 +341,12 @@ except SystemExit:
 class TestPublishedMode:
     """A staged write must land at a mode other uids can read.
 
-    `tempfile.mkstemp` creates at 0600 and ignores the umask by design, and a
-    rename preserves that mode. Skipping the chmod once put 52,575 files
-    totalling 6.9 GiB outside every backup snapshot, because the host's restic
-    runs as a different uid. See the shared-devtools rule at
-    docs/process/shared-file-permissions.md.
+    `tempfile.mkstemp` hardcodes 0600 and ignores the umask, and a rename
+    preserves that mode. Skipping that once put 52,575 files totalling 6.9 GiB
+    outside every backup snapshot, because the host's restic runs as a
+    different uid. Creating the staging file with an explicit mode instead
+    lets the kernel apply the umask, so there is no chmod to forget. See the
+    shared-devtools rule at docs/process/shared-file-permissions.md.
     """
 
     @staticmethod
@@ -368,38 +367,60 @@ class TestPublishedMode:
         assert self._mode(target) != 0o600
         assert self._mode(target) & 0o044
 
-    @pytest.mark.parametrize(("mask", "expected"), [(0o002, 0o664), (0o022, 0o644)])
-    def test_mode_follows_the_umask(self, mask: int, expected: int) -> None:
-        """The mode is 0666 minus the umask, never 0777."""
+    @pytest.mark.parametrize(("mask", "expected"), [(0o002, 0o664), (0o022, 0o644), (0o077, 0o600)])
+    def test_mode_is_whatever_the_umask_allows(self, tmp_path: Path, mask: int, expected: int) -> None:
+        """The kernel applies the umask, so a private umask stays private."""
         previous = os.umask(mask)
         try:
-            assert _shared_file_mode() == expected
+            target = tmp_path / "masked.json"
+            write_json_atomic(target, {"a": 1})
         finally:
             _ = os.umask(previous)
 
-    def test_published_mode_matches_the_import_time_mode(self, tmp_path: Path) -> None:
-        """Writes use the mode captured at import, not a fresh umask read.
+        assert self._mode(target) == expected
 
-        Reading the umask means setting it, which is process-global. A threaded
-        server doing that per write would briefly expose a zero umask to every
-        other thread, so the value is captured once while importing.
-        """
-        target = tmp_path / "captured.json"
-        write_json_atomic(target, {"a": 1})
+    def test_never_publishes_an_executable_file(self, tmp_path: Path) -> None:
+        """0666, not 0777: nothing written here is a program."""
+        previous = os.umask(0)
+        try:
+            target = tmp_path / "plain.bin"
+            write_bytes_atomic(target, b"x")
+        finally:
+            _ = os.umask(previous)
 
-        assert self._mode(target) == _FILE_MODE
+        assert not self._mode(target) & 0o111
 
-    def test_publishing_does_not_touch_the_umask(self, tmp_path: Path) -> None:
-        """Publishing must not mutate the process umask other threads rely on."""
+    def test_writing_does_not_touch_the_umask(self, tmp_path: Path) -> None:
+        """Nothing here reads the umask, so nothing can disturb other threads."""
         before = os.umask(0o022)
         _ = os.umask(before)
         try:
-            staged = tmp_path / "staged.tmp"
-            _ = staged.write_text("x")
-            publish_atomic(str(staged), tmp_path / "done.txt")
+            write_json_atomic(tmp_path / "a.json", {"a": 1})
 
             after = os.umask(0o022)
             _ = os.umask(after)
             assert after == before
         finally:
             _ = os.umask(before)
+
+    def test_staging_file_refuses_to_reuse_an_existing_path(self, tmp_path: Path) -> None:
+        """O_EXCL is what makes the staged name safe without mkstemp."""
+        fd, staged = open_staged(tmp_path / "target.json")
+        os.close(fd)
+        try:
+            with pytest.raises(FileExistsError):
+                _ = os.open(staged, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o666)
+        finally:
+            staged.unlink()
+
+    def test_staging_file_is_a_hidden_sibling(self, tmp_path: Path) -> None:
+        """A sibling keeps the rename on one filesystem, which is what makes it atomic."""
+        target = tmp_path / "target.json"
+        fd, staged = open_staged(target)
+        os.close(fd)
+        try:
+            assert staged.parent == target.parent
+            assert staged.name.startswith(".target.json.")
+            assert staged.name.endswith(".tmp")
+        finally:
+            staged.unlink()

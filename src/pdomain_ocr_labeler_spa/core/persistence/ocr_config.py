@@ -56,7 +56,6 @@ import contextlib
 import json
 import logging
 import os
-import tempfile
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -64,7 +63,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pdomain_ocr_labeler_spa.core.ocr_config_state import AutoRotateMethod
 from pdomain_ocr_labeler_spa.core.persistence.paths import ocr_config_path
 
-from .atomic import publish_atomic
+from .atomic import open_staged
 
 logger = logging.getLogger(__name__)
 
@@ -225,14 +224,14 @@ def save_ocr_config(data_root: Path, state: OCRConfigSidecar) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = json.dumps(state.model_dump(), indent=2, ensure_ascii=False)
-        fd, tmp_name = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+        fd, staged = open_staged(path)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(payload)
-            publish_atomic(tmp_name, path)
+            staged.replace(path)
         except Exception:
             with contextlib.suppress(OSError):
-                os.unlink(tmp_name)
+                staged.unlink()
             raise
     except OSError as exc:
         logger.warning(
