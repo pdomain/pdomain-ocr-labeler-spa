@@ -14,20 +14,20 @@ license = { text = "Unlicense" }
 requires-python = ">=3.13,<3.14"
 dependencies = [
     # Server
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.32",
-    "pydantic>=2.9",
-    "pydantic-settings>=2.5",
+    "fastapi>=0.141",
+    "uvicorn[standard]>=0.52",
+    "pydantic>=2.13",
+    "pydantic-settings>=2.15",
     "python-multipart>=0.0.20",
     "httpx>=0.28",
-    "sse-starlette>=2.1",
-    "anyio>=4.4",
+    "sse-starlette>=3.4",
+    "anyio>=4.15",
     # Security advisory lower-bounds (direct constraints so pip-audit stays clean
     # regardless of what fastapi/httpx pull in transitively).
     # idna>=3.15 — CVE-2026-45409 (ReDoS in idna.encode())
-    "idna>=3.15",
+    "idna>=3.19",
     # starlette>=1.0.1 — PYSEC-2026-161 / GHSA-86qp-5c8j-p5mr (host-header handling)
-    "starlette>=1.0.1",
+    "starlette>=1.6.0",
     # urllib3>=2.7.0 — PYSEC-2026-141 / PYSEC-2026-142
     "urllib3>=2.7.0",
     # OCR / image domain (wired in later milestones; harmless to declare now)
@@ -35,7 +35,7 @@ dependencies = [
     # >=0.2.0: pdomain-book-contracts.annotation (RegionRole, PageKind,
     # LabelSource, KnowledgeState, ConfidenceTier) — released 2026-09-08.
     "pdomain-book-contracts>=0.2.0",
-    "huggingface_hub>=0.23",
+    "huggingface_hub>=1.16",
     # Suite plumbing: port probing + registry (find_available_port, register_self)
     # >=0.9.0: PageAggregate.rotation_updated / RotationUpdated event (S8 rotate).
     # >=0.11.0: shared_paths API + DoctrExportManifest schema (Track C).
@@ -60,12 +60,12 @@ Repository = "https://github.com/pdomain/pdomain-ocr-labeler-spa"
 
 [dependency-groups]
 dev = [
-    "pre-commit>=4.0",
-    "pytest>=8.3",
-    "pytest-asyncio>=0.24",
-    "pytest-cov>=5.0",
-    "pytest-xdist>=3.6",
-    "psutil>=6.0",
+    "pre-commit>=4.6",
+    "pytest>=9.1",
+    "pytest-asyncio>=1.4",
+    "pytest-cov>=7.1",
+    "pytest-xdist>=3.8",
+    "psutil>=7.2",
     # Floor tracks the .pre-commit-config.yaml ruff-pre-commit pin. A lower
     # floor lets the venv and the hook disagree: 0.16 promoted PLR0917 out of
     # preview and re-scoped BLE001, so `make ci` ran pre-commit (0.16) which
@@ -77,8 +77,8 @@ dev = [
     # (starlette 1.2 does `import httpx2 as httpx` and emits StarletteDeprecationWarning
     # if httpx2 is absent; filterwarnings=error turns that into a hard collection failure).
     # Keep httpx above for e2e tests that import it directly as a plain HTTP client.
-    "httpx2>=2.3.0",
-    "basedpyright>=1.39.4",
+    "httpx2>=2.12.0",
+    "basedpyright>=1.40.1",
     "gitlint>=0.19.1",
 ]
 e2e = [

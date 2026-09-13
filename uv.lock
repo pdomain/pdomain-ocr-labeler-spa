@@ -1516,37 +1516,37 @@ e2e = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anyio", specifier = ">=4.4" },
-    { name = "fastapi", specifier = ">=0.115" },
+    { name = "anyio", specifier = ">=4.15" },
+    { name = "fastapi", specifier = ">=0.141" },
     { name = "httpx", specifier = ">=0.28" },
-    { name = "huggingface-hub", specifier = ">=0.23" },
-    { name = "idna", specifier = ">=3.15" },
+    { name = "huggingface-hub", specifier = ">=1.16" },
+    { name = "idna", specifier = ">=3.19" },
     { name = "modal", marker = "extra == 'modal'", specifier = ">=0.66" },
     { name = "pdomain-book-contracts", specifier = ">=0.2.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pdomain-book-tools", specifier = "==0.28.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pdomain-ops", specifier = ">=0.11.2", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
-    { name = "pydantic", specifier = ">=2.9" },
-    { name = "pydantic-settings", specifier = ">=2.5" },
+    { name = "pydantic", specifier = ">=2.13" },
+    { name = "pydantic-settings", specifier = ">=2.15" },
     { name = "python-multipart", specifier = ">=0.0.20" },
-    { name = "sse-starlette", specifier = ">=2.1" },
-    { name = "starlette", specifier = ">=1.0.1" },
+    { name = "sse-starlette", specifier = ">=3.4" },
+    { name = "starlette", specifier = ">=1.6.0" },
     { name = "urllib3", specifier = ">=2.7.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52" },
 ]
 provides-extras = ["modal"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "basedpyright", specifier = ">=1.39.4" },
+    { name = "basedpyright", specifier = ">=1.40.1" },
     { name = "gitlint", specifier = ">=0.19.1" },
     { name = "httpx", specifier = ">=0.28" },
-    { name = "httpx2", specifier = ">=2.3.0" },
-    { name = "pre-commit", specifier = ">=4.0" },
-    { name = "psutil", specifier = ">=6.0" },
-    { name = "pytest", specifier = ">=8.3" },
-    { name = "pytest-asyncio", specifier = ">=0.24" },
-    { name = "pytest-cov", specifier = ">=5.0" },
-    { name = "pytest-xdist", specifier = ">=3.6" },
+    { name = "httpx2", specifier = ">=2.12.0" },
+    { name = "pre-commit", specifier = ">=4.6" },
+    { name = "psutil", specifier = ">=7.2" },
+    { name = "pytest", specifier = ">=9.1" },
+    { name = "pytest-asyncio", specifier = ">=1.4" },
+    { name = "pytest-cov", specifier = ">=7.1" },
+    { name = "pytest-xdist", specifier = ">=3.8" },
     { name = "ruff", specifier = ">=0.16.2" },
 ]
 e2e = [{ name = "pytest-playwright", specifier = ">=0.5" }]
