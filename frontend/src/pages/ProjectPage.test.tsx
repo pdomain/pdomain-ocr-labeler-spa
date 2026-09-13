@@ -17,6 +17,10 @@
 //
 // react-konva is mocked module-wide so the PageImageCanvas tree renders
 // as simple divs under jsdom (no canvas backend).
+//
+// react-hotkeys-hook 5 matches against the physical `KeyboardEvent.code`
+// (e.g. "KeyS"), not `.key` — fireEvent.keyDown must set `code` explicitly,
+// jsdom does not derive it from `key`.
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
@@ -423,7 +427,7 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     // D-050: save-page-button is in PageActionsCompact (own useSavePage hook).
     // Trigger ProjectPage's own save mutation via Ctrl+S hotkey so that
     // ProjectPage's isMutating flag rises (drives BusyOverlay).
-    fireEvent.keyDown(document, { key: "s", ctrlKey: true });
+    fireEvent.keyDown(document, { key: "s", code: "KeyS", ctrlKey: true });
     // BusyOverlay renders inside the image-pane while the mutation is pending.
     // IS-4: image-pane is now a direct flex child of the canvas column (no splitter).
     expect(await screen.findByTestId("busy-overlay")).toBeInTheDocument();
@@ -534,7 +538,7 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       // Wait for data to settle so isMutating=false and hotkeys are active.
       await screen.findByTestId("save-page-button");
 
-      fireEvent.keyDown(document, { key: "s", ctrlKey: true, bubbles: true });
+      fireEvent.keyDown(document, { key: "s", code: "KeyS", ctrlKey: true, bubbles: true });
       await waitFor(() => {
         expect(saveCalls.length).toBeGreaterThanOrEqual(1);
       });
@@ -553,7 +557,7 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       renderProjectPage();
       await screen.findByTestId("project-page");
 
-      fireEvent.keyDown(document, { key: "g", ctrlKey: true, bubbles: true });
+      fireEvent.keyDown(document, { key: "g", code: "KeyG", ctrlKey: true, bubbles: true });
 
       // Dialog should be visible now.
       await waitFor(() => {
@@ -581,7 +585,7 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       renderProjectPage();
       await screen.findByTestId("project-page");
 
-      fireEvent.keyDown(document, { key: "g", ctrlKey: true, bubbles: true });
+      fireEvent.keyDown(document, { key: "g", code: "KeyG", ctrlKey: true, bubbles: true });
       await waitFor(() => {
         expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
       });
@@ -606,7 +610,7 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       renderProjectPage();
       await screen.findByTestId("project-page");
 
-      fireEvent.keyDown(document, { key: "j", bubbles: true });
+      fireEvent.keyDown(document, { key: "j", code: "KeyJ", bubbles: true });
       await waitFor(() => {
         // null → null + 1 = 0 (clamped to 0 since lines=[]).
         expect(wl.getState().selectedLineIndex).toBe(0);
@@ -621,7 +625,7 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       await screen.findByTestId("project-page");
 
       // K from null → clamped to 0.
-      fireEvent.keyDown(document, { key: "k", bubbles: true });
+      fireEvent.keyDown(document, { key: "k", code: "KeyK", bubbles: true });
       await waitFor(() => {
         expect(wl.getState().selectedLineIndex).toBe(0);
       });
@@ -816,7 +820,7 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       // Select line 0 so the dispatch has a non-empty selected_lines
       selectLine(0);
 
-      fireEvent.keyDown(document, { key: "r", bubbles: true });
+      fireEvent.keyDown(document, { key: "r", code: "KeyR", bubbles: true });
 
       await waitFor(() => {
         expect(calls.length).toBeGreaterThanOrEqual(1);
@@ -840,7 +844,7 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
 
       selectLine(0);
 
-      fireEvent.keyDown(document, { key: "R", shiftKey: true, bubbles: true });
+      fireEvent.keyDown(document, { key: "R", code: "KeyR", shiftKey: true, bubbles: true });
 
       await waitFor(() => {
         expect(calls.length).toBeGreaterThanOrEqual(1);

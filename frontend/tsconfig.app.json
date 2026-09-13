@@ -1,7 +1,5 @@
 {
   "compilerOptions": {
-    // TypeScript 6 requires declarations for side-effect CSS imports, which
-    // vite/client provides along with the rest of the Vite ambient types.
     "types": ["vite/client"],
     "target": "ES2022",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],

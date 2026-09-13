@@ -8,6 +8,10 @@
 //
 // Mock setup mirrors ProjectPage.test.tsx (kept in a separate file so the
 // undo slice does not collide with parallel work in the main test file).
+//
+// react-hotkeys-hook 5 matches against the physical `KeyboardEvent.code`
+// (e.g. "KeyZ"), not `.key` — fireEvent.keyDown must set `code` explicitly,
+// jsdom does not derive it from `key`.
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
@@ -136,7 +140,7 @@ describe("ProjectPage: Mod+Z / Mod+Shift+Z dispatch undo/redo (H-C)", () => {
       expect(actionButton("undo-button")).not.toBeDisabled();
     });
 
-    fireEvent.keyDown(document, { key: "z", ctrlKey: true, bubbles: true });
+    fireEvent.keyDown(document, { key: "z", code: "KeyZ", ctrlKey: true, bubbles: true });
     await waitFor(() => {
       expect(undoSpy).toHaveBeenCalled();
     });
@@ -153,7 +157,7 @@ describe("ProjectPage: Mod+Z / Mod+Shift+Z dispatch undo/redo (H-C)", () => {
       expect(actionButton("undo-button")).toBeDisabled();
     });
 
-    fireEvent.keyDown(document, { key: "z", ctrlKey: true, bubbles: true });
+    fireEvent.keyDown(document, { key: "z", code: "KeyZ", ctrlKey: true, bubbles: true });
     // Give the (would-be) mutation a tick to fire.
     await new Promise((r) => setTimeout(r, 50));
     expect(undoSpy).not.toHaveBeenCalled();
@@ -172,7 +176,13 @@ describe("ProjectPage: Mod+Z / Mod+Shift+Z dispatch undo/redo (H-C)", () => {
       expect(actionButton("redo-button")).not.toBeDisabled();
     });
 
-    fireEvent.keyDown(document, { key: "Z", ctrlKey: true, shiftKey: true, bubbles: true });
+    fireEvent.keyDown(document, {
+      key: "Z",
+      code: "KeyZ",
+      ctrlKey: true,
+      shiftKey: true,
+      bubbles: true,
+    });
     await waitFor(() => {
       expect(redoSpy).toHaveBeenCalled();
     });
@@ -210,7 +220,7 @@ describe("ProjectPage: Reload confirm copy (U-7)", () => {
     renderProjectPage();
     await screen.findByTestId("project-page");
 
-    fireEvent.keyDown(document, { key: "l", ctrlKey: true, bubbles: true });
+    fireEvent.keyDown(document, { key: "l", code: "KeyL", ctrlKey: true, bubbles: true });
     await waitFor(() => {
       expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
     });
@@ -235,7 +245,7 @@ describe("ProjectPage: Reload-OCR confirm warns history resets (U-6/H-D)", () =>
     renderProjectPage();
     await screen.findByTestId("project-page");
 
-    fireEvent.keyDown(document, { key: "r", ctrlKey: true, bubbles: true });
+    fireEvent.keyDown(document, { key: "r", code: "KeyR", ctrlKey: true, bubbles: true });
     await waitFor(() => {
       expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
     });

@@ -20,6 +20,31 @@ if (typeof globalThis.ResizeObserver === "undefined") {
   (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = ResizeObserverStub;
 }
 
+// jsdom does not implement window.matchMedia. Production code already
+// try/catches around calling it (see ui-prefs.ts, App.tsx) for environments
+// where it's absent entirely, but Vitest 5 tightened `vi.spyOn()` to require
+// an existing function on the target property (it now throws "can only spy
+// on a function" instead of silently patching one in, see
+// https://github.com/vitest-dev/vitest/issues/9439). Tests that spy on
+// `window.matchMedia` to control prefers-color-scheme need a real function
+// there first.
+if (typeof window.matchMedia === "undefined") {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    configurable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
+}
+
 // jsdom does not implement EventSource. Components using SSE would throw at
 // mount time without this stub. Tests that need real SSE event dispatch should
 // override globalThis.EventSource with their own mock via vi.stubGlobal.

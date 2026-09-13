@@ -8,6 +8,12 @@
 //   - Export button opens the export dialog.
 //   - Reload OCR, Rematch GT, Save Page trigger their mutations (smoke).
 //   - Toast lifecycle: loading toast on job start, success toast on complete.
+//
+// The EventSource stubs below use `vi.fn(function () {...})` rather than an
+// arrow function: Vitest 5 requires the mock's implementation to be a
+// `function`/`class` when the mock is invoked with `new` (the hook under
+// test does `new EventSource(...)`), since an arrow function is never
+// constructible per the JS spec and vi.fn() no longer papers over that.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, act } from "@testing-library/react";
@@ -585,7 +591,9 @@ describe("PageActionsCompact: toast lifecycle for reload-ocr", () => {
     };
     vi.stubGlobal(
       "EventSource",
-      vi.fn(() => mockES),
+      vi.fn(function () {
+        return mockES;
+      }),
     );
 
     const user = userEvent.setup();
@@ -638,7 +646,9 @@ describe("PageActionsCompact: toast lifecycle for reload-ocr", () => {
     };
     vi.stubGlobal(
       "EventSource",
-      vi.fn(() => mockES),
+      vi.fn(function () {
+        return mockES;
+      }),
     );
 
     const user = userEvent.setup();
@@ -682,7 +692,9 @@ describe("PageActionsCompact: S5.2 save-project skipped-page warning", () => {
     };
     vi.stubGlobal(
       "EventSource",
-      vi.fn(() => mockES),
+      vi.fn(function () {
+        return mockES;
+      }),
     );
     return mockES;
   }

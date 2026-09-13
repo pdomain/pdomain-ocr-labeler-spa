@@ -8,6 +8,10 @@
 //   - Shift+E toggles erase mode
 //   - Shift+A toggles add-word mode
 //   - Esc calls onCancelMode when viewport is active
+//
+// react-hotkeys-hook 5 matches against the physical `KeyboardEvent.code`
+// (e.g. "KeyP"), not `.key` — fireEvent.keyDown must set `code` explicitly,
+// jsdom does not derive it from `key`.
 
 import { renderHook } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -53,37 +57,37 @@ describe("useViewportHotkeys", () => {
 
   it("Shift+P calls onLayerToggle('paragraph')", () => {
     renderHotkeys();
-    fireEvent.keyDown(document, { key: "P", shiftKey: true });
+    fireEvent.keyDown(document, { key: "P", code: "KeyP", shiftKey: true });
     expect(onLayerToggle).toHaveBeenCalledWith("paragraph");
   });
 
   it("Shift+L calls onLayerToggle('line')", () => {
     renderHotkeys();
-    fireEvent.keyDown(document, { key: "L", shiftKey: true });
+    fireEvent.keyDown(document, { key: "L", code: "KeyL", shiftKey: true });
     expect(onLayerToggle).toHaveBeenCalledWith("line");
   });
 
   it("Shift+W calls onLayerToggle('word')", () => {
     renderHotkeys();
-    fireEvent.keyDown(document, { key: "W", shiftKey: true });
+    fireEvent.keyDown(document, { key: "W", code: "KeyW", shiftKey: true });
     expect(onLayerToggle).toHaveBeenCalledWith("word");
   });
 
   it("Shift+E calls onEraseToggle", () => {
     renderHotkeys();
-    fireEvent.keyDown(document, { key: "E", shiftKey: true });
+    fireEvent.keyDown(document, { key: "E", code: "KeyE", shiftKey: true });
     expect(onEraseToggle).toHaveBeenCalledOnce();
   });
 
   it("Shift+A calls onAddWordToggle", () => {
     renderHotkeys();
-    fireEvent.keyDown(document, { key: "A", shiftKey: true });
+    fireEvent.keyDown(document, { key: "A", code: "KeyA", shiftKey: true });
     expect(onAddWordToggle).toHaveBeenCalledOnce();
   });
 
   it("Escape calls onCancelMode", () => {
     renderHotkeys();
-    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
     expect(onCancelMode).toHaveBeenCalledOnce();
   });
 

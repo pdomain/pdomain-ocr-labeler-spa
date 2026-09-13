@@ -637,7 +637,7 @@ describe("PageImageCanvas — Select mode (drag box-select, #197, #302)", () => 
     expect(screen.queryByTestId("ocr-drag-rect")).not.toBeNull();
 
     // Keyboard handling is at document scope via useViewportHotkeys.
-    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
     expect(screen.queryByTestId("ocr-drag-rect")).toBeNull();
   });
 });
@@ -853,7 +853,7 @@ describe("PageImageCanvas — viewport hotkeys (spec-21-A8, #304, spec §10)", (
     expect(screen.queryByTestId("ocr-drag-rect")).not.toBeNull();
 
     // Document-scope Esc (the hook listens at document scope per #237).
-    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
     expect(screen.queryByTestId("ocr-drag-rect")).toBeNull();
   });
 
@@ -907,7 +907,7 @@ describe("PageImageCanvas — viewport hotkeys (spec-21-A8, #304, spec §10)", (
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
     expect(useUiPrefs.getState().layerVisibility.word).toBe(true);
 
-    fireEvent.keyDown(document, { key: "W", shiftKey: true });
+    fireEvent.keyDown(document, { key: "W", code: "KeyW", shiftKey: true });
     expect(useUiPrefs.getState().layerVisibility.word).toBe(false);
   });
 
@@ -915,7 +915,7 @@ describe("PageImageCanvas — viewport hotkeys (spec-21-A8, #304, spec §10)", (
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
     expect(useUiPrefs.getState().layerVisibility.paragraph).toBe(true);
 
-    fireEvent.keyDown(document, { key: "P", shiftKey: true });
+    fireEvent.keyDown(document, { key: "P", code: "KeyP", shiftKey: true });
     expect(useUiPrefs.getState().layerVisibility.paragraph).toBe(false);
   });
 
@@ -923,7 +923,7 @@ describe("PageImageCanvas — viewport hotkeys (spec-21-A8, #304, spec §10)", (
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
     expect(useUiPrefs.getState().layerVisibility.line).toBe(true);
 
-    fireEvent.keyDown(document, { key: "L", shiftKey: true });
+    fireEvent.keyDown(document, { key: "L", code: "KeyL", shiftKey: true });
     expect(useUiPrefs.getState().layerVisibility.line).toBe(false);
   });
 
@@ -931,7 +931,7 @@ describe("PageImageCanvas — viewport hotkeys (spec-21-A8, #304, spec §10)", (
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
     expect(viewportStore.getState().mode).toBe("select");
 
-    fireEvent.keyDown(document, { key: "E", shiftKey: true });
+    fireEvent.keyDown(document, { key: "E", code: "KeyE", shiftKey: true });
     expect(viewportStore.getState().mode).toBe("erase");
   });
 
@@ -939,7 +939,7 @@ describe("PageImageCanvas — viewport hotkeys (spec-21-A8, #304, spec §10)", (
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} />);
     expect(viewportStore.getState().mode).toBe("select");
 
-    fireEvent.keyDown(document, { key: "A", shiftKey: true });
+    fireEvent.keyDown(document, { key: "A", code: "KeyA", shiftKey: true });
     expect(viewportStore.getState().mode).toBe("add-word");
   });
 });

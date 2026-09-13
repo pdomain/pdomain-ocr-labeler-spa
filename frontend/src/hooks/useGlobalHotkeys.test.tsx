@@ -13,6 +13,10 @@
 // Note: arrow-key combos (Mod+ArrowLeft/Right/Home/End) rely on keyCode
 // mapping in hotkeys-js which doesn't fire reliably via fireEvent.keyDown
 // in jsdom. Those combos are covered by E2E tests (#242).
+//
+// react-hotkeys-hook 5 matches against the physical `KeyboardEvent.code`
+// (e.g. "KeyS"), not `.key` — pressKey() must set `code` explicitly, jsdom
+// does not derive it from `key`.
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
@@ -24,7 +28,13 @@ function TestComponent(props: GlobalHotkeyHandlers & { disabled?: boolean }) {
 }
 
 function pressKey(key: string, ctrlKey = false, shiftKey = false) {
-  fireEvent.keyDown(document, { key, ctrlKey, shiftKey, bubbles: true });
+  fireEvent.keyDown(document, {
+    key,
+    code: `Key${key.toUpperCase()}`,
+    ctrlKey,
+    shiftKey,
+    bubbles: true,
+  });
 }
 
 describe("useGlobalHotkeys (#236)", () => {

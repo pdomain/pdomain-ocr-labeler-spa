@@ -47,9 +47,14 @@ let lastSource: MockEventSource | null = null;
 
 beforeEach(() => {
   lastSource = null;
+  // Vitest 5 requires the mock's implementation to be a `function`/`class`
+  // (not an arrow function) when the mock is invoked with `new` — an arrow
+  // function is never constructible per the JS spec, and vi.fn() no longer
+  // papers over that. `useNotificationStream` calls `new EventSource(...)`,
+  // so the stub must be a real function expression.
   vi.stubGlobal(
     "EventSource",
-    vi.fn((url: string) => {
+    vi.fn(function (url: string) {
       lastSource = makeMockEventSource(url);
       return lastSource;
     }),
