@@ -23,11 +23,17 @@ level: I1
 - **Relates to:**
   [`docs/plans/2026-07-21-deep-code-review-continuation.md`](../plans/2026-07-21-deep-code-review-continuation.md),
   [`docs/plans/2026-07-21-open-findings-fixes.md`](../plans/2026-07-21-open-findings-fixes.md),
-  [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml),
   [`docs/issues/2026-05-22-gh-430-ci-equivalence.md`](2026-05-22-gh-430-ci-equivalence.md),
   [`docs/issues/2026-05-22-gh-433-openapi-drift.md`](2026-05-22-gh-433-openapi-drift.md)
 
 ## Summary
+
+> **The GitHub workflows were removed on 2026-09-13, so the CI half of this
+> issue no longer applies.** The `test-e2e` job that could pass while
+> skipping is gone along with the rest of the automation. What remains is
+> the local half: the soft skips themselves still exist in the suite, and
+> `make e2e` can still report success while skipping. Read the CI passages
+> below as history.
 
 GitHub’s `test-e2e` job runs with `continue-on-error: true`, so a red Playwright
 suite does not fail the workflow. Independently, several e2e helpers soft-skip
@@ -60,7 +66,7 @@ green merge confidence** without proving the advertised UI paths.
 
 ## Evidence
 
-1. **Non-blocking GH job** — `.github/workflows/ci.yml` `test-e2e` sets
+1. **Non-blocking GH job** — the `test-e2e` job in the CI workflow set
    `continue-on-error: true` with comment “Temporary non-blocking gate pending
    root-cause fix for Playwright flakiness,” then runs
    `uv run --group e2e pytest tests/e2e -v -n auto`.
