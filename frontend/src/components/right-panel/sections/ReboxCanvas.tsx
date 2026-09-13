@@ -149,17 +149,21 @@ export function ReboxCanvas({
   imageUrl,
 }: ReboxCanvasProps) {
   const canvasColors = buildCanvasColors();
-  const [imageEl, setImageEl] = useState<HTMLImageElement | null>(null);
+  // Keyed by the URL it was loaded for, so `imageEl` below is derived rather
+  // than reset via a synchronous setState call in the effect — it's simply
+  // null whenever the loaded image doesn't match the current `imageUrl`
+  // (including while a new one is still loading, or when there is none).
+  const [loadedImage, setLoadedImage] = useState<{ url: string; img: HTMLImageElement } | null>(
+    null,
+  );
+  const imageEl = loadedImage && loadedImage.url === imageUrl ? loadedImage.img : null;
 
   useEffect(() => {
-    if (!imageUrl) {
-      setImageEl(null);
-      return;
-    }
+    if (!imageUrl) return;
     let cancelled = false;
     const img = new window.Image();
     img.onload = () => {
-      if (!cancelled) setImageEl(img);
+      if (!cancelled) setLoadedImage({ url: imageUrl, img });
     };
     img.src = imageUrl;
     return () => {
@@ -203,10 +207,19 @@ export function ReboxCanvas({
   const [drawing, setDrawing] = useState<BBox | null>(null);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  // Reset drawing if user switches away from draw mode.
+  // Reset drawing if user switches away from draw mode. `drawing` has no
+  // legitimate reason to stay non-null once `tool` isn't "draw", so this is
+  // a direct derived-state correction during render rather than an effect —
+  // it only ever calls setState once per actual transition, since the
+  // condition becomes false as soon as it's applied.
+  if (tool !== "draw" && drawing !== null) {
+    setDrawing(null);
+  }
+
+  // The drag-start ref is a plain mutable value outside React state, so
+  // resetting it belongs in an effect (no setState involved here at all).
   useEffect(() => {
     if (tool !== "draw") {
-      setDrawing(null);
       dragStartRef.current = null;
     }
   }, [tool]);

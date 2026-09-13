@@ -344,10 +344,18 @@ function WordRow({ word, lineIndex, projectId, pageIndex, allInputsRef }: WordRo
   // ML-5: ref for this input — registered in allInputsRef on mount.
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Sync when server refreshes
-  useEffect(() => {
-    setGtText(word.ground_truth_text ?? "");
-  }, [word.ground_truth_text]);
+  // Sync when server refreshes. Done during render, comparing against the
+  // last-seen server value, rather than in an effect — this must fire only
+  // when the server value itself changes, not on every render where
+  // `gtText` differs from it (the user is expected to diverge from the
+  // server value while editing).
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevServerGt, setPrevServerGt] = useState(word.ground_truth_text ?? "");
+  const serverGt = word.ground_truth_text ?? "";
+  if (serverGt !== prevServerGt) {
+    setPrevServerGt(serverGt);
+    setGtText(serverGt);
+  }
 
   // ML-5: register/unregister this input in the flat traversal list.
   useEffect(() => {

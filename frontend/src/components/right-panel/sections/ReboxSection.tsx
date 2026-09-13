@@ -21,7 +21,7 @@
 //   rebox-apply              — Apply rebox primary button
 //   rebox-reset              — Reset to original bbox
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Button } from "@pdomain/pdomain-ui/primitives";
 import { ReboxCanvas, type ReboxTool } from "./ReboxCanvas";
 import { useReboxWord } from "../../../hooks/useWordMutations";
@@ -65,15 +65,18 @@ export function ReboxSection({ word, projectId, pageIndex, imageUrl }: ReboxSect
   const [draft, setDraft] = useState<BBox>(() => ({ ...word.bbox }));
 
   // Track an identity key so a new word reseeds the draft + zoom + tool.
+  // Done during render rather than in an effect, comparing against the
+  // last-seen identity key, so the reseed fires exactly once per identity
+  // change (not on every render).
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
   const wordKey = `${word.line_index}-${word.word_index ?? 0}`;
-  useEffect(() => {
+  const [prevWordKey, setPrevWordKey] = useState(wordKey);
+  if (wordKey !== prevWordKey) {
+    setPrevWordKey(wordKey);
     setDraft({ ...word.bbox });
     setTool("snap");
     setZoom(1);
-    // wordKey intentionally not in deps — we want the seed to fire only on
-    // *identity* change, and wordKey carries the same info as the indices.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wordKey]);
+  }
 
   const dirty = !bboxEqual(roundBbox(draft), roundBbox(word.bbox));
   const summary = `${roundBbox(draft).width} × ${roundBbox(draft).height} px`;

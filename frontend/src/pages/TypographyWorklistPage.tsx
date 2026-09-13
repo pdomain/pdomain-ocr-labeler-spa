@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { TypographySection } from "../components/right-panel/sections/TypographySection";
 import { useTypographyWorklist } from "../hooks/useTypographyReview";
@@ -18,13 +18,20 @@ export default function TypographyWorklistPage() {
   const words = useMemo(() => worklist.data?.words ?? [], [worklist.data?.words]);
   const [selectedWordId, setSelectedWordId] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Re-validate the selection whenever the word list changes, defaulting to
+  // the first word if the current selection fell out of the list. Done
+  // during render (comparing against the last-seen `words` reference) rather
+  // than in an effect.
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevWords, setPrevWords] = useState(words);
+  if (words !== prevWords) {
+    setPrevWords(words);
     setSelectedWordId((current) =>
       current && words.some((word) => word.word_id === current)
         ? current
         : (words[0]?.word_id ?? null),
     );
-  }, [words]);
+  }
 
   if (worklist.isLoading) return <p className="p-4">Loading typography worklist…</p>;
   if (worklist.isError) {

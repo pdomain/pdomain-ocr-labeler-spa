@@ -86,9 +86,20 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
   }, [open]);
 
   // Fetch directory listing whenever currentPath changes (and dialog is open).
+  // `listLoading` flips true during render the moment either input changes
+  // (https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes)
+  // instead of synchronously inside the effect, avoiding an extra
+  // effect-driven render on every path/open change.
+  const [prevListDeps, setPrevListDeps] = useState({ open, currentPath });
+  if (prevListDeps.open !== open || prevListDeps.currentPath !== currentPath) {
+    setPrevListDeps({ open, currentPath });
+    if (open) {
+      setListLoading(true);
+    }
+  }
+
   useEffect(() => {
     if (!open) return;
-    setListLoading(true);
     const params = new URLSearchParams({ path: currentPath });
     fetch(`/api/fs/ls?${params.toString()}`)
       .then((r) => r.json())

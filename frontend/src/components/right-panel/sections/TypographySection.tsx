@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { components } from "../../../api/types";
 import {
   TypographyApiError,
@@ -37,12 +37,23 @@ export function TypographySection({ projectId, pageIndex, wordId }: TypographySe
 
   const head = headQuery.data;
   const taxonomyLabels = head?.taxonomy.labels.map((label) => label.value) ?? [];
-  useEffect(() => {
+
+  // Reseed selection/label state when the word identity changes. Done during
+  // render, comparing against the last-seen identity, rather than in an
+  // effect — the reseed must fire only on identity change, not on every
+  // render (the user is expected to build up `spans`/`labels` locally while
+  // reviewing the same word).
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevWordId, setPrevWordId] = useState(wordId);
+  const [prevHeadToken, setPrevHeadToken] = useState(head?.head_token);
+  if (wordId !== prevWordId || head?.head_token !== prevHeadToken) {
+    setPrevWordId(wordId);
+    setPrevHeadToken(head?.head_token);
     setSpans(head?.correction?.replacement?.spans ?? []);
     setAnchor(null);
     setFocus(null);
     setLabels(new Set());
-  }, [wordId, head?.head_token]);
+  }
 
   const selected = useMemo(() => {
     if (anchor === null || focus === null) return null;

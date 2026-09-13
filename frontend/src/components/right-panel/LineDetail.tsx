@@ -22,7 +22,7 @@
 //   line-detail-validate-all   — validate-all footer button (P5.e)
 //   line-detail-bulk-bar       — bulk action bar (P5.f)
 
-import { useSyncExternalStore, useState, useEffect } from "react";
+import { useSyncExternalStore, useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { LineCard } from "../LineCard";
 import { StatusPip } from "@pdomain/pdomain-ui/primitives";
@@ -155,9 +155,17 @@ function GTRow({ line, projectId, pageIndex }: GTRowProps) {
   const setLineGt = useSetLineGt(projectId, pageIndex);
 
   // Sync local state when the server refreshes the line (after a save).
-  useEffect(() => {
-    setGtText(line.ground_truth_line_text ?? "");
-  }, [line.ground_truth_line_text]);
+  // Done during render, comparing against the last-seen server value, rather
+  // than in an effect — this must fire only when the server value itself
+  // changes, not on every render where `gtText` differs from it (the user is
+  // expected to diverge from the server value while editing).
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevServerGt, setPrevServerGt] = useState(line.ground_truth_line_text ?? "");
+  const serverGt = line.ground_truth_line_text ?? "";
+  if (serverGt !== prevServerGt) {
+    setPrevServerGt(serverGt);
+    setGtText(serverGt);
+  }
 
   function commit() {
     const trimmed = gtText.trim();

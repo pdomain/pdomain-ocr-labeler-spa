@@ -23,8 +23,11 @@ export default defineConfig({
     dedupe: ["react", "react-dom", "react-konva"],
   },
   test: {
-    deps: {
-      inline: [/@pdomain\/pdomain-ui/, /@radix-ui\//],
+    // Vitest 5 moved `test.deps.inline` to `test.server.deps.inline`.
+    server: {
+      deps: {
+        inline: [/@pdomain\/pdomain-ui/, /@radix-ui\//],
+      },
     },
     environment: "jsdom",
     globals: true,

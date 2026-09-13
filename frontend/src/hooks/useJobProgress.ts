@@ -128,9 +128,18 @@ export function useJobProgress(jobId: string | null | undefined): JobProgressEve
   const [latest, setLatest] = useState<JobProgressEvent | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
+  // Reset `latest` during render (not in an effect) the moment `jobId`
+  // changes, so callers never see a stale event from a previous job while a
+  // new EventSource is still connecting, or after the job is cleared. See
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevJobId, setPrevJobId] = useState(jobId);
+  if (prevJobId !== jobId) {
+    setPrevJobId(jobId);
+    setLatest(null);
+  }
+
   useEffect(() => {
     if (!jobId) {
-      setLatest(null);
       return;
     }
 
@@ -175,12 +184,6 @@ export function useJobProgress(jobId: string | null | undefined): JobProgressEve
       }
       esRef.current = null;
     };
-  }, [jobId]);
-
-  // Reset when jobId changes so callers don't see stale progress from a
-  // previous job while the new EventSource is opening.
-  useEffect(() => {
-    setLatest(null);
   }, [jobId]);
 
   return latest;

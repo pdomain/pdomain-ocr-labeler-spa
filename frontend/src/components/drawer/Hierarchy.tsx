@@ -358,8 +358,8 @@ function NodeRow({ flatNode, isSelected, isExpanded, onSelect, onToggle }: NodeR
           ? "line"
           : "word";
 
-  let label = "";
-  let monoId = "";
+  let label: string;
+  let monoId: string;
   if (node.kind === "block") {
     label = node.label;
     monoId = `B-${node.blockIndex + 1}`;

@@ -117,7 +117,7 @@ export default function PerfTestPage() {
   // Memoised so re-renders don't rebuild the 4 000-word payload. The
   // PageImageCanvas selection-expand memo and the BBoxOverlay React.memo
   // (spec §11) together skip the per-rect work when the parent re-renders.
-  const page = useMemo(makeSyntheticPage, []);
+  const page = useMemo(() => makeSyntheticPage(), []);
 
   // Drag callbacks deliberately swallow events — we only want the
   // viewport's drag-preview rAF path exercised, not the downstream

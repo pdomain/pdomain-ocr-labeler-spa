@@ -224,7 +224,10 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
         deltaX: clampedDelta,
       });
     },
-    [adjustGap, currentGap, hasNext, lineIndex, next?.bbox, next?.word_index],
+    // Depend on `next` itself (not its individual `.bbox`/`.word_index`
+    // fields) — React Compiler infers the whole-object dependency here and
+    // can't verify the narrower, field-level dependency list is equivalent.
+    [adjustGap, currentGap, hasNext, lineIndex, next],
   );
 
   // ── Split ─────────────────────────────────────────────────────────────────

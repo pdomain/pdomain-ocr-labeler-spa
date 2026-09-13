@@ -51,9 +51,13 @@ export function OcrGtCompareRow({
   const [localGt, setLocalGt] = useState(gtText);
   const [pickerOpen, setPickerOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Tracks focus via onFocus/onBlur (state) rather than reading
+  // `document.activeElement`/`inputRef.current` during render, which React
+  // refs must not be — see https://react.dev/reference/react/useRef.
+  const [isFocused, setIsFocused] = useState(false);
 
-  // Sync when word changes
-  if (localGt !== gtText && document.activeElement !== inputRef.current) {
+  // Sync when word changes, but not while the user is actively editing.
+  if (localGt !== gtText && !isFocused) {
     setLocalGt(gtText);
   }
 
@@ -80,6 +84,7 @@ export function OcrGtCompareRow({
   }
 
   function handleBlur() {
+    setIsFocused(false);
     commitGt();
   }
 
@@ -172,6 +177,9 @@ export function OcrGtCompareRow({
             value={localGt}
             onChange={(e) => {
               setLocalGt(e.target.value);
+            }}
+            onFocus={() => {
+              setIsFocused(true);
             }}
             onBlur={handleBlur}
             onKeyDown={(e) => {

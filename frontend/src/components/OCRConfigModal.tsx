@@ -209,6 +209,18 @@ export function OCRConfigModal({
     auto_rotate_method: AutoRotateMethod;
   } | null>(null);
 
+  // C3: model-selection state. Pending values are local so the user can pick a
+  // model + revision and commit with Apply. They re-sync to the server snapshot
+  // whenever the config query resolves/refetches.
+  //
+  // Declared here (ahead of the close-on-open-change effect below, which
+  // clears them) rather than lower down next to detectionOptions/
+  // recognitionOptions, so the effect's setters are never referenced before
+  // their declaration.
+  const [pendingDetection, setPendingDetection] = useState<string | null>(null);
+  const [pendingRecognition, setPendingRecognition] = useState<string | null>(null);
+  const [pendingRevision, setPendingRevision] = useState<string | null>(null);
+
   // Capture snapshot when modal opens (open: false → true).
   const prevOpenRef = useRef(open);
   useEffect(() => {
@@ -218,7 +230,12 @@ export function OCRConfigModal({
         auto_rotate_method: ocrConfig.auto_rotate_method,
       });
     }
-    if (!open) {
+    // Gated on the open→closed *transition* (via the ref) rather than the
+    // plain `open` prop: React's effect-analysis treats a ref-guarded branch
+    // as safe from cascading-render concerns, and it also avoids redundantly
+    // re-clearing already-null state on every render while the modal stays
+    // closed.
+    if (!open && prevOpenRef.current) {
       setPendingAutoRotate(null);
       setSaveError(null);
       // Discard un-applied model selections on every close path (Cancel,
@@ -257,14 +274,8 @@ export function OCRConfigModal({
   const autoRotateMethod: AutoRotateMethod =
     pendingAutoRotate?.auto_rotate_method ?? ocrConfig?.auto_rotate_method ?? "auto";
 
-  // C3: model-selection state. Pending values are local so the user can pick a
-  // model + revision and commit with Apply. They re-sync to the server snapshot
-  // whenever the config query resolves/refetches.
   const detectionOptions = ocrConfig?.detection_options ?? [];
   const recognitionOptions = ocrConfig?.recognition_options ?? [];
-  const [pendingDetection, setPendingDetection] = useState<string | null>(null);
-  const [pendingRecognition, setPendingRecognition] = useState<string | null>(null);
-  const [pendingRevision, setPendingRevision] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [rescanning, setRescanning] = useState(false);
 

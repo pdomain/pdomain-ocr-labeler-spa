@@ -25,7 +25,7 @@
 //   export-close-button            — Close button
 
 import { useEffect, useState } from "react";
-import { useJobProgress } from "../hooks/useJobProgress";
+import { useJobProgress, type JobProgressEvent } from "../hooks/useJobProgress";
 import { useLabelVocabulary } from "../hooks/useLabelVocabulary";
 import { useTypographyReview } from "../hooks/useTypographyReview";
 import { fetchTrainerInstalled, launchTrainer } from "./ExportDialogUtils";
@@ -119,11 +119,26 @@ export function ExportDialog({
       .catch(() => setTrainerInstalled(false));
   }, [open]);
 
-  // Fetch available styles when scope=all_validated and dialog is open
+  // Fetch available styles when scope=all_validated and dialog is open.
+  // `stylesLoading` flips true the moment the relevant inputs change (during
+  // render, per https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes)
+  // rather than synchronously inside the effect below, so this doesn't
+  // trigger an extra effect-driven render on every open/scope/project change.
+  const [prevStylesDeps, setPrevStylesDeps] = useState({ open, scope, projectId });
+  if (
+    prevStylesDeps.open !== open ||
+    prevStylesDeps.scope !== scope ||
+    prevStylesDeps.projectId !== projectId
+  ) {
+    setPrevStylesDeps({ open, scope, projectId });
+    if (open && scope === "all_validated") {
+      setStylesLoading(true);
+    }
+  }
+
   useEffect(() => {
     if (!open || scope !== "all_validated") return;
     let cancelled = false;
-    setStylesLoading(true);
     fetch(`/api/projects/${encodeURIComponent(projectId)}/export/styles`)
       .then((r) => r.json())
       .then((data: string[]) => {
@@ -144,11 +159,21 @@ export function ExportDialog({
     };
   }, [open, scope, projectId]);
 
-  // Watch job progress for terminal events
-  useEffect(() => {
-    if (!progress) return;
+  // Watch job progress for terminal events. Handled during render (rather
+  // than in an effect) because this is reacting to `progress` — a value
+  // already owned by the `useJobProgress` hook — transitioning to a terminal
+  // status; see the "adjusting state when a prop changes" pattern linked
+  // above. `lastHandledProgress` guards against re-applying the same
+  // terminal event on a later render.
+  const [lastHandledProgress, setLastHandledProgress] = useState<JobProgressEvent | null>(null);
+  if (
+    progress &&
+    progress !== lastHandledProgress &&
+    (progress.status === "complete" || progress.status === "error")
+  ) {
+    setLastHandledProgress(progress);
+    setRunning(false);
     if (progress.status === "complete") {
-      setRunning(false);
       setHistory((prev) => [
         ...prev,
         {
@@ -162,13 +187,11 @@ export function ExportDialog({
           pagesSkippedNotValidated: progress.pages_skipped_not_validated,
         },
       ]);
-      setJobId(null);
-    } else if (progress.status === "error") {
-      setRunning(false);
+    } else {
       setError(progress.error_message ?? "Export failed");
-      setJobId(null);
     }
-  }, [progress, scope, selectedStyles]);
+    setJobId(null);
+  }
 
   // --- Style filter helpers ---
   const allStylesSelected = selectedStyles.length === 0;

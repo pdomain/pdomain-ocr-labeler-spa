@@ -126,20 +126,24 @@ export function EraseCanvas({
   height = DEFAULT_HEIGHT,
 }: EraseCanvasProps) {
   const stageRef = useRef<Konva.Stage>(null);
-  const [imageEl, setImageEl] = useState<HTMLImageElement | null>(null);
+  // Keyed by the URL it was loaded for, so `imageEl` below is derived rather
+  // than reset via a synchronous setState call in the effect — it's simply
+  // null whenever the loaded image doesn't match the current `imageUrl`
+  // (including while a new one is still loading, or when there is none).
+  const [loadedImage, setLoadedImage] = useState<{ url: string; img: HTMLImageElement } | null>(
+    null,
+  );
+  const imageEl = loadedImage && loadedImage.url === imageUrl ? loadedImage.img : null;
   const [rectDrag, setRectDrag] = useState<RectDragState | null>(null);
   const [lassoDrag, setLassoDrag] = useState<LassoDragState | null>(null);
   const eraseColors = buildEraseColors();
 
   useEffect(() => {
-    if (!imageUrl) {
-      setImageEl(null);
-      return;
-    }
+    if (!imageUrl) return;
     let cancelled = false;
     const img = new window.Image();
     img.onload = () => {
-      if (!cancelled) setImageEl(img);
+      if (!cancelled) setLoadedImage({ url: imageUrl, img });
     };
     img.src = imageUrl;
     return () => {

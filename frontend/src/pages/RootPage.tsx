@@ -555,7 +555,11 @@ export default function RootPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectExists, derivedProjectId, lastProjectPath, skipSessionRedirect]);
 
-  const loadFailed = loadStateRef.current === "failed";
+  // Derived from the mutation's own reactive status rather than reading
+  // `loadStateRef.current` during render (refs must not be read during
+  // render — see https://react.dev/reference/react/useRef). `loadStateRef`
+  // itself still exists purely to gate the effect below to firing once.
+  const loadFailed = loadMutation.isError;
 
   // In-flight: blank content area while either query is loading or load POST is pending.
   if (
