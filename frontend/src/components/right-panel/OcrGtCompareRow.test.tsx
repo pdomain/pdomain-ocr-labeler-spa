@@ -28,7 +28,7 @@ describe("OcrGtCompareRow (P2.c)", () => {
     expect(onCommitGt).toHaveBeenCalledWith("world");
   });
 
-  it("does not call onCommitGt when value unchanged on blur", () => {
+  it("does not call onCommitGt when value unchanged on blur-sm", () => {
     const onCommitGt = vi.fn();
     render(<OcrGtCompareRow ocrText="hello" gtText="hello" onCommitGt={onCommitGt} />);
     fireEvent.blur(screen.getByTestId("ocr-gt-input"));

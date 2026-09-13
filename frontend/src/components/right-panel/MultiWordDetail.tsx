@@ -100,7 +100,7 @@ export function MultiWordDetail({
   const grouped = groupByBlock(selectedWords, page.line_matches ?? []);
 
   const btn =
-    "text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 " +
+    "text-[11px] px-2 py-1 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 " +
     "hover:border-accent transition-colors disabled:opacity-40";
 
   const isPending = validateWords.isPending || deleteWords.isPending || applyComponent.isPending;
@@ -116,7 +116,7 @@ export function MultiWordDetail({
           <div
             key={blockKey ?? "null"}
             data-testid={blockTestId}
-            className="flex flex-col gap-1.5 border border-border-1 rounded p-2"
+            className="flex flex-col gap-1.5 border border-border-1 rounded-sm p-2"
           >
             {/* Block header */}
             <div
@@ -140,7 +140,7 @@ export function MultiWordDetail({
                       <span
                         key={wordIdx}
                         data-testid={`multi-word-item-${lineMatch.line_index}-${wordIdx}`}
-                        className="px-1.5 py-0.5 rounded bg-bg-raised text-ink-1 border border-border-2 text-[11px]"
+                        className="px-1.5 py-0.5 rounded-sm bg-bg-raised text-ink-1 border border-border-2 text-[11px]"
                         title={
                           wordMatch?.ground_truth_text &&
                           wordMatch.ground_truth_text !== wordMatch?.ocr_text
@@ -215,7 +215,7 @@ export function MultiWordDetail({
           <select
             data-testid="multi-word-component-select"
             aria-label="Word component"
-            className="text-[11px] border border-border-2 rounded px-1 py-0.5 bg-bg-sunk flex-1"
+            className="text-[11px] border border-border-2 rounded-sm px-1 py-0.5 bg-bg-sunk flex-1"
             value={component}
             onChange={(e) => {
               setComponent(e.target.value);

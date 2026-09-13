@@ -137,7 +137,7 @@ export function WordFooter({
         onClick={handleValidate}
         disabled={toggleValidated.isPending || (!isValidated && !reviewComplete)}
         className={[
-          "flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium transition-colors",
+          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm text-xs font-medium transition-colors",
           "border",
           isValidated
             ? "border-accent/60 bg-accent/10 text-accent hover:bg-accent/20"
@@ -160,7 +160,7 @@ export function WordFooter({
       <button
         data-testid="word-footer-skip"
         onClick={handleSkip}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium border border-border-2 bg-sunk text-ink-2 hover:bg-sunk/80 transition-colors"
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm text-xs font-medium border border-border-2 bg-sunk text-ink-2 hover:bg-sunk/80 transition-colors"
         aria-label="Skip to next word"
       >
         <span>Skip</span>
@@ -177,7 +177,7 @@ export function WordFooter({
           setConfirmOpen(true);
         }}
         disabled={deleteWord.isPending}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium border border-mismatch/60 bg-mismatch/10 text-mismatch hover:bg-mismatch/20 transition-colors"
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm text-xs font-medium border border-mismatch/60 bg-mismatch/10 text-mismatch hover:bg-mismatch/20 transition-colors"
         aria-label="Delete word"
       >
         <span>Delete</span>

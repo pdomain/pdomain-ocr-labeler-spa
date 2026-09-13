@@ -1,144 +1,101 @@
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import { describe, it, expect } from "vitest";
-import config from "../../tailwind.config.js";
 
-describe("tailwind.config theme.extend", () => {
-  const colors = config.theme?.extend?.colors ?? {};
+// Tailwind 4 moved the theme out of tailwind.config.js and into an `@theme`
+// block in index.css, and the config file is gone. This suite used to import
+// that config and assert its object shape; it now asserts the same tokens in
+// the place they actually live. A missing token here means the matching
+// utility class silently stops resolving, which is what it has always guarded.
+const indexCss = readFileSync(resolve(__dirname, "../index.css"), "utf-8");
+
+const themeBlock = (() => {
+  const start = indexCss.indexOf("@theme");
+  if (start === -1) return "";
+  return indexCss.slice(start, indexCss.indexOf("}", start) + 1);
+})();
+
+function expectToken(name: string, value: string): void {
+  expect(themeBlock).toContain(`${name}: ${value}`);
+}
+
+describe("index.css @theme tokens", () => {
+  it("defines an @theme block", () => {
+    expect(themeBlock).not.toBe("");
+  });
 
   describe("bg colors", () => {
-    it("bg.page maps to CSS var", () => {
-      expect(colors.bg?.page).toBe("var(--bg-page)");
-    });
-
-    it("bg.surface maps to CSS var", () => {
-      expect(colors.bg?.surface).toBe("var(--bg-surface)");
-    });
-
-    it("bg.raised maps to CSS var", () => {
-      expect(colors.bg?.raised).toBe("var(--bg-raised)");
-    });
-
-    it("bg.sunk maps to CSS var", () => {
-      expect(colors.bg?.sunk).toBe("var(--bg-sunk)");
-    });
+    it.each([
+      ["--color-bg-page", "var(--bg-page)"],
+      ["--color-bg-surface", "var(--bg-surface)"],
+      ["--color-bg-raised", "var(--bg-raised)"],
+      ["--color-bg-sunk", "var(--bg-sunk)"],
+    ])("%s maps to %s", (name, value) => expectToken(name, value));
   });
 
   describe("border colors", () => {
-    it("border.1 maps to CSS var", () => {
-      expect(colors.border?.["1"]).toBe("var(--border-1)");
-    });
-
-    it("border.2 maps to CSS var", () => {
-      expect(colors.border?.["2"]).toBe("var(--border-2)");
-    });
-
-    it("border.3 maps to CSS var", () => {
-      expect(colors.border?.["3"]).toBe("var(--border-3)");
-    });
+    it.each([
+      ["--color-border-1", "var(--border-1)"],
+      ["--color-border-2", "var(--border-2)"],
+      ["--color-border-3", "var(--border-3)"],
+    ])("%s maps to %s", (name, value) => expectToken(name, value));
   });
 
   describe("ink colors", () => {
-    it("ink.1 maps to CSS var", () => {
-      expect(colors.ink?.["1"]).toBe("var(--ink-1)");
-    });
-
-    it("ink.2 maps to CSS var", () => {
-      expect(colors.ink?.["2"]).toBe("var(--ink-2)");
-    });
-
-    it("ink.3 maps to CSS var", () => {
-      expect(colors.ink?.["3"]).toBe("var(--ink-3)");
-    });
-
-    it("ink.4 maps to CSS var", () => {
-      expect(colors.ink?.["4"]).toBe("var(--ink-4)");
-    });
+    it.each([
+      ["--color-ink-1", "var(--ink-1)"],
+      ["--color-ink-2", "var(--ink-2)"],
+      ["--color-ink-3", "var(--ink-3)"],
+      ["--color-ink-4", "var(--ink-4)"],
+    ])("%s maps to %s", (name, value) => expectToken(name, value));
   });
 
   describe("accent colors", () => {
-    it("accent.DEFAULT maps to CSS var", () => {
-      expect(colors.accent?.DEFAULT).toBe("var(--accent)");
-    });
-
-    it("accent.ink maps to CSS var", () => {
-      expect(colors.accent?.ink).toBe("var(--accent-ink)");
-    });
+    it.each([
+      ["--color-accent", "var(--accent)"],
+      ["--color-accent-ink", "var(--accent-ink)"],
+    ])("%s maps to %s", (name, value) => expectToken(name, value));
   });
 
   describe("status colors", () => {
-    it("status.exact maps to CSS var", () => {
-      expect(colors.status?.exact).toBe("var(--status-exact)");
-    });
-
-    it("status.fuzzy maps to CSS var", () => {
-      expect(colors.status?.fuzzy).toBe("var(--status-fuzzy)");
-    });
-
-    it("status.mismatch maps to CSS var", () => {
-      expect(colors.status?.mismatch).toBe("var(--status-mismatch)");
-    });
-
-    it("status.ocr maps to CSS var", () => {
-      expect(colors.status?.ocr).toBe("var(--status-ocr)");
-    });
-
-    it("status.gt maps to CSS var", () => {
-      expect(colors.status?.gt).toBe("var(--status-gt)");
-    });
+    it.each([
+      ["--color-status-exact", "var(--status-exact)"],
+      ["--color-status-fuzzy", "var(--status-fuzzy)"],
+      ["--color-status-mismatch", "var(--status-mismatch)"],
+      ["--color-status-ocr", "var(--status-ocr)"],
+      ["--color-status-gt", "var(--status-gt)"],
+    ])("%s maps to %s", (name, value) => expectToken(name, value));
   });
 
   describe("layer colors", () => {
-    it("layer.block maps to CSS var", () => {
-      expect(colors.layer?.block).toBe("var(--layer-block)");
-    });
-
-    it("layer.para maps to CSS var", () => {
-      expect(colors.layer?.para).toBe("var(--layer-para)");
-    });
-
-    it("layer.line maps to CSS var", () => {
-      expect(colors.layer?.line).toBe("var(--layer-line)");
-    });
-
-    it("layer.word maps to CSS var", () => {
-      expect(colors.layer?.word).toBe("var(--layer-word)");
-    });
+    it.each([
+      ["--color-layer-block", "var(--layer-block)"],
+      ["--color-layer-para", "var(--layer-para)"],
+      ["--color-layer-line", "var(--layer-line)"],
+      ["--color-layer-word", "var(--layer-word)"],
+    ])("%s maps to %s", (name, value) => expectToken(name, value));
   });
 
-  describe("fontFamily", () => {
-    const fontFamily = config.theme?.extend?.fontFamily ?? {};
-
+  describe("fonts", () => {
     it("ui font family is defined", () => {
-      expect(Array.isArray(fontFamily.ui)).toBe(true);
-      expect(fontFamily.ui).toContain("Inter");
+      expect(themeBlock).toMatch(/--font-ui:.*Inter/);
     });
 
     it("mono font family is defined", () => {
-      expect(Array.isArray(fontFamily.mono)).toBe(true);
-      expect(fontFamily.mono).toContain("JetBrains Mono");
+      expect(themeBlock).toMatch(/--font-mono:.*JetBrains Mono/);
     });
   });
 
-  describe("fontSize", () => {
-    const fontSize = config.theme?.extend?.fontSize ?? {};
-
-    it("fontSize.label", () => {
-      expect(fontSize.label).toStrictEqual(["9.5px", { lineHeight: "1.1" }]);
-    });
-
-    it("fontSize.hint", () => {
-      expect(fontSize.hint).toStrictEqual(["10px", { lineHeight: "1.2" }]);
-    });
-
-    it("fontSize['btn-sm']", () => {
-      expect(fontSize["btn-sm"]).toStrictEqual(["11px", { lineHeight: "1.2" }]);
-    });
-
-    it("fontSize.body", () => {
-      expect(fontSize.body).toStrictEqual(["12px", { lineHeight: "1.4" }]);
-    });
-
-    it("fontSize.heading", () => {
-      expect(fontSize.heading).toStrictEqual(["13px", { lineHeight: "1.3" }]);
+  describe("text sizes", () => {
+    it.each([
+      ["--text-label", "9.5px", "1.1"],
+      ["--text-hint", "10px", "1.2"],
+      ["--text-btn-sm", "11px", "1.2"],
+      ["--text-body", "12px", "1.4"],
+      ["--text-heading", "13px", "1.3"],
+    ])("%s is %s with line height %s", (name, size, lineHeight) => {
+      expectToken(name, size);
+      expectToken(`${name}--line-height`, lineHeight);
     });
   });
 });

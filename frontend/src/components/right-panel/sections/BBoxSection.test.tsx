@@ -130,7 +130,7 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     expect(screen.getByTestId("bbox-reset-button")).toBeInTheDocument();
   });
 
-  it("fires word PATCH (rebox) mutation on input blur with changed value", async () => {
+  it("fires word PATCH (rebox) mutation on input blur-sm with changed value", async () => {
     const handler = vi.fn((_req: Request) =>
       Promise.resolve(HttpResponse.json(makePageResponse(DEFAULT_BBOX))),
     );

@@ -135,7 +135,7 @@ export function ErasePixelsSection({
       {/* Ops list */}
       <div
         data-testid="erase-ops-list"
-        className="flex flex-col gap-1 max-h-32 overflow-y-auto rounded border border-border-2 bg-sunk p-1"
+        className="flex flex-col gap-1 max-h-32 overflow-y-auto rounded-sm border border-border-2 bg-sunk p-1"
       >
         {ops.length === 0 ? (
           <p className="text-[11px] text-ink-3 italic p-1">Draw to mark pixels for erasing</p>
@@ -143,7 +143,7 @@ export function ErasePixelsSection({
           ops.map((op, i) => (
             <div
               key={i}
-              className="flex items-center justify-between gap-2 px-1 py-0.5 rounded hover:bg-raised"
+              className="flex items-center justify-between gap-2 px-1 py-0.5 rounded-sm hover:bg-raised"
             >
               <span className="text-[11px] text-ink-2 truncate">{describeOp(op, i)}</span>
               <button

@@ -285,7 +285,7 @@ export function EraseCanvas({
 
       {/* Konva stage */}
       <div
-        className="border border-border-2 rounded overflow-hidden bg-sunk"
+        className="border border-border-2 rounded-sm overflow-hidden bg-sunk"
         style={{ width, cursor: "crosshair" }}
       >
         <Stage

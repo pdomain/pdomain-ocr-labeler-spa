@@ -98,7 +98,7 @@ function CoordInput({
           const n = parseInt(e.target.value, 10);
           if (!isNaN(n)) onChange(n);
         }}
-        className="w-14 h-5 px-1 rounded border border-border-2 bg-sunk text-[10px] text-ink-1 text-center"
+        className="w-14 h-5 px-1 rounded-sm border border-border-2 bg-sunk text-[10px] text-ink-1 text-center"
       />
     </label>
   );
@@ -316,7 +316,7 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
       {selected && (
         <div
           data-testid="charfixer-detail-strip"
-          className="flex flex-wrap items-center gap-2 rounded border border-border-2 bg-sunk px-2 py-1.5"
+          className="flex flex-wrap items-center gap-2 rounded-sm border border-border-2 bg-sunk px-2 py-1.5"
         >
           <span
             data-testid="charfixer-detail-text"
@@ -383,7 +383,7 @@ export function CharFixerSection({ word, projectId, pageIndex, imageUrl }: CharF
               data-testid={`char-fixer-cell-${i}`}
               data-mismatch={isMismatch ? "true" : undefined}
               className={[
-                "flex flex-col items-center gap-0.5 rounded border bg-sunk px-1 py-1",
+                "flex flex-col items-center gap-0.5 rounded-sm border bg-sunk px-1 py-1",
                 isMismatch
                   ? "border-l-2 border-l-status-mismatch border-border-2"
                   : "border-border-2",

@@ -65,7 +65,7 @@ export function WordHeader({ word, hasPrev, hasNext, onPrev, onNext }: WordHeade
             aria-label="Previous word"
             disabled={!hasPrev}
             onClick={onPrev}
-            className="w-6 h-6 flex items-center justify-center rounded text-[11px] text-ink-2 hover:bg-bg-sunk disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="w-6 h-6 flex items-center justify-center rounded-sm text-[11px] text-ink-2 hover:bg-bg-sunk disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             ◀
           </button>
@@ -75,7 +75,7 @@ export function WordHeader({ word, hasPrev, hasNext, onPrev, onNext }: WordHeade
             aria-label="Next word"
             disabled={!hasNext}
             onClick={onNext}
-            className="w-6 h-6 flex items-center justify-center rounded text-[11px] text-ink-2 hover:bg-bg-sunk disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="w-6 h-6 flex items-center justify-center rounded-sm text-[11px] text-ink-2 hover:bg-bg-sunk disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             ▶
           </button>

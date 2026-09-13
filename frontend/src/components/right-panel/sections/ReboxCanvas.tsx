@@ -325,7 +325,7 @@ export function ReboxCanvas({
 
   return (
     <div
-      className="rounded border border-border-2 overflow-hidden bg-sunk"
+      className="rounded-sm border border-border-2 overflow-hidden bg-sunk"
       style={{
         cursor: tool === "draw" ? "crosshair" : tool === "pan" ? "grab" : "default",
       }}

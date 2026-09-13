@@ -73,7 +73,7 @@ export function BusyOverlay({ activeJob, isMutating = false, onCancel }: BusyOve
   const cancelButton = showCancel ? (
     <button
       data-testid="busy-overlay-cancel"
-      className="px-3 py-1.5 text-sm rounded border border-border-2 hover:bg-bg-raised disabled:opacity-50"
+      className="px-3 py-1.5 text-sm rounded-sm border border-border-2 hover:bg-bg-raised disabled:opacity-50"
       onClick={handleCancel}
       disabled={cancelMutation.isPending}
       title={isBestEffort ? "Cancel (best-effort — OCR may not stop immediately)" : undefined}
@@ -90,7 +90,7 @@ export function BusyOverlay({ activeJob, isMutating = false, onCancel }: BusyOve
     // breaking the containment assertion. OperationStatusPanel renders in-place (no portal).
     <div
       data-testid="busy-overlay"
-      className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm flex items-center justify-center"
+      className="fixed inset-0 z-40 bg-black/30 backdrop-blur-xs flex items-center justify-center"
       aria-label="Operation in progress"
     >
       <OperationStatusPanel
@@ -116,7 +116,7 @@ export function ProjectLoadingOverlay({ isLoading }: ProjectLoadingOverlayProps)
     // "project-loading-overlay" testid. See BusyOverlay comment above for rationale.
     <div
       data-testid="project-loading-overlay"
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center"
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center"
       aria-label="Loading project"
     >
       <OperationStatusPanel title="Loading project" message="Loading project…" state="running" />

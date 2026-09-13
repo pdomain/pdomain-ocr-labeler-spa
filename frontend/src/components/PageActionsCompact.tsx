@@ -414,7 +414,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   }
 
   const base =
-    "flex items-center gap-1 h-7 px-2.5 rounded border text-[11px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
+    "flex items-center gap-1 h-7 px-2.5 rounded-sm border text-[11px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
   const normal = "border-border-2 bg-bg-raised text-ink-2 hover:bg-bg-surface hover:text-ink-1";
   const accentBtn =
     "border-border-2 bg-bg-raised text-accent hover:border-accent hover:text-accent-ink hover:bg-accent";
@@ -555,7 +555,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
               <span aria-hidden="true">⋯</span>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[12rem]">
+          <DropdownMenuContent align="end" className="min-w-48">
             <DropdownMenuItem
               data-testid="reload-ocr-edited-button"
               disabled={disabled || !hasEditedImage}
@@ -644,7 +644,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
               : `Manually rotated ${String(rotationDegrees)}° clockwise.`
           }
           className={[
-            "px-2 py-0.5 text-[11px] font-semibold rounded bg-bg-raised",
+            "px-2 py-0.5 text-[11px] font-semibold rounded-sm bg-bg-raised",
             rotationSource === "manual" ? "text-accent" : "text-ink-3",
             "disabled:cursor-default",
           ].join(" ")}

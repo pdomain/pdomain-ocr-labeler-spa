@@ -24,7 +24,7 @@ export function PlaintextGtOcrView({ pageTextGt = "", pageTextOcr = "" }: Plaint
           data-testid="drawer-text-panel-ground-truth"
           readOnly
           value={pageTextGt ?? ""}
-          className="flex-1 resize-none font-mono text-sm p-2 border border-border-1 rounded bg-bg-sunk focus:outline-none"
+          className="flex-1 resize-none font-mono text-sm p-2 border border-border-1 rounded-sm bg-bg-sunk focus:outline-hidden"
           aria-label="Ground truth text"
         />
       </div>
@@ -36,7 +36,7 @@ export function PlaintextGtOcrView({ pageTextGt = "", pageTextOcr = "" }: Plaint
           data-testid="drawer-text-panel-ocr"
           readOnly
           value={pageTextOcr ?? ""}
-          className="flex-1 resize-none font-mono text-sm p-2 border border-border-1 rounded bg-bg-sunk focus:outline-none"
+          className="flex-1 resize-none font-mono text-sm p-2 border border-border-1 rounded-sm bg-bg-sunk focus:outline-hidden"
           aria-label="OCR text"
         />
       </div>

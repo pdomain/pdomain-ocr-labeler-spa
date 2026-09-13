@@ -786,7 +786,7 @@ export default function PageImageCanvas({
         aria-label={`Canvas mode: ${MODE_LABELS[mode]}`}
       >
         <span
-          className="w-[6px] h-[6px] rounded-full flex-shrink-0"
+          className="w-[6px] h-[6px] rounded-full shrink-0"
           style={{ backgroundColor: modeRectColors[mode] }}
         />
         {MODE_LABELS[mode]}
@@ -807,7 +807,7 @@ export default function PageImageCanvas({
           onClick={() => {
             setCanvasZoom(0);
           }}
-          className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${canvasZoom === 0 ? "border-accent/60 bg-accent/10 text-accent" : "border-border-2 bg-bg-surface/90 text-ink-2 hover:text-ink-1"}`}
+          className={`text-[10px] px-2 py-0.5 rounded-sm border transition-colors ${canvasZoom === 0 ? "border-accent/60 bg-accent/10 text-accent" : "border-border-2 bg-bg-surface/90 text-ink-2 hover:text-ink-1"}`}
         >
           Fit
         </button>
@@ -818,7 +818,7 @@ export default function PageImageCanvas({
           onClick={() => {
             setCanvasZoom(1.0);
           }}
-          className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${canvasZoom === 1.0 ? "border-accent/60 bg-accent/10 text-accent" : "border-border-2 bg-bg-surface/90 text-ink-2 hover:text-ink-1"}`}
+          className={`text-[10px] px-2 py-0.5 rounded-sm border transition-colors ${canvasZoom === 1.0 ? "border-accent/60 bg-accent/10 text-accent" : "border-border-2 bg-bg-surface/90 text-ink-2 hover:text-ink-1"}`}
         >
           100%
         </button>
@@ -836,7 +836,7 @@ export default function PageImageCanvas({
               matchFilterMode === "mismatches_only" ? "all" : "mismatches_only",
             );
           }}
-          className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${matchFilterMode === "mismatches_only" ? "border-accent/60 bg-accent/10 text-accent" : "border-border-2 bg-bg-surface/90 text-ink-2 hover:text-ink-1"}`}
+          className={`text-[10px] px-2 py-0.5 rounded-sm border transition-colors ${matchFilterMode === "mismatches_only" ? "border-accent/60 bg-accent/10 text-accent" : "border-border-2 bg-bg-surface/90 text-ink-2 hover:text-ink-1"}`}
         >
           Mismatches
         </button>
@@ -854,7 +854,7 @@ export default function PageImageCanvas({
           <button
             type="button"
             data-testid="canvas-bulk-validate"
-            className="text-[10px] px-2 py-0.5 rounded border border-status-exact/60 bg-bg-surface/90 text-status-exact hover:bg-status-exact/10 transition-colors"
+            className="text-[10px] px-2 py-0.5 rounded-sm border border-status-exact/60 bg-bg-surface/90 text-status-exact hover:bg-status-exact/10 transition-colors"
             onClick={() => {
               /* bulk validate — wired when useWordMutations bulk API lands */
             }}
@@ -864,7 +864,7 @@ export default function PageImageCanvas({
           <button
             type="button"
             data-testid="canvas-bulk-skip"
-            className="text-[10px] px-2 py-0.5 rounded border border-status-fuzzy/60 bg-bg-surface/90 text-status-fuzzy hover:bg-status-fuzzy/10 transition-colors"
+            className="text-[10px] px-2 py-0.5 rounded-sm border border-status-fuzzy/60 bg-bg-surface/90 text-status-fuzzy hover:bg-status-fuzzy/10 transition-colors"
             onClick={() => {
               /* bulk skip */
             }}
@@ -874,7 +874,7 @@ export default function PageImageCanvas({
           <button
             type="button"
             data-testid="canvas-bulk-delete"
-            className="text-[10px] px-2 py-0.5 rounded border border-status-mismatch/60 bg-bg-surface/90 text-status-mismatch hover:bg-status-mismatch/10 transition-colors"
+            className="text-[10px] px-2 py-0.5 rounded-sm border border-status-mismatch/60 bg-bg-surface/90 text-status-mismatch hover:bg-status-mismatch/10 transition-colors"
             onClick={() => {
               /* bulk delete */
             }}

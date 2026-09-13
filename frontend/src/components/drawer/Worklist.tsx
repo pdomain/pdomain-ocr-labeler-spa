@@ -197,7 +197,7 @@ function FilterRow({ counts, activeFilter, sort, onFilter, onSort }: FilterRowPr
   return (
     <div
       data-testid="worklist-filter-row"
-      className="flex flex-col gap-1.5 p-2 border-b border-border-1 flex-shrink-0"
+      className="flex flex-col gap-1.5 p-2 border-b border-border-1 shrink-0"
     >
       {/* Status-count chip row */}
       <div className="flex gap-1 flex-wrap">
@@ -232,14 +232,14 @@ function FilterRow({ counts, activeFilter, sort, onFilter, onSort }: FilterRowPr
 
       {/* Sort dropdown */}
       <div className="flex items-center gap-1.5">
-        <span className="text-[10px] text-ink-3 flex-shrink-0">Sort:</span>
+        <span className="text-[10px] text-ink-3 shrink-0">Sort:</span>
         <select
           data-testid="worklist-sort-select"
           value={sort}
           onChange={(e) => {
             onSort(e.target.value as WorklistSort);
           }}
-          className="text-[10px] bg-bg-raised border border-border-2 rounded px-1 py-0.5 text-ink-2 hover:border-accent focus:outline-none focus:border-accent transition-colors"
+          className="text-[10px] bg-bg-raised border border-border-2 rounded-sm px-1 py-0.5 text-ink-2 hover:border-accent focus:outline-hidden focus:border-accent transition-colors"
         >
           {SORT_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
@@ -289,7 +289,7 @@ function WorklistRowInner({ item, isSelected, isChecked }: WorklistRowInnerProps
       )}
     >
       {/* Bulk-select checkbox */}
-      <div className="flex items-center pl-1.5 pr-0.5 flex-shrink-0">
+      <div className="flex items-center pl-1.5 pr-0.5 shrink-0">
         <input
           type="checkbox"
           data-testid={`worklist-row-checkbox-${line.line_index}`}
@@ -307,15 +307,15 @@ function WorklistRowInner({ item, isSelected, isChecked }: WorklistRowInnerProps
       </div>
 
       {/* 4px status color bar */}
-      <div className={cn("w-1 flex-shrink-0 rounded-sm my-0.5 ml-0.5", barClass)} />
+      <div className={cn("w-1 shrink-0 rounded-xs my-0.5 ml-0.5", barClass)} />
 
       {/* Row body */}
       <div className="flex-1 flex flex-col gap-0.5 px-2 py-1.5 min-w-0">
         {/* Top row: mono ID + pip + confidence */}
         <div className="flex items-center gap-1.5">
-          <span className="font-mono text-[10px] text-ink-3 flex-shrink-0">{idStamp}</span>
+          <span className="font-mono text-[10px] text-ink-3 shrink-0">{idStamp}</span>
           <StatusPip status={pip} />
-          <span className="ml-auto font-mono tabular-nums text-[10px] text-ink-3 flex-shrink-0">
+          <span className="ml-auto font-mono tabular-nums text-[10px] text-ink-3 shrink-0">
             {pct}%
           </span>
         </div>

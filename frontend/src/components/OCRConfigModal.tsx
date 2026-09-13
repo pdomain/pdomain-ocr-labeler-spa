@@ -412,7 +412,7 @@ export function OCRConfigModal({
           </DialogTitle>
           <DialogClose
             aria-label="Close"
-            className="text-ink-4 hover:text-ink-2 rounded p-1"
+            className="text-ink-4 hover:text-ink-2 rounded-sm p-1"
             data-testid="ocr-config-close-button"
           >
             ×
@@ -426,7 +426,7 @@ export function OCRConfigModal({
             <p
               role="alert"
               data-testid="ocr-config-save-error"
-              className="text-xs rounded px-2 py-1 mb-3"
+              className="text-xs rounded-sm px-2 py-1 mb-3"
               style={{
                 color: "var(--status-bad)",
                 background: "color-mix(in srgb, var(--status-bad) 8%, var(--bg-surface))",
@@ -444,7 +444,7 @@ export function OCRConfigModal({
 
             {!normalizeAvailable && (
               <p
-                className="text-xs rounded px-2 py-1 mb-3"
+                className="text-xs rounded-sm px-2 py-1 mb-3"
                 style={{
                   color: "var(--status-fuzzy)",
                   background: "color-mix(in srgb, var(--status-fuzzy) 8%, var(--bg-surface))",
@@ -511,7 +511,7 @@ export function OCRConfigModal({
                   value={settings.normalize_profile}
                   disabled={true}
                   onChange={handleProfileChange}
-                  className="border border-border-1 rounded text-xs px-1 py-0.5 bg-bg-sunk cursor-not-allowed"
+                  className="border border-border-1 rounded-sm text-xs px-1 py-0.5 bg-bg-sunk cursor-not-allowed"
                   aria-label="Normalization profile"
                 >
                   <option value="ascii">ascii</option>
@@ -529,7 +529,7 @@ export function OCRConfigModal({
 
             {!autoRotateAvailable && (
               <p
-                className="text-xs rounded px-2 py-1 mb-3"
+                className="text-xs rounded-sm px-2 py-1 mb-3"
                 style={{
                   color: "var(--status-fuzzy)",
                   background: "color-mix(in srgb, var(--status-fuzzy) 8%, var(--bg-surface))",
@@ -579,7 +579,7 @@ export function OCRConfigModal({
                   value={autoRotateMethod}
                   disabled={!autoRotateAvailable || !autoRotateOnLoad}
                   onChange={handleAutoRotateMethodChange}
-                  className="border border-border-1 rounded text-xs px-1 py-0.5 bg-bg-sunk"
+                  className="border border-border-1 rounded-sm text-xs px-1 py-0.5 bg-bg-sunk"
                   aria-label="Auto-rotation method"
                 >
                   <option value="auto">auto</option>
@@ -612,7 +612,7 @@ export function OCRConfigModal({
                   onChange={(e) => {
                     setPendingDetection(e.target.value);
                   }}
-                  className="border border-border-1 rounded text-xs px-1 py-0.5 bg-bg-sunk flex-1"
+                  className="border border-border-1 rounded-sm text-xs px-1 py-0.5 bg-bg-sunk flex-1"
                   aria-label="Detection model"
                 >
                   {detectionOptions.length === 0 ? (
@@ -639,7 +639,7 @@ export function OCRConfigModal({
                   onChange={(e) => {
                     setPendingRecognition(e.target.value);
                   }}
-                  className="border border-border-1 rounded text-xs px-1 py-0.5 bg-bg-sunk flex-1"
+                  className="border border-border-1 rounded-sm text-xs px-1 py-0.5 bg-bg-sunk flex-1"
                   aria-label="Recognition model"
                 >
                   {recognitionOptions.length === 0 ? (
@@ -668,7 +668,7 @@ export function OCRConfigModal({
                   onChange={(e) => {
                     setPendingRevision(e.target.value);
                   }}
-                  className="border border-border-1 rounded text-xs px-1 py-0.5 bg-bg-sunk flex-1"
+                  className="border border-border-1 rounded-sm text-xs px-1 py-0.5 bg-bg-sunk flex-1"
                   aria-label="Hugging Face pinned revision"
                 />
               </div>
@@ -682,7 +682,7 @@ export function OCRConfigModal({
                   onClick={() => {
                     void handleApplyModels();
                   }}
-                  className="px-3 py-1 text-xs rounded border border-border-2 bg-bg-raised text-accent hover:border-accent disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-3 py-1 text-xs rounded-sm border border-border-2 bg-bg-raised text-accent hover:border-accent disabled:opacity-40 disabled:cursor-not-allowed"
                   aria-label="Apply OCR model selection"
                 >
                   Apply
@@ -694,7 +694,7 @@ export function OCRConfigModal({
                   onClick={() => {
                     void handleRescanModels();
                   }}
-                  className="px-3 py-1 text-xs rounded border border-border-2 bg-bg-raised text-ink-2 hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-3 py-1 text-xs rounded-sm border border-border-2 bg-bg-raised text-ink-2 hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed"
                   aria-label="Rescan available OCR models"
                 >
                   Rescan
@@ -710,7 +710,7 @@ export function OCRConfigModal({
           <button
             type="button"
             onClick={handleCancel}
-            className="px-4 py-1.5 text-sm border border-border-2 bg-bg-raised hover:opacity-80 rounded text-ink-2"
+            className="px-4 py-1.5 text-sm border border-border-2 bg-bg-raised hover:opacity-80 rounded-sm text-ink-2"
             data-testid="ocr-config-cancel-button"
           >
             Cancel
@@ -718,7 +718,7 @@ export function OCRConfigModal({
           <button
             type="button"
             onClick={handleDone}
-            className="px-4 py-1.5 text-sm bg-accent text-accent-ink hover:opacity-80 rounded"
+            className="px-4 py-1.5 text-sm bg-accent text-accent-ink hover:opacity-80 rounded-sm"
             data-testid="ocr-config-done-button"
           >
             Done

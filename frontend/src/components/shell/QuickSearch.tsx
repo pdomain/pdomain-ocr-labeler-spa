@@ -57,7 +57,7 @@ export const QuickSearch = forwardRef<QuickSearchHandle>(function QuickSearch(_p
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- cosmetic click-to-focus wrapper; the inner <input> is the real interactive element with full keyboard support
     <div
       data-testid="quick-search"
-      className="flex items-center gap-1.5 h-7 px-2 rounded border border-border-2 bg-bg-sunk text-ink-3 min-w-[160px] max-w-[240px] w-full cursor-text"
+      className="flex items-center gap-1.5 h-7 px-2 rounded-sm border border-border-2 bg-bg-sunk text-ink-3 min-w-[160px] max-w-[240px] w-full cursor-text"
       onClick={(e) => {
         const input = (e.currentTarget as HTMLElement).querySelector("input");
         input?.focus();
@@ -74,7 +74,7 @@ export const QuickSearch = forwardRef<QuickSearchHandle>(function QuickSearch(_p
         onKeyDown={handleKeyDown}
         placeholder="Search…"
         aria-label="Quick search"
-        className="flex-1 bg-transparent text-[11px] text-ink-2 placeholder:text-ink-3 focus:outline-none cursor-text"
+        className="flex-1 bg-transparent text-[11px] text-ink-2 placeholder:text-ink-3 focus:outline-hidden cursor-text"
       />
 
       {/* S6.4: keycap chip focuses the input on click (Mod+K global hotkey also focuses).
@@ -88,7 +88,7 @@ export const QuickSearch = forwardRef<QuickSearchHandle>(function QuickSearch(_p
           e.stopPropagation();
           inputRef.current?.focus();
         }}
-        className="shrink-0 flex items-center gap-0.5 px-1 py-0.5 rounded border border-border-2 bg-bg-raised text-[9px] font-medium text-ink-3 hover:text-ink-1 hover:border-ink-3 transition-colors leading-none"
+        className="shrink-0 flex items-center gap-0.5 px-1 py-0.5 rounded-sm border border-border-2 bg-bg-raised text-[9px] font-medium text-ink-3 hover:text-ink-1 hover:border-ink-3 transition-colors leading-none"
       >
         <span aria-hidden="true">⌘K</span>
       </button>

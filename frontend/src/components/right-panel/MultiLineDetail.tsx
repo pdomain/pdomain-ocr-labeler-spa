@@ -86,7 +86,7 @@ export function MultiLineDetail({
     validateWords.isPending;
 
   const btn =
-    "text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 " +
+    "text-[11px] px-2 py-1 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 " +
     "hover:border-accent transition-colors disabled:opacity-40";
 
   function handleBulkValidate(validated: boolean) {
@@ -120,9 +120,9 @@ export function MultiLineDetail({
       {/* Sticky bulk bar (ML-7) */}
       <div
         data-testid="multi-line-bulk-bar"
-        className="flex items-center gap-1.5 px-3 py-1.5 border-b border-accent/40 bg-accent/5 flex-shrink-0 flex-wrap"
+        className="flex items-center gap-1.5 px-3 py-1.5 border-b border-accent/40 bg-accent/5 shrink-0 flex-wrap"
       >
-        <span className="text-[10px] text-ink-2 flex-shrink-0 font-medium">
+        <span className="text-[10px] text-ink-2 shrink-0 font-medium">
           {sortedLineIds.length} line{sortedLineIds.length !== 1 ? "s" : ""} selected
         </span>
         <button
@@ -232,25 +232,25 @@ function LineCard({ line, projectId, pageIndex, allInputsRef }: LineCardProps) {
     <div
       data-testid={`multi-line-card-${line.line_index}`}
       data-line-index={line.line_index}
-      className="flex flex-col border border-border-1 rounded bg-bg-raised/30"
+      className="flex flex-col border border-border-1 rounded-sm bg-bg-raised/30"
     >
       {/* Card header: line identity */}
       <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-border-1/60">
         <div className="flex items-center gap-2 min-w-0">
           <StatusPip status={pip} />
-          <span className="font-mono text-[11px] text-ink-1 flex-shrink-0">Line {lineNum}</span>
+          <span className="font-mono text-[11px] text-ink-1 shrink-0">Line {lineNum}</span>
           {paraNum !== null && (
-            <span className="text-[10px] text-ink-3 flex-shrink-0">· Para {paraNum}</span>
+            <span className="text-[10px] text-ink-3 shrink-0">· Para {paraNum}</span>
           )}
           {blockNum !== null && (
-            <span className="text-[10px] text-ink-3 flex-shrink-0">· Block {blockNum}</span>
+            <span className="text-[10px] text-ink-3 shrink-0">· Block {blockNum}</span>
           )}
-          <span className="text-[10px] text-ink-3 flex-shrink-0">
+          <span className="text-[10px] text-ink-3 shrink-0">
             {validatedCount}/{totalCount} validated
           </span>
         </div>
         {/* Per-line ops */}
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"
             data-testid={`line-validate-button-${line.line_index}`}
@@ -259,7 +259,7 @@ function LineCard({ line, projectId, pageIndex, allInputsRef }: LineCardProps) {
             onClick={() => {
               validateLine.mutate({ lineIndex: line.line_index, validated: true });
             }}
-            className="text-[10px] px-1.5 py-0.5 rounded border border-status-exact/60 text-status-exact hover:bg-status-exact/10 transition-colors disabled:opacity-40"
+            className="text-[10px] px-1.5 py-0.5 rounded-sm border border-status-exact/60 text-status-exact hover:bg-status-exact/10 transition-colors disabled:opacity-40"
           >
             ✓ Val
           </button>
@@ -271,7 +271,7 @@ function LineCard({ line, projectId, pageIndex, allInputsRef }: LineCardProps) {
             onClick={() => {
               copyLineGt.mutate({ lineIndex: line.line_index, direction: "gt_to_ocr" });
             }}
-            className="text-[10px] px-1.5 py-0.5 rounded border border-border-2 text-ink-3 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+            className="text-[10px] px-1.5 py-0.5 rounded-sm border border-border-2 text-ink-3 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
           >
             GT→OCR
           </button>
@@ -283,7 +283,7 @@ function LineCard({ line, projectId, pageIndex, allInputsRef }: LineCardProps) {
             onClick={() => {
               copyLineGt.mutate({ lineIndex: line.line_index, direction: "ocr_to_gt" });
             }}
-            className="text-[10px] px-1.5 py-0.5 rounded border border-border-2 text-ink-3 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+            className="text-[10px] px-1.5 py-0.5 rounded-sm border border-border-2 text-ink-3 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
           >
             OCR→GT
           </button>
@@ -293,7 +293,7 @@ function LineCard({ line, projectId, pageIndex, allInputsRef }: LineCardProps) {
             title="Delete this line"
             disabled={isPending}
             onClick={handleDelete}
-            className="text-[10px] px-1.5 py-0.5 rounded border border-status-mismatch/50 text-status-mismatch hover:bg-status-mismatch/10 transition-colors disabled:opacity-40"
+            className="text-[10px] px-1.5 py-0.5 rounded-sm border border-status-mismatch/50 text-status-mismatch hover:bg-status-mismatch/10 transition-colors disabled:opacity-40"
           >
             Del
           </button>
@@ -415,7 +415,7 @@ function WordRow({ word, lineIndex, projectId, pageIndex, allInputsRef }: WordRo
       <StatusPip status={pip} />
       <span
         data-testid={`ocr-text-label-${lineIndex}-${wordIdx}`}
-        className="text-[10px] font-mono text-ink-3 w-16 truncate flex-shrink-0"
+        className="text-[10px] font-mono text-ink-3 w-16 truncate shrink-0"
         title={word.ocr_text ?? ""}
       >
         {word.ocr_text || <span className="italic">∅</span>}
@@ -432,7 +432,7 @@ function WordRow({ word, lineIndex, projectId, pageIndex, allInputsRef }: WordRo
         }}
         onBlur={commit}
         onKeyDown={handleKeyDown}
-        className="flex-1 min-w-0 text-[11px] font-mono bg-bg-surface border border-border-2 rounded px-1.5 py-0.5 text-ink-1 focus:outline-none focus:border-accent transition-colors"
+        className="flex-1 min-w-0 text-[11px] font-mono bg-bg-surface border border-border-2 rounded-sm px-1.5 py-0.5 text-ink-1 focus:outline-hidden focus:border-accent transition-colors"
         aria-label={`GT for word ${wordIdx + 1} in line ${lineIndex + 1}`}
       />
 
@@ -452,8 +452,8 @@ function WordRow({ word, lineIndex, projectId, pageIndex, allInputsRef }: WordRo
         }}
         className={
           word.is_validated
-            ? "text-[10px] px-1.5 py-0.5 rounded border border-status-exact/80 text-status-exact bg-status-exact/10 transition-colors disabled:opacity-40 flex-shrink-0"
-            : "text-[10px] px-1.5 py-0.5 rounded border border-border-2 text-ink-3 hover:text-status-exact hover:border-status-exact/60 transition-colors disabled:opacity-40 flex-shrink-0"
+            ? "text-[10px] px-1.5 py-0.5 rounded-sm border border-status-exact/80 text-status-exact bg-status-exact/10 transition-colors disabled:opacity-40 shrink-0"
+            : "text-[10px] px-1.5 py-0.5 rounded-sm border border-border-2 text-ink-3 hover:text-status-exact hover:border-status-exact/60 transition-colors disabled:opacity-40 shrink-0"
         }
       >
         {word.is_validated ? "✓" : "Val"}

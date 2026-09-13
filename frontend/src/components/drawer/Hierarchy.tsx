@@ -56,7 +56,7 @@ function KindChip({ kind }: { kind: "block" | "para" | "line" | "word" }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center px-1 py-0 rounded border text-[9px] font-mono font-semibold flex-shrink-0",
+        "inline-flex items-center px-1 py-0 rounded-sm border text-[9px] font-mono font-semibold shrink-0",
         KIND_CHIP_CLASS[kind],
       )}
     >
@@ -405,21 +405,21 @@ function NodeRow({ flatNode, isSelected, isExpanded, onSelect, onToggle }: NodeR
       }}
     >
       {/* Expand chevron placeholder — keeps alignment */}
-      <span className="w-3 text-ink-3 text-[9px] flex-shrink-0">
+      <span className="w-3 text-ink-3 text-[9px] shrink-0">
         {hasChildren ? (isExpanded ? "▾" : "▸") : ""}
       </span>
 
       {/* Layer color square */}
       <span
         data-testid={`hierarchy-color-${id}`}
-        className={cn("w-[6px] h-[6px] rounded-sm flex-shrink-0", LAYER_DOT_CLASS[layerKey])}
+        className={cn("w-[6px] h-[6px] rounded-xs shrink-0", LAYER_DOT_CLASS[layerKey])}
       />
 
       {/* Kind chip (P5.c) */}
       <KindChip kind={layerKey} />
 
       {/* Mono ID stamp (P5.c) */}
-      <span className="font-mono text-[10px] text-ink-3 flex-shrink-0">{monoId}</span>
+      <span className="font-mono text-[10px] text-ink-3 shrink-0">{monoId}</span>
 
       {/* Label */}
       <span className="truncate">{label}</span>
@@ -498,7 +498,7 @@ export function Hierarchy({ page }: HierarchyProps) {
       {/* Filter pills + node count (P5.c) */}
       <div
         data-testid="hierarchy-filter-row"
-        className="flex items-center gap-1 px-2 py-1.5 border-b border-border-1 flex-shrink-0 flex-wrap"
+        className="flex items-center gap-1 px-2 py-1.5 border-b border-border-1 shrink-0 flex-wrap"
       >
         <KindFilterPill
           testid="hierarchy-filter-all"
@@ -549,7 +549,7 @@ export function Hierarchy({ page }: HierarchyProps) {
         />
         <span
           data-testid="hierarchy-node-count"
-          className="ml-auto text-[10px] font-mono text-ink-3 tabular-nums flex-shrink-0"
+          className="ml-auto text-[10px] font-mono text-ink-3 tabular-nums shrink-0"
         >
           {nodeCount}
         </span>

@@ -215,7 +215,7 @@ export function CharFixerCanvas({
 
   return (
     <div
-      className="rounded border border-border-2 overflow-hidden bg-sunk"
+      className="rounded-sm border border-border-2 overflow-hidden bg-sunk"
       style={{
         backgroundImage: imageUrl ? `url(${imageUrl})` : undefined,
         backgroundSize: "cover",

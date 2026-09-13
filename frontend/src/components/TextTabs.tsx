@@ -138,7 +138,7 @@ export function TextTabs({
               onClick={() => onLineFilterChange?.(opt.value)}
               aria-pressed={lineFilter === opt.value}
               className={[
-                "px-3 py-1 text-xs rounded font-medium transition-colors",
+                "px-3 py-1 text-xs rounded-sm font-medium transition-colors",
                 lineFilter === opt.value
                   ? "bg-accent text-accent-ink"
                   : "bg-bg-surface text-ink-2 border border-border-2 hover:bg-bg-raised",
@@ -162,7 +162,7 @@ export function TextTabs({
           data-testid="text-panel-ground-truth"
           readOnly
           value={pageTextGt ?? ""}
-          className="flex-1 resize-none font-mono text-sm p-2 border border-border-1 rounded bg-bg-sunk focus:outline-none"
+          className="flex-1 resize-none font-mono text-sm p-2 border border-border-1 rounded-sm bg-bg-sunk focus:outline-hidden"
           aria-label="Ground truth text"
         />
       </div>
@@ -178,7 +178,7 @@ export function TextTabs({
           data-testid="text-panel-ocr"
           readOnly
           value={pageTextOcr ?? ""}
-          className="flex-1 resize-none font-mono text-sm p-2 border border-border-1 rounded bg-bg-sunk focus:outline-none"
+          className="flex-1 resize-none font-mono text-sm p-2 border border-border-1 rounded-sm bg-bg-sunk focus:outline-hidden"
           aria-label="OCR text"
         />
       </div>

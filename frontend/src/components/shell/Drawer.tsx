@@ -123,7 +123,7 @@ export function Drawer({
             setDrawerOpen(true);
           }}
           aria-label="Expand drawer"
-          className="w-8 flex-shrink-0 flex items-center justify-center text-ink-3 hover:text-ink-1 border-r border-border-1"
+          className="w-8 shrink-0 flex items-center justify-center text-ink-3 hover:text-ink-1 border-r border-border-1"
         >
           <ChevronRight size={14} />
         </button>
@@ -135,7 +135,7 @@ export function Drawer({
           {/* Tab strip + collapse button */}
           <div
             data-testid="drawer-header"
-            className="flex items-center border-b border-border-1 flex-shrink-0 h-9"
+            className="flex items-center border-b border-border-1 shrink-0 h-9"
           >
             {TABS.map((tab) => {
               const count = tabCounts?.[tab.id];
@@ -161,7 +161,7 @@ export function Drawer({
                   <span
                     data-testid={`drawer-tab-icon-${tab.id}`}
                     aria-hidden="true"
-                    className="flex-shrink-0"
+                    className="shrink-0"
                   >
                     {tab.icon}
                   </span>
@@ -190,7 +190,7 @@ export function Drawer({
                 setDrawerOpen(false);
               }}
               aria-label="Collapse drawer"
-              className="w-8 h-full flex items-center justify-center text-ink-3 hover:text-ink-1 flex-shrink-0"
+              className="w-8 h-full flex items-center justify-center text-ink-3 hover:text-ink-1 shrink-0"
             >
               <ChevronLeft size={14} />
             </button>
@@ -202,7 +202,7 @@ export function Drawer({
           {activeTab === "worklist" && worklistHeader != null && (
             <div
               data-testid="drawer-worklist-header"
-              className="flex-shrink-0 border-b border-border-1 px-2 py-1.5"
+              className="shrink-0 border-b border-border-1 px-2 py-1.5"
             >
               {worklistHeader}
             </div>

@@ -56,7 +56,7 @@ export function BulkWordActions({ projectId, pageIndex }: BulkWordActionsProps) 
   const [component, setComponent] = useState("");
 
   const btn =
-    "text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 " +
+    "text-[11px] px-2 py-1 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 " +
     "hover:border-accent transition-colors disabled:opacity-40";
 
   return (
@@ -118,7 +118,7 @@ export function BulkWordActions({ projectId, pageIndex }: BulkWordActionsProps) 
             <select
               data-testid="bulk-word-component-select"
               aria-label="Word component"
-              className="text-[11px] border border-border-2 rounded px-1 py-0.5 bg-bg-sunk flex-1"
+              className="text-[11px] border border-border-2 rounded-sm px-1 py-0.5 bg-bg-sunk flex-1"
               value={component}
               onChange={(e) => {
                 setComponent(e.target.value);

@@ -35,7 +35,7 @@ export function LineWordsCard({ word, checked, onCheckedChange }: LineWordsCardP
   return (
     <div
       data-testid={`line-words-card-${word.word_index}`}
-      className="flex items-start gap-2 bg-bg-raised rounded px-2 py-1.5"
+      className="flex items-start gap-2 bg-bg-raised rounded-sm px-2 py-1.5"
     >
       {/* Bulk selection checkbox */}
       <input
@@ -46,11 +46,11 @@ export function LineWordsCard({ word, checked, onCheckedChange }: LineWordsCardP
           onCheckedChange(e.target.checked);
         }}
         aria-label={`Select word ${wordNum}`}
-        className="mt-0.5 accent-accent flex-shrink-0"
+        className="mt-0.5 accent-accent shrink-0"
       />
 
       {/* Serif preview placeholder (word image would go here when available) */}
-      <div className="w-12 h-8 bg-bg-surface rounded flex items-center justify-center flex-shrink-0 border border-border-1">
+      <div className="w-12 h-8 bg-bg-surface rounded-sm flex items-center justify-center shrink-0 border border-border-1">
         <span className="text-[11px] text-ink-3 italic font-serif truncate px-0.5">
           {word.ocr_text || "·"}
         </span>

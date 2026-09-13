@@ -98,7 +98,7 @@ export function WordImagePreview({
       {/* 76px serif preview box */}
       <div
         data-testid="word-image-preview-box"
-        className="w-full h-[76px] rounded border border-border-2 overflow-hidden flex items-center justify-center"
+        className="w-full h-[76px] rounded-sm border border-border-2 overflow-hidden flex items-center justify-center"
         style={{ background: "var(--bg-sunk)" }}
       >
         {canRenderCrop ? (

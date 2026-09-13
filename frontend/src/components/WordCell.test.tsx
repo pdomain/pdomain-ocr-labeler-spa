@@ -60,7 +60,7 @@ describe("WordCell", () => {
     expect(input.value).toBe("world");
   });
 
-  it("fires onCommitGt with new value on blur when value changed", () => {
+  it("fires onCommitGt with new value on blur-sm when value changed", () => {
     const onCommitGt = vi.fn();
     const word = makeWordMatch({
       word_id: "w-001",
@@ -76,7 +76,7 @@ describe("WordCell", () => {
     expect(onCommitGt).toHaveBeenCalledWith("w-001", 0, 0, "world");
   });
 
-  it("does NOT fire onCommitGt when value is unchanged on blur", () => {
+  it("does NOT fire onCommitGt when value is unchanged on blur-sm", () => {
     const onCommitGt = vi.fn();
     const word = makeWordMatch({
       word_id: "w-001",

@@ -270,7 +270,7 @@ function AppInner() {
                 onClick={() => {
                   dialogStore.open("ocrConfig");
                 }}
-                className="px-2 py-1 text-xs border border-border-2 rounded bg-bg-raised text-ink-2 hover:text-ink-1 hover:border-accent transition-colors"
+                className="px-2 py-1 text-xs border border-border-2 rounded-sm bg-bg-raised text-ink-2 hover:text-ink-1 hover:border-accent transition-colors"
               >
                 OCR Config
               </button>

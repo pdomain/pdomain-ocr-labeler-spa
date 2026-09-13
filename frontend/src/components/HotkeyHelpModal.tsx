@@ -109,7 +109,7 @@ export function HotkeyHelpModal() {
           has no definition for .dialog in this app. */}
       <DialogContent
         data-testid="hotkey-help-dialog"
-        className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 max-w-2xl w-full mx-4 max-h-[80vh] bg-bg-surface rounded-lg border border-border-2 shadow-lg focus:outline-none flex flex-col p-0"
+        className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 max-w-2xl w-full mx-4 max-h-[80vh] bg-bg-surface rounded-lg border border-border-2 shadow-lg focus:outline-hidden flex flex-col p-0"
       >
         {/* Header */}
         <DialogHeader className="flex flex-row items-center justify-between px-4 py-3 border-b border-border-1">

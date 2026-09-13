@@ -291,7 +291,7 @@ export function ExportDialog({
             onClick={onClose}
             disabled={running}
             aria-label="Close export dialog"
-            className="px-2 py-1.5 text-lg text-ink-3 hover:text-ink-1 hover:bg-bg-raised rounded transition-colors disabled:opacity-40"
+            className="px-2 py-1.5 text-lg text-ink-3 hover:text-ink-1 hover:bg-bg-raised rounded-sm transition-colors disabled:opacity-40"
           >
             x
           </DialogClose>
@@ -391,7 +391,7 @@ export function ExportDialog({
               onChange={(e) => {
                 setComponentFilter(e.target.value);
               }}
-              className="text-sm border border-border-1 rounded px-2 py-1 bg-bg-sunk text-ink-2"
+              className="text-sm border border-border-1 rounded-sm px-2 py-1 bg-bg-sunk text-ink-2"
             >
               <option key="" value="">
                 (none)
@@ -438,7 +438,7 @@ export function ExportDialog({
           {/* Error */}
           {error && (
             <div
-              className="text-sm text-status-mismatch border border-status-mismatch/40 rounded px-3 py-2"
+              className="text-sm text-status-mismatch border border-status-mismatch/40 rounded-sm px-3 py-2"
               style={{
                 background: "color-mix(in srgb, var(--status-mismatch) 12%, var(--bg-surface))",
               }}
@@ -450,7 +450,7 @@ export function ExportDialog({
           {/* Progress */}
           {progressMsg && (
             <div
-              className="text-sm text-accent border border-accent/40 rounded px-3 py-2"
+              className="text-sm text-accent border border-accent/40 rounded-sm px-3 py-2"
               style={{ background: "color-mix(in srgb, var(--status-ocr) 8%, var(--bg-surface))" }}
             >
               {progressMsg}
@@ -465,7 +465,7 @@ export function ExportDialog({
                 {history.map((entry) => (
                   <div
                     key={entry.id}
-                    className="text-xs text-ink-2 bg-bg-raised border border-border-1 rounded px-2 py-1"
+                    className="text-xs text-ink-2 bg-bg-raised border border-border-1 rounded-sm px-2 py-1"
                   >
                     <span className="font-medium">
                       {entry.scope === "current" ? "Current page" : "All validated"}
@@ -505,7 +505,7 @@ export function ExportDialog({
                     {trainerInstalled && (
                       <button
                         data-testid="export-send-to-trainer"
-                        className="ml-3 px-2 py-0.5 text-xs rounded border border-accent text-accent hover:bg-accent hover:text-accent-ink transition-colors"
+                        className="ml-3 px-2 py-0.5 text-xs rounded-sm border border-accent text-accent hover:bg-accent hover:text-accent-ink transition-colors"
                         onClick={() => {
                           // Silent failure by design: launch errors are logged to
                           // console.warn in ExportDialogUtils; no user-facing error toast.
@@ -534,7 +534,7 @@ export function ExportDialog({
               onClick={() => {
                 void handleCancel();
               }}
-              className="px-3 py-1.5 text-sm rounded border border-status-fuzzy bg-bg-surface text-status-fuzzy hover:bg-bg-raised transition-colors"
+              className="px-3 py-1.5 text-sm rounded-sm border border-status-fuzzy bg-bg-surface text-status-fuzzy hover:bg-bg-raised transition-colors"
             >
               Cancel
             </button>
@@ -545,7 +545,7 @@ export function ExportDialog({
               onClick={() => {
                 void handleExport();
               }}
-              className="px-3 py-1.5 text-sm rounded bg-accent text-accent-ink hover:opacity-90 transition-opacity disabled:opacity-40"
+              className="px-3 py-1.5 text-sm rounded-sm bg-accent text-accent-ink hover:opacity-90 transition-opacity disabled:opacity-40"
             >
               Export
             </button>
@@ -554,7 +554,7 @@ export function ExportDialog({
             data-testid="export-close-button"
             onClick={onClose}
             disabled={running}
-            className="px-3 py-1.5 text-sm rounded border border-border-2 bg-bg-surface text-ink-2 hover:bg-bg-raised transition-colors disabled:opacity-40"
+            className="px-3 py-1.5 text-sm rounded-sm border border-border-2 bg-bg-surface text-ink-2 hover:bg-bg-raised transition-colors disabled:opacity-40"
           >
             Close
           </button>

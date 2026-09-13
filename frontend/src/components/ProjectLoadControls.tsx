@@ -116,7 +116,7 @@ export default function ProjectLoadControls({ projectName }: ProjectLoadControls
             onClick={() => {
               dialogStore.open("sourceFolder");
             }}
-            className="flex items-center justify-center w-6 h-6 rounded text-ink-3 hover:text-ink-1 hover:bg-bg-raised transition-colors"
+            className="flex items-center justify-center w-6 h-6 rounded-sm text-ink-3 hover:text-ink-1 hover:bg-bg-raised transition-colors"
           >
             <FolderOpen size={13} aria-hidden />
           </button>
@@ -131,7 +131,7 @@ export default function ProjectLoadControls({ projectName }: ProjectLoadControls
         onChange={(e) => {
           setSelectedId(e.target.value);
         }}
-        className={isBreadcrumbMode ? "sr-only" : "border rounded px-2 py-1 text-sm"}
+        className={isBreadcrumbMode ? "sr-only" : "border rounded-sm px-2 py-1 text-sm"}
         aria-hidden={isBreadcrumbMode}
         tabIndex={isBreadcrumbMode ? -1 : undefined}
       >
@@ -158,7 +158,7 @@ export default function ProjectLoadControls({ projectName }: ProjectLoadControls
         disabled={loadDisabled}
         onClick={handleLoad}
         className={
-          isBreadcrumbMode ? "sr-only" : "px-3 py-1 text-sm border rounded disabled:opacity-50"
+          isBreadcrumbMode ? "sr-only" : "px-3 py-1 text-sm border rounded-sm disabled:opacity-50"
         }
         aria-hidden={isBreadcrumbMode}
         tabIndex={isBreadcrumbMode ? -1 : undefined}
@@ -173,7 +173,7 @@ export default function ProjectLoadControls({ projectName }: ProjectLoadControls
         onClick={() => {
           dialogStore.open("sourceFolder");
         }}
-        className={isBreadcrumbMode ? "sr-only" : "px-2 py-1 text-sm border rounded"}
+        className={isBreadcrumbMode ? "sr-only" : "px-2 py-1 text-sm border rounded-sm"}
         aria-hidden={isBreadcrumbMode}
         tabIndex={isBreadcrumbMode ? -1 : undefined}
       >

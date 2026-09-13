@@ -891,7 +891,7 @@ export default function ProjectPage() {
             data-testid="toolbar-grid-collapse"
             aria-label={uiPrefs.toolbarGridCollapsed ? "Expand actions" : "Collapse actions"}
             aria-expanded={!uiPrefs.toolbarGridCollapsed}
-            className="flex items-center justify-center rounded p-0.5 text-ink-3 hover:bg-bg-1 hover:text-ink-1"
+            className="flex items-center justify-center rounded-sm p-0.5 text-ink-3 hover:bg-bg-1 hover:text-ink-1"
             onClick={() => {
               useUiPrefs.setState({ toolbarGridCollapsed: !uiPrefs.toolbarGridCollapsed });
               notifyUiPrefs();

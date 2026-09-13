@@ -182,7 +182,7 @@ export function TypographySection({ projectId, pageIndex, wordId }: TypographySe
         </p>
       )}
       {textValidation.data && (
-        <div className="rounded border p-2">
+        <div className="rounded-sm border p-2">
           <p>Confirm the exact imported text independently:</p>
           <p className="font-serif">{textValidation.data.text}</p>
           <button
@@ -209,7 +209,7 @@ export function TypographySection({ projectId, pageIndex, wordId }: TypographySe
               selected ? index >= selected.start && index < selected.end : anchor === index
             }
             onClick={() => select(index)}
-            className="rounded border px-2 py-1 font-serif"
+            className="rounded-sm border px-2 py-1 font-serif"
           >
             {grapheme}
           </button>

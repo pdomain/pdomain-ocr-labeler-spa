@@ -34,7 +34,7 @@ export function GlyphChip({ lineIndex, wordIndex, kind, predicted, onClick }: Gl
       data-testid={testid}
       onClick={onClick}
       className={[
-        "inline-flex items-center px-1 py-0 text-[9px] font-mono rounded border leading-tight",
+        "inline-flex items-center px-1 py-0 text-[9px] font-mono rounded-sm border leading-tight",
         "cursor-pointer select-none",
         predicted
           ? "opacity-60 border-dashed border-ink-4 text-ink-3 bg-transparent"

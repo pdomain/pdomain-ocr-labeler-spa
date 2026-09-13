@@ -93,7 +93,7 @@ function ParagraphDetailInner({ page, projectId, pageIndex, paraId }: ParagraphD
     validatePara.isPending;
 
   const btn =
-    "text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 " +
+    "text-[11px] px-2 py-1 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 " +
     "hover:border-accent transition-colors disabled:opacity-40 text-left";
 
   return (

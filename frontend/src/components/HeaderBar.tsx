@@ -64,7 +64,7 @@ export default function HeaderBar({ projectName, projectRoot }: HeaderBarProps =
         <span
           aria-hidden
           data-testid="header-logo-badge"
-          className="inline-flex items-center justify-center w-6 h-6 rounded bg-accent text-white font-bold text-[13px] select-none leading-none"
+          className="inline-flex items-center justify-center w-6 h-6 rounded-sm bg-accent text-white font-bold text-[13px] select-none leading-none"
         >
           O
         </span>

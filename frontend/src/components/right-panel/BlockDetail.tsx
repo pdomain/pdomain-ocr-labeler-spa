@@ -495,7 +495,7 @@ function GlyphCard({ spec, selected, onClick }: GlyphCardProps) {
       onClick={onClick}
       title={spec.label}
       className={[
-        "flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded border transition-colors w-[60px]",
+        "flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-sm border transition-colors w-[60px]",
         selected
           ? "border-accent bg-accent/10 text-ink-1"
           : "border-border-2 bg-bg-raised text-ink-3 hover:border-accent/60 hover:text-ink-2 hover:bg-bg-raised/80",
@@ -545,7 +545,7 @@ function LayoutPreview({ layoutType, sampleText }: { layoutType: LayoutType; sam
       case "diagram":
         return "text-[10px] text-center text-ink-3";
       case "code":
-        return "text-[10px] font-mono bg-bg-sunk px-1 rounded text-ink-1";
+        return "text-[10px] font-mono bg-bg-sunk px-1 rounded-sm text-ink-1";
       case "verse":
         return "text-[11px] text-ink-1 italic pl-4";
       case "letter":
@@ -563,7 +563,7 @@ function LayoutPreview({ layoutType, sampleText }: { layoutType: LayoutType; sam
   return (
     <div
       data-testid="block-detail-preview"
-      className="bg-bg-sunk border border-border-1 rounded px-3 py-2 min-h-[40px]"
+      className="bg-bg-sunk border border-border-1 rounded-sm px-3 py-2 min-h-[40px]"
     >
       <div className="text-[9px] text-ink-4 mb-1 uppercase tracking-wider">Preview</div>
       <div className={previewClass()}>
@@ -735,7 +735,7 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
         defaultValue={level === "para" ? "items" : "layout"}
         className="flex flex-col h-full"
       >
-        <TabsList className="flex-shrink-0">
+        <TabsList className="shrink-0">
           {level === "block" && (
             <TabsTrigger data-testid="block-detail-tab-layout" value="layout">
               Layout
@@ -757,7 +757,7 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
             <div className="p-3 space-y-3">
               {/* Model suggestion callout */}
               {suggestedLayout ? (
-                <div className="bg-accent/10 border border-accent/30 rounded px-3 py-2 text-[11px] flex items-center justify-between gap-2">
+                <div className="bg-accent/10 border border-accent/30 rounded-sm px-3 py-2 text-[11px] flex items-center justify-between gap-2">
                   <span>
                     Model suggests:{" "}
                     <span className="text-ink-1 font-semibold">
@@ -768,13 +768,13 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
                     type="button"
                     data-testid="block-detail-layout-accept"
                     onClick={handleAcceptSuggestion}
-                    className="text-[11px] px-2 py-0.5 rounded bg-accent text-accent-ink font-medium hover:opacity-90 transition-opacity"
+                    className="text-[11px] px-2 py-0.5 rounded-sm bg-accent text-accent-ink font-medium hover:opacity-90 transition-opacity"
                   >
                     Use suggestion
                   </button>
                 </div>
               ) : (
-                <div className="bg-bg-raised rounded px-3 py-2 text-[11px] text-ink-3 italic">
+                <div className="bg-bg-raised rounded-sm px-3 py-2 text-[11px] text-ink-3 italic">
                   No model suggestion available.
                 </div>
               )}
@@ -833,7 +833,7 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
         {/* ── Items tab ── */}
         <TabsContent value="items" className="flex-1 overflow-auto">
           {/* View sub-toggle + count */}
-          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-1 flex-shrink-0">
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-1 shrink-0">
             <span className="text-[11px] text-ink-3">
               {relevantLines.length} line{relevantLines.length !== 1 ? "s" : ""}
             </span>
@@ -841,7 +841,7 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
               {/* Compat: keep density-toggle testid for existing tests */}
               <div
                 data-testid="block-detail-density-toggle"
-                className="flex items-center rounded border border-border-2 overflow-hidden"
+                className="flex items-center rounded-sm border border-border-2 overflow-hidden"
               >
                 <button
                   type="button"
@@ -905,7 +905,10 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
               </div>
               {/* Paragraph scope selector */}
               {Array.from(paraGroups.entries()).map(([pId, pLines]) => (
-                <div key={pId ?? "null"} className="border border-border-1 rounded overflow-hidden">
+                <div
+                  key={pId ?? "null"}
+                  className="border border-border-1 rounded-sm overflow-hidden"
+                >
                   <button
                     type="button"
                     data-testid={`block-detail-para-scope-${pId ?? "null"}`}
@@ -955,7 +958,7 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
             onClick={handleSaveLayout}
             disabled={!hasPendingChange || patchParagraph.isPending}
             className={[
-              "text-[11px] px-3 py-1 rounded font-medium transition-colors",
+              "text-[11px] px-3 py-1 rounded-sm font-medium transition-colors",
               hasPendingChange
                 ? "bg-accent text-accent-ink hover:opacity-90"
                 : "bg-bg-raised text-ink-3 border border-border-2 cursor-not-allowed",
@@ -1010,7 +1013,7 @@ function LineItemCard({ line }: { line: LineMatch }) {
       onClick={() => {
         selectLine(line.line_index);
       }}
-      className="flex items-center gap-2 bg-bg-raised rounded px-2 py-1 text-left hover:bg-bg-raised/80 transition-colors"
+      className="flex items-center gap-2 bg-bg-raised rounded-sm px-2 py-1 text-left hover:bg-bg-raised/80 transition-colors"
     >
       <StatusPip status={statusPip(line.overall_match_status)} />
       <span className="flex-1 truncate text-[11px] font-mono text-ink-1">

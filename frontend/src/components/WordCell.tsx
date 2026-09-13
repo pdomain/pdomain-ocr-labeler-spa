@@ -139,13 +139,13 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
     <div
       data-testid={`word-image-cell-${l}-${w}`}
       data-testid-alias={`word-cell-${wordId}`}
-      className="border border-border-1 rounded p-1 flex flex-col gap-0.5 min-w-16 max-w-32 relative"
+      className="border border-border-1 rounded-sm p-1 flex flex-col gap-0.5 min-w-16 max-w-32 relative"
     >
       {/* Glyph corner badge (spec §5.3, testid §7) */}
       {badgeColor !== null && (
         <span
           data-testid={`word-glyph-badge-${l}-${w}`}
-          className={`absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-sm ${badgeColor}`}
+          className={`absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-xs ${badgeColor}`}
           aria-label="glyph annotation badge"
           title={
             hasMarks
@@ -216,7 +216,7 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
             <span
               key={`style-${label}`}
               data-testid={`word-tag-chip-${l}-${w}-${label}`}
-              className="word-tag-chip flex items-center gap-0.5 px-1 py-0 text-[10px] rounded"
+              className="word-tag-chip flex items-center gap-0.5 px-1 py-0 text-[10px] rounded-sm"
               style={{ background: "color-mix(in srgb, var(--status-ocr) 12%, var(--bg-raised))" }}
               title={`Style: ${label}`}
             >
@@ -227,7 +227,7 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
             <span
               key={`comp-${comp}`}
               data-testid={`word-tag-chip-${l}-${w}-${comp}`}
-              className="word-tag-chip flex items-center gap-0.5 px-1 py-0 text-[10px] rounded"
+              className="word-tag-chip flex items-center gap-0.5 px-1 py-0 text-[10px] rounded-sm"
               style={{
                 background: "color-mix(in srgb, var(--status-exact) 12%, var(--bg-raised))",
               }}
@@ -269,7 +269,7 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
             setGtValue(committedRef.current);
           }
         }}
-        className="w-full text-xs border border-border-1 rounded px-1 py-0.5 font-mono focus:outline-none focus:border-accent"
+        className="w-full text-xs border border-border-1 rounded-sm px-1 py-0.5 font-mono focus:outline-hidden focus:border-accent"
         aria-label={`Ground truth for "${word.ocr_text}"`}
       />
 

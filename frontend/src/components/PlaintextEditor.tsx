@@ -36,7 +36,7 @@ export function PlaintextEditor({ source, page }: PlaintextEditorProps) {
       readOnly
       value={value}
       aria-label={ariaLabel}
-      className="flex-1 w-full h-full resize-none font-mono text-sm p-2 border border-border-1 rounded bg-bg-sunk focus:outline-none"
+      className="flex-1 w-full h-full resize-none font-mono text-sm p-2 border border-border-1 rounded-sm bg-bg-sunk focus:outline-hidden"
     />
   );
 }

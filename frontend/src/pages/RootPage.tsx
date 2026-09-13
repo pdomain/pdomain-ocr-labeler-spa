@@ -109,7 +109,7 @@ function HeroBand() {
       className="bg-bg-surface border-b border-border-1 px-6 py-4 flex items-center gap-4"
     >
       {/* Logo mark — orange "O" badge (Gap 2 preview) */}
-      <div className="relative flex-shrink-0">
+      <div className="relative shrink-0">
         <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
           <span className="text-accent-ink font-bold text-xl leading-none select-none">O</span>
         </div>
@@ -216,7 +216,7 @@ function ProjectCard({ project }: { project: ProjectKey }) {
       {/* Thumbnail area — placeholder until API exposes first-page image */}
       <div
         data-testid={`project-card-thumbnail-${project.project_id}`}
-        className="h-24 bg-bg-raised flex items-center justify-center border-b border-border-1 flex-shrink-0"
+        className="h-24 bg-bg-raised flex items-center justify-center border-b border-border-1 shrink-0"
         aria-label={`Thumbnail for ${project.label || project.project_id}`}
       >
         <svg viewBox="0 0 48 48" className="w-10 h-10 text-ink-4" fill="none">
@@ -263,7 +263,7 @@ function ProjectCard({ project }: { project: ProjectKey }) {
           <div
             data-testid={`project-card-error-${project.project_id}`}
             role="alert"
-            className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1"
+            className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded-sm px-2 py-1"
           >
             Failed to open project. Please try again.
           </div>
@@ -277,7 +277,7 @@ function ProjectCard({ project }: { project: ProjectKey }) {
             onClick={handleOpen}
             disabled={openMutation.isPending || isLoadError}
             aria-disabled={isLoadError ? "true" : undefined}
-            className="flex-1 text-[11px] font-medium px-2 py-1.5 rounded bg-accent text-accent-ink hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex-1 text-[11px] font-medium px-2 py-1.5 rounded-sm bg-accent text-accent-ink hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {openMutation.isPending ? "Loading…" : "Open"}
           </button>
@@ -291,12 +291,12 @@ function ProjectCard({ project }: { project: ProjectKey }) {
                 setMenuOpen((o) => !o);
               }}
               aria-label="More actions"
-              className="p-1.5 rounded border border-border-2 text-ink-3 hover:text-ink-1 hover:border-border-1 transition-colors"
+              className="p-1.5 rounded-sm border border-border-2 text-ink-3 hover:text-ink-1 hover:border-border-1 transition-colors"
             >
               <ChevronDown size={12} />
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-1 w-32 bg-bg-raised border border-border-2 rounded shadow-lg z-10">
+              <div className="absolute right-0 top-full mt-1 w-32 bg-bg-raised border border-border-2 rounded-sm shadow-lg z-10">
                 {/* P4.2: Delete is wired (confirm → DELETE → list refresh).
                  * The former "Archive" stub was REMOVED — there is no archive
                  * endpoint or project-status field in the API; re-add it once
@@ -378,7 +378,7 @@ function ProjectListView({ projects }: { projects: ProjectKey[] }) {
             }}
             placeholder="Search projects…"
             aria-label="Search projects"
-            className="w-full pl-8 pr-3 py-1.5 text-[12px] bg-bg-sunk border border-border-2 rounded focus:outline-none focus:border-accent text-ink-1 placeholder:text-ink-4 transition-colors"
+            className="w-full pl-8 pr-3 py-1.5 text-[12px] bg-bg-sunk border border-border-2 rounded-sm focus:outline-hidden focus:border-accent text-ink-1 placeholder:text-ink-4 transition-colors"
           />
         </div>
 

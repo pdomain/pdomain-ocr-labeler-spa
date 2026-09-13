@@ -58,7 +58,7 @@ function CountChip({ kind, count, label, chipStyle, textClass }: CountChipProps)
   return (
     <span
       data-testid={`count-chip-${kind}`}
-      className={`px-1.5 py-0.5 text-xs font-medium rounded ${textClass}`}
+      className={`px-1.5 py-0.5 text-xs font-medium rounded-sm ${textClass}`}
       style={chipStyle}
       title={`${count} ${label}`}
     >
@@ -142,7 +142,7 @@ export function LineCard({
   return (
     <div
       data-testid={`line-card-${line.line_index}`}
-      className="border border-border-1 rounded mb-1 overflow-hidden"
+      className="border border-border-1 rounded-sm mb-1 overflow-hidden"
     >
       {/* Header */}
       <div
@@ -222,7 +222,7 @@ export function LineCard({
             <>
               <button
                 data-testid={`line-gt-to-ocr-button-${line.line_index}`}
-                className="px-1.5 py-0.5 text-xs border border-border-2 rounded bg-bg-surface hover:bg-bg-raised"
+                className="px-1.5 py-0.5 text-xs border border-border-2 rounded-sm bg-bg-surface hover:bg-bg-raised"
                 onClick={() => onCopyGtToOcr?.(line.line_index)}
                 title="Copy GT to OCR"
               >
@@ -230,7 +230,7 @@ export function LineCard({
               </button>
               <button
                 data-testid={`line-ocr-to-gt-button-${line.line_index}`}
-                className="px-1.5 py-0.5 text-xs border border-border-2 rounded bg-bg-surface hover:bg-bg-raised"
+                className="px-1.5 py-0.5 text-xs border border-border-2 rounded-sm bg-bg-surface hover:bg-bg-raised"
                 onClick={() => onCopyOcrToGt?.(line.line_index)}
                 title="Copy OCR to GT"
               >
@@ -241,7 +241,7 @@ export function LineCard({
 
           <button
             data-testid={`line-validate-button-${line.line_index}`}
-            className="px-1.5 py-0.5 text-xs border border-border-2 rounded bg-bg-surface hover:bg-bg-raised"
+            className="px-1.5 py-0.5 text-xs border border-border-2 rounded-sm bg-bg-surface hover:bg-bg-raised"
             onClick={() => onValidate?.(line.line_index, !line.is_fully_validated)}
           >
             {line.is_fully_validated ? "Unvalidate" : "Validate"}
@@ -249,7 +249,7 @@ export function LineCard({
 
           <button
             data-testid={`line-delete-button-${line.line_index}`}
-            className="px-1.5 py-0.5 text-xs border border-status-mismatch/50 text-status-mismatch rounded bg-bg-surface hover:bg-bg-raised"
+            className="px-1.5 py-0.5 text-xs border border-status-mismatch/50 text-status-mismatch rounded-sm bg-bg-surface hover:bg-bg-raised"
             onClick={() => onDelete?.(line.line_index)}
             title="Delete line"
           >

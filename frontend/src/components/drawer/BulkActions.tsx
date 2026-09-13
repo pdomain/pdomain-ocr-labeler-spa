@@ -124,7 +124,7 @@ export function BulkActions({ projectId, pageIndex }: BulkActionsProps) {
   return (
     <div
       data-testid="bulk-actions"
-      className="flex-shrink-0 border-t border-border-1 bg-bg-surface px-3 py-2 flex flex-col gap-2"
+      className="shrink-0 border-t border-border-1 bg-bg-surface px-3 py-2 flex flex-col gap-2"
     >
       {/* Selection header — only when items are selected */}
       {count > 0 && (
@@ -154,7 +154,7 @@ export function BulkActions({ projectId, pageIndex }: BulkActionsProps) {
           disabled={isBusy || count === 0}
           onClick={() => void handleMarkReviewed()}
           className={cn(
-            "text-[11px] px-2 py-1 rounded border transition-colors",
+            "text-[11px] px-2 py-1 rounded-sm border transition-colors",
             "bg-bg-raised text-ink-2 border-border-2 hover:border-accent hover:text-ink-1",
             "disabled:opacity-40 disabled:pointer-events-none",
           )}
@@ -167,7 +167,7 @@ export function BulkActions({ projectId, pageIndex }: BulkActionsProps) {
           disabled={isBusy}
           onClick={() => void handleRerunMatch()}
           className={cn(
-            "text-[11px] px-2 py-1 rounded border transition-colors",
+            "text-[11px] px-2 py-1 rounded-sm border transition-colors",
             "bg-bg-raised text-ink-2 border-border-2 hover:border-accent hover:text-ink-1",
             "disabled:opacity-40 disabled:pointer-events-none",
           )}
@@ -180,7 +180,7 @@ export function BulkActions({ projectId, pageIndex }: BulkActionsProps) {
           disabled={isBusy}
           onClick={() => void handleExport()}
           className={cn(
-            "text-[11px] px-2 py-1 rounded border transition-colors",
+            "text-[11px] px-2 py-1 rounded-sm border transition-colors",
             "bg-bg-raised text-ink-2 border-border-2 hover:border-accent hover:text-ink-1",
             "disabled:opacity-40 disabled:pointer-events-none",
           )}

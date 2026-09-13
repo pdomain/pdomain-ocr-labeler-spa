@@ -3,7 +3,7 @@
 exports[`ReboxCanvas (P3.b) > matches snapshot (snap tool, zoom 1, no ghost) 1`] = `
 <div>
   <div
-    class="rounded border border-border-2 overflow-hidden bg-sunk"
+    class="rounded-sm border border-border-2 overflow-hidden bg-sunk"
     style="cursor: default;"
   >
     <div

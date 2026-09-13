@@ -126,7 +126,7 @@ export function BulkGlyphMarkDialog({
               setRecipe(e.target.value as Recipe);
               setPreviewCount(null);
             }}
-            className="text-xs border border-border-1 rounded px-2 py-1 bg-surface-1 text-ink-1"
+            className="text-xs border border-border-1 rounded-sm px-2 py-1 bg-surface-1 text-ink-1"
           >
             {(Object.keys(RECIPE_LABELS) as Recipe[]).map((r) => (
               <option key={r} value={r}>
@@ -166,7 +166,7 @@ export function BulkGlyphMarkDialog({
 
         {/* Preview count */}
         {previewCount !== null && (
-          <div className="text-xs text-ink-2 bg-surface-2 rounded px-3 py-2">
+          <div className="text-xs text-ink-2 bg-surface-2 rounded-sm px-3 py-2">
             Preview:{" "}
             <span data-testid="bulk-glyph-preview-count">
               {previewCount} word{previewCount !== 1 ? "s" : ""} will be modified
@@ -184,7 +184,7 @@ export function BulkGlyphMarkDialog({
             type="button"
             onClick={() => void handlePreview()}
             disabled={isPreviewing || isApplying}
-            className="text-xs px-3 py-1.5 border border-border-1 rounded hover:bg-surface-2 disabled:opacity-40"
+            className="text-xs px-3 py-1.5 border border-border-1 rounded-sm hover:bg-surface-2 disabled:opacity-40"
           >
             {isPreviewing ? "Previewing…" : "Preview"}
           </button>
@@ -193,7 +193,7 @@ export function BulkGlyphMarkDialog({
             <button
               type="button"
               onClick={onClose}
-              className="text-xs px-3 py-1.5 border border-border-1 rounded hover:bg-surface-2"
+              className="text-xs px-3 py-1.5 border border-border-1 rounded-sm hover:bg-surface-2"
             >
               Cancel
             </button>
@@ -202,7 +202,7 @@ export function BulkGlyphMarkDialog({
               type="button"
               onClick={() => void handleApply()}
               disabled={isApplying || isPreviewing}
-              className="text-xs px-3 py-1.5 bg-accent text-white rounded hover:opacity-90 disabled:opacity-40"
+              className="text-xs px-3 py-1.5 bg-accent text-white rounded-sm hover:opacity-90 disabled:opacity-40"
             >
               {isApplying ? "Applying…" : "Apply"}
             </button>

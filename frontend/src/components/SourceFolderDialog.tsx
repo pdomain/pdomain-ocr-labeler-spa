@@ -215,7 +215,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
           Tailwind overrides supply the labeler's visual chrome. */}
       <DialogContent
         data-testid="source-folder-dialog"
-        className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 max-w-md w-full mx-4 bg-bg-surface rounded-lg border border-border-2 p-5 space-y-4 shadow-lg focus:outline-none"
+        className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 max-w-md w-full mx-4 bg-bg-surface rounded-lg border border-border-2 p-5 space-y-4 shadow-lg focus:outline-hidden"
       >
         <DialogHeader>
           <DialogTitle className="text-base font-semibold text-ink-1">
@@ -228,7 +228,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
           <p className="text-xs font-medium text-ink-3 uppercase tracking-wide">Current path</p>
           <div
             data-testid="source-folder-current-path-label"
-            className="px-3 py-1.5 text-sm bg-bg-raised border border-border-1 rounded font-mono break-all"
+            className="px-3 py-1.5 text-sm bg-bg-raised border border-border-1 rounded-sm font-mono break-all"
           >
             {currentPath}
           </div>
@@ -242,7 +242,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             onClick={handleHome}
             disabled={loading}
             title="Go to home (~)"
-            className="flex-1 px-2 py-1.5 text-sm rounded border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
+            className="flex-1 px-2 py-1.5 text-sm rounded-sm border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
           >
             Home
           </button>
@@ -252,7 +252,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             onClick={handleUp}
             disabled={loading}
             title="Go up one directory"
-            className="flex-1 px-2 py-1.5 text-sm rounded border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
+            className="flex-1 px-2 py-1.5 text-sm rounded-sm border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
           >
             Up
           </button>
@@ -261,7 +261,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
         {/* Directory listing */}
         <div className="space-y-1">
           <p className="text-xs font-medium text-ink-3 uppercase tracking-wide">Subdirectories</p>
-          <div className="border border-border-1 rounded max-h-40 overflow-y-auto bg-bg-raised">
+          <div className="border border-border-1 rounded-sm max-h-40 overflow-y-auto bg-bg-raised">
             {listLoading ? (
               <div data-testid="fs-ls-loading" className="px-3 py-2 text-xs text-ink-4 italic">
                 Loading…
@@ -309,7 +309,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             onKeyDown={handleKeyDown}
             disabled={loading}
             placeholder="/path/to/projects"
-            className="w-full px-3 py-1.5 text-sm border border-border-2 bg-bg-sunk rounded font-mono focus:outline-none focus:border-accent disabled:opacity-50"
+            className="w-full px-3 py-1.5 text-sm border border-border-2 bg-bg-sunk rounded-sm font-mono focus:outline-hidden focus:border-accent disabled:opacity-50"
           />
           {/* eslint-enable jsx-a11y/no-autofocus */}
         </div>
@@ -322,7 +322,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             onClick={handleOpenTyped}
             disabled={loading}
             title="Navigate to the typed path"
-            className="flex-1 px-2 py-1.5 text-sm rounded border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
+            className="flex-1 px-2 py-1.5 text-sm rounded-sm border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
           >
             Open Typed Path
           </button>
@@ -332,7 +332,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             onClick={handleUseCurrent}
             disabled={loading}
             title="Copy current path into input"
-            className="flex-1 px-2 py-1.5 text-sm rounded border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
+            className="flex-1 px-2 py-1.5 text-sm rounded-sm border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
           >
             Use Current
           </button>
@@ -340,7 +340,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
 
         {error && (
           <div
-            className="text-sm text-status-mismatch border border-status-mismatch/40 rounded px-3 py-2"
+            className="text-sm text-status-mismatch border border-status-mismatch/40 rounded-sm px-3 py-2"
             style={{
               background: "color-mix(in srgb, var(--status-mismatch) 12%, var(--bg-surface))",
             }}
@@ -355,7 +355,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
               type="button"
               data-testid="source-folder-cancel-button"
               disabled={loading}
-              className="px-3 py-1.5 text-sm rounded border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
+              className="px-3 py-1.5 text-sm rounded-sm border border-border-2 bg-bg-surface hover:bg-bg-raised disabled:opacity-50"
             >
               Cancel
             </button>
@@ -365,7 +365,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             data-testid="source-folder-apply-button"
             onClick={() => void handleApply()}
             disabled={loading}
-            className="px-3 py-1.5 text-sm rounded bg-accent text-accent-ink hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="px-3 py-1.5 text-sm rounded-sm bg-accent text-accent-ink hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {loading ? "Setting…" : "Apply"}
           </button>

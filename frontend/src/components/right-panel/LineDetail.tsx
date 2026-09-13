@@ -126,7 +126,7 @@ function StructureBox({ line }: StructureBoxProps) {
   return (
     <div
       data-testid="line-detail-structure-box"
-      className="flex items-center gap-2 px-3 py-2 border-b border-border-1 bg-bg-raised/50 flex-shrink-0"
+      className="flex items-center gap-2 px-3 py-2 border-b border-border-1 bg-bg-raised/50 shrink-0"
     >
       <StatusPip status={pip} />
       <div className="flex flex-col min-w-0">
@@ -176,7 +176,7 @@ function GTRow({ line, projectId, pageIndex }: GTRowProps) {
   }
 
   return (
-    <div className="px-3 py-2 border-b border-border-1 flex-shrink-0">
+    <div className="px-3 py-2 border-b border-border-1 shrink-0">
       <label
         htmlFor="line-detail-gt-input"
         className="block text-[10px] text-ink-3 mb-1 uppercase tracking-wide"
@@ -201,7 +201,7 @@ function GTRow({ line, projectId, pageIndex }: GTRowProps) {
           }
         }}
         placeholder="Enter ground truth text…"
-        className="w-full text-[11px] font-mono bg-bg-surface border border-border-2 rounded px-2 py-1 text-ink-1 focus:outline-none focus:border-accent transition-colors"
+        className="w-full text-[11px] font-mono bg-bg-surface border border-border-2 rounded-sm px-2 py-1 text-ink-1 focus:outline-hidden focus:border-accent transition-colors"
         aria-label="Line ground truth text"
       />
       {line.ocr_line_text && (
@@ -269,7 +269,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
   return (
     <div data-testid="line-detail" className="flex flex-col h-full">
       <Tabs data-testid="line-detail-tabs" defaultValue="line" className="flex flex-col h-full">
-        <TabsList className="flex-shrink-0">
+        <TabsList className="shrink-0">
           <TabsTrigger data-testid="line-detail-tab-line" value="line">
             Line
           </TabsTrigger>
@@ -332,7 +332,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
           </div>
 
           {/* P5.e: validate-all footer + merge */}
-          <div className="flex-shrink-0 border-t border-border-1">
+          <div className="shrink-0 border-t border-border-1">
             <div className="px-3 py-2">
               <button
                 type="button"
@@ -341,7 +341,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
                   validateLine.mutate({ lineIndex: line.line_index, validated: true });
                 }}
                 disabled={validateLine.isPending || line.is_fully_validated}
-                className="w-full text-[11px] py-1.5 rounded border border-status-exact/60 text-status-exact hover:bg-status-exact/10 transition-colors disabled:opacity-40"
+                className="w-full text-[11px] py-1.5 rounded-sm border border-status-exact/60 text-status-exact hover:bg-status-exact/10 transition-colors disabled:opacity-40"
               >
                 {line.is_fully_validated
                   ? "All words validated ✓"
@@ -354,7 +354,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
               <button
                 type="button"
                 data-testid="line-detail-merge-prev"
-                className="text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+                className="text-[11px] px-2 py-1 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
                 disabled={line.line_index === 0 || mergeLines.isPending}
                 title={line.line_index === 0 ? "No previous line" : "Merge with previous line"}
                 onClick={() => {
@@ -366,7 +366,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
               <button
                 type="button"
                 data-testid="line-detail-merge-next"
-                className="text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+                className="text-[11px] px-2 py-1 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
                 disabled={mergeLines.isPending}
                 title="Merge with next line"
                 onClick={() => {
@@ -387,7 +387,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
               <button
                 type="button"
                 data-testid="line-copy-gt-to-ocr"
-                className="text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+                className="text-[11px] px-2 py-1 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
                 disabled={copyLineGt.isPending}
                 title="Copy ground truth → OCR for every word in this line"
                 onClick={() => {
@@ -399,7 +399,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
               <button
                 type="button"
                 data-testid="line-copy-ocr-to-gt"
-                className="text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+                className="text-[11px] px-2 py-1 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
                 disabled={copyLineGt.isPending}
                 title="Copy OCR → ground truth for every word in this line"
                 onClick={() => {
@@ -411,7 +411,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
               <button
                 type="button"
                 data-testid="line-split-after-word"
-                className="text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+                className="text-[11px] px-2 py-1 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
                 disabled={splitAfterWord.isPending || line.word_matches.length < 2}
                 title="Split this line after its first word"
                 onClick={() => {
@@ -423,7 +423,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
               <button
                 type="button"
                 data-testid="line-split-by-words"
-                className="text-[11px] px-2 py-1 rounded border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+                className="text-[11px] px-2 py-1 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
                 disabled={splitByWords.isPending || line.word_matches.length < 2}
                 title="Extract this line's first word into a new line"
                 onClick={() => {
@@ -442,15 +442,13 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
           {checkedWords.size > 0 && (
             <div
               data-testid="line-detail-bulk-bar"
-              className="flex items-center gap-1.5 px-3 py-1.5 border-b border-accent/40 bg-accent/5 flex-shrink-0"
+              className="flex items-center gap-1.5 px-3 py-1.5 border-b border-accent/40 bg-accent/5 shrink-0"
             >
-              <span className="text-[10px] text-ink-2 flex-shrink-0">
-                {checkedWords.size} selected
-              </span>
+              <span className="text-[10px] text-ink-2 shrink-0">{checkedWords.size} selected</span>
               <button
                 type="button"
                 data-testid="line-detail-bulk-validate"
-                className="text-[10px] px-1.5 py-0.5 rounded border border-status-exact/60 text-status-exact hover:bg-status-exact/10 transition-colors"
+                className="text-[10px] px-1.5 py-0.5 rounded-sm border border-status-exact/60 text-status-exact hover:bg-status-exact/10 transition-colors"
                 onClick={() => {
                   const pairs: [number, number][] = Array.from(checkedWords).map(
                     (wi) => [line.line_index, wi] as [number, number],
@@ -464,7 +462,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
               <button
                 type="button"
                 data-testid="line-detail-bulk-skip"
-                className="text-[10px] px-1.5 py-0.5 rounded border border-status-fuzzy/60 text-status-fuzzy hover:bg-status-fuzzy/10 transition-colors"
+                className="text-[10px] px-1.5 py-0.5 rounded-sm border border-status-fuzzy/60 text-status-fuzzy hover:bg-status-fuzzy/10 transition-colors"
                 onClick={() => {
                   const pairs: [number, number][] = Array.from(checkedWords).map(
                     (wi) => [line.line_index, wi] as [number, number],
@@ -477,7 +475,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
               </button>
               <button
                 type="button"
-                className="ml-auto text-[10px] px-1.5 py-0.5 rounded border border-border-2 text-ink-3 hover:text-ink-1 transition-colors"
+                className="ml-auto text-[10px] px-1.5 py-0.5 rounded-sm border border-border-2 text-ink-3 hover:text-ink-1 transition-colors"
                 onClick={clearChecked}
                 aria-label="Clear selection"
               >
@@ -487,7 +485,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
           )}
 
           {/* Group header */}
-          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-1 flex-shrink-0">
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-1 shrink-0">
             <span className="text-[11px] text-ink-3">
               {line.word_matches.length} word{line.word_matches.length !== 1 ? "s" : ""}
             </span>
@@ -495,7 +493,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
               type="button"
               data-testid="line-detail-density-toggle"
               onClick={toggleDensity}
-              className="text-[11px] px-2 py-0.5 rounded border border-border-2 text-ink-2 hover:border-accent hover:text-ink-1 transition-colors"
+              className="text-[11px] px-2 py-0.5 rounded-sm border border-border-2 text-ink-2 hover:border-accent hover:text-ink-1 transition-colors"
             >
               {densityPref === "cards" ? "Cards" : "Rows"}
             </button>

@@ -61,7 +61,7 @@ export function FilterToggle() {
       data-filter={filter}
       onClick={cycleMatchFilter}
       aria-label={`Filter: ${LABELS[filter]} (click to cycle)`}
-      className="text-xs px-2 py-1 border border-border-2 rounded bg-bg-raised text-ink-2 hover:bg-bg-raised/80 hover:text-ink-1 transition-colors"
+      className="text-xs px-2 py-1 border border-border-2 rounded-sm bg-bg-raised text-ink-2 hover:bg-bg-raised/80 hover:text-ink-1 transition-colors"
     >
       {LABELS[filter]}
     </button>

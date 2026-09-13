@@ -231,7 +231,7 @@ export function ToolbarActionGrid({
                     }
                   }}
                   className={[
-                    "m-0.5 py-0.5 text-xs rounded border transition-colors truncate",
+                    "m-0.5 py-0.5 text-xs rounded-sm border transition-colors truncate",
                     isStub
                       ? "border-transparent bg-transparent text-transparent cursor-default"
                       : isEnabled
@@ -251,7 +251,7 @@ export function ToolbarActionGrid({
       <div className="flex items-center gap-2 px-1 py-0.5 flex-wrap">
         <select
           data-testid="apply-component-select"
-          className="text-xs border border-border-2 rounded px-1 py-0.5 bg-bg-sunk"
+          className="text-xs border border-border-2 rounded-sm px-1 py-0.5 bg-bg-sunk"
           aria-label="Word component"
           value={componentValue}
           onChange={(e) => {
@@ -273,7 +273,7 @@ export function ToolbarActionGrid({
           onClick={() => {
             onApplyComponent?.(componentValue);
           }}
-          className="px-2 py-0.5 text-xs rounded border border-border-2 bg-bg-surface hover:bg-bg-raised hover:border-accent text-ink-2 transition-colors"
+          className="px-2 py-0.5 text-xs rounded-sm border border-border-2 bg-bg-surface hover:bg-bg-raised hover:border-accent text-ink-2 transition-colors"
         >
           Set
         </button>
@@ -283,7 +283,7 @@ export function ToolbarActionGrid({
           onClick={() => {
             onClearComponent?.(componentValue);
           }}
-          className="px-2 py-0.5 text-xs rounded border border-border-2 bg-bg-surface hover:bg-bg-raised hover:border-status-mismatch text-ink-2 transition-colors"
+          className="px-2 py-0.5 text-xs rounded-sm border border-border-2 bg-bg-surface hover:bg-bg-raised hover:border-status-mismatch text-ink-2 transition-colors"
         >
           Clear
         </button>
@@ -297,7 +297,7 @@ export function ToolbarActionGrid({
           onClick={onAddWordToggle}
           title="Toggle Add Word mode (Shift+A)"
           className={[
-            "px-2 py-0.5 text-xs rounded border transition-colors",
+            "px-2 py-0.5 text-xs rounded-sm border transition-colors",
             addWordActive
               ? "bg-accent text-accent-ink border-accent hover:opacity-90"
               : "bg-bg-surface text-ink-2 border-border-2 hover:bg-bg-raised",

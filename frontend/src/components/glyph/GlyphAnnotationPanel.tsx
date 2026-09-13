@@ -132,7 +132,7 @@ export function GlyphAnnotationPanel({
   return (
     <div
       data-testid={`glyph-panel-${lineIndex}-${wordIndex}`}
-      className="flex flex-col gap-2 p-2 text-xs border border-border-1 rounded"
+      className="flex flex-col gap-2 p-2 text-xs border border-border-1 rounded-sm"
     >
       <div className="font-semibold text-ink-2">Typography</div>
 
@@ -143,7 +143,7 @@ export function GlyphAnnotationPanel({
           <button
             data-testid="glyph-panel-add-ligature"
             onClick={handleAddLigature}
-            className="px-1 py-0 text-[10px] border border-border-1 rounded hover:bg-surface-2"
+            className="px-1 py-0 text-[10px] border border-border-1 rounded-sm hover:bg-surface-2"
             type="button"
           >
             + Add
@@ -155,7 +155,7 @@ export function GlyphAnnotationPanel({
           data-testid="glyph-panel-ligature-kind-select"
           value={newKind}
           onChange={(e) => setNewKind(e.target.value)}
-          className="text-[10px] border border-border-1 rounded px-1 mb-1 bg-surface-1"
+          className="text-[10px] border border-border-1 rounded-sm px-1 mb-1 bg-surface-1"
         >
           {LIGATURE_KINDS.map((k) => (
             <option key={k} value={k}>
@@ -173,7 +173,7 @@ export function GlyphAnnotationPanel({
                 data-testid={`glyph-panel-charspan-cell-${i}`}
                 onClick={(e) => handleCharSpanClick(i, e.shiftKey)}
                 className={[
-                  "w-5 h-5 text-[10px] font-mono border rounded cursor-pointer",
+                  "w-5 h-5 text-[10px] font-mono border rounded-sm cursor-pointer",
                   selectedSpan !== null && i >= selectedSpan[0] && i < selectedSpan[1]
                     ? "bg-accent text-white border-accent"
                     : "border-border-1 hover:bg-surface-2",
@@ -254,7 +254,7 @@ export function GlyphAnnotationPanel({
                 data-testid={`glyph-panel-long-s-cell-${i}`}
                 onClick={() => handleToggleLongS(i)}
                 className={[
-                  "w-5 h-5 text-[10px] font-mono border rounded cursor-pointer",
+                  "w-5 h-5 text-[10px] font-mono border rounded-sm cursor-pointer",
                   (annotations?.long_s_positions ?? []).includes(i)
                     ? "bg-accent text-white border-accent"
                     : "border-border-1 hover:bg-surface-2",
@@ -287,7 +287,7 @@ export function GlyphAnnotationPanel({
           <button
             data-testid="glyph-panel-mark-reviewed-empty"
             onClick={handleMarkReviewed}
-            className="text-[10px] px-2 py-0.5 border border-border-1 rounded hover:bg-surface-2"
+            className="text-[10px] px-2 py-0.5 border border-border-1 rounded-sm hover:bg-surface-2"
             type="button"
           >
             Mark reviewed (no marks)
@@ -297,7 +297,7 @@ export function GlyphAnnotationPanel({
           <button
             data-testid="glyph-panel-reset"
             onClick={handleReset}
-            className="text-[10px] px-2 py-0.5 border border-red-300 text-red-600 rounded hover:bg-red-50 ml-auto"
+            className="text-[10px] px-2 py-0.5 border border-red-300 text-red-600 rounded-sm hover:bg-red-50 ml-auto"
             type="button"
           >
             Reset

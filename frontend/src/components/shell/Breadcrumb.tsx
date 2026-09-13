@@ -96,7 +96,7 @@ function Chip({ testid, label, layer, active, onClick }: ChipProps) {
       data-active={active ? "true" : "false"}
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium select-none transition-colors",
+        "inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-medium select-none transition-colors",
         activeClass,
       )}
     >
@@ -113,7 +113,7 @@ function Chip({ testid, label, layer, active, onClick }: ChipProps) {
 // ─── Separator ───────────────────────────────────────────────────────────────
 
 function Sep() {
-  return <ChevronRight aria-hidden="true" className="h-3 w-3 text-ink-3 flex-shrink-0" />;
+  return <ChevronRight aria-hidden="true" className="h-3 w-3 text-ink-3 shrink-0" />;
 }
 
 // ─── Label resolution ────────────────────────────────────────────────────────

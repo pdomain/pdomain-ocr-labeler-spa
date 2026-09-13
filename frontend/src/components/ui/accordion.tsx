@@ -81,7 +81,7 @@ const AccordionTrigger = React.forwardRef<
     ref={ref}
     className={cn(
       "flex flex-1 items-center justify-between py-2.5 px-4",
-      "text-[10.5px] font-bold tracking-[0.05em] uppercase text-ink-1 transition-all",
+      "text-[10.5px] font-bold tracking-wider uppercase text-ink-1 transition-all",
       "hover:bg-bg-raised",
       className,
     )}

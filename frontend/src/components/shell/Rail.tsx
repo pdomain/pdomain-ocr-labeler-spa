@@ -152,7 +152,7 @@ function TargetCell({ target, active, swatchColor, onClick }: TargetCellProps) {
     >
       {/* Color swatch */}
       <span
-        className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+        className="inline-block w-2.5 h-2.5 rounded-xs shrink-0"
         style={{ background: swatchColor }}
         aria-hidden="true"
       />
@@ -186,7 +186,7 @@ function LayerToggleRow({ testId, label, color, visible, onToggle }: LayerToggle
       )}
     >
       <span
-        className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+        className="inline-block w-2.5 h-2.5 rounded-xs shrink-0"
         style={{ background: color, opacity: visible ? 1 : 0.35 }}
         aria-hidden="true"
       />
@@ -349,7 +349,7 @@ export function Rail() {
             //       the multi-select UI needs to be activated programmatically.
             useUiPrefs.setState({ drawerOpen: true, drawerTab: "worklist" });
           }}
-          className="w-full flex flex-col items-center justify-center gap-0.5 py-1.5 rounded text-[9px] font-medium text-ink-3 hover:text-ink-2 hover:bg-bg-raised/50 transition-colors select-none"
+          className="w-full flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-sm text-[9px] font-medium text-ink-3 hover:text-ink-2 hover:bg-bg-raised/50 transition-colors select-none"
         >
           <LayoutList size={14} aria-hidden="true" />
           <span>Bulk</span>
@@ -362,7 +362,7 @@ export function Rail() {
           onClick={() => {
             dialogStore.open("hotkeyHelp");
           }}
-          className="w-full flex flex-col items-center justify-center gap-0.5 py-1.5 rounded text-[9px] font-medium text-ink-3 hover:text-ink-2 hover:bg-bg-raised/50 transition-colors select-none"
+          className="w-full flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-sm text-[9px] font-medium text-ink-3 hover:text-ink-2 hover:bg-bg-raised/50 transition-colors select-none"
         >
           <Keyboard size={14} aria-hidden="true" />
           <span>Hotkeys</span>

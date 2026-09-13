@@ -8,10 +8,78 @@
  * have a deterministic baseline before component-level fonts override.
  */
 
-@import "./styles/tokens.css";
-@import "@pdomain/pdomain-ui/theme/primitives.css";
+@import "./styles/tokens.css" layer(base);
+@import "@pdomain/pdomain-ui/theme/primitives.css" layer(base);
 
 /* shadcn bootstrap vars — replaced by tokens.css in Slice 1 */
+@import "tailwindcss";
+
+@theme {
+  --color-bg-page: var(--bg-page);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-raised: var(--bg-raised);
+  --color-bg-sunk: var(--bg-sunk);
+
+  --color-border-1: var(--border-1);
+  --color-border-2: var(--border-2);
+  --color-border-3: var(--border-3);
+
+  --color-ink-1: var(--ink-1);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-4: var(--ink-4);
+
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+
+  --color-status-exact: var(--status-exact);
+  --color-status-fuzzy: var(--status-fuzzy);
+  --color-status-mismatch: var(--status-mismatch);
+  --color-status-ocr: var(--status-ocr);
+  --color-status-gt: var(--status-gt);
+
+  --color-layer-block: var(--layer-block);
+  --color-layer-para: var(--layer-para);
+  --color-layer-line: var(--layer-line);
+  --color-layer-word: var(--layer-word);
+
+  --font-ui: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: JetBrains Mono, ui-monospace, monospace;
+
+  --text-label: 9.5px;
+  --text-label--line-height: 1.1;
+  --text-hint: 10px;
+  --text-hint--line-height: 1.2;
+  --text-btn-sm: 11px;
+  --text-btn-sm--line-height: 1.2;
+  --text-body: 12px;
+  --text-body--line-height: 1.4;
+  --text-heading: 13px;
+  --text-heading--line-height: 1.3;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility font-pgdp {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -53,19 +121,11 @@
   }
 }
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-body {
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  font-size: 12px;
-  color: var(--ink-1);
-  background: var(--bg-page);
-}
-
 @layer utilities {
-  .font-pgdp {
-    font-family: "JetBrains Mono", ui-monospace, monospace;
+  body {
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 12px;
+    color: var(--ink-1);
+    background: var(--bg-page);
   }
 }

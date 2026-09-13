@@ -86,7 +86,7 @@ export function ConfirmDialog({
           local primitives.css. */}
       <AlertDialogContent
         data-testid="confirm-dialog"
-        className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 max-w-sm w-full mx-4 bg-bg-surface rounded-lg border border-border-2 p-5 space-y-4 shadow-lg focus:outline-none"
+        className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 max-w-sm w-full mx-4 bg-bg-surface rounded-lg border border-border-2 p-5 space-y-4 shadow-lg focus:outline-hidden"
       >
         <AlertDialogHeader className="space-y-1">
           <AlertDialogTitle className="text-base font-semibold">{title}</AlertDialogTitle>
@@ -95,7 +95,7 @@ export function ConfirmDialog({
         <AlertDialogFooter className="flex justify-end gap-2">
           <AlertDialogCancel
             data-testid="confirm-dialog-cancel"
-            className="px-3 py-1.5 text-sm rounded border border-border-2 bg-bg-surface hover:bg-bg-raised"
+            className="px-3 py-1.5 text-sm rounded-sm border border-border-2 bg-bg-surface hover:bg-bg-raised"
           >
             {cancelLabel}
           </AlertDialogCancel>
@@ -105,7 +105,7 @@ export function ConfirmDialog({
               confirmedRef.current = true;
               onConfirm();
             }}
-            className="px-3 py-1.5 text-sm rounded bg-status-mismatch text-accent-ink hover:opacity-90 transition-opacity"
+            className="px-3 py-1.5 text-sm rounded-sm bg-status-mismatch text-accent-ink hover:opacity-90 transition-opacity"
           >
             {confirmLabel}
           </AlertDialogAction>

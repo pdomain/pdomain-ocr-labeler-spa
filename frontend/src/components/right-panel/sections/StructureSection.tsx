@@ -68,7 +68,7 @@ function NeighborCard({ word, position, testId }: NeighborCardProps) {
   const text = word ? wordText(word) : null;
 
   const baseClasses =
-    "flex flex-col items-center justify-center rounded px-2 py-1.5 min-w-0 flex-1 text-center";
+    "flex flex-col items-center justify-center rounded-sm px-2 py-1.5 min-w-0 flex-1 text-center";
   const variantClasses = isCurrent
     ? "bg-accent/15 border border-accent/40 text-accent font-semibold"
     : "bg-bg-raised border border-border-1 text-ink-3 opacity-70";
@@ -121,7 +121,7 @@ function SplitPicker({ text, splitPos, onPick }: SplitPickerProps) {
               onPick(i + 1);
             }}
             className={[
-              "px-1 py-0.5 rounded text-[12px] font-mono border cursor-pointer transition-colors",
+              "px-1 py-0.5 rounded-sm text-[12px] font-mono border cursor-pointer transition-colors",
               isSelected
                 ? "bg-accent text-white border-accent"
                 : "bg-bg-raised text-ink-2 border-border-1 hover:border-accent hover:text-accent",
@@ -292,7 +292,7 @@ export function StructureSection({ word, page, projectId, pageIndex }: Structure
           </Button>
         </div>
         {mergePreviewText && (
-          <p className="text-[11px] font-mono text-ink-2 bg-bg-sunk rounded px-2 py-1 mt-0.5">
+          <p className="text-[11px] font-mono text-ink-2 bg-bg-sunk rounded-sm px-2 py-1 mt-0.5">
             → <span className="text-accent">{mergePreviewText}</span>
           </p>
         )}

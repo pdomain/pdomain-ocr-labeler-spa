@@ -103,7 +103,7 @@ export function RightPanel({
           onClick={() => onCollapse?.()}
           title="Collapse right panel"
           className={cn(
-            "inline-flex items-center justify-center w-6 h-6 rounded text-ink-3",
+            "inline-flex items-center justify-center w-6 h-6 rounded-sm text-ink-3",
             "hover:text-ink-1 hover:bg-bg-raised transition-colors",
           )}
         >

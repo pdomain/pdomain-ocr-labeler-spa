@@ -88,7 +88,7 @@ export default function ProjectNavigationControls({
 
   // Button base classes for the compact header style.
   const btnBase =
-    "flex items-center justify-center h-6 w-6 rounded text-ink-2 border border-border-2 bg-bg-raised hover:bg-bg-surface hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed transition-colors";
+    "flex items-center justify-center h-6 w-6 rounded-sm text-ink-2 border border-border-2 bg-bg-raised hover:bg-bg-surface hover:text-ink-1 disabled:opacity-40 disabled:cursor-not-allowed transition-colors";
 
   return (
     <div
@@ -123,7 +123,7 @@ export default function ProjectNavigationControls({
           setGotoValue("");
         }}
         onKeyDown={onInputKeyDown}
-        className="w-10 h-6 px-1 text-center text-[11px] tabular-nums border border-border-2 rounded bg-bg-sunk text-ink-1 focus:outline-none focus:border-accent"
+        className="w-10 h-6 px-1 text-center text-[11px] tabular-nums border border-border-2 rounded-sm bg-bg-sunk text-ink-1 focus:outline-hidden focus:border-accent"
       />
 
       {/* ▶ Next arrow */}

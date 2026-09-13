@@ -111,7 +111,7 @@ export function ReboxSection({ word, projectId, pageIndex, imageUrl }: ReboxSect
       <div
         role="radiogroup"
         aria-label="Rebox tool"
-        className="inline-flex rounded border border-border-2 bg-raised overflow-hidden self-start"
+        className="inline-flex rounded-sm border border-border-2 bg-raised overflow-hidden self-start"
       >
         <ToolButton
           testId="rebox-tool-snap"
@@ -156,7 +156,7 @@ export function ReboxSection({ word, projectId, pageIndex, imageUrl }: ReboxSect
             type="button"
             data-testid="rebox-zoom-out"
             aria-label="Zoom out"
-            className="h-6 w-6 rounded border border-border-2 bg-raised text-ink-1 hover:bg-sunk disabled:opacity-40"
+            className="h-6 w-6 rounded-sm border border-border-2 bg-raised text-ink-1 hover:bg-sunk disabled:opacity-40"
             onClick={zoomOut}
             disabled={zoom <= MIN_ZOOM}
           >
@@ -169,7 +169,7 @@ export function ReboxSection({ word, projectId, pageIndex, imageUrl }: ReboxSect
             type="button"
             data-testid="rebox-zoom-in"
             aria-label="Zoom in"
-            className="h-6 w-6 rounded border border-border-2 bg-raised text-ink-1 hover:bg-sunk disabled:opacity-40"
+            className="h-6 w-6 rounded-sm border border-border-2 bg-raised text-ink-1 hover:bg-sunk disabled:opacity-40"
             onClick={zoomIn}
             disabled={zoom >= MAX_ZOOM}
           >

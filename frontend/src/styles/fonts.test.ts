@@ -18,7 +18,9 @@ describe("font setup", () => {
   });
 
   it("font-pgdp utility exists and targets JetBrains Mono", () => {
-    expect(indexCss).toContain(".font-pgdp");
+    // Tailwind 4 declares custom utilities with @utility rather than a bare
+    // class inside @layer components.
+    expect(indexCss).toContain("@utility font-pgdp");
     expect(indexCss).toContain("JetBrains Mono");
   });
 });

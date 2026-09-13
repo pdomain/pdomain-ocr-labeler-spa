@@ -131,7 +131,7 @@ export function OcrGtCompareRow({
           </div>
           <div
             data-testid="ocr-gt-ocr-well"
-            className="h-8 px-2 flex items-center rounded border border-border-2 bg-bg-sunk font-mono text-[11px] text-ink-2 overflow-hidden truncate select-all"
+            className="h-8 px-2 flex items-center rounded-sm border border-border-2 bg-bg-sunk font-mono text-[11px] text-ink-2 overflow-hidden truncate select-all"
           >
             {ocrText || <span className="text-ink-4 italic">∅</span>}
           </div>
@@ -147,7 +147,7 @@ export function OcrGtCompareRow({
                 data-testid="ocr-gt-copy-btn"
                 title="Copy OCR text to GT"
                 onClick={handleCopyOcr}
-                className="h-4 px-1.5 text-[9px] rounded border border-border-2 text-ink-3 hover:text-ink-1 hover:border-accent transition-colors"
+                className="h-4 px-1.5 text-[9px] rounded-sm border border-border-2 text-ink-3 hover:text-ink-1 hover:border-accent transition-colors"
               >
                 ← OCR
               </button>
@@ -160,7 +160,7 @@ export function OcrGtCompareRow({
                   setPickerOpen((o) => !o);
                 }}
                 className={[
-                  "h-4 px-1.5 text-[9px] rounded border transition-colors font-mono",
+                  "h-4 px-1.5 text-[9px] rounded-sm border transition-colors font-mono",
                   pickerOpen
                     ? "bg-accent text-accent-ink border-accent"
                     : "border-border-2 text-ink-3 hover:text-ink-1 hover:border-accent",

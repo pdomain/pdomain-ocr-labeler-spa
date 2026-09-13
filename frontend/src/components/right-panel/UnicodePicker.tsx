@@ -468,7 +468,7 @@ export function UnicodePicker({ onInsert }: UnicodePickerProps) {
   return (
     <div
       data-testid="unicode-picker"
-      className="flex flex-col gap-1.5 rounded border border-border-2 bg-sunk p-2"
+      className="flex flex-col gap-1.5 rounded-sm border border-border-2 bg-sunk p-2"
     >
       {/* Sets row — horizontal scrollable pills */}
       <div className="flex gap-1 overflow-x-auto pb-0.5 scrollbar-none">
@@ -509,7 +509,7 @@ export function UnicodePicker({ onInsert }: UnicodePickerProps) {
             onClick={() => {
               onInsert(char);
             }}
-            className="flex flex-col items-center justify-center gap-0.5 h-12 rounded border border-border-2 bg-raised text-ink-1 hover:bg-accent/10 hover:border-accent transition-colors"
+            className="flex flex-col items-center justify-center gap-0.5 h-12 rounded-sm border border-border-2 bg-raised text-ink-1 hover:bg-accent/10 hover:border-accent transition-colors"
           >
             <span className="font-serif text-base leading-none">{char}</span>
             <span className="text-[8px] font-mono text-ink-4 leading-none">{cp}</span>
@@ -528,7 +528,7 @@ export function UnicodePicker({ onInsert }: UnicodePickerProps) {
           setSlashValue(e.target.value);
         }}
         onKeyDown={handleSlashKeyDown}
-        className="h-7 w-full rounded border border-border-2 bg-raised px-2 text-[11px] font-mono text-ink-1 placeholder:text-ink-4 focus:outline-none focus:border-accent transition-colors"
+        className="h-7 w-full rounded-sm border border-border-2 bg-raised px-2 text-[11px] font-mono text-ink-1 placeholder:text-ink-4 focus:outline-hidden focus:border-accent transition-colors"
       />
     </div>
   );
