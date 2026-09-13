@@ -110,37 +110,48 @@ The script (`scripts/release-common.sh`, verified 2026-06-01):
 | Flag | Effect |
 |------|--------|
 | `FORCE=1` | Skip repo-state guards (dirty tree / wrong branch / origin sync) |
-| `SKIP_PUSH=1` | Create tag locally; do not push or trigger CI |
+| `SKIP_PUSH=1` | Create tag locally; do not push |
 
 ---
 
-## CI release workflow (`.github/workflows/release.yml`)
+## What the release script does after tagging
 
-Triggered by `gh workflow run` with `inputs.tag`.
-Runs two jobs:
+The GitHub workflows were removed on 2026-09-13. `scripts/release-common.sh`
+now does the whole job locally, in this order:
 
-1. **`release-ci`** - checks out the exact tag, runs `make ci-slow` on
-   `ubuntu-latest`. This re-verifies the build including wheel assembly.
-   (`.github/workflows/release.yml`, verified 2026-06-01)
+1. Runs the preflight, which is `make ci-slow`, against the working tree.
+2. Creates the annotated tag and pushes `master` and the tag.
+3. Builds the artifacts with `make build`, overridable through `RELEASE_BUILD`.
+4. Creates the GitHub Release with `gh release create --generate-notes
+   --verify-tag` and attaches everything matching `dist/*.whl`, `dist/*.tar.gz`
+   and `dist/*.tgz`.
 
-2. **`publish`** - builds release artifacts via `make build` and creates a
-   GitHub Release with auto-generated notes.
+If the build fails after the tag is pushed, the script stops and prints the
+`gh release create` command to run by hand once the build is fixed. The tag is
+already public at that point, so the release is the only missing piece.
 
-The release workflow builds a wheel with `make build` and attaches `dist/*.whl` to the
-GitHub Release. It does not attach an sdist unless `make build` is changed to produce one.
-After release creation, the workflow dispatches `pdomain-index-pip`; if dispatch fails,
-the index scheduled regen is the fallback.
+**Publishing to the index is a separate, manual step.** Nothing dispatches it
+and there is no scheduled fallback any more:
+
+```bash
+(cd ../pdomain-index-pip && ./scripts/publish-index.sh)
+```
+
+A release that is not followed by that command stays invisible to installers,
+because the index is generated from release assets.
 
 ---
 
-## CI pre-merge wheel check (`.github/workflows/ci.yml`)
+## Wheel contents check
 
-The `build-wheel` job in the PR CI gate also builds a wheel and asserts that
-`pdomain_ocr_labeler_spa/static/index.html` is present inside the zip.
-(`ci.yml: build-wheel job`, verified 2026-06-01)
-This catches a missing `static/` on every PR, not just at release time.
+There is no pre-merge CI gate any more. `make build` refuses to run without a
+populated `static/`, and the wheel should contain
+`pdomain_ocr_labeler_spa/static/index.html`. Check it before releasing:
 
----
+```bash
+make frontend-build && make build
+unzip -l dist/*.whl | grep static/index.html
+```
 
 ## Verifying a built wheel
 
