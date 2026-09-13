@@ -1,8 +1,14 @@
 name: dep-refresh
 
 on:
-  schedule:
-    - cron: '0 2 * * 0'   # Sunday 02:00 UTC
+  # Schedule paused on 2026-09-13 by owner request. The weekly run was
+  # committing dependency updates unattended, which collided with manual
+  # upgrade work: it left pdomain-index-pip diverged on a lockfile
+  # conflict and superseded a hand-made upgrade in pdomain-index-npm six
+  # times over. workflow_dispatch is deliberately kept so the job can
+  # still be run on purpose. Restore by uncommenting the two lines below.
+  # schedule:
+  #   - cron: '0 2 * * 0'   # Sunday 02:00 UTC
   workflow_dispatch:
 
 permissions:
