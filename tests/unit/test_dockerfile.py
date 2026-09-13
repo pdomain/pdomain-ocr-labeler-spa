@@ -471,50 +471,32 @@ def test_spa_stage_copies_pnpm_lockfile_and_npmrc() -> None:
     )
 
 
-def test_dockerfile_and_release_workflow_agree_on_pnpm_install_logic() -> None:
-    """F-011 / #416 (anti-drift): Dockerfile spa stage and release.yml must
-    agree on pnpm-install policy: neither uses npm; both use pnpm.
+def test_dockerfile_spa_stage_installs_with_pnpm_frozen_lockfile() -> None:
+    """F-011 / #416: the Dockerfile spa stage installs with pnpm and a frozen
+    lockfile, and never with npm.
 
-    The Dockerfile spa stage calls ``pnpm install --frozen-lockfile`` directly.
-    The dispatch-only release.yml encapsulates the same install via ``make``
-    targets (``make build`` / ``make ci-slow`` → ``make frontend-install`` →
-    ``pnpm install --frozen-lockfile``), so the literal string no longer
-    appears in the workflow YAML.
-
-    The invariant we protect: neither file may use ``npm install`` or ``npm ci``
-    (the lockfile is ``frontend/pnpm-lock.yaml``, not ``package-lock.json``).
-    The Dockerfile must still call ``pnpm install --frozen-lockfile`` directly
-    (it cannot delegate to the Makefile). The workflow must invoke ``make build``
-    or ``make ci-slow`` (which call pnpm internally), ensuring both paths
-    use the same ``--frozen-lockfile`` discipline (#416 / F-011).
+    This used to also assert that ``.github/workflows/release.yml`` reached the
+    same install through ``make`` targets, keeping Docker and CI in step. The
+    workflows were removed on 2026-09-13, so there is no second path left to
+    agree with; releasing now runs ``make`` locally through
+    ``scripts/release-common.sh``, which uses the same targets. The Dockerfile
+    half is still a real invariant: it cannot delegate to the Makefile, so it
+    has to get the discipline right on its own.
     """
-    workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     spa = _spa_stage_text()
 
-    # Dockerfile spa stage: must call pnpm install --frozen-lockfile directly.
     assert "pnpm install --frozen-lockfile" in spa, (
         "Dockerfile spa stage must invoke `pnpm install --frozen-lockfile` "
         "directly — it cannot delegate to a Makefile target (#416 / F-011)."
     )
 
-    # release.yml: must use make targets (which call pnpm --frozen-lockfile
-    # internally), not raw npm or direct pnpm install.
-    assert re.search(r"\bmake\s+(build|ci-slow)\b", workflow), (
-        "release.yml must invoke `make build` or `make ci-slow` (which call "
-        "`pnpm install --frozen-lockfile` internally). "
-        "Direct pnpm calls or npm calls would bypass the Makefile and "
-        "break Docker/CI parity (#416 / F-011)."
-    )
-
-    # Neither file may use npm install or npm ci (non-comment lines only).
-    for label, text in (("release.yml", workflow), ("Dockerfile spa stage", spa)):
-        code_lines = [ln for ln in text.splitlines() if not ln.lstrip().startswith("#")]
-        for line in code_lines:
-            if re.search(r"\bnpm\s+(install|ci)\b", line):
-                raise AssertionError(
-                    f"{label} uses npm in: {line!r} — "
-                    "all frontend install must go through pnpm (#416 / F-011)."
-                )
+    code_lines = [ln for ln in spa.splitlines() if not ln.lstrip().startswith("#")]
+    for line in code_lines:
+        if re.search(r"\bnpm\s+(install|ci)\b", line):
+            raise AssertionError(
+                f"Dockerfile spa stage uses npm in: {line!r} — "
+                "all frontend install must go through pnpm (#416 / F-011)."
+            )
 
 
 def test_dockerignore_excludes_essential_paths() -> None:
