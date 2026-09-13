@@ -56,9 +56,8 @@ function getSplitterRatio(): number {
 // Component
 // ---------------------------------------------------------------------------
 
-export function Splitter({ direction, left, right, className }: SplitterProps) {
+export function Splitter({ direction: _direction, left, right, className }: SplitterProps) {
   // direction is reserved for future "vertical" support; currently always horizontal
-  void direction;
 
   const ratio = useSyncExternalStore(subscribe, getSplitterRatio, getSplitterRatio);
   const containerRef = useRef<HTMLDivElement | null>(null);

@@ -53,7 +53,6 @@ function pageBase(projectId: string, pageIndex: number): string {
  * Returns a 202 response with job_id; caller uses useJobProgress to track.
  */
 export function useReloadOcr(projectId: string, pageIndex: number) {
-  const qc = useQueryClient();
   return useMutation<ReloadOCRResponse>({
     mutationFn: () =>
       apiPost<ReloadOCRResponse>(`${pageBase(projectId, pageIndex)}/reload-ocr`, {
@@ -62,7 +61,6 @@ export function useReloadOcr(projectId: string, pageIndex: number) {
     onSuccess: () => {
       // Page data will update when the job completes — invalidate then.
       // Callers are responsible for watching useJobProgress and invalidating.
-      void qc;
     },
   });
 }
