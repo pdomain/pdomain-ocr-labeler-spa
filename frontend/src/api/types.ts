@@ -570,6 +570,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/page-kind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Page Kind
+         * @description ``POST .../page-kind`` — record a person's confirmed page kind.
+         *
+         *     Spec: pdomain-ocr-synth's docs/specs/2026-09-07-region-provenance-and-persistence-design.md
+         *     "Page kind needs a marker, not a decision log". A page has one kind, so
+         *     the human's answer replaces the machine's whole outright — there is no
+         *     accept/reject pair here the way there is for regions. Writing
+         *     ``page.page_kind`` under the per-page lock and re-serializing via
+         *     ``save_page_content_to_store`` is what "the page blob is only ever
+         *     written by a human action" means at this level; ``propose_page_kinds``
+         *     (a machine job) never touches either.
+         */
+        post: operations["confirm_page_kind_api_projects__project_id__pages__page_index__page_kind_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/pages/{page_index}/rotate": {
         parameters: {
             query?: never;
@@ -2872,6 +2901,16 @@ export interface components {
          * @enum {string}
          */
         ConfidenceTier: "gold" | "silver" | "bronze" | "quarantine";
+        /**
+         * ConfirmPageKindRequest
+         * @description Body for ``POST .../page-kind`` — the human's confirmed page kind.
+         */
+        ConfirmPageKindRequest: {
+            /** Kind */
+            kind: string;
+            /** Note */
+            note?: string | null;
+        };
         /**
          * CoordinateTransform
          * @description Named affine transform between portable coordinate spaces.
@@ -6148,6 +6187,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RematchGtRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_page_kind_api_projects__project_id__pages__page_index__page_kind_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmPageKindRequest"];
             };
         };
         responses: {

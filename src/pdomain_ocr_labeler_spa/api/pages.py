@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -168,6 +169,13 @@ class RematchGtRequest(BaseModel):
     """Body for ``POST .../rematch-gt`` — spec §5.3."""
 
     pass
+
+
+class ConfirmPageKindRequest(BaseModel):
+    """Body for ``POST .../page-kind`` — the human's confirmed page kind."""
+
+    kind: str
+    note: str | None = None
 
 
 class RotatePageRequest(BaseModel):
@@ -1436,6 +1444,117 @@ def rematch_gt(
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
+@router.post("/{page_index}/page-kind", response_model=PagePayload)
+def confirm_page_kind(
+    *,
+    project_id: str,
+    page_index: int,
+    body: ConfirmPageKindRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+    page_store: LabelerPageStore | None = Depends(get_page_store_optional),
+) -> JSONResponse:
+    """``POST .../page-kind`` — record a person's confirmed page kind.
+
+    Spec: pdomain-ocr-synth's docs/specs/2026-09-07-region-provenance-and-persistence-design.md
+    "Page kind needs a marker, not a decision log". A page has one kind, so
+    the human's answer replaces the machine's whole outright — there is no
+    accept/reject pair here the way there is for regions. Writing
+    ``page.page_kind`` under the per-page lock and re-serializing via
+    ``save_page_content_to_store`` is what "the page blob is only ever
+    written by a human action" means at this level; ``propose_page_kinds``
+    (a machine job) never touches either.
+    """
+    from pdomain_book_contracts.annotation import PageKind
+
+    from ..core.page_kind.reviewed_store import PageKindReviewedStore
+
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    try:
+        kind = PageKind(body.kind)
+    except ValueError:
+        return JSONResponse(
+            status_code=400,
+            content=ApiError(
+                error="invalid_page_kind",
+                message=f"not a valid page kind: {body.kind!r}",
+            ).model_dump(),
+        )
+
+    project = project_state.loaded_project
+    if project is None:  # _check_project_and_page guarantees; explicit to survive -O
+        raise RuntimeError("project is None after _check_project_and_page passed — invariant violated")
+
+    pstate = project_state.get_page_state(page_index)
+    if pstate is None or pstate.page_record is None:
+        return JSONResponse(
+            status_code=400,
+            content=ApiError(
+                error="page_not_loaded",
+                message=f"page {page_index} has no in-memory page record; load or run OCR first",
+            ).model_dump(),
+        )
+    page = getattr(pstate.page_record, "payload", None)
+    if page is None:
+        return JSONResponse(
+            status_code=400,
+            content=ApiError(
+                error="page_not_loaded",
+                message=f"page {page_index} record carries no payload; load or run OCR first",
+            ).model_dump(),
+        )
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        page.page_kind = kind
+        pstate.generation += 1
+
+        if page_store is not None and pstate.page_id is not None and callable(getattr(page, "to_dict", None)):
+            try:
+                save_page_content_to_store(
+                    page_id=pstate.page_id,
+                    page=page,
+                    store=page_store,
+                    changes=[{"type": "page_kind", "page_index": page_index, "kind": kind.value}],
+                    labeler_sidecars=pstate,
+                )
+            except Exception as exc:
+                log.exception("confirm_page_kind: store write failed page_id=%s", pstate.page_id)
+                return JSONResponse(
+                    status_code=503,
+                    content=ApiError(
+                        error="store_persist_failed",
+                        message=(
+                            f"page kind applied in memory but failed to persist page "
+                            f"{page_index} to the event store: {exc}"
+                        ),
+                    ).model_dump(),
+                )
+
+        PageKindReviewedStore(project.project_root).mark_reviewed(
+            page_index, datetime.now(UTC).isoformat(), note=body.note
+        )
+
+    payload = _page_payload(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+        page_store=page_store,
+    )
+    updated = payload.model_copy(
+        update={
+            "extra": {**payload.extra, "page_kind": kind.value, "page_kind_reviewed": True},
+        }
+    )
+    return JSONResponse(status_code=200, content=updated.model_dump(mode="json"))
+
+
 @router.post("/{page_index}/rotate", status_code=202, response_model=RotatePageResponse)
 def rotate_page(
     project_id: str,
@@ -1795,6 +1914,7 @@ def install_pages_router(app) -> None:  # type: ignore[no-untyped-def]
 
 
 __all__ = [
+    "ConfirmPageKindRequest",
     "GlyphBulkMarkRequest",
     "GlyphBulkMarkResponse",
     "PageHistoryInfo",
