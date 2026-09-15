@@ -112,9 +112,19 @@ async def handle_propose_page_kinds(runner: JobRunner, job: Job) -> None:
         )
 
     templates = fit_book_templates(measured)
-    # classify_pages preserves input order, so zipping with range(total)
-    # recovers page_index without depending on page_name uniqueness.
+    # classify_pages preserves input order, so enumerate() recovers page_index
+    # without depending on page_name uniqueness. That order-preservation is
+    # documented behavior, not a type-checked contract, so the length check
+    # below is what makes relying on it safe: a future release that filters
+    # or reorders results fails loudly here instead of silently attributing
+    # every proposal after the first divergence to the wrong page.
     classifications = classify_pages(measured, templates)
+    if len(classifications) != len(measured):  # explicit to survive -O
+        raise RuntimeError(
+            "propose_page_kinds: classify_pages returned "
+            f"{len(classifications)} classification(s) for {len(measured)} measured "
+            "page(s) — page_index recovery by position is no longer safe"
+        )
 
     run = PageKindProposalRun(
         run_id=uuid.uuid4().hex,

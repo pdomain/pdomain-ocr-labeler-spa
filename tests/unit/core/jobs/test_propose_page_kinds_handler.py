@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+from pdomain_pgdp_measure.page_templates import (
+    BookTemplates,
+    PageClassification,
+    fit_book_templates,
+)
+from pdomain_pgdp_measure.page_templates import classify_pages as _real_classify_pages
 from pdomain_pgdp_measure.profile_models import CoordinateFrame, InkBand, PageMeasurement
 
 from pdomain_ocr_labeler_spa.core.jobs.events import JobEventBroker
@@ -131,3 +139,66 @@ async def test_the_job_never_touches_the_page_blob(tmp_path: Path) -> None:
     await handle_propose_page_kinds(runner, job)
 
     assert not blobs_dir.exists()
+
+
+async def test_a_jittered_book_threads_fractional_confidence_through_the_journal(
+    tmp_path: Path,
+) -> None:
+    """The brief's original tops ([300, 302, 298, 301]) don't hit confidence
+    1.0 (see the steady-book test above) — they hit a fraction strictly
+    between 0 and 1, which still has to pass ``PageKindProposal.__post_init__``'s
+    bound check and round-trip through the journal unchanged. Asserts the
+    bound and the round-trip against an independently computed classification,
+    not a pinned fractional number (that would tie the test to one library
+    version's arithmetic).
+    """
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds import (
+        handle_propose_page_kinds,
+    )
+
+    tops = [300, 302, 298, 301]
+    project = _project(tmp_path, len(tops))
+    runner, job = _runner_and_job(project, tops=tops)
+
+    measured = [_measured(f"{i:03d}.png", first_band_top=top) for i, top in enumerate(tops)]
+    expected = _real_classify_pages(measured, fit_book_templates(measured))
+
+    await handle_propose_page_kinds(runner, job)
+
+    proposal_log = PageKindProposalLog(project.project_root)
+    proposals = {p.page_index: p for p in proposal_log.proposals_for_run(proposal_log.runs()[0].run_id)}
+    assert len(proposals) == len(tops)
+    assert all(p.kind.value == "body" for p in proposals.values())
+    assert any(p.confidence is not None and 0.0 < p.confidence < 1.0 for p in proposals.values())
+    for page_index, classification in enumerate(expected):
+        assert proposals[page_index].confidence == classification.confidence
+
+
+async def test_a_classify_pages_length_mismatch_raises_loudly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``classify_pages`` preserving input order isn't a type-checked contract —
+    if a future release ever filters or reorders results, ``page_index``
+    recovery by position must fail loudly rather than silently mis-attribute
+    proposals to the wrong page.
+
+    ``classify_pages`` isn't currently an injectable seam on the runner
+    context, so this monkeypatches the handler module's imported name rather
+    than adding a second production seam just for this test.
+    """
+    import pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds as handler_module
+
+    project = _project(tmp_path, 3)
+    runner, job = _runner_and_job(project, tops=[300, 302, 298])
+
+    def _classify_pages_dropping_one(
+        pages: Sequence[PageMeasurement], templates: BookTemplates
+    ) -> tuple[PageClassification, ...]:
+        return _real_classify_pages(pages, templates)[:-1]
+
+    monkeypatch.setattr(handler_module, "classify_pages", _classify_pages_dropping_one)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await handler_module.handle_propose_page_kinds(runner, job)
+    assert "2" in str(exc_info.value)
+    assert "3" in str(exc_info.value)
