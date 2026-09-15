@@ -967,7 +967,12 @@ def post_auto_rotate_all(
     return JSONResponse(status_code=202, content={"job_id": job_id})
 
 
-@router.post("/{project_id}/propose-page-kinds", status_code=202, response_model=ProposePageKindsResponse)
+@router.post(
+    "/{project_id}/propose-page-kinds",
+    status_code=202,
+    response_model=ProposePageKindsResponse,
+    operation_id="propose_page_kinds",
+)
 def post_propose_page_kinds(
     project_id: str,
     project_state: ProjectState = Depends(get_project_state),

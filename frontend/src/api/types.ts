@@ -347,7 +347,7 @@ export interface paths {
          *
          *     Returns 404 when the requested project is not loaded.
          */
-        post: operations["post_propose_page_kinds_api_projects__project_id__propose_page_kinds_post"];
+        post: operations["propose_page_kinds"];
         delete?: never;
         options?: never;
         head?: never;
@@ -591,8 +591,15 @@ export interface paths {
          *     ``save_page_content_to_store`` is what "the page blob is only ever
          *     written by a human action" means at this level; ``propose_page_kinds``
          *     (a machine job) never touches either.
+         *
+         *     The reviewed marker is written only after the confirmed kind reaches
+         *     durable storage. A marker recording that a person reviewed a page whose
+         *     kind was never stored would say the opposite of what happened, so a page
+         *     that cannot be persisted — no event store wired, or no ``page_id`` for
+         *     this page — is refused with ``503 store_unavailable`` and leaves no
+         *     marker behind.
          */
-        post: operations["confirm_page_kind_api_projects__project_id__pages__page_index__page_kind_post"];
+        post: operations["confirm_page_kind"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2904,10 +2911,15 @@ export interface components {
         /**
          * ConfirmPageKindRequest
          * @description Body for ``POST .../page-kind`` — the human's confirmed page kind.
+         *
+         *     ``kind`` is the enum, not a bare string: pydantic rejects an unknown kind
+         *     before the route runs (the app's validation handler renders that as
+         *     ``400 validation_error``), and the generated TypeScript client gets a union
+         *     of the real kinds instead of ``string``. Mirrors the enum-typed ``role`` on
+         *     the region routes.
          */
         ConfirmPageKindRequest: {
-            /** Kind */
-            kind: string;
+            kind: components["schemas"]["PageKind"];
             /** Note */
             note?: string | null;
         };
@@ -4212,6 +4224,12 @@ export interface components {
              */
             depth: number;
         };
+        /**
+         * PageKind
+         * @description What a page is.
+         * @enum {string}
+         */
+        PageKind: "body" | "chapter opening" | "title page" | "half title" | "contents" | "index" | "dedication" | "preface" | "errata" | "plate" | "blank" | "advertisement" | "colophon" | "unknown";
         /**
          * PagePayload
          * @description Full per-page payload — spec §5.3 / §1 ``PagePayload``.
@@ -5975,7 +5993,7 @@ export interface operations {
             };
         };
     };
-    post_propose_page_kinds_api_projects__project_id__propose_page_kinds_post: {
+    propose_page_kinds: {
         parameters: {
             query?: never;
             header?: never;
@@ -6210,7 +6228,7 @@ export interface operations {
             };
         };
     };
-    confirm_page_kind_api_projects__project_id__pages__page_index__page_kind_post: {
+    confirm_page_kind: {
         parameters: {
             query?: never;
             header?: never;

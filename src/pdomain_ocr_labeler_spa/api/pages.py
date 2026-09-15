@@ -6,16 +6,17 @@ import io
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import JSONResponse, Response
+from pdomain_book_contracts.annotation import PageKind, normalize_page_kind
 from pdomain_book_tools.ocr.page import Page
 from pdomain_ops.pages import PagePayload as OpsPagePayload
 from pdomain_ops.pages import PageRecord
 from pdomain_ops.pages import build_provenance_summary as ops_build_provenance_summary
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field
 
 from ..core import text_normalize
 from ..core.glyph.bulk_mark import GlyphBulkMarkParams, apply_bulk_mark
@@ -171,10 +172,33 @@ class RematchGtRequest(BaseModel):
     pass
 
 
-class ConfirmPageKindRequest(BaseModel):
-    """Body for ``POST .../page-kind`` — the human's confirmed page kind."""
+def _normalize_page_kind_input(value: object) -> object:
+    """Canonicalize a page-kind label before ``PageKind`` coercion.
 
-    kind: str
+    ``normalize_page_kind`` lowercases, folds underscores and hyphens to
+    spaces, and collapses whitespace, so ``"chapter_opening"`` — the spelling a
+    client would echo back from a proposal's ``evidence.page_class`` — resolves
+    to ``PageKind.CHAPTER_OPENING``. It canonicalizes spelling *inside*
+    ``PageKind``'s own vocabulary and raises ``ValueError`` for anything
+    outside it; it is not a ``PageClass``-to-``PageKind`` merge, which the spec
+    forbids. Non-strings pass through untouched for pydantic to reject.
+    """
+    if isinstance(value, str):
+        return normalize_page_kind(value)
+    return value
+
+
+class ConfirmPageKindRequest(BaseModel):
+    """Body for ``POST .../page-kind`` — the human's confirmed page kind.
+
+    ``kind`` is the enum, not a bare string: pydantic rejects an unknown kind
+    before the route runs (the app's validation handler renders that as
+    ``400 validation_error``), and the generated TypeScript client gets a union
+    of the real kinds instead of ``string``. Mirrors the enum-typed ``role`` on
+    the region routes.
+    """
+
+    kind: Annotated[PageKind, BeforeValidator(_normalize_page_kind_input)]
     note: str | None = None
 
 
@@ -1444,7 +1468,7 @@ def rematch_gt(
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
-@router.post("/{page_index}/page-kind", response_model=PagePayload)
+@router.post("/{page_index}/page-kind", response_model=PagePayload, operation_id="confirm_page_kind")
 def confirm_page_kind(
     *,
     project_id: str,
@@ -1465,46 +1489,55 @@ def confirm_page_kind(
     ``save_page_content_to_store`` is what "the page blob is only ever
     written by a human action" means at this level; ``propose_page_kinds``
     (a machine job) never touches either.
-    """
-    from pdomain_book_contracts.annotation import PageKind
 
+    The reviewed marker is written only after the confirmed kind reaches
+    durable storage. A marker recording that a person reviewed a page whose
+    kind was never stored would say the opposite of what happened, so a page
+    that cannot be persisted — no event store wired, or no ``page_id`` for
+    this page — is refused with ``503 store_unavailable`` and leaves no
+    marker behind.
+    """
     from ..core.page_kind.reviewed_store import PageKindReviewedStore
 
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
         return err
 
-    try:
-        kind = PageKind(body.kind)
-    except ValueError:
-        return JSONResponse(
-            status_code=400,
-            content=ApiError(
-                error="invalid_page_kind",
-                message=f"not a valid page kind: {body.kind!r}",
-            ).model_dump(),
-        )
-
+    kind = body.kind
     project = project_state.loaded_project
     if project is None:  # _check_project_and_page guarantees; explicit to survive -O
         raise RuntimeError("project is None after _check_project_and_page passed — invariant violated")
 
     pstate = project_state.get_page_state(page_index)
-    if pstate is None or pstate.page_record is None:
+    page = _resolve_page_object_for_pages(pstate)
+    if pstate is None or page is None:
         return JSONResponse(
             status_code=400,
             content=ApiError(
                 error="page_not_loaded",
-                message=f"page {page_index} has no in-memory page record; load or run OCR first",
+                message=f"page {page_index} has no in-memory Page; load or run OCR first",
             ).model_dump(),
         )
-    page = getattr(pstate.page_record, "payload", None)
-    if page is None:
+
+    # Refuse before mutating anything: without a store and a page_id there is
+    # nowhere for the confirmed kind to land, and a confirmation that reaches
+    # no durable storage must not leave a reviewed marker claiming it did.
+    page_id = pstate.page_id
+    if page_store is None or page_id is None:
+        log.warning(
+            "confirm_page_kind: no durable target for page=%d (store=%s page_id=%s)",
+            page_index,
+            "wired" if page_store is not None else "missing",
+            page_id,
+        )
         return JSONResponse(
-            status_code=400,
+            status_code=503,
             content=ApiError(
-                error="page_not_loaded",
-                message=f"page {page_index} record carries no payload; load or run OCR first",
+                error="store_unavailable",
+                message=(
+                    f"page kind for page {page_index} cannot be persisted: "
+                    "the page is not backed by the event store"
+                ),
             ).model_dump(),
         )
 
@@ -1513,27 +1546,26 @@ def confirm_page_kind(
         page.page_kind = kind
         pstate.generation += 1
 
-        if page_store is not None and pstate.page_id is not None and callable(getattr(page, "to_dict", None)):
-            try:
-                save_page_content_to_store(
-                    page_id=pstate.page_id,
-                    page=page,
-                    store=page_store,
-                    changes=[{"type": "page_kind", "page_index": page_index, "kind": kind.value}],
-                    labeler_sidecars=pstate,
-                )
-            except Exception as exc:
-                log.exception("confirm_page_kind: store write failed page_id=%s", pstate.page_id)
-                return JSONResponse(
-                    status_code=503,
-                    content=ApiError(
-                        error="store_persist_failed",
-                        message=(
-                            f"page kind applied in memory but failed to persist page "
-                            f"{page_index} to the event store: {exc}"
-                        ),
-                    ).model_dump(),
-                )
+        try:
+            save_page_content_to_store(
+                page_id=page_id,
+                page=page,
+                store=page_store,
+                changes=[{"type": "page_kind", "page_index": page_index, "kind": kind.value}],
+                labeler_sidecars=pstate,
+            )
+        except Exception as exc:
+            log.exception("confirm_page_kind: store write failed page_id=%s", page_id)
+            return JSONResponse(
+                status_code=503,
+                content=ApiError(
+                    error="store_persist_failed",
+                    message=(
+                        f"page kind applied in memory but failed to persist page "
+                        f"{page_index} to the event store: {exc}"
+                    ),
+                ).model_dump(),
+            )
 
         PageKindReviewedStore(project.project_root).mark_reviewed(
             page_index, datetime.now(UTC).isoformat(), note=body.note
