@@ -183,6 +183,12 @@ class AutoRotateAllResponse(BaseModel):
     job_id: str
 
 
+class ProposePageKindsResponse(BaseModel):
+    """Response for ``POST /api/projects/{id}/propose-page-kinds`` → 202."""
+
+    job_id: str
+
+
 class LoadProjectResponse(BaseModel):
     """M2 slice-5 response — interim shape on the path to spec-canonical.
 
@@ -961,6 +967,41 @@ def post_auto_rotate_all(
     return JSONResponse(status_code=202, content={"job_id": job_id})
 
 
+@router.post("/{project_id}/propose-page-kinds", status_code=202, response_model=ProposePageKindsResponse)
+def post_propose_page_kinds(
+    project_id: str,
+    project_state: ProjectState = Depends(get_project_state),
+    runner: JobRunner = Depends(get_job_runner),
+) -> JSONResponse:
+    """``POST /api/projects/{id}/propose-page-kinds`` → ``202 {job_id}``.
+
+    Enqueues a ``propose_page_kinds`` job that measures every page's image,
+    classifies the whole book against its own fitted templates, and records
+    one page-kind proposal per page.
+
+    Spec: pdomain-ocr-synth's docs/specs/2026-09-07-region-provenance-and-persistence-design.md
+    "Page kind is classified per book, and it runs before regions".
+
+    Returns 404 when the requested project is not loaded.
+    """
+    project = project_state.loaded_project
+    if project is None or project.project_id != project_id:
+        return JSONResponse(
+            status_code=404,
+            content=ApiError(
+                error="project_not_found",
+                message=f"project not found or not loaded: {project_id}",
+            ).model_dump(),
+        )
+
+    job_id = runner.submit(
+        "propose_page_kinds",
+        project_id=project_id,
+        payload={"project_id": project_id, "page_count": project.total_pages},
+    )
+    return JSONResponse(status_code=202, content={"job_id": job_id})
+
+
 def install_projects_router(app) -> None:  # type: ignore[no-untyped-def]
     """Register the projects router. Called from ``bootstrap.build_app``."""
     app.include_router(router)
@@ -974,6 +1015,7 @@ __all__ = [
     "LoadProjectRequest",
     "LoadProjectResponse",
     "ProjectKey",
+    "ProposePageKindsResponse",
     "SetSourceProjectsRootRequest",
     "SetSourceProjectsRootResponse",
     "install_projects_router",

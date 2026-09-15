@@ -412,6 +412,18 @@ async def _handle_refine_bboxes(runner: JobRunner, job: Job) -> None:
     handle_refine_bboxes(runner, job)
 
 
+async def _handle_propose_page_kinds(runner: JobRunner, job: Job) -> None:
+    """propose_page_kinds handler — delegates to
+    ``core/jobs/handlers/propose_page_kinds``.
+
+    Classifies every page of the active project's book via pgdp-measure's
+    book-scoped page-template classifier and records proposals durably.
+    """
+    from .handlers.propose_page_kinds import handle_propose_page_kinds  # lazy import
+
+    await handle_propose_page_kinds(runner, job)
+
+
 _HANDLERS: dict[str, Handler] = {
     "reload_ocr": _handle_reload_ocr,
     "save_project": _handle_save_project,
@@ -419,6 +431,7 @@ _HANDLERS: dict[str, Handler] = {
     "rotate_page": _handle_rotate_page,
     "auto_rotate_all": _handle_auto_rotate_all,
     "refine_bboxes": _handle_refine_bboxes,
+    "propose_page_kinds": _handle_propose_page_kinds,
 }
 
 

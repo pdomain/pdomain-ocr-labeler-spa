@@ -325,6 +325,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/propose-page-kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Propose Page Kinds
+         * @description ``POST /api/projects/{id}/propose-page-kinds`` → ``202 {job_id}``.
+         *
+         *     Enqueues a ``propose_page_kinds`` job that measures every page's image,
+         *     classifies the whole book against its own fitted templates, and records
+         *     one page-kind proposal per page.
+         *
+         *     Spec: pdomain-ocr-synth's docs/specs/2026-09-07-region-provenance-and-persistence-design.md
+         *     "Page kind is classified per book, and it runs before regions".
+         *
+         *     Returns 404 when the requested project is not loaded.
+         */
+        post: operations["post_propose_page_kinds_api_projects__project_id__propose_page_kinds_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fs/ls": {
         parameters: {
             query?: never;
@@ -4330,6 +4359,14 @@ export interface components {
             label: string;
         };
         /**
+         * ProposePageKindsResponse
+         * @description Response for ``POST /api/projects/{id}/propose-page-kinds`` → 202.
+         */
+        ProposePageKindsResponse: {
+            /** Job Id */
+            job_id: string;
+        };
+        /**
          * ProvenanceGraph
          * @description DAG of provenance nodes with an active head and head-history.
          */
@@ -5886,6 +5923,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AutoRotateAllResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_propose_page_kinds_api_projects__project_id__propose_page_kinds_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposePageKindsResponse"];
                 };
             };
             /** @description Validation Error */

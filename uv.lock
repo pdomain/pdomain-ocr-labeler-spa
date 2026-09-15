@@ -1482,6 +1482,7 @@ dependencies = [
     { name = "pdomain-book-contracts" },
     { name = "pdomain-book-tools" },
     { name = "pdomain-ops" },
+    { name = "pdomain-pgdp-measure" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-multipart" },
@@ -1525,6 +1526,7 @@ requires-dist = [
     { name = "pdomain-book-contracts", specifier = ">=0.2.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pdomain-book-tools", specifier = "==0.28.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pdomain-ops", specifier = ">=0.11.2", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
+    { name = "pdomain-pgdp-measure", specifier = ">=0.1.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pydantic", specifier = ">=2.13" },
     { name = "pydantic-settings", specifier = ">=2.15" },
     { name = "python-multipart", specifier = ">=0.0.20" },
@@ -1573,6 +1575,20 @@ dependencies = [
 sdist = { url = "https://github.com/pdomain/pdomain-ops/releases/download/v0.11.2/pdomain_ops-0.11.2.tar.gz", hash = "sha256:c0561b4e0a00081078d5204c014d54648bd8446f64ddcbb63f46b45c253a2775" }
 wheels = [
     { url = "https://github.com/pdomain/pdomain-ops/releases/download/v0.11.2/pdomain_ops-0.11.2-py3-none-any.whl", hash = "sha256:0d310ef9b78b294fcd29d410cd555149efc1a654eb70bf7a4412a29e7a3602a1" },
+]
+
+[[package]]
+name = "pdomain-pgdp-measure"
+version = "0.1.0"
+source = { registry = "https://pdomain.github.io/pdomain-index-pip/simple/" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://github.com/pdomain/pdomain-pgdp-measure/releases/download/v0.1.0/pdomain_pgdp_measure-0.1.0.tar.gz", hash = "sha256:f96f2e2aa58ef5e1c0d37c6a09d61210c49dca1bffeac008deec8891beb9f9b6" }
+wheels = [
+    { url = "https://github.com/pdomain/pdomain-pgdp-measure/releases/download/v0.1.0/pdomain_pgdp_measure-0.1.0-py3-none-any.whl", hash = "sha256:861c58672864173d3414ebedfb876aec231f4bb38704ac0337d7269d14002df2" },
 ]
 
 [[package]]

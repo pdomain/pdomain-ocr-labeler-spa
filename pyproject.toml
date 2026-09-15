@@ -42,6 +42,7 @@ dependencies = [
     # >=0.11.2: device-vocabulary display fix; 0.11.2 loosened the fastapi/
     # starlette pins that had blocked this bump (ocr-container-meta#399).
     "pdomain-ops>=0.11.2",
+    "pdomain-pgdp-measure>=0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -97,6 +98,7 @@ required-version = ">=0.11.16"
 pdomain-book-tools = { index = "pdomain-index-pip" }
 pdomain-book-contracts = { index = "pdomain-index-pip" }
 pdomain-ops = { index = "pdomain-index-pip" }
+pdomain-pgdp-measure = { index = "pdomain-index-pip" }
 
 [tool.hatch.version]
 source = "vcs"
