@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -62,7 +63,15 @@ def _project(tmp_path: Path, page_count: int) -> Project:
     )
 
 
-def _runner_and_job(project: Project, tops: list[int]) -> tuple[JobRunner, Job]:
+def _runner_and_job(
+    project: Project, tops: list[int], *, payload_project_id: str | None = None
+) -> tuple[JobRunner, Job]:
+    """A runner with *project* loaded, plus a job queued against it.
+
+    ``payload_project_id`` defaults to the loaded project's own id, matching
+    what the start route submits; pass a different one to simulate a book
+    swapped in after the job was queued.
+    """
     project_state = ProjectState()
     project_state.set_loaded_project(project)
 
@@ -79,7 +88,15 @@ def _runner_and_job(project: Project, tops: list[int]) -> tuple[JobRunner, Job]:
             "propose_page_kinds_measure_fn": _measure_fn,
         },
     )
-    job = Job(job_id="j1", job_type="propose_page_kinds", created_at=datetime.now(UTC))
+    job = Job(
+        job_id="j1",
+        job_type="propose_page_kinds",
+        created_at=datetime.now(UTC),
+        payload={"project_id": payload_project_id or project.project_id},
+    )
+    # Register the job the way ``submit`` would, so ``update_progress`` finds
+    # it and the handler's progress reports are observable via ``get_job``.
+    runner._jobs[job.job_id] = job
     return runner, job
 
 
@@ -202,3 +219,87 @@ async def test_a_classify_pages_length_mismatch_raises_loudly(
         await handler_module.handle_propose_page_kinds(runner, job)
     assert "2" in str(exc_info.value)
     assert "3" in str(exc_info.value)
+
+
+async def test_a_run_queued_for_another_book_refuses_to_classify_the_loaded_one(
+    tmp_path: Path,
+) -> None:
+    """Jobs dequeue later than they are submitted, and a load in between swaps
+    ``loaded_project``. Proposals are durable and book-scoped, so classifying
+    whatever is loaded now would write one book's run into another book's
+    journal. The handler must refuse rather than proceed.
+    """
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds import (
+        handle_propose_page_kinds,
+    )
+
+    project = _project(tmp_path, 3)
+    runner, job = _runner_and_job(project, tops=[300, 302, 298], payload_project_id="bookB")
+
+    await handle_propose_page_kinds(runner, job)
+
+    proposal_log = PageKindProposalLog(project.project_root)
+    assert proposal_log.runs() == []
+    assert not proposal_log.path.exists()
+
+    reported = runner.get_job("j1")
+    assert reported is not None
+    assert "bookB" in reported.message
+    assert "bookA" in reported.message
+
+
+async def test_an_unmappable_page_class_proposes_unknown_without_a_confidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``PageKind.UNKNOWN`` is the classifier declining to answer, and
+    ``PageKindProposal`` documents that a refusal carries no confidence. A
+    ``page_class`` this handler has no mapping for — a future library value —
+    must therefore drop the score rather than persist it against an answer
+    that was never given.
+    """
+    import pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds as handler_module
+
+    project = _project(tmp_path, 3)
+    runner, job = _runner_and_job(project, tops=[300, 302, 298])
+
+    def _classify_pages_with_a_future_class(
+        pages: Sequence[PageMeasurement], templates: BookTemplates
+    ) -> tuple[PageClassification, ...]:
+        classified = _real_classify_pages(pages, templates)
+        return (
+            replace(classified[0], page_class="illustration_plate", confidence=0.87),
+            *classified[1:],
+        )
+
+    monkeypatch.setattr(handler_module, "classify_pages", _classify_pages_with_a_future_class)
+
+    await handler_module.handle_propose_page_kinds(runner, job)
+
+    proposal = PageKindProposalLog(project.project_root).latest_proposal_for_page(0)
+    assert proposal is not None
+    assert proposal.kind.value == "unknown"
+    assert proposal.confidence is None
+    assert proposal.evidence["page_class"] == "illustration_plate"
+
+
+async def test_the_runs_page_count_is_the_number_of_proposals_it_wrote(tmp_path: Path) -> None:
+    """A persisted run whose ``page_count`` disagrees with how many proposals
+    it wrote contradicts itself. ``total_pages`` is a separate field from the
+    ``image_paths`` the run actually walks, so the count comes from the
+    classifications.
+    """
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds import (
+        handle_propose_page_kinds,
+    )
+
+    project = _project(tmp_path, 3)
+    # A project whose declared total disagrees with its own image list — the
+    # run must report what it classified, not what the project claims.
+    project.total_pages = 99
+    runner, job = _runner_and_job(project, tops=[300, 302, 298])
+
+    await handle_propose_page_kinds(runner, job)
+
+    proposal_log = PageKindProposalLog(project.project_root)
+    run = proposal_log.runs()[0]
+    assert run.page_count == len(proposal_log.proposals_for_run(run.run_id)) == 3

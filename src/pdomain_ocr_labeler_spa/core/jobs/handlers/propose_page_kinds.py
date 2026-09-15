@@ -6,9 +6,12 @@ design.md "Page kind is classified per book, and it runs before regions".
 The pass needs every page before it can classify any — ``fit_book_templates``
 measures the whole book's first-band geometry before classifying a single
 page against it — so it cannot run at page fetch; it is a book-scoped job.
-Job rows live in memory and are lost on restart, so this handler writes each
-page's proposal durably via ``PageKindProposalLog`` as it goes, and treats
-the job row purely as progress reporting.
+Job rows live in memory and are lost on restart, so the run's durable record
+is the ``PageKindProposalLog`` journal, not the job row: once the whole book
+is classified, the handler appends the run and every page's proposal to that
+journal in one pass, and treats the job row purely as progress reporting.
+Nothing is journalled before classification finishes — a run that dies
+part-way leaves no proposals behind.
 
 This handler never touches ``Page.page_kind`` and never calls
 ``save_page_content_to_store`` — the page blob is only ever written by a
@@ -21,6 +24,7 @@ in ``core/jobs/runner._HANDLERS["propose_page_kinds"]``.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -80,8 +84,19 @@ def _get_required_context(
     return project_state, notification_queue, measure_fn
 
 
-def _to_kind(classification: PageClassification) -> PageKind:
-    return _PAGE_CLASS_TO_KIND.get(classification.page_class, PageKind.UNKNOWN)
+def _to_kind_and_confidence(classification: PageClassification) -> tuple[PageKind, float | None]:
+    """Map one measured classification onto a proposal's ``kind`` + ``confidence``.
+
+    ``PageKind.UNKNOWN`` is the classifier declining to say — either because it
+    said so itself (``page_class == "unknown"``) or because it returned a class
+    this mapping does not know. ``PageKindProposal`` documents that a refusal
+    carries no confidence at all, so a refusal's confidence is dropped rather
+    than persisted as a real score for an answer that was never given.
+    """
+    kind = _PAGE_CLASS_TO_KIND.get(classification.page_class, PageKind.UNKNOWN)
+    if kind is PageKind.UNKNOWN:
+        return kind, None
+    return kind, classification.confidence
 
 
 async def handle_propose_page_kinds(runner: JobRunner, job: Job) -> None:
@@ -90,6 +105,31 @@ async def handle_propose_page_kinds(runner: JobRunner, job: Job) -> None:
     project = project_state.loaded_project
     if project is None:
         await runner.update_progress(job.job_id, current=0, total=0, message="No project loaded")
+        return
+
+    # The run was queued against one book; whoever dequeues it may find a
+    # different one loaded (the start route sets ``payload["project_id"]``,
+    # and a load in between swaps ``loaded_project``). Proposals are durable
+    # and book-scoped, so classifying whatever happens to be loaded now would
+    # write book A's run into book B's journal. Refuse instead, reported the
+    # same way as the no-project-loaded case.
+    submitted_project_id = job.payload.get("project_id")
+    if isinstance(submitted_project_id, str) and submitted_project_id != project.project_id:
+        log.warning(
+            "propose_page_kinds: job=%s was queued for project=%s but project=%s is loaded — refusing",
+            job.job_id,
+            submitted_project_id,
+            project.project_id,
+        )
+        await runner.update_progress(
+            job.job_id,
+            current=0,
+            total=0,
+            message=(
+                f"Project changed since this run was queued: "
+                f"expected {submitted_project_id}, found {project.project_id}"
+            ),
+        )
         return
 
     total = project.total_pages
@@ -103,7 +143,12 @@ async def handle_propose_page_kinds(runner: JobRunner, job: Job) -> None:
             image_path=image_path,
             source_path=f"{project.project_id}/{image_path.name}",
         )
-        measured.append(measure_fn(project.project_id, input_page))
+        # ``profile_page`` decodes the image and scans it with numpy — CPU-bound
+        # work that would block the one event loop for the whole book. Offload
+        # it the way every other image-touching handler does (``reload_ocr``,
+        # ``rotate``, ``auto_rotate_all``) so the confirm route and this job's
+        # own SSE progress stream keep being served while the run proceeds.
+        measured.append(await asyncio.to_thread(measure_fn, project.project_id, input_page))
         await runner.update_progress(
             job.job_id,
             current=page_index + 1,
@@ -131,22 +176,29 @@ async def handle_propose_page_kinds(runner: JobRunner, job: Job) -> None:
         model_id="pgdp-measure/page-templates",
         model_version=PAGE_TEMPLATE_METHOD,
         created_at=datetime.now(UTC).isoformat(),
-        page_count=total,
+        # The pages this run actually classified, not the project's page total.
+        # They are the same number today, but the proposals come from walking
+        # ``image_paths`` while ``total_pages`` is a separate field — a run
+        # whose page_count disagrees with how many proposals it wrote is a
+        # record that contradicts itself.
+        page_count=len(classifications),
     )
-    proposals = [
-        PageKindProposal(
-            proposal_id=uuid.uuid4().hex,
-            run_id=run.run_id,
-            page_index=page_index,
-            kind=_to_kind(classification),
-            confidence=classification.confidence,
-            evidence={
-                "page_class": classification.page_class,
-                "template_residual_px": classification.template_residual_px,
-            },
+    proposals: list[PageKindProposal] = []
+    for page_index, classification in enumerate(classifications):
+        kind, confidence = _to_kind_and_confidence(classification)
+        proposals.append(
+            PageKindProposal(
+                proposal_id=uuid.uuid4().hex,
+                run_id=run.run_id,
+                page_index=page_index,
+                kind=kind,
+                confidence=confidence,
+                evidence={
+                    "page_class": classification.page_class,
+                    "template_residual_px": classification.template_residual_px,
+                },
+            )
         )
-        for page_index, classification in enumerate(classifications)
-    ]
 
     proposal_log = PageKindProposalLog(project.project_root)
     proposal_log.append_run(run)

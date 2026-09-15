@@ -104,8 +104,11 @@ class PageKindProposalLog:
     def latest_proposal_for_page(self, page_index: int) -> PageKindProposal | None:
         """The most recent proposal for one page, across every run.
 
-        The confirm route diffs the human's answer against this to tell an
-        acceptance from a change — no decision log needed at this level.
+        A read-side helper: the machine's current claim about one page, for
+        callers that want to show it beside the human's answer. The confirm
+        route does not consult it — a page has one kind, so the human's answer
+        replaces the machine's outright and nothing at this level needs to tell
+        an acceptance from a change.
         """
         latest: PageKindProposal | None = None
         for line_number, entry in self._read():
