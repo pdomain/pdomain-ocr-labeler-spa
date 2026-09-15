@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from pdomain_book_contracts.annotation import RegionRole
@@ -104,4 +105,19 @@ def test_a_malformed_line_is_skipped_rather_than_failing_the_read(tmp_path: Path
     with path.open("a", encoding="utf-8") as handle:
         handle.write("{not json\n")
 
+    assert [p.proposal_id for p in log.proposals_for_page(0)] == ["p1"]
+
+
+def test_a_line_with_no_record_key_is_skipped_rather_than_raising(tmp_path: Path) -> None:
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    log = RegionProposalLog(tmp_path)
+    log.append_run(_run())
+    log.append_proposals([_proposal("p1")])
+    path = tmp_path / ".pd-pages" / "region-proposals.jsonl"
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"kind": "run"}) + "\n")
+        handle.write(json.dumps({"kind": "proposal"}) + "\n")
+
+    assert [r.run_id for r in log.runs()] == ["r1"]
     assert [p.proposal_id for p in log.proposals_for_page(0)] == ["p1"]
