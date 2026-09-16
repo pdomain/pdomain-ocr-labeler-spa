@@ -325,6 +325,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/propose-page-kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Propose Page Kinds
+         * @description ``POST /api/projects/{id}/propose-page-kinds`` → ``202 {job_id}``.
+         *
+         *     Enqueues a ``propose_page_kinds`` job that measures every page's image,
+         *     classifies the whole book against its own fitted templates, and records
+         *     one page-kind proposal per page.
+         *
+         *     Spec: pdomain-ocr-synth's docs/specs/2026-09-07-region-provenance-and-persistence-design.md
+         *     "Page kind is classified per book, and it runs before regions".
+         *
+         *     Returns 404 when the requested project is not loaded.
+         */
+        post: operations["propose_page_kinds"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fs/ls": {
         parameters: {
             query?: never;
@@ -535,6 +564,42 @@ export interface paths {
          *     when GT is available.
          */
         post: operations["rematch_gt_api_projects__project_id__pages__page_index__rematch_gt_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/page-kind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Page Kind
+         * @description ``POST .../page-kind`` — record a person's confirmed page kind.
+         *
+         *     Spec: pdomain-ocr-synth's docs/specs/2026-09-07-region-provenance-and-persistence-design.md
+         *     "Page kind needs a marker, not a decision log". A page has one kind, so
+         *     the human's answer replaces the machine's whole outright — there is no
+         *     accept/reject pair here the way there is for regions. Writing
+         *     ``page.page_kind`` under the per-page lock and re-serializing via
+         *     ``save_page_content_to_store`` is what "the page blob is only ever
+         *     written by a human action" means at this level; ``propose_page_kinds``
+         *     (a machine job) never touches either.
+         *
+         *     The reviewed marker is written only after the confirmed kind reaches
+         *     durable storage. A marker recording that a person reviewed a page whose
+         *     kind was never stored would say the opposite of what happened, so a page
+         *     that cannot be persisted — no event store wired, or no ``page_id`` for
+         *     this page — is refused with ``503 store_unavailable`` and leaves no
+         *     marker behind.
+         */
+        post: operations["confirm_page_kind"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2844,6 +2909,21 @@ export interface components {
          */
         ConfidenceTier: "gold" | "silver" | "bronze" | "quarantine";
         /**
+         * ConfirmPageKindRequest
+         * @description Body for ``POST .../page-kind`` — the human's confirmed page kind.
+         *
+         *     ``kind`` is the enum, not a bare string: pydantic rejects an unknown kind
+         *     before the route runs (the app's validation handler renders that as
+         *     ``400 validation_error``), and the generated TypeScript client gets a union
+         *     of the real kinds instead of ``string``. Mirrors the enum-typed ``role`` on
+         *     the region routes.
+         */
+        ConfirmPageKindRequest: {
+            kind: components["schemas"]["PageKind"];
+            /** Note */
+            note?: string | null;
+        };
+        /**
          * CoordinateTransform
          * @description Named affine transform between portable coordinate spaces.
          */
@@ -4145,6 +4225,12 @@ export interface components {
             depth: number;
         };
         /**
+         * PageKind
+         * @description What a page is.
+         * @enum {string}
+         */
+        PageKind: "body" | "chapter opening" | "title page" | "half title" | "contents" | "index" | "dedication" | "preface" | "errata" | "plate" | "blank" | "advertisement" | "colophon" | "unknown";
+        /**
          * PagePayload
          * @description Full per-page payload — spec §5.3 / §1 ``PagePayload``.
          *
@@ -4328,6 +4414,14 @@ export interface components {
             project_root: string;
             /** Label */
             label: string;
+        };
+        /**
+         * ProposePageKindsResponse
+         * @description Response for ``POST /api/projects/{id}/propose-page-kinds`` → 202.
+         */
+        ProposePageKindsResponse: {
+            /** Job Id */
+            job_id: string;
         };
         /**
          * ProvenanceGraph
@@ -5899,6 +5993,37 @@ export interface operations {
             };
         };
     };
+    propose_page_kinds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposePageKindsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_directory_api_fs_ls_get: {
         parameters: {
             query?: {
@@ -6080,6 +6205,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RematchGtRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_page_kind: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmPageKindRequest"];
             };
         };
         responses: {

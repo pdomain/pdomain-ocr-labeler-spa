@@ -55,10 +55,10 @@ class PageKindProposalLog:
         """Append proposals. Existing records are never touched."""
         self._append([{"kind": "proposal", "record": p.to_dict()} for p in proposals])
 
-    def _read(self) -> list[dict[str, Any]]:
+    def _read(self) -> list[tuple[int, dict[str, Any]]]:
         if not self._path.exists():
             return []
-        records: list[dict[str, Any]] = []
+        records: list[tuple[int, dict[str, Any]]] = []
         with self._path.open("r", encoding="utf-8") as handle:
             for line_number, line in enumerate(handle, start=1):
                 stripped = line.strip()
@@ -70,36 +70,55 @@ class PageKindProposalLog:
                     log.warning("page-kind-proposals.jsonl: skipping malformed line %d", line_number)
                     continue
                 if isinstance(loaded, dict):
-                    records.append(loaded)
+                    records.append((line_number, loaded))
         return records
 
     def runs(self) -> list[PageKindProposalRun]:
         """Every run recorded, in the order they were written."""
-        return [
-            PageKindProposalRun.from_dict(entry["record"])
-            for entry in self._read()
-            if entry.get("kind") == "run"
-        ]
+        found: list[PageKindProposalRun] = []
+        for line_number, entry in self._read():
+            if entry.get("kind") != "run":
+                continue
+            try:
+                found.append(PageKindProposalRun.from_dict(entry["record"]))
+            except (KeyError, ValueError, TypeError):
+                log.warning("page-kind-proposals.jsonl: skipping wrong-shaped line %d", line_number)
+                continue
+        return found
 
     def proposals_for_run(self, run_id: str) -> list[PageKindProposal]:
         """Every proposal written by one run."""
-        return [
-            PageKindProposal.from_dict(entry["record"])
-            for entry in self._read()
-            if entry.get("kind") == "proposal" and entry["record"].get("run_id") == run_id
-        ]
+        found: list[PageKindProposal] = []
+        for line_number, entry in self._read():
+            if entry.get("kind") != "proposal":
+                continue
+            try:
+                proposal = PageKindProposal.from_dict(entry["record"])
+            except (KeyError, ValueError, TypeError):
+                log.warning("page-kind-proposals.jsonl: skipping wrong-shaped line %d", line_number)
+                continue
+            if proposal.run_id == run_id:
+                found.append(proposal)
+        return found
 
     def latest_proposal_for_page(self, page_index: int) -> PageKindProposal | None:
         """The most recent proposal for one page, across every run.
 
-        The confirm route diffs the human's answer against this to tell an
-        acceptance from a change — no decision log needed at this level.
+        A read-side helper: the machine's current claim about one page, for
+        callers that want to show it beside the human's answer. The confirm
+        route does not consult it — a page has one kind, so the human's answer
+        replaces the machine's outright and nothing at this level needs to tell
+        an acceptance from a change.
         """
         latest: PageKindProposal | None = None
-        for entry in self._read():
+        for line_number, entry in self._read():
             if entry.get("kind") != "proposal":
                 continue
-            proposal = PageKindProposal.from_dict(entry["record"])
+            try:
+                proposal = PageKindProposal.from_dict(entry["record"])
+            except (KeyError, ValueError, TypeError):
+                log.warning("page-kind-proposals.jsonl: skipping wrong-shaped line %d", line_number)
+                continue
             if proposal.page_index == page_index:
                 latest = proposal
         return latest

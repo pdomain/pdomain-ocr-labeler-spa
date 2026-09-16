@@ -63,10 +63,10 @@ class RegionProposalLog:
         """Append proposals. Existing records are never touched."""
         self._append([{"kind": "proposal", "record": p.to_dict()} for p in proposals])
 
-    def _read(self) -> list[dict[str, Any]]:
+    def _read(self) -> list[tuple[int, dict[str, Any]]]:
         if not self._path.exists():
             return []
-        records: list[dict[str, Any]] = []
+        records: list[tuple[int, dict[str, Any]]] = []
         with self._path.open("r", encoding="utf-8") as handle:
             for line_number, line in enumerate(handle, start=1):
                 stripped = line.strip()
@@ -80,22 +80,33 @@ class RegionProposalLog:
                     logger.warning("region-proposals.jsonl: skipping malformed line %d", line_number)
                     continue
                 if isinstance(loaded, dict):
-                    records.append(loaded)
+                    records.append((line_number, loaded))
         return records
 
     def runs(self) -> list[ProposalRun]:
         """Every run recorded, in the order they were written."""
-        return [
-            ProposalRun.from_dict(entry["record"]) for entry in self._read() if entry.get("kind") == "run"
-        ]
+        found: list[ProposalRun] = []
+        for line_number, entry in self._read():
+            if entry.get("kind") != "run":
+                continue
+            try:
+                found.append(ProposalRun.from_dict(entry["record"]))
+            except (KeyError, ValueError, TypeError):
+                logger.warning("region-proposals.jsonl: skipping wrong-shaped line %d", line_number)
+                continue
+        return found
 
     def proposals_for_page(self, page_index: int, *, run_id: str | None = None) -> list[RegionProposal]:
         """Proposals for one page, optionally narrowed to a single run."""
         found: list[RegionProposal] = []
-        for entry in self._read():
+        for line_number, entry in self._read():
             if entry.get("kind") != "proposal":
                 continue
-            proposal = RegionProposal.from_dict(entry["record"])
+            try:
+                proposal = RegionProposal.from_dict(entry["record"])
+            except (KeyError, ValueError, TypeError):
+                logger.warning("region-proposals.jsonl: skipping wrong-shaped line %d", line_number)
+                continue
             if proposal.page_index != page_index:
                 continue
             if run_id is not None and proposal.run_id != run_id:
