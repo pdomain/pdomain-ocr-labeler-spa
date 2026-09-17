@@ -28,15 +28,13 @@ defects in commit ``8cb5a58``):
   ``profile_page``.
 
 The page-kind journals are each read in full, once, up front — not once per
-page. ``PageKindReviewedStore`` only exposes a per-page ``is_reviewed`` query
-(no bulk accessor), so its full-file read is unavoidably paid once per page;
-what this handler removes is the plan's duplicate re-reads of the *same*
-page (the eligibility loop, plus ``page_kind_was_confirmed``'s second pass)
-by memoizing each page's reviewed status the first time it is looked up.
-``PageKindProposalLog`` does expose a bulk-ish path — ``runs()`` plus
-``proposals_for_run(run_id)`` — so the proposed-page-index set is built from
-that (one read per run, not one per page), replacing the plan's per-page
-``latest_proposal_for_page`` calls.
+page. ``PageKindReviewedStore.reviewed_page_indices`` returns every reviewed
+page index from one read, so the eligibility loop and
+``page_kind_was_confirmed``'s second pass both consult that one set rather
+than re-parsing the journal per page. ``PageKindProposalLog`` is read the
+same way, via ``runs()`` plus ``proposals_for_run(run_id)`` — one read per
+run, not one per page — so the proposed-page-index set is built from that,
+rather than the plan's per-page ``latest_proposal_for_page`` calls.
 """
 
 from __future__ import annotations
@@ -186,21 +184,19 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     page_kind_reviewed = PageKindReviewedStore(project.project_root)
     kind_runs = page_kind_proposals.runs()
     proposed_page_indices = _proposed_page_indices(page_kind_proposals, kind_runs)
-    reviewed_page_indices: dict[int, bool] = {}
+    reviewed_page_indices = page_kind_reviewed.reviewed_page_indices()
 
     def _is_kind_confirmed(idx: int) -> bool:
         """A page's kind is confirmed when the live page carries one, or a person reviewed it.
 
-        ``reviewed_page_indices`` memoizes each page's ``is_reviewed`` result
-        the first time it is looked up, so a page already checked in the
-        eligibility loop below is a dict lookup here, not a second full-file
-        read of the reviewed-store journal.
+        ``reviewed_page_indices`` is the whole journal's reviewed-page set,
+        read once up front (see the module docstring), so this is a set
+        lookup rather than a second full-file read of the reviewed-store
+        journal.
         """
-        if idx not in reviewed_page_indices:
-            reviewed_page_indices[idx] = page_kind_reviewed.is_reviewed(idx)
         pstate = project_state.page_states[idx]
         page = _resolve_live_page(pstate)
-        return (page is not None and page.page_kind is not None) or reviewed_page_indices[idx]
+        return (page is not None and page.page_kind is not None) or idx in reviewed_page_indices
 
     eligible_indices: list[int] = []
     skipped_indices: list[int] = []

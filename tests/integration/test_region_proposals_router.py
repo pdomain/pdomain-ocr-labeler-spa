@@ -731,3 +731,83 @@ def test_a_run_queued_for_another_book_refuses_to_propose_for_the_loaded_one(
     assert reported is not None
     assert "some-other-book" in reported.message
     assert project.project_id in reported.message
+
+
+# ── A bulk reviewed-store read, not once per eligible page ───────────────
+
+
+def _run_propose_regions_job(client: Any, *, detector: Any = None) -> Any:
+    """Directly invoke the handler against a fresh job, mirroring the tests above."""
+    import asyncio
+    from datetime import UTC, datetime
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
+    from pdomain_ocr_labeler_spa.core.jobs.runner import Job, JobStatus
+
+    project_state = client.app.state.project_state
+    project = project_state.loaded_project
+    assert project is not None
+    runner = client.app.state.job_runner
+    if detector is not None:
+        runner.context["region_detector"] = detector
+
+    job = Job(
+        job_id="test-lease-job",
+        job_type="propose_regions",
+        status=JobStatus.RUNNING,
+        project_id=project.project_id,
+        payload={"project_id": project.project_id},
+        created_at=datetime.now(UTC),
+    )
+    runner._jobs[job.job_id] = job
+    asyncio.run(handle_propose_regions(runner, job))
+    return runner
+
+
+def test_reviewed_store_is_read_once_per_run_not_once_per_eligible_page(
+    toolbar_loaded: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Before the bulk accessor, each eligible page's reviewed check paid its own
+    full-file journal parse. With ``reviewed_page_indices`` the whole run costs
+    exactly one read, however many pages are eligible.
+    """
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from pdomain_ops.page_aggregate import PageAggregate
+    from pdomain_ops.pages import PageRecord
+
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+    from pdomain_ocr_labeler_spa.core.page_state import PageLoadOutcome, PageSource
+    from pdomain_ocr_labeler_spa.core.project_state import PageState
+
+    client, project_state, page = toolbar_loaded
+    project = project_state.loaded_project
+    assert project is not None
+    store = client.app.state.page_store
+
+    for idx in (1, 2):
+        page_id = uuid4()
+        store.save_page(PageAggregate(PageRecord(page_id=page_id, page_index=idx, source="ocr")))
+        outcome = PageLoadOutcome(page_index=idx, source=PageSource.OCR, payload=page)
+        pstate = PageState(page_index=idx, page_record=outcome)
+        pstate.page_id = page_id
+        project_state._page_states[idx] = pstate
+
+    reviewed = PageKindReviewedStore(project.project_root)
+    for idx in (0, 1, 2):
+        reviewed.mark_reviewed(idx, datetime.now(UTC).isoformat())
+
+    read_calls = 0
+    original_read = PageKindReviewedStore._read
+
+    def _counting_read(self: PageKindReviewedStore) -> list[Any]:
+        nonlocal read_calls
+        read_calls += 1
+        return original_read(self)
+
+    monkeypatch.setattr(PageKindReviewedStore, "_read", _counting_read)
+
+    _run_propose_regions_job(client)
+
+    assert read_calls == 1
