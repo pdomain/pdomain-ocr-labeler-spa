@@ -115,6 +115,27 @@ def test_confirming_a_page_kind_writes_it_and_marks_it_reviewed(
     assert reviewed.note == "looks right"
 
 
+def test_confirming_a_page_kind_writes_the_kind_and_single_method_on_the_marker(
+    loaded_client: TestClient, projects_root: Path
+) -> None:
+    """pdomain-ocr-synth's 2026-09-17-page-kind-review-design.md "A reviewed
+    marker records the kind and how it was confirmed": the page route writes
+    ``method=single`` and the confirmed kind onto the marker.
+    """
+    from pdomain_book_contracts.annotation import PageKind
+
+    page = Page(width=100, height=100, page_index=0, blocks=[])
+    _seed_page_state(loaded_client, page_index=0, page=page)
+
+    resp = loaded_client.post("/api/projects/book1/pages/0/page-kind", json={"kind": "title page"})
+    assert resp.status_code == 200, resp.text
+
+    marker = PageKindReviewedStore(projects_root / "book1").latest_for_page(0)
+    assert marker is not None
+    assert marker.kind == PageKind.TITLE_PAGE
+    assert marker.method == "single"
+
+
 def test_a_confirmed_kind_reaches_a_later_plain_get(loaded_client: TestClient) -> None:
     """The confirmed kind and its reviewed marker must survive a reload —
     ``_page_payload`` (used by both the confirm route and the plain GET) has

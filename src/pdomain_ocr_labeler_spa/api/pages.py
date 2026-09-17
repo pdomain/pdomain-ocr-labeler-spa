@@ -6,7 +6,7 @@ import io
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
@@ -1509,6 +1509,73 @@ def rematch_gt(
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
+def _confirm_page_kind_locked(
+    *,
+    project_root: Path,
+    project_state: ProjectState,
+    page_index: int,
+    pstate: PageState,
+    page: Page,
+    page_id: Any,
+    page_store: LabelerPageStore,
+    kind: PageKind,
+    note: str | None,
+    method: Literal["single", "bulk"],
+) -> str | None:
+    """Confirm one page's kind under its page lock — the shared body both the
+    single-page and bulk routes call.
+
+    Spec: pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
+    "One route confirms many pages" — "Extract the body of confirm_page_kind
+    into one function that both routes call... One code path means the bulk
+    route cannot drift from the single one."
+
+    Sets ``page.page_kind`` and saves the page to the store; only after the
+    save succeeds does it write the reviewed marker (with ``kind`` and
+    ``method`` so the book route and later calibration can tell a page
+    confirmed alone from one confirmed in a batch). Restores the prior kind
+    and generation if the save fails.
+
+    Returns ``None`` on success, or the save exception's message on failure
+    (the prior in-memory state has already been restored in that case).
+    """
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        prior_kind = page.page_kind
+        prior_generation = pstate.generation
+        page.page_kind = kind
+        pstate.generation += 1
+
+        try:
+            save_page_content_to_store(
+                page_id=page_id,
+                page=page,
+                store=page_store,
+                changes=[{"type": "page_kind", "page_index": page_index, "kind": kind.value}],
+                labeler_sidecars=pstate,
+            )
+        except Exception as exc:
+            # The store never received this confirmation, and no reviewed
+            # marker is written below — restore the prior in-memory state so
+            # it doesn't claim a confirmation that didn't happen. Otherwise a
+            # later route that persists this same Page object would write a
+            # human-set page_kind with no matching marker, and the page would
+            # come back as unreviewed despite carrying a confirmed kind.
+            page.page_kind = prior_kind
+            pstate.generation = prior_generation
+            log.exception("_confirm_page_kind_locked: store write failed page_id=%s", page_id)
+            return str(exc)
+
+        PageKindReviewedStore(project_root).mark_reviewed(
+            page_index,
+            datetime.now(UTC).isoformat(),
+            note=note,
+            kind=kind,
+            method=method,
+        )
+    return None
+
+
 @router.post("/{page_index}/page-kind", response_model=PagePayload, operation_id="confirm_page_kind")
 def confirm_page_kind(
     *,
@@ -1580,44 +1647,28 @@ def confirm_page_kind(
             ).model_dump(),
         )
 
-    page_lock = project_state.get_page_lock(page_index)
-    with page_lock:
-        prior_kind = page.page_kind
-        prior_generation = pstate.generation
-        page.page_kind = kind
-        pstate.generation += 1
-
-        try:
-            save_page_content_to_store(
-                page_id=page_id,
-                page=page,
-                store=page_store,
-                changes=[{"type": "page_kind", "page_index": page_index, "kind": kind.value}],
-                labeler_sidecars=pstate,
-            )
-        except Exception as exc:
-            # The store never received this confirmation, and no reviewed
-            # marker is written below — restore the prior in-memory state so
-            # it doesn't claim a confirmation that didn't happen. Otherwise a
-            # later route that persists this same Page object would write a
-            # human-set page_kind with no matching marker, and the page would
-            # come back as unreviewed despite carrying a confirmed kind.
-            page.page_kind = prior_kind
-            pstate.generation = prior_generation
-            log.exception("confirm_page_kind: store write failed page_id=%s", page_id)
-            return JSONResponse(
-                status_code=503,
-                content=ApiError(
-                    error="store_persist_failed",
-                    message=(
-                        f"page kind applied in memory but failed to persist page "
-                        f"{page_index} to the event store: {exc}"
-                    ),
-                ).model_dump(),
-            )
-
-        PageKindReviewedStore(project.project_root).mark_reviewed(
-            page_index, datetime.now(UTC).isoformat(), note=body.note
+    save_error = _confirm_page_kind_locked(
+        project_root=project.project_root,
+        project_state=project_state,
+        page_index=page_index,
+        pstate=pstate,
+        page=page,
+        page_id=page_id,
+        page_store=page_store,
+        kind=kind,
+        note=body.note,
+        method="single",
+    )
+    if save_error is not None:
+        return JSONResponse(
+            status_code=503,
+            content=ApiError(
+                error="store_persist_failed",
+                message=(
+                    f"page kind applied in memory but failed to persist page "
+                    f"{page_index} to the event store: {save_error}"
+                ),
+            ).model_dump(),
         )
 
     payload = _page_payload(
