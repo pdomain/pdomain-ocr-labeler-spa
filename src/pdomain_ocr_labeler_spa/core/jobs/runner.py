@@ -19,9 +19,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Mapping
 from datetime import UTC, datetime
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
@@ -580,4 +581,25 @@ def registered_job_types() -> frozenset[str]:
     return frozenset(_HANDLERS)
 
 
-__all__ = ["Job", "JobRunner", "JobStatus", "registered_job_types", "to_public_job"]
+def registered_handlers() -> Mapping[str, Handler]:
+    """Return the ``job_type -> handler wrapper`` registry, read-only.
+
+    Public accessor mirroring ``registered_job_types()``/
+    ``payload_result_keys()`` so tests can statically resolve each
+    handler's real implementation module (each wrapper does a lazy
+    ``from .handlers.<name> import <fn>`` inside its body — see
+    ``tests/unit/core/jobs/test_job_type_contract.py``) without reaching
+    into the private ``_HANDLERS`` dict.
+    """
+    return MappingProxyType(_HANDLERS)
+
+
+__all__ = [
+    "Job",
+    "JobRunner",
+    "JobStatus",
+    "payload_result_keys",
+    "registered_handlers",
+    "registered_job_types",
+    "to_public_job",
+]

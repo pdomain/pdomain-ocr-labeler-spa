@@ -11,6 +11,8 @@ status is added without a matching public ``JobStatus`` member, or
 
 from __future__ import annotations
 
+import importlib
+import inspect
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,13 +21,14 @@ from typing import Any
 import pydantic
 import pytest
 
-from pdomain_ocr_labeler_spa.core.jobs import handlers as handlers_pkg
+from pdomain_ocr_labeler_spa.core.jobs import runner as runner_module
 from pdomain_ocr_labeler_spa.core.jobs.runner import Job as RunnerJob
 from pdomain_ocr_labeler_spa.core.jobs.runner import (
     JobStatus as RunnerJobStatus,
 )
 from pdomain_ocr_labeler_spa.core.jobs.runner import (
     payload_result_keys,
+    registered_handlers,
     registered_job_types,
     to_public_job,
 )
@@ -207,24 +210,148 @@ def test_to_public_job_merges_job_result_alongside_payload_output_keys() -> None
     assert public_job.result == {"skipped_pages": 0, "words_exported_detection": 5}
 
 
-def test_payload_result_keys_cover_every_key_a_handler_writes() -> None:
-    """Contract test: every ``job.payload["<key>"] = ...`` write in any
-    handler module must be in ``payload_result_keys()`` — the allowlist
-    ``to_public_job`` uses to surface ``job.payload`` output through the
-    public model. A handler that starts writing a new output key without
-    updating the allowlist fails this test instead of silently dropping
-    the field off the wire, the way ``skipped_pages``/``skipped_indices``
-    did (docs/issues/2026-07-21-jobs-api-openapi-mismatch.md, P1-JOBS-API).
-    """
-    handlers_dir = Path(handlers_pkg.__file__).parent
-    pattern = re.compile(r'job\.payload\["([A-Za-z0-9_]+)"\]\s*=')
+# ── static-scan machinery for the payload-write contract test below ───────────
 
-    written_keys: set[str] = set()
-    for path in handlers_dir.glob("*.py"):
-        written_keys |= set(pattern.findall(path.read_text(encoding="utf-8")))
+_LAZY_IMPORT_RE = re.compile(r"from\s+(\.[\w.]*)\s+import\s+\w+")
+_LITERAL_KEY_RE = re.compile(r"""^(['"])([A-Za-z0-9_]+)\1$""")
+_PAYLOAD_SUBSCRIPT_WRITE_RE = re.compile(r"job\.payload\[([^\]]*)\]\s*=")
+_PAYLOAD_UPDATE_CALL_RE = re.compile(r"job\.payload\.update\(")
+
+
+def _resolve_handler_target_modules() -> dict[str, Path]:
+    """Statically resolve, from the ``_HANDLERS`` registry, which module
+    file each registered handler's real implementation lives in.
+
+    Each wrapper in ``registered_handlers()`` does a lazy ``from
+    .handlers.<name> import <fn>`` inside its body (to dodge import
+    cycles / heavy deps at import time). This reads that import line out
+    of the wrapper's own source via ``inspect.getsource`` and resolves it
+    relative to the wrapper's package — not a glob over
+    ``core/jobs/handlers/`` — so a handler registered from a module
+    outside that directory is still found.
+    """
+    modules: dict[str, Path] = {}
+    for job_type, wrapper in registered_handlers().items():
+        source = inspect.getsource(wrapper)
+        match = _LAZY_IMPORT_RE.search(source)
+        assert match is not None, (
+            f"handler wrapper for {job_type!r} ({wrapper.__name__}) has no "
+            "`from .<module> import <fn>` lazy import in its source — "
+            "update _resolve_handler_target_modules to find its real module"
+        )
+        target_module = importlib.import_module(match.group(1), package=runner_module.__package__)
+        target_file = inspect.getfile(target_module)
+        modules[job_type] = Path(target_file)
+    return modules
+
+
+def _scan_module_source_for_payload_writes(source: str) -> tuple[set[str], list[str]]:
+    """Return ``(literal_keys, opaque_sites)`` found in one module's source.
+
+    ``literal_keys``: every key from a ``job.payload["literal"] = ...``
+    write (single- or double-quoted). ``opaque_sites``: a human-readable
+    description of any write this scan cannot statically resolve to a
+    literal key — a computed subscript (``job.payload[some_expr] =
+    ...``) or a ``job.payload.update(...)`` call — since the allowlist
+    cannot verify a key it cannot see.
+    """
+    literal_keys: set[str] = set()
+    opaque: list[str] = []
+    for raw_key in _PAYLOAD_SUBSCRIPT_WRITE_RE.findall(source):
+        stripped = raw_key.strip()
+        match = _LITERAL_KEY_RE.match(stripped)
+        if match:
+            literal_keys.add(match.group(2))
+        else:
+            opaque.append(f"job.payload[{stripped}] = ...")
+    if _PAYLOAD_UPDATE_CALL_RE.search(source):
+        opaque.append("job.payload.update(...)")
+    return literal_keys, opaque
+
+
+def test_resolve_handler_target_modules_covers_every_registered_handler() -> None:
+    """The registry-derived module list must name a real, existing file for
+    every registered job type — the same universe ``registered_job_types()``
+    proves matches ``JobType``."""
+    modules = _resolve_handler_target_modules()
+    assert set(modules) == registered_job_types()
+    for job_type, path in modules.items():
+        assert path.is_file(), f"{job_type}: resolved module {path} does not exist"
+        assert path.suffix == ".py"
+
+
+def test_scan_module_source_finds_literal_payload_keys() -> None:
+    source = "job.payload[\"skipped_pages\"] = 1\njob.payload['run_id'] = value\n"
+    literal_keys, opaque = _scan_module_source_for_payload_writes(source)
+    assert literal_keys == {"skipped_pages", "run_id"}
+    assert opaque == []
+
+
+def test_scan_module_source_flags_non_literal_key_writes() -> None:
+    """A computed key (``job.payload[key_var] = ...``) escapes the literal
+    regex the allowlist check relies on — this must be flagged, not
+    silently ignored, since it is exactly how a real handler output key
+    could go undetected."""
+    source = "job.payload[key_var] = 1\n"
+    literal_keys, opaque = _scan_module_source_for_payload_writes(source)
+    assert literal_keys == set()
+    assert len(opaque) == 1
+    assert "key_var" in opaque[0]
+
+
+def test_scan_module_source_flags_update_calls() -> None:
+    """``job.payload.update(...)`` can write arbitrary keys through one call
+    site — always flagged as opaque rather than attempting to parse its
+    argument."""
+    source = "job.payload.update(extra_fields)\n"
+    literal_keys, opaque = _scan_module_source_for_payload_writes(source)
+    assert literal_keys == set()
+    assert opaque == ["job.payload.update(...)"]
+
+
+def test_payload_result_keys_cover_every_key_a_handler_writes() -> None:
+    """Contract test: every literal ``job.payload["<key>"] = ...`` write in
+    any registered handler's real module must be in ``payload_result_keys()``
+    — the allowlist ``to_public_job`` uses to surface ``job.payload`` output
+    through the public model. A handler that starts writing a new output key
+    without updating the allowlist fails this test instead of silently
+    dropping the field off the wire, the way ``skipped_pages``/
+    ``skipped_indices`` did (docs/issues/2026-07-21-jobs-api-openapi-mismatch.md,
+    P1-JOBS-API).
+
+    Hardened over the first version of this test (2026-09-17 review): the
+    handler module list is derived from the ``_HANDLERS`` registry itself
+    (``_resolve_handler_target_modules``), not a glob over
+    ``core/jobs/handlers/``, so a handler registered from a module outside
+    that directory is still covered; and any payload write this scan cannot
+    resolve to a literal string key — a computed subscript or a
+    ``job.payload.update(...)`` call — fails the test outright instead of
+    silently passing, since the allowlist cannot verify a key it cannot see.
+
+    What this still cannot catch: a key written through a *helper function
+    defined in a different module* that the handler calls (e.g. a shared
+    ``_record_result(job, **kwargs)`` living outside the handler's own
+    resolved file) — that would require tracing the handler's call graph,
+    which is exactly the "running every handler" cost this static check
+    exists to avoid. A handler that delegates its payload writes that way
+    needs a manual audit; this test only proves the handler's *own* module
+    is clean.
+    """
+    literal_keys: set[str] = set()
+    opaque_sites: list[str] = []
+    for job_type, path in _resolve_handler_target_modules().items():
+        found_keys, found_opaque = _scan_module_source_for_payload_writes(path.read_text(encoding="utf-8"))
+        literal_keys |= found_keys
+        opaque_sites.extend(f"{job_type} ({path.name}): {site}" for site in found_opaque)
+
+    assert not opaque_sites, (
+        "handler module(s) write job.payload through a site this test cannot "
+        f"statically verify against the allowlist: {opaque_sites} — use a "
+        "literal string key, or audit manually and extend this test"
+    )
 
     allowlist = payload_result_keys()
-    missing = written_keys - allowlist
+    missing = literal_keys - allowlist
     assert not missing, (
         f"handler(s) write job.payload key(s) not in payload_result_keys(): {missing} "
         f"— add them to runner._PAYLOAD_RESULT_KEYS so to_public_job() surfaces them"

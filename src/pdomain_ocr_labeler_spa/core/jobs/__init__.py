@@ -9,6 +9,7 @@ from .runner import (
     JobRunner,
     JobStatus,
     payload_result_keys,
+    registered_handlers,
     registered_job_types,
     to_public_job,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "JobRunner",
     "JobStatus",
     "payload_result_keys",
+    "registered_handlers",
     "registered_job_types",
     "to_public_job",
 ]
