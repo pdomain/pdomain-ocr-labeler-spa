@@ -4294,6 +4294,12 @@ export interface components {
             regions?: components["schemas"]["RegionView"][];
             /** Proposals */
             proposals?: components["schemas"]["RegionProposalView"][];
+            page_kind?: components["schemas"]["PageKind"] | null;
+            /**
+             * Page Kind Reviewed
+             * @default false
+             */
+            page_kind_reviewed: boolean;
             /** Extra */
             extra?: {
                 [key: string]: unknown;

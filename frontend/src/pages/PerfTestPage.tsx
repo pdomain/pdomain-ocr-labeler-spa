@@ -88,6 +88,7 @@ function makeSyntheticPage(): PagePayload {
     line_filter: "all",
     image_url: null,
     generation: 0,
+    page_kind_reviewed: false,
     // Select every word so PageImageCanvas's `expandSelection` path
     // hands BBoxOverlay 4 000 word-bbox items — that's the heavy paint
     // path spec §11 actually pins (the overlay-words Layer is still

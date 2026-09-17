@@ -248,6 +248,80 @@ async def test_a_run_queued_for_another_book_refuses_to_classify_the_loaded_one(
     assert "bookA" in reported.message
 
 
+async def test_a_job_carrying_project_id_but_an_empty_payload_still_refuses_the_wrong_book(
+    tmp_path: Path,
+) -> None:
+    """``Job.project_id`` is the typed field every submitter sets; the
+    ``payload["project_id"]`` fallback must not be the only guard. A job
+    whose payload omits the key entirely — the case with no guard at all
+    before this fix — has to refuse just as surely as one that sets it.
+    """
+    from pdomain_ocr_labeler_spa.core.jobs.events import JobEventBroker
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds import (
+        handle_propose_page_kinds,
+    )
+    from pdomain_ocr_labeler_spa.core.jobs.runner import Job, JobRunner
+    from pdomain_ocr_labeler_spa.core.notifications import NotificationQueue
+
+    project = _project(tmp_path, 3)
+    project_state = ProjectState()
+    project_state.set_loaded_project(project)
+
+    def _measure_fn(project_id: str, page: object) -> PageMeasurement:
+        name = page.name
+        index = int(name.split(".")[0])
+        return _measured(name, first_band_top=[300, 302, 298][index])
+
+    runner = JobRunner(
+        JobEventBroker(),
+        context={
+            "project_state": project_state,
+            "notification_queue": NotificationQueue(),
+            "propose_page_kinds_measure_fn": _measure_fn,
+        },
+    )
+    job = Job(
+        job_id="j1",
+        job_type="propose_page_kinds",
+        project_id="bookB",
+        created_at=datetime.now(UTC),
+        payload={},
+    )
+    runner._jobs[job.job_id] = job
+
+    await handle_propose_page_kinds(runner, job)
+
+    proposal_log = PageKindProposalLog(project.project_root)
+    assert proposal_log.runs() == []
+    assert not proposal_log.path.exists()
+
+    reported = runner.get_job("j1")
+    assert reported is not None
+    assert "bookB" in reported.message
+    assert "bookA" in reported.message
+
+
+async def test_progress_total_matches_the_sequence_the_loop_walks(tmp_path: Path) -> None:
+    """``project.total_pages`` is a separate field from ``image_paths`` — the
+    progress denominator has to come from the sequence the loop actually
+    walks, the same reconciliation already applied to the durable
+    ``PageKindProposalRun.page_count``.
+    """
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds import (
+        handle_propose_page_kinds,
+    )
+
+    project = _project(tmp_path, 3)
+    project.total_pages = 99
+    runner, job = _runner_and_job(project, tops=[300, 302, 298])
+
+    await handle_propose_page_kinds(runner, job)
+
+    reported = runner.get_job("j1")
+    assert reported is not None
+    assert reported.progress_total == 3
+
+
 async def test_an_unmappable_page_class_proposes_unknown_without_a_confidence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
