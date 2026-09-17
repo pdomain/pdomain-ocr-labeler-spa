@@ -12,6 +12,7 @@ import {
   selectPara,
   selectLine,
   selectWord,
+  selectRegion,
   applyLineSelection,
   selectionStore,
 } from "../../stores/selection-store";
@@ -155,6 +156,13 @@ describe("RightPanel (Slice 14)", () => {
     expect(body).toHaveAttribute("data-level", "word");
   });
 
+  it("body data-level=region has correct data-level attribute", () => {
+    selectRegion("r1");
+    render(<RightPanel page={makePage()} />);
+    const body = screen.getByTestId("right-panel-body");
+    expect(body).toHaveAttribute("data-level", "region");
+  });
+
   it("collapse button calls onCollapse when clicked", async () => {
     const onCollapse = vi.fn();
     const user = userEvent.setup();
@@ -195,6 +203,16 @@ describe("STB-5: RightPanel never shows placeholder for implemented levels", () 
     renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
     expect(screen.queryByTestId("right-panel-placeholder")).toBeNull();
     expect(screen.getByTestId("paragraph-detail")).toBeInTheDocument();
+  });
+
+  it("level=region does NOT show the placeholder (renders RegionDetail)", () => {
+    selectRegion("r1");
+    renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
+    expect(screen.queryByTestId("right-panel-placeholder")).toBeNull();
+    // "r1" is in neither page.regions nor page.proposals in this fixture, so
+    // RegionDetail renders its not-found state — still RegionDetail, not the
+    // generic level placeholder Task 1 stood in with.
+    expect(screen.getByTestId("region-detail")).toBeInTheDocument();
   });
 
   it("level=word with wordSlot does NOT show the placeholder", () => {

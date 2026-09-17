@@ -75,6 +75,7 @@ import type { components } from "../api/types";
 import { getStageDimensions, type EncodedDims } from "../lib/canvas-utils";
 import type { BBox } from "../lib/coords";
 import { expandFromStore } from "../lib/selection-expand";
+import { regionCandidates, hitTestRegions } from "../lib/region-hit-test";
 import { BBoxOverlay, type BBoxItem } from "./BBoxOverlay";
 import { scheduleDragUpdate } from "../lib/rafSchedule";
 import { readCssToken, hexToRgba } from "../hooks/useLayerColors";
@@ -85,6 +86,8 @@ import {
   selectBlock,
   selectPara,
   selectLine,
+  selectRegion,
+  selectProposal,
   toggleWord,
 } from "../stores/selection-store";
 import {
@@ -366,12 +369,16 @@ export default function PageImageCanvas({
   }, []);
 
   // SEL-1: Subscribe to selectionStore for both bulk-action count and highlight overlay.
+  // Also carries level/path so the region-selected overlay (Task 2) can find
+  // which region or proposal is currently picked.
   const [selectionState, setSelectionState] = useState(() => {
     const s = selectionStore.getState();
     return {
       selectedWords: s.selectedWords,
       selectedLines: s.selectedLines,
       selectedParagraphs: s.selectedParagraphs,
+      level: s.level,
+      path: s.path,
     };
   });
   // Derived for backward-compat callers that still use selectedWordCount.
@@ -382,6 +389,8 @@ export default function PageImageCanvas({
         selectedWords: s.selectedWords,
         selectedLines: s.selectedLines,
         selectedParagraphs: s.selectedParagraphs,
+        level: s.level,
+        path: s.path,
       });
     });
   }, []);
@@ -462,6 +471,37 @@ export default function PageImageCanvas({
       proposed: regions.filter((r) => !r.confirmed).map(toItem),
     };
   }, [page, encoded]);
+
+  // Task 2 (region-review-surface): candidates for the "region" rail
+  // target's click hit-test. Built from `page.regions` directly (not from
+  // `regionOverlayItems`, whose item ids collapse `region_id ?? proposal_id`
+  // and so cannot tell a confirmed region apart from a proposal that shares
+  // the same box). `toBox` matches the conversion the layers above draw
+  // with, so the hit-test agrees with what is on screen.
+  const regionHitCandidates = useMemo(() => {
+    const regions = page?.regions ?? [];
+    return regionCandidates(regions, (box) => (encoded ? rectToDisplay(box, encoded) : box));
+  }, [page, encoded]);
+
+  // The selected-region highlight (Task 2): one item when the current
+  // selection is a region or a proposal and it is still on the page, zero
+  // otherwise (e.g. right after a decision removes the proposal).
+  const selectedRegionItems = useMemo<BBoxItem[]>(() => {
+    if (selectionState.level !== "region") return [];
+    const regions = page?.regions ?? [];
+    const { regionId, proposalId } = selectionState.path;
+    const match = regions.find((r) => {
+      if (regionId !== undefined) return r.confirmed && r.region_id === regionId;
+      return !r.confirmed && r.proposal_id === proposalId;
+    });
+    if (!match) return [];
+    return [
+      {
+        id: match.region_id ?? match.proposal_id ?? "",
+        bbox: encoded ? rectToDisplay(match.box, encoded) : match.box,
+      },
+    ];
+  }, [page, encoded, selectionState]);
 
   // Spec 21 §10 viewport hotkeys (#304).
   // Called unconditionally before any early return (Rules of Hooks).
@@ -577,6 +617,24 @@ export default function PageImageCanvas({
     if (isTrivial) {
       if (mode === "select") {
         const { x: cx, y: cy } = pos;
+
+        // Task 2 (region-review-surface): the region target hit-tests
+        // confirmed regions and proposals only, using the explicit-kind
+        // candidate list — the structural branches below hit-test
+        // BBoxItem[] arrays whose id can't distinguish a region from a
+        // proposal that shares its box.
+        if (railTarget === "region") {
+          const regionHit = hitTestRegions(regionHitCandidates, cx, cy);
+          if (!regionHit) return;
+          if (regionHit.kind === "region") {
+            selectRegion(regionHit.id);
+          } else {
+            selectProposal(regionHit.id);
+          }
+          useUiPrefs.setState({ rightPanelOpen: true });
+          return;
+        }
+
         const hit =
           railTarget === "block"
             ? hitTest(structuralOverlayItems.blocks, cx, cy)
@@ -694,6 +752,15 @@ export default function PageImageCanvas({
               <BBoxOverlay
                 layer="regions-proposed"
                 items={regionOverlayItems.proposed}
+                visible={layerVisibility.block}
+              />
+              {/* Selected-region highlight (Task 2, region-review-surface) —
+                  the region or proposal the region rail target currently
+                  has selected. Rides the "blocks" visibility toggle, same
+                  as the two region layers above it. */}
+              <BBoxOverlay
+                layer="regions-selected"
+                items={selectedRegionItems}
                 visible={layerVisibility.block}
               />
               {/* Selection highlight overlays (Slice 13 — rail target scoping) */}

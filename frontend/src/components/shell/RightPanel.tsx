@@ -10,6 +10,7 @@
 //           "line"  → <LineDetail> (Slice 21).
 //           "block" → <BlockDetail> (Slice 22).
 //           "para"  → thin para view reusing BlockDetail items (Slice 22).
+//           "region" → <RegionDetail> (region review surface plan Task 4).
 //
 // Slice 14 deliberately does NOT mount WordMatchView itself — the consumer
 // (ProjectPage) provides word content via `wordSlot` so the panel stays free
@@ -25,6 +26,7 @@ import { BlockDetail } from "../right-panel/BlockDetail";
 import { ParagraphDetail } from "../right-panel/ParagraphDetail";
 import { MultiWordDetail } from "../right-panel/MultiWordDetail";
 import { MultiLineDetail } from "../right-panel/MultiLineDetail";
+import { RegionDetail } from "../right-panel/RegionDetail";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -48,6 +50,7 @@ const LEVEL_PLACEHOLDER: Record<SelectionLevel, string> = {
   para: "Paragraph detail — coming soon.",
   line: "Line detail — coming soon.",
   word: "Word detail — coming soon.",
+  region: "Select a region",
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -178,6 +181,15 @@ export function RightPanel({
           ) : (
             <div data-testid="right-panel-para-empty" className="p-3 text-ink-3 text-sm">
               No paragraph selected.
+            </div>
+          )
+        ) : /* STB-5: region level */
+        level === "region" ? (
+          page && projectId !== undefined && pageIndex !== undefined ? (
+            <RegionDetail page={page} projectId={projectId} pageIndex={pageIndex} />
+          ) : (
+            <div data-testid="right-panel-region-empty" className="p-3 text-ink-3 text-sm">
+              No region selected.
             </div>
           )
         ) : textTabsSlot ? (

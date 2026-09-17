@@ -25,13 +25,17 @@ import type { components } from "../api/types";
 type PagePayload = components["schemas"]["PagePayload"];
 type LineMatch = components["schemas"]["LineMatch"];
 
-export type SelectionLevel = "none" | "block" | "para" | "line" | "word";
+export type SelectionLevel = "none" | "block" | "para" | "line" | "word" | "region";
 
 export interface SelectionPath {
   blockId?: string;
   paraId?: number | null;
   lineId?: number;
   wordId?: [number, number];
+  /** Set for a confirmed region. */
+  regionId?: string;
+  /** Set for an undecided proposal. */
+  proposalId?: string;
 }
 
 export type WalkDirection = "next" | "prev";
@@ -113,7 +117,10 @@ function step<T>(list: T[], idx: number, dir: WalkDirection): T | undefined {
 /**
  * Compute the path for the next sibling at the deepest level of `path`.
  *
- * If at the first/last sibling, returns the same path unchanged.
+ * If at the first/last sibling, returns the same path unchanged. A path
+ * carrying only `regionId`/`proposalId` matches none of the branches below
+ * and falls through to the final no-op return — region stepping is Task 5's
+ * `n`/`p`, not this sibling walker.
  */
 export function nextSibling(
   path: SelectionPath,
@@ -224,6 +231,9 @@ export function walkDown(path: SelectionPath, page: PagePayload): SelectionPath 
 
 /** Pick the deepest non-undefined level present in `path`. */
 export function pathLevel(path: SelectionPath): SelectionLevel {
+  // A region or proposal is its own level, checked ahead of word/line/para/block
+  // since a region selection never carries any of those other ids.
+  if (path.regionId !== undefined || path.proposalId !== undefined) return "region";
   if (path.wordId !== undefined) return "word";
   if (path.lineId !== undefined) return "line";
   if (path.paraId !== undefined) return "para";

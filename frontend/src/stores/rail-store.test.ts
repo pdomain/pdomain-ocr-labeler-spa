@@ -34,6 +34,17 @@ describe("rail-store (Slice 10)", () => {
     expect(railStore.getState().target).toBe("para");
   });
 
+  it("setTarget updates target to region", () => {
+    railStore.getState().setTarget("region");
+    expect(railStore.getState().target).toBe("region");
+  });
+
+  it("target persistence round-trip: a persisted 'region' is read back", () => {
+    localStorage.setItem(RAIL_TARGET_STORAGE_KEY, "region");
+    railStore.reset();
+    expect(railStore.getState().target).toBe("region");
+  });
+
   it("setMode updates mode", () => {
     railStore.getState().setMode("annotate");
     expect(railStore.getState().mode).toBe("annotate");

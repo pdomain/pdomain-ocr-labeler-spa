@@ -7,7 +7,34 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from pdomain_ocr_labeler_spa.core.jobs.runner import Job, JobRunner
     from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion, DetectorInput, RegionDetector
+
+
+async def _collect_progress(runner: JobRunner, job: Job) -> list[tuple[int, int, str]]:
+    """Run the handler, recording every ``update_progress`` call's (current, total, message)."""
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
+
+    seen: list[tuple[int, int, str]] = []
+    original = runner.update_progress
+
+    async def _record(
+        job_id: str,
+        *,
+        current: int,
+        total: int,
+        message: str = "",
+        result: dict[str, Any] | None = None,
+    ) -> None:
+        seen.append((current, total, message))
+        await original(job_id, current=current, total=total, message=message, result=result)
+
+    runner.update_progress = _record  # type: ignore[method-assign]
+    try:
+        await handle_propose_regions(runner, job)
+    finally:
+        runner.update_progress = original  # type: ignore[method-assign]
+    return seen
 
 
 def test_the_handler_hands_the_detector_one_input_per_eligible_page(
@@ -209,3 +236,87 @@ def test_an_object_with_an_unrelated_fit_method_is_not_a_book_fitted_detector(
 
     assert unrelated_fit_calls == []
     assert [d.page_index for d in judged] == [0, 1]
+
+
+def test_the_summary_names_pages_skipped_for_no_page_kind(
+    proposal_run_one_page_missing_kind: Any,
+) -> None:
+    """A page with no page-kind state is named in the run's final message, with the hint to fix it.
+
+    ``proposal_run_one_page_missing_kind`` loads two pages but marks only page
+    0 reviewed, so page 1 carries no page-kind state at all — the case a
+    person hits by clicking "Propose regions" before "Propose page kinds".
+    """
+    import asyncio
+
+    runner, job, _project_state = proposal_run_one_page_missing_kind
+    seen = asyncio.run(_collect_progress(runner, job))
+
+    assert seen, "the run reported no progress at all"
+    _current, _total, final_message = seen[-1]
+    assert "Skipped 1 page(s)" in final_message
+    assert "Propose page kinds" in final_message
+
+
+def test_the_summary_has_no_skip_clause_when_every_page_has_kind_state(
+    proposal_run_ready: Any,
+) -> None:
+    """With no page skipped for a missing kind, the summary is just the proposal count."""
+    import asyncio
+
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion
+
+    runner, job, _project_state = proposal_run_ready
+
+    def _one_region_detector(detector_input: DetectorInput) -> list[DetectedRegion]:
+        del detector_input
+        return [
+            DetectedRegion(
+                role=RegionRole.PAGE_HEADER,
+                box=(10, 20, 190, 40),
+                confidence=0.9,
+                evidence={},
+            )
+        ]
+
+    runner.context["region_detector"] = _one_region_detector
+    seen = asyncio.run(_collect_progress(runner, job))
+
+    _current, _total, final_message = seen[-1]
+    assert final_message == "Proposed 2 region(s) on 2 page(s)."
+
+
+def test_the_early_return_message_hints_at_propose_page_kinds(
+    proposal_run_no_kind_state: Any,
+) -> None:
+    """Neither page carries page-kind state, so the run refuses before measuring anything."""
+    import asyncio
+
+    runner, job, _project_state = proposal_run_no_kind_state
+    seen = asyncio.run(_collect_progress(runner, job))
+
+    assert len(seen) == 1, "the early return should report exactly one progress update"
+    _current, _total, message = seen[0]
+    assert "Propose page kinds" in message
+
+
+def test_the_final_progress_update_keeps_current_equal_to_the_combined_total(
+    proposal_run_ready: Any,
+) -> None:
+    """The summary update must report against the same combined total as every prior update.
+
+    See ``test_progress_never_goes_backwards_across_the_two_phases`` above:
+    the two-phase run reports both phases against one ``combined_total``, and
+    the handler's last update — now a summary message — must not reset or
+    exceed it.
+    """
+    import asyncio
+
+    runner, job, _project_state = proposal_run_ready
+    seen = asyncio.run(_collect_progress(runner, job))
+
+    final_current, final_total, _message = seen[-1]
+    assert final_current == final_total
+    assert final_total == seen[0][1], "total changed across the run"

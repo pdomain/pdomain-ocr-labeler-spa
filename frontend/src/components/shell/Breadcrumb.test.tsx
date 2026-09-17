@@ -13,6 +13,8 @@ import {
   selectLine,
   selectWord,
   selectBlock,
+  selectRegion,
+  selectProposal,
 } from "../../stores/selection-store";
 import type { components } from "../../api/types";
 
@@ -130,6 +132,22 @@ describe("Breadcrumb (Slice 14)", () => {
     selectPara(null);
     render(<Breadcrumb page={makePage()} />);
     expect(screen.getByTestId("breadcrumb-chip-para")).toHaveTextContent("Unsorted");
+  });
+
+  it("renders a Region chip when a region is selected", () => {
+    selectRegion("r1");
+    render(<Breadcrumb page={makePage()} />);
+    expect(screen.getByTestId("breadcrumb-chip-region")).toHaveTextContent("Region");
+    expect(screen.getByTestId("breadcrumb-chip-region")).toHaveAttribute("data-active", "true");
+    expect(screen.queryByTestId("breadcrumb-chip-proposal")).not.toBeInTheDocument();
+  });
+
+  it("renders a Proposal chip when a proposal is selected", () => {
+    selectProposal("p1");
+    render(<Breadcrumb page={makePage()} />);
+    expect(screen.getByTestId("breadcrumb-chip-proposal")).toHaveTextContent("Proposal");
+    expect(screen.getByTestId("breadcrumb-chip-proposal")).toHaveAttribute("data-active", "true");
+    expect(screen.queryByTestId("breadcrumb-chip-region")).not.toBeInTheDocument();
   });
 });
 

@@ -45,6 +45,7 @@ export type LayerName =
   | "words"
   | "regions-confirmed"
   | "regions-proposed"
+  | "regions-selected"
   | "drag-rect"
   | "selection-paragraphs"
   | "selection-lines"
@@ -101,6 +102,16 @@ export const LAYER_COLORS: Record<LayerName, LayerColorSpec> = {
     fill: "rgba(14,165,233,0.15)",
     stroke: "rgba(3,105,161,0.55)",
     strokeWidth: 1,
+  },
+  // The selected-region highlight (Task 2, region-review-surface): a
+  // person's current pick, drawn over whichever of the two layers above it
+  // came from. Magenta keeps it visually distinct from both the confirmed
+  // amber and the proposed blue, and the stroke is heavier than either
+  // (2 px, 1 px) so the highlight always reads on top.
+  "regions-selected": {
+    fill: "transparent",
+    stroke: "rgba(217,70,239,0.95)",
+    strokeWidth: 3,
   },
   "drag-rect": {
     fill: "transparent",
@@ -203,6 +214,7 @@ function resolveLayerColorSpec(
       return hexToLayerColorSpec(layerColors.word);
     case "regions-confirmed":
     case "regions-proposed":
+    case "regions-selected":
       // No theme token exists yet for region layers (Task 7); use the
       // static LAYER_COLORS constants directly, same as drag-rect/selection.
       return LAYER_COLORS[layer];

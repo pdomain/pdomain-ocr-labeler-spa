@@ -1036,6 +1036,21 @@ def reject_region_proposal(
     if accepted_region_id is not None and find_region_block(page, accepted_region_id) is not None:
         return _proposal_already_accepted(proposal_id, accepted_region_id)
 
+    # A second reject is a no-op, not a second decision. A held or double-tapped
+    # reject key sends the request twice, and the decision journal is what
+    # confidence gets calibrated against, so a duplicate would count one
+    # person's single "no" twice. Answer with the current payload, as a first
+    # reject would, and append nothing.
+    if latest is not None and latest.disposition is Disposition.REJECTED:
+        return _refresh_payload_response(
+            project_id=project_id,
+            page_index=page_index,
+            project_state=project_state,
+            settings=settings,
+            app_config=app_config,
+            page_store=store,
+        )
+
     decision_err = _append_decision_or_error(
         decision_log,
         RegionDecision(

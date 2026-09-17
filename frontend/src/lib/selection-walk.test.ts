@@ -92,6 +92,30 @@ describe("pathLevel", () => {
     expect(pathLevel({ paraId: 0, lineId: 1, wordId: [1, 0] })).toBe("word");
     expect(pathLevel({ blockId: "b1" })).toBe("block");
   });
+  it("returns 'region' for a regionId", () => {
+    expect(pathLevel({ regionId: "r1" })).toBe("region");
+  });
+  it("returns 'region' for a proposalId", () => {
+    expect(pathLevel({ proposalId: "p1" })).toBe("region");
+  });
+  it("region/proposal are checked before wordId", () => {
+    expect(pathLevel({ regionId: "r1", wordId: [0, 0] })).toBe("region");
+    expect(pathLevel({ proposalId: "p1", wordId: [0, 0] })).toBe("region");
+  });
+});
+
+describe("nextSibling — region level", () => {
+  const page = makePage();
+
+  it("is a no-op with a regionId path", () => {
+    const path = { regionId: "r1" };
+    expect(nextSibling(path, page, "next")).toEqual(path);
+  });
+
+  it("is a no-op with a proposalId path", () => {
+    const path = { proposalId: "p1" };
+    expect(nextSibling(path, page, "prev")).toEqual(path);
+  });
 });
 
 describe("nextSibling — word level", () => {

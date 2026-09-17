@@ -25,6 +25,7 @@ import { Square, Keyboard, LayoutList } from "@/icons/local-shims";
 import { railStore, type RailTarget, type RailMode } from "../../stores/rail-store";
 import { useRailHotkeys } from "../../hooks/useRailHotkeys";
 import { useLayerColors } from "../../hooks/useLayerColors";
+import { LAYER_COLORS } from "../BBoxOverlay";
 import { dialogStore } from "../../stores/dialog-store";
 import { useUiPrefs, type LayerVisibility } from "../../stores/ui-prefs";
 import { cn } from "@/lib/utils";
@@ -47,11 +48,16 @@ const MODE_LABELS: Record<RailMode, string> = {
 
 // ─── Target layer color CSS class lookup ─────────────────────────────────────
 
+// No "--layer-region" CSS token exists (region colors are the static
+// LAYER_COLORS constants, Task 2 of region-review-surface); the region
+// TargetCell's swatch reads LAYER_COLORS directly instead, and these two
+// Records use the neutral ink/border classes for its active-state styling.
 const targetLayerClass: Record<RailTarget, string> = {
   block: "text-layer-block",
   para: "text-layer-para",
   line: "text-layer-line",
   word: "text-layer-word",
+  region: "text-ink-1",
 };
 
 const targetLayerBorderClass: Record<RailTarget, string> = {
@@ -59,6 +65,7 @@ const targetLayerBorderClass: Record<RailTarget, string> = {
   para: "border border-layer-para",
   line: "border border-layer-line",
   word: "border border-layer-word",
+  region: "border border-border-1",
 };
 
 const TARGET_LABELS: Record<RailTarget, string> = {
@@ -66,6 +73,7 @@ const TARGET_LABELS: Record<RailTarget, string> = {
   para: "Para",
   line: "Line",
   word: "Word",
+  region: "Region",
 };
 
 const TARGET_HOTKEYS: Record<RailTarget, string> = {
@@ -73,6 +81,7 @@ const TARGET_HOTKEYS: Record<RailTarget, string> = {
   para: "2",
   line: "3",
   word: "4",
+  region: "5",
 };
 
 // ─── Section label ────────────────────────────────────────────────────────────
@@ -291,6 +300,19 @@ export function Rail() {
           swatchColor={layerColors.word}
           onClick={() => {
             handleSetTarget("word");
+          }}
+        />
+        {/* No selectionMode radio counterpart for "region" — clicking it
+            only sets railStore.target, same as "block" (Task 1). Swatch
+            colour matches the confirmed-region amber the canvas draws
+            (BBoxOverlay's LAYER_COLORS), so the cell and the shapes it
+            selects read as the same thing. */}
+        <TargetCell
+          target="region"
+          active={target === "region"}
+          swatchColor={LAYER_COLORS["regions-confirmed"].stroke}
+          onClick={() => {
+            handleSetTarget("region");
           }}
         />
       </div>
