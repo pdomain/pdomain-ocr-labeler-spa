@@ -116,6 +116,20 @@ _FOLIO_PUNCTUATION = ".,;:!?[](){}'\"-"
 ``_FOLIO_PATTERN``. Real OCR renders a folio as ``232.`` or ``[17]`` — the
 punctuation itself never widens the pattern to accept letters."""
 
+_DIGITS_ONLY_PATTERN = re.compile(r"^[0-9]+$")
+"""Matches a peelable folio edge word — digits only, never a roman numeral.
+See ``_EDGE_FOLIO_PEEL_GAP_RATIO``: a head ending in a word such as ``CIVIL``
+or ``MIX`` must keep it, so roman numerals are excluded from the peel."""
+
+_EDGE_FOLIO_PEEL_GAP_RATIO = 1.6
+"""Peel a digit-only edge word off a cluster when its gap to its in-cluster
+neighbour exceeds this many times the book's median word space. Measured on
+``projectID408c1dd9b9318`` pages 33, 47 and 49: head-to-folio gaps of 53-55px
+against a book median word space of 30px (that book's word spaces run
+26-40px) — about 1.8x the median. ``projectID3fc3d7d03c613``'s verso head
+ends ``[ETH. ANN. 33``, where ``33``'s gap to ``ANN.`` is 22px against a 20px
+median (1.1x) and must not be peeled. 1.6 sits between the two."""
+
 
 def _strip_folio_punctuation(text: str) -> str:
     """Strip the punctuation real OCR wraps a folio in, e.g. ``232.`` or ``[17]``."""
@@ -133,6 +147,12 @@ class _ScaledWord(NamedTuple):
 
     word: Word
     box: tuple[float, float, float, float]
+
+
+def _scaled_word_text(scaled_word: _ScaledWord) -> str:
+    """The word's OCR text, ground truth preferred — mirrors ``_Cluster.text``."""
+    word = scaled_word.word
+    return word.ground_truth_text or word.text or ""
 
 
 @dataclass(frozen=True)
@@ -374,6 +394,62 @@ def _cluster(words: list[_ScaledWord], gap_px: float) -> list[_Cluster]:
     return [_Cluster(group) for group in clusters]
 
 
+def _peel_one_end(clusters: list[_Cluster], *, at_start: bool, median_word_space_px: float) -> list[_Cluster]:
+    """Split the digit-only edge word off the leftmost or rightmost cluster, if it clears the gap bar."""
+    index = 0 if at_start else -1
+    cluster = clusters[index]
+    if len(cluster.words) <= 1:
+        return clusters
+    edge, neighbour = (
+        (cluster.words[0], cluster.words[1]) if at_start else (cluster.words[-1], cluster.words[-2])
+    )
+    gap = (neighbour.box[0] - edge.box[2]) if at_start else (edge.box[0] - neighbour.box[2])
+    stripped = _strip_folio_punctuation(_scaled_word_text(edge))
+    if not (stripped and _DIGITS_ONLY_PATTERN.match(stripped)):
+        return clusters
+    if gap <= _EDGE_FOLIO_PEEL_GAP_RATIO * median_word_space_px:
+        return clusters
+    remainder = cluster.words[1:] if at_start else cluster.words[:-1]
+    edge_cluster = _Cluster([edge])
+    remainder_cluster = _Cluster(remainder)
+    result = list(clusters)
+    if at_start:
+        result[0:1] = [edge_cluster, remainder_cluster]
+    else:
+        result[-1:] = [remainder_cluster, edge_cluster]
+    return result
+
+
+def _peel_edge_folios(clusters: list[_Cluster], median_word_space_px: float | None) -> list[_Cluster]:
+    """Split a digit-only folio off either end of a page's clusters — book-fitted path only.
+
+    A long running head can sit barely a word space away from its own folio,
+    so the book-wide gap threshold alone cannot separate them (see the module
+    docstring on ``_EDGE_FOLIO_PEEL_GAP_RATIO``). ``median_word_space_px`` is
+    ``None`` whenever the book's own gaps could not support a fit — the
+    fixed-share fallback never computes one and never passes one here — and
+    the peel does not fire in that case; a book with no real gap bimodality
+    gives no basis to say a 22px gap is "close" or "far".
+    """
+    if median_word_space_px is None or not clusters:
+        return clusters
+    clusters = _peel_one_end(clusters, at_start=True, median_word_space_px=median_word_space_px)
+    clusters = _peel_one_end(clusters, at_start=False, median_word_space_px=median_word_space_px)
+    return clusters
+
+
+def _median_word_space_px(gaps: Sequence[float], threshold_px: float) -> float | None:
+    """The book's typical in-band word space: the median of pooled gaps inside the fitted threshold.
+
+    Feeds ``_peel_edge_folios``. ``None`` when no pooled gap qualifies (for
+    instance an empty pool), in which case the peel never fires.
+    """
+    word_spaces = [gap for gap in gaps if 0 < gap <= threshold_px]
+    if not word_spaces:
+        return None
+    return statistics.median(word_spaces)
+
+
 def _pooled_gaps(book: Sequence[DetectorInput]) -> list[float]:
     """Every in-band word gap across the book, pooled for the Otsu fit.
 
@@ -460,8 +536,15 @@ def _furniture_region_detector(
     *,
     gap_threshold_px: float,
     gap_threshold_source: GapThresholdSource,
+    median_word_space_px: float | None = None,
 ) -> list[DetectedRegion]:
-    """Propose one region per horizontal cluster inside the page's furniture bands."""
+    """Propose one region per horizontal cluster inside the page's furniture bands.
+
+    ``median_word_space_px`` gates the edge-folio peel (``_peel_edge_folios``)
+    and is only ever non-``None`` from the book-fitted path
+    (``FurnitureDetector.fit``); the plain fallback below never passes one, so
+    it never peels.
+    """
     band = _in_band_words(detector_input)
     if band is None or not band.words:
         return []
@@ -472,6 +555,7 @@ def _furniture_region_detector(
 
     ordinals = detector_input.classification.furniture_band_ordinals
     clusters = _cluster(band.words, gap_threshold_px)
+    clusters = _peel_edge_folios(clusters, median_word_space_px)
 
     detected: list[DetectedRegion] = []
     for cluster in clusters:
@@ -529,21 +613,28 @@ class FurnitureDetector(BookFittedDetector):
     ``fit`` pools every in-band word gap across the book (the same in-band
     filter ``furniture_region_detector`` always applied), places the
     threshold at the midpoint of the Otsu valley, and returns a per-page
-    callable closed over that one pixel threshold and its source. Never
-    raises on an ordinary book — every "cannot fit" condition falls back to
-    the fixed share of text width internally rather than propagating.
+    callable closed over that one pixel threshold and its source, plus the
+    book's median word space for the edge-folio peel (see
+    ``_peel_edge_folios``). Never raises on an ordinary book — every "cannot
+    fit" condition falls back to the fixed share of text width internally
+    rather than propagating, and the peel is disabled whenever that fallback
+    fires.
     """
 
     def fit(self, book: Sequence[DetectorInput]) -> RegionDetector:
         gaps = _pooled_gaps(book)
         text_width_px = _book_text_width_px(book)
         gap_threshold_px, gap_threshold_source = _fit_gap_threshold_px(gaps, text_width_px)
+        median_word_space_px = (
+            _median_word_space_px(gaps, gap_threshold_px) if gap_threshold_source == "book_fit" else None
+        )
 
         def _detect(detector_input: DetectorInput) -> list[DetectedRegion]:
             return _furniture_region_detector(
                 detector_input,
                 gap_threshold_px=gap_threshold_px,
                 gap_threshold_source=gap_threshold_source,
+                median_word_space_px=median_word_space_px,
             )
 
         return _detect

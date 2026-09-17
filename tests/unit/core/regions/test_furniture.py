@@ -697,3 +697,139 @@ def test_a_bracketed_folio_is_a_page_number() -> None:
     ]
     detected = furniture_region_detector(_input(words))
     assert [d.role for d in detected] == [RegionRole.PAGE_HEADER, RegionRole.PAGE_NUMBER]
+
+
+# ---------------------------------------------------------------------------
+# Fix 3 — peel a digit folio off either end of a cluster, book-fitted path
+# only. projectID408c1dd9b9318 pages 33, 47, 49: a long running head sits
+# 53-55px from its own folio, barely wider than the book's 26-40px word
+# spaces (median 30px) — no single gap threshold separates the two.
+# ---------------------------------------------------------------------------
+
+
+def _peel_book_pages_with_folio(folio_text: str) -> list[dict[str, object]]:
+    """One page reading ``HEAD HEAD HEAD <folio_text>`` with a 54px head-to-folio gap.
+
+    Paired with four other pages (word-space 30px, head-to-folio gap 200 to
+    215px) whose pooled gaps fit the book's threshold to 127px and its median
+    word space to exactly 30px — verified against the module's own Otsu math
+    before writing this fixture.
+    """
+    return [
+        _word("HEAD", 100, 105, 150, 125),
+        _word("HEAD", 180, 105, 230, 125),
+        _word("HEAD", 260, 105, 310, 125),
+        _word(folio_text, 364, 105, 390, 125),
+    ]
+
+
+def _peel_book_other_pages() -> list[list[dict[str, object]]]:
+    return [
+        [
+            _word("THE", 50, 105, 90, 125),
+            _word("SHIP", 120, 105, 190, 125),
+            _word("2", 390, 105, 410, 125),
+        ],
+        [
+            _word("THE", 50, 105, 90, 125),
+            _word("CREW", 120, 105, 190, 125),
+            _word("3", 395, 105, 415, 125),
+        ],
+        [
+            _word("THE", 50, 105, 90, 125),
+            _word("MAST", 120, 105, 190, 125),
+            _word("4", 400, 105, 420, 125),
+        ],
+        [
+            _word("THE", 50, 105, 90, 125),
+            _word("CROSS", 120, 105, 190, 125),
+            _word("5", 405, 105, 425, 125),
+        ],
+    ]
+
+
+def test_a_book_fitted_detector_peels_a_digit_folio_off_a_long_head() -> None:
+    """54px head-to-folio gap, 30px median word space: 1.8x the median clears the 1.6x bar."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import FurnitureDetector
+
+    target_words = _peel_book_pages_with_folio("27")
+    book = [_input(target_words)] + [_input(words) for words in _peel_book_other_pages()]
+
+    per_page_detect = FurnitureDetector().fit(book)
+    detected = per_page_detect(book[0])
+
+    assert len(detected) == 2
+    head, folio = detected
+    assert head.role is RegionRole.PAGE_HEADER
+    assert head.box == (100, 105, 310, 125)
+    assert folio.role is RegionRole.PAGE_NUMBER
+    assert folio.box == (364, 105, 390, 125)
+    assert head.evidence["gap_threshold_source"] == "book_fit"
+
+
+def test_a_book_fitted_detector_does_not_peel_a_digit_that_is_part_of_the_head() -> None:
+    """projectID3fc3d7d03c613's verso head ends ``[ETH. ANN. 33``: 22px gap against a 20px median (1.1x)."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import FurnitureDetector
+
+    target_words = [
+        _word("[ETH.", 100, 105, 140, 125),
+        _word("ANN.", 158, 105, 198, 125),
+        _word("33", 220, 105, 240, 125),
+    ]
+    other_pages = [
+        [
+            _word("THE", 50, 105, 90, 125),
+            _word("SHIP", 110, 105, 180, 125),
+            _word("2", 380, 105, 400, 125),
+        ],
+        [
+            _word("THE", 50, 105, 90, 125),
+            _word("CREW", 110, 105, 180, 125),
+            _word("3", 385, 105, 405, 125),
+        ],
+        [
+            _word("THE", 50, 105, 90, 125),
+            _word("MAST", 110, 105, 180, 125),
+            _word("4", 390, 105, 410, 125),
+        ],
+        [
+            _word("THE", 50, 105, 90, 125),
+            _word("CROSS", 110, 105, 180, 125),
+            _word("5", 395, 105, 415, 125),
+        ],
+    ]
+    book = [_input(target_words)] + [_input(words) for words in other_pages]
+
+    per_page_detect = FurnitureDetector().fit(book)
+    detected = per_page_detect(book[0])
+
+    assert len(detected) == 1
+    assert detected[0].role is RegionRole.PAGE_HEADER
+    assert detected[0].box == (100, 105, 240, 125)
+    assert detected[0].evidence["gap_threshold_source"] == "book_fit"
+
+
+def test_a_roman_numeral_edge_token_is_never_peeled() -> None:
+    """A head ending in a word such as ``XII`` must keep it — roman numerals are excluded from the peel."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import FurnitureDetector
+
+    target_words = _peel_book_pages_with_folio("XII")
+    book = [_input(target_words)] + [_input(words) for words in _peel_book_other_pages()]
+
+    per_page_detect = FurnitureDetector().fit(book)
+    detected = per_page_detect(book[0])
+
+    assert len(detected) == 1
+    assert detected[0].role is RegionRole.PAGE_HEADER
+    assert detected[0].box == (100, 105, 390, 125)
+
+
+def test_the_unfitted_fallback_never_peels() -> None:
+    """Same head-to-folio layout as the book-fit split above; the plain fallback must not split it."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import furniture_region_detector
+
+    target_words = _peel_book_pages_with_folio("27")
+    detected = furniture_region_detector(_input(target_words))
+
+    assert len(detected) == 1
+    assert detected[0].role is RegionRole.PAGE_HEADER
