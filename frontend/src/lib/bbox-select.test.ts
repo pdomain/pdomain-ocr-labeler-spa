@@ -52,6 +52,10 @@ describe("targetToLayerKey", () => {
   it("word → words", () => {
     expect(targetToLayerKey("word")).toBe("words");
   });
+
+  it("region → words (no dedicated drag-select layer yet)", () => {
+    expect(targetToLayerKey("region")).toBe("words");
+  });
 });
 
 describe("intersectBboxes", () => {

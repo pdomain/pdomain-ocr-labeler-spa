@@ -20,12 +20,12 @@
 
 import { createStore } from "zustand/vanilla";
 
-export type RailTarget = "block" | "para" | "line" | "word";
+export type RailTarget = "block" | "para" | "line" | "word" | "region";
 export type RailMode = "view" | "region" | "annotate" | "erase";
 
 export const RAIL_TARGET_STORAGE_KEY = "pdl.rail.target";
 
-const VALID_TARGETS = new Set<string>(["block", "para", "line", "word"]);
+const VALID_TARGETS = new Set<string>(["block", "para", "line", "word", "region"]);
 const VALID_MODES = new Set<string>(["view", "region", "annotate", "erase"]);
 
 interface RailState {

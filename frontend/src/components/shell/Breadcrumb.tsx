@@ -3,7 +3,9 @@
 // P5.i Gap 55: terminal (deepest) chip uses kind-specific bg fill instead of neutral.
 //
 // Renders a chain like `Project › Block 2 › Para 3 › Line 7 › Word 1` from the
-// current `selection-store` path. Each chip is a real `<button>`:
+// current `selection-store` path. A region-level selection instead renders a
+// single `Project › Region` or `Project › Proposal` chip — regions have no
+// block/para/line/word ancestors. Each chip is a real `<button>`:
 //   - The deepest chip (data-active=true) gets a kind-color background fill
 //     (bg-layer-{kind}/10 + text-layer-{kind}) so the active selection kind is
 //     visually distinct from the ancestor breadcrumb trail.
@@ -254,6 +256,36 @@ function renderChips(level: SelectionLevel, path: SelectionPath) {
         layer="word"
         active={level === "word"}
         // The deepest chip is non-navigational; clicking it is a no-op.
+        onClick={() => {
+          /* no-op at deepest level */
+        }}
+      />,
+    );
+  }
+  if (path.regionId !== undefined) {
+    nodes.push(<Sep key="sep-region" />);
+    nodes.push(
+      <Chip
+        key="region"
+        testid="breadcrumb-chip-region"
+        label="Region"
+        active={level === "region"}
+        // The region chip is a leaf with no ancestors; clicking it is a no-op.
+        onClick={() => {
+          /* no-op at deepest level */
+        }}
+      />,
+    );
+  }
+  if (path.proposalId !== undefined) {
+    nodes.push(<Sep key="sep-proposal" />);
+    nodes.push(
+      <Chip
+        key="proposal"
+        testid="breadcrumb-chip-proposal"
+        label="Proposal"
+        active={level === "region"}
+        // The proposal chip is a leaf with no ancestors; clicking it is a no-op.
         onClick={() => {
           /* no-op at deepest level */
         }}

@@ -10,6 +10,8 @@
 //           "line"  → <LineDetail> (Slice 21).
 //           "block" → <BlockDetail> (Slice 22).
 //           "para"  → thin para view reusing BlockDetail items (Slice 22).
+//           "region" → placeholder for now; Task 4 of the region review
+//                      surface plan replaces it with <RegionDetail>.
 //
 // Slice 14 deliberately does NOT mount WordMatchView itself — the consumer
 // (ProjectPage) provides word content via `wordSlot` so the panel stays free
@@ -48,6 +50,7 @@ const LEVEL_PLACEHOLDER: Record<SelectionLevel, string> = {
   para: "Paragraph detail — coming soon.",
   line: "Line detail — coming soon.",
   word: "Word detail — coming soon.",
+  region: "Select a region",
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -180,6 +183,11 @@ export function RightPanel({
               No paragraph selected.
             </div>
           )
+        ) : /* STB-5: region level — placeholder for now; Task 4 adds RegionDetail. */
+        level === "region" ? (
+          <div className="p-3">
+            <Placeholder level={level} />
+          </div>
         ) : textTabsSlot ? (
           /* D-051: level === "none" — render TextTabs slot when provided */
           <div className="flex flex-col h-full min-h-0">{textTabsSlot}</div>

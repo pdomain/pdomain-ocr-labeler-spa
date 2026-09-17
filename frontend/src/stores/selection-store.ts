@@ -229,6 +229,33 @@ export function selectWord(lineIdx: number, wordIdx: number): void {
   }));
 }
 
+/**
+ * Select a confirmed region by id. (No sibling layer exists for regions;
+ * `walkSibling` is a no-op at region level, same as at block level.)
+ */
+export function selectRegion(regionId: string): void {
+  selectionStore.setState((s) => ({
+    ...s,
+    selectedParagraphs: [],
+    selectedLines: [],
+    selectedWords: [],
+    level: "region",
+    path: { regionId },
+  }));
+}
+
+/** Select an undecided proposal by id. */
+export function selectProposal(proposalId: string): void {
+  selectionStore.setState((s) => ({
+    ...s,
+    selectedParagraphs: [],
+    selectedLines: [],
+    selectedWords: [],
+    level: "region",
+    path: { proposalId },
+  }));
+}
+
 // ─── Navigation actions (Slice 15) ───────────────────────────────────────────
 
 function applyPath(prev: SelectionState, path: SelectionPath): SelectionState {

@@ -42,6 +42,8 @@ export function targetToLayerKey(target: RailTarget): "paragraphs" | "lines" | "
       return "lines";
     case "word":
       return "words";
+    case "region":
+      return "words"; // no dedicated drag-select layer for regions yet
   }
 }
 

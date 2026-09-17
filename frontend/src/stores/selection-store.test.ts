@@ -10,6 +10,8 @@ import {
   selectPara,
   selectLine,
   selectWord,
+  selectRegion,
+  selectProposal,
   toggleWord,
   promoteCompleteWordLines,
   walkSibling,
@@ -145,6 +147,38 @@ describe("selection-store hierarchical layer", () => {
     expect(s.path.wordId).toEqual([0, 1]);
     expect(s.path.lineId).toBe(0);
     expect(s.selectedWords).toEqual([[0, 1]]);
+  });
+
+  it("selectRegion sets level=region and path.regionId, clears legacy arrays", () => {
+    selectionStore.setState((s) => ({
+      ...s,
+      selectedParagraphs: [0],
+      selectedLines: [1],
+      selectedWords: [[0, 0]],
+    }));
+    selectRegion("r1");
+    const s = selectionStore.getState();
+    expect(s.level).toBe("region");
+    expect(s.path).toEqual({ regionId: "r1" });
+    expect(s.selectedParagraphs).toEqual([]);
+    expect(s.selectedLines).toEqual([]);
+    expect(s.selectedWords).toEqual([]);
+  });
+
+  it("selectProposal sets level=region and path.proposalId, clears legacy arrays", () => {
+    selectionStore.setState((s) => ({
+      ...s,
+      selectedParagraphs: [0],
+      selectedLines: [1],
+      selectedWords: [[0, 0]],
+    }));
+    selectProposal("p1");
+    const s = selectionStore.getState();
+    expect(s.level).toBe("region");
+    expect(s.path).toEqual({ proposalId: "p1" });
+    expect(s.selectedParagraphs).toEqual([]);
+    expect(s.selectedLines).toEqual([]);
+    expect(s.selectedWords).toEqual([]);
   });
 
   it("switching levels clears previous legacy arrays", () => {

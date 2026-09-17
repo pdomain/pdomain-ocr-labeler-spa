@@ -11,6 +11,7 @@ import { renderHook } from "@testing-library/react";
 import { fireEvent } from "@testing-library/react";
 import { useRailHotkeys } from "./useRailHotkeys";
 import { railStore } from "../stores/rail-store";
+import { useUiPrefs } from "../stores/ui-prefs";
 
 describe("useRailHotkeys (Slice 10 / P1.f)", () => {
   beforeEach(() => {
@@ -49,6 +50,20 @@ describe("useRailHotkeys (Slice 10 / P1.f)", () => {
     railStore.getState().setTarget("block"); // change first
     pressKey("4");
     expect(railStore.getState().target).toBe("word");
+  });
+
+  it("'5' sets target to region", () => {
+    setup();
+    pressKey("5");
+    expect(railStore.getState().target).toBe("region");
+  });
+
+  it("'5' leaves selectionMode unchanged (no radio counterpart)", () => {
+    setup();
+    useUiPrefs.setState({ selectionMode: "line" });
+    pressKey("5");
+    expect(railStore.getState().target).toBe("region");
+    expect(useUiPrefs.getState().selectionMode).toBe("line");
   });
 
   // SEL-3 conflict guard: Shift+1/2/3 belong to the viewport selection-mode

@@ -12,6 +12,7 @@ import {
   selectPara,
   selectLine,
   selectWord,
+  selectRegion,
   applyLineSelection,
   selectionStore,
 } from "../../stores/selection-store";
@@ -155,6 +156,13 @@ describe("RightPanel (Slice 14)", () => {
     expect(body).toHaveAttribute("data-level", "word");
   });
 
+  it("body data-level=region has correct data-level attribute", () => {
+    selectRegion("r1");
+    render(<RightPanel page={makePage()} />);
+    const body = screen.getByTestId("right-panel-body");
+    expect(body).toHaveAttribute("data-level", "region");
+  });
+
   it("collapse button calls onCollapse when clicked", async () => {
     const onCollapse = vi.fn();
     const user = userEvent.setup();
@@ -195,6 +203,14 @@ describe("STB-5: RightPanel never shows placeholder for implemented levels", () 
     renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
     expect(screen.queryByTestId("right-panel-placeholder")).toBeNull();
     expect(screen.getByTestId("paragraph-detail")).toBeInTheDocument();
+  });
+
+  it("level=region shows the region placeholder (Task 4 replaces it)", () => {
+    selectRegion("r1");
+    renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
+    const placeholder = screen.getByTestId("right-panel-placeholder");
+    expect(placeholder).toBeInTheDocument();
+    expect(placeholder).toHaveTextContent(/region/i);
   });
 
   it("level=word with wordSlot does NOT show the placeholder", () => {

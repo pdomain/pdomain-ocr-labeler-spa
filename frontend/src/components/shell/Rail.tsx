@@ -47,11 +47,17 @@ const MODE_LABELS: Record<RailMode, string> = {
 
 // ─── Target layer color CSS class lookup ─────────────────────────────────────
 
+// "region" has no TargetCell in the TARGET section yet — key 5 sets the rail
+// target through useRailHotkeys, but no rail button drives it, and no
+// "layer-region" color token exists. These Records still need a "region"
+// entry to stay exhaustive over RailTarget; the neutral ink/border classes
+// are placeholders until a region TargetCell (and its color) lands.
 const targetLayerClass: Record<RailTarget, string> = {
   block: "text-layer-block",
   para: "text-layer-para",
   line: "text-layer-line",
   word: "text-layer-word",
+  region: "text-ink-1",
 };
 
 const targetLayerBorderClass: Record<RailTarget, string> = {
@@ -59,6 +65,7 @@ const targetLayerBorderClass: Record<RailTarget, string> = {
   para: "border border-layer-para",
   line: "border border-layer-line",
   word: "border border-layer-word",
+  region: "border border-border-1",
 };
 
 const TARGET_LABELS: Record<RailTarget, string> = {
@@ -66,6 +73,7 @@ const TARGET_LABELS: Record<RailTarget, string> = {
   para: "Para",
   line: "Line",
   word: "Word",
+  region: "Region",
 };
 
 const TARGET_HOTKEYS: Record<RailTarget, string> = {
@@ -73,6 +81,7 @@ const TARGET_HOTKEYS: Record<RailTarget, string> = {
   para: "2",
   line: "3",
   word: "4",
+  region: "5",
 };
 
 // ─── Section label ────────────────────────────────────────────────────────────

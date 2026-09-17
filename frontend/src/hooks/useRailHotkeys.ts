@@ -6,13 +6,15 @@
 //   2 → target=para
 //   3 → target=line
 //   4 → target=word
+//   5 → target=region
 //   v/V → mode=view
 //   r/R → mode=region
 //   a/A → mode=annotate
 //   e/E → mode=erase
 //
 // SEL-3: target hotkeys (2/3/4) also sync uiPrefs.selectionMode.
-// Key 1 (block) leaves selectionMode unchanged — block has no counterpart.
+// Keys 1 (block) and 5 (region) leave selectionMode unchanged — neither has a
+// selectionMode counterpart.
 
 import { useEffect } from "react";
 import { railStore, type RailTarget, type RailMode } from "../stores/rail-store";
@@ -23,6 +25,7 @@ const TARGET_KEYS: Record<string, RailTarget> = {
   "2": "para",
   "3": "line",
   "4": "word",
+  "5": "region",
 };
 
 const MODE_KEYS: Record<string, RailMode> = {
