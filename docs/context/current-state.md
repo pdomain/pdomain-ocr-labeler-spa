@@ -13,7 +13,7 @@ last_verified: 2026-07-21
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-07-21
+- **Last verified:** 2026-09-17
 - **Read when:** orienting on shipped behavior, open work, or repository risk.
 - **Search terms:** current state, shipped, open work, risks, roadmap.
 
@@ -42,6 +42,30 @@ persist rotation metadata. The implementation is in
 `src/pdomain_ocr_labeler_spa/core/jobs/handlers/auto_rotate_all.py`; browser coverage is in
 `tests/e2e/test_rotate_parity.py`. Earlier documentation that called these
 handlers stubs was stale.
+
+The region and page-kind backend is complete, and no surface reads it yet.
+This is the labeling track, designed in `pdomain-ocr-synth` and built here. As
+of 2026-09-17:
+
+- A page's kind is proposed by a book-scoped `propose_page_kinds` job that
+  measures every page through `pdomain-pgdp-measure` and classifies the book
+  against its own fitted templates, and confirmed by a person through
+  `POST .../pages/{index}/page-kind`. `PagePayload` carries `page_kind` and
+  `page_kind_reviewed` as typed fields, so a confirmed kind survives a plain
+  `GET`.
+- Regions are `Block` objects in the page tree, marked by a `region_id` in
+  `additional_block_attributes`. Eight routes cover create, edit, delete, word
+  membership, list proposals, accept, reject, and the book-scoped
+  `POST .../regions/propose`. Proposals and decisions live in JSONL journals
+  under the project's `.pd-pages/`, never in the page blob.
+- `propose_regions` runs a swappable detector from
+  `JobRunner.context["region_detector"]`, defaulting to one that proposes
+  nothing. The geometry engine that fills it is planned at `pdomain-ocr-synth`'s
+  `docs/plans/2026-09-17-geometry-region-proposals.md`.
+- **No region or page-kind review surface exists.** The frontend has generated
+  types for every one of these routes and no client code that calls one. A
+  person can see a region on the canvas and cannot draw, edit, accept, or
+  reject one.
 
 Page lifecycle types now have one import owner. Production and test callers
 import `PageRecord` and `RotationSource` from `pdomain_ops.pages`; the temporary
