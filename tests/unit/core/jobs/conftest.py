@@ -19,6 +19,7 @@ from pdomain_ocr_labeler_spa.core.project_state import PageState, ProjectState
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from pdomain_book_contracts.annotation import PageKind
     from pdomain_book_tools.ocr.page import Page
     from pdomain_pgdp_measure.profile_input import ProfileInputPage
 
@@ -147,3 +148,145 @@ def proposal_run_no_kind_state(tmp_path: Path) -> tuple[JobRunner, Job, ProjectS
     page kind, so there is nothing to propose regions for.
     """
     return _build_two_page_run(tmp_path, reviewed_page_indices=())
+
+
+class _LazyLoadPageLoader:
+    """Fake ``PageLoader``: a fixed set of pages hit the labeled lane; every
+    other page misses every lane. ``run_ocr`` always raises.
+
+    Mirrors ``tests/integration/test_page_kinds_router.py``'s
+    ``_FakePageLoader`` — an ``allow_ocr=False`` caller (here: the
+    ``propose_regions`` handler's lazy-load pass over pages not yet in
+    memory) must never reach ``run_ocr``.
+    """
+
+    def __init__(self, labeled_hits: dict[int, PageLoadOutcome]) -> None:
+        self._labeled_hits = labeled_hits
+        self.run_ocr_calls: list[int] = []
+        self.load_labeled_calls: list[int] = []
+        self.load_cached_calls: list[int] = []
+
+    def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
+        self.load_labeled_calls.append(page_index)
+        return self._labeled_hits.get(page_index)
+
+    def load_cached(self, page_index: int) -> PageLoadOutcome | None:
+        self.load_cached_calls.append(page_index)
+        return None
+
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: PageKind | None = None,
+    ) -> PageLoadOutcome:
+        self.run_ocr_calls.append(page_index)
+        raise RuntimeError("run_ocr must never be called by propose_regions (allow_ocr=False)")
+
+
+@pytest.fixture
+def proposal_run_lazy_load(
+    tmp_path: Path,
+) -> tuple[JobRunner, Job, ProjectState, _LazyLoadPageLoader]:
+    """A three-page book with no page in memory; two pages have stored OCR content.
+
+    Mirrors a real book after a server restart, or one nobody has paged
+    through yet: ``project_state.page_states`` starts empty. Pages 0 and 2
+    are marked reviewed (page-kind confirmed) so they're eligible once
+    loaded, and both hit the loader's labeled lane. Page 1 has neither
+    stored content nor page-kind state — the "skipped, no OCR output yet"
+    case.
+
+    Yields ``(runner, job, project_state, loader)`` so a test can assert on
+    ``loader.run_ocr_calls``.
+    """
+    image_paths = [tmp_path / f"{i:03d}.png" for i in range(3)]
+    project = Project(
+        project_id="book1",
+        project_root=tmp_path,
+        image_paths=image_paths,
+        ground_truth_map={},
+        total_pages=len(image_paths),
+    )
+    project_state = ProjectState()
+    project_state.set_loaded_project(project)
+
+    reviewed = PageKindReviewedStore(project.project_root)
+    for page_index in (0, 2):
+        reviewed.mark_reviewed(page_index, datetime.now(UTC).isoformat())
+
+    labeled_hits = {
+        page_index: PageLoadOutcome(
+            page_index=page_index, source=PageSource.FILESYSTEM, payload=_blank_page(page_index)
+        )
+        for page_index in (0, 2)
+    }
+    loader = _LazyLoadPageLoader(labeled_hits)
+
+    context: dict[str, Any] = {
+        "project_state": project_state,
+        "propose_regions_measure_fn": _stub_measure_fn,
+        "page_loader": loader,
+    }
+    runner = JobRunner(JobEventBroker(), context=context)
+    job = Job(
+        job_id="proposal-run-lazy-load-job",
+        job_type="propose_regions",
+        status=JobStatus.RUNNING,
+        project_id=project.project_id,
+        payload={"project_id": project.project_id},
+        created_at=datetime.now(UTC),
+    )
+    runner._jobs[job.job_id] = job
+
+    return runner, job, project_state, loader
+
+
+@pytest.fixture
+def proposal_run_no_loader_with_unloaded_page(
+    tmp_path: Path,
+) -> tuple[JobRunner, Job, ProjectState]:
+    """One page loaded and reviewed; a second page exists but is not in memory.
+
+    No ``page_loader`` (nor the production context keys a loader would be
+    built from) is wired — the fallback path that considers only pages
+    already in memory, exactly as the handler behaved before it grew the
+    lazy-load pass.
+    """
+    image_paths = [tmp_path / f"{i:03d}.png" for i in range(2)]
+    project = Project(
+        project_id="book1",
+        project_root=tmp_path,
+        image_paths=image_paths,
+        ground_truth_map={},
+        total_pages=len(image_paths),
+    )
+    project_state = ProjectState()
+    project_state.set_loaded_project(project)
+
+    reviewed = PageKindReviewedStore(project.project_root)
+    reviewed.mark_reviewed(0, datetime.now(UTC).isoformat())
+
+    page = _blank_page(0)
+    outcome = PageLoadOutcome(page_index=0, source=PageSource.OCR, payload=page)
+    pstate = PageState(page_index=0, page_record=outcome)
+    pstate.page_id = uuid4()
+    project_state._page_states[0] = pstate
+
+    context: dict[str, Any] = {
+        "project_state": project_state,
+        "propose_regions_measure_fn": _stub_measure_fn,
+    }
+    runner = JobRunner(JobEventBroker(), context=context)
+    job = Job(
+        job_id="proposal-run-no-loader-job",
+        job_type="propose_regions",
+        status=JobStatus.RUNNING,
+        project_id=project.project_id,
+        payload={"project_id": project.project_id},
+        created_at=datetime.now(UTC),
+    )
+    runner._jobs[job.job_id] = job
+
+    return runner, job, project_state

@@ -1,13 +1,13 @@
 """``propose_regions`` job handler — book-scoped region proposal run.
 
-Iterates every currently-loaded page whose page kind has been proposed or
-confirmed — reading that state itself from the page-kind stores, never
-trusting a caller's say-so — snapshots each such page's facet digests so the
-run can be traced to the exact facets it read, calls the injected (or default
-no-op) detector, and appends whatever it returns to the proposal journal.
-Never calls ``save_page_content_to_store`` or ``save_page_to_store`` — a
-proposal run is a machine's claim, and the page blob is only ever written by
-a human action.
+Considers every page of the book, whether or not it is already in memory —
+reading page-kind state itself from the page-kind stores, never trusting a
+caller's say-so — snapshots each eligible page's facet digests so the run can
+be traced to the exact facets it read, calls the injected (or default no-op)
+detector, and appends whatever it returns to the proposal journal. Never
+calls ``save_page_content_to_store`` or ``save_page_to_store`` — a proposal
+run is a machine's claim, and the page blob is only ever written by a human
+action.
 
 Three invariants mirror ``propose_page_kinds`` (its own handler fixed the
 same defects in commit ``8cb5a58``, plus the lease below in the same change
@@ -40,6 +40,29 @@ that added it here):
   skipped, the same as ``propose_page_kinds`` — both during the book
   measurement pass and, separately, around the detector call itself.
 
+**Pages load lazily.** A page only enters ``project_state.page_states`` once
+someone opens it — after a server restart, or on a book nobody has paged
+through yet, that dict can be empty even though every page has stored OCR
+content. Before eligibility is computed, every page index of the book not
+already carrying a ``page_record`` is loaded through ``core.page_state.
+ensure_page_model`` with ``allow_ocr=False``: labeled → cached precedence
+only, never OCR — a proposal run is read-only over what OCR has already
+produced, the same restriction the bulk page-kind confirm route
+(``api/page_kinds.py``'s ``_bulk_page_loader`` / ``_NullPageLoader``) applies
+for the same reason. A page with no stored or cached content yet is skipped
+and counted in the run's summary. ``ensure_page_model`` takes the project
+lock and may read the store, so each call is offloaded via
+``asyncio.to_thread``, run before the measurement pass so it never competes
+with ``combined_total`` for a progress slot of its own — see
+``_get_page_loader``'s docstring for where the loader comes from. A core job
+handler must not import from the ``api`` package (a layering rule the tests
+enforce), so this cannot call ``api.pages._build_page_loader_from_context``
+directly; ``_get_page_loader`` duplicates that function's production-path
+construction instead, mirroring ``core/jobs/handlers/reload_ocr.py``'s own
+``_get_page_loader``. When no loader is available at all (no project
+context wired), the run falls back to considering only pages already in
+memory — today's behavior — and logs it.
+
 The page-kind journals are each read in full, once, up front — not once per
 page. ``PageKindReviewedStore.reviewed_page_indices`` returns every reviewed
 page index from one read, so the eligibility loop and
@@ -63,9 +86,11 @@ from eventsourcing.application import AggregateNotFoundError
 from pdomain_book_tools.ocr.page import Page
 from pdomain_pgdp_measure.profiling import profile_page
 
+from ....settings import Settings
 from ...page_kind.proposal_log import PageKindProposalLog
 from ...page_kind.reviewed_store import PageKindReviewedStore
 from ...page_measurement import measure_book
+from ...page_state import ensure_page_model
 from ...project_state import PageState, ProjectState
 from ...regions.block_adapter import compute_page_facet_digests, confirmed_regions_from_page
 from ...regions.decision_log import RegionDecisionLog
@@ -78,8 +103,11 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from uuid import UUID
 
+    from ...ocr.predictor import PredictorCache
+    from ...ocr_config_state import OCRConfigCarrier
     from ...page_kind.models import PageKindProposalRun
     from ...page_measurement import MeasuredBook, MeasurePageFn
+    from ...page_state import PageLoader
     from ...persistence.page_store import LabelerPageStore
     from ...regions.detector import DetectedRegion, RegionDetector
     from ...regions.models import ResolvedRegion
@@ -109,6 +137,63 @@ def _get_required_context(runner: JobRunner) -> tuple[ProjectState, LabelerPageS
         raise RuntimeError("propose_regions: runner.context['project_state'] is not wired")
     page_store = ctx.get("page_store")
     return project_state, page_store
+
+
+def _get_page_loader(
+    runner: JobRunner,
+    project_state: ProjectState,
+    page_store: LabelerPageStore | None,
+) -> PageLoader | None:
+    """The ``PageLoader`` used to lazily load a page not yet in memory, or ``None``.
+
+    Mirrors ``core/jobs/handlers/reload_ocr.py``'s ``_get_page_loader`` (see
+    that module's docstring, ~lines 27-51): a core job handler must not
+    import from the ``api`` package, so this cannot call
+    ``api.pages._build_page_loader_from_context`` and instead duplicates its
+    production-path construction, the same way ``reload_ocr.py`` does.
+
+    1. ``runner.context["page_loader"]`` — test injection or explicit
+       route-layer wiring. Returned directly.
+    2. Otherwise, an on-demand ``LocalDoctrPageLoader`` built from the
+       production context keys ``predictor_cache`` / ``ocr_config_carrier`` /
+       ``settings`` that ``bootstrap.py`` wires at startup.
+
+    Every call site below passes ``allow_ocr=False``, so unlike reload_ocr's
+    production path (which drives OCR through a per-page lease), this
+    loader's ``run_ocr`` is never reached — no image-path resolver is wired.
+
+    Returns ``None`` when neither is available: no project loaded, or the
+    production context keys aren't wired. The caller falls back to
+    considering only pages already in memory — the behavior before this
+    function existed — and logs it.
+    """
+    loader = runner.context.get("page_loader")
+    if loader is not None:
+        return loader  # type: ignore[return-value]
+
+    if project_state.loaded_project is None:
+        return None
+
+    ctx: dict[str, Any] = runner.context
+    predictor_cache: PredictorCache | None = ctx.get("predictor_cache")
+    ocr_carrier: OCRConfigCarrier | None = ctx.get("ocr_config_carrier")
+    settings = ctx.get("settings")
+    if predictor_cache is None or ocr_carrier is None or not isinstance(settings, Settings):
+        return None
+
+    from ....adapters.ocr.local_doctr import LocalDoctrPageLoader
+
+    detection_key, recognition_key, hf_revision = ocr_carrier.snapshot()
+    return LocalDoctrPageLoader(
+        project=project_state.loaded_project,
+        predictor_cache=predictor_cache,
+        detection_key=detection_key,
+        recognition_key=recognition_key,
+        hf_revision=hf_revision,
+        data_root=settings.data_root,
+        cache_root=settings.cache_root,
+        store=page_store,
+    )
 
 
 def _resolve_live_page(pstate: PageState) -> Page | None:
@@ -386,11 +471,53 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
         )
         return
 
+    # Pages load lazily — a page only enters ``project_state.page_states``
+    # once someone opens it, so after a server restart, or on a book nobody
+    # has paged through yet, that dict can be empty even though every page
+    # has stored OCR content. Load every page not already carrying a
+    # ``page_record`` before eligibility is computed below, through the same
+    # labeled/cached-only precedence the bulk page-kind confirm route uses
+    # (``allow_ocr=False`` — never runs OCR from this job). No progress is
+    # reported for this pass: it runs entirely before the measurement pass's
+    # first ``update_progress`` call, so it cannot make ``combined_total``'s
+    # progress go backwards or claim a slot of its own. See the module
+    # docstring's "Pages load lazily" section and ``_get_page_loader``.
+    loader = _get_page_loader(runner, project_state, page_store)
+    no_ocr_yet_indices: list[int] = []
+    if loader is not None:
+        for idx in range(project.total_pages):
+            pstate = project_state.page_states.get(idx)
+            if pstate is not None and pstate.page_record is not None:
+                continue
+            # Blocking: ``ensure_page_model`` takes the project lock and may
+            # read the store's provenance graph — offloaded so a book with
+            # many unloaded pages doesn't stall the event loop for the
+            # duration of the pass.
+            outcome = await asyncio.to_thread(
+                ensure_page_model, project_state, idx, loader=loader, allow_ocr=False
+            )
+            if outcome is None:
+                no_ocr_yet_indices.append(idx)
+    else:
+        log.info(
+            "propose_regions: run for project=%s — no page loader available; "
+            "considering only pages already in memory",
+            project.project_id,
+        )
+
+    if no_ocr_yet_indices:
+        log.info(
+            "propose_regions: project=%s skipped %d page(s) with no stored or cached OCR output yet: %s",
+            project.project_id,
+            len(no_ocr_yet_indices),
+            no_ocr_yet_indices,
+        )
+
     page_indices = sorted(
         idx for idx, pstate in project_state.page_states.items() if pstate.page_record is not None
     )
     if not page_indices:
-        await runner.update_progress(job.job_id, current=0, total=0, message="No pages loaded")
+        await runner.update_progress(job.job_id, current=0, total=0, message="No page has OCR output yet")
         return
 
     # The job reads page-kind state itself rather than trusting a caller's
@@ -761,6 +888,8 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
         summary_parts.append(
             f"Skipped {len(skipped_indices)} page(s) with no page kind; run Propose page kinds first."
         )
+    if no_ocr_yet_indices:
+        summary_parts.append(f"Skipped {len(no_ocr_yet_indices)} page(s) with no OCR output yet.")
     if carried_count:
         summary_parts.append(f"Carried {carried_count} decision(s) from earlier runs.")
     unprocessed_parts: list[str] = []
