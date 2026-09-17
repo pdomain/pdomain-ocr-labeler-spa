@@ -87,6 +87,7 @@ from pdomain_book_tools.ocr.page import Page
 from pdomain_pgdp_measure.profiling import profile_page
 
 from ....settings import Settings
+from ...labeler_sidecars import LegacyTypographyPayloadError
 from ...page_kind.proposal_log import PageKindProposalLog
 from ...page_kind.reviewed_store import PageKindReviewedStore
 from ...page_measurement import measure_book
@@ -526,6 +527,7 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     # docstring's "Pages load lazily" section and ``_get_page_loader``.
     loader = _get_page_loader(runner, project_state, page_store)
     no_ocr_yet_indices: list[int] = []
+    legacy_payload_indices: list[int] = []
     if loader is not None:
         for idx in range(project.total_pages):
             # A concurrent ``POST .../load`` can swap ``loaded_project`` to a
@@ -547,9 +549,21 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
             # read the store's provenance graph — offloaded so a book with
             # many unloaded pages doesn't stall the event loop for the
             # duration of the pass.
-            outcome = await asyncio.to_thread(
-                ensure_page_model, project_state, idx, loader=loader, allow_ocr=False
-            )
+            try:
+                outcome = await asyncio.to_thread(
+                    ensure_page_model, project_state, idx, loader=loader, allow_ocr=False
+                )
+            except LegacyTypographyPayloadError:
+                # ``LocalDoctrPageLoader.load_labeled`` (and
+                # ``ensure_page_model`` in turn) re-raises this rather than
+                # treating it as an ordinary cache miss — "Removed review
+                # data must never be mistaken for a cache miss" (see its own
+                # docstring). Right for a single-page route to stop outright
+                # over, but a book-scoped run must not let one un-migrated
+                # page cost every other page its proposals — skip it,
+                # counted in its own summary clause below.
+                legacy_payload_indices.append(idx)
+                continue
             if outcome is None:
                 no_ocr_yet_indices.append(idx)
     else:
@@ -577,6 +591,15 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
             project.project_id,
             len(no_ocr_yet_indices),
             no_ocr_yet_indices,
+        )
+
+    if legacy_payload_indices:
+        log.warning(
+            "propose_regions: project=%s skipped %d page(s) with legacy review data that must be "
+            "migrated first: %s",
+            project.project_id,
+            len(legacy_payload_indices),
+            legacy_payload_indices,
         )
 
     page_indices = sorted(
@@ -956,6 +979,11 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
         )
     if no_ocr_yet_indices:
         summary_parts.append(f"Skipped {len(no_ocr_yet_indices)} page(s) with no OCR output yet.")
+    if legacy_payload_indices:
+        summary_parts.append(
+            f"Skipped {len(legacy_payload_indices)} page(s) with legacy review data that must be "
+            "migrated first."
+        )
     if carried_count:
         summary_parts.append(f"Carried {carried_count} decision(s) from earlier runs.")
     unprocessed_parts: list[str] = []

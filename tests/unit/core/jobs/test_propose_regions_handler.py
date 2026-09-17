@@ -464,3 +464,28 @@ def test_a_project_swap_on_the_last_page_is_caught_after_the_loop(
     assert "book-b" in reported.message
 
     assert RegionProposalLog(book_b.project_root).runs() == []
+
+
+def test_a_legacy_typography_payload_is_skipped_not_fatal(
+    proposal_run_legacy_payload: Any,
+) -> None:
+    """One page's removed-review-data error must not abort the whole run.
+
+    ``LocalDoctrPageLoader.load_labeled`` re-raises
+    ``LegacyTypographyPayloadError`` rather than treating it as an ordinary
+    cache miss, so ``ensure_page_model`` propagates it too. The lazy-load
+    loop must catch it per page, skip that page, and keep going.
+    """
+    import asyncio
+
+    runner, job, project_state, loader = proposal_run_legacy_payload
+    seen = asyncio.run(_collect_progress(runner, job))
+
+    assert loader.run_ocr_calls == []
+    assert 1 not in project_state.page_states, "the legacy-payload page must not have loaded"
+    assert project_state.page_states[0].page_record is not None
+    assert project_state.page_states[2].page_record is not None
+
+    _current, _total, final_message = seen[-1]
+    assert "1 page(s)" in final_message
+    assert "legacy review data" in final_message

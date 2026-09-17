@@ -11,6 +11,7 @@ from pdomain_pgdp_measure.profile_models import PageMeasurement, ProfileDiagnost
 
 from pdomain_ocr_labeler_spa.core.jobs.events import JobEventBroker
 from pdomain_ocr_labeler_spa.core.jobs.runner import Job, JobRunner, JobStatus
+from pdomain_ocr_labeler_spa.core.labeler_sidecars import LegacyTypographyPayloadError
 from pdomain_ocr_labeler_spa.core.models import Project
 from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
 from pdomain_ocr_labeler_spa.core.page_state import PageLoadOutcome, PageSource
@@ -411,3 +412,92 @@ def proposal_run_book_swap_on_last_page(
     re-check after the loop can.
     """
     return _build_book_swap_run(tmp_path, book_a_total_pages=2, swap_at_page_index=1)
+
+
+class _LegacyPayloadPageLoader:
+    """Fake ``PageLoader``: one page's labeled lane raises
+    ``LegacyTypographyPayloadError`` (removed review data present in stored
+    content); a fixed set of other pages hit normally. ``run_ocr`` always
+    raises.
+    """
+
+    def __init__(self, *, legacy_page_index: int, ok_hits: dict[int, PageLoadOutcome]) -> None:
+        self._legacy_page_index = legacy_page_index
+        self._ok_hits = ok_hits
+        self.load_labeled_calls: list[int] = []
+        self.run_ocr_calls: list[int] = []
+
+    def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
+        self.load_labeled_calls.append(page_index)
+        if page_index == self._legacy_page_index:
+            raise LegacyTypographyPayloadError("legacy char_ranges_map payload is unsupported")
+        return self._ok_hits.get(page_index)
+
+    def load_cached(self, page_index: int) -> PageLoadOutcome | None:
+        return None
+
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: PageKind | None = None,
+    ) -> PageLoadOutcome:
+        self.run_ocr_calls.append(page_index)
+        raise RuntimeError("run_ocr must never be called by propose_regions (allow_ocr=False)")
+
+
+@pytest.fixture
+def proposal_run_legacy_payload(
+    tmp_path: Path,
+) -> tuple[JobRunner, Job, ProjectState, _LegacyPayloadPageLoader]:
+    """A three-page book; page 1's stored content raises
+    ``LegacyTypographyPayloadError`` (removed review data) when loaded.
+    Pages 0 and 2 load normally and are reviewed.
+
+    Regression test: a raise from ``ensure_page_model`` during the
+    lazy-load pass must not abort the whole run — one page's un-migrated
+    legacy payload shouldn't cost every other page its proposals.
+
+    Yields ``(runner, job, project_state, loader)``.
+    """
+    image_paths = [tmp_path / f"{i:03d}.png" for i in range(3)]
+    project = Project(
+        project_id="book1",
+        project_root=tmp_path,
+        image_paths=image_paths,
+        ground_truth_map={},
+        total_pages=len(image_paths),
+    )
+    project_state = ProjectState()
+    project_state.set_loaded_project(project)
+
+    reviewed = PageKindReviewedStore(project.project_root)
+    for page_index in (0, 2):
+        reviewed.mark_reviewed(page_index, datetime.now(UTC).isoformat())
+
+    ok_hits = {
+        page_index: PageLoadOutcome(
+            page_index=page_index, source=PageSource.FILESYSTEM, payload=_blank_page(page_index)
+        )
+        for page_index in (0, 2)
+    }
+    loader = _LegacyPayloadPageLoader(legacy_page_index=1, ok_hits=ok_hits)
+
+    context: dict[str, Any] = {
+        "project_state": project_state,
+        "propose_regions_measure_fn": _stub_measure_fn,
+        "page_loader": loader,
+    }
+    runner = JobRunner(JobEventBroker(), context=context)
+    job = Job(
+        job_id="proposal-run-legacy-payload-job",
+        job_type="propose_regions",
+        status=JobStatus.RUNNING,
+        project_id=project.project_id,
+        payload={"project_id": project.project_id},
+        created_at=datetime.now(UTC),
+    )
+    runner._jobs[job.job_id] = job
+
+    return runner, job, project_state, loader
