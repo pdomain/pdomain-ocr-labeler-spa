@@ -525,6 +525,21 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     # first ``update_progress`` call, so it cannot make ``combined_total``'s
     # progress go backwards or claim a slot of its own. See the module
     # docstring's "Pages load lazily" section and ``_get_page_loader``.
+    #
+    # Deliberately no message-only "loading N page(s) from storage" update
+    # before this loop, tempting as that looks: every ``update_progress``
+    # call this handler makes, from its very first to its very last, is
+    # required to report the same ``total`` (``test_progress_never_goes_
+    # backwards_across_the_two_phases`` asserts ``len({t for _, t in seen})
+    # == 1`` over the *whole* run). ``combined_total`` isn't known until
+    # ``total = len(eligible_indices)`` is computed below, which itself
+    # depends on this very loop having already run (eligibility reads each
+    # loaded page's kind) plus the page-kind journal reads that follow it —
+    # so an update here would have to either report ``total=0`` (a
+    # different value from every later call) or already know
+    # ``combined_total`` (impossible this early). Neither fits; there is no
+    # total this update could report that both means something and holds
+    # for the rest of the run.
     loader = _get_page_loader(runner, project_state, page_store)
     no_ocr_yet_indices: list[int] = []
     legacy_payload_indices: list[int] = []
