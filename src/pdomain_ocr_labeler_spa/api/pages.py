@@ -1560,9 +1560,6 @@ def _confirm_page_kind_locked(
     project_root: Path,
     project_state: ProjectState,
     page_index: int,
-    pstate: PageState,
-    page: Page,
-    page_id: Any,
     page_store: LabelerPageStore,
     kind: PageKind,
     note: str | None,
@@ -1582,11 +1579,23 @@ def _confirm_page_kind_locked(
     confirmed alone from one confirmed in a batch). Restores the prior kind
     and generation if the save fails.
 
-    Returns ``None`` on success, or the save exception's message on failure
-    (the prior in-memory state has already been restored in that case).
+    The page state, page and ``page_id`` are resolved inside the lock, never
+    taken from a caller's earlier snapshot: a re-OCR or rotation swaps in a
+    new ``Page`` under a new ``page_id`` while holding this same lock, and a
+    confirm that wrote to the replaced page would leave the stored kind and
+    the marker disagreeing.
+
+    Returns ``None`` on success, or a failure message (the prior in-memory
+    state has already been restored when a save failed).
     """
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
+        pstate = project_state.get_page_state(page_index)
+        page = _resolve_page_object_for_pages(pstate)
+        if pstate is None or page is None or pstate.page_id is None:
+            log.warning("_confirm_page_kind_locked: page=%d is no longer loaded or store-backed", page_index)
+            return f"page {page_index} is no longer loaded or backed by the event store"
+        page_id = pstate.page_id
         prior_kind = page.page_kind
         prior_generation = pstate.generation
         page.page_kind = kind
@@ -1697,9 +1706,6 @@ def confirm_page_kind(
         project_root=project.project_root,
         project_state=project_state,
         page_index=page_index,
-        pstate=pstate,
-        page=page,
-        page_id=page_id,
         page_store=page_store,
         kind=kind,
         note=body.note,

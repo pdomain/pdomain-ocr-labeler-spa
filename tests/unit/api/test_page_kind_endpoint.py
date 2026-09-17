@@ -309,3 +309,62 @@ def test_confirming_a_page_kind_on_an_unloaded_page_returns_400(loaded_client: T
     resp = loaded_client.post("/api/projects/book1/pages/0/page-kind", json={"kind": "body"})
     assert resp.status_code == 400, resp.text
     assert resp.json()["error"] == "page_not_loaded"
+
+
+def test_a_confirm_writes_to_the_page_that_is_live_when_it_takes_the_lock(
+    loaded_client: TestClient, projects_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A re-OCR swap between the route's checks and its lock must not strand the confirm.
+
+    The swap replaces the page and its ``page_id`` while holding the page lock,
+    so the confirm has to resolve the page after it acquires that lock. Writing
+    to the replaced page would store the kind on an aggregate nothing reads.
+    """
+    import threading
+    from contextlib import contextmanager
+
+    from pdomain_ocr_labeler_spa.api._page_content import load_page_from_store
+
+    old_page = Page(width=100, height=100, page_index=0, blocks=[])
+    _seed_page_state(loaded_client, page_index=0, page=old_page)
+    state = _app_state(loaded_client)
+    project_state: ProjectState = state.project_state
+    store: LabelerPageStore = state.page_store
+
+    new_page = Page(width=100, height=100, page_index=0, blocks=[])
+    new_aggregate = _ingest_ocr_result(
+        page=new_page,
+        image_bytes=b"\x89PNG\r\n",
+        page_index=0,
+        store=store,
+        project=project_state.loaded_project,
+    )
+    real_lock = project_state.get_page_lock(0)
+    swapped = threading.Event()
+
+    @contextmanager
+    def _swap_then_lock() -> Iterator[None]:
+        if not swapped.is_set():
+            swapped.set()
+            pstate = project_state.get_page_state(0)
+            assert pstate is not None
+            pstate.page_record = PageLoadOutcome(page_index=0, source=PageSource.OCR, payload=new_page)
+            pstate.page_id = new_aggregate.id
+        with real_lock:
+            yield
+
+    monkeypatch.setattr(project_state, "get_page_lock", lambda _index: _swap_then_lock())
+
+    resp = loaded_client.post("/api/projects/book1/pages/0/page-kind", json={"kind": "plate"})
+
+    assert resp.status_code == 200, resp.text
+    assert swapped.is_set()
+    assert old_page.page_kind is None
+    stored = load_page_from_store(store, new_aggregate.id)
+    assert stored is not None
+    assert stored.page_kind is not None
+    assert stored.page_kind.value == "plate"
+    marker = PageKindReviewedStore(projects_root / "book1").latest_for_page(0)
+    assert marker is not None
+    assert marker.kind is not None
+    assert marker.kind.value == "plate"
