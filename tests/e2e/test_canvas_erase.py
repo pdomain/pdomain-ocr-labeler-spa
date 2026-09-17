@@ -6,11 +6,11 @@ preview, and reset the mode to "select" on completion, but never called the
 backend. The UI *looked* like it worked; nothing was ever erased. See
 ``docs/issues/2026-07-21-canvas-erase-mode-noop.md``.
 
-This test enters erase mode from the Rail's mode card
-(``rail-mode-erase`` — the click path into the same ``viewportStore`` "erase"
-mode the ``Shift+E`` hotkey targets; see the note on ``_enter_erase_mode``
-below for why the hotkey itself is not used here), drags a rectangle over a
-known page-space area with ``page.mouse``, and then proves the backend
+This test enters erase mode from the canvas with the ``Shift+E`` hotkey (see
+``_enter_erase_mode`` below — this used to click the Rail's mode card
+instead, to sidestep a separate hotkey-collision bug fixed alongside this
+test), drags a rectangle over a known page-space area with ``page.mouse``,
+and then proves the backend
 actually processed the erase — not merely that the UI reacted — by polling
 the page payload's ``history.undo_available`` flag the same way
 ``test_undo_redo.py`` proves other mutations reached the store:
@@ -245,28 +245,25 @@ def _drag_erase_rect(page: Page, ltrb: tuple[int, int, int, int], scale: float, 
 
 
 def _enter_erase_mode(page: Page) -> None:
-    """Enter viewport "erase" mode via the Rail's mode card.
+    """Enter viewport "erase" mode via the ``Shift+E`` hotkey.
 
-    ``useViewportHotkeys`` binds ``Shift+E`` to the same ``viewportStore``
-    erase toggle, but ``useRailHotkeys`` independently binds the *unshifted*
-    ``E``/``e`` key to ``railStore.setMode("erase")`` — and accepts the
-    shifted form too (``MODE_KEYS`` lists both ``e`` and ``E``). Both
-    listeners are separate ``document`` keydown handlers, so a single
-    ``Shift+E`` keypress fires both: whichever attaches first wins the
-    logical race, and observed behavior is a net no-op (viewport toggles to
-    "erase" then immediately back to "select" once the rail→viewport mode
-    sync effect in ``PageImageCanvas`` re-applies "erase" and the rail
-    hotkey's own toggle fires second, or vice versa depending on mount
-    order). That collision is a separate, pre-existing issue from
-    P1-CANVAS-ERASE (this test's onErasePixels wiring) — clicking the Rail's
-    ``rail-mode-erase`` card sidesteps it entirely by driving
-    ``railStore.setMode("erase")`` through a single code path, which the
-    same rail→viewport sync effect then mirrors onto ``viewportStore`` once,
-    reliably.
+    Before the reviewer's finding-3 fix, this hotkey was a no-op: both
+    ``useViewportHotkeys`` (``shift+e`` → toggle the ``viewportStore`` erase
+    mode) and ``useRailHotkeys`` (its ``MODE_KEYS`` table listed *both*
+    ``e`` and ``E``, so it fired on the shifted form too) were separate
+    ``document`` keydown listeners reacting to the SAME keypress. The rail
+    hotkey set ``railStore.mode = "erase"``, which ``PageImageCanvas``'s
+    rail→viewport sync effect mirrored onto ``viewportStore`` — then
+    ``useViewportHotkeys``' own toggle ran too and flipped ``viewportStore``
+    right back to "select", netting a no-op the user could never escape by
+    pressing the key again (this test used to click the Rail's
+    ``rail-mode-erase`` card instead, to sidestep the collision). Fixed in
+    ``useRailHotkeys.ts`` by excluding ``e``/``E`` and ``a``/``A`` (but not
+    ``v``/``V`` or ``r``/``R``, which the viewport does not bind) from rail
+    mode changes while Shift is held, leaving the viewport hotkey as the
+    sole handler — see that module's docstring for the full rationale.
     """
-    rail_erase = page.locator('[data-testid="rail-mode-erase"]').first
-    rail_erase.wait_for(state="visible", timeout=10_000)
-    rail_erase.click()
+    page.keyboard.press("Shift+E")
 
 
 @pytest.mark.e2e
@@ -275,8 +272,8 @@ def test_canvas_erase_drag_reaches_the_backend(canvas_erase_server: CanvasEraseS
 
     1. A fresh page has nothing to undo (``history.undo_available`` is
        ``False``) — the baseline the erase must flip.
-    2. Enter erase mode via the Rail's mode card (see ``_enter_erase_mode``
-       for why not the ``Shift+E`` hotkey) — the mode pill reads "ERASE".
+    2. Enter erase mode with the ``Shift+E`` hotkey (see ``_enter_erase_mode``
+       for the collision this used to hit) — the mode pill reads "ERASE".
     3. Drag a rectangle over a known page-space area with ``page.mouse``.
     4. The mode pill resets to "VIEW" (PageImageCanvas resets to "select" on
        a completed erase drag) — the UI reacted.
