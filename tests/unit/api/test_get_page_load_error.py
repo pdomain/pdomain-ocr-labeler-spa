@@ -29,7 +29,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from pdomain_ocr_labeler_spa.bootstrap import build_app
-from pdomain_ocr_labeler_spa.core.page_state import PageLoadOutcome, PageSource
+from pdomain_ocr_labeler_spa.core.page_state import PageLoader, PageLoadOutcome, PageSource
 from pdomain_ocr_labeler_spa.settings import Settings
 
 
@@ -41,6 +41,11 @@ def _make_settings(tmp_path: Path, **overrides: object) -> Settings:
         "data_root": tmp_path / "data",
         "cache_root": tmp_path / "cache",
         "mode": "api_only",
+        # Prefetch (GAP-2) would otherwise schedule a background fetch of
+        # adjacent pages as soon as one page GET returns, racing the
+        # explicit multi-fetch assertions below (warn-once-per-project,
+        # warn-every-time) against a nondeterministic background task.
+        "no_prefetch": True,
     }
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]
@@ -53,6 +58,7 @@ def projects_root(tmp_path: Path) -> Path:
     proj = root / "book1"
     proj.mkdir()
     (proj / "001.png").write_bytes(b"\x89PNG\r\n")
+    (proj / "002.png").write_bytes(b"\x89PNG\r\n")
     return root
 
 
@@ -163,3 +169,72 @@ def test_no_text_page_leaves_page_load_error_none_and_logs_no_warning(
     assert body["line_matches"] == []
 
     assert not any("ensure_page_model failed" in r.getMessage() for r in caplog.records)
+
+
+def _raise_loader_unavailable(runner: Any, project_state: Any, settings: Any) -> PageLoader:
+    """Stand-in for ``_build_page_loader_from_context`` that always raises.
+
+    Signature mirrors ``test_b1_b3_f1.py``'s ``_patched_build_loader`` (loose
+    ``Any`` params — ``monkeypatch.setattr`` doesn't enforce the original
+    signature). The declared ``PageLoader`` return type is never actually
+    produced; the body only raises.
+    """
+    raise RuntimeError("no predictor_cache in runner.context")
+
+
+def test_loader_build_failure_stamps_ocr_unavailable_and_warns_once_per_project(
+    app_client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A loader that can't be built at all is a deployment fact, not a
+    per-page one: it gets its own error code (not ``ocr_load_failed``), and
+    only the FIRST page fetched for a project logs a WARNING — later fetches
+    (any page) log at DEBUG instead, so navigating a whole book in this state
+    doesn't produce one WARNING per page.
+    """
+    from pdomain_ocr_labeler_spa.api import pages as pages_mod
+
+    # Deterministic regardless of what ran earlier in this worker process.
+    pages_mod._ocr_unavailable_warned_projects.discard("book1")
+    monkeypatch.setattr(pages_mod, "_build_page_loader_from_context", _raise_loader_unavailable)
+
+    with caplog.at_level(logging.DEBUG, logger="pdomain_ocr_labeler_spa.api.pages"):
+        resp1 = app_client.get("/api/projects/book1/pages/0")
+        resp2 = app_client.get("/api/projects/book1/pages/1")
+
+    for resp in (resp1, resp2):
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["page_load_error"] is not None
+        assert body["page_load_error"]["error"] == "ocr_unavailable"
+        assert "not available in this deployment" in body["page_load_error"]["message"]
+
+    relevant = [r for r in caplog.records if "OCR loader unavailable for project=book1" in r.getMessage()]
+    warnings = [r for r in relevant if r.levelno == logging.WARNING]
+    debugs = [r for r in relevant if r.levelno == logging.DEBUG]
+    assert len(warnings) == 1, f"expected exactly one WARNING across two fetches, got {len(warnings)}"
+    assert len(debugs) == 1, f"expected the second fetch to log at DEBUG, got {len(debugs)}"
+
+
+def test_per_page_failure_warns_on_every_fetch(
+    app_client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Unlike the deployment-wide loader-unavailable case, a per-page OCR
+    failure on a loader that builds fine warns every time — the failure is
+    specific to this page's OCR run, not a standing deployment condition, so
+    there's nothing to de-duplicate.
+    """
+    app_client.app.state.job_runner.context["page_loader"] = _RaisingPageLoader()  # type: ignore[attr-defined]
+
+    with caplog.at_level(logging.WARNING, logger="pdomain_ocr_labeler_spa.api.pages"):
+        resp1 = app_client.get("/api/projects/book1/pages/0")
+        resp2 = app_client.get("/api/projects/book1/pages/0")
+
+    for resp in (resp1, resp2):
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["page_load_error"]["error"] == "ocr_load_failed"
+
+    warnings = [r for r in caplog.records if "ensure_page_model failed" in r.getMessage()]
+    assert len(warnings) == 2, f"expected a WARNING for each per-page OCR failure, got {len(warnings)}"
