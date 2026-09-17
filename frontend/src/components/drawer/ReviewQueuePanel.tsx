@@ -55,24 +55,13 @@ type RegionReviewQueueItem = components["schemas"]["RegionReviewQueueItem"];
  * Rail badge, needs the proposals themselves, not just the per-page summary. */
 const ITEM_LIMIT = 200;
 
-// The queue item the API returns today (`RegionReviewQueueItem` in
-// api/regions.py) carries no `evidence` field — only the per-page proposals
-// list does (`RegionProposalView`, read by RegionDetail.tsx). This local
-// extension declares that field as optional on top of the generated type,
-// so the panel renders it if a future backend change adds it, without
-// widening the trusted response type with an unchecked cast: every
-// `RegionReviewQueueItem` already structurally satisfies this type, since
-// `evidence` is optional.
-type ReviewQueueItemView = RegionReviewQueueItem & {
-  evidence?: Record<string, unknown> | undefined;
-};
-
-/** The evidence dict's "signal" entry, when the item carries a string one. */
+/** The evidence dict's "signal" entry, when the item carries a string one.
+ *
+ * Evidence is open-ended per detector, so the value is read defensively:
+ * a detector that records no `signal`, or a non-string one, renders nothing.
+ */
 function evidenceSignal(item: RegionReviewQueueItem): string | null {
-  const view: ReviewQueueItemView = item;
-  const evidence = view.evidence;
-  if (evidence === undefined) return null;
-  const signal = evidence["signal"];
+  const signal = item.evidence["signal"];
   return typeof signal === "string" ? signal : null;
 }
 

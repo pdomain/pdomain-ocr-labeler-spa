@@ -4868,6 +4868,10 @@ export interface components {
             /** Confidence */
             confidence: number;
             box: components["schemas"]["BBox"];
+            /** Evidence */
+            evidence: {
+                [key: string]: unknown;
+            };
         };
         /**
          * RegionReviewQueuePageSummary

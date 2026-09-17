@@ -31,6 +31,7 @@ function item(overrides: Partial<RegionReviewQueueItem> = {}): RegionReviewQueue
     role: "paragraph",
     confidence: 0.5,
     box: { x: 0, y: 0, width: 10, height: 10 },
+    evidence: {},
     ...overrides,
   };
 }
