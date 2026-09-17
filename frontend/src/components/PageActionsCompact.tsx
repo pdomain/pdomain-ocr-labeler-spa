@@ -341,8 +341,12 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     },
   });
 
-  // Save-project completion: fetch the job payload to check skipped_pages,
-  // then show a warning (if any pages were skipped) or success toast.
+  // Save-project completion: fetch the job's `result` to check
+  // skipped_pages, then show a warning (if any pages were skipped) or
+  // success toast. `result` is the public Job model's field for
+  // handler-specific output (core.models.Job.result;
+  // docs/issues/2026-07-21-jobs-api-openapi-mismatch.md, P1-JOBS-API) —
+  // save_project writes skipped_pages/skipped_indices/failures there.
   useJobCompletionInvalidation({
     activeJobId: saveProjectJobId,
     jobProgress: saveProjectProgress,
@@ -351,10 +355,10 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     onComplete: (jobId) => {
       void fetch(`/api/jobs/${encodeURIComponent(jobId)}`)
         .then((r) => r.json())
-        .then((job: { payload?: { skipped_pages?: number; skipped_indices?: number[] } }) => {
-          const skipped = job.payload?.skipped_pages ?? 0;
+        .then((job: { result?: { skipped_pages?: number; skipped_indices?: number[] } | null }) => {
+          const skipped = job.result?.skipped_pages ?? 0;
           if (skipped > 0) {
-            const indices = job.payload?.skipped_indices ?? [];
+            const indices = job.result?.skipped_indices ?? [];
             toast.warn(
               `Project saved. ${skipped} page(s) not saved (unregistered): ${indices.join(", ")}`,
               {
@@ -647,7 +651,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   }
 
   // C2: restored "Save Project" — persists every page (202 + job_id).
-  // S5.2: on completion, reads payload.skipped_pages and shows warning if > 0.
+  // S5.2: on completion, reads result.skipped_pages and shows warning if > 0.
   function handleSaveProject() {
     saveProject.mutate(undefined, {
       onSuccess: (data) => {

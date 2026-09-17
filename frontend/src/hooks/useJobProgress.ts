@@ -17,8 +17,13 @@
 //   event: snapshot | progress | complete | error | cancelled
 //   data: { id, type, project_id, status, progress: { current, total,
 //           current_page, message }, error_message, created_at, updated_at,
-//           event } (+ any structured job result merged in on the terminal
-//           frame, e.g. export stats).
+//           result, event }. `result` is job-type-specific handler output
+//           (core.models.Job.result) — e.g. export's terminal stats
+//           (words_exported_detection / words_exported_recognition /
+//           pages_skipped_not_validated). The backend also still merges
+//           export's stats flat at the frame's top level for backward
+//           compatibility with older callers, but this hook reads them from
+//           `result`, the one field every job type uses.
 
 import { useEffect, useRef, useState } from "react";
 import type { components } from "../api/types";
@@ -33,11 +38,6 @@ export type JobEventKind = "snapshot" | "progress" | "complete" | "error" | "can
 /** A job-progress SSE frame: the public `Job` model plus the SSE event kind. */
 export interface JobProgressEvent extends Job {
   event: JobEventKind;
-  // Export stats breakdown (Lane E3) — present on the terminal event of an
-  // export job. Flat top-level fields, merged from the job's `result`.
-  words_exported_detection?: number;
-  words_exported_recognition?: number;
-  pages_skipped_not_validated?: number;
 }
 
 const TERMINAL: ReadonlySet<JobStatus> = new Set(["complete", "error", "cancelled"]);
@@ -105,14 +105,11 @@ function parseJobProgressEvent(raw: unknown): JobProgressEvent | null {
   if (typeof obj["error_message"] === "string" || obj["error_message"] === null) {
     parsed.error_message = obj["error_message"];
   }
-  if (typeof obj["words_exported_detection"] === "number") {
-    parsed.words_exported_detection = obj["words_exported_detection"];
-  }
-  if (typeof obj["words_exported_recognition"] === "number") {
-    parsed.words_exported_recognition = obj["words_exported_recognition"];
-  }
-  if (typeof obj["pages_skipped_not_validated"] === "number") {
-    parsed.pages_skipped_not_validated = obj["pages_skipped_not_validated"];
+  if (obj["result"] === null) {
+    parsed.result = null;
+  } else if (typeof obj["result"] === "object") {
+    // Validated string boundary (object check above); see doc comment above.
+    parsed.result = obj["result"] as Record<string, unknown>;
   }
   return parsed;
 }

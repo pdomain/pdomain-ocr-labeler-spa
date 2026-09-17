@@ -87,6 +87,7 @@ function wireFrame(overrides: {
   progress?: { current?: number; total?: number; message?: string };
   error_message?: string | null;
   event?: string;
+  result?: Record<string, unknown> | null;
 }) {
   return {
     id: overrides.id ?? "job-abc",
@@ -98,6 +99,7 @@ function wireFrame(overrides: {
     created_at: new Date(0).toISOString(),
     updated_at: new Date(0).toISOString(),
     event: overrides.event ?? overrides.status,
+    result: overrides.result ?? null,
   };
 }
 
@@ -158,6 +160,38 @@ describe("useJobProgress", () => {
     expect(result.current?.progress.total).toBe(10);
     expect(result.current?.id).toBe("job-abc");
     expect(result.current?.type).toBe("reload_ocr");
+  });
+
+  it("surfaces a terminal frame's `result` field (e.g. export stats)", async () => {
+    const { result } = renderHook(() => useJobProgress("job-abc"));
+
+    act(() => {
+      lastSource!._emit(
+        "complete",
+        wireFrame({
+          status: "complete",
+          progress: { current: 5, total: 5, message: "done" },
+          result: { words_exported_detection: 42, pages_skipped_not_validated: 0 },
+        }),
+      );
+    });
+
+    await waitFor(() => expect(result.current).not.toBeNull());
+    expect(result.current?.result).toEqual({
+      words_exported_detection: 42,
+      pages_skipped_not_validated: 0,
+    });
+  });
+
+  it("leaves `result` null when the backend sends no result", async () => {
+    const { result } = renderHook(() => useJobProgress("job-abc"));
+
+    act(() => {
+      lastSource!._emit("progress", RUNNING_FRAME);
+    });
+
+    await waitFor(() => expect(result.current).not.toBeNull());
+    expect(result.current?.result).toBeNull();
   });
 
   it("handles the 'snapshot' event (first frame)", async () => {

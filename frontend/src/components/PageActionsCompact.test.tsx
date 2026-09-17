@@ -1597,7 +1597,7 @@ describe("PageActionsCompact: toast lifecycle for reload-ocr", () => {
 });
 
 // ─── S5.2: Save-project skipped-page warning toast ───────────────────────────
-// When save-all completes with payload.skipped_pages > 0, the component must
+// When save-all completes with result.skipped_pages > 0, the component must
 // show a warning toast (not a success toast) mentioning the skipped pages.
 // Definition of done: skipping is never silent.
 
@@ -1628,11 +1628,10 @@ describe("PageActionsCompact: S5.2 save-project skipped-page warning", () => {
         HttpResponse.json({ job_id: "j-save-skip" }, { status: 202 }),
       ),
     );
-    // GET /api/jobs/j-save-skip → job result with skipped_pages: 1. `payload`
-    // isn't part of the public `Job` model's declared fields (id/type/
-    // project_id/status/progress/error_message/created_at/updated_at) — it's
-    // a PageActionsCompact-specific extra this mock supplies so the S5.2
-    // skipped-page warning path under test has something to read.
+    // GET /api/jobs/j-save-skip → the public Job's `result` field carries
+    // save_project's skipped_pages/skipped_indices/failures output
+    // (core.models.Job.result; docs/issues/2026-07-21-jobs-api-openapi-mismatch.md,
+    // P1-JOBS-API).
     server.use(
       http.get("/api/jobs/j-save-skip", () =>
         HttpResponse.json({
@@ -1643,7 +1642,7 @@ describe("PageActionsCompact: S5.2 save-project skipped-page warning", () => {
           progress: { current: 1, total: 1, message: "Saved" },
           created_at: new Date(0).toISOString(),
           updated_at: new Date(0).toISOString(),
-          payload: {
+          result: {
             failures: [],
             skipped_pages: 1,
             skipped_indices: [0],
@@ -1710,7 +1709,7 @@ describe("PageActionsCompact: S5.2 save-project skipped-page warning", () => {
           progress: { current: 1, total: 1, message: "Saved" },
           created_at: new Date(0).toISOString(),
           updated_at: new Date(0).toISOString(),
-          payload: {
+          result: {
             failures: [],
             skipped_pages: 0,
             skipped_indices: [],
