@@ -42,6 +42,7 @@ import { useJobProgress } from "../hooks/useJobProgress";
 import { useJobCompletionInvalidation } from "../hooks/useJobCompletionInvalidation";
 import { dialogStore } from "../stores/dialog-store";
 import { toast } from "../lib/toast";
+import { PAGE_KINDS } from "../lib/pageKinds";
 import { BulkGlyphMarkDialog } from "./glyph/BulkGlyphMarkDialog";
 
 export interface PageActionsCompactProps {
@@ -53,27 +54,6 @@ export interface PageActionsCompactProps {
 //
 // Spec: pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
 //   "The page toolbar shows and confirms the current page's kind".
-//
-// Built from the generated PageKind type via an exhaustive Record, the same
-// pattern RegionDetail.tsx's REGION_ROLE_RECORD uses for RegionRole — a new
-// kind fails to compile here until it is listed.
-const PAGE_KIND_RECORD: Record<PageKind, true> = {
-  body: true,
-  "chapter opening": true,
-  "title page": true,
-  "half title": true,
-  contents: true,
-  index: true,
-  dedication: true,
-  preface: true,
-  errata: true,
-  plate: true,
-  blank: true,
-  advertisement: true,
-  colophon: true,
-  unknown: true,
-};
-const PAGE_KINDS = Object.keys(PAGE_KIND_RECORD) as PageKind[];
 
 /** The kind a fresh control should preselect: confirmed, else proposed, else none. */
 function defaultKindSelection(page: PagePayload | undefined): PageKind | "" {

@@ -52,33 +52,9 @@ import {
   type BulkConfirmPageKindItem,
 } from "../hooks/usePageKinds";
 import { pageNoUrl } from "../lib/routes";
+import { PAGE_KINDS, type PageKind } from "../lib/pageKinds";
 
-type PageKind = components["schemas"]["PageKind"];
 type PageKindsListItem = components["schemas"]["PageKindsListItem"];
-
-// ─── The kind list ──────────────────────────────────────────────────────────
-//
-// Built from the generated PageKind type via an exhaustive Record, the same
-// pattern RegionDetail.tsx's REGION_ROLE_RECORD uses for RegionRole — a new
-// kind fails to compile here until it is listed.
-const PAGE_KIND_RECORD: Record<PageKind, true> = {
-  body: true,
-  "chapter opening": true,
-  "title page": true,
-  "half title": true,
-  contents: true,
-  index: true,
-  dedication: true,
-  preface: true,
-  errata: true,
-  plate: true,
-  blank: true,
-  advertisement: true,
-  colophon: true,
-  unknown: true,
-};
-
-const PAGE_KINDS = Object.keys(PAGE_KIND_RECORD) as PageKind[];
 
 type ReviewFilter = "unreviewed" | "all";
 
