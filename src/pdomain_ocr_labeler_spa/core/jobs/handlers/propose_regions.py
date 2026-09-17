@@ -63,6 +63,14 @@ construction instead, mirroring ``core/jobs/handlers/reload_ocr.py``'s own
 context wired), the run falls back to considering only pages already in
 memory — today's behavior — and logs it.
 
+A page this loop loads is not discarded afterward: like paging through the
+book, or the bulk page-kind confirm route's own ``ensure_page_model`` calls,
+it goes into ``project_state.page_states`` and stays there for the life of
+the loaded project. One run of this job therefore loads every page with
+stored OCR into memory for the loaded project's whole lifetime, not just for
+this one run — the next call (this job, or any other route) finds those
+pages already loaded and skips their ``ensure_page_model`` call entirely.
+
 The page-kind journals are each read in full, once, up front — not once per
 page. ``PageKindReviewedStore.reviewed_page_indices`` returns every reviewed
 page index from one read, so the eligibility loop and
