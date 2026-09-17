@@ -124,3 +124,54 @@ def test_measure_book_on_a_book_with_no_pages_returns_empty(tmp_path: Path) -> N
     assert result.classifications == ()
     assert result.page_indices == ()
     assert result.templates.has_type_page is False
+
+
+def test_measure_book_stops_early_when_should_stop_returns_true(tmp_path: Path) -> None:
+    """``should_stop`` — the shared cancel-check seam — halts the loop mid-book.
+
+    Checked at the top of each page's iteration, before that page is
+    measured, so a stop noticed after page 0 leaves pages 1 and 2 unmeasured
+    (P1-CANCEL, ``docs/issues/2026-07-21-job-cancel-incomplete.md``).
+    """
+    from pdomain_ocr_labeler_spa.core.page_measurement import measure_book
+
+    seen: list[tuple[int, int]] = []
+
+    async def on_page_measured(current: int, total: int) -> None:
+        seen.append((current, total))
+
+    project_state, project = _project_state(tmp_path, page_count=3)
+    result = asyncio.run(
+        measure_book(
+            project,
+            project_state=project_state,
+            measure_fn=_fake_measurement,
+            on_page_measured=on_page_measured,
+            should_stop=lambda: len(seen) >= 1,
+        )
+    )
+
+    assert len(result.measurements) == 1
+    assert result.page_indices == (0,)
+    assert seen == [(1, 3)]
+
+
+def test_measure_book_should_stop_true_from_the_start_measures_nothing(tmp_path: Path) -> None:
+    from pdomain_ocr_labeler_spa.core.page_measurement import measure_book
+
+    async def _noop(current: int, total: int) -> None:
+        del current, total
+
+    project_state, project = _project_state(tmp_path, page_count=2)
+    result = asyncio.run(
+        measure_book(
+            project,
+            project_state=project_state,
+            measure_fn=_fake_measurement,
+            on_page_measured=_noop,
+            should_stop=lambda: True,
+        )
+    )
+
+    assert result.measurements == ()
+    assert result.page_indices == ()

@@ -170,6 +170,10 @@ class _FakeRunner:
         self._jobs: dict[str, Job] = {}
         self.updates: list[dict[str, Any]] = []
 
+    def is_cancelled(self, job_id: str) -> bool:
+        job = self._jobs.get(job_id)
+        return job is not None and job.status is JobStatus.CANCELLED
+
     async def update_progress(
         self,
         job_id: str,

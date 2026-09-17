@@ -229,6 +229,19 @@ class JobRunner:
         await self._emit(cancelled)
         return cancelled
 
+    def is_cancelled(self, job_id: str) -> bool:
+        """Return whether ``job_id`` has been cooperatively cancelled.
+
+        The shared way for a handler to ask "has this been cancelled" —
+        modeled on the inline ``runner._jobs[...].status == CANCELLED`` poll
+        the export handler used before every other long-running handler grew
+        its own copy of it. Call between units of work (a page, a batch) so
+        the check happens without reaching into ``self._jobs`` directly. See
+        ``docs/issues/2026-07-21-job-cancel-incomplete.md`` (P1-CANCEL).
+        """
+        job = self._jobs.get(job_id)
+        return job is not None and job.status is JobStatus.CANCELLED
+
     async def update_progress(
         self,
         job_id: str,

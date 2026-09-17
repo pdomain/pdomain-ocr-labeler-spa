@@ -489,3 +489,178 @@ def test_a_legacy_typography_payload_is_skipped_not_fatal(
     _current, _total, final_message = seen[-1]
     assert "1 page(s)" in final_message
     assert "legacy review data" in final_message
+
+
+# ---------------------------------------------------------------------------
+# Cancel — P1-CANCEL (docs/issues/2026-07-21-job-cancel-incomplete.md)
+# ---------------------------------------------------------------------------
+
+
+def test_cancel_during_lazy_load_journals_nothing(proposal_run_lazy_load: Any) -> None:
+    """A cancel noticed while loading pages leaves nothing journalled.
+
+    The proposal run row isn't appended until after the measurement pass, so
+    a cancel this early is honest with "nothing recorded".
+    """
+    import asyncio
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
+    from pdomain_ocr_labeler_spa.core.jobs.runner import JobStatus
+    from pdomain_ocr_labeler_spa.core.notifications import NotificationKind, NotificationQueue
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    runner, job, project_state, loader = proposal_run_lazy_load
+    notification_queue = NotificationQueue()
+    runner.context["notification_queue"] = notification_queue
+    original_load_labeled = loader.load_labeled
+
+    def _load_labeled_then_cancel(page_index: int) -> Any:
+        result = original_load_labeled(page_index)
+        if page_index == 0:
+            # Simulate a cancel request landing while page 0 is loading.
+            current = runner._jobs[job.job_id]
+            runner._jobs[job.job_id] = current.model_copy(update={"status": JobStatus.CANCELLED})
+        return result
+
+    loader.load_labeled = _load_labeled_then_cancel
+
+    asyncio.run(handle_propose_regions(runner, job))
+
+    # Only page 0 was loaded — the loop stopped at the top of the next
+    # iteration (page 1) once it noticed the cancel.
+    assert loader.load_labeled_calls == [0]
+
+    project = project_state.loaded_project
+    assert project is not None
+    assert RegionProposalLog(project.project_root).runs() == []
+
+    final_job = runner.get_job(job.job_id)
+    assert final_job is not None
+    assert final_job.status is JobStatus.CANCELLED
+    assert "cancelled" in final_job.message.lower()
+    assert "nothing recorded" in final_job.message.lower()
+
+    # A toast reaches a live client even though the SSE channel closed the
+    # instant request_cancel emitted the terminal frame.
+    notifications = notification_queue.snapshot()
+    assert len(notifications) == 1
+    assert notifications[0].kind == NotificationKind.INFO
+    assert "cancel" in notifications[0].message.lower()
+
+
+def test_cancel_during_measurement_journals_nothing(proposal_run_ready: Any) -> None:
+    """A cancel noticed mid-measurement also leaves nothing journalled.
+
+    The run row is appended after the measurement pass, not before it, so
+    this is the same "nothing recorded" invariant as the lazy-load phase.
+    """
+    import asyncio
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
+    from pdomain_ocr_labeler_spa.core.jobs.runner import JobStatus
+    from pdomain_ocr_labeler_spa.core.notifications import NotificationKind, NotificationQueue
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    runner, job, project_state = proposal_run_ready
+    notification_queue = NotificationQueue()
+    runner.context["notification_queue"] = notification_queue
+    original_measure_fn = runner.context["propose_regions_measure_fn"]
+    calls = 0
+
+    def _measure_then_cancel(project_id: str, page: object) -> Any:
+        nonlocal calls
+        calls += 1
+        result = original_measure_fn(project_id, page)
+        if calls == 1:
+            # Simulate a cancel request landing while page 0 is being measured.
+            current = runner._jobs[job.job_id]
+            runner._jobs[job.job_id] = current.model_copy(update={"status": JobStatus.CANCELLED})
+        return result
+
+    runner.context["propose_regions_measure_fn"] = _measure_then_cancel
+
+    asyncio.run(handle_propose_regions(runner, job))
+
+    project = project_state.loaded_project
+    assert project is not None
+    assert RegionProposalLog(project.project_root).runs() == []
+
+    final_job = runner.get_job(job.job_id)
+    assert final_job is not None
+    assert final_job.status is JobStatus.CANCELLED
+    assert "cancelled" in final_job.message.lower()
+    assert "nothing recorded" in final_job.message.lower()
+
+    notifications = notification_queue.snapshot()
+    assert len(notifications) == 1
+    assert notifications[0].kind == NotificationKind.INFO
+    assert "cancel" in notifications[0].message.lower()
+
+
+def test_cancel_during_detection_journals_only_what_was_already_proposed(
+    proposal_run_ready: Any,
+) -> None:
+    """A cancel noticed mid-detection leaves the run row and its proposals so far.
+
+    Unlike the earlier phases, ``proposal_log.append_proposals`` runs per
+    page inside the detection loop — a cancel here does not "undo" an
+    already-durable write, and the final message must say exactly what was
+    written rather than implying nothing happened.
+    """
+    import asyncio
+
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
+    from pdomain_ocr_labeler_spa.core.jobs.runner import JobStatus
+    from pdomain_ocr_labeler_spa.core.notifications import NotificationKind, NotificationQueue
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    runner, job, project_state = proposal_run_ready
+    notification_queue = NotificationQueue()
+    runner.context["notification_queue"] = notification_queue
+    detector_calls: list[int] = []
+
+    def _detector(detector_input: DetectorInput) -> list[DetectedRegion]:
+        detector_calls.append(detector_input.page_index)
+        if len(detector_calls) == 1:
+            # Simulate a cancel request landing while page 0 is being detected.
+            current = runner._jobs[job.job_id]
+            runner._jobs[job.job_id] = current.model_copy(update={"status": JobStatus.CANCELLED})
+        return [
+            DetectedRegion(
+                role=RegionRole.PAGE_HEADER,
+                box=(10, 20, 190, 40),
+                confidence=0.75,
+                evidence={"signal": "test"},
+            )
+        ]
+
+    runner.context["region_detector"] = _detector
+    asyncio.run(handle_propose_regions(runner, job))
+
+    # Only page 0's detector call happened — the loop stopped at the top of
+    # the next iteration (page 1) once it noticed the cancel.
+    assert detector_calls == [0]
+
+    project = project_state.loaded_project
+    assert project is not None
+    log = RegionProposalLog(project.project_root)
+    runs = log.runs()
+    assert len(runs) == 1
+    proposals = [p for idx in (0, 1) for p in log.proposals_for_page(idx, run_id=runs[0].run_id)]
+    assert len(proposals) == 1
+    assert proposals[0].page_index == 0
+
+    final_job = runner.get_job(job.job_id)
+    assert final_job is not None
+    assert final_job.status is JobStatus.CANCELLED
+    assert "cancelled" in final_job.message.lower()
+    assert "1 region" in final_job.message
+    assert "1 of 2" in final_job.message
+
+    notifications = notification_queue.snapshot()
+    assert len(notifications) == 1
+    assert notifications[0].kind == NotificationKind.INFO
+    assert "cancel" in notifications[0].message.lower()

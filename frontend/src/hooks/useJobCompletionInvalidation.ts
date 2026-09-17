@@ -71,6 +71,20 @@ export interface UseJobCompletionInvalidationOptions {
    * latest event is passed through verbatim.
    */
   onRunning?: (jobId: string, event: JobProgressEvent) => void;
+
+  /**
+   * Optional callback fired once on the `"cancelled"` transition — the
+   * cooperative-cancel terminal state (P1-CANCEL), distinct from both
+   * `"complete"` and `"error"`. The terminal `JobProgressEvent` is passed
+   * through so the caller can show the backend's own summary of what ran
+   * before the cancel took effect.
+   *
+   * Unlike `"complete"`, this hook does not invalidate `invalidationKey`
+   * on cancel — whether a cancelled run left anything durable behind is
+   * handler-specific (some do, some don't), so that decision stays with
+   * the call site, the same way `"error"` already works.
+   */
+  onCancelled?: (jobId: string, event: JobProgressEvent) => void;
 }
 
 /**
@@ -96,18 +110,27 @@ export function useJobCompletionInvalidation({
   onComplete,
   onError,
   onRunning,
+  onCancelled,
 }: UseJobCompletionInvalidationOptions): void {
   const qc = useQueryClient();
 
   useEffect(() => {
     if (!activeJobId || jobProgress === null) return;
 
-    if (jobProgress.status === "complete") {
+    // "cancelled" is a valid wire status the backend emits (P1-CANCEL) even
+    // though the generated `JobStatus` union is stale and omits it — see
+    // useJobProgress.ts's own note on the same gap.
+    const status: string = jobProgress.status;
+
+    if (status === "complete") {
       void qc.invalidateQueries({ queryKey: invalidationKey });
       onComplete?.(activeJobId, jobProgress);
       setActiveJobId(null);
-    } else if (jobProgress.status === "error") {
+    } else if (status === "error") {
       onError?.(activeJobId, jobProgress.error_message ?? null);
+      setActiveJobId(null);
+    } else if (status === "cancelled") {
+      onCancelled?.(activeJobId, jobProgress);
       setActiveJobId(null);
     } else {
       onRunning?.(activeJobId, jobProgress);

@@ -85,6 +85,7 @@ async def measure_book(
     project_state: ProjectState,
     measure_fn: MeasurePageFn,
     on_page_measured: ProgressFn,
+    should_stop: Callable[[], bool] | None = None,
 ) -> MeasuredBook:
     """Measure every page of ``project`` through a verified lease, fit its
     templates, and classify it.
@@ -97,12 +98,22 @@ async def measure_book(
     project has nothing to lease: ``leased_labeling_page`` is then a no-op and
     ``labeling_image_path`` degrades to ``image_path`` unchanged, so one code
     path serves both project kinds.
+
+    ``should_stop`` (optional), checked at the top of each page's iteration
+    before that page's own bytes are read — a caller's cooperative cancel
+    check (e.g. ``JobRunner.is_cancelled``). When it returns True the pass
+    stops measuring further pages and returns whatever it already measured;
+    ``fit_book_templates`` / ``classify_pages`` both tolerate an empty or
+    partial ``measured`` list. This never raises on cancel — the caller
+    decides what a partial ``MeasuredBook`` means for its own journal.
     """
     image_paths = list(project.image_paths)
     total = len(image_paths)
     measured: list[PageMeasurement] = []
     measured_page_indices: list[int] = []
     for page_index, image_path in enumerate(image_paths):
+        if should_stop is not None and should_stop():
+            break
         # The lease is entered through an ``ExitStack`` rather than a ``with``
         # inside a ``try``, so only ``open_labeling_page``'s own ``ValueError``
         # is attributed to the lease. A measurement function may raise

@@ -16,10 +16,16 @@ Output layout::
 style label otherwise (e.g. ``"italics"``).  Multiple style filters
 produce multiple subfolders in one run.
 
-Cancel support: the handler checks ``runner._jobs[job_id].status`` between
-page iterations.  On cancellation it ``shutil.rmtree``s the partial output
-dir and emits nothing further (the runner's ``request_cancel`` already
-emitted the CANCELLED event).
+Cancel support: the handler checks ``runner.is_cancelled(job_id)`` (the
+shared cancel-check helper on ``JobRunner``) between page iterations.  On
+cancellation it ``shutil.rmtree``s the partial output dir and reports a
+final progress message naming how many pages were exported before the
+cancel landed.  The runner's ``request_cancel`` already emitted the
+terminal CANCELLED SSE event and closed the broker; the extra
+``update_progress`` call here only updates the in-memory ``Job.message``
+for HTTP pollers — it does not reopen the SSE stream, so it also queues a
+``NotificationKind.INFO`` toast (when a queue is wired) as the channel a
+live client actually still has open.
 
 ### DocTRExportOperations
 
@@ -61,6 +67,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ...notifications import NotificationKind, NotificationQueue
 from ...project_state import ProjectState
 
 if TYPE_CHECKING:
@@ -687,8 +694,6 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
 
     Spec: ``docs/specs/2026-05-12-export-design.md §Export flow``.
     """
-    from ..runner import JobStatus  # avoid circular at module level
-
     payload = job.payload
     project_id = job.project_id or ""
     scope = payload.get("scope", "all_validated")
@@ -773,13 +778,24 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
     words_exported_recognition = 0
     pages_skipped_not_validated = 0
     for page_num, (ref, image_path, frozen_page) in enumerate(pages_to_export):
-        # Cooperative cancel check.
-        current_job = runner._jobs.get(job.job_id)
-        if current_job and current_job.status == JobStatus.CANCELLED:
+        # Cooperative cancel check — shared helper, see JobRunner.is_cancelled.
+        if runner.is_cancelled(job.job_id):
             # rmtree partial output for all subfolders.
             project_export_root = data_root / _DOCTR_EXPORT_DIRNAME / project_id
             if project_export_root.exists():
                 shutil.rmtree(project_export_root, ignore_errors=True)
+            cancel_message = (
+                f"Cancelled after exporting {exported_count} of {total_pages} page(s); partial output removed"
+            )
+            notification_queue = runner.context.get("notification_queue")
+            if isinstance(notification_queue, NotificationQueue):
+                notification_queue.queue(NotificationKind.INFO, f"Export {cancel_message.lower()}")
+            await runner.update_progress(
+                job.job_id,
+                current=exported_count,
+                total=total_pages,
+                message=cancel_message,
+            )
             return
 
         page = frozen_page if frozen_page is not None else load_export_page(ref, store)

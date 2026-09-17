@@ -28,6 +28,16 @@ The handler:
 4. Honors ``overwrite_manual``: skips pages whose aggregate
    ``rotation_source == "manual"`` unless set.
 5. Emits real per-page progress events.
+
+Cancel support: the loop checks ``runner.is_cancelled(job_id)`` (the shared
+cancel-check helper on ``JobRunner``) at the top of each page iteration,
+before that page's detect/rotate/re-OCR/persist sequence starts. A page
+already mid-sequence when cancel lands finishes normally — the same as this
+handler's own per-page failure path, which logs and continues rather than
+rolling a partial rotation back — so cancel never abandons a half-written
+page. On cancel the handler reports a final progress message naming how
+many pages it had processed and rotated before stopping (P1-CANCEL,
+``docs/issues/2026-07-21-job-cancel-incomplete.md``).
 """
 
 from __future__ import annotations
@@ -167,6 +177,27 @@ async def handle_auto_rotate_all(runner: JobRunner, job: Job) -> None:
     skipped_pages: list[int] = []
 
     for page_idx in range(page_count):
+        # Cooperative cancel check — shared helper, see JobRunner.is_cancelled.
+        # Checked before this page's own detect/rotate/re-OCR/persist
+        # sequence starts, so cancel never interrupts a page already in
+        # flight (P1-CANCEL).
+        if runner.is_cancelled(job.job_id):
+            notification_queue.queue(
+                NotificationKind.INFO,
+                f"Auto-rotate cancelled after processing {page_idx} of {page_count} page(s) "
+                f"({len(rotated_pages)} rotated).",
+            )
+            await runner.update_progress(
+                job.job_id,
+                current=page_idx,
+                total=page_count,
+                message=(
+                    f"Cancelled after processing {page_idx} of {page_count} page(s); "
+                    f"{len(rotated_pages)} rotated"
+                ),
+            )
+            return
+
         src_path = Path(project.image_paths[page_idx]).resolve()
 
         # Security: skip pages whose image path escapes the project root.
