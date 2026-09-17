@@ -77,8 +77,17 @@ As of 2026-09-17:
   and `p` step through undecided proposals, `enter` accepts, `x` rejects, and selection advances by
   itself. The page actions menu starts both proposal runs. `tests/e2e/test_region_review_loop.py`
   drives the loop in a real browser.
-- **Not built yet:** drawing a region, resizing a box, editing word membership in the UI, reviewing
-  page kinds, and a book-wide review queue.
+- **Decisions carry across runs.** A new proposal matching a confirmed region, same role and box IoU
+  of at least 0.7, gets a `carried` decision naming that region, so a re-run does not bring back
+  reviewed work. The carry runs under the page lock. Deleting a region rejects every proposal whose
+  latest decision names it.
+- **A book-wide review queue.** `GET .../regions/review-queue` returns the book's undecided count, a
+  per-page summary, and up to 500 items in reading or confidence order. It uses the same
+  undecided rule as the page view. In the SPA, `]` and `[` jump to the next or previous page with
+  undecided proposals, the rail's region target shows the book's count as a badge, and emptying a
+  page says how many remain in the book. `tests/e2e/test_review_queue_navigation.py` drives it.
+- **Not built yet:** drawing a region, resizing a box, editing word membership in the UI, and
+  reviewing page kinds.
 
 Page lifecycle types now have one import owner. Production and test callers
 import `PageRecord` and `RotationSource` from `pdomain_ops.pages`; the temporary
