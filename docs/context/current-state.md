@@ -43,8 +43,17 @@ persist rotation metadata. The implementation is in
 `tests/e2e/test_rotate_parity.py`. Earlier documentation that called these
 handlers stubs was stale.
 
-The labeling track now runs end to end: a machine proposes regions and a person reviews them.
-It was designed in `pdomain-ocr-synth` and built here. As of 2026-09-17:
+The labeling track runs end to end on synthetic test pages, and not yet on a real book. It was
+designed in `pdomain-ocr-synth` and built here.
+
+**On real OCR output the region pipeline fails, and a fix is in progress.** The first run on a real
+book, 2026-09-17, found that DocTR word boxes are normalized to 0-to-1 coordinates while every
+region test builds pixel-space pages. As a result the furniture detector skips every real page and
+proposes nothing, accepting a proposal returns 400 mislabelled `invalid_region_role`, and a confirmed
+region would be served in 0-to-1 coordinates. The API already serves word boxes in source pixels
+through `_bbox_to_model`; region boxes need the same conversion at the boundary.
+
+As of 2026-09-17:
 
 - **Page kind** is proposed by a book-scoped `propose_page_kinds` job, which measures every page
   through `pdomain-pgdp-measure` and classifies the book against its own fitted templates. A person
