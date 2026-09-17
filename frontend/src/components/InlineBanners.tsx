@@ -19,17 +19,26 @@ import { Banner } from "@pdomain/pdomain-ui/primitives";
 interface OcrFailedBannerProps {
   /** True when the current page's OCR run failed. */
   ocrFailed?: boolean;
+  /**
+   * Optional detail from `PagePayload.page_load_error.message` (issue
+   * 2026-08-08-get-page-hides-ocr-failures) — shown alongside the generic
+   * headline when the backend reported a specific loader failure.
+   */
+  message?: string | null;
 }
 
 /**
- * Inline banner shown when `pageRecord.ocr_failed === true`.
+ * Inline banner shown when `pageRecord.ocr_failed === true` or when the
+ * backend stamped `PagePayload.page_load_error` (a loader failure on the
+ * on-demand OCR trigger — issue 2026-08-08-get-page-hides-ocr-failures).
  * Spec: "OCR failed for this page" sticky error.
  */
-export function OcrFailedBanner({ ocrFailed }: OcrFailedBannerProps) {
+export function OcrFailedBanner({ ocrFailed, message }: OcrFailedBannerProps) {
   if (!ocrFailed) return null;
   return (
     <Banner tone="danger" data-testid="banner-ocr-failed" role="alert">
       OCR failed for this page. Try reloading OCR from the toolbar.
+      {message ? ` (${message})` : ""}
     </Banner>
   );
 }

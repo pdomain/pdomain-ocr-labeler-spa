@@ -205,6 +205,7 @@ function pageFixture() {
     generation: 1,
     page_text_ocr: "ocr text",
     page_text_gt: "gt text",
+    page_load_error: null as { error: string; message: string } | null,
     extra: {},
   };
 }
@@ -397,6 +398,36 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     );
     renderProjectPage();
     expect(await screen.findByTestId("banner-ocr-failed")).toBeInTheDocument();
+  });
+
+  it("does not render OcrFailedBanner for a page with no text and no page_load_error", async () => {
+    // issue 2026-08-08-get-page-hides-ocr-failures: a page that genuinely
+    // has no OCR text (the default fixture: empty line_matches, no
+    // page_load_error) must render exactly as it does today — no banner.
+    server.use(
+      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid/pages/:idx", () => HttpResponse.json(pageFixture())),
+    );
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    expect(screen.queryByTestId("banner-ocr-failed")).toBeNull();
+  });
+
+  it("renders OcrFailedBanner with the loader message when page_load_error is set", async () => {
+    // issue 2026-08-08-get-page-hides-ocr-failures: a genuine loader
+    // failure must be visible, distinct from "OCR ran and found no text".
+    server.use(
+      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid/pages/:idx", () => {
+        const page = pageFixture();
+        page.page_load_error = { error: "ocr_load_failed", message: "doctr predictor unavailable" };
+        return HttpResponse.json(page);
+      }),
+    );
+    renderProjectPage();
+    const banner = await screen.findByTestId("banner-ocr-failed");
+    expect(banner).toBeInTheDocument();
+    expect(banner.textContent).toContain("doctr predictor unavailable");
   });
 
   it("IS-1: auto-redirects to / and does NOT render ProjectNotFoundBanner when project 404s", async () => {

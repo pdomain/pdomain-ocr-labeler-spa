@@ -972,7 +972,10 @@ export default function ProjectPage() {
         />
       </div>
       <div data-testid="inline-banners" className="flex flex-col gap-1 p-1">
-        <OcrFailedBanner ocrFailed={pageRecord?.ocr_failed === true} />
+        <OcrFailedBanner
+          ocrFailed={pageRecord?.ocr_failed === true || pagePayload?.page_load_error != null}
+          message={pagePayload?.page_load_error?.message ?? null}
+        />
         <ImageDriftBanner imageDrift={false} />
       </div>
 
