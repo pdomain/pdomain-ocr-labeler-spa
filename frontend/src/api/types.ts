@@ -702,7 +702,7 @@ export interface paths {
          *     (Lane A / Task A4 — "Reload OCR (Edited)"), event-store write, and
          *     failure envelopes cannot drift between them.
          */
-        post: operations["erase_page_pixels_api_projects__project_id__pages__page_index__erase_pixels_post"];
+        post: operations["erase_page_pixels"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6692,7 +6692,7 @@ export interface operations {
             };
         };
     };
-    erase_page_pixels_api_projects__project_id__pages__page_index__erase_pixels_post: {
+    erase_page_pixels: {
         parameters: {
             query?: never;
             header?: never;

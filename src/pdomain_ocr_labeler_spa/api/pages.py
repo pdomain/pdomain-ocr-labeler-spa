@@ -2107,7 +2107,7 @@ def update_selection(
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
-@router.post("/{page_index}/erase-pixels", response_model=PagePayload)
+@router.post("/{page_index}/erase-pixels", response_model=PagePayload, operation_id="erase_page_pixels")
 def erase_page_pixels(
     *,
     project_id: str,
