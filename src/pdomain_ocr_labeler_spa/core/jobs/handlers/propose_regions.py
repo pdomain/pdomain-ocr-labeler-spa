@@ -196,7 +196,8 @@ def _best_carry_match(proposal: RegionProposal, confirmed: Sequence[ResolvedRegi
 
     A match needs the same role and a box IoU at or above
     ``_CARRY_IOU_THRESHOLD``. When more than one confirmed region qualifies,
-    the highest IoU wins.
+    the highest IoU wins; on an exact tie the earlier region in page order
+    keeps the match.
     """
     best: ResolvedRegion | None = None
     best_iou = _CARRY_IOU_THRESHOLD
@@ -204,7 +205,7 @@ def _best_carry_match(proposal: RegionProposal, confirmed: Sequence[ResolvedRegi
         if region.role != proposal.role:
             continue
         iou = _box_iou(proposal.box, region.box)
-        if iou >= best_iou:
+        if iou > best_iou or (best is None and iou == best_iou):
             best = region
             best_iou = iou
     return best
@@ -269,6 +270,52 @@ def _carry_decisions_for_page(
             )
         )
     return decisions, len(regions_with_no_origin)
+
+
+def _carry_page(
+    *,
+    project_state: ProjectState,
+    decision_log: RegionDecisionLog,
+    page_index: int,
+    proposals: Sequence[RegionProposal],
+    origin_by_region_id: Mapping[str, RegionDecision],
+    decided_at: str,
+) -> tuple[int, int]:
+    """Match and append one page's carried decisions under that page's lock.
+
+    Returns the count of carried decisions appended and the count of matched
+    regions with no origin decision. The lock is the one every region route
+    takes, and ``delete_region`` holds it until its rejections are recorded,
+    so a carry can neither read a half-mutated block tree nor append a carry
+    naming a region a concurrent delete has already rejected. A carried
+    decision is append-only and permanent, which a transient digest read is not.
+    Blocking: call it through ``asyncio.to_thread``.
+    """
+    pstate = project_state.page_states[page_index]
+    appended = 0
+    with project_state.get_page_lock(page_index):
+        page = _resolve_live_page(pstate)
+        if page is None:
+            return 0, 0
+        carried, skipped = _carry_decisions_for_page(
+            page=page,
+            proposals=proposals,
+            origin_by_region_id=origin_by_region_id,
+            decided_at=decided_at,
+        )
+        for decision in carried:
+            try:
+                decision_log.append(decision)
+            except OSError:
+                log.warning(
+                    "propose_regions: failed to persist a carried decision for proposal_id=%s page=%d",
+                    decision.proposal_id,
+                    page_index,
+                    exc_info=True,
+                )
+                continue
+            appended += 1
+    return appended, skipped
 
 
 def _book_fit_inputs(
@@ -655,29 +702,17 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
         origin_by_region_id = _origin_decisions_by_region_id(decision_log.decisions())
         decided_at = datetime.now(UTC).isoformat()
         for idx, page_proposals in new_proposals_by_page.items():
-            pstate = project_state.page_states[idx]
-            page = _resolve_live_page(pstate)
-            if page is None:
-                continue
-            carried, skipped = _carry_decisions_for_page(
-                page=page,
+            appended, skipped = await asyncio.to_thread(
+                _carry_page,
+                project_state=project_state,
+                decision_log=decision_log,
+                page_index=idx,
                 proposals=page_proposals,
                 origin_by_region_id=origin_by_region_id,
                 decided_at=decided_at,
             )
+            carried_count += appended
             carry_skipped_region_count += skipped
-            for decision in carried:
-                try:
-                    decision_log.append(decision)
-                except OSError:
-                    log.warning(
-                        "propose_regions: failed to persist a carried decision for proposal_id=%s page=%d",
-                        decision.proposal_id,
-                        idx,
-                        exc_info=True,
-                    )
-                    continue
-                carried_count += 1
 
     if carry_skipped_region_count:
         log.info(

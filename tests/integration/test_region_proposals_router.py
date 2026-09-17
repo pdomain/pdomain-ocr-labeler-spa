@@ -1547,3 +1547,94 @@ def test_deleting_a_region_carried_twice_rejects_the_source_and_both_carries(
     for pid in all_proposal_ids:
         assert proposal_views[pid]["disposition"] == "rejected"
         assert proposal_views[pid]["decided_region_id"] is None
+
+
+def test_two_proposals_matching_one_region_both_carry_and_delete_rejects_both(
+    toolbar_loaded: Any,
+) -> None:
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    region_id = _accept_seeded_proposal(client, project_root, proposal_id="p1", role=RegionRole.POETRY)
+    _mark_page_reviewed(project_root)
+
+    def _two_overlapping(detector_input: Any) -> list[DetectedRegion]:
+        del detector_input
+        return [
+            DetectedRegion(role=RegionRole.POETRY, box=(5, 5, 50, 50), confidence=0.6, evidence={}),
+            DetectedRegion(role=RegionRole.POETRY, box=(6, 6, 50, 50), confidence=0.5, evidence={}),
+        ]
+
+    _run_propose_regions_job(client, detector=_two_overlapping)
+
+    new_proposals = [p for p in RegionProposalLog(project_root).proposals_for_page(0) if p.run_id != "r1"]
+    assert len(new_proposals) == 2
+    latest = RegionDecisionLog(project_root).latest_by_proposal()
+    for proposal in new_proposals:
+        decision = latest[(proposal.proposal_id, proposal.run_id)]
+        assert decision.disposition is Disposition.CARRIED
+        assert decision.region_id == region_id
+
+    deleted = client.delete(f"{_BASE}/regions/{region_id}")
+    assert deleted.status_code == 200, deleted.text
+
+    latest = RegionDecisionLog(project_root).latest_by_proposal()
+    for proposal in new_proposals:
+        assert latest[(proposal.proposal_id, proposal.run_id)].disposition is Disposition.REJECTED
+
+
+def test_carry_waits_for_the_page_lock_before_reading_or_appending(toolbar_loaded: Any) -> None:
+    """A carry must not read a block tree a region route is mutating."""
+    import threading
+
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import _carry_page
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition, RegionProposal
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    region_id = _accept_seeded_proposal(client, project_root, proposal_id="p1", role=RegionRole.POETRY)
+    decision_log = RegionDecisionLog(project_root)
+    origin = next(d for d in decision_log.decisions() if d.region_id == region_id)
+    proposal = RegionProposal(
+        proposal_id="p2",
+        run_id="r2",
+        page_index=0,
+        role=RegionRole.POETRY,
+        box=(5, 5, 50, 50),
+        confidence=0.6,
+        evidence={},
+    )
+    results: list[tuple[int, int]] = []
+
+    def _carry() -> None:
+        results.append(
+            _carry_page(
+                project_state=project_state,
+                decision_log=decision_log,
+                page_index=0,
+                proposals=[proposal],
+                origin_by_region_id={region_id: origin},
+                decided_at="2026-09-17T12:00:00+00:00",
+            )
+        )
+
+    lock = project_state.get_page_lock(0)
+    with lock:
+        worker = threading.Thread(target=_carry)
+        worker.start()
+        worker.join(timeout=0.3)
+        assert worker.is_alive()
+        assert all(d.disposition is not Disposition.CARRIED for d in decision_log.decisions())
+    worker.join(timeout=5)
+    assert not worker.is_alive()
+    assert results == [(1, 0)]
+    assert any(d.disposition is Disposition.CARRIED for d in decision_log.decisions())
