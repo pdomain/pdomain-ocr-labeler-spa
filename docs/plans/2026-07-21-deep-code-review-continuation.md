@@ -263,7 +263,7 @@ Each row is a governed issue under `docs/issues/`. Prefer implementing by issue
 | 1 | `2026-07-21-cli-export-not-store-first.md` — **resolved 2026-08-08**, deleted; see tombstone | P0-CLI-STORE, 1.2–1.5 |
 | 1 | [`docs/issues/2026-07-21-export-normalize-flag-dead.md`](../issues/2026-07-21-export-normalize-flag-dead.md) | P1-NORMALIZE, 1.4 |
 | 2 | [`docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md`](../issues/2026-07-21-glyph-m11-usable-path-incomplete.md) | P0-GLYPH-*, Wave 2 / T1–T11 |
-| 3a | [`docs/issues/2026-07-21-job-sse-fe-be-shape-mismatch.md`](../issues/2026-07-21-job-sse-fe-be-shape-mismatch.md) | P1-JOB-SSE, P1-JOB-TYPE |
+| 3a | done 2026-09-17 in `8275e8f`; see the tombstone in `docs/context/decisions.md` | P1-JOB-SSE, P1-JOB-TYPE |
 | 3b | done 2026-09-17 in `fe396c3`; see the tombstone in `docs/context/decisions.md` | P1-CANVAS-ERASE |
 | 3b | done 2026-09-17 in `81a0325`; see the tombstone in `docs/context/decisions.md` | P1-IMAGE-DRIFT |
 | 3b | done 2026-09-17 in `10ba8b6`; see the tombstone in `docs/context/decisions.md` | P1-CANCEL |
@@ -274,7 +274,7 @@ Each row is a governed issue under `docs/issues/`. Prefer implementing by issue
 | 4 | [`docs/issues/2026-05-22-gh-433-openapi-drift.md`](../issues/2026-05-22-gh-433-openapi-drift.md) | P1-CI-GATES |
 | 4 | [`docs/issues/2026-07-21-e2e-non-blocking-soft-skips.md`](../issues/2026-07-21-e2e-non-blocking-soft-skips.md) | P0-CI-SOFT, P2-E2E-GATE |
 | 5 | [`docs/issues/2026-07-21-suite-launcher-app-shims.md`](../issues/2026-07-21-suite-launcher-app-shims.md) | P1-SUITE |
-| 5 | [`docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`](../issues/2026-07-21-jobs-api-openapi-mismatch.md) | P1-JOBS-API |
+| 5 | done 2026-09-17 in `8275e8f`; see the tombstone in `docs/context/decisions.md` | P1-JOBS-API |
 | 5 | [`docs/issues/2026-07-21-project-list-metadata-filters-noop.md`](../issues/2026-07-21-project-list-metadata-filters-noop.md) | P2-ROOT |
 
 Full catalogue: [`docs/issues/README.md`](../issues/README.md).

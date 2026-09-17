@@ -606,3 +606,31 @@ and browser gates pass on the merged tree.
   handler's post-cancel summary still reaches a closed SSE channel, so it is
   shown through a notification toast instead; reaching the live stream would
   mean changing when the job event stream terminates, for every job type.
+
+### [2026-09-17] Retired: the jobs API and its event stream disagreed with their schema
+
+- Old paths: `docs/issues/2026-07-21-jobs-api-openapi-mismatch.md` and
+  `docs/issues/2026-07-21-job-sse-fe-be-shape-mismatch.md`
+- Outcome: implemented
+- Superseded by: `src/pdomain_ocr_labeler_spa/core/models.py` (`Job`, `JobType`,
+  `JobStatus`, `JobResult`) and `core/jobs/runner.py`
+  (`JobRunner.to_public_job`)
+- Resolved by: `8275e8f` (merge of `fix/jobs-contract`)
+- Rationale kept: the routes declared the `Job` model but returned the
+  in-process runner's dict, and the event stream emitted a third shape, so the
+  generated TypeScript described a response that did not exist and `JobType` was
+  missing four job types the runner actually accepts. One adapter now serializes
+  both, every frame carries the model plus an `event` naming the frame kind, and
+  a typed `result` carries what a handler produced. Two tests keep it honest: a
+  handler with no `JobType` member fails, and a payload key a handler writes that
+  the public result does not expose fails. Field renames are listed in the
+  merge's commits: `job_id` to `id`, `job_type` to `type`, the flat progress
+  fields to `progress.current` and `progress.total`, `message` to
+  `progress.message`, `error` to `error_message`, the two timestamps to one
+  `updated_at`, and the frame's own `type` to `event`. Evidence:
+  `tests/unit/core/jobs/test_job_type_contract.py` and
+  `tests/integration/test_jobs_wire_contract.py`.
+- Remaining work: export stats still appear both flat on the event frame and
+  under `result`, kept for older callers; nothing in this frontend reads the flat
+  copy. The payload-key test is static, so a key written through a helper in
+  another module is still out of its reach, which its docstring says.
