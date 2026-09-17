@@ -152,6 +152,12 @@ The normalize report stays open on its frontend half.
 | [`2026-08-08-ruff-version-skew.md`](2026-08-08-ruff-version-skew.md) | P1-RUFF-SKEW | Medium |
 | [`2026-08-08-dep-refresh-cannot-auto-land.md`](2026-08-08-dep-refresh-cannot-auto-land.md) | P2-DEP-REFRESH | Medium |
 
+## Selection (2026-09-17)
+
+| Issue | ID | Sev |
+| --- | --- | --- |
+| [`2026-09-17-a-word-or-line-selection-jumps-to-another-item-on-page-change.md`](2026-09-17-a-word-or-line-selection-jumps-to-another-item-on-page-change.md) | P2-SELECTION-PAGE | Low |
+
 Resolved reports are deleted, so this index tracks open work only. Past
 resolutions live in the `docs/context/decisions.md` tombstones and in git
 history.
