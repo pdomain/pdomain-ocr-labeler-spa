@@ -28,6 +28,7 @@ import {
   useRedoPage,
   useConfirmPageKind,
   useErasePagePixels,
+  ERASE_PAGE_PIXELS_TIMEOUT_MS,
 } from "./usePageMutations";
 
 function makeWrapper() {
@@ -532,5 +533,38 @@ describe("useErasePagePixels", () => {
     });
 
     expect(invalidateSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ─── useErasePagePixels — request timeout (reviewer finding 2) ─────────────
+// Spec: docs/issues/2026-07-21-canvas-erase-mode-noop.md follow-up review —
+// apiPost issued a bare fetch with no timeout/AbortController, so a request
+// that never settles left any in-flight guard stuck for the life of the
+// mount with no toast and no way back.
+
+describe("useErasePagePixels — request timeout", () => {
+  it("aborts and rejects with a timeout error if the request never settles", async () => {
+    vi.useFakeTimers();
+    try {
+      server.use(
+        // Never resolves — simulates a hung request.
+        http.post(
+          `/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/erase-pixels`,
+          () => new Promise(() => {}),
+        ),
+      );
+      const qc = makeQueryClient();
+      const { result } = renderHook(() => useErasePagePixels(PROJECT_ID, PAGE_IDX), {
+        wrapper: makeWrapperFor(qc),
+      });
+
+      const pending = result.current.mutateAsync({ bbox: { x: 1, y: 2, width: 3, height: 4 } });
+      const assertion = expect(pending).rejects.toThrow(/timed out/i);
+
+      await vi.advanceTimersByTimeAsync(ERASE_PAGE_PIXELS_TIMEOUT_MS);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

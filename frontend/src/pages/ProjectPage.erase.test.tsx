@@ -23,6 +23,7 @@ import { dialogStore } from "../stores/dialog-store";
 import { useUiPrefs } from "../stores/ui-prefs";
 import { viewportStore } from "../stores/viewport-store";
 import { toast } from "../lib/toast";
+import { ERASE_PAGE_PIXELS_TIMEOUT_MS } from "../hooks/usePageMutations";
 
 // ─── Capture onErasePixels ──────────────────────────────────────────────────
 // Mock the LOCAL PageImageCanvas component (not the pdomain-ui one) so we can
@@ -453,5 +454,56 @@ describe("ProjectPage — onErasePixels wired to PageImageCanvas (P1-CANVAS-ERAS
         shape: "rect",
       });
     });
+  });
+
+  // Reviewer finding 2 (low): a request that never settled left the guard
+  // stuck for the life of the mount with no toast and no way back.
+  it("a hung erase request times out, shows an error toast, and releases the guard for a retry", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let postCount = 0;
+      server.use(
+        http.post("/api/projects/:pid/pages/:idx/erase-pixels", () => {
+          postCount += 1;
+          // The first attempt hangs forever (never settles); the retry
+          // after the guard is released succeeds normally.
+          if (postCount === 1) return new Promise(() => {});
+          return HttpResponse.json(pageFixtureWithWords());
+        }),
+      );
+      const errorSpy = vi.spyOn(toast, "error");
+
+      renderProjectPage();
+      await screen.findByTestId("project-page");
+      await waitFor(() => {
+        expect(capturedEncodedScale).toBe(0.5);
+      });
+
+      act(() => {
+        viewportStore.setState({ mode: "erase" });
+      });
+      act(() => {
+        capturedOnErasePixels?.({ x: 20, y: 10, width: 40, height: 15 });
+      });
+      await waitFor(() => expect(postCount).toBe(1));
+
+      await vi.advanceTimersByTimeAsync(ERASE_PAGE_PIXELS_TIMEOUT_MS);
+      await waitFor(() => {
+        expect(errorSpy).toHaveBeenCalled();
+      });
+      const lastMessage = String(errorSpy.mock.calls.at(-1)?.[0]);
+      expect(lastMessage).toMatch(/timed out/i);
+
+      // The guard must be released: a second drag on the SAME page now posts.
+      act(() => {
+        viewportStore.setState({ mode: "erase" });
+      });
+      act(() => {
+        capturedOnErasePixels?.({ x: 20, y: 10, width: 40, height: 15 });
+      });
+      await waitFor(() => expect(postCount).toBe(2));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
