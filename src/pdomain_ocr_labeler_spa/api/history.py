@@ -79,6 +79,14 @@ def _execute_history_op(
        content moves backward) — U-9: the changelog records the op.
     5. Swap the in-memory ``PageState`` payload, re-stamp ``_labeler_page_id``,
        bump generations (page + project, so SSE consumers refresh).
+
+    Steps 1-5 all run under this page's lock (spec §13, same discipline as
+    ``_confirm_page_kind_locked``): a confirm racing an undo/redo must not
+    read ``prior_kind`` or the aggregate mid-restore, and must not land
+    between the marker write and the in-memory swap — either of those would
+    let the page blob's kind and the latest reviewed marker disagree.
+    ``threading.Lock`` is not reentrant, so nothing reachable from inside
+    this block may acquire this same page's lock again.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -93,109 +101,110 @@ def _execute_history_op(
             "history_unavailable",
             f"page {page_index} has no event-store history; load the page first",
         )
-    page_id = pstate.page_id
-    prior_page = _resolve_page_object_for_pages(pstate)
-    prior_kind = prior_page.page_kind if prior_page is not None else None
 
-    try:
-        agg = store.get_page(page_id)
-    except Exception:
-        log.debug("%s: aggregate load failed for page_id=%s", op, page_id)
-        return _history_conflict(
-            "history_unavailable",
-            f"page {page_index} has no event-store history; load the page first",
-        )
-    graph = agg.record.provenance
-    if graph is None:
-        return _history_conflict(
-            "history_unavailable",
-            f"page {page_index} has no provenance graph",
-        )
-
-    depth = _resolve_undo_depth(settings)
-    state = derive_history(graph, depth=depth)
-    target = state.undo_target() if op == "undo" else state.redo_target()
-    if target is None:
-        return _history_conflict(
-            f"{op}_unavailable",
-            f"nothing to {op} for page {page_index}",
-        )
-    current = state.chain[state.cursor]
-
-    target_node = graph.nodes.get(target)
-    if target_node is None or not target_node.blob_refs:  # pragma: no cover - chain invariant
-        return _history_conflict(
-            "history_unavailable",
-            f"restore target {target!r} has no content blob",
-        )
-    restored_hash = target_node.blob_refs[0]
-
-    try:
-        from pdomain_book_tools.ocr.page import Page
-
-        from ..core.labeler_sidecars import (
-            apply_sidecars_to_page_state,
-            parse_content_blob,
-            stamp_sidecars_on_page,
-        )
-
-        page_bytes = store.blobs.read(restored_hash)
-        page_dict, restored_sidecars = parse_content_blob(page_bytes)
-        restored_page = Page.from_dict(page_dict)
-        stamp_sidecars_on_page(restored_page, restored_sidecars)
-    except Exception as exc:
-        log.exception("%s: restore blob read failed for page=%d", op, page_index)
-        return JSONResponse(
-            status_code=500,
-            content=ApiError(
-                error="restore_failed",
-                message=f"failed to read restored content for page {page_index}: {exc}",
-            ).model_dump(),
-        )
-
-    # Append the marker event — the durable record of the revert (U-9).
-    marker = build_history_marker_node(
-        op=op,
-        restores=target,
-        undoes=current,
-        restored_blob_hash=restored_hash,
-        parent_id=graph.head_id,
-    )
-    agg.labeler_edited(
-        provenance_node=marker,
-        changes=[{"type": op, "restores": target, "undoes": current}],
-    )
-    store.save_page(agg)
-
-    # pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
-    # "An undo or redo that changes the kind writes a marker too": the
-    # restored blob can carry an earlier (or no) kind, and without a marker
-    # here the reviewed journal would keep the kind the undo just removed.
-    # Appended after the page save above succeeds, the order confirm_page_kind
-    # already uses. A ``None`` restored kind withdraws the review — see
-    # ``PageKindReviewedMarker``. A failed append logs a warning; the page
-    # change already happened and this route still returns its result.
-    new_kind = restored_page.page_kind
-    if new_kind != prior_kind:
-        try:
-            PageKindReviewedStore(project.project_root).mark_reviewed(
-                page_index,
-                datetime.now(UTC).isoformat(),
-                kind=new_kind,
-                method="history",
-            )
-        except Exception:
-            log.warning(
-                "%s: page-kind reviewed-marker append failed for page=%d", op, page_index, exc_info=True
-            )
-
-    # Swap the in-memory payload under the per-page lock; re-stamp the
-    # aggregate id so subsequent mutations target the same aggregate
-    # (same stamp discipline as the restart read path, local_doctr.py:374).
-    # Wave 0.1: rehydrate char sidecars from the restored blob so maps never
-    # overlay a different content version after undo/redo.
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
+        page_id = pstate.page_id
+        prior_page = _resolve_page_object_for_pages(pstate)
+        prior_kind = prior_page.page_kind if prior_page is not None else None
+
+        try:
+            agg = store.get_page(page_id)
+        except Exception:
+            log.debug("%s: aggregate load failed for page_id=%s", op, page_id)
+            return _history_conflict(
+                "history_unavailable",
+                f"page {page_index} has no event-store history; load the page first",
+            )
+        graph = agg.record.provenance
+        if graph is None:
+            return _history_conflict(
+                "history_unavailable",
+                f"page {page_index} has no provenance graph",
+            )
+
+        depth = _resolve_undo_depth(settings)
+        state = derive_history(graph, depth=depth)
+        target = state.undo_target() if op == "undo" else state.redo_target()
+        if target is None:
+            return _history_conflict(
+                f"{op}_unavailable",
+                f"nothing to {op} for page {page_index}",
+            )
+        current = state.chain[state.cursor]
+
+        target_node = graph.nodes.get(target)
+        if target_node is None or not target_node.blob_refs:  # pragma: no cover - chain invariant
+            return _history_conflict(
+                "history_unavailable",
+                f"restore target {target!r} has no content blob",
+            )
+        restored_hash = target_node.blob_refs[0]
+
+        try:
+            from pdomain_book_tools.ocr.page import Page
+
+            from ..core.labeler_sidecars import (
+                apply_sidecars_to_page_state,
+                parse_content_blob,
+                stamp_sidecars_on_page,
+            )
+
+            page_bytes = store.blobs.read(restored_hash)
+            page_dict, restored_sidecars = parse_content_blob(page_bytes)
+            restored_page = Page.from_dict(page_dict)
+            stamp_sidecars_on_page(restored_page, restored_sidecars)
+        except Exception as exc:
+            log.exception("%s: restore blob read failed for page=%d", op, page_index)
+            return JSONResponse(
+                status_code=500,
+                content=ApiError(
+                    error="restore_failed",
+                    message=f"failed to read restored content for page {page_index}: {exc}",
+                ).model_dump(),
+            )
+
+        # Append the marker event — the durable record of the revert (U-9).
+        marker = build_history_marker_node(
+            op=op,
+            restores=target,
+            undoes=current,
+            restored_blob_hash=restored_hash,
+            parent_id=graph.head_id,
+        )
+        agg.labeler_edited(
+            provenance_node=marker,
+            changes=[{"type": op, "restores": target, "undoes": current}],
+        )
+        store.save_page(agg)
+
+        # pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
+        # "An undo or redo that changes the kind writes a marker too": the
+        # restored blob can carry an earlier (or no) kind, and without a marker
+        # here the reviewed journal would keep the kind the undo just removed.
+        # Appended after the page save above succeeds, the order confirm_page_kind
+        # already uses. A ``None`` restored kind withdraws the review — see
+        # ``PageKindReviewedMarker``. A failed append logs a warning; the page
+        # change already happened and this route still returns its result.
+        new_kind = restored_page.page_kind
+        if new_kind != prior_kind:
+            try:
+                PageKindReviewedStore(project.project_root).mark_reviewed(
+                    page_index,
+                    datetime.now(UTC).isoformat(),
+                    kind=new_kind,
+                    method="history",
+                )
+            except Exception:
+                log.warning(
+                    "%s: page-kind reviewed-marker append failed for page=%d", op, page_index, exc_info=True
+                )
+
+        # Swap the in-memory payload; re-stamp the aggregate id so subsequent
+        # mutations target the same aggregate (same stamp discipline as the
+        # restart read path, local_doctr.py:374). Wave 0.1: rehydrate char
+        # sidecars from the restored blob so maps never overlay a different
+        # content version after undo/redo.
         object.__setattr__(restored_page, "_labeler_page_id", page_id)
         pstate.page_record = PageLoadOutcome(
             page_index=page_index,
@@ -204,7 +213,10 @@ def _execute_history_op(
         )
         apply_sidecars_to_page_state(pstate, restored_sidecars)
         pstate.generation += 1
-    # Bump the project-state generation so SSE consumers refresh.
+    # Bump the project-state generation so SSE consumers refresh. Outside the
+    # page lock — ``set_page_state`` only takes the project lock, and no other
+    # path takes the project lock before a page lock (see reload_ocr's
+    # ``_finalize_reocr_outcome``), so this ordering is deadlock-free either way.
     project_state.set_page_state(page_index, pstate)
 
     payload = _page_payload(

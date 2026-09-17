@@ -419,6 +419,49 @@ def test_a_failed_history_marker_append_still_returns_the_undo_result(
     assert r.json()["page_kind"] == "body"
 
 
+# ── Lock discipline (finding 2, page-kind-review-design.md) ──────────────────
+#
+# "Take the page lock before reading prior_kind / loading the aggregate and
+# hold it through the save, the marker write, and the page state swap."
+
+
+@pytest.mark.integration
+def test_undo_holds_the_page_lock_across_the_save(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A store whose ``save_page`` tries a non-blocking acquire of this same
+    page's lock proves the route already holds it — the acquire must fail.
+    Without the fix, ``_execute_history_op`` only took the lock for the final
+    in-memory swap, so a confirm could read ``prior_kind`` or land between the
+    save and the marker write.
+    """
+    _get_history(client)  # prime: loads the page into memory
+    r = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "the"})
+    assert r.status_code == 200, r.text
+
+    project_state = client.app.state.project_state  # type: ignore[attr-defined]
+    page_store = client.app.state.page_store  # type: ignore[attr-defined]
+    page_lock = project_state.get_page_lock(0)
+
+    acquired_during_save: list[bool] = []
+    original_save_page = page_store.save_page
+
+    def _spying_save_page(agg: object) -> object:
+        acquired = page_lock.acquire(blocking=False)
+        acquired_during_save.append(acquired)
+        if acquired:
+            page_lock.release()
+        return original_save_page(agg)
+
+    monkeypatch.setattr(page_store, "save_page", _spying_save_page)
+
+    r = client.post("/api/projects/book1/pages/0/undo")
+    assert r.status_code == 200, r.text
+    assert acquired_during_save == [False], (
+        "save_page must run while the route already holds this page's lock"
+    )
+
+
 # ── Depth bound (U-8, slice H-D) ─────────────────────────────────────────────
 
 
