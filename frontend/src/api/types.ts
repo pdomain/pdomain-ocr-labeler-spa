@@ -416,12 +416,18 @@ export interface paths {
          *     ``page_record`` and ``line_matches`` without requiring a separate
          *     Reload OCR click.
          *
-         *     A loader failure on that on-demand call degrades to an empty
-         *     ``page_record`` rather than a 500 — the request still succeeds so the
-         *     image renders — but is logged at WARNING and stamped onto
-         *     ``PagePayload.page_load_error`` (issue
+         *     A failure on that on-demand call degrades to an empty ``page_record``
+         *     rather than a 500 — the request still succeeds so the image renders —
+         *     but is stamped onto ``PagePayload.page_load_error`` (issue
          *     2026-08-08-get-page-hides-ocr-failures), distinguishing it from a page
-         *     that legitimately has no OCR text.
+         *     that legitimately has no OCR text. Two distinct causes get two codes:
+         *
+         *     - ``ocr_unavailable`` — the loader itself couldn't be built (DocTR not
+         *       installed, production context keys unwired). A deployment-wide
+         *       condition, not a fact about this page; logged at WARNING once per
+         *       project, DEBUG after.
+         *     - ``ocr_load_failed`` — the loader built fine but this page's OCR run
+         *       raised. Logged at WARNING every time.
          */
         get: operations["get_page_api_projects__project_id__pages__page_index__get"];
         put?: never;
