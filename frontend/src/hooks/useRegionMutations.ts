@@ -12,8 +12,19 @@
 // writes the cache directly, matching every other mutation in hooks/useLineMutations.ts —
 // the routes return a full PagePayload, but this file deliberately never calls
 // setQueryData with it.
+//
+// Whole-branch review defect 1 (a decision can be sent twice): `RegionDetail`
+// and `useRegionReviewHotkeys` each create their own instances of these four
+// mutations, so one instance's `isPending` never sees the other's in-flight
+// request. All four share the `mutationKey` below — a held or double-tapped
+// key, or a key pressed mid-panel-click, would otherwise fire a second
+// request while the first is still in flight. `useRegionDecisionPending`
+// reads that shared key through `useIsMutating`, whose mutation-key filter
+// does a `partialMatchKey` (query-core's `matchMutation`/`utils.ts`) — the
+// same prefix-match semantics `useIsFetching`/query filters use — so any
+// hook instance sees a mutation any other instance started.
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { components } from "../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -22,6 +33,19 @@ type AcceptRegionProposalRequest = components["schemas"]["AcceptRegionProposalRe
 type EditRegionRequest = components["schemas"]["EditRegionRequest"];
 
 // ─── internal helpers ─────────────────────────────────────────────────────
+
+/** The shared `mutationKey` every region-decision mutation below registers under. */
+function decisionMutationKey(projectId: string, pageIndex: number): readonly unknown[] {
+  return ["region-decision", projectId, pageIndex];
+}
+
+/**
+ * True while any accept, reject, edit or delete mutation for this page is
+ * in flight, regardless of which component instance started it.
+ */
+export function useRegionDecisionPending(projectId: string, pageIndex: number): boolean {
+  return useIsMutating({ mutationKey: decisionMutationKey(projectId, pageIndex) }) > 0;
+}
 
 async function apiRequest<T>(url: string, method: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method };
@@ -60,6 +84,7 @@ function pageBase(projectId: string, pageIndex: number): string {
 export function useAcceptProposal(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
   return useMutation<PagePayload, Error, { proposalId: string; role?: RegionRole }>({
+    mutationKey: decisionMutationKey(projectId, pageIndex),
     mutationFn: ({ proposalId, role }) => {
       const body: AcceptRegionProposalRequest = role === undefined ? {} : { role };
       return apiRequest<PagePayload>(
@@ -80,6 +105,7 @@ export function useAcceptProposal(projectId: string, pageIndex: number) {
 export function useRejectProposal(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
   return useMutation<PagePayload, Error, { proposalId: string }>({
+    mutationKey: decisionMutationKey(projectId, pageIndex),
     mutationFn: ({ proposalId }) =>
       apiRequest<PagePayload>(
         `${pageBase(projectId, pageIndex)}/regions/proposals/${encodeURIComponent(proposalId)}/reject`,
@@ -97,6 +123,7 @@ export function useRejectProposal(projectId: string, pageIndex: number) {
 export function useEditRegion(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
   return useMutation<PagePayload, Error, { regionId: string; role: RegionRole }>({
+    mutationKey: decisionMutationKey(projectId, pageIndex),
     mutationFn: ({ regionId, role }) => {
       const body: EditRegionRequest = { role };
       return apiRequest<PagePayload>(
@@ -117,6 +144,7 @@ export function useEditRegion(projectId: string, pageIndex: number) {
 export function useDeleteRegion(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
   return useMutation<PagePayload, Error, { regionId: string }>({
+    mutationKey: decisionMutationKey(projectId, pageIndex),
     mutationFn: ({ regionId }) =>
       apiRequest<PagePayload>(
         `${pageBase(projectId, pageIndex)}/regions/${encodeURIComponent(regionId)}`,

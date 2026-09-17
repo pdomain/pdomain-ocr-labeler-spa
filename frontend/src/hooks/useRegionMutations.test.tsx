@@ -14,7 +14,7 @@
 
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import { server } from "../test/server";
@@ -23,6 +23,7 @@ import {
   useRejectProposal,
   useEditRegion,
   useDeleteRegion,
+  useRegionDecisionPending,
 } from "./useRegionMutations";
 
 const PROJECT_ID = "proj1";
@@ -209,5 +210,82 @@ describe("useDeleteRegion", () => {
     expect(method).toBe("DELETE");
     expect(path).toBe(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/regions/region-1`);
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID, PAGE_IDX] });
+  });
+});
+
+// ─── useRegionDecisionPending ────────────────────────────────────────────────
+//
+// Whole-branch review defect 1: the four mutations above share a
+// `mutationKey`, so `useRegionDecisionPending` (a thin `useIsMutating` read)
+// must see a mutation started by a *different* hook instance — the case that
+// matters, since RegionDetail and useRegionReviewHotkeys each build their own
+// mutation instances from the same QueryClient.
+
+describe("useRegionDecisionPending", () => {
+  it("is false with nothing in flight, true while another hook instance's accept is pending, false once it settles", async () => {
+    let resolveAccept!: () => void;
+    server.use(
+      http.post(
+        "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept",
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveAccept = () =>
+              resolve(
+                HttpResponse.json({
+                  project_id: PROJECT_ID,
+                  page_index: PAGE_IDX,
+                  line_matches: [],
+                }),
+              );
+          }),
+      ),
+    );
+    const qc = makeQueryClient();
+    const wrapper = makeWrapper(qc);
+
+    // Two independent hook instances sharing one QueryClient — standing in
+    // for RegionDetail and useRegionReviewHotkeys, which never share a React
+    // tree but do share the QueryClientProvider.
+    const accept = renderHook(() => useAcceptProposal(PROJECT_ID, PAGE_IDX), { wrapper });
+    const pending = renderHook(() => useRegionDecisionPending(PROJECT_ID, PAGE_IDX), { wrapper });
+
+    expect(pending.result.current).toBe(false);
+
+    act(() => {
+      accept.result.current.mutate({ proposalId: "prop-1" });
+    });
+
+    await waitFor(() => expect(pending.result.current).toBe(true));
+
+    act(() => {
+      resolveAccept();
+    });
+
+    await waitFor(() => expect(pending.result.current).toBe(false));
+  });
+
+  it("does not see a mutation scoped to a different page index", async () => {
+    server.use(
+      http.post(
+        "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept",
+        () => new Promise<Response>(() => {}), // never resolves within this test
+      ),
+    );
+    const qc = makeQueryClient();
+    const wrapper = makeWrapper(qc);
+    const OTHER_PAGE_IDX = PAGE_IDX + 1;
+
+    const accept = renderHook(() => useAcceptProposal(PROJECT_ID, PAGE_IDX), { wrapper });
+    const pendingOtherPage = renderHook(
+      () => useRegionDecisionPending(PROJECT_ID, OTHER_PAGE_IDX),
+      { wrapper },
+    );
+
+    act(() => {
+      accept.result.current.mutate({ proposalId: "prop-1" });
+    });
+
+    await waitFor(() => expect(accept.result.current.isPending).toBe(true));
+    expect(pendingOtherPage.result.current).toBe(false);
   });
 });

@@ -366,6 +366,24 @@ export default function ProjectPage() {
     pageIndex: idx0,
   });
 
+  // ── Region selection scoping (whole-branch review defect 2) ────────────
+  // A region or proposal id belongs to the page it was selected on. Nothing
+  // else cleared it on navigation, so `enter` on a new page could fire an
+  // accept against the new page's URL carrying the old page's proposal id.
+  // Clear only the region level on a page-index change — word, line,
+  // paragraph and block selections predate this fix, and whether they share
+  // the same latent problem is a separate question this fix does not
+  // resolve (see the region review guards report).
+  const prevPageIndexRef = useRef(idx0);
+  useEffect(() => {
+    if (prevPageIndexRef.current !== idx0) {
+      if (selectionStore.getState().level === "region") {
+        clearSelection();
+      }
+      prevPageIndexRef.current = idx0;
+    }
+  }, [idx0]);
+
   // ── ⌘K QuickSearch (D-047) ─────────────────────────────────────────────
   // QuickSearch relocated from the chrome header into the Drawer worklist
   // header (it filters the worklist, which lives in the drawer). The Mod+K

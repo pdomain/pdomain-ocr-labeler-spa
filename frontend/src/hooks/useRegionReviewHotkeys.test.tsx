@@ -276,3 +276,186 @@ describe("useRegionReviewHotkeys: collision regression", () => {
     expect(worklistStore.getState().selectedLineIndex).toBe(3);
   });
 });
+
+// ─── Whole-branch review defect 1: a decision can be sent twice ────────────
+
+describe("useRegionReviewHotkeys: one decision at a time", () => {
+  it("sends one accept request when 'enter' is pressed twice while the first is still pending", async () => {
+    let acceptCount = 0;
+    let resolveFirst!: () => void;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept", () => {
+        acceptCount += 1;
+        return new Promise<Response>((resolve) => {
+          resolveFirst = () => resolve(HttpResponse.json({ ...PAGE }));
+        });
+      }),
+    );
+    act(() => selectProposal("p1"));
+    renderHotkeys(PAGE);
+
+    pressKey("enter");
+    // Let the mutation observer's pending state reach the hook's next render
+    // before the second key arrives — otherwise both handlers would still
+    // close over the pre-mutate `decisionPending=false`, same as a real
+    // double-tap that lands inside one render's worth of wall-clock time
+    // would not (react-query's own scheduling gives every render at least
+    // one JS-engine tick to see the update).
+    await waitFor(() => expect(acceptCount).toBe(1));
+
+    pressKey("enter");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(acceptCount).toBe(1);
+    resolveFirst();
+    await waitFor(() => expect(selectionStore.getState().path.proposalId).toBe("p2"));
+  });
+
+  it("does not fire 'x' while an accept from 'enter' is still pending", async () => {
+    let requestCount = 0;
+    let resolveAccept!: () => void;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept", () => {
+        requestCount += 1;
+        return new Promise<Response>((resolve) => {
+          resolveAccept = () => resolve(HttpResponse.json({ ...PAGE }));
+        });
+      }),
+      http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject", () => {
+        requestCount += 1;
+        return HttpResponse.json({ ...PAGE });
+      }),
+    );
+    act(() => selectProposal("p1"));
+    renderHotkeys(PAGE);
+
+    pressKey("enter");
+    await waitFor(() => expect(requestCount).toBe(1));
+
+    pressKey("x");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(requestCount).toBe(1);
+    resolveAccept();
+  });
+});
+
+describe("useRegionReviewHotkeys: keyboard failures are no longer silent", () => {
+  it("a keyboard accept that 500s shows an error toast and does not advance selection", async () => {
+    const errorSpy = vi.spyOn(toast, "error");
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept", () =>
+        HttpResponse.json({ message: "boom" }, { status: 500 }),
+      ),
+    );
+    act(() => selectProposal("p1"));
+    renderHotkeys(PAGE);
+
+    pressKey("enter");
+
+    await waitFor(() => expect(errorSpy).toHaveBeenCalledWith("Accept failed"));
+    // No advance: still on the proposal that was selected before the failure.
+    expect(selectionStore.getState().path.proposalId).toBe("p1");
+  });
+
+  it("a keyboard reject that 500s shows an error toast and does not advance selection", async () => {
+    const errorSpy = vi.spyOn(toast, "error");
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject", () =>
+        HttpResponse.json({ message: "boom" }, { status: 500 }),
+      ),
+    );
+    act(() => selectProposal("p1"));
+    renderHotkeys(PAGE);
+
+    pressKey("x");
+
+    await waitFor(() => expect(errorSpy).toHaveBeenCalledWith("Reject failed"));
+    expect(selectionStore.getState().path.proposalId).toBe("p1");
+  });
+
+  it("a keyboard delete that 500s shows an error toast", async () => {
+    const errorSpy = vi.spyOn(toast, "error");
+    server.use(
+      http.delete("/api/projects/:pid/pages/:idx/regions/:regionId", () =>
+        HttpResponse.json({ message: "boom" }, { status: 500 }),
+      ),
+    );
+    const page = pageWithConfirmedRegion();
+    act(() => selectRegion("r1"));
+    renderHotkeys(page);
+
+    pressKey("delete");
+    const onConfirm = dialogStore.getState().confirm.onConfirm;
+    act(() => onConfirm?.());
+
+    await waitFor(() => expect(errorSpy).toHaveBeenCalledWith("Delete failed"));
+  });
+});
+
+// ─── Whole-branch review defect 2: a selection can outlive its page ────────
+
+describe("useRegionReviewHotkeys: the selection must still be on the current page", () => {
+  it("'enter' with a proposalId absent from page.regions sends nothing", async () => {
+    let acceptCount = 0;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept", () => {
+        acceptCount += 1;
+        return HttpResponse.json({ ...PAGE });
+      }),
+    );
+    act(() => selectProposal("stale-from-old-page"));
+    renderHotkeys(PAGE);
+
+    pressKey("enter");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(acceptCount).toBe(0);
+  });
+
+  it("'x' with a proposalId absent from page.regions sends nothing", async () => {
+    let rejectCount = 0;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject", () => {
+        rejectCount += 1;
+        return HttpResponse.json({ ...PAGE });
+      }),
+    );
+    act(() => selectProposal("stale-from-old-page"));
+    renderHotkeys(PAGE);
+
+    pressKey("x");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(rejectCount).toBe(0);
+  });
+
+  it("'delete' with a regionId absent from page.regions sends nothing and does not open the confirm dialog", async () => {
+    act(() => selectRegion("stale-region-from-old-page"));
+    renderHotkeys(PAGE);
+
+    pressKey("delete");
+
+    expect(dialogStore.getState().confirm.open).toBe(false);
+  });
+
+  it("'enter' with a proposalId that is now a confirmed region (not undecided) sends nothing", async () => {
+    // Simulates a refetch that just accepted the proposal from elsewhere:
+    // the id now names a confirmed region, not an undecided proposal.
+    let acceptCount = 0;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept", () => {
+        acceptCount += 1;
+        return HttpResponse.json({ ...PAGE });
+      }),
+    );
+    const page = pageWithConfirmedRegion();
+    act(() => selectProposal("r1"));
+    renderHotkeys(page);
+
+    pressKey("enter");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(acceptCount).toBe(0);
+  });
+});
