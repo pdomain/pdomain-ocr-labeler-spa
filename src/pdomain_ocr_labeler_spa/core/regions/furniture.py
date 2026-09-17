@@ -111,6 +111,16 @@ text below it. Measured on real OCR'd pages:
 tallest legitimate band seen, page 30 of ``projectID3fc3d7d03c613``, scored
 3.5. 6 sits well clear of both."""
 
+_FOLIO_PUNCTUATION = ".,;:!?[](){}'\"-"
+"""Stripped from both ends of a cluster's text before it is matched against
+``_FOLIO_PATTERN``. Real OCR renders a folio as ``232.`` or ``[17]`` — the
+punctuation itself never widens the pattern to accept letters."""
+
+
+def _strip_folio_punctuation(text: str) -> str:
+    """Strip the punctuation real OCR wraps a folio in, e.g. ``232.`` or ``[17]``."""
+    return text.strip(_FOLIO_PUNCTUATION)
+
 
 class _ScaledWord(NamedTuple):
     """One word, alongside its box converted to the page's pixel frame.
@@ -149,7 +159,7 @@ class _Cluster:
 
     @property
     def is_folio(self) -> bool:
-        stripped = self.text.replace(" ", "")
+        stripped = _strip_folio_punctuation(self.text.replace(" ", ""))
         return bool(stripped) and bool(_FOLIO_PATTERN.match(stripped))
 
 

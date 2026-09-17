@@ -668,3 +668,32 @@ def test_a_band_at_three_point_five_times_its_words_is_not_skipped() -> None:
     assert band is not None
     assert len(band.words) == 2
     assert len(furniture_region_detector(detector_input)) == 1
+
+
+# ---------------------------------------------------------------------------
+# Fix 2 — a folio OCR'd with surrounding punctuation still reads as a folio.
+# ---------------------------------------------------------------------------
+
+
+def test_a_folio_with_a_trailing_period_is_a_page_number() -> None:
+    """projectID3fc3d7d03c613 page 25's folio came out as ``232.``."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import furniture_region_detector
+
+    words = [
+        _word("PREFACE", 100, 105, 260, 125),
+        _word("232.", 860, 105, 900, 125),
+    ]
+    detected = furniture_region_detector(_input(words))
+    assert [d.role for d in detected] == [RegionRole.PAGE_HEADER, RegionRole.PAGE_NUMBER]
+
+
+def test_a_bracketed_folio_is_a_page_number() -> None:
+    """A folio bracketed as ``[17]`` must not widen the pattern to accept letters."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import furniture_region_detector
+
+    words = [
+        _word("PREFACE", 100, 105, 260, 125),
+        _word("[17]", 860, 105, 900, 125),
+    ]
+    detected = furniture_region_detector(_input(words))
+    assert [d.role for d in detected] == [RegionRole.PAGE_HEADER, RegionRole.PAGE_NUMBER]
