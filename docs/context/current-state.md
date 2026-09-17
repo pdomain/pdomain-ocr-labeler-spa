@@ -69,8 +69,10 @@ As of 2026-09-17:
 - **Proposals come from a geometry engine.** `propose_regions` measures the whole book and runs
   `FurnitureDetector` by default. It proposes a `page header` and a `page number` from each page's top
   furniture bands, splitting head from folio at a gap threshold fitted to each book's own word gaps.
-  Both proposal jobs read page images through a verified per-page lease. A run ends with a summary
-  message saying how many proposals it made and why any pages were skipped.
+  Both proposal jobs read page images through a verified per-page lease. A region run loads any page
+  with stored OCR that nobody has opened, never running OCR itself, so it works right after a
+  restart. A run ends with a summary message saying how many proposals it made and why any pages
+  were skipped.
 - **A person reviews proposals in the SPA.** Key `5` selects the region rail target. A canvas click
   selects the smallest region or proposal under it, and `RegionDetail` accepts, accepts as another
   role, or rejects it, or changes the role of or deletes a confirmed region. From the keyboard, `n`
