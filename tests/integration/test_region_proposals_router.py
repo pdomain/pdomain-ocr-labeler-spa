@@ -1243,3 +1243,57 @@ def test_the_run_summary_reports_the_carried_count(toolbar_loaded: Any) -> None:
     reported = runner.get_job(job.job_id)
     assert reported is not None
     assert "Carried 1 decision(s) from earlier runs." in reported.message
+
+
+# ── Deleting a carried region rejects every proposal that decided it ─────
+
+
+def test_deleting_a_region_carried_twice_rejects_the_source_and_both_carries(
+    toolbar_loaded: Any,
+) -> None:
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    region_id = _accept_seeded_proposal(client, project_root, proposal_id="p1", role=RegionRole.POETRY)
+    _mark_page_reviewed(project_root)
+
+    def _overlapping_detector(detector_input: Any) -> list[DetectedRegion]:
+        del detector_input
+        return [DetectedRegion(role=RegionRole.POETRY, box=(5, 5, 50, 50), confidence=0.6, evidence={})]
+
+    _run_propose_regions_job(client, detector=_overlapping_detector)
+    _run_propose_regions_job(client, detector=_overlapping_detector)
+
+    proposal_log = RegionProposalLog(project_root)
+    carried_proposal_ids = {p.proposal_id for p in proposal_log.proposals_for_page(0) if p.run_id != "r1"}
+    assert len(carried_proposal_ids) == 2
+    all_proposal_ids = {"p1", *carried_proposal_ids}
+
+    deleted = client.delete(f"{_BASE}/regions/{region_id}")
+    assert deleted.status_code == 200, deleted.text
+
+    decision_log = RegionDecisionLog(project_root)
+    latest = decision_log.latest_by_proposal()
+    rejected_proposal_ids = {
+        pid for (pid, _run_id), decision in latest.items() if decision.disposition is Disposition.REJECTED
+    }
+    assert rejected_proposal_ids == all_proposal_ids
+    for pid, run_id in latest:
+        if pid in all_proposal_ids:
+            decision = latest[(pid, run_id)]
+            assert decision.disposition is Disposition.REJECTED
+            assert decision.region_id is None
+            assert decision.run_id == run_id
+
+    payload = client.get(_BASE).json()
+    assert not any(reg["confirmed"] for reg in payload["regions"])
+    proposal_views = {p["proposal_id"]: p for p in payload["proposals"]}
+    for pid in all_proposal_ids:
+        assert proposal_views[pid]["disposition"] == "rejected"
+        assert proposal_views[pid]["decided_region_id"] is None
