@@ -67,9 +67,10 @@ from ...page_kind.proposal_log import PageKindProposalLog
 from ...page_kind.reviewed_store import PageKindReviewedStore
 from ...page_measurement import measure_book
 from ...project_state import PageState, ProjectState
-from ...regions.block_adapter import compute_page_facet_digests
+from ...regions.block_adapter import compute_page_facet_digests, confirmed_regions_from_page
+from ...regions.decision_log import RegionDecisionLog
 from ...regions.detector import BookFittedDetector, DetectorInput, null_region_detector
-from ...regions.models import ProposalRun, RegionProposal
+from ...regions.models import Disposition, ProposalRun, RegionDecision, RegionProposal
 from ...regions.proposal_log import RegionProposalLog
 from ._labeling_page_lease import leased_labeling_page
 
@@ -81,6 +82,7 @@ if TYPE_CHECKING:
     from ...page_measurement import MeasuredBook, MeasurePageFn
     from ...persistence.page_store import LabelerPageStore
     from ...regions.detector import DetectedRegion, RegionDetector
+    from ...regions.models import ResolvedRegion
     from ..runner import Job, JobRunner
 
 log = logging.getLogger(__name__)
@@ -91,6 +93,12 @@ log = logging.getLogger(__name__)
 #: page"). Slice 4's real detector may narrow this; this scaffolding detector
 #: proposes nothing, so a conservative default is safe here.
 _GEOMETRY_FACETS = frozenset({"word_boxes", "line_structure", "page_image"})
+
+#: Minimum box intersection-over-union for a new proposal to carry a person's
+#: earlier confirmation forward (spec §"Decisions must carry across runs
+#: first, or the queue fills with work already done"). Uncalibrated starting
+#: value, per the owner ruling this implements — not derived from data.
+_CARRY_IOU_THRESHOLD = 0.7
 
 
 def _get_required_context(runner: JobRunner) -> tuple[ProjectState, LabelerPageStore | None]:
@@ -164,6 +172,103 @@ def _positions_by_page_index(page_indices: Sequence[int]) -> dict[int, int]:
     makes the join quadratic in the book's page count.
     """
     return {page_index: position for position, page_index in enumerate(page_indices)}
+
+
+def _box_iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
+    """Intersection-over-union of two ``(left, top, right, bottom)`` pixel boxes."""
+    a_left, a_top, a_right, a_bottom = a
+    b_left, b_top, b_right, b_bottom = b
+    inter_width = max(0, min(a_right, b_right) - max(a_left, b_left))
+    inter_height = max(0, min(a_bottom, b_bottom) - max(a_top, b_top))
+    intersection = inter_width * inter_height
+    if intersection <= 0:
+        return 0.0
+    a_area = (a_right - a_left) * (a_bottom - a_top)
+    b_area = (b_right - b_left) * (b_bottom - b_top)
+    union = a_area + b_area - intersection
+    if union <= 0:
+        return 0.0
+    return intersection / union
+
+
+def _best_carry_match(proposal: RegionProposal, confirmed: Sequence[ResolvedRegion]) -> ResolvedRegion | None:
+    """The confirmed region this proposal carries from, or ``None``.
+
+    A match needs the same role and a box IoU at or above
+    ``_CARRY_IOU_THRESHOLD``. When more than one confirmed region qualifies,
+    the highest IoU wins.
+    """
+    best: ResolvedRegion | None = None
+    best_iou = _CARRY_IOU_THRESHOLD
+    for region in confirmed:
+        if region.role != proposal.role:
+            continue
+        iou = _box_iou(proposal.box, region.box)
+        if iou >= best_iou:
+            best = region
+            best_iou = iou
+    return best
+
+
+def _origin_decisions_by_region_id(
+    decisions: Sequence[RegionDecision],
+) -> dict[str, RegionDecision]:
+    """Map each confirmed region to the decision that originally confirmed it.
+
+    The origin is the ``accepted`` or ``edited`` decision naming a region's
+    id — never a ``carried`` one, or a second re-run would name a previous
+    carry as the origin instead of the person's own confirmation. Read once
+    per run over the whole decision journal, not once per proposal.
+    """
+    origin_by_region_id: dict[str, RegionDecision] = {}
+    for decision in decisions:
+        if decision.disposition not in (Disposition.ACCEPTED, Disposition.EDITED):
+            continue
+        if decision.region_id is None:
+            continue
+        if decision.region_id not in origin_by_region_id:
+            origin_by_region_id[decision.region_id] = decision
+    return origin_by_region_id
+
+
+def _carry_decisions_for_page(
+    *,
+    page: Page,
+    proposals: Sequence[RegionProposal],
+    origin_by_region_id: Mapping[str, RegionDecision],
+    decided_at: str,
+) -> tuple[list[RegionDecision], int]:
+    """Carried decisions for one page's newly proposed regions.
+
+    Returns the decisions to append, plus the count of distinct confirmed
+    regions that matched a new proposal but had no origin decision to carry
+    from — a hand-drawn region, or one whose confirming decision is missing.
+    """
+    confirmed = confirmed_regions_from_page(page)
+    decisions: list[RegionDecision] = []
+    regions_with_no_origin: set[str] = set()
+    for proposal in proposals:
+        match = _best_carry_match(proposal, confirmed)
+        if match is None or match.region_id is None:
+            continue
+        origin = origin_by_region_id.get(match.region_id)
+        if origin is None:
+            regions_with_no_origin.add(match.region_id)
+            continue
+        decisions.append(
+            RegionDecision(
+                decision_id=uuid.uuid4().hex,
+                run_id=proposal.run_id,
+                proposal_id=proposal.proposal_id,
+                disposition=Disposition.CARRIED,
+                region_id=match.region_id,
+                actor="propose_regions",
+                decided_at=decided_at,
+                carried_from_run_id=origin.run_id,
+                carried_from_proposal_id=origin.proposal_id,
+            )
+        )
+    return decisions, len(regions_with_no_origin)
 
 
 def _book_fit_inputs(
@@ -408,6 +513,10 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     lease_failed_indices: list[int] = []
     no_measurement_indices: list[int] = []
     detector_failed_indices: list[int] = []
+    # Proposals this run wrote, by page — read back afterward for the carry
+    # pass rather than re-reading the journal, since this run already holds
+    # them in memory.
+    new_proposals_by_page: dict[int, list[RegionProposal]] = {}
     for i, idx in enumerate(eligible_indices, start=1):
         pstate = project_state.page_states[idx]
         page = _resolve_live_page(pstate)
@@ -501,6 +610,7 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
                 proposal_log.append_proposals(proposals)
                 proposal_count += len(proposals)
                 detected_page_indices.add(idx)
+                new_proposals_by_page[idx] = proposals
         await runner.update_progress(
             job.job_id, current=measure_total + i, total=combined_total, message=f"page {idx}"
         )
@@ -532,12 +642,59 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
             detector_failed_indices,
         )
 
+    # A new proposal that matches a confirmed region — same role, box IoU at
+    # or above ``_CARRY_IOU_THRESHOLD`` — carries that region's earlier
+    # confirmation forward as its own decision, so a re-run does not re-
+    # propose work a person already did (spec §"Decisions must carry across
+    # runs first"). The decision journal is read once here, for the whole
+    # run, not once per proposal.
+    decision_log = RegionDecisionLog(project.project_root)
+    carried_count = 0
+    carry_skipped_region_count = 0
+    if new_proposals_by_page:
+        origin_by_region_id = _origin_decisions_by_region_id(decision_log.decisions())
+        decided_at = datetime.now(UTC).isoformat()
+        for idx, page_proposals in new_proposals_by_page.items():
+            pstate = project_state.page_states[idx]
+            page = _resolve_live_page(pstate)
+            if page is None:
+                continue
+            carried, skipped = _carry_decisions_for_page(
+                page=page,
+                proposals=page_proposals,
+                origin_by_region_id=origin_by_region_id,
+                decided_at=decided_at,
+            )
+            carry_skipped_region_count += skipped
+            for decision in carried:
+                try:
+                    decision_log.append(decision)
+                except OSError:
+                    log.warning(
+                        "propose_regions: failed to persist a carried decision for proposal_id=%s page=%d",
+                        decision.proposal_id,
+                        idx,
+                        exc_info=True,
+                    )
+                    continue
+                carried_count += 1
+
+    if carry_skipped_region_count:
+        log.info(
+            "propose_regions: run=%s project=%s skipped %d confirmed region(s) with no "
+            "accepted/edited origin decision (hand-drawn, or a missing decision)",
+            run_id,
+            project.project_id,
+            carry_skipped_region_count,
+        )
+
     log.info(
-        "propose_regions: run=%s project=%s pages=%d proposals=%d",
+        "propose_regions: run=%s project=%s pages=%d proposals=%d carried=%d",
         run_id,
         project.project_id,
         total,
         proposal_count,
+        carried_count,
     )
 
     # The runner's completion step copies this call's ``message`` verbatim onto
@@ -569,6 +726,8 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
         summary_parts.append(
             f"Skipped {len(skipped_indices)} page(s) with no page kind; run Propose page kinds first."
         )
+    if carried_count:
+        summary_parts.append(f"Carried {carried_count} decision(s) from earlier runs.")
     unprocessed_parts: list[str] = []
     if lease_failed_indices:
         unprocessed_parts.append(f"{len(lease_failed_indices)} page(s) had a failed lease")
