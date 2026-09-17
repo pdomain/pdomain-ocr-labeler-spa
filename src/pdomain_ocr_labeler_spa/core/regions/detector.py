@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from pdomain_book_contracts.annotation import RegionRole
 from pdomain_book_tools.ocr.page import Page
@@ -55,10 +55,34 @@ RegionDetector = Callable[[DetectorInput], Sequence[DetectedRegion]]
 """Takes one page and the book it belongs to, and returns what it detected."""
 
 
+@runtime_checkable
+class BookFittedDetector(Protocol):
+    """A detector that must see the whole book before it judges any page.
+
+    Mirrors the "fit the whole book once, then judge each page" shape
+    ``fit_book_templates`` already established (``core/page_measurement.py``).
+    A detector that implements this protocol never receives ``DetectorInput``
+    directly from ``propose_regions`` — the handler builds a ``DetectorInput``
+    for every eligible, measured page, calls ``fit`` exactly once with that
+    whole sequence (off the event loop; it walks every word box in the book),
+    and uses the ``RegionDetector`` it returns for the per-page loop. A plain
+    ``RegionDetector`` callable that does not implement this protocol is
+    called directly, unchanged, with no ``fit`` step at all.
+    """
+
+    def fit(self, book: Sequence[DetectorInput]) -> RegionDetector: ...
+
+
 def null_region_detector(detector_input: DetectorInput) -> list[DetectedRegion]:
     """The default detector: proposes nothing. Keeps the job runnable with no engine wired."""
     del detector_input  # unused — this is the explicit no-op the seam defaults to
     return []
 
 
-__all__ = ["DetectedRegion", "DetectorInput", "RegionDetector", "null_region_detector"]
+__all__ = [
+    "BookFittedDetector",
+    "DetectedRegion",
+    "DetectorInput",
+    "RegionDetector",
+    "null_region_detector",
+]
