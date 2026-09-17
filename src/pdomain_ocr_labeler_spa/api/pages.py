@@ -1200,7 +1200,10 @@ def get_page(
                 # already uses for a request that survives but must still
                 # surface. The marker below (not just the log line) lets
                 # the SPA tell "OCR failed" apart from "OCR ran and found no
-                # text".
+                # text". ``message`` is client-facing (goes over the wire),
+                # so it's curated to the exception type name only —
+                # ``str(exc)`` can carry server filesystem paths. Full
+                # detail is already captured in the WARNING's exc_info.
                 log.warning(
                     "get_page: ensure_page_model failed for project=%s page=%d — "
                     "degrading to empty page_record",
@@ -1210,7 +1213,7 @@ def get_page(
                 )
                 page_load_error = PageLoadError(
                     error="ocr_load_failed",
-                    message=f"OCR failed to load page {page_index}: {exc}",
+                    message=f"OCR failed to load page {page_index} ({type(exc).__name__}).",
                 )
 
     payload = _page_payload(

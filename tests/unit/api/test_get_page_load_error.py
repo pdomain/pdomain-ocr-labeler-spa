@@ -97,6 +97,30 @@ class _RaisingPageLoader:
         raise RuntimeError("doctr predictor unavailable")
 
 
+class _RaisingWithPathPageLoader:
+    """A ``PageLoader`` whose ``run_ocr`` raises with a filesystem path in
+    its message — the client-facing ``page_load_error.message`` must not
+    leak that path (finding 2, issue 2026-08-08-get-page-hides-ocr-failures).
+    """
+
+    _PATH = "/var/lib/pdomain/models/db_resnet50/weights.pt"
+
+    def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
+        return None
+
+    def load_cached(self, page_index: int) -> PageLoadOutcome | None:
+        return None
+
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: object | None = None,
+    ) -> PageLoadOutcome:
+        raise RuntimeError(f"failed to read weights at {self._PATH}")
+
+
 class _EmptyTextPageLoader:
     """A ``PageLoader`` whose ``run_ocr`` succeeds but finds no words."""
 
@@ -144,7 +168,10 @@ def test_loader_failure_stamps_page_load_error_and_logs_warning(
     body = resp.json()
     assert body["page_load_error"] is not None
     assert body["page_load_error"]["error"] == "ocr_load_failed"
-    assert "doctr predictor unavailable" in body["page_load_error"]["message"]
+    # Client-facing message is curated to the exception type, not str(exc) —
+    # see test_per_page_failure_message_does_not_leak_exception_details for
+    # the dedicated no-path-leak coverage.
+    assert "RuntimeError" in body["page_load_error"]["message"]
 
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert warnings, "expected a WARNING-level log record for the loader failure"
@@ -238,3 +265,33 @@ def test_per_page_failure_warns_on_every_fetch(
 
     warnings = [r for r in caplog.records if "ensure_page_model failed" in r.getMessage()]
     assert len(warnings) == 2, f"expected a WARNING for each per-page OCR failure, got {len(warnings)}"
+
+
+def test_per_page_failure_message_does_not_leak_exception_details(
+    app_client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """``page_load_error.message`` is client-facing and goes over the wire —
+    ``str(exc)`` can carry server filesystem paths, so the response must be
+    curated to the exception type at most. Full detail (the path) still
+    belongs in the WARNING's exc_info for whoever reads the server log.
+    """
+    loader = _RaisingWithPathPageLoader()
+    app_client.app.state.job_runner.context["page_loader"] = loader  # type: ignore[attr-defined]
+
+    with caplog.at_level(logging.WARNING, logger="pdomain_ocr_labeler_spa.api.pages"):
+        resp = app_client.get("/api/projects/book1/pages/0")
+
+    assert resp.status_code == 200, resp.text
+    message = resp.json()["page_load_error"]["message"]
+    assert loader._PATH not in message, f"filesystem path leaked into client response: {message!r}"
+    assert "RuntimeError" in message, "curated message should still name the exception type"
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert warnings, "expected a WARNING-level log record for the loader failure"
+    record = warnings[0]
+    assert record.exc_info is not None
+    exc = record.exc_info[1]
+    assert exc is not None and loader._PATH in str(exc), (
+        "full detail (the path) must still be recoverable from the WARNING's exc_info"
+    )
