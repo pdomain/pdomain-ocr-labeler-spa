@@ -1045,7 +1045,10 @@ export default function ProjectPage() {
           ocrFailed={pagePayload?.page_load_error != null}
           message={pagePayload?.page_load_error?.message ?? null}
         />
-        <ImageDriftBanner imageDrift={false} />
+        <ImageDriftBanner
+          imageDrift={pagePayload?.image_drift != null}
+          message={pagePayload?.image_drift?.message ?? null}
+        />
       </div>
 
       {/*

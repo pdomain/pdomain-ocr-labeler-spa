@@ -146,6 +146,7 @@ def _ingest_ocr_result(
     page_index: int,
     store: Any,  # LabelerPageStore — TYPE_CHECKING import avoids circular dep
     project: Any = None,  # Project — its project_id keys the ProjectAggregate
+    image_is_edited: bool = False,
 ) -> Any:  # PageAggregate
     """Fire OcrCompleted on a new PageAggregate and persist via LabelerPageStore.
 
@@ -172,6 +173,16 @@ def _ingest_ocr_result(
         The ``Project`` whose ``project_id`` keys the ``ProjectAggregate``. When
         ``None``, only the ``PageAggregate`` is written (no index→page_id map);
         the restart read path then cannot resolve this page.
+    image_is_edited:
+        ``True`` when ``image_bytes`` came from ``run_ocr(edited_image_bytes=
+        ...)`` (Lane A / Task A4, "Reload OCR (Edited)") rather than the
+        pristine on-disk source. Stamped durably onto the provenance node's
+        ``extra`` dict (issue 2026-07-21-image-drift-banner-hard-off) so a
+        fresh process — after a restart, with no in-memory
+        ``PageState.edited_image_blob`` — can still tell that this
+        generation's recorded image digest is the edited bytes' hash, not
+        the pristine source's, and must not compare the untouched on-disk
+        file against it. See ``api.pages._image_drift_for_page``.
 
     Returns
     -------
@@ -194,12 +205,16 @@ def _ingest_ocr_result(
     page_json_bytes = json.dumps(page.to_dict()).encode("utf-8")
     content_hash = store.blobs.write(page_json_bytes)
 
-    # Build a minimal provenance node
+    # Build a minimal provenance node. ``extra`` follows the same
+    # open-ended-marker convention ``core/page_history.py`` uses
+    # (``extra={"history_op": {...}}``) — a durable, JSON-safe slot on the
+    # node itself rather than a new pdomain_ops schema field.
     prov_node = ProvenanceNode(
         id=str(page_id),
         source="ocr",
         tool="doctr",
         blob_refs=[content_hash, image_hash],
+        extra={"image_is_edited": True} if image_is_edited else None,
     )
     prov_graph = ProvenanceGraph(
         nodes={prov_node.id: prov_node},
@@ -433,13 +448,23 @@ class LocalDoctrPageLoader:
                 raise PageImageNotFoundError(f"Page image not found on disk: {image_path}")
 
         try:
-            return self._run_ocr_on_path(page_index, image_path, page_kind=page_kind)
+            return self._run_ocr_on_path(
+                page_index,
+                image_path,
+                page_kind=page_kind,
+                image_is_edited=edited_image_bytes is not None,
+            )
         finally:
             if _tmp_dir is not None:
                 _tmp_dir.cleanup()
 
     def _run_ocr_on_path(
-        self, page_index: int, image_path: Path, *, page_kind: PageKind | None = None
+        self,
+        page_index: int,
+        image_path: Path,
+        *,
+        page_kind: PageKind | None = None,
+        image_is_edited: bool = False,
     ) -> PageLoadOutcome:
         """Run OCR against a concrete on-disk image path (Lane A / A4 seam).
 
@@ -548,6 +573,7 @@ class LocalDoctrPageLoader:
                     page_index=page_index,
                     store=self.store,
                     project=self.project,
+                    image_is_edited=image_is_edited,
                 )
                 # Stamp the page_id from the aggregate onto the page object
                 # so callers can transfer it to PageState.page_id.

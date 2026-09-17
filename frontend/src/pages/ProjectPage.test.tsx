@@ -206,6 +206,7 @@ function pageFixture() {
     page_text_ocr: "ocr text",
     page_text_gt: "gt text",
     page_load_error: null as { error: string; message: string } | null,
+    image_drift: null as { error: string; message: string } | null,
     extra: {},
   };
 }
@@ -439,6 +440,44 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     const banner = await screen.findByTestId("banner-ocr-failed");
     expect(banner).toBeInTheDocument();
     expect(banner.textContent).toContain("doctr predictor unavailable");
+  });
+
+  it("does not render ImageDriftBanner for a page with no image_drift (P1-IMAGE-DRIFT)", async () => {
+    // issue 2026-07-21-image-drift-banner-hard-off: an unchanged page (the
+    // default fixture: image_drift null) must render exactly as it does
+    // today — no banner. ImageDriftBanner must no longer be hard-wired off
+    // (imageDrift={false}); it must read the real payload field.
+    server.use(
+      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid/pages/:idx", () => HttpResponse.json(pageFixture())),
+    );
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    expect(screen.queryByTestId("banner-image-drift")).toBeNull();
+  });
+
+  it("renders ImageDriftBanner pointing at Reload OCR when image_drift is set (P1-IMAGE-DRIFT)", async () => {
+    // issue 2026-07-21-image-drift-banner-hard-off: the page's source image
+    // changed on disk since OCR — the banner must render and name the
+    // recovery action (Reload OCR).
+    server.use(
+      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid/pages/:idx", () => {
+        const page = pageFixture();
+        page.image_drift = {
+          error: "image_changed",
+          message: "The source image changed on disk after this page was OCR'd (page_001.png).",
+        };
+        return HttpResponse.json(page);
+      }),
+    );
+    renderProjectPage();
+    const banner = await screen.findByTestId("banner-image-drift");
+    expect(banner).toBeInTheDocument();
+    expect(banner.textContent).toContain("page_001.png");
+    expect(banner.textContent).toMatch(/reload ocr/i);
+    // The action it points at (reload-ocr-button) must actually exist.
+    expect(screen.getByTestId("reload-ocr-button")).toBeInTheDocument();
   });
 
   it("IS-1: auto-redirects to / and does NOT render ProjectNotFoundBanner when project 404s", async () => {

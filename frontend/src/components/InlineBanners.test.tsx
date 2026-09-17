@@ -61,6 +61,33 @@ describe("ImageDriftBanner", () => {
     expect(container.querySelector("[data-testid='banner-image-drift']")).toBeNull();
   });
 
+  it("does NOT render when imageDrift is undefined", () => {
+    const { container } = render(<ImageDriftBanner />);
+    expect(container.querySelector("[data-testid='banner-image-drift']")).toBeNull();
+  });
+
+  it("points at the Reload OCR toolbar action", () => {
+    render(<ImageDriftBanner imageDrift />);
+    expect(screen.getByText(/reload ocr/i)).toBeInTheDocument();
+  });
+
+  it("includes the backend detail when provided (issue 2026-07-21-image-drift-banner-hard-off)", () => {
+    render(
+      <ImageDriftBanner
+        imageDrift
+        message="The source image changed on disk after this page was OCR'd (001.png)."
+      />,
+    );
+    const banner = screen.getByTestId("banner-image-drift");
+    expect(banner.textContent).toContain("001.png");
+  });
+
+  it("renders without a parenthetical when no message is provided", () => {
+    render(<ImageDriftBanner imageDrift />);
+    const banner = screen.getByTestId("banner-image-drift");
+    expect(banner.textContent).not.toContain("(");
+  });
+
   it("banners are NOT toasts (rendered inline, not via sonner)", () => {
     // Inline banners must be rendered in the DOM directly, not via toast API.
     // This test just confirms the element is a regular DOM node, not a portal.

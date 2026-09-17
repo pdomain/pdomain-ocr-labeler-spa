@@ -158,6 +158,40 @@ class PageState:
     # ``use_edited_image=True`` so OCR re-runs against the erased image instead
     # of the pristine on-disk source file. ``None`` until the first erase.
     edited_image_blob: str | None = field(default=None)
+    # Cheap image-drift baseline (issue 2026-07-21-image-drift-banner-hard-off).
+    # ``api.pages._image_drift_for_page`` records the source image's
+    # ``st_size`` / ``st_mtime_ns`` here the first time it checks a page
+    # against a given OCR-time digest (``image_drift_head_digest``), then
+    # compares against these cached values on every later fetch so it only
+    # re-hashes the file when the cheap stat check actually moved. Reset (by
+    # head-digest mismatch, not by clearing these fields) whenever the page
+    # is re-OCR'd, since a new digest invalidates the old baseline.
+    # Best-effort, in-process cache only — like ``edited_image_blob``, not
+    # part of the durable record; a lost update under concurrent requests
+    # only costs one extra hash, never a wrong drift verdict.
+    #
+    # ``image_drift_head_digest`` is the current head's recorded image
+    # digest (``ProvenanceNode.blob_refs[1]``) this baseline was computed
+    # for — used only to detect that the page was re-OCR'd (a new head)
+    # and the baseline needs recomputing.
+    #
+    # ``image_drift_digest`` is the ground-truth digest the on-disk file is
+    # actually compared against. It equals ``image_drift_head_digest`` for
+    # an ordinary OCR generation. The two diverge for a page whose OCR ran
+    # against the post-erase edited image ("Reload OCR (Edited)") rather
+    # than the pristine source: the recorded head digest is the edited
+    # bytes' hash, which the untouched on-disk file can never match, so
+    # ``_image_drift_for_page`` re-anchors ``image_drift_digest`` to the
+    # on-disk file's own digest at the moment that generation is first
+    # seen, instead of comparing against a digest the disk file was never
+    # going to match. That generation is identified from the durable
+    # ``ProvenanceNode.extra["image_is_edited"]`` marker
+    # ``_ingest_ocr_result`` stamps (not from ``edited_image_blob`` above,
+    # which is in-memory only and does not survive a restart).
+    image_drift_head_digest: str | None = field(default=None)
+    image_drift_digest: str | None = field(default=None)
+    image_drift_size: int | None = field(default=None)
+    image_drift_mtime_ns: int | None = field(default=None)
 
 
 class ProjectState:
