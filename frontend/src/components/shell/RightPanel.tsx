@@ -10,8 +10,7 @@
 //           "line"  → <LineDetail> (Slice 21).
 //           "block" → <BlockDetail> (Slice 22).
 //           "para"  → thin para view reusing BlockDetail items (Slice 22).
-//           "region" → placeholder for now; Task 4 of the region review
-//                      surface plan replaces it with <RegionDetail>.
+//           "region" → <RegionDetail> (region review surface plan Task 4).
 //
 // Slice 14 deliberately does NOT mount WordMatchView itself — the consumer
 // (ProjectPage) provides word content via `wordSlot` so the panel stays free
@@ -27,6 +26,7 @@ import { BlockDetail } from "../right-panel/BlockDetail";
 import { ParagraphDetail } from "../right-panel/ParagraphDetail";
 import { MultiWordDetail } from "../right-panel/MultiWordDetail";
 import { MultiLineDetail } from "../right-panel/MultiLineDetail";
+import { RegionDetail } from "../right-panel/RegionDetail";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -183,11 +183,15 @@ export function RightPanel({
               No paragraph selected.
             </div>
           )
-        ) : /* STB-5: region level — placeholder for now; Task 4 adds RegionDetail. */
+        ) : /* STB-5: region level */
         level === "region" ? (
-          <div className="p-3">
-            <Placeholder level={level} />
-          </div>
+          page && projectId !== undefined && pageIndex !== undefined ? (
+            <RegionDetail page={page} projectId={projectId} pageIndex={pageIndex} />
+          ) : (
+            <div data-testid="right-panel-region-empty" className="p-3 text-ink-3 text-sm">
+              No region selected.
+            </div>
+          )
         ) : textTabsSlot ? (
           /* D-051: level === "none" — render TextTabs slot when provided */
           <div className="flex flex-col h-full min-h-0">{textTabsSlot}</div>
