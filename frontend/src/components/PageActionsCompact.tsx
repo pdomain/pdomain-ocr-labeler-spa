@@ -40,6 +40,7 @@ import { useProposePageKinds, useProposeRegions } from "../hooks/useProposalRuns
 import { usePage } from "../hooks/usePage";
 import { useJobProgress } from "../hooks/useJobProgress";
 import { useJobCompletionInvalidation } from "../hooks/useJobCompletionInvalidation";
+import { useCancelJob, type UseCancelJobResult } from "../hooks/useCancelJob";
 import { dialogStore } from "../stores/dialog-store";
 import { toast } from "../lib/toast";
 import { PAGE_KINDS } from "../lib/pageKinds";
@@ -48,6 +49,52 @@ import { BulkGlyphMarkDialog } from "./glyph/BulkGlyphMarkDialog";
 export interface PageActionsCompactProps {
   projectId: string;
   pageIndex: number;
+}
+
+// ─── cancellable run toasts (P1-CANCEL reachability half) ──────────────────
+//
+// Propose page kinds / Propose regions / Auto-rotate all are book-scoped
+// background jobs started from here, not routed through BusyOverlay (it
+// blocks the page; these are meant to be worked through). BusyOverlay owns
+// the only other Cancel button in the app — its CANCELLABLE policy set
+// already lists all three job types as backend-cancellable
+// (docs/issues/2026-07-21-job-cancel-incomplete.md). This gives their own
+// loading toast the same Cancel action, via the same POST
+// (useCancelJob.ts) BusyOverlay's button fires.
+
+/**
+ * Loading toast for a cancellable book-scoped run.
+ *
+ * Once `cancelJob.cancel(jobId)` has fired for this job id, later progress
+ * ticks keep the toast in a "Cancelling…" state with no action —
+ * `wasRequested` is the same guard `cancel()` uses to dedupe the POST, so a
+ * second click, or a progress tick racing the terminal event, can't
+ * reintroduce the button or repeat the request.
+ */
+function showCancellableLoadingToast(
+  jobId: string,
+  message: string,
+  cancelJob: UseCancelJobResult,
+): void {
+  const cancelling = cancelJob.wasRequested(jobId);
+  void import("sonner").then(({ toast: sonnerToast }) => {
+    sonnerToast.loading(cancelling ? "Cancelling…" : message, {
+      id: jobId,
+      ...(cancelling
+        ? {}
+        : {
+            action: {
+              label: "Cancel",
+              onClick: () => {
+                cancelJob.cancel(jobId);
+                void import("sonner").then(({ toast: t }) => {
+                  t.loading("Cancelling…", { id: jobId });
+                });
+              },
+            },
+          }),
+    });
+  });
 }
 
 // ─── page-kind control (page-kind review design) ───────────────────────────
@@ -199,6 +246,14 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   // Rotate / auto-rotate job tracking (P2 / C28+C29) — separate so the
   // completion toast can say "rotated" rather than "OCR complete".
   const [rotateJobId, setRotateJobId] = useState<string | null>(null);
+  // Which action started the currently-tracked rotate job: only
+  // auto_rotate_all is in BusyOverlay's CANCELLABLE policy set — a single
+  // manual rotate (rotate_page) is not, so its toast stays plain. Tracked
+  // separately from rotateJobId so the toast callbacks below can tell them
+  // apart without threading the job type through useJobProgress.
+  const [rotateJobType, setRotateJobType] = useState<"rotate_page" | "auto_rotate_all" | null>(
+    null,
+  );
   const [bulkGlyphOpen, setBulkGlyphOpen] = useState(false);
   const jobProgress = useJobProgress(activeJobId);
   const saveProjectProgress = useJobProgress(saveProjectJobId);
@@ -211,6 +266,11 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   const [regionsJobId, setRegionsJobId] = useState<string | null>(null);
   const pageKindsProgress = useJobProgress(pageKindsJobId);
   const regionsProgress = useJobProgress(regionsJobId);
+
+  // P1-CANCEL: one cancel POST, shared by every cancellable toast in this
+  // component (see useCancelJob.ts — the same hook backs BusyOverlay's
+  // Cancel button).
+  const bookJobCancel = useCancelJob();
 
   // C2: read the page payload so the restored "Reload OCR (Edited)" button can
   // be gated on the real edited-image signal (labeler extension flag set by the
@@ -308,11 +368,24 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     onError: (jobId) => {
       toast.error("Rotate failed", { id: jobId });
     },
+    // P1-CANCEL: only auto_rotate_all is in BusyOverlay's CANCELLABLE
+    // policy set — pages already rotated before the cancel took effect are
+    // durably persisted (auto_rotate_all.py checks cancellation between
+    // pages, not mid-page), so the page query is worth refreshing here.
+    onCancelled: (jobId, event) => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      const msg = event.progress.message || "Rotate cancelled";
+      toast.warn(msg, { id: jobId });
+    },
     onRunning: (jobId, event) => {
       const msg = event.progress?.message ?? "Rotating…";
-      void import("sonner").then(({ toast: sonnerToast }) => {
-        sonnerToast.loading(msg, { id: jobId });
-      });
+      if (rotateJobType === "auto_rotate_all") {
+        showCancellableLoadingToast(jobId, msg, bookJobCancel);
+      } else {
+        void import("sonner").then(({ toast: sonnerToast }) => {
+          sonnerToast.loading(msg, { id: jobId });
+        });
+      }
     },
   });
 
@@ -342,13 +415,20 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     onError: (jobId) => {
       toast.error("Page kind proposals failed", { id: jobId });
     },
+    // P1-CANCEL: propose_page_kinds cancels during its measurement pass —
+    // classification and recording only happen after that pass completes
+    // (propose_page_kinds.py), so a cancelled run leaves nothing new to
+    // invalidate; the backend's own message says as much ("nothing
+    // recorded").
+    onCancelled: (jobId, event) => {
+      const msg = event.progress.message || "Page kind proposals cancelled";
+      toast.warn(msg, { id: jobId });
+    },
     onRunning: (jobId, event) => {
       // The normalized message is "" when the backend sent none, so fall back
       // with ||, not ??, or the loading toast would go blank.
       const msg = event.progress.message || "Proposing page kinds…";
-      void import("sonner").then(({ toast: sonnerToast }) => {
-        sonnerToast.loading(msg, { id: jobId });
-      });
+      showCancellableLoadingToast(jobId, msg, bookJobCancel);
     },
   });
 
@@ -377,11 +457,19 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     onError: (jobId) => {
       toast.error("Region proposals failed", { id: jobId });
     },
+    // P1-CANCEL: propose_regions journals proposals per page as it goes
+    // (propose_regions.py), so pages already proposed before the cancel
+    // took effect are durable — both the page query and the review queue
+    // are worth refreshing here, same as on a normal completion.
+    onCancelled: (jobId, event) => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["review-queue", projectId] });
+      const msg = event.progress.message || "Region proposals cancelled";
+      toast.warn(msg, { id: jobId });
+    },
     onRunning: (jobId, event) => {
       const msg = event.progress.message || "Proposing regions…";
-      void import("sonner").then(({ toast: sonnerToast }) => {
-        sonnerToast.loading(msg, { id: jobId });
-      });
+      showCancellableLoadingToast(jobId, msg, bookJobCancel);
     },
   });
 
@@ -570,6 +658,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
         onSuccess: (data) => {
           if (data?.job_id) {
             setRotateJobId(data.job_id);
+            setRotateJobType("rotate_page");
             void import("sonner").then(({ toast: sonnerToast }) => {
               sonnerToast.loading("Rotating page…", { id: data.job_id });
             });
@@ -584,14 +673,16 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
 
   // P2 / C29: batch auto-rotate. Uses the configured auto-rotate method
   // (OCR config dialog) server-side; manually-rotated pages are skipped.
+  // P1-CANCEL: auto_rotate_all is in BusyOverlay's CANCELLABLE policy set —
+  // its loading toast gets a Cancel action (showCancellableLoadingToast),
+  // unlike the single-page rotate above.
   function handleAutoRotateAll() {
     autoRotateAll.mutate(undefined, {
       onSuccess: (data) => {
         if (data?.job_id) {
           setRotateJobId(data.job_id);
-          void import("sonner").then(({ toast: sonnerToast }) => {
-            sonnerToast.loading("Auto-rotating pages…", { id: data.job_id });
-          });
+          setRotateJobType("auto_rotate_all");
+          showCancellableLoadingToast(data.job_id, "Auto-rotating pages…", bookJobCancel);
         }
       },
       onError: (err) => {
@@ -613,9 +704,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       onSuccess: (data) => {
         if (data.job_id) {
           setPageKindsJobId(data.job_id);
-          void import("sonner").then(({ toast: sonnerToast }) => {
-            sonnerToast.loading("Proposing page kinds…", { id: data.job_id });
-          });
+          showCancellableLoadingToast(data.job_id, "Proposing page kinds…", bookJobCancel);
         }
       },
       onError: () => {
@@ -629,9 +718,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       onSuccess: (data) => {
         if (data.job_id) {
           setRegionsJobId(data.job_id);
-          void import("sonner").then(({ toast: sonnerToast }) => {
-            sonnerToast.loading("Proposing regions…", { id: data.job_id });
-          });
+          showCancellableLoadingToast(data.job_id, "Proposing regions…", bookJobCancel);
         }
       },
       onError: () => {

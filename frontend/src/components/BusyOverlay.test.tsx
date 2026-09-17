@@ -14,8 +14,10 @@
 //     button rendered via OperationStatusPanel.primaryAction.
 
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { http, HttpResponse } from "msw";
+import { server } from "../test/server";
 import { BusyOverlay, ProjectLoadingOverlay } from "./BusyOverlay";
 
 describe("BusyOverlay", () => {
@@ -184,6 +186,41 @@ describe("BusyOverlay", () => {
     );
     // No cancel button for non-cancellable jobs (without best-effort override)
     expect(screen.queryByTestId("busy-overlay-cancel")).toBeNull();
+  });
+
+  // useCancelJob.ts: BusyOverlay and the PageActionsCompact book-scoped run
+  // toasts now share one POST /api/jobs/{jobId}/cancel call site.
+  it("clicking Cancel POSTs to /api/jobs/{jobId}/cancel with the active job's id", async () => {
+    let hits = 0;
+    let path: string | undefined;
+    server.use(
+      http.post("/api/jobs/:jobId/cancel", ({ request }) => {
+        hits += 1;
+        path = new URL(request.url).pathname;
+        return HttpResponse.json({ job_id: "job-2", status: "cancelled" });
+      }),
+    );
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <BusyOverlay
+          activeJob={{
+            id: "job-2",
+            type: "save_project",
+            project_id: "proj-1",
+            status: "running",
+            progress: { current: 0, total: 0, message: "Saving…" },
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId("busy-overlay-cancel"));
+
+    await waitFor(() => expect(hits).toBe(1));
+    expect(path).toBe("/api/jobs/job-2/cancel");
   });
 
   it("IS visible when isMutating prop is true", () => {

@@ -851,6 +851,191 @@ describe("PageActionsCompact: propose page kinds / propose regions (Task 6)", ()
   });
 });
 
+// ─── Cancel action on book-scoped run toasts (P1-CANCEL) ────────────────────
+// Plan: docs/plans/2026-09-17-region-review-surface.md — P1-CANCEL
+// reachability half.
+//
+// Propose page kinds / Propose regions / Auto-rotate all are the three
+// book-scoped runs BusyOverlay's CANCELLABLE policy set already treats as
+// backend-cancellable (BusyOverlay.tsx), but none of them ever route
+// through BusyOverlay — each tracks its own job id and shows progress
+// through this component's own loading toast instead. This suite covers
+// giving that toast a Cancel action wired to the same POST
+// /api/jobs/{jobId}/cancel BusyOverlay's button fires.
+
+interface CancelToastAction {
+  label: string;
+  onClick: () => void;
+}
+interface LoadingCallOptions {
+  id?: string;
+  action?: CancelToastAction;
+}
+
+/** The most recent `sonnerToast.loading(...)` call addressed to `jobId`. */
+function findLatestLoadingCall(jobId: string) {
+  const calls = toastMock.loading.mock.calls as [unknown, LoadingCallOptions?][];
+  const matches = calls.filter(([, opts]) => opts?.id === jobId);
+  return matches.at(-1);
+}
+
+interface CancellableRun {
+  label: string;
+  menuTestId: string;
+  postRoute: string;
+  jobId: string;
+}
+
+const CANCELLABLE_RUNS: CancellableRun[] = [
+  {
+    label: "Propose page kinds",
+    menuTestId: "propose-page-kinds-button",
+    postRoute: "/api/projects/proj-1/propose-page-kinds",
+    jobId: "job-pk-cancel",
+  },
+  {
+    label: "Propose regions",
+    menuTestId: "propose-regions-button",
+    postRoute: "/api/projects/proj-1/regions/propose",
+    jobId: "job-rg-cancel",
+  },
+  {
+    label: "Auto-rotate all",
+    menuTestId: "auto-rotate-all-button",
+    postRoute: "/api/projects/proj-1/auto-rotate-all",
+    jobId: "job-ar-cancel",
+  },
+];
+
+describe("PageActionsCompact: Cancel action on book-scoped run toasts (P1-CANCEL)", () => {
+  async function startRun(user: ReturnType<typeof userEvent.setup>, run: CancellableRun) {
+    server.use(
+      http.post(run.postRoute, () => HttpResponse.json({ job_id: run.jobId }, { status: 202 })),
+    );
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId(run.menuTestId));
+    await waitFor(() => expect(findLatestLoadingCall(run.jobId)).toBeDefined());
+  }
+
+  for (const run of CANCELLABLE_RUNS) {
+    it(`${run.label}: the loading toast offers a Cancel action`, async () => {
+      stubPage(false);
+      const user = userEvent.setup();
+      renderCompact();
+      await startRun(user, run);
+
+      const call = findLatestLoadingCall(run.jobId);
+      expect(call?.[1]?.action?.label).toBe("Cancel");
+    });
+
+    it(`${run.label}: clicking Cancel POSTs /api/jobs/{jobId}/cancel with that job's id`, async () => {
+      stubPage(false);
+      let hits = 0;
+      let path: string | undefined;
+      server.use(
+        http.post(`/api/jobs/${run.jobId}/cancel`, ({ request }) => {
+          hits += 1;
+          path = new URL(request.url).pathname;
+          return HttpResponse.json({ job_id: run.jobId, status: "cancelled" });
+        }),
+      );
+      const user = userEvent.setup();
+      renderCompact();
+      await startRun(user, run);
+
+      findLatestLoadingCall(run.jobId)?.[1]?.action?.onClick();
+
+      await waitFor(() => expect(hits).toBe(1));
+      expect(path).toBe(`/api/jobs/${run.jobId}/cancel`);
+    });
+
+    it(`${run.label}: clicking Cancel twice sends only one request`, async () => {
+      stubPage(false);
+      let hits = 0;
+      server.use(
+        http.post(`/api/jobs/${run.jobId}/cancel`, () => {
+          hits += 1;
+          return HttpResponse.json({ job_id: run.jobId, status: "cancelled" });
+        }),
+      );
+      const user = userEvent.setup();
+      renderCompact();
+      await startRun(user, run);
+
+      const action = findLatestLoadingCall(run.jobId)?.[1]?.action;
+      action?.onClick();
+      action?.onClick();
+
+      await waitFor(() => expect(hits).toBe(1));
+      // Give a would-be second request a chance to land before asserting
+      // it never did.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(hits).toBe(1);
+    });
+
+    it(`${run.label}: a cancelled terminal event shows the backend's own message`, async () => {
+      stubPage(false);
+      server.use(
+        http.post(`/api/jobs/${run.jobId}/cancel`, () =>
+          HttpResponse.json({ job_id: run.jobId, status: "cancelled" }),
+        ),
+      );
+      const es = mockEventSource();
+      const user = userEvent.setup();
+      renderCompact();
+      await startRun(user, run);
+
+      const message = `${run.label} cancelled after doing some of the work`;
+      es.dispatch({ job_id: run.jobId, status: "cancelled", progress: { message } });
+
+      await waitFor(() => {
+        const calls = toastMock.mock.calls as [unknown, { id?: string }?][];
+        const match = calls.find(([msg, opts]) => msg === message && opts?.id === run.jobId);
+        expect(match).toBeDefined();
+      });
+
+      vi.unstubAllGlobals();
+    });
+
+    it(`${run.label}: no Cancel action once the job completes`, async () => {
+      stubPage(false);
+      const es = mockEventSource();
+      const user = userEvent.setup();
+      renderCompact();
+      await startRun(user, run);
+
+      es.dispatch({ job_id: run.jobId, status: "complete", progress: { message: "Done" } });
+
+      await waitFor(() => {
+        const calls = toastMock.mock.calls as [unknown, { id?: string; action?: unknown }?][];
+        const match = calls.find(([, opts]) => opts?.id === run.jobId);
+        expect(match).toBeDefined();
+        expect(match?.[1]?.action).toBeUndefined();
+      });
+
+      vi.unstubAllGlobals();
+    });
+  }
+
+  // A manual single-page rotate is NOT in BusyOverlay's CANCELLABLE set —
+  // only auto_rotate_all is — so its toast must stay plain.
+  it("a manual single-page rotate does NOT get a Cancel action", async () => {
+    stubPage(false);
+    server.use(
+      http.post("/api/projects/proj-1/pages/0/rotate", () =>
+        HttpResponse.json({ job_id: "job-manual-rotate" }, { status: 202 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("rotate-cw-button"));
+
+    await waitFor(() => expect(findLatestLoadingCall("job-manual-rotate")).toBeDefined());
+    expect(findLatestLoadingCall("job-manual-rotate")?.[1]?.action).toBeUndefined();
+  });
+});
+
 // ─── page-kind toolbar control (page-kind review design) ────────────────────
 // Spec: pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
 //   "The page toolbar shows and confirms the current page's kind" — three

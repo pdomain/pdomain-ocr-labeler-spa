@@ -35,6 +35,20 @@ const ERROR_EVENT: JobProgressEvent = {
   error_message: "OCR engine crashed",
 };
 
+// "cancelled" is a valid wire status the backend emits (P1-CANCEL) even
+// though the generated `JobStatus` union is stale and omits it — see
+// useJobProgress.ts's own note on the same gap. Cast at the literal, same
+// as the hook itself and ProjectPage.tsx do.
+const CANCELLED_EVENT: JobProgressEvent = {
+  job_id: "job-1",
+  status: "cancelled" as JobProgressEvent["status"],
+  progress: {
+    current: 3,
+    total: 10,
+    message: "Cancelled after processing 3 of 10 page(s); 1 rotated",
+  },
+};
+
 interface HarnessOptions {
   activeJobId: string | null;
   jobProgress: JobProgressEvent | null;
@@ -42,6 +56,7 @@ interface HarnessOptions {
   onComplete?: (jobId: string, event: JobProgressEvent) => void;
   onError?: (jobId: string, err: string | null) => void;
   onRunning?: (jobId: string, event: JobProgressEvent) => void;
+  onCancelled?: (jobId: string, event: JobProgressEvent) => void;
 }
 
 function makeWrapper() {
@@ -67,6 +82,7 @@ function renderHarness(initial: HarnessOptions) {
         ...(opts.onComplete !== undefined && { onComplete: opts.onComplete }),
         ...(opts.onError !== undefined && { onError: opts.onError }),
         ...(opts.onRunning !== undefined && { onRunning: opts.onRunning }),
+        ...(opts.onCancelled !== undefined && { onCancelled: opts.onCancelled }),
       });
     },
     { wrapper: Wrapper, initialProps: initial },
@@ -212,6 +228,61 @@ describe("useJobCompletionInvalidation", () => {
     expect(setActiveJobId).not.toHaveBeenCalled();
     expect(onRunning).toHaveBeenCalledTimes(1);
     expect(onRunning).toHaveBeenCalledWith("job-1", RUNNING_EVENT);
+  });
+
+  it("fires onCancelled and clears activeJobId on 'cancelled' but does NOT auto-invalidate", () => {
+    // Unlike "complete", the hook does not assume a cancelled run wrote
+    // anything durable — whether it did is handler-specific (some do,
+    // some don't; see PageActionsCompact.tsx's per-tracker onCancelled
+    // callbacks). Invalidation stays the call site's decision, same as
+    // "error" already works.
+    const onCancelled = vi.fn();
+    const { rerender, invalidateSpy, setActiveJobId } = renderHarness({
+      activeJobId: "job-1",
+      jobProgress: RUNNING_EVENT,
+      onCancelled,
+    });
+
+    act(() => {
+      rerender({
+        activeJobId: "job-1",
+        jobProgress: CANCELLED_EVENT,
+        onCancelled,
+      });
+    });
+
+    expect(invalidateSpy).not.toHaveBeenCalled();
+    expect(setActiveJobId).toHaveBeenCalledTimes(1);
+    expect(setActiveJobId).toHaveBeenCalledWith(null);
+    expect(onCancelled).toHaveBeenCalledTimes(1);
+    expect(onCancelled).toHaveBeenCalledWith("job-1", CANCELLED_EVENT);
+  });
+
+  it("does not treat 'cancelled' as a non-terminal 'running' update", () => {
+    // Before this hook grew an explicit "cancelled" branch, a cancelled
+    // job fell into the same `else` clause as "running" and called
+    // onRunning forever without ever clearing activeJobId.
+    const onRunning = vi.fn();
+    const onCancelled = vi.fn();
+    const { rerender, setActiveJobId } = renderHarness({
+      activeJobId: "job-1",
+      jobProgress: RUNNING_EVENT,
+      onRunning,
+      onCancelled,
+    });
+
+    act(() => {
+      rerender({
+        activeJobId: "job-1",
+        jobProgress: CANCELLED_EVENT,
+        onRunning,
+        onCancelled,
+      });
+    });
+
+    expect(onRunning).toHaveBeenCalledTimes(1); // only the earlier RUNNING_EVENT render
+    expect(onCancelled).toHaveBeenCalledTimes(1);
+    expect(setActiveJobId).toHaveBeenCalledWith(null);
   });
 
   it("uses the supplied invalidation key verbatim", () => {

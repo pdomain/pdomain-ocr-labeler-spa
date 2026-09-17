@@ -21,9 +21,9 @@
 //   No cancel button for refine_bboxes_page / expand_refine_bboxes_page /
 //   refine_bboxes_project.
 
-import { useMutation } from "@tanstack/react-query";
 import { OperationStatusPanel } from "@pdomain/pdomain-ui/status";
 import type { components } from "../api/types";
+import { useCancelJob } from "../hooks/useCancelJob";
 
 type Job = components["schemas"]["Job"];
 
@@ -62,13 +62,9 @@ interface BusyOverlayProps {
 export function BusyOverlay({ activeJob, isMutating = false, onCancel }: BusyOverlayProps) {
   const visible = isMutating || activeJob !== null;
 
-  const cancelMutation = useMutation({
-    mutationFn: async (jobId: string) => {
-      const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" });
-      if (!res.ok) throw new Error("Cancel failed");
-      return res.json() as Promise<unknown>;
-    },
-  });
+  // Shared with the book-scoped run toasts in PageActionsCompact — see
+  // useCancelJob.ts. One POST /api/jobs/{jobId}/cancel call site, not two.
+  const { cancel, mutation: cancelMutation } = useCancelJob();
 
   if (!visible) return null;
 
@@ -85,7 +81,7 @@ export function BusyOverlay({ activeJob, isMutating = false, onCancel }: BusyOve
       return;
     }
     if (activeJob) {
-      cancelMutation.mutate(activeJob.id);
+      cancel(activeJob.id);
     }
   }
 
