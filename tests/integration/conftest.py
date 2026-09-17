@@ -299,12 +299,12 @@ def normalized_page_loaded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> A
     resp = client.post("/api/projects/load", json={"project_root": str(proj_dir)})
     assert resp.status_code == 200, resp.text
 
-    store: LabelerPageStore = client.app.state.page_store  # type: ignore[attr-defined]
+    store: LabelerPageStore = app.state.page_store
     page = _np_make_page()
     page_id = uuid4()
     store.save_page(PageAggregate(PageRecord(page_id=page_id, page_index=0, source="ocr")))
 
-    project_state = client.app.state.project_state  # type: ignore[attr-defined]
+    project_state = app.state.project_state
     outcome = PageLoadOutcome(page_index=0, source=PageSource.OCR, payload=page)
     pstate = PageState(page_index=0, page_record=outcome)
     pstate.page_id = page_id
