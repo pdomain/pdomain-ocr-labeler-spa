@@ -51,30 +51,49 @@ export interface PageActionsCompactProps {
   pageIndex: number;
 }
 
-// ─── cancellable run toasts (P1-CANCEL reachability half) ──────────────────
+// ─── cancellable run toasts (P1-CANCEL reachability) ────────────────────────
 //
-// Propose page kinds / Propose regions / Auto-rotate all are book-scoped
-// background jobs started from here, not routed through BusyOverlay (it
-// blocks the page; these are meant to be worked through). BusyOverlay owns
-// the only other Cancel button in the app — its CANCELLABLE policy set
-// already lists all three job types as backend-cancellable
-// (docs/issues/2026-07-21-job-cancel-incomplete.md). This gives their own
-// loading toast the same Cancel action, via the same POST
-// (useCancelJob.ts) BusyOverlay's button fires.
+// Every job type this component tracks — Reload OCR, Save Project, and the
+// three book-scoped runs (Propose page kinds / Propose regions / Auto-rotate
+// all) — shows its progress through its own toast here, never through
+// BusyOverlay (it blocks the page; several of these are meant to be worked
+// through). BusyOverlay owns the only *other* Cancel button in the app; its
+// CANCELLABLE / BEST_EFFORT_CANCEL policy sets (BusyOverlay.tsx) already
+// list every one of these job types as backend-cancellable
+// (docs/issues/2026-07-21-job-cancel-incomplete.md). This gives each toast
+// the same Cancel action, via the same POST (useCancelJob.ts) BusyOverlay's
+// button fires — so the button a person actually clicks can cancel, not
+// just the equivalent keyboard shortcut that happens to route through
+// ProjectPage's own BusyOverlay-tracked job.
 
 /**
- * Loading toast for a cancellable book-scoped run.
+ * reload_ocr_page is in BusyOverlay's BEST_EFFORT_CANCEL set, not its
+ * CANCELLABLE set: reload_ocr.py never polls `runner.is_cancelled` between
+ * its stages, so a cancel request only flips the job's status — OCR keeps
+ * running in its background thread and may still complete. Matches
+ * BusyOverlay's own BEST_EFFORT_CANCEL title wording (BusyOverlay.tsx)
+ * rather than inventing new copy for this surface.
+ */
+const BEST_EFFORT_CANCEL_NOTE = "best-effort — OCR may not stop immediately";
+
+/**
+ * Loading toast for a cancellable run.
  *
  * Once `cancelJob.cancel(jobId)` has fired for this job id, later progress
  * ticks keep the toast in a "Cancelling…" state with no action —
  * `wasRequested` is the same guard `cancel()` uses to dedupe the POST, so a
  * second click, or a progress tick racing the terminal event, can't
  * reintroduce the button or repeat the request.
+ *
+ * `description`, when given, renders as a secondary line under the message
+ * — used only for the best-effort caveat on Reload OCR's toast; every
+ * other caller omits it.
  */
 function showCancellableLoadingToast(
   jobId: string,
   message: string,
   cancelJob: UseCancelJobResult,
+  description?: string,
 ): void {
   const cancelling = cancelJob.wasRequested(jobId);
   void import("sonner").then(({ toast: sonnerToast }) => {
@@ -83,6 +102,7 @@ function showCancellableLoadingToast(
       ...(cancelling
         ? {}
         : {
+            ...(description ? { description } : {}),
             action: {
               label: "Cancel",
               onClick: () => {
@@ -270,7 +290,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   // P1-CANCEL: one cancel POST, shared by every cancellable toast in this
   // component (see useCancelJob.ts — the same hook backs BusyOverlay's
   // Cancel button).
-  const bookJobCancel = useCancelJob();
+  const cancelJob = useCancelJob();
 
   // C2: read the page payload so the restored "Reload OCR (Edited)" button can
   // be gated on the real edited-image signal (labeler extension flag set by the
@@ -306,11 +326,18 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     onError: (jobId) => {
       toast.error("OCR failed", { id: jobId });
     },
+    // P1-CANCEL: reload_ocr_page is best-effort only (BusyOverlay's
+    // BEST_EFFORT_CANCEL, not CANCELLABLE) — reload_ocr.py never polls
+    // is_cancelled between its stages, so the terminal "cancelled" event's
+    // own progress message is just whatever OCR stage happened to be in
+    // flight, not a summary of what canceling did. Say what to expect
+    // instead of echoing that stage label as if it explained the outcome.
+    onCancelled: (jobId) => {
+      toast.warn(`Cancel requested (${BEST_EFFORT_CANCEL_NOTE}).`, { id: jobId });
+    },
     onRunning: (jobId, event) => {
       const msg = event.progress?.message ?? "Running OCR…";
-      void import("sonner").then(({ toast: sonnerToast }) => {
-        sonnerToast.loading(msg, { id: jobId });
-      });
+      showCancellableLoadingToast(jobId, msg, cancelJob, `Cancel is ${BEST_EFFORT_CANCEL_NOTE}.`);
     },
   });
 
@@ -346,11 +373,18 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     onError: (jobId) => {
       toast.error("Save project failed", { id: jobId });
     },
+    // P1-CANCEL: save_project is in BusyOverlay's CANCELLABLE policy set —
+    // it checks is_cancelled between pages and every page saved before the
+    // cancel took effect is already durably persisted
+    // (save_project.py), so the page query is worth refreshing here.
+    onCancelled: (jobId, event) => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      const msg = event.progress.message || "Save project cancelled";
+      toast.warn(msg, { id: jobId });
+    },
     onRunning: (jobId, event) => {
       const msg = event.progress?.message ?? "Saving project…";
-      void import("sonner").then(({ toast: sonnerToast }) => {
-        sonnerToast.loading(msg, { id: jobId });
-      });
+      showCancellableLoadingToast(jobId, msg, cancelJob);
     },
   });
 
@@ -380,7 +414,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     onRunning: (jobId, event) => {
       const msg = event.progress?.message ?? "Rotating…";
       if (rotateJobType === "auto_rotate_all") {
-        showCancellableLoadingToast(jobId, msg, bookJobCancel);
+        showCancellableLoadingToast(jobId, msg, cancelJob);
       } else {
         void import("sonner").then(({ toast: sonnerToast }) => {
           sonnerToast.loading(msg, { id: jobId });
@@ -428,7 +462,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       // The normalized message is "" when the backend sent none, so fall back
       // with ||, not ??, or the loading toast would go blank.
       const msg = event.progress.message || "Proposing page kinds…";
-      showCancellableLoadingToast(jobId, msg, bookJobCancel);
+      showCancellableLoadingToast(jobId, msg, cancelJob);
     },
   });
 
@@ -469,7 +503,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     },
     onRunning: (jobId, event) => {
       const msg = event.progress.message || "Proposing regions…";
-      showCancellableLoadingToast(jobId, msg, bookJobCancel);
+      showCancellableLoadingToast(jobId, msg, cancelJob);
     },
   });
 
@@ -536,9 +570,12 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
             if (data?.job_id) {
               setActiveJobId(data.job_id);
               // Show initial loading toast immediately while SSE stream opens.
-              void import("sonner").then(({ toast: sonnerToast }) => {
-                sonnerToast.loading("Running OCR…", { id: data.job_id });
-              });
+              showCancellableLoadingToast(
+                data.job_id,
+                "Running OCR…",
+                cancelJob,
+                `Cancel is ${BEST_EFFORT_CANCEL_NOTE}.`,
+              );
             }
           },
           onError: () => {
@@ -593,9 +630,12 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
           onSuccess: (data) => {
             if (data?.job_id) {
               setActiveJobId(data.job_id);
-              void import("sonner").then(({ toast: sonnerToast }) => {
-                sonnerToast.loading("Running OCR (edited)…", { id: data.job_id });
-              });
+              showCancellableLoadingToast(
+                data.job_id,
+                "Running OCR (edited)…",
+                cancelJob,
+                `Cancel is ${BEST_EFFORT_CANCEL_NOTE}.`,
+              );
             }
           },
           onError: () => {
@@ -613,9 +653,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       onSuccess: (data) => {
         if (data?.job_id) {
           setSaveProjectJobId(data.job_id);
-          void import("sonner").then(({ toast: sonnerToast }) => {
-            sonnerToast.loading("Saving project…", { id: data.job_id });
-          });
+          showCancellableLoadingToast(data.job_id, "Saving project…", cancelJob);
         } else {
           toast.success("Project saved");
         }
@@ -682,7 +720,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
         if (data?.job_id) {
           setRotateJobId(data.job_id);
           setRotateJobType("auto_rotate_all");
-          showCancellableLoadingToast(data.job_id, "Auto-rotating pages…", bookJobCancel);
+          showCancellableLoadingToast(data.job_id, "Auto-rotating pages…", cancelJob);
         }
       },
       onError: (err) => {
@@ -704,7 +742,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       onSuccess: (data) => {
         if (data.job_id) {
           setPageKindsJobId(data.job_id);
-          showCancellableLoadingToast(data.job_id, "Proposing page kinds…", bookJobCancel);
+          showCancellableLoadingToast(data.job_id, "Proposing page kinds…", cancelJob);
         }
       },
       onError: () => {
@@ -718,7 +756,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       onSuccess: (data) => {
         if (data.job_id) {
           setRegionsJobId(data.job_id);
-          showCancellableLoadingToast(data.job_id, "Proposing regions…", bookJobCancel);
+          showCancellableLoadingToast(data.job_id, "Proposing regions…", cancelJob);
         }
       },
       onError: () => {

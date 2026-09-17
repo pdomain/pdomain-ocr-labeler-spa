@@ -870,6 +870,7 @@ interface CancelToastAction {
 interface LoadingCallOptions {
   id?: string;
   action?: CancelToastAction;
+  description?: string;
 }
 
 /** The most recent `sonnerToast.loading(...)` call addressed to `jobId`. */
@@ -1033,6 +1034,255 @@ describe("PageActionsCompact: Cancel action on book-scoped run toasts (P1-CANCEL
 
     await waitFor(() => expect(findLatestLoadingCall("job-manual-rotate")).toBeDefined());
     expect(findLatestLoadingCall("job-manual-rotate")?.[1]?.action).toBeUndefined();
+  });
+});
+
+// ─── Cancel action on Reload OCR / Save Project toasts (P1-CANCEL) ──────────
+// PageActionsCompact's own "Reload OCR" and "Save Project" buttons track
+// their jobs locally and never reach BusyOverlay — only the equivalent
+// keyboard shortcut (wired to ProjectPage's own tracker, not tested here)
+// did. This closes that gap the same way as the three book-scoped runs
+// above, with one difference: reload_ocr_page is BusyOverlay's
+// BEST_EFFORT_CANCEL, not its CANCELLABLE — the handler never checks
+// cancellation mid-page, so its toast must say so rather than implying an
+// immediate stop, and its terminal message is authored by the frontend, not
+// echoed from the backend's own (irrelevant, mid-OCR-stage) progress label.
+
+describe("PageActionsCompact: Cancel action on Reload OCR / Save Project toasts (P1-CANCEL)", () => {
+  it("Reload OCR's loading toast offers a Cancel action with the best-effort caveat", async () => {
+    server.use(
+      http.post("/api/projects/proj-1/pages/0/reload-ocr", () =>
+        HttpResponse.json({ job_id: "job-ocr-cancel-1" }, { status: 202 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("reload-ocr-button"));
+    approveReloadOcrConfirm();
+
+    await waitFor(() => expect(findLatestLoadingCall("job-ocr-cancel-1")).toBeDefined());
+    const call = findLatestLoadingCall("job-ocr-cancel-1");
+    expect(call?.[1]?.action?.label).toBe("Cancel");
+    expect(call?.[1]?.description).toMatch(/best-effort/i);
+    expect(call?.[1]?.description).toMatch(/may not stop immediately/i);
+  });
+
+  // "Reload OCR (Edited)" starts the same reload_ocr_page job type through a
+  // second button (overflow menu) — its own initial loading toast must get
+  // the same Cancel action, not just the plain "Reload OCR" button's.
+  it("Reload OCR (Edited)'s loading toast also offers a Cancel action", async () => {
+    stubPage(true);
+    server.use(
+      http.post("/api/projects/proj-1/pages/0/reload-ocr", () =>
+        HttpResponse.json({ job_id: "job-ocr-edited-cancel-1" }, { status: 202 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("reload-ocr-edited-button"));
+    approveReloadOcrConfirm();
+
+    await waitFor(() => expect(findLatestLoadingCall("job-ocr-edited-cancel-1")).toBeDefined());
+    const call = findLatestLoadingCall("job-ocr-edited-cancel-1");
+    expect(call?.[1]?.action?.label).toBe("Cancel");
+    expect(call?.[1]?.description).toMatch(/best-effort/i);
+  });
+
+  it("clicking Reload OCR's Cancel POSTs /api/jobs/{jobId}/cancel with that job's id", async () => {
+    server.use(
+      http.post("/api/projects/proj-1/pages/0/reload-ocr", () =>
+        HttpResponse.json({ job_id: "job-ocr-cancel-2" }, { status: 202 }),
+      ),
+    );
+    let hits = 0;
+    let path: string | undefined;
+    server.use(
+      http.post("/api/jobs/job-ocr-cancel-2/cancel", ({ request }) => {
+        hits += 1;
+        path = new URL(request.url).pathname;
+        return HttpResponse.json({ job_id: "job-ocr-cancel-2", status: "cancelled" });
+      }),
+    );
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("reload-ocr-button"));
+    approveReloadOcrConfirm();
+
+    await waitFor(() => expect(findLatestLoadingCall("job-ocr-cancel-2")).toBeDefined());
+    findLatestLoadingCall("job-ocr-cancel-2")?.[1]?.action?.onClick();
+
+    await waitFor(() => expect(hits).toBe(1));
+    expect(path).toBe("/api/jobs/job-ocr-cancel-2/cancel");
+  });
+
+  it("a cancelled Reload OCR job shows a best-effort message, not the raw mid-OCR stage label", async () => {
+    server.use(
+      http.post("/api/projects/proj-1/pages/0/reload-ocr", () =>
+        HttpResponse.json({ job_id: "job-ocr-cancel-3" }, { status: 202 }),
+      ),
+      http.post("/api/jobs/job-ocr-cancel-3/cancel", () =>
+        HttpResponse.json({ job_id: "job-ocr-cancel-3", status: "cancelled" }),
+      ),
+    );
+    const es = mockEventSource();
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("reload-ocr-button"));
+    approveReloadOcrConfirm();
+    await waitFor(() => expect(findLatestLoadingCall("job-ocr-cancel-3")).toBeDefined());
+
+    // reload_ocr.py never checks is_cancelled — its terminal "cancelled"
+    // event's own progress message is just whichever OCR stage was in
+    // flight, not a cancel summary. The toast must not just echo it.
+    es.dispatch({
+      job_id: "job-ocr-cancel-3",
+      status: "cancelled",
+      progress: { message: "Running OCR" },
+    });
+
+    await waitFor(() => {
+      const calls = toastMock.mock.calls as [unknown, { id?: string }?][];
+      const bestEffortMatch = calls.find(
+        ([msg, opts]) =>
+          typeof msg === "string" && /best-effort/i.test(msg) && opts?.id === "job-ocr-cancel-3",
+      );
+      expect(bestEffortMatch).toBeDefined();
+      const rawStageEcho = calls.find(([msg]) => msg === "Running OCR");
+      expect(rawStageEcho).toBeUndefined();
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("no Cancel action on Reload OCR's toast once the job completes", async () => {
+    server.use(
+      http.post("/api/projects/proj-1/pages/0/reload-ocr", () =>
+        HttpResponse.json({ job_id: "job-ocr-cancel-4" }, { status: 202 }),
+      ),
+    );
+    const es = mockEventSource();
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("reload-ocr-button"));
+    approveReloadOcrConfirm();
+    await waitFor(() => expect(findLatestLoadingCall("job-ocr-cancel-4")).toBeDefined());
+
+    es.dispatch({ job_id: "job-ocr-cancel-4", status: "complete", progress: { message: "Done" } });
+
+    await waitFor(() => {
+      const calls = toastMock.mock.calls as [unknown, { id?: string; action?: unknown }?][];
+      const match = calls.find(([, opts]) => opts?.id === "job-ocr-cancel-4");
+      expect(match).toBeDefined();
+      expect(match?.[1]?.action).toBeUndefined();
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("Save Project's loading toast offers a Cancel action", async () => {
+    stubPage(false);
+    server.use(
+      http.post("/api/projects/proj-1/save-all", () =>
+        HttpResponse.json({ job_id: "job-save-cancel-1" }, { status: 202 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("save-project-button"));
+
+    await waitFor(() => expect(findLatestLoadingCall("job-save-cancel-1")).toBeDefined());
+    expect(findLatestLoadingCall("job-save-cancel-1")?.[1]?.action?.label).toBe("Cancel");
+  });
+
+  it("clicking Save Project's Cancel POSTs /api/jobs/{jobId}/cancel with that job's id", async () => {
+    stubPage(false);
+    server.use(
+      http.post("/api/projects/proj-1/save-all", () =>
+        HttpResponse.json({ job_id: "job-save-cancel-2" }, { status: 202 }),
+      ),
+    );
+    let hits = 0;
+    let path: string | undefined;
+    server.use(
+      http.post("/api/jobs/job-save-cancel-2/cancel", ({ request }) => {
+        hits += 1;
+        path = new URL(request.url).pathname;
+        return HttpResponse.json({ job_id: "job-save-cancel-2", status: "cancelled" });
+      }),
+    );
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("save-project-button"));
+
+    await waitFor(() => expect(findLatestLoadingCall("job-save-cancel-2")).toBeDefined());
+    findLatestLoadingCall("job-save-cancel-2")?.[1]?.action?.onClick();
+
+    await waitFor(() => expect(hits).toBe(1));
+    expect(path).toBe("/api/jobs/job-save-cancel-2/cancel");
+  });
+
+  it("a cancelled Save Project job renders the backend's own summary message", async () => {
+    stubPage(false);
+    server.use(
+      http.post("/api/projects/proj-1/save-all", () =>
+        HttpResponse.json({ job_id: "job-save-cancel-3" }, { status: 202 }),
+      ),
+      http.post("/api/jobs/job-save-cancel-3/cancel", () =>
+        HttpResponse.json({ job_id: "job-save-cancel-3", status: "cancelled" }),
+      ),
+    );
+    const es = mockEventSource();
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("save-project-button"));
+    await waitFor(() => expect(findLatestLoadingCall("job-save-cancel-3")).toBeDefined());
+
+    const message = "Cancelled after saving 2 of 5 page(s)";
+    es.dispatch({ job_id: "job-save-cancel-3", status: "cancelled", progress: { message } });
+
+    await waitFor(() => {
+      const calls = toastMock.mock.calls as [unknown, { id?: string }?][];
+      const match = calls.find(
+        ([msg, opts]) => msg === message && opts?.id === "job-save-cancel-3",
+      );
+      expect(match).toBeDefined();
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("no Cancel action on Save Project's toast once the job completes", async () => {
+    stubPage(false);
+    server.use(
+      http.post("/api/projects/proj-1/save-all", () =>
+        HttpResponse.json({ job_id: "job-save-cancel-4" }, { status: 202 }),
+      ),
+    );
+    const es = mockEventSource();
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("save-project-button"));
+    await waitFor(() => expect(findLatestLoadingCall("job-save-cancel-4")).toBeDefined());
+
+    es.dispatch({
+      job_id: "job-save-cancel-4",
+      status: "complete",
+      progress: { message: "Saved" },
+    });
+
+    await waitFor(() => {
+      const calls = toastMock.mock.calls as [unknown, { id?: string; action?: unknown }?][];
+      const match = calls.find(([, opts]) => opts?.id === "job-save-cancel-4");
+      expect(match).toBeDefined();
+      expect(match?.[1]?.action).toBeUndefined();
+    });
+
+    vi.unstubAllGlobals();
   });
 });
 
