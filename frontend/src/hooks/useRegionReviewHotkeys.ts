@@ -94,7 +94,6 @@ type PagePayload = components["schemas"]["PagePayload"];
 type RegionReviewQueuePageSummary = components["schemas"]["RegionReviewQueuePageSummary"];
 
 const NO_PROPOSALS_ON_PAGE_MESSAGE = "No undecided proposals left on this page";
-const NO_PROPOSALS_IN_BOOK_MESSAGE = "No undecided proposals left in the book.";
 const NO_NEXT_PAGE_MESSAGE = "No more pages with undecided proposals after this page.";
 const NO_PREV_PAGE_MESSAGE = "No pages with undecided proposals before this page.";
 const QUEUE_LOADING_MESSAGE = "Review queue is still loading.";
@@ -179,10 +178,17 @@ function prevPageWithWork(
  * The end-of-page toast text. `remaining` is the book's undecided count
  * *after* accounting for whatever just emptied the current page — undefined
  * when the queue hasn't loaded (falls back to the plain on-page message).
+ *
+ * Always leads with the on-page sentence (finding 4, low): an earlier
+ * version replaced it outright with a book-wide "No undecided proposals
+ * left in the book." once the book count hit zero, dropping the page text
+ * the driver contract's toast assertion (tests/e2e/test_region_review_loop.py)
+ * depends on. The zero case now extends the same on-page sentence instead of
+ * swapping it out, matching the non-zero form's shape.
  */
 function endOfPageMessage(remaining: number | undefined): string {
   if (remaining === undefined) return NO_PROPOSALS_ON_PAGE_MESSAGE;
-  if (remaining <= 0) return NO_PROPOSALS_IN_BOOK_MESSAGE;
+  if (remaining <= 0) return `${NO_PROPOSALS_ON_PAGE_MESSAGE}. None left in the book.`;
   return `${NO_PROPOSALS_ON_PAGE_MESSAGE}. ${String(remaining)} left in the book; press ] for the next.`;
 }
 

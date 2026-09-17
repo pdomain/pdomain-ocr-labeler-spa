@@ -287,7 +287,9 @@ describe("useRegionReviewHotkeys: x rejects and clears at the end of the list", 
 
     await waitFor(() => expect(rejectedId).toBe("only"));
     await waitFor(() => expect(selectionStore.getState().level).toBe("none"));
-    expect(infoSpy).toHaveBeenCalledWith("No undecided proposals left in the book.");
+    expect(infoSpy).toHaveBeenCalledWith(
+      "No undecided proposals left on this page. None left in the book.",
+    );
   });
 
   it("names the book's remaining count and the ] key when the book still has work", async () => {
