@@ -387,7 +387,13 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     expect(await screen.findByTestId("project-loading-overlay")).toBeInTheDocument();
   });
 
-  it("renders the InlineBanners.OcrFailedBanner when page_record.ocr_failed is true", async () => {
+  it("does not render OcrFailedBanner from the unused page_record.ocr_failed flag", async () => {
+    // page_record.ocr_failed comes from pdomain_ops.PageRecord (an upstream
+    // dependency) and nothing in this backend ever sets it — the real
+    // signal is PagePayload.page_load_error (issue
+    // 2026-08-08-get-page-hides-ocr-failures). ProjectPage must not read
+    // the dead flag; see "renders OcrFailedBanner with the loader message
+    // when page_load_error is set" for the real trigger.
     server.use(
       http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
       http.get("/api/projects/:pid/pages/:idx", () => {
@@ -397,7 +403,12 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       }),
     );
     renderProjectPage();
-    expect(await screen.findByTestId("banner-ocr-failed")).toBeInTheDocument();
+    // Wait for the page fetch to actually resolve (page-name-label only
+    // renders once pageQ.data?.page_record is present) rather than asserting
+    // absence the instant "project-page" mounts, which would pass
+    // vacuously before the mocked fetch even settles.
+    await screen.findByTestId("page-name-label");
+    expect(screen.queryByTestId("banner-ocr-failed")).toBeNull();
   });
 
   it("does not render OcrFailedBanner for a page with no text and no page_load_error", async () => {

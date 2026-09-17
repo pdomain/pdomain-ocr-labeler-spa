@@ -332,7 +332,6 @@ export default function ProjectPage() {
 
   // ── Derived view state ─────────────────────────────────────────────────
   const pagePayload = pageQ.data ?? null;
-  const pageRecord = pagePayload?.page_record ?? null;
   const lines: LineMatch[] = pagePayload?.line_matches ?? [];
   // Event-store undo (spec 2026-06-12): availability flags from the payload.
   const undoAvailable = pagePayload?.history?.undo_available === true;
@@ -973,7 +972,7 @@ export default function ProjectPage() {
       </div>
       <div data-testid="inline-banners" className="flex flex-col gap-1 p-1">
         <OcrFailedBanner
-          ocrFailed={pageRecord?.ocr_failed === true || pagePayload?.page_load_error != null}
+          ocrFailed={pagePayload?.page_load_error != null}
           message={pagePayload?.page_load_error?.message ?? null}
         />
         <ImageDriftBanner imageDrift={false} />
