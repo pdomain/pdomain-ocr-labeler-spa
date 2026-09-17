@@ -123,7 +123,6 @@ The normalize report stays open on its frontend half.
 
 | Issue | ID | Sev |
 | --- | --- | --- |
-| [`2026-07-21-image-drift-banner-hard-off.md`](2026-07-21-image-drift-banner-hard-off.md) | P1-IMAGE-DRIFT | Medium |
 | [`2026-07-21-job-cancel-incomplete.md`](2026-07-21-job-cancel-incomplete.md) | P1-CANCEL | Medium |
 | [`2026-07-21-bbox-refine-crop-misleading.md`](2026-07-21-bbox-refine-crop-misleading.md) | P1-BBOX-UI | Medium |
 

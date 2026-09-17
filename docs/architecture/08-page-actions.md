@@ -307,12 +307,28 @@ uses `Cmd` automatically via `react-hotkeys-hook`'s `Mod+` syntax.
 
 ---
 
-## 14. Image drift recovery (resolved)
+## 14. Image drift recovery (partly built)
 
-**Decision.** On `409 { reason: 'image_drift' }`, the client automatically
-reloads the page (same as a manual page navigation) and shows a toast:
-`"Page reloaded — image was updated since last load."` No user confirmation
-required.
+**What ships today, since `81a0325`:** the page fetch tells a person their
+image changed. `GET .../pages/{index}` compares the page's OCR-time image
+digest against the source file and returns `PagePayload.image_drift`, naming
+the file that changed; `ImageDriftBanner` shows it and points at Reload OCR.
+The check compares size and modification time first and hashes only when those
+move, and a page whose OCR ran on erased bytes is marked as such on its
+provenance node so it is never reported as drifted. Book-labeling projects are
+skipped: their images come from a manifest-verified lease that already refuses
+a changed file.
+
+**What is still owed:** refusing a save made against a stale image. The
+paragraph below is the original design for that half and has never been built;
+no `409` with a drift reason exists in the backend. A banner warns before
+editing, but nothing yet stops an edit from being written on top of an image
+that changed underneath it.
+
+**Original decision, not implemented.** On `409 { reason: 'image_drift' }`, the
+client automatically reloads the page (same as a manual page navigation) and
+shows a toast: `"Page reloaded — image was updated since last load."` No user
+confirmation required.
 
 Implementation:
 
@@ -330,7 +346,9 @@ do, makes the recovery self-describing, and requires no user decision. If the
 user had meaningful edits in flight, the cache lane (auto-save) will have
 preserved most of them — they can re-apply after the reload.
 
-**Confirm in M8** integration tests and Playwright `test_image_drift.py`.
+**Tests.** The shipped half is covered by `tests/unit/api/test_image_drift.py`
+and `tests/integration/test_image_drift_route.py`. The save-time refusal has no
+test because it has no implementation.
 
 ---
 

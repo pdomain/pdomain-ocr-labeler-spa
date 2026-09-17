@@ -558,3 +558,25 @@ and browser gates pass on the merged tree.
   `frontend/src/stores/worklist-focus.test.ts` and
   `tests/e2e/test_match_nav_selection_sync.py`.
 - Remaining work: none
+
+### [2026-09-17] Retired: the image drift banner could never appear
+
+- Old path: `docs/issues/2026-07-21-image-drift-banner-hard-off.md`
+- Outcome: implemented, in the half that a banner can honestly cover
+- Superseded by: `src/pdomain_ocr_labeler_spa/api/pages.py`
+  (`_image_drift_for_page`, `ImageDrift`) and
+  `docs/architecture/08-page-actions.md` §14
+- Resolved by: `81a0325` (merge of `fix/image-drift`)
+- Rationale kept: the banner was mounted with its flag hard-coded off, and the
+  deeper problem was that no part of the backend reported drift at all. The page
+  fetch now compares the page's OCR-time image digest against the file on disk,
+  comparing size and modification time first and hashing only when those move,
+  and the payload carries what changed. A page whose OCR ran on erased bytes
+  carries a durable marker on its provenance node, so it is not reported as
+  drifted for the rest of its life. Book-labeling projects are skipped, because
+  their manifest-verified lease already refuses a changed file. Evidence:
+  `tests/unit/api/test_image_drift.py`,
+  `tests/integration/test_image_drift_route.py`.
+- Remaining work: the save-time half. Nothing yet refuses an edit written
+  against an image that changed underneath it; `08-page-actions.md` §14 now says
+  so plainly instead of describing it as resolved.

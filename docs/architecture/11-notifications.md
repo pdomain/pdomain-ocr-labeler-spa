@@ -178,7 +178,8 @@ For persistent / sticky messages tied to a specific page or project:
 - "Project not found at /abs/path." — in the project chrome when
   routing to a project_id that doesn't resolve.
 - "Image on disk has changed. Reload page to continue." — at the top
-  of the matches view after a `409 image_drift` save.
+  of the matches view after a save refused for image drift. That refusal is
+  not built; see `08-page-actions.md` §14.
 
 Implementation: per-page React components rendering shadcn `<Alert />`.
 Not toasts.
