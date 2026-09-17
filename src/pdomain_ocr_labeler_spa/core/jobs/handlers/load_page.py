@@ -186,17 +186,24 @@ async def handle_load_page(runner: JobRunner, job: Job) -> None:
         log.error("load_page: %s project=%s", message, project_id)
         raise TimeoutError(message) from exc
     except Exception as exc:
-        notification_queue.queue(
-            NotificationKind.NEGATIVE,
-            f"OCR failed for page {page_index + 1}: {exc}",
-        )
+        # Curated (exception type name only, never str(exc)) exactly like
+        # api.pages.get_page's synchronous ocr_load_failed branch —
+        # LocalDoctrPageLoader.run_ocr's PageImageNotFoundError carries the
+        # full on-disk path, and unlike an explicit "Reload OCR" click, this
+        # branch now fires on an ordinary first page open, so a raw
+        # str(exc) here would leak server filesystem layout to the client
+        # both on the job's terminal error_message (JobRunner._run_one
+        # stores str(exc) verbatim) and in this notification. Full detail
+        # stays in the WARNING's exc_info below.
+        curated_message = f"OCR failed for page {page_index + 1} ({type(exc).__name__})."
+        notification_queue.queue(NotificationKind.NEGATIVE, curated_message)
         log.warning(
             "load_page: OCR failed project=%s page=%d",
             project_id,
             page_index,
             exc_info=True,
         )
-        raise
+        raise RuntimeError(curated_message) from exc
 
     _finalize_reocr_outcome(
         project_state,

@@ -24,6 +24,7 @@ into the test process — same pattern as
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -305,7 +306,11 @@ def test_failure_emits_error_event_distinguishable_from_a_no_text_page(
 
         terminal = recorded[-1]
         assert terminal.get("event") == "error", terminal
-        assert "doctr exploded" in (terminal.get("error_message") or ""), terminal
+        # Curated (exception type name only, not str(exc)) — see
+        # test_ocr_failure_message_does_not_leak_filesystem_path for the
+        # dedicated no-path-leak coverage of this same curation.
+        assert "RuntimeError" in (terminal.get("error_message") or ""), terminal
+        assert "doctr exploded" not in (terminal.get("error_message") or ""), terminal
 
         notif_queue = c.app.state.notification_queue  # type: ignore[attr-defined]
         notifications = notif_queue.snapshot()
@@ -423,3 +428,59 @@ def test_a_fetch_after_the_job_fails_submits_a_new_job(tmp_path: Path, projects_
 
         runner = c.app.state.job_runner  # type: ignore[attr-defined]
         assert len(runner.list_jobs()) == 2, "expected two distinct load_page jobs"
+
+
+# ── Path-leak regression: an OCR failure carrying a filesystem path ───────
+
+
+def test_ocr_failure_message_does_not_leak_filesystem_path(
+    tmp_path: Path, projects_root: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The job's terminal ``error_message`` and its notification are curated
+    exactly like the synchronous ``ocr_load_failed`` branch in
+    ``api/pages.py`` — the exception type name only, never ``str(exc)`` — so
+    a path from an exception like ``LocalDoctrPageLoader.run_ocr``'s
+    ``PageImageNotFoundError`` never reaches the client on an ordinary first
+    page open. Full detail stays in the server log.
+    """
+    path_fragment = "/var/lib/pdomain/models/db_resnet50/weights.pt"
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    loader = _StoreMissPageLoader(raise_on_run=RuntimeError(f"failed to read weights at {path_fragment}"))
+    recorded: list[dict[str, Any]] = []
+
+    with TestClient(app) as c:
+        c.app.state.job_runner.context["page_loader"] = loader  # type: ignore[attr-defined]
+        _wrap_broker_publish(c.app.state.job_events, recorded)  # type: ignore[attr-defined]
+        resp = c.post("/api/projects/load", json={"project_root": str(projects_root / "book1")})
+        assert resp.status_code == 200, resp.text
+
+        with caplog.at_level(logging.WARNING, logger="pdomain_ocr_labeler_spa.core.jobs.handlers.load_page"):
+            page_resp = c.get("/api/projects/book1/pages/0")
+            assert page_resp.status_code == 200, page_resp.text
+
+            _wait_for_terminal(recorded)
+
+        terminal = recorded[-1]
+        assert terminal.get("event") == "error", terminal
+        error_message = terminal.get("error_message") or ""
+        assert path_fragment not in error_message, (
+            f"filesystem path leaked into error_message: {error_message!r}"
+        )
+        assert "RuntimeError" in error_message, "curated message should still name the exception type"
+
+        notif_queue = c.app.state.notification_queue  # type: ignore[attr-defined]
+        notifications = notif_queue.snapshot()
+        assert notifications, "expected at least one notification"
+        assert all(path_fragment not in n.message for n in notifications), (
+            f"filesystem path leaked into a notification: {[n.message for n in notifications]}"
+        )
+
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert warnings, "expected a WARNING-level log record for the OCR failure"
+        record = warnings[0]
+        assert record.exc_info is not None, "the WARNING must keep exc_info for the traceback"
+        exc = record.exc_info[1]
+        assert exc is not None and path_fragment in str(exc), (
+            "full detail (the path) must still be recoverable from the WARNING's exc_info"
+        )
