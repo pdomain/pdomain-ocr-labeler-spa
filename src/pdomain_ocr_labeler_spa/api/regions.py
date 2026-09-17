@@ -457,36 +457,64 @@ def _append_decision_or_error(
 
 
 def _record_region_deletion(
-    *, project_root: Path, page_index: int, proposal_id: str | None
+    *, project_root: Path, page_index: int, region_id: str, proposal_id: str | None
 ) -> JSONResponse | None:
-    """Record that a person removed the confirmed region a proposal produced.
+    """Record that a person removed a confirmed region, for every proposal that decided it.
 
-    Returns ``None`` when there is nothing to record — a hand-drawn region, or a
-    proposal id no longer present in the proposal log, in which case the run id
-    the decision must name cannot be established honestly. Neither case fails the
-    delete. Returns the guarded 503 envelope when the append itself fails.
+    A region can be named by more than one proposal's latest decision once carries
+    exist: the proposal that was originally accepted, plus every later run's proposal
+    that carried the same confirmation forward. Each gets its own ``rejected``
+    decision, under its own run id — the convention every decision already follows —
+    so none of them stays hidden behind a decision naming a region that no longer
+    exists.
+
+    Returns ``None`` when there is nothing to record at all — a hand-drawn region (no
+    proposal ever named it) with no carried proposal either. The source proposal on
+    the block is included even if its own decision is somehow not among the ones
+    found by region id; if it is not present in the proposal log either, it is
+    skipped and logged, exactly as before, without failing the delete. Returns the
+    guarded 503 envelope the moment any append fails.
     """
-    if proposal_id is None:
+    decision_log = RegionDecisionLog(project_root)
+    latest_by_proposal = decision_log.latest_by_proposal()
+
+    # Every proposal whose latest decision names this region — the source
+    # accept/edit and every later carry — keyed by proposal id to its own run id.
+    to_reject: dict[str, str] = {
+        pid: run_id
+        for (pid, run_id), decision in latest_by_proposal.items()
+        if decision.region_id == region_id
+    }
+
+    if proposal_id is not None and proposal_id not in to_reject:
+        proposal = _find_proposal(RegionProposalLog(project_root), page_index, proposal_id)
+        if proposal is None:
+            log.warning(
+                "region deleted but its proposal is not in the log; no decision recorded (proposal_id=%s)",
+                proposal_id,
+            )
+        else:
+            to_reject[proposal_id] = proposal.run_id
+
+    if not to_reject:
         return None
-    proposal = _find_proposal(RegionProposalLog(project_root), page_index, proposal_id)
-    if proposal is None:
-        log.warning(
-            "region deleted but its proposal is not in the log; no decision recorded (proposal_id=%s)",
-            proposal_id,
+
+    for pid, run_id in to_reject.items():
+        err = _append_decision_or_error(
+            decision_log,
+            RegionDecision(
+                decision_id=uuid.uuid4().hex,
+                run_id=run_id,
+                proposal_id=pid,
+                disposition=Disposition.REJECTED,
+                region_id=None,
+                actor="default",
+                decided_at=datetime.now(UTC).isoformat(),
+            ),
         )
-        return None
-    return _append_decision_or_error(
-        RegionDecisionLog(project_root),
-        RegionDecision(
-            decision_id=uuid.uuid4().hex,
-            run_id=proposal.run_id,
-            proposal_id=proposal_id,
-            disposition=Disposition.REJECTED,
-            region_id=None,
-            actor="default",
-            decided_at=datetime.now(UTC).isoformat(),
-        ),
-    )
+        if err is not None:
+            return err
+    return None
 
 
 # ── Routes: create / edit / delete ──────────────────────────────────────
@@ -676,12 +704,14 @@ def delete_region(
     """Delete a region. Its member words (if any) are recovered, never dropped.
 
     Deleting a region a person accepted from a proposal records a ``rejected``
-    decision naming that proposal. Without it the ``accepted`` decision would go
-    on naming a ``region_id`` that no longer exists, and the resolver's "already
-    promoted into a confirmed region" branch would suppress the proposal forever:
-    it would vanish from the payload and the canvas with no record that anybody
-    removed it — a rejection expressed as an absence, which is the one thing this
-    design refuses to do.
+    decision naming that proposal — and, once a region has been carried forward
+    into later proposal runs, naming every other proposal whose latest decision
+    also names this region. Without it, a decision naming a ``region_id`` that
+    no longer exists would keep going through the resolver's "already promoted
+    into a confirmed region" branch, and the proposal it belongs to would vanish
+    from the payload and the canvas with no record that anybody removed it — a
+    rejection expressed as an absence, which is the one thing this design
+    refuses to do.
 
     ``Disposition.REJECTED`` is the only value that says a person declined the
     proposal; the enum is owned upstream and gains no member here. Because the
@@ -736,6 +766,7 @@ def delete_region(
         decision_err = _record_region_deletion(
             project_root=project.project_root,
             page_index=page_index,
+            region_id=region_id,
             proposal_id=proposal_id,
         )
         if decision_err is not None:
