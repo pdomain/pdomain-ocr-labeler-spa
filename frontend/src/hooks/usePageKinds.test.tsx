@@ -261,6 +261,39 @@ describe("useBulkConfirmPageKinds", () => {
     expect(toastMock.error).not.toHaveBeenCalledWith(expect.stringContaining("25"));
   });
 
+  it("invalidates the page-kinds and page prefixes even when a later batch fails", async () => {
+    let callCount = 0;
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/page-kinds/confirm`, async ({ request }) => {
+        callCount += 1;
+        const body = (await request.json()) as { pages: { page_index: number }[] };
+        if (callCount === 2) {
+          return HttpResponse.json({ error: "internal", message: "boom" }, { status: 500 });
+        }
+        return HttpResponse.json({
+          results: body.pages.map((p) => ({ page_index: p.page_index, status: "confirmed" })),
+          confirmed_count: body.pages.length,
+        });
+      }),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useBulkConfirmPageKinds(PROJECT_ID), {
+      wrapper: makeWrapper(qc),
+    });
+    const items = Array.from({ length: 60 }, (_, i) => ({
+      page_index: i,
+      kind: "body" as const,
+    }));
+
+    await act(async () => {
+      await expect(result.current.mutateAsync({ items })).rejects.toThrow();
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page-kinds", PROJECT_ID] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID] });
+  });
+
   it("invalidates the page-kinds and page prefixes on success", async () => {
     server.use(
       http.post(`/api/projects/${PROJECT_ID}/page-kinds/confirm`, () =>

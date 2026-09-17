@@ -9,9 +9,9 @@
 //    request stops (and reports) on an outright failure.
 //
 // `useBulkConfirmPageKinds` invalidates the `["page-kinds", projectId]`
-// prefix and the `["page", projectId]` prefix on success, because any page
-// in the book may have changed ("A book-wide list reviews many pages at
-// once").
+// prefix and the `["page", projectId]` prefix on settle — success or error
+// — because a batch already confirmed before a later batch fails outright
+// still changed pages ("A book-wide list reviews many pages at once").
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { components } from "../api/types";
@@ -168,7 +168,7 @@ export function useBulkConfirmPageKinds(projectId: string) {
 
       return { confirmedCount, results: allResults };
     },
-    onSuccess: () => {
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["page-kinds", projectId] });
       void qc.invalidateQueries({ queryKey: ["page", projectId] });
     },
