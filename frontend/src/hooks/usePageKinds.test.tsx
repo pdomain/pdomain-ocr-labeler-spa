@@ -217,6 +217,50 @@ describe("useBulkConfirmPageKinds", () => {
     expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining("25"));
   });
 
+  it("reports the running confirmed tally, not pages processed, in progress and error toasts", async () => {
+    // Batch 1 (25 pages): only 10 actually confirm, the rest come back
+    // not_loaded. Batch 2 fails outright. The progress toast after batch 1
+    // and the error toast after batch 2 must both say 10 — the confirmed
+    // tally from confirmed_count — not 25, the count of pages processed.
+    let callCount = 0;
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/page-kinds/confirm`, async ({ request }) => {
+        callCount += 1;
+        const body = (await request.json()) as { pages: { page_index: number }[] };
+        if (callCount === 1) {
+          return HttpResponse.json({
+            results: body.pages.map((p, i) => ({
+              page_index: p.page_index,
+              status: i < 10 ? "confirmed" : "not_loaded",
+            })),
+            confirmed_count: 10,
+          });
+        }
+        return HttpResponse.json({ error: "internal", message: "boom" }, { status: 500 });
+      }),
+    );
+    const qc = makeQueryClient();
+    const { result } = renderHook(() => useBulkConfirmPageKinds(PROJECT_ID), {
+      wrapper: makeWrapper(qc),
+    });
+    const items = Array.from({ length: 60 }, (_, i) => ({
+      page_index: i,
+      kind: "body" as const,
+    }));
+
+    await act(async () => {
+      await expect(result.current.mutateAsync({ items })).rejects.toThrow();
+    });
+
+    expect(toastMock.info).toHaveBeenCalledWith(expect.stringContaining("10"), expect.anything());
+    expect(toastMock.info).not.toHaveBeenCalledWith(
+      expect.stringContaining("25"),
+      expect.anything(),
+    );
+    expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining("10"));
+    expect(toastMock.error).not.toHaveBeenCalledWith(expect.stringContaining("25"));
+  });
+
   it("invalidates the page-kinds and page prefixes on success", async () => {
     server.use(
       http.post(`/api/projects/${PROJECT_ID}/page-kinds/confirm`, () =>

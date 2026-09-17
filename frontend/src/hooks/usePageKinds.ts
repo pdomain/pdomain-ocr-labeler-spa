@@ -135,7 +135,6 @@ export function useBulkConfirmPageKinds(projectId: string) {
     mutationFn: async ({ items, note }) => {
       const allResults: ConfirmPageKindsResultItem[] = [];
       let confirmedCount = 0;
-      let doneCount = 0;
 
       for (let i = 0; i < items.length; i += BULK_BATCH_SIZE) {
         const batch = items.slice(i, i + BULK_BATCH_SIZE);
@@ -147,15 +146,14 @@ export function useBulkConfirmPageKinds(projectId: string) {
           );
         } catch (err) {
           toast.error(
-            `Confirming page kinds failed. ${String(doneCount)} page(s) were confirmed before the error.`,
+            `Confirming page kinds failed. ${String(confirmedCount)} page(s) were confirmed before the error.`,
           );
           throw err;
         }
         const results = response.results ?? [];
         allResults.push(...results);
         confirmedCount += response.confirmed_count;
-        doneCount += batch.length;
-        toast.info(`Confirmed ${String(doneCount)} of ${String(items.length)} page(s)…`, {
+        toast.info(`Confirmed ${String(confirmedCount)} of ${String(items.length)} page(s)…`, {
           id: "bulk-page-kind-confirm",
         });
       }
