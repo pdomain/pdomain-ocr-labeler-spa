@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
@@ -57,6 +58,9 @@ from .dependencies import (
     get_settings,
 )
 from .middleware.error_handler import ApiError
+
+if TYPE_CHECKING:
+    from pdomain_ops.pages import ProvenanceNode
 
 log = logging.getLogger(__name__)
 
@@ -128,6 +132,23 @@ class PageLoadError(BaseModel):
     message: str
 
 
+class ImageDrift(BaseModel):
+    """Marks that this page's on-disk source image changed since it was
+    OCR'd — issue 2026-07-21-image-drift-banner-hard-off.
+
+    Shaped like ``PageLoadError`` (an ``error`` tag plus a human-readable
+    ``message``) for the same reason: a typed model that can say something
+    useful, not a bare boolean. ``PagePayload.image_drift`` is ``None`` both
+    when the image is unchanged and when drift can't be determined (no
+    recorded OCR-time digest yet, or the file can't be read) — see
+    ``_image_drift_for_page`` for the detection strategy and why an
+    inconclusive read reports no drift rather than a false alarm.
+    """
+
+    error: str
+    message: str
+
+
 class PagePayload(BaseModel):
     """Full per-page payload — spec §5.3 / §1 ``PagePayload``.
 
@@ -178,6 +199,13 @@ class PagePayload(BaseModel):
     # ``get_page`` when the on-demand ``ensure_page_model`` call raises;
     # ``_page_payload`` itself never sets this. See ``PageLoadError``.
     page_load_error: PageLoadError | None = None
+    # Source-image drift marker — ``None`` when the on-disk image still
+    # matches what this page was OCR'd from, or when that can't be
+    # determined. Stamped by ``_page_payload`` itself (unlike
+    # ``page_load_error``, which only ``get_page`` sets) since every
+    # mutation endpoint that reuses ``_page_payload`` should reflect current
+    # drift state. See ``ImageDrift`` / ``_image_drift_for_page``.
+    image_drift: ImageDrift | None = None
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -922,6 +950,30 @@ def _assemble_page_payload(
     )
 
 
+def _page_head_node(*, page_store: LabelerPageStore | None, page_id: UUID | None) -> ProvenanceNode | None:
+    """Best-effort read of a page's current provenance head node.
+
+    Shared by ``_image_digest_for_page`` (the recorded image digest, index 1
+    of ``blob_refs``) and ``_image_drift_for_page`` (whether this
+    generation's OCR ran against edited bytes, ``extra["image_is_edited"]``)
+    so both read the same head via one aggregate fetch and one failure path.
+
+    A page must always render even when this can't be read (a missing
+    aggregate, an event-store hiccup) — spec §"Facet digests are computed,
+    never declared" doesn't require the read to succeed, only that a change
+    is caught when it can be. The failure is logged at WARNING, not silenced:
+    at DEBUG it would be invisible in production, where this runs.
+    """
+    if page_store is None or page_id is None:
+        return None
+    try:
+        agg_record = page_store.get_page(page_id).record
+    except Exception:
+        log.warning("_page_payload: image-digest read failed for page_id=%s", page_id, exc_info=True)
+        return None
+    return agg_record.provenance.head if agg_record.provenance else None
+
+
 def _image_digest_for_page(*, page_store: LabelerPageStore | None, page_id: UUID | None) -> str | None:
     """Best-effort image-provenance digest for a page's current head.
 
@@ -935,24 +987,176 @@ def _image_digest_for_page(*, page_store: LabelerPageStore | None, page_id: UUID
     geometry proposal on the page — the exact thing per-facet digests exist to
     prevent. An omitted facet compares unequal to a recorded one, so it reads
     as stale, never as falsely fresh.
-
-    A page must always render even when this facet can't be read (a missing
-    aggregate, an event-store hiccup) — spec §"Facet digests are computed,
-    never declared" doesn't require the read to succeed, only that a change
-    is caught when it can be. The failure is logged at WARNING, not silenced:
-    at DEBUG it would be invisible in production, where this runs.
     """
-    if page_store is None or page_id is None:
-        return None
-    try:
-        agg_record = page_store.get_page(page_id).record
-    except Exception:
-        log.warning("_page_payload: image-digest read failed for page_id=%s", page_id, exc_info=True)
-        return None
-    head = agg_record.provenance.head if agg_record.provenance else None
+    head = _page_head_node(page_store=page_store, page_id=page_id)
     if head is None or len(head.blob_refs) < 2:
         return None
     return head.blob_refs[1]
+
+
+def _image_drift_for_page(
+    *,
+    project_state: ProjectState,
+    page_index: int,
+    pstate: PageState | None,
+    page_store: LabelerPageStore | None,
+) -> ImageDrift | None:
+    """Best-effort image-drift detector — issue
+    2026-07-21-image-drift-banner-hard-off.
+
+    Compares the page's recorded OCR-time image digest
+    (``_image_digest_for_page``, ``ProvenanceNode.blob_refs[1]``) against the
+    file ``project_state.labeling_image_path(page_index)`` names today. Runs
+    on every page fetch, so it is deliberately cheap: ``pstate`` caches the
+    source file's ``st_size`` / ``st_mtime_ns`` from the last time this
+    function checked it against the *current* head digest
+    (``image_drift_head_digest``), and only hashes the file (the expensive
+    path) when one of those moved. A page whose digest or file can't be read
+    reports no drift rather than a false alarm — the same discipline
+    ``_image_digest_for_page`` itself uses. Unlike a missing digest (a
+    routine "no OCR yet" state), a ``stat()``/``read_bytes()`` failure on an
+    otherwise-OCR'd page's source file is logged at WARNING before returning
+    ``None``: a permissions problem or a mid-read disk error must stay
+    visible to an operator, not silently degrade to "no drift" forever.
+
+    Book-labeling projects are skipped entirely
+    (``project_state.has_book_labeling_session``). ``labeling_image_path``
+    resolves those pages to a ``/proc/self/fd/<n>`` descriptor for a sealed,
+    immutable memfd lease that ``BookLabelingSession`` opens fresh per
+    request — its stat metadata changes on every call, which would report
+    drift constantly rather than never. That lease also already hashes every
+    pinned artifact against the book's manifest at open time and raises
+    before any page-payload code runs, so a genuinely changed book-source
+    file is already a request-level error on that path (a verified-source
+    guarantee, not a soft banner) — this check would be redundant even if it
+    could read a stable stat for that path.
+
+    Baseline handling: the first time this function sees a page for a given
+    OCR-time head digest — a fresh process, or the digest just changed
+    because the page was re-OCR'd — ``pstate`` has no matching baseline yet.
+    That first check hashes the file once and compares it against the
+    ground-truth digest for this generation (see "edited-image passthrough"
+    below), rather than blindly trusting the current stat as a fresh
+    baseline: a page whose image was replaced while the server was down (or
+    before this process ever looked at it) must be caught the first time
+    it's fetched, not only after a *second* on-disk change. This costs one
+    hash per page per process — the same order of work ``get_page`` already
+    does per page fetch (OCR, dims, provenance reads) — after which the
+    cheap stat comparison takes over for every later fetch of the same page.
+
+    Edited-image passthrough (issue 2026-07-21-image-drift-banner-hard-off,
+    Wave 3b follow-up): "Reload OCR (Edited)" (``ReloadOCRRequest.
+    use_edited_image=True``) OCRs the persisted post-erase image, not the
+    pristine on-disk source — ``local_doctr.py``'s ``run_ocr`` writes the
+    edited bytes to a temp file and ``_run_ocr_on_path`` hashes *that* file
+    into ``blob_refs[1]``. The untouched on-disk source can never match that
+    digest, so comparing against it would report permanent drift, and the
+    banner's advice (plain Reload OCR) would discard the user's edited OCR
+    result.
+
+    Detected via the durable marker ``_ingest_ocr_result`` stamps on the
+    provenance node itself — ``head.extra["image_is_edited"] is True`` —
+    not via ``PageState.edited_image_blob``, which is in-memory only and
+    never repopulated for a ``PageState`` built fresh after a restart (the
+    original version of this fix used it and didn't survive one). Reading
+    the marker back off the persisted head means detection is correct on
+    the very first fetch of a brand-new ``PageState``, with no dependency on
+    which requests happened to touch this process before. A head with no
+    ``extra`` at all — every generation written before this marker
+    existed — reads as "not edited" (``dict.get`` default), i.e. behaves
+    exactly like an ordinary OCR generation: harmless for a genuinely
+    pristine page, but a page that WAS edited-and-reloaded under the old
+    code keeps showing the same permanent false drift until it is
+    edited-and-reloaded again (which stamps the marker) or freshly OCR'd
+    (which naturally re-syncs the digest).
+
+    The first check of an edited-passthrough generation re-anchors the
+    ground-truth digest to the on-disk file's own hash at that moment,
+    instead of the (permanently mismatching) recorded head digest —
+    chosen over treating "OCR ran on edited bytes" as drift-not-applicable
+    because it keeps detection alive: a genuine on-disk change *after* that
+    point still diverges from the re-anchored baseline and is still caught,
+    the same as an ordinary page.
+    """
+    if project_state.has_book_labeling_session:
+        return None
+    if pstate is None:
+        return None
+    head = _page_head_node(page_store=page_store, page_id=pstate.page_id)
+    if head is None or len(head.blob_refs) < 2:
+        return None
+    digest = head.blob_refs[1]
+    image_is_edited = bool(head.extra) and head.extra.get("image_is_edited") is True
+    try:
+        image_path = project_state.labeling_image_path(page_index)
+        file_stat = image_path.stat()
+    except (OSError, ValueError):
+        # WARNING not silence: a missing file or a permissions problem on an
+        # otherwise-OCR'd page is a production condition an operator needs
+        # to see, the same reasoning _image_digest_for_page's own read
+        # failure uses — degrading to "no drift" must not also mean
+        # degrading to invisible.
+        log.warning(
+            "_image_drift_for_page: could not stat source image for page_index=%d — degrading to no drift",
+            page_index,
+            exc_info=True,
+        )
+        return None
+
+    has_baseline = pstate.image_drift_head_digest == digest
+    if (
+        has_baseline
+        and pstate.image_drift_size == file_stat.st_size
+        and pstate.image_drift_mtime_ns == file_stat.st_mtime_ns
+    ):
+        # Cheap path: a baseline already exists for this head digest and
+        # neither size nor mtime moved since — trust it without hashing.
+        return None
+
+    # No baseline yet (first check for this head digest — new process or a
+    # fresh OCR generation) or the cheap stat check moved: hash once, either
+    # to establish the real baseline or to confirm/deny a suspected change.
+    try:
+        current_digest = hashlib.sha256(image_path.read_bytes()).hexdigest()
+    except OSError:
+        # Same visibility reasoning as the stat() failure above: a mid-read
+        # disk error must not silently vanish into "no drift" forever.
+        log.warning(
+            "_image_drift_for_page: could not read source image for page_index=%d — degrading to no drift",
+            page_index,
+            exc_info=True,
+        )
+        return None
+
+    if has_baseline:
+        # A baseline already exists for this generation (only the stat
+        # moved) — reuse the ground truth it was anchored to rather than
+        # re-deriving it, so a real drift keeps comparing against the
+        # original reference instead of trivially matching itself.
+        ground_truth_digest = pstate.image_drift_digest
+    else:
+        # New generation: edited-image passthrough (see docstring) anchors
+        # to the on-disk file as it stands right now; an ordinary OCR
+        # generation anchors to the recorded head digest as before.
+        ground_truth_digest = current_digest if image_is_edited else digest
+
+    # Cache the baseline regardless of the verdict — this is what lets an
+    # unchanged first check, or a merely-touched file, skip hashing on the
+    # next fetch. ``image_drift_digest`` (the ground truth) only changes
+    # when the generation itself changes, above; here it is just written
+    # back unchanged in the has_baseline case.
+    pstate.image_drift_head_digest = digest
+    pstate.image_drift_digest = ground_truth_digest
+    pstate.image_drift_size = file_stat.st_size
+    pstate.image_drift_mtime_ns = file_stat.st_mtime_ns
+
+    if current_digest == ground_truth_digest:
+        return None
+
+    return ImageDrift(
+        error="image_changed",
+        message=f"The source image changed on disk after this page was OCR'd ({image_path.name}).",
+    )
 
 
 def _resolve_regions_and_proposals(
@@ -1070,7 +1274,12 @@ def _page_payload(
     here.  The mutation endpoints that call this helper hold the
     per-project lock for their state change; the snapshot returned
     here is consistent with the state at the moment the lock was
-    released.
+    released. One exception: ``_image_drift_for_page`` opportunistically
+    caches a cheap stat baseline on ``pstate`` (issue
+    2026-07-21-image-drift-banner-hard-off) — a best-effort write tolerant of
+    races the same way ``edited_image_blob`` and friends already are; a lost
+    update there costs one extra file hash on the next call, never a wrong
+    verdict.
     """
     project = project_state.loaded_project
     # Pre-condition guaranteed by _check_project_and_page on the HTTP
@@ -1348,6 +1557,24 @@ def _page_payload(
             exc_info=True,
         )
 
+    # image_drift: best-effort cheap comparison of the current source image
+    # against the digest it was OCR'd from — see ``_image_drift_for_page``.
+    image_drift: ImageDrift | None = None
+    try:
+        image_drift = _image_drift_for_page(
+            project_state=project_state,
+            page_index=page_index,
+            pstate=pstate,
+            page_store=page_store,
+        )
+    except Exception:  # pragma: no cover - defensive
+        log.debug(
+            "_page_payload: image-drift check failed for project=%s page=%d",
+            project_id,
+            page_index,
+            exc_info=True,
+        )
+
     return PagePayload(
         project_id=project_id,
         page_index=page_index,
@@ -1365,6 +1592,7 @@ def _page_payload(
         page_kind=page_kind,
         page_kind_reviewed=page_kind_reviewed,
         page_kind_proposal=page_kind_proposal,
+        image_drift=image_drift,
     )
 
 
@@ -2530,6 +2758,7 @@ __all__ = [
     "_build_image_url",
     "_build_provenance_summary",
     "_image_digest_for_page",
+    "_image_drift_for_page",
     "_page_payload",
     "_prefetch_adjacent_pages",
     "_render_plaintext",

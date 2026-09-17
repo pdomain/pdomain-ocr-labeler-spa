@@ -99,6 +99,7 @@ import {
   clearReviewSelectionIntent,
 } from "../stores/review-selection-intent-store";
 import { worklistStore } from "../stores/worklist-store";
+import { focusWorklistLine } from "../stores/worklist-focus";
 import { pageNoUrl } from "../lib/routes";
 
 import { PageActionsCompact } from "../components/PageActionsCompact";
@@ -513,15 +514,22 @@ export default function ProjectPage() {
     },
   });
 
-  // ── Matches hotkeys (BUG-KBD-3) ─────────────────────────────────────────
+  // ── Matches hotkeys (BUG-KBD-3, P1-MATCH-NAV) ───────────────────────────
   // Wired at the page level — operates on worklistStore.selectedLineIndex to
   // know which line is "current" for all action hotkeys (V/U/D/O/G/M/R).
+  // onLineNav calls the same `focusWorklistLine` helper a Worklist row click
+  // uses, so J/K keep the canvas / breadcrumb / right panel (selectionStore)
+  // in sync with the worklist highlight instead of moving only the queue
+  // pointer (P1-MATCH-NAV). With no lines on the page there is nothing to
+  // navigate to or select, so J/K are a no-op rather than focusing a line
+  // index that does not exist.
   useMatchesHotkeys({
     onLineNav: (delta) => {
+      if (lines.length === 0) return;
       const { selectedLineIndex } = worklistStore.getState();
       const nextIdx = (selectedLineIndex ?? -1) + delta;
       const clampedIdx = Math.max(0, Math.min(lines.length - 1, nextIdx));
-      worklistStore.setSelectedLineIndex(clampedIdx);
+      focusWorklistLine(clampedIdx);
     },
     onValidate: () => {
       const { selectedLineIndex } = worklistStore.getState();
@@ -1037,7 +1045,10 @@ export default function ProjectPage() {
           ocrFailed={pagePayload?.page_load_error != null}
           message={pagePayload?.page_load_error?.message ?? null}
         />
-        <ImageDriftBanner imageDrift={false} />
+        <ImageDriftBanner
+          imageDrift={pagePayload?.image_drift != null}
+          message={pagePayload?.image_drift?.message ?? null}
+        />
       </div>
 
       {/*

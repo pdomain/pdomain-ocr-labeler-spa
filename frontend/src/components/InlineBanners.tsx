@@ -6,7 +6,8 @@
 // Three distinct banners:
 //   - OcrFailedBanner: shown when pageRecord.ocr_failed === true
 //   - ProjectNotFoundBanner: shown when routing to a missing project_id
-//   - ImageDriftBanner: shown after a 409 image_drift save response
+//   - ImageDriftBanner: shown when PagePayload.image_drift is set (the page's
+//     source image changed on disk since it was OCR'd)
 //
 // These are NOT toasts — they are rendered inline in the page content area.
 // Uses pdomain-ui Banner primitive (tone mapping: error→danger, warning→warning, info→info).
@@ -65,19 +66,29 @@ export function ProjectNotFoundBanner({ projectId, notFound }: ProjectNotFoundBa
 }
 
 interface ImageDriftBannerProps {
-  /** True after a 409 image_drift save response. */
+  /** True when the current page's source image changed on disk since OCR. */
   imageDrift?: boolean;
+  /**
+   * Optional detail from `PagePayload.image_drift.message` (issue
+   * 2026-07-21-image-drift-banner-hard-off) — shown alongside the generic
+   * headline when the backend named what changed.
+   */
+  message?: string | null;
 }
 
 /**
- * Inline banner shown after a 409 `image_drift` save response.
+ * Inline banner shown when the backend stamped `PagePayload.image_drift`
+ * (the page's source image on disk no longer matches the bytes it was
+ * OCR'd from). Points at the existing Reload OCR toolbar action, the same
+ * recovery path `OcrFailedBanner` points at for a loader failure.
  * Spec: "Image on disk has changed. Reload page to continue."
  */
-export function ImageDriftBanner({ imageDrift }: ImageDriftBannerProps) {
+export function ImageDriftBanner({ imageDrift, message }: ImageDriftBannerProps) {
   if (!imageDrift) return null;
   return (
     <Banner tone="warning" data-testid="banner-image-drift" role="alert">
-      Image on disk has changed. Reload the page to continue editing.
+      Image on disk has changed. Reload OCR from the toolbar to continue editing.
+      {message ? ` (${message})` : ""}
     </Banner>
   );
 }

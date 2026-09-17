@@ -279,7 +279,8 @@ Already wired (`Toaster` in `App.tsx`, `useNotificationStream` in
   rotate / refine.
 - `InlineBanners` mounted inside `LeftPane` — subscribes to
   `useNotificationStream` for `ocr_failed` / `project_not_found` /
-  `image_drift` notifications.
+  `image_drift` notifications. Drift reaches the SPA on the page payload
+  today, not as a notification; see `08-page-actions.md` §14.
 - Toasts continue to fire for transient successes.
 
 ---
