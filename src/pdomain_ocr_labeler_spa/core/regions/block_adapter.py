@@ -25,6 +25,7 @@ from pdomain_book_tools.ocr.block import Block
 from pdomain_book_tools.ocr.page import Page
 from pdomain_book_tools.ocr.word import Word
 
+from pdomain_ocr_labeler_spa.core.regions.coordinates import bounding_box_to_pixels
 from pdomain_ocr_labeler_spa.core.regions.models import ResolvedRegion
 
 _REGION_ID_KEY = "region_id"
@@ -76,7 +77,10 @@ def confirmed_regions_from_page(page: Page) -> list[ResolvedRegion]:
             continue
         if block.bounding_box is None:
             continue
-        left, top, right, bottom = block.bounding_box.to_ltrb()
+        # A region's box is stored in the page's own convention — pixels on a
+        # pixel-space page, 0-to-1 on a normalized one — but ``RegionView.box``
+        # is always pixels, the same rule the write routes apply in reverse.
+        box = bounding_box_to_pixels(block.bounding_box, page_width=page.width, page_height=page.height)
         source_proposal_id = block.additional_block_attributes.get(_SOURCE_PROPOSAL_ID_KEY)
         member_signatures = tuple(
             sig for sig in (word.bbox_signature for word in block.words) if sig is not None
@@ -84,7 +88,7 @@ def confirmed_regions_from_page(page: Page) -> list[ResolvedRegion]:
         resolved.append(
             ResolvedRegion(
                 role=role,
-                box=(round(left), round(top), round(right), round(bottom)),
+                box=box,
                 confirmed=True,
                 confidence=None,
                 proposal_id=source_proposal_id if isinstance(source_proposal_id, str) else None,
