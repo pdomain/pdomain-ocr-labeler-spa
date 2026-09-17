@@ -60,6 +60,17 @@ from .middleware.error_handler import ApiError
 
 log = logging.getLogger(__name__)
 
+# Project ids for which ``get_page`` has already logged a WARNING for
+# "the OCR loader itself could not be built" (as opposed to a per-page OCR
+# failure). Unlike a per-page failure, that condition doesn't change from
+# page to page, so every page navigated in this state would otherwise repeat
+# the same WARNING — the first hit for a project logs WARNING, later hits
+# log DEBUG (see ``get_page``). Deliberately process-lifetime, not per
+# ``ProjectState`` instance: reloading the same project shouldn't re-warn
+# either, since the deployment-level cause (DocTR missing, context keys
+# unwired) hasn't changed.
+_ocr_unavailable_warned_projects: set[str] = set()
+
 router = APIRouter(
     prefix="/api/projects/{project_id}/pages",
     tags=["pages"],
@@ -98,6 +109,23 @@ class PageKindProposalView(BaseModel):
     # ``RegionProposalListItem.evidence`` in ``api/regions.py``, equally
     # open-ended for the same reason.
     evidence: dict[str, Any]
+
+
+class PageLoadError(BaseModel):
+    """Marks a genuine loader failure for this page GET — issue
+    2026-08-08-get-page-hides-ocr-failures.
+
+    ``get_page`` auto-triggers ``ensure_page_model`` (B1) when no
+    page_record is cached yet.  A failure there used to degrade silently to
+    an empty page_record, indistinguishable from a page that legitimately
+    has no OCR text.  ``PagePayload.page_load_error`` is that distinction:
+    non-``None`` only when the loader itself raised, never when OCR ran and
+    found nothing.  Shaped like ``ApiError`` (``error`` tag + human-readable
+    ``message``) but scoped to one page rather than the whole request.
+    """
+
+    error: str
+    message: str
 
 
 class PagePayload(BaseModel):
@@ -145,6 +173,11 @@ class PagePayload(BaseModel):
     # rather than failing the page. ``None`` when no run has proposed a kind
     # for this page yet.
     page_kind_proposal: PageKindProposalView | None = None
+    # Loader-failure marker — ``None`` when the page loaded normally,
+    # including when it legitimately has no OCR text. Stamped by
+    # ``get_page`` when the on-demand ``ensure_page_model`` call raises;
+    # ``_page_payload`` itself never sets this. See ``PageLoadError``.
+    page_load_error: PageLoadError | None = None
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -1364,6 +1397,19 @@ def get_page(
     cached → OCR lane probes, so the response has a populated
     ``page_record`` and ``line_matches`` without requiring a separate
     Reload OCR click.
+
+    A failure on that on-demand call degrades to an empty ``page_record``
+    rather than a 500 — the request still succeeds so the image renders —
+    but is stamped onto ``PagePayload.page_load_error`` (issue
+    2026-08-08-get-page-hides-ocr-failures), distinguishing it from a page
+    that legitimately has no OCR text. Two distinct causes get two codes:
+
+    - ``ocr_unavailable`` — the loader itself couldn't be built (DocTR not
+      installed, production context keys unwired). A deployment-wide
+      condition, not a fact about this page; logged at WARNING once per
+      project, DEBUG after.
+    - ``ocr_load_failed`` — the loader built fine but this page's OCR run
+      raised. Logged at WARNING every time.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -1371,21 +1417,66 @@ def get_page(
 
     # B1: auto-trigger ensure_page_model when no page_record is cached.
     pstate = project_state.get_page_state(page_index)
+    page_load_error: PageLoadError | None = None
     if pstate is None or pstate.page_record is None:
+        loader: PageLoader | None = None
         try:
             loader = _build_page_loader_from_context(runner, project_state, settings)
-            ensure_page_model(project_state, page_index, loader=loader)
         except Exception:
-            # Loader unavailable (e.g. DocTR not installed, test env with no
-            # context keys) — degrade gracefully to empty page_record.  The
-            # SPA can still show the image and let the user trigger Reload OCR
-            # manually.  Log at DEBUG so test noise stays low.
-            log.debug(
-                "get_page: ensure_page_model failed for %s/%d — degrading to empty page_record",
+            # The loader itself couldn't be built (e.g. DocTR not installed,
+            # test env with no context keys) — OCR is unavailable for the
+            # whole deployment, not a fact about this one page, so this gets
+            # its own code rather than ``ocr_load_failed`` and a message that
+            # says so instead of implying this page's OCR run failed. The
+            # condition doesn't change page to page, so every page navigated
+            # would otherwise repeat the same WARNING — log it once per
+            # project and drop to DEBUG after (issue
+            # 2026-08-08-get-page-hides-ocr-failures). Full detail stays in
+            # exc_info at both levels; only the level changes.
+            already_warned = project_id in _ocr_unavailable_warned_projects
+            _ocr_unavailable_warned_projects.add(project_id)
+            log.log(
+                logging.DEBUG if already_warned else logging.WARNING,
+                "get_page: OCR loader unavailable for project=%s — degrading to empty page_record",
                 project_id,
-                page_index,
                 exc_info=True,
             )
+            page_load_error = PageLoadError(
+                error="ocr_unavailable",
+                message="OCR is not available in this deployment.",
+            )
+
+        if loader is not None:
+            try:
+                ensure_page_model(project_state, page_index, loader=loader)
+            except Exception as exc:
+                # A loader that builds fine can still fail on this specific
+                # page (a genuine OCR failure) — degrade gracefully to an
+                # empty page_record so the SPA can still show the image and
+                # let the user trigger Reload OCR manually. Logged at
+                # WARNING every time (unlike the deployment-wide branch
+                # above): a per-page OCR failure is not routine, and DEBUG
+                # output never reaches an operator running this server
+                # (issue 2026-08-08-get-page-hides-ocr-failures) — the same
+                # reasoning ``_page_payload``'s image-digest read failure
+                # already uses for a request that survives but must still
+                # surface. The marker below (not just the log line) lets
+                # the SPA tell "OCR failed" apart from "OCR ran and found no
+                # text". ``message`` is client-facing (goes over the wire),
+                # so it's curated to the exception type name only —
+                # ``str(exc)`` can carry server filesystem paths. Full
+                # detail is already captured in the WARNING's exc_info.
+                log.warning(
+                    "get_page: ensure_page_model failed for project=%s page=%d — "
+                    "degrading to empty page_record",
+                    project_id,
+                    page_index,
+                    exc_info=True,
+                )
+                page_load_error = PageLoadError(
+                    error="ocr_load_failed",
+                    message=f"OCR failed to load page {page_index} ({type(exc).__name__}).",
+                )
 
     payload = _page_payload(
         project_id=project_id,
@@ -1395,6 +1486,8 @@ def get_page(
         app_config=app_config,
         page_store=page_store,
     )
+    if page_load_error is not None:
+        payload.page_load_error = page_load_error
 
     # Undo/redo flags — spec 2026-06-12-event-store-undo. Stamped here (not in
     # ``_page_payload``) so the helper stays store-free; mutation routes refresh
