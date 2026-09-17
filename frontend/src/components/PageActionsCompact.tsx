@@ -206,14 +206,16 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     setActiveJobId: setPageKindsJobId,
     invalidationKey: ["page", projectId, pageIndex],
     onComplete: (jobId, event) => {
-      const msg = event.progress?.message || "Page kind proposals complete";
+      const msg = event.progress.message || "Page kind proposals complete";
       toast.success(msg, { id: jobId });
     },
     onError: (jobId) => {
       toast.error("Page kind proposals failed", { id: jobId });
     },
     onRunning: (jobId, event) => {
-      const msg = event.progress?.message ?? "Proposing page kinds…";
+      // The normalized message is "" when the backend sent none, so fall back
+      // with ||, not ??, or the loading toast would go blank.
+      const msg = event.progress.message || "Proposing page kinds…";
       void import("sonner").then(({ toast: sonnerToast }) => {
         sonnerToast.loading(msg, { id: jobId });
       });
@@ -230,7 +232,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     setActiveJobId: setRegionsJobId,
     invalidationKey: ["page", projectId, pageIndex],
     onComplete: (jobId, event) => {
-      const msg = event.progress?.message || "Region proposals complete";
+      const msg = event.progress.message || "Region proposals complete";
       if (msg.toLowerCase().includes("propose page kinds first")) {
         toast.warn(msg, { id: jobId });
       } else {
@@ -241,7 +243,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       toast.error("Region proposals failed", { id: jobId });
     },
     onRunning: (jobId, event) => {
-      const msg = event.progress?.message ?? "Proposing regions…";
+      const msg = event.progress.message || "Proposing regions…";
       void import("sonner").then(({ toast: sonnerToast }) => {
         sonnerToast.loading(msg, { id: jobId });
       });
@@ -473,7 +475,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   function handleProposePageKinds() {
     proposePageKinds.mutate(undefined, {
       onSuccess: (data) => {
-        if (data?.job_id) {
+        if (data.job_id) {
           setPageKindsJobId(data.job_id);
           void import("sonner").then(({ toast: sonnerToast }) => {
             sonnerToast.loading("Proposing page kinds…", { id: data.job_id });
@@ -489,7 +491,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   function handleProposeRegions() {
     proposeRegions.mutate(undefined, {
       onSuccess: (data) => {
-        if (data?.job_id) {
+        if (data.job_id) {
           setRegionsJobId(data.job_id);
           void import("sonner").then(({ toast: sonnerToast }) => {
             sonnerToast.loading("Proposing regions…", { id: data.job_id });
