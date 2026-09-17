@@ -239,6 +239,16 @@ def test_the_evidence_names_the_band_and_the_cluster_width() -> None:
     assert detected[0].evidence["template_residual_px"] == 2
 
 
+def test_the_evidence_names_the_fixed_share_threshold_source() -> None:
+    """``furniture_region_detector`` always judges against the fixed share."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import furniture_region_detector
+
+    words = [_word("THE", 100, 105, 170, 125), _word("17", 870, 105, 900, 125)]
+    detected = furniture_region_detector(_input(words))
+    assert detected[0].evidence["gap_threshold_source"] == "fixed_share"
+    assert detected[0].evidence["gap_threshold_px"] == 80.0
+
+
 def test_a_page_with_normalized_word_boxes_is_skipped() -> None:
     """Ink bands are source-frame pixels; a 0-to-1 box cannot be compared against one."""
     from pdomain_ocr_labeler_spa.core.regions.furniture import furniture_region_detector
@@ -261,3 +271,181 @@ def test_a_page_mixing_normalized_and_pixel_boxes_is_skipped() -> None:
         extra_line=[_word("17", 0.9, 0.05, 0.95, 0.08, normalized=True)],
     )
     assert furniture_region_detector(detector_input) == []
+
+
+# ---------------------------------------------------------------------------
+# The per-book gap fit: Otsu-midpoint, its three fallback triggers, and the
+# book that motivated deriving the threshold instead of fixing it.
+# ---------------------------------------------------------------------------
+
+
+def test_the_otsu_fit_places_the_threshold_inside_the_valley() -> None:
+    """A clear bimodal gap list: many word spaces, a wide empty valley, the head-folio gaps."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import _fit_gap_threshold_px
+
+    word_spaces = [3.0, 5.0, 8.0, 10.0, 12.0, 15.0, 18.0, 20.0, 22.0, 26.0]
+    head_folio_gaps = [118.0, 140.0, 160.0, 180.0, 210.0, 240.0, 260.0, 287.0]
+    gaps = word_spaces + head_folio_gaps
+
+    threshold_px, source = _fit_gap_threshold_px(gaps, text_width_px=1000)
+
+    assert source == "book_fit"
+    assert max(word_spaces) < threshold_px < min(head_folio_gaps)
+
+
+def test_too_few_pooled_gaps_falls_back_to_the_fixed_share() -> None:
+    """Fewer than 8 pooled gaps: too little evidence to fit, regardless of shape."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import (
+        FOLIO_GAP_SHARE_OF_TEXT_WIDTH,
+        _fit_gap_threshold_px,
+    )
+
+    gaps = [5.0, 6.0, 7.0, 150.0, 160.0, 170.0, 180.0]  # 7 gaps, a clear valley but too few
+    assert len(gaps) < 8
+
+    threshold_px, source = _fit_gap_threshold_px(gaps, text_width_px=1000)
+
+    assert source == "fixed_share"
+    assert threshold_px == 1000 * FOLIO_GAP_SHARE_OF_TEXT_WIDTH
+
+
+def test_a_degenerate_gap_class_falls_back_to_the_fixed_share() -> None:
+    """An Otsu split that leaves either class with fewer than two members is untrustworthy."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import (
+        FOLIO_GAP_SHARE_OF_TEXT_WIDTH,
+        _fit_gap_threshold_px,
+    )
+
+    # Eight clustered low values and a single outlier: the outlier's own class
+    # has only one member, so the split is not trusted even though it exists.
+    gaps = [3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 200.0]
+
+    threshold_px, source = _fit_gap_threshold_px(gaps, text_width_px=1000)
+
+    assert source == "fixed_share"
+    assert threshold_px == 1000 * FOLIO_GAP_SHARE_OF_TEXT_WIDTH
+
+
+def test_a_threshold_outside_the_text_width_band_falls_back_to_the_fixed_share() -> None:
+    """A valley that sits below 2 percent of text width is not a real furniture gap."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import (
+        FOLIO_GAP_SHARE_OF_TEXT_WIDTH,
+        _fit_gap_threshold_px,
+    )
+
+    # Two well-separated classes by Otsu's own measure, but their midpoint
+    # (about 10px) is under 2 percent of a 1000px text width (20px) — no real
+    # bimodality against this book's own geometry.
+    low = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+    high = [12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0]
+
+    threshold_px, source = _fit_gap_threshold_px(low + high, text_width_px=1000)
+
+    assert source == "fixed_share"
+    assert threshold_px == 1000 * FOLIO_GAP_SHARE_OF_TEXT_WIDTH
+
+
+_MOTIVATING_BOOK_PAGE_WIDTH = 1800
+_MOTIVATING_BOOK_PAGE_HEIGHT = 2400
+_MOTIVATING_BOOK_TEXT_LEFT = 50
+_MOTIVATING_BOOK_TEXT_WIDTH = 1596
+_MOTIVATING_BOOK_TEXT_RIGHT = _MOTIVATING_BOOK_TEXT_LEFT + _MOTIVATING_BOOK_TEXT_WIDTH
+
+
+def _motivating_book_templates() -> BookTemplates:
+    template = PageTemplate(
+        page_class="normal_recto",
+        first_band_top_px=100,
+        first_band_spread_px=6,
+        text_left_px=_MOTIVATING_BOOK_TEXT_LEFT,
+        text_right_px=_MOTIVATING_BOOK_TEXT_RIGHT,
+        band_count=30,
+        page_count=200,
+        page_share=0.5,
+    )
+    return BookTemplates(100.0, 4.0, 16.0, (template,), 0.9)
+
+
+def _motivating_book_page(words: list[dict[str, object]]) -> Page:
+    line: dict[str, object] = {
+        "type": "Block",
+        "child_type": "WORDS",
+        "block_category": "LINE",
+        "items": words,
+        "bounding_box": _bbox(0, 0, _MOTIVATING_BOOK_PAGE_WIDTH, _MOTIVATING_BOOK_PAGE_HEIGHT),
+    }
+    return Page.from_dict(
+        {
+            "width": _MOTIVATING_BOOK_PAGE_WIDTH,
+            "height": _MOTIVATING_BOOK_PAGE_HEIGHT,
+            "page_index": 0,
+            "bounding_box": _bbox(0, 0, _MOTIVATING_BOOK_PAGE_WIDTH, _MOTIVATING_BOOK_PAGE_HEIGHT),
+            "items": [line],
+        }
+    )
+
+
+def _motivating_book_measurement(page_name: str) -> PageMeasurement:
+    return PageMeasurement(
+        page_name=page_name,
+        source_path=f"book1/{page_name}",
+        sha256="a" * 64,
+        source_frame=CoordinateFrame(width=_MOTIVATING_BOOK_PAGE_WIDTH, height=_MOTIVATING_BOOK_PAGE_HEIGHT),
+        image_mode="L",
+        grayscale_threshold=128,
+        foreground_pixels=50_000,
+        foreground_bounds=(50, 100, 1700, 2300),
+        margins=(50, 100, _MOTIVATING_BOOK_PAGE_WIDTH - 1700, _MOTIVATING_BOOK_PAGE_HEIGHT - 2300),
+        ink_bands=(InkBand(100, 130),),
+        page_class="normal_recto",
+    )
+
+
+def _motivating_book_input(page_index: int, words: list[dict[str, object]]) -> Any:
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectorInput
+
+    page_name = f"{page_index:03d}.png"
+    return DetectorInput(
+        page=_motivating_book_page(words),
+        page_index=page_index,
+        measurement=_motivating_book_measurement(page_name),
+        classification=PageClassification(page_name, "normal_recto", 2, (0,), 0.9),
+        templates=_motivating_book_templates(),
+    )
+
+
+def test_the_book_that_motivated_this_fit_splits_where_the_fixed_share_joins() -> None:
+    """Text width 1596px: 10 percent is ~160px, but every head-folio gap here is 135-150px.
+
+    The fixed detector never clears its own threshold and joins head and
+    folio into one region on every page. The fitted threshold sits at the
+    valley between the ~10-20px word spaces and the ~135-150px head-folio
+    gaps, well under 135, and splits them into two.
+    """
+    from pdomain_ocr_labeler_spa.core.regions.furniture import FurnitureDetector, furniture_region_detector
+
+    pages_words = [
+        [
+            _word("THE", 50, 105, 120, 125),
+            _word("VOYAGE", 130, 105, 260, 125),
+            _word("1", 410, 105, 430, 125),
+        ],
+        [_word("THE", 50, 105, 120, 125), _word("SHIP", 133, 105, 230, 125), _word("2", 370, 105, 390, 125)],
+        [_word("THE", 50, 105, 120, 125), _word("CREW", 135, 105, 235, 125), _word("3", 380, 105, 400, 125)],
+        [
+            _word("OUR", 50, 105, 110, 125),
+            _word("JOURNEY", 128, 105, 260, 125),
+            _word("4", 395, 105, 415, 125),
+        ],
+        [_word("A", 50, 105, 70, 125), _word("TALE", 90, 105, 170, 125), _word("5", 305, 105, 325, 125)],
+    ]
+    book = [_motivating_book_input(i, words) for i, words in enumerate(pages_words)]
+
+    fixed = furniture_region_detector(book[0])
+    assert len(fixed) == 1, "10% of a 1596px text width (~160px) exceeds no head-folio gap here"
+
+    per_page_detect = FurnitureDetector().fit(book)
+    fitted = per_page_detect(book[0])
+    assert len(fitted) == 2, "the fitted threshold should split the head from the folio"
+    assert fitted[0].evidence["gap_threshold_source"] == "book_fit"
+    assert fitted[1].evidence["gap_threshold_source"] == "book_fit"
