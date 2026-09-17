@@ -20,6 +20,15 @@ Notifications side-effects go through ``NotificationQueue`` per spec 11
 failures are recorded) so the SPA can render a banner / toast without
 streaming the per-page progress.
 
+Cancel support: the loop checks ``runner.is_cancelled(job_id)`` (the shared
+cancel-check helper on ``JobRunner``) at the top of each page's iteration,
+before that page's store write starts — a page's write is a single atomic
+call, so cancel never interrupts one in flight. Pages after the cancelled
+one keep ``generation > last_saved_generation``, so a later save re-attempts
+them; the store is left consistent either way. The final progress message
+states it was cancelled and how many pages had already been saved
+(P1-CANCEL, ``docs/issues/2026-07-21-job-cancel-incomplete.md``).
+
 Failures list shape: the handler stashes the list on
 ``job.payload["failures"]`` so a follow-up ``GET /api/jobs/{id}``
 caller can read it; the SSE stream also carries the failures
@@ -136,6 +145,32 @@ async def handle_save_project(runner: JobRunner, job: Job) -> None:
     await runner.update_progress(job.job_id, current=0, total=total, message=f"Saving {total} page(s)")
 
     for page_index in dirty:
+        # Cooperative cancel check — shared helper, see JobRunner.is_cancelled.
+        # Checked before this page's own store write starts, so cancel never
+        # abandons a partially-written page (P1-CANCEL).
+        if runner.is_cancelled(job.job_id):
+            job.payload["failures"] = failures
+            job.payload["skipped_pages"] = len(skipped)
+            job.payload["skipped_indices"] = skipped
+            notification_queue.queue(
+                NotificationKind.NEGATIVE if failures else NotificationKind.INFO,
+                f"Save cancelled after {completed} of {total} page(s).",
+            )
+            await runner.update_progress(
+                job.job_id,
+                current=completed,
+                total=total,
+                message=f"Cancelled after saving {completed} of {total} page(s)",
+            )
+            log.info(
+                "save_project: cancelled project=%s saved=%d of %d job=%s",
+                project.project_id,
+                completed,
+                total,
+                job.job_id,
+            )
+            return
+
         pstate = project_state.page_states.get(page_index)
         if pstate is None or pstate.page_record is None:  # pragma: no cover - race-defense
             continue
