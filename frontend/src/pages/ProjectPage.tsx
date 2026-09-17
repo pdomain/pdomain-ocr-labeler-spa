@@ -409,9 +409,31 @@ export default function ProjectPage() {
   // merging them) would reintroduce that bug — keep this order.
   // ProjectPage.pageChange.test.tsx's "same-commit ordering" test fails if
   // this effect is moved above the clear — verified while writing it.
+  //
+  // Abandoning the intent (finding 1, medium): the intent used to be
+  // consumed only when idx0 happened to equal intent.pageIndex, and was
+  // never cleared otherwise. So pressing ']' (intent for page 7), then
+  // navigating elsewhere with ordinary prev/next before page 7 loaded, left
+  // the intent pending indefinitely — later reaching page 7 through normal
+  // navigation silently auto-selected that proposal. `prevIdx0Ref` tracks
+  // the previous idx0 so this effect can tell a genuine navigation (idx0
+  // actually changed) apart from a re-run triggered only by `pagePayload`
+  // changing at the same idx0 (e.g. the destination page's fetch resolving).
+  // Only a genuine navigation that lands somewhere other than the intent's
+  // own pageIndex abandons it — the navigation ']' itself triggers (which
+  // changes idx0 TO intent.pageIndex) must not clear the intent it just set.
+  const prevIdx0Ref = useRef(idx0);
   useEffect(() => {
+    const idx0Changed = prevIdx0Ref.current !== idx0;
+    prevIdx0Ref.current = idx0;
+
     const intent = reviewSelectionIntentStore.getState().intent;
     if (!intent) return;
+
+    if (idx0Changed && intent.pageIndex !== idx0) {
+      clearReviewSelectionIntent();
+      return;
+    }
     if (intent.pageIndex !== idx0) return;
     if (!pagePayload) return; // destination page not loaded yet — wait
     const isUndecided = (pagePayload.regions ?? []).some(

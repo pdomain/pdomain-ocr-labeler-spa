@@ -347,4 +347,50 @@ describe("ProjectPage — the review-queue selection intent survives the page-ch
     await waitFor(() => expect(reviewSelectionIntentStore.getState().intent).toBeNull());
     expect(selectionStore.getState().level).toBe("none");
   });
+
+  // Finding 1 (medium, ProjectPage.tsx ~line 412): the intent was only ever
+  // consumed when idx0 happened to equal intent.pageIndex, and was never
+  // cleared otherwise. An intent set by ']' for a distant page survived any
+  // number of *ordinary* page changes that didn't land on it — so later
+  // reaching that page through normal navigation would silently auto-select
+  // a proposal the user never asked for there.
+  it("clears an intent abandoned by intervening ordinary navigation, so later reaching that page does not auto-select", async () => {
+    server.use(
+      http.get("/api/projects/:pid", () =>
+        HttpResponse.json({ ...projectFixture(), image_paths: ["p1.png", "p2.png", "p3.png"] }),
+      ),
+    );
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    // Simulates ']' recording an intent for page index 2 (the 3rd page) from
+    // page index 0 — the destination is not adjacent, so ordinary next/prev
+    // navigation passes through page index 1 first.
+    setReviewSelectionIntent({ pageIndex: 2, proposalId: "prop-1" });
+
+    const nextButton = await screen.findByTestId("nav-next-button");
+    await waitFor(() => expect(nextButton).not.toBeDisabled());
+    fireEvent.click(nextButton); // idx0: 0 -> 1, does not match the intent's pageIndex (2).
+
+    await waitFor(() => expect(screen.getByTestId("nav-page-input")).toHaveValue(2));
+    await waitFor(() => expect(reviewSelectionIntentStore.getState().intent).toBeNull());
+
+    fireEvent.click(await screen.findByTestId("nav-next-button")); // idx0: 1 -> 2, ordinary arrival.
+
+    await waitFor(() => expect(screen.getByTestId("nav-page-input")).toHaveValue(3));
+    expect(selectionStore.getState().path.proposalId).toBeUndefined();
+  });
+
+  it("does not clear the intent set for the destination the same navigation is heading to", async () => {
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    setReviewSelectionIntent({ pageIndex: 1, proposalId: "prop-1" });
+
+    const nextButton = await screen.findByTestId("nav-next-button");
+    await waitFor(() => expect(nextButton).not.toBeDisabled());
+    fireEvent.click(nextButton); // idx0: 0 -> 1, matches the intent's own pageIndex.
+
+    await waitFor(() => expect(screen.getByTestId("nav-page-input")).toHaveValue(2));
+    await waitFor(() => expect(selectionStore.getState().path.proposalId).toBe("prop-1"));
+    expect(reviewSelectionIntentStore.getState().intent).toBeNull();
+  });
 });
