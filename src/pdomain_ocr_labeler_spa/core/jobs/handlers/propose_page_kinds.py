@@ -37,6 +37,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from contextlib import ExitStack
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -175,22 +176,15 @@ async def handle_propose_page_kinds(runner: JobRunner, job: Job) -> None:
     measured_page_indices: list[int] = []
     skipped_page_indices: list[int] = []
     for page_index, image_path in enumerate(project.image_paths):
+        # The lease is entered through an ``ExitStack`` rather than a ``with``
+        # inside a ``try``, so only ``open_labeling_page``'s own ``ValueError``
+        # is attributed to the lease. A measurement function may raise
+        # ``ValueError`` of its own, and reporting that as a failed lease
+        # would send the next reader looking at the manifest instead of the
+        # measurement.
+        stack = ExitStack()
         try:
-            with leased_labeling_page(project_state, page_index):
-                input_page = ProfileInputPage(
-                    name=image_path.name,
-                    image_path=project_state.labeling_image_path(page_index),
-                    source_path=f"{project.project_id}/{image_path.name}",
-                )
-                # ``profile_page`` decodes the image and scans it with numpy —
-                # CPU-bound work that would block the one event loop for the
-                # whole book. Offload it the way every other image-touching
-                # handler does (``reload_ocr``, ``rotate``, ``auto_rotate_all``)
-                # so the confirm route and this job's own SSE progress stream
-                # keep being served while the run proceeds. The lease stays
-                # bound for the duration of the offloaded call —
-                # ``asyncio.to_thread`` propagates the contextvar it uses.
-                measurement = await asyncio.to_thread(measure_fn, project.project_id, input_page)
+            stack.enter_context(leased_labeling_page(project_state, page_index))
         except ValueError as exc:
             skipped_page_indices.append(page_index)
             log.warning(
@@ -205,6 +199,21 @@ async def handle_propose_page_kinds(runner: JobRunner, job: Job) -> None:
                 message=f"Skipped unreadable page {page_index + 1}/{total}",
             )
             continue
+        with stack:
+            input_page = ProfileInputPage(
+                name=image_path.name,
+                image_path=project_state.labeling_image_path(page_index),
+                source_path=f"{project.project_id}/{image_path.name}",
+            )
+            # ``profile_page`` decodes the image and scans it with numpy —
+            # CPU-bound work that would block the one event loop for the whole
+            # book. Offload it the way every other image-touching handler does
+            # (``reload_ocr``, ``rotate``, ``auto_rotate_all``) so the confirm
+            # route and this job's own SSE progress stream keep being served
+            # while the run proceeds. The lease stays bound for the duration
+            # of the offloaded call — ``asyncio.to_thread`` propagates the
+            # contextvar the binding uses.
+            measurement = await asyncio.to_thread(measure_fn, project.project_id, input_page)
         measured.append(measurement)
         measured_page_indices.append(page_index)
         await runner.update_progress(

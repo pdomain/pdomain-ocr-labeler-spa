@@ -53,6 +53,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from contextlib import ExitStack
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -274,26 +275,31 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     )
     proposal_count = 0
     lease_failed_indices: list[int] = []
+    detector_failed_indices: list[int] = []
     for i, idx in enumerate(eligible_indices, start=1):
         pstate = project_state.page_states[idx]
         page = _resolve_live_page(pstate)
         if page is not None:
+            # A detector reads the page image on a book-labeling project only
+            # through a verified per-page lease — reading
+            # ``project.image_paths`` directly would bypass the manifest hash
+            # pin the same way the defect this fixes did for
+            # ``propose_page_kinds``. Held unconditionally, even for the
+            # default no-op detector: the seam exists to be swapped by slice
+            # 4's real detector, and a conditional lease would be wrong the
+            # moment it is.
+            #
+            # The lease is entered through an ``ExitStack`` rather than a
+            # ``with`` inside a ``try``, so only ``open_labeling_page``'s own
+            # ``ValueError`` is attributed to the lease. A detector is
+            # entitled to raise ``ValueError`` of its own — slice 4's reads
+            # ``Page.is_content_normalized``, which raises on a page mixing
+            # normalized and pixel word boxes — and reporting that as a
+            # failed lease would send the next reader looking at the manifest
+            # instead of the page.
+            stack = ExitStack()
             try:
-                # A detector reads the page image on a book-labeling project
-                # only through a verified per-page lease — reading
-                # ``project.image_paths`` directly would bypass the manifest
-                # hash pin the same way the defect this fixes did for
-                # ``propose_page_kinds``. Held unconditionally, even for the
-                # default no-op detector: the seam exists to be swapped by
-                # slice 4's real detector, and a conditional lease would be
-                # wrong the moment it is. CPU-bound in the general case
-                # (slice 4's real detector decodes images and runs numpy) —
-                # offloaded for the same reason the facet-digest snapshot
-                # above is; the lease stays bound for the duration of the
-                # offloaded call, since ``asyncio.to_thread`` propagates the
-                # contextvar it uses.
-                with leased_labeling_page(project_state, idx):
-                    detected = await asyncio.to_thread(detector, page)
+                stack.enter_context(leased_labeling_page(project_state, idx))
             except ValueError as exc:
                 lease_failed_indices.append(idx)
                 log.warning(
@@ -302,6 +308,26 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
                     exc,
                 )
                 detected = None
+            else:
+                with stack:
+                    try:
+                        # CPU-bound in the general case — slice 4's real
+                        # detector decodes images and runs numpy. Offloaded
+                        # for the same reason the facet-digest snapshot above
+                        # is; the lease stays bound for the duration of the
+                        # offloaded call, since ``asyncio.to_thread``
+                        # propagates the contextvar the binding uses.
+                        detected = await asyncio.to_thread(detector, page)
+                    except Exception:
+                        # The detector is a swap-in callable from
+                        # ``runner.context``, so its failures are not this
+                        # handler's bugs to distinguish. One bad page must not
+                        # kill a 400-page run, and the traceback is logged
+                        # rather than swallowed, so a broken detector is still
+                        # loud.
+                        detector_failed_indices.append(idx)
+                        log.exception("propose_regions: detector raised on page=%d; skipping it", idx)
+                        detected = None
             if detected:
                 proposals = [
                     RegionProposal(
@@ -326,6 +352,15 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
             project.project_id,
             len(lease_failed_indices),
             lease_failed_indices,
+        )
+
+    if detector_failed_indices:
+        log.warning(
+            "propose_regions: run=%s project=%s detector raised on %d page(s): %s",
+            run_id,
+            project.project_id,
+            len(detector_failed_indices),
+            detector_failed_indices,
         )
 
     log.info(
