@@ -34,6 +34,30 @@ if TYPE_CHECKING:
     from pdomain_ocr_labeler_spa.core.regions.models import ProposalRun, RegionDecision, RegionProposal
 
 
+def is_undecided(decision: RegionDecision | None) -> bool:
+    """Whether a proposal still needs a person's decision.
+
+    The one predicate both ``resolve_regions`` (for the page view) and the
+    book-level review queue share, so the two can never disagree about which
+    proposals are outstanding work. ``False`` when the latest decision is a
+    refusal (``REJECTED``) or already names a ``region_id`` — accepted,
+    edited and carried decisions all name one, since each promotes the
+    proposal into a confirmed region. ``True`` otherwise, including when
+    there is no decision at all.
+
+    Deliberately excludes ``resolve_regions``'s confidence-threshold check:
+    the threshold is how a caller decides whether a proposal can *stand in*
+    for a missing confirmed region on one page, not whether it is decided.
+    The queue has no threshold and counts every undecided proposal as work
+    regardless of confidence.
+    """
+    if decision is None:
+        return True
+    if decision.disposition is Disposition.REJECTED:
+        return False
+    return decision.region_id is None
+
+
 def resolve_regions(
     confirmed: Sequence[ResolvedRegion],
     proposals: Sequence[RegionProposal],
@@ -77,12 +101,9 @@ def resolve_regions(
 
     for proposal in proposals:
         decision = decisions.get(proposal.proposal_id)
-        if decision is not None and decision.disposition is Disposition.REJECTED:
-            # A refusal is a fact. Never fall back to a proposal a person
-            # already looked at and turned down.
-            continue
-        if decision is not None and decision.region_id is not None:
-            # Already promoted into a confirmed region, which is in `confirmed`.
+        if not is_undecided(decision):
+            # Rejected outright, or already promoted into a confirmed region,
+            # which is in `confirmed`.
             continue
         if proposal.confidence < threshold:
             continue

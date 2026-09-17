@@ -97,19 +97,28 @@ class RegionProposalLog:
         return found
 
     def proposals_for_page(self, page_index: int, *, run_id: str | None = None) -> list[RegionProposal]:
-        """Proposals for one page, optionally narrowed to a single run."""
+        """Proposals for one page, optionally narrowed to a single run.
+
+        Re-parses the whole journal on every call. A caller that wants every
+        page of a book — such as the review queue — should use ``proposals``
+        instead and filter in memory, or this becomes one full-file read per
+        page.
+        """
+        return [
+            p
+            for p in self.proposals()
+            if p.page_index == page_index and (run_id is None or p.run_id == run_id)
+        ]
+
+    def proposals(self) -> list[RegionProposal]:
+        """Every proposal recorded, across every page and run, read once."""
         found: list[RegionProposal] = []
         for line_number, entry in self._read():
             if entry.get("kind") != "proposal":
                 continue
             try:
-                proposal = RegionProposal.from_dict(entry["record"])
+                found.append(RegionProposal.from_dict(entry["record"]))
             except (KeyError, ValueError, TypeError):
                 logger.warning("region-proposals.jsonl: skipping wrong-shaped line %d", line_number)
                 continue
-            if proposal.page_index != page_index:
-                continue
-            if run_id is not None and proposal.run_id != run_id:
-                continue
-            found.append(proposal)
         return found
