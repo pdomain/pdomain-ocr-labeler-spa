@@ -18,7 +18,7 @@ from pdomain_pgdp_measure.profile_models import CoordinateFrame, InkBand, PageMe
 
 from pdomain_ocr_labeler_spa.api.projects import _build_project_from_book_labeling_manifest
 from pdomain_ocr_labeler_spa.core.jobs.events import JobEventBroker
-from pdomain_ocr_labeler_spa.core.jobs.runner import Job, JobRunner
+from pdomain_ocr_labeler_spa.core.jobs.runner import Job, JobRunner, JobStatus
 from pdomain_ocr_labeler_spa.core.models import Project
 from pdomain_ocr_labeler_spa.core.notifications import NotificationQueue
 from pdomain_ocr_labeler_spa.core.page_kind.proposal_log import PageKindProposalLog
@@ -522,3 +522,75 @@ async def test_the_runs_page_count_is_the_number_of_proposals_it_wrote(tmp_path:
     proposal_log = PageKindProposalLog(project.project_root)
     run = proposal_log.runs()[0]
     assert run.page_count == len(proposal_log.proposals_for_run(run.run_id)) == 3
+
+
+# ---------------------------------------------------------------------------
+# Cancel — P1-CANCEL (docs/issues/2026-07-21-job-cancel-incomplete.md)
+# ---------------------------------------------------------------------------
+
+
+async def test_cancel_partway_journals_nothing_and_reports_progress(tmp_path: Path) -> None:
+    """A cancel noticed mid-book journals nothing and says how much was measured.
+
+    Mirrors the module docstring's invariant: nothing is journalled before
+    classification finishes, so a run stopped by cancel — like one that
+    crashed — leaves no proposals behind. The terminal message must still
+    say how much work was actually done.
+    """
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds import (
+        handle_propose_page_kinds,
+    )
+
+    project = _project(tmp_path, 4)
+    runner, job = _runner_and_job(project, tops=[300, 300, 300, 300])
+
+    original_measure_fn = runner.context["propose_page_kinds_measure_fn"]
+    calls = 0
+
+    def _measure_then_maybe_cancel(project_id: str, page: object) -> PageMeasurement:
+        nonlocal calls
+        calls += 1
+        result = original_measure_fn(project_id, page)
+        if calls == 2:
+            # Simulate a cancel request landing while page 1 is being measured.
+            current = runner._jobs[job.job_id]
+            runner._jobs[job.job_id] = current.model_copy(update={"status": JobStatus.CANCELLED})
+        return result
+
+    runner.context["propose_page_kinds_measure_fn"] = _measure_then_maybe_cancel
+
+    await handle_propose_page_kinds(runner, job)
+
+    # Only pages 0 and 1 were measured — the loop stopped at the top of the
+    # third iteration once it noticed the cancel.
+    assert calls == 2
+
+    proposal_log = PageKindProposalLog(project.project_root)
+    assert proposal_log.runs() == []
+
+    final_job = runner.get_job(job.job_id)
+    assert final_job is not None
+    assert final_job.status is JobStatus.CANCELLED
+    assert "cancelled" in final_job.message.lower()
+    assert "2 of 4" in final_job.message
+    assert "nothing recorded" in final_job.message.lower()
+
+
+async def test_cancel_before_the_first_page_measures_and_journals_nothing(tmp_path: Path) -> None:
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds import (
+        handle_propose_page_kinds,
+    )
+
+    project = _project(tmp_path, 3)
+    runner, job = _runner_and_job(project, tops=[300, 300, 300])
+    runner._jobs[job.job_id] = job.model_copy(update={"status": JobStatus.CANCELLED})
+
+    await handle_propose_page_kinds(runner, job)
+
+    proposal_log = PageKindProposalLog(project.project_root)
+    assert proposal_log.runs() == []
+
+    final_job = runner.get_job(job.job_id)
+    assert final_job is not None
+    assert final_job.status is JobStatus.CANCELLED
+    assert "0 of 3" in final_job.message

@@ -11,7 +11,12 @@ is the ``PageKindProposalLog`` journal, not the job row: once the whole book
 is classified, the handler appends the run and every page's proposal to that
 journal in one pass, and treats the job row purely as progress reporting.
 Nothing is journalled before classification finishes — a run that dies
-part-way leaves no proposals behind.
+part-way leaves no proposals behind. A cooperative cancel
+(``runner.is_cancelled`` — see ``docs/issues/2026-07-21-job-cancel-
+incomplete.md`` P1-CANCEL) is checked while measuring the book, between
+pages: on cancel the run stops measuring, journals nothing (honoring the
+same invariant a mid-run crash would), and reports how many pages it had
+measured before stopping.
 
 This handler never touches ``Page.page_kind`` and never calls
 ``save_page_content_to_store`` — the page blob is only ever written by a
@@ -157,8 +162,28 @@ async def handle_propose_page_kinds(runner: JobRunner, job: Job) -> None:
         )
 
     measured = await measure_book(
-        project, project_state=project_state, measure_fn=measure_fn, on_page_measured=_report
+        project,
+        project_state=project_state,
+        measure_fn=measure_fn,
+        on_page_measured=_report,
+        should_stop=lambda: runner.is_cancelled(job.job_id),
     )
+
+    if runner.is_cancelled(job.job_id):
+        measured_count = len(measured.measurements)
+        log.info(
+            "propose_page_kinds: project=%s job=%s cancelled after measuring %d of %d page(s); "
+            "nothing recorded",
+            project.project_id,
+            job.job_id,
+            measured_count,
+            total,
+        )
+        message = f"Cancelled after measuring {measured_count} of {total} page(s); nothing recorded"
+        notification_queue.queue(NotificationKind.INFO, f"Page-kind proposal {message.lower()}.")
+        await runner.update_progress(job.job_id, current=measured_count, total=total, message=message)
+        return
+
     classifications = measured.classifications
     # A page absent from ``page_indices`` failed to open a verified lease
     # during measurement; every other page index in the book measured fine.
