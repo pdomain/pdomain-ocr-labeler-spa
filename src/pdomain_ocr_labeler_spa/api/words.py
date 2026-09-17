@@ -43,7 +43,14 @@ Pd-book-tools method mapping (spec §9 names → actual pdomain-book-tools API):
   labeler inline implementation at
   ``pd_ocr_labeler/state/page_state.py:1802``: clamp bbox to image
   extents, assign ``cv2_numpy_page_image[top:bottom, left:right] =
-  fill_value``, then call ``page.finalize_page_structure()``.
+  fill_value``, then call ``page.finalize_page_structure()``. P1-CANVAS-ERASE
+  (``docs/issues/2026-07-21-canvas-erase-mode-noop.md``) added a page-scoped
+  sibling, ``POST .../pages/{page_index}/erase-pixels`` in ``api/pages.py``,
+  for canvas drags that have no word to anchor to. ``ErasePixelsRequest``
+  and the actual erase implementation (``_erase_pixels_on_page_image``) both
+  live in ``api/pages.py`` — this module already imports from it, so that's
+  the layer both routes can share without a circular import — and this
+  route delegates to it after resolving its word.
 """
 
 from __future__ import annotations
@@ -69,7 +76,17 @@ from .dependencies import (
     get_settings,
 )
 from .middleware.error_handler import ApiError
-from .pages import PagePayload, _page_payload
+from .pages import (
+    ErasePixelsRequest,
+    PagePayload,
+    _bbox_to_coords,
+    _erase_pixels_on_page_image,
+    _mutation_failed,
+    _page_not_loaded,
+    _page_payload,
+    _save_to_store_best_effort,
+    _store_persist_failed_response,
+)
 
 log = logging.getLogger(__name__)
 
@@ -189,23 +206,10 @@ class MergeWordsRequest(BaseModel):
     direction: Literal["left", "right"]
 
 
-class ErasePixelsRequest(BaseModel):
-    """Spec §2 lines 330-332.
-
-    ``shape`` controls how the fill is applied within the bbox:
-
-    - ``"rect"`` (default): solid rectangle fill, matching the original
-      legacy-labeler behaviour
-      (``pd_ocr_labeler/state/page_state.py:1802``).
-    - ``"circle"``: filled ellipse inscribed within the bbox, drawn via
-      ``cv2.ellipse`` with a numpy mask.  Use this for brush ops so that
-      the corners of the bounding square are **not** erased — only the
-      circular region the user actually painted.
-    """
-
-    bbox: BBox
-    fill_value: int = 255
-    shape: Literal["rect", "circle"] = "rect"
+# ``ErasePixelsRequest`` lives in ``api/pages.py`` now (imported above) —
+# both the page-scoped and word-scoped erase-pixels routes need it, and
+# this module already imports from ``api/pages.py``, so defining it there
+# avoids a circular import.
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -245,24 +249,6 @@ def _check_project_and_page(
     return None
 
 
-def _page_not_loaded(page_index: int) -> JSONResponse:
-    """400 envelope used by mutation handlers when ``PageState`` is empty.
-
-    Mirrors ``api/pages.py:save_page`` (#308) — the client should load
-    or run OCR for the page before attempting a mutation. The spec-23-C1
-    mutation handlers all resolve the target word through
-    ``PageState.page_record.payload``; without a populated payload they
-    have nothing to mutate.
-    """
-    return JSONResponse(
-        status_code=400,
-        content=ApiError(
-            error="page_not_loaded",
-            message=(f"page {page_index} has no in-memory page record; load or run OCR first"),
-        ).model_dump(),
-    )
-
-
 def _word_not_found(line_index: int, word_index: int) -> JSONResponse:
     return JSONResponse(
         status_code=404,
@@ -271,33 +257,6 @@ def _word_not_found(line_index: int, word_index: int) -> JSONResponse:
             message=f"word not found: line {line_index}, word {word_index}",
         ).model_dump(),
     )
-
-
-def _mutation_failed(message: str) -> JSONResponse:
-    """400 envelope used when a pdomain-book-tools mutation returns ``False``.
-
-    pdomain-book-tools methods like ``Page.rebox_word``, ``Line.merge_word_left``,
-    etc. return ``True``/``False`` rather than raising. The False return
-    means the call was rejected (out-of-range index, invalid rect, no
-    image to erase, etc.); spec §9 requires we surface that rather than
-    silently no-op. ``mutation_failed`` is distinct from ``word_not_found``
-    so the SPA can differentiate "couldn't find target" from "target
-    found but mutation refused".
-    """
-    return JSONResponse(
-        status_code=400,
-        content=ApiError(error="mutation_failed", message=message).model_dump(),
-    )
-
-
-def _bbox_to_coords(bbox: BBox) -> tuple[int, int, int, int]:
-    """Convert ``BBox(x, y, width, height)`` → ``(x1, y1, x2, y2)``.
-
-    Spec wire-shape (``docs/architecture/01-data-models.md §1``):
-    width/height are positive integers, so x2 = x + width and
-    y2 = y + height are well-defined.
-    """
-    return bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height
 
 
 def _resolve_page_object(pstate: PageState | None) -> Page | None:
@@ -387,64 +346,11 @@ def _apply_word_validated(word: Any, validated: bool) -> None:
             labels.remove("validated")
 
 
-def _save_to_store_best_effort(
-    *,
-    pstate: PageState,
-    store: Any,  # LabelerPageStore | None
-    changes: list[dict[str, Any]],
-) -> bool:
-    """Persist a word-mutation event to the store.
-
-    Persists the edited page *content* (so the edit survives a fresh-store
-    reload — the #1 audit finding) when the resolved page exposes ``to_dict``;
-    otherwise falls back to recording only the changelog entry. The page
-    content must be re-serialized, not just diffed, or a fresh store would
-    replay the original OCR content and silently drop the edit.
-
-    Returns
-    -------
-    bool
-        ``True`` when the write succeeded, or when there is intentionally no
-        store / no ``page_id`` (tests and pre-registration). ``False`` when
-        ``store`` and ``page_id`` were present but the write failed — callers
-        must surface that (Wave 0.5 / P1-MUTATION-200: no silent HTTP 200).
-    """
-    if store is None or pstate.page_id is None:
-        return True
-    try:
-        from ..core.page_state import save_page_content_to_store, save_page_to_store
-
-        page = _resolve_page_object(pstate)
-        if page is not None and callable(getattr(page, "to_dict", None)):
-            save_page_content_to_store(
-                page_id=pstate.page_id,
-                page=page,
-                store=store,
-                changes=changes,
-                labeler_sidecars=pstate,
-            )
-        else:
-            save_page_to_store(page_id=pstate.page_id, changes=changes, store=store)
-        return True
-    except Exception as exc:  # pragma: no cover - defensive
-        log.warning("_save_to_store_best_effort: failed page_id=%s: %s", pstate.page_id, exc)
-        return False
-
-
-def _store_persist_failed_response(*, page_id: Any, detail: str = "") -> JSONResponse:
-    """503 when a store-backed mutation could not durably persist (Wave 0.5)."""
-    message = "edit applied in memory but failed to persist to the event store"
-    if page_id is not None:
-        message = f"{message} (page_id={page_id})"
-    if detail:
-        message = f"{message}: {detail}"
-    return JSONResponse(
-        status_code=503,
-        content=ApiError(
-            error="store_persist_failed",
-            message=message,
-        ).model_dump(),
-    )
+# ``_save_to_store_best_effort`` and ``_store_persist_failed_response`` live
+# in ``api/pages.py`` now (imported above) — the erase-pixels shared helper
+# (also in ``api/pages.py``) needs them, and this module already imports
+# from ``api/pages.py``, so keeping them there avoids a circular import.
+# The other word-mutation routes below use the same imported names.
 
 
 def _refresh_payload_response(
@@ -474,36 +380,6 @@ def _refresh_payload_response(
         page_store=page_store,
     )
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
-
-
-def _persist_edited_image_blob(
-    *,
-    pstate: PageState,
-    store: Any,  # LabelerPageStore | None
-    image: Any,  # numpy ndarray (cv2 BGR)
-) -> None:
-    """Encode the post-erase page image to PNG and store it as a blob.
-
-    Lane A / Task A4. Records the resulting content hash on
-    ``pstate.edited_image_blob`` so the ``reload_ocr`` handler can re-OCR the
-    erased image when the SPA requests "Reload OCR (Edited)". Best-effort: a
-    failure here must not turn a successful in-memory erase into a 500.
-
-    No-op when no store is wired or no ``page_id`` is registered.
-    """
-    if store is None or pstate.page_id is None or image is None:
-        return
-    try:
-        import cv2
-
-        ok, buf = cv2.imencode(".png", image)
-        if not ok:
-            log.warning("_persist_edited_image_blob: cv2.imencode failed")
-            return
-        blob_hash = store.blobs.write(buf.tobytes())
-        pstate.edited_image_blob = blob_hash
-    except Exception as exc:  # pragma: no cover - best-effort persistence
-        log.warning("_persist_edited_image_blob: failed page_id=%s: %s", pstate.page_id, exc)
 
 
 def _write_cached_envelope_best_effort(
@@ -1252,17 +1128,19 @@ def erase_pixels(
 
     Spec 23 §9 row 11 names ``page.erase_pixels(bbox, fill_value=255)``,
     which does not exist in pdomain-book-tools (tracking ConcaveTrillion/
-    pdomain-book-tools#53). The handler mirrors the legacy labeler's inline
-    implementation at ``pd_ocr_labeler/state/page_state.py:1802``:
+    pdomain-book-tools#53). The actual erase (clamp bbox to image extents,
+    fill, ``page.finalize_page_structure()``, post-erase image-blob
+    persistence, event-store write) is delegated to the shared
+    ``api.pages._erase_pixels_on_page_image`` helper — mirrors the legacy
+    labeler's inline implementation at
+    ``pd_ocr_labeler/state/page_state.py:1802`` — which this route shares
+    with the page-scoped ``POST .../pages/{page_index}/erase-pixels`` route
+    (P1-CANVAS-ERASE) so the two cannot drift.
 
-    1. Resolve ``page.cv2_numpy_page_image`` → numpy ndarray.
-    2. Clamp the bbox to image extents.
-    3. Assign ``image[top:bottom, left:right] = clamped_fill_value``.
-    4. Call ``page.finalize_page_structure()`` so derived caches reset.
-
-    Note that ``(line_index, word_index)`` is only used to anchor the
-    operation onto a specific word for selection feedback; the actual
-    erase rectangle is taken from ``body.bbox`` (image-coordinate, not
+    ``(line_index, word_index)`` here is only used to resolve a target word
+    (returning 404 ``word_not_found`` when it doesn't exist) and to anchor
+    the changelog entry for selection feedback; the actual erase rectangle
+    is always taken from ``body.bbox`` (image-coordinate, not
     word-relative).
     """
     err = _check_project_and_page(project_id, page_index, project_state)
@@ -1280,77 +1158,16 @@ def erase_pixels(
         if word is None:
             return _word_not_found(line_index, word_index)
 
-        image = getattr(page, "cv2_numpy_page_image", None)
-        shape = getattr(image, "shape", None)
-        if image is None or shape is None or len(shape) < 2:
-            return _mutation_failed("erase_pixels: page image unavailable (cv2_numpy_page_image)")
-
-        try:
-            height = int(shape[0])
-            width = int(shape[1])
-        except Exception:
-            return _mutation_failed("erase_pixels: invalid page image shape")
-
-        if width <= 0 or height <= 0:
-            return _mutation_failed("erase_pixels: empty page image")
-
-        x1, y1, x2, y2 = _bbox_to_coords(body.bbox)
-        left = max(0, min(width, round(min(x1, x2))))
-        right = max(0, min(width, round(max(x1, x2))))
-        top = max(0, min(height, round(min(y1, y2))))
-        bottom = max(0, min(height, round(max(y1, y2))))
-
-        if right <= left or bottom <= top:
-            return _mutation_failed(
-                f"erase_pixels: rectangle out of bounds or empty "
-                f"after clamp ({left}, {top}, {right}, {bottom})"
-            )
-
-        clamped_fill = max(0, min(255, int(body.fill_value)))
-        try:
-            if body.shape == "circle":
-                import cv2
-                import numpy as _np
-
-                cx = (left + right) // 2
-                cy = (top + bottom) // 2
-                rx = max(1, (right - left) // 2)
-                ry = max(1, (bottom - top) // 2)
-                # Build a 2-D boolean mask the same height x width as the image.
-                # We draw with a fixed sentinel value (255) so the mask is
-                # independent of ``clamped_fill`` — avoids false-positive
-                # matches when ``clamped_fill == 0`` would collide with the
-                # zero-initialised mask background.
-                ellipse_mask = _np.zeros(image.shape[:2], dtype=_np.uint8)
-                cv2.ellipse(ellipse_mask, (cx, cy), (rx, ry), 0, 0, 360, 255, -1)
-                image[ellipse_mask != 0] = clamped_fill
-            else:
-                image[top:bottom, left:right] = clamped_fill
-        except Exception as exc:
-            log.exception("erase_pixels: in-place assignment failed: %s", exc)
-            return _mutation_failed(f"erase_pixels: in-place assignment failed: {exc}")
-
-        # Mirror legacy: reset derived bbox/image caches.
-        finalize = getattr(page, "finalize_page_structure", None)
-        if callable(finalize):
-            finalize()
-        pstate.generation += 1
-        # Persist the post-erase image as a blob so "Reload OCR (Edited)" can
-        # re-OCR the erased pixels (Lane A / Task A4).
-        _persist_edited_image_blob(pstate=pstate, store=store, image=image)
-        if not _save_to_store_best_effort(
+        erase_err = _erase_pixels_on_page_image(
+            page=page,
             pstate=pstate,
             store=store,
-            changes=[
-                {
-                    "type": "erase_pixels",
-                    "line": line_index,
-                    "word": word_index,
-                    "bbox": [x1, y1, x2, y2],
-                }
-            ],
-        ):
-            return _store_persist_failed_response(page_id=pstate.page_id)
+            body=body,
+            line_index=line_index,
+            word_index=word_index,
+        )
+        if erase_err is not None:
+            return erase_err
 
     return _refresh_payload_response(
         project_id=project_id,

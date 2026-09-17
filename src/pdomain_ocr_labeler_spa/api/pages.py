@@ -275,6 +275,32 @@ class UpdateSelectionRequest(BaseModel):
     selection: Selection
 
 
+class ErasePixelsRequest(BaseModel):
+    """Body for ``POST .../erase-pixels`` (page- and word-scoped variants).
+
+    ``shape`` controls how the fill is applied within the bbox:
+
+    - ``"rect"`` (default): solid rectangle fill, matching the original
+      legacy-labeler behaviour
+      (``pd_ocr_labeler/state/page_state.py:1802``).
+    - ``"circle"``: filled ellipse inscribed within the bbox, drawn via
+      ``cv2.ellipse`` with a numpy mask.  Use this for brush ops so that
+      the corners of the bounding square are **not** erased — only the
+      circular region the user actually painted.
+
+    Defined here (rather than in ``api/words.py``) because both the
+    page-scoped ``POST .../pages/{page_index}/erase-pixels`` route (this
+    module) and the word-scoped
+    ``POST .../words/{li}/{wi}/erase-pixels`` route (``api/words.py``) need
+    it, and ``api/words.py`` already imports from this module — the reverse
+    import would be circular.
+    """
+
+    bbox: BBox
+    fill_value: int = 255
+    shape: Literal["rect", "circle"] = "rect"
+
+
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
@@ -319,6 +345,242 @@ def _check_project_and_page(
         return _project_not_found(project_id)
     if page_index < 0 or page_index >= project.total_pages:
         return _page_not_found(page_index)
+    return None
+
+
+def _page_not_loaded(page_index: int) -> JSONResponse:
+    """400 envelope used by mutation handlers when ``PageState`` is empty.
+
+    Moved here (spec-23-C2 / P1-CANVAS-ERASE) from ``api/words.py`` so the
+    page-scoped ``POST .../pages/{page_index}/erase-pixels`` route and the
+    word-scoped ``POST .../words/{li}/{wi}/erase-pixels`` route
+    (``api/words.py``, which imports this back) return byte-identical
+    ``page_not_loaded`` envelopes. Callers should ``GET /pages/{idx}`` (or
+    run OCR) first — the mutation handlers all resolve their target through
+    ``PageState.page_record.payload``; without a populated payload they have
+    nothing to mutate.
+    """
+    return JSONResponse(
+        status_code=400,
+        content=ApiError(
+            error="page_not_loaded",
+            message=(f"page {page_index} has no in-memory page record; load or run OCR first"),
+        ).model_dump(),
+    )
+
+
+def _mutation_failed(message: str) -> JSONResponse:
+    """400 envelope used when a pdomain-book-tools mutation returns ``False``.
+
+    pdomain-book-tools methods like ``Page.rebox_word``, ``Line.merge_word_left``,
+    etc. return ``True``/``False`` rather than raising. The False return
+    means the call was rejected (out-of-range index, invalid rect, no
+    image to erase, etc.); spec §9 requires we surface that rather than
+    silently no-op. ``mutation_failed`` is distinct from ``word_not_found``
+    so the SPA can differentiate "couldn't find target" from "target
+    found but mutation refused".
+    """
+    return JSONResponse(
+        status_code=400,
+        content=ApiError(error="mutation_failed", message=message).model_dump(),
+    )
+
+
+def _store_persist_failed_response(*, page_id: UUID | None, detail: str = "") -> JSONResponse:
+    """503 when a store-backed mutation could not durably persist (Wave 0.5)."""
+    message = "edit applied in memory but failed to persist to the event store"
+    if page_id is not None:
+        message = f"{message} (page_id={page_id})"
+    if detail:
+        message = f"{message}: {detail}"
+    return JSONResponse(
+        status_code=503,
+        content=ApiError(
+            error="store_persist_failed",
+            message=message,
+        ).model_dump(),
+    )
+
+
+def _bbox_to_coords(bbox: BBox) -> tuple[int, int, int, int]:
+    """Convert ``BBox(x, y, width, height)`` → ``(x1, y1, x2, y2)``.
+
+    Spec wire-shape (``docs/architecture/01-data-models.md §1``):
+    width/height are positive integers, so x2 = x + width and
+    y2 = y + height are well-defined.
+    """
+    return bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height
+
+
+def _save_to_store_best_effort(
+    *,
+    pstate: PageState,
+    store: LabelerPageStore | None,
+    changes: list[dict[str, Any]],
+) -> bool:
+    """Persist a page-mutation event to the store.
+
+    Persists the edited page *content* (so the edit survives a fresh-store
+    reload — the #1 audit finding) when the resolved page exposes ``to_dict``;
+    otherwise falls back to recording only the changelog entry. The page
+    content must be re-serialized, not just diffed, or a fresh store would
+    replay the original OCR content and silently drop the edit.
+
+    Returns
+    -------
+    bool
+        ``True`` when the write succeeded, or when there is intentionally no
+        store / no ``page_id`` (tests and pre-registration). ``False`` when
+        ``store`` and ``page_id`` were present but the write failed — callers
+        must surface that (Wave 0.5 / P1-MUTATION-200: no silent HTTP 200).
+    """
+    if store is None or pstate.page_id is None:
+        return True
+    try:
+        page = _resolve_page_object_for_pages(pstate)
+        if page is not None and callable(getattr(page, "to_dict", None)):
+            save_page_content_to_store(
+                page_id=pstate.page_id,
+                page=page,
+                store=store,
+                changes=changes,
+                labeler_sidecars=pstate,
+            )
+        else:
+            save_page_to_store(page_id=pstate.page_id, changes=changes, store=store)
+        return True
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("_save_to_store_best_effort: failed page_id=%s: %s", pstate.page_id, exc)
+        return False
+
+
+def _persist_edited_image_blob(
+    *,
+    pstate: PageState,
+    store: LabelerPageStore | None,
+    image: Any,  # numpy ndarray (cv2 BGR)
+) -> None:
+    """Encode the post-erase page image to PNG and store it as a blob.
+
+    Lane A / Task A4. Records the resulting content hash on
+    ``pstate.edited_image_blob`` so the ``reload_ocr`` handler can re-OCR the
+    erased image when the SPA requests "Reload OCR (Edited)". Best-effort: a
+    failure here must not turn a successful in-memory erase into a 500.
+
+    No-op when no store is wired or no ``page_id`` is registered.
+    """
+    if store is None or pstate.page_id is None or image is None:
+        return
+    try:
+        import cv2
+
+        ok, buf = cv2.imencode(".png", image)
+        if not ok:
+            log.warning("_persist_edited_image_blob: cv2.imencode failed")
+            return
+        blob_hash = store.blobs.write(buf.tobytes())
+        pstate.edited_image_blob = blob_hash
+    except Exception as exc:  # pragma: no cover - best-effort persistence
+        log.warning("_persist_edited_image_blob: failed page_id=%s: %s", pstate.page_id, exc)
+
+
+def _erase_pixels_on_page_image(
+    *,
+    page: Page,
+    pstate: PageState,
+    store: LabelerPageStore | None,
+    body: ErasePixelsRequest,
+    line_index: int | None = None,
+    word_index: int | None = None,
+) -> JSONResponse | None:
+    """Erase ``body.bbox`` from ``page``'s in-memory image and persist the edit.
+
+    Shared by the page-scoped ``POST .../pages/{page_index}/erase-pixels``
+    route (this module) and the word-scoped
+    ``POST .../words/{li}/{wi}/erase-pixels`` route (``api/words.py``) —
+    P1-CANVAS-ERASE — so the two entry points cannot drift: same page lock
+    (held by the caller), same bbox clamping, same
+    ``finalize_page_structure`` call, same post-erase image-blob persistence
+    (Lane A / Task A4 — "Reload OCR (Edited)"), same event-store write, and
+    the same failure envelopes. Mirrors the legacy labeler's inline
+    implementation at ``pd_ocr_labeler/state/page_state.py:1802``.
+
+    ``line_index``/``word_index`` are optional: the word route passes them so
+    the changelog entry keeps recording which word anchored the erase for
+    selection feedback; the page route (no word to anchor to) omits them.
+
+    Returns an error ``JSONResponse`` on any failure (unavailable image,
+    empty clamped rectangle, failed in-place assignment, failed store
+    persist). Returns ``None`` on success — the caller still owns building
+    and returning the refreshed ``PagePayload`` response.
+    """
+    image = getattr(page, "cv2_numpy_page_image", None)
+    shape = getattr(image, "shape", None)
+    if image is None or shape is None or len(shape) < 2:
+        return _mutation_failed("erase_pixels: page image unavailable (cv2_numpy_page_image)")
+
+    try:
+        height = int(shape[0])
+        width = int(shape[1])
+    except Exception:
+        return _mutation_failed("erase_pixels: invalid page image shape")
+
+    if width <= 0 or height <= 0:
+        return _mutation_failed("erase_pixels: empty page image")
+
+    x1, y1, x2, y2 = _bbox_to_coords(body.bbox)
+    left = max(0, min(width, round(min(x1, x2))))
+    right = max(0, min(width, round(max(x1, x2))))
+    top = max(0, min(height, round(min(y1, y2))))
+    bottom = max(0, min(height, round(max(y1, y2))))
+
+    if right <= left or bottom <= top:
+        return _mutation_failed(
+            f"erase_pixels: rectangle out of bounds or empty after clamp ({left}, {top}, {right}, {bottom})"
+        )
+
+    clamped_fill = max(0, min(255, int(body.fill_value)))
+    try:
+        if body.shape == "circle":
+            import cv2
+            import numpy as _np
+
+            cx = (left + right) // 2
+            cy = (top + bottom) // 2
+            rx = max(1, (right - left) // 2)
+            ry = max(1, (bottom - top) // 2)
+            # Build a 2-D boolean mask the same height x width as the image.
+            # We draw with a fixed sentinel value (255) so the mask is
+            # independent of ``clamped_fill`` — avoids false-positive
+            # matches when ``clamped_fill == 0`` would collide with the
+            # zero-initialised mask background.
+            ellipse_mask = _np.zeros(image.shape[:2], dtype=_np.uint8)
+            cv2.ellipse(ellipse_mask, (cx, cy), (rx, ry), 0, 0, 360, 255, -1)
+            image[ellipse_mask != 0] = clamped_fill
+        else:
+            image[top:bottom, left:right] = clamped_fill
+    except Exception as exc:
+        log.exception("erase_pixels: in-place assignment failed: %s", exc)
+        return _mutation_failed(f"erase_pixels: in-place assignment failed: {exc}")
+
+    # Mirror legacy: reset derived bbox/image caches.
+    finalize = getattr(page, "finalize_page_structure", None)
+    if callable(finalize):
+        finalize()
+    pstate.generation += 1
+    # Persist the post-erase image as a blob so "Reload OCR (Edited)" can
+    # re-OCR the erased pixels (Lane A / Task A4).
+    _persist_edited_image_blob(pstate=pstate, store=store, image=image)
+
+    change: dict[str, Any] = {"type": "erase_pixels", "bbox": [x1, y1, x2, y2]}
+    if line_index is not None:
+        change["line"] = line_index
+    if word_index is not None:
+        change["word"] = word_index
+
+    if not _save_to_store_best_effort(pstate=pstate, store=store, changes=[change]):
+        return _store_persist_failed_response(page_id=pstate.page_id)
+
     return None
 
 
@@ -1845,6 +2107,67 @@ def update_selection(
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
+@router.post("/{page_index}/erase-pixels", response_model=PagePayload)
+def erase_page_pixels(
+    *,
+    project_id: str,
+    page_index: int,
+    body: ErasePixelsRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+    page_store: LabelerPageStore | None = Depends(get_page_store_optional),
+) -> JSONResponse:
+    """``POST .../pages/{page_index}/erase-pixels`` — erase a page-space bbox.
+
+    P1-CANVAS-ERASE (``docs/issues/2026-07-21-canvas-erase-mode-noop.md``):
+    the page-scoped counterpart to
+    ``POST .../words/{li}/{wi}/erase-pixels`` (``api/words.py``). That
+    route's own docstring already establishes that ``(line_index,
+    word_index)`` only anchors the operation onto a word for selection
+    feedback — the erase rectangle always comes from ``body.bbox``, in
+    page-image coordinates. A canvas drag (``PageImageCanvas`` erase mode)
+    has no word to anchor to, so this route erases directly against the
+    page image with no word-resolution step at all — it works on a page
+    with no words on it, which the word-scoped route cannot serve.
+
+    Both routes call the shared ``_erase_pixels_on_page_image`` helper (this
+    module) under their own per-page lock, so the clamping,
+    ``finalize_page_structure`` call, post-erase image-blob persistence
+    (Lane A / Task A4 — "Reload OCR (Edited)"), event-store write, and
+    failure envelopes cannot drift between them.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object_for_pages(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        erase_err = _erase_pixels_on_page_image(
+            page=page,
+            pstate=pstate,
+            store=page_store,
+            body=body,
+        )
+        if erase_err is not None:
+            return erase_err
+
+    payload = _page_payload(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+        page_store=page_store,
+    )
+    return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
+
+
 @router.get(
     "/{page_index}/image",
     response_class=Response,
@@ -2094,6 +2417,7 @@ def install_pages_router(app) -> None:  # type: ignore[no-untyped-def]
 
 __all__ = [
     "ConfirmPageKindRequest",
+    "ErasePixelsRequest",
     "GlyphBulkMarkRequest",
     "GlyphBulkMarkResponse",
     "PageHistoryInfo",
