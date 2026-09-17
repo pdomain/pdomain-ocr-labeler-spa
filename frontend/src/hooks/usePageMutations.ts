@@ -20,6 +20,9 @@ export type PagePayload = components["schemas"]["PagePayload"];
 export type RotatePageResponse = components["schemas"]["RotatePageResponse"];
 export type AutoRotateAllResponse = components["schemas"]["AutoRotateAllResponse"];
 export type PageKind = components["schemas"]["PageKind"];
+export type BBox = components["schemas"]["BBox"];
+export type ErasePixelsRequest = components["schemas"]["ErasePixelsRequest"];
+export type EraseShape = ErasePixelsRequest["shape"];
 
 // ─── internal helpers ──────────────────────────────────────────────────────
 
@@ -45,6 +48,11 @@ async function apiPost<T>(url: string, body: unknown): Promise<T> {
 
 function pageBase(projectId: string, pageIndex: number): string {
   return `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}`;
+}
+
+/** The `mutationKey` `useErasePagePixels` registers under (see its docstring). */
+function erasePagePixelsMutationKey(projectId: string, pageIndex: number): readonly unknown[] {
+  return ["erase-page-pixels", projectId, pageIndex];
 }
 
 // ─── useReloadOcr (#215) ───────────────────────────────────────────────────
@@ -252,6 +260,43 @@ export function useConfirmPageKind(projectId: string, pageIndex: number) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
       void qc.invalidateQueries({ queryKey: ["page-kinds", projectId] });
+    },
+  });
+}
+
+// ─── useErasePagePixels (P1-CANVAS-ERASE) ──────────────────────────────────
+
+/**
+ * Erase pixels directly against the page image from a page-space bbox.
+ *
+ * The page-scoped counterpart to `useErasePixels` (useWordMutations.ts). The
+ * word-scoped route anchors an erase op onto a `(line_index, word_index)`
+ * purely for selection feedback — the erase rect always comes from
+ * `body.bbox` in page-image coordinates. Canvas erase-mode drags
+ * (`PageImageCanvas` "erase" mode) have no word to anchor to, so they call
+ * this route instead: `POST /api/projects/{pid}/pages/{idx}/erase-pixels`.
+ *
+ * Registers under a shared `mutationKey` (like `useRegionMutations.ts`'s
+ * `decisionMutationKey`) so `useIsMutating` could see an in-flight erase from
+ * any hook instance. ProjectPage's canvas drag handler actually guards
+ * duplicate drags with its own synchronous ref rather than this key (see
+ * `handleErasePixels`'s docstring for why), but the shared key keeps a
+ * cross-instance guard available if a second call site (e.g. a future erase
+ * toolbar button) starts sharing the mode.
+ *
+ * On success, invalidates the page query so the canvas re-renders with the
+ * erased pixels.
+ */
+export function useErasePagePixels(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { bbox: BBox; fillValue?: number; shape?: EraseShape }>({
+    mutationKey: erasePagePixelsMutationKey(projectId, pageIndex),
+    mutationFn: ({ bbox, fillValue = 255, shape = "rect" }) => {
+      const body: ErasePixelsRequest = { bbox, fill_value: fillValue, shape };
+      return apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/erase-pixels`, body);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
     },
   });
 }

@@ -27,6 +27,7 @@ import {
   useUndoPage,
   useRedoPage,
   useConfirmPageKind,
+  useErasePagePixels,
 } from "./usePageMutations";
 
 function makeWrapper() {
@@ -418,5 +419,118 @@ describe("useConfirmPageKind", () => {
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID, PAGE_IDX] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page-kinds", PROJECT_ID] });
+  });
+});
+
+// ─── useErasePagePixels (P1-CANVAS-ERASE) ──────────────────────────────────
+// Spec: docs/issues/2026-07-21-canvas-erase-mode-noop.md — the page-scoped
+// counterpart to useErasePixels (useWordMutations.ts), backing the canvas
+// erase-mode drag (no word to anchor to).
+
+describe("useErasePagePixels", () => {
+  it("POSTs { bbox, fill_value, shape } to .../erase-pixels and resolves with the PagePayload", async () => {
+    let method: string | undefined;
+    let path: string | undefined;
+    let body: unknown;
+    server.use(
+      http.post(
+        `/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/erase-pixels`,
+        async ({ request }) => {
+          method = request.method;
+          path = new URL(request.url).pathname;
+          body = await request.json();
+          return HttpResponse.json({ project_id: PROJECT_ID, page_index: PAGE_IDX });
+        },
+      ),
+    );
+    const qc = makeQueryClient();
+    const { result } = renderHook(() => useErasePagePixels(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapperFor(qc),
+    });
+
+    let data: { project_id?: string } | undefined;
+    await act(async () => {
+      data = await result.current.mutateAsync({
+        bbox: { x: 10, y: 20, width: 30, height: 40 },
+        fillValue: 255,
+        shape: "rect",
+      });
+    });
+
+    expect(method).toBe("POST");
+    expect(path).toBe(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/erase-pixels`);
+    expect(body).toEqual({
+      bbox: { x: 10, y: 20, width: 30, height: 40 },
+      fill_value: 255,
+      shape: "rect",
+    });
+    expect(data?.project_id).toBe(PROJECT_ID);
+  });
+
+  it("defaults fill_value to 255 and shape to rect when omitted", async () => {
+    let body: unknown;
+    server.use(
+      http.post(
+        `/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/erase-pixels`,
+        async ({ request }) => {
+          body = await request.json();
+          return HttpResponse.json({ project_id: PROJECT_ID, page_index: PAGE_IDX });
+        },
+      ),
+    );
+    const qc = makeQueryClient();
+    const { result } = renderHook(() => useErasePagePixels(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapperFor(qc),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ bbox: { x: 1, y: 2, width: 3, height: 4 } });
+    });
+
+    expect(body).toEqual({
+      bbox: { x: 1, y: 2, width: 3, height: 4 },
+      fill_value: 255,
+      shape: "rect",
+    });
+  });
+
+  it("invalidates the page query on success", async () => {
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/erase-pixels`, () =>
+        HttpResponse.json({ project_id: PROJECT_ID, page_index: PAGE_IDX }),
+      ),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useErasePagePixels(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapperFor(qc),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ bbox: { x: 1, y: 2, width: 3, height: 4 } });
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID, PAGE_IDX] });
+  });
+
+  it("rejects and does not invalidate the page query on a failing request", async () => {
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/erase-pixels`, () =>
+        HttpResponse.json({ message: "erase failed" }, { status: 500 }),
+      ),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useErasePagePixels(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapperFor(qc),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ bbox: { x: 1, y: 2, width: 3, height: 4 } }),
+      ).rejects.toThrow("erase failed");
+    });
+
+    expect(invalidateSpy).not.toHaveBeenCalled();
   });
 });
