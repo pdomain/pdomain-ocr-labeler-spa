@@ -11,6 +11,7 @@ from pdomain_pgdp_measure.profile_models import PageMeasurement, ProfileDiagnost
 
 from pdomain_ocr_labeler_spa.core.jobs.events import JobEventBroker
 from pdomain_ocr_labeler_spa.core.jobs.runner import Job, JobRunner, JobStatus
+from pdomain_ocr_labeler_spa.core.labeler_sidecars import LegacyTypographyPayloadError
 from pdomain_ocr_labeler_spa.core.models import Project
 from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
 from pdomain_ocr_labeler_spa.core.page_state import PageLoadOutcome, PageSource
@@ -19,6 +20,7 @@ from pdomain_ocr_labeler_spa.core.project_state import PageState, ProjectState
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from pdomain_book_contracts.annotation import PageKind
     from pdomain_book_tools.ocr.page import Page
     from pdomain_pgdp_measure.profile_input import ProfileInputPage
 
@@ -147,3 +149,355 @@ def proposal_run_no_kind_state(tmp_path: Path) -> tuple[JobRunner, Job, ProjectS
     page kind, so there is nothing to propose regions for.
     """
     return _build_two_page_run(tmp_path, reviewed_page_indices=())
+
+
+class _LazyLoadPageLoader:
+    """Fake ``PageLoader``: a fixed set of pages hit the labeled lane; every
+    other page misses every lane. ``run_ocr`` always raises.
+
+    Mirrors ``tests/integration/test_page_kinds_router.py``'s
+    ``_FakePageLoader`` — an ``allow_ocr=False`` caller (here: the
+    ``propose_regions`` handler's lazy-load pass over pages not yet in
+    memory) must never reach ``run_ocr``.
+    """
+
+    def __init__(self, labeled_hits: dict[int, PageLoadOutcome]) -> None:
+        self._labeled_hits = labeled_hits
+        self.run_ocr_calls: list[int] = []
+        self.load_labeled_calls: list[int] = []
+        self.load_cached_calls: list[int] = []
+
+    def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
+        self.load_labeled_calls.append(page_index)
+        return self._labeled_hits.get(page_index)
+
+    def load_cached(self, page_index: int) -> PageLoadOutcome | None:
+        self.load_cached_calls.append(page_index)
+        return None
+
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: PageKind | None = None,
+    ) -> PageLoadOutcome:
+        self.run_ocr_calls.append(page_index)
+        raise RuntimeError("run_ocr must never be called by propose_regions (allow_ocr=False)")
+
+
+@pytest.fixture
+def proposal_run_lazy_load(
+    tmp_path: Path,
+) -> tuple[JobRunner, Job, ProjectState, _LazyLoadPageLoader]:
+    """A three-page book with no page in memory; two pages have stored OCR content.
+
+    Mirrors a real book after a server restart, or one nobody has paged
+    through yet: ``project_state.page_states`` starts empty. Pages 0 and 2
+    are marked reviewed (page-kind confirmed) so they're eligible once
+    loaded, and both hit the loader's labeled lane. Page 1 has neither
+    stored content nor page-kind state — the "skipped, no OCR output yet"
+    case.
+
+    Yields ``(runner, job, project_state, loader)`` so a test can assert on
+    ``loader.run_ocr_calls``.
+    """
+    image_paths = [tmp_path / f"{i:03d}.png" for i in range(3)]
+    project = Project(
+        project_id="book1",
+        project_root=tmp_path,
+        image_paths=image_paths,
+        ground_truth_map={},
+        total_pages=len(image_paths),
+    )
+    project_state = ProjectState()
+    project_state.set_loaded_project(project)
+
+    reviewed = PageKindReviewedStore(project.project_root)
+    for page_index in (0, 2):
+        reviewed.mark_reviewed(page_index, datetime.now(UTC).isoformat())
+
+    labeled_hits = {
+        page_index: PageLoadOutcome(
+            page_index=page_index, source=PageSource.FILESYSTEM, payload=_blank_page(page_index)
+        )
+        for page_index in (0, 2)
+    }
+    loader = _LazyLoadPageLoader(labeled_hits)
+
+    context: dict[str, Any] = {
+        "project_state": project_state,
+        "propose_regions_measure_fn": _stub_measure_fn,
+        "page_loader": loader,
+    }
+    runner = JobRunner(JobEventBroker(), context=context)
+    job = Job(
+        job_id="proposal-run-lazy-load-job",
+        job_type="propose_regions",
+        status=JobStatus.RUNNING,
+        project_id=project.project_id,
+        payload={"project_id": project.project_id},
+        created_at=datetime.now(UTC),
+    )
+    runner._jobs[job.job_id] = job
+
+    return runner, job, project_state, loader
+
+
+@pytest.fixture
+def proposal_run_no_loader_with_unloaded_page(
+    tmp_path: Path,
+) -> tuple[JobRunner, Job, ProjectState]:
+    """One page loaded and reviewed; a second page exists but is not in memory.
+
+    No ``page_loader`` (nor the production context keys a loader would be
+    built from) is wired — the fallback path that considers only pages
+    already in memory, exactly as the handler behaved before it grew the
+    lazy-load pass.
+    """
+    image_paths = [tmp_path / f"{i:03d}.png" for i in range(2)]
+    project = Project(
+        project_id="book1",
+        project_root=tmp_path,
+        image_paths=image_paths,
+        ground_truth_map={},
+        total_pages=len(image_paths),
+    )
+    project_state = ProjectState()
+    project_state.set_loaded_project(project)
+
+    reviewed = PageKindReviewedStore(project.project_root)
+    reviewed.mark_reviewed(0, datetime.now(UTC).isoformat())
+
+    page = _blank_page(0)
+    outcome = PageLoadOutcome(page_index=0, source=PageSource.OCR, payload=page)
+    pstate = PageState(page_index=0, page_record=outcome)
+    pstate.page_id = uuid4()
+    project_state._page_states[0] = pstate
+
+    context: dict[str, Any] = {
+        "project_state": project_state,
+        "propose_regions_measure_fn": _stub_measure_fn,
+    }
+    runner = JobRunner(JobEventBroker(), context=context)
+    job = Job(
+        job_id="proposal-run-no-loader-job",
+        job_type="propose_regions",
+        status=JobStatus.RUNNING,
+        project_id=project.project_id,
+        payload={"project_id": project.project_id},
+        created_at=datetime.now(UTC),
+    )
+    runner._jobs[job.job_id] = job
+
+    return runner, job, project_state
+
+
+class _BookSwappingPageLoader:
+    """Fake ``PageLoader`` whose ``load_labeled`` swaps
+    ``project_state.loaded_project`` to a different book partway through a
+    run — simulates a concurrent ``POST .../load`` landing between two of
+    the lazy-load loop's per-page ``ensure_page_model`` calls (each takes
+    the project lock only for its own page, not once for the whole loop).
+
+    Mutates ``project_state._loaded_project`` / ``._page_states`` directly
+    rather than calling the public ``set_loaded_project`` — that method
+    re-acquires ``ProjectState._lock``, which ``ensure_page_model`` already
+    holds for the duration of this call, and would deadlock the worker
+    thread ``asyncio.to_thread`` runs this on.
+    """
+
+    def __init__(self, project_state: ProjectState, swap_to: Project, *, swap_at_page_index: int) -> None:
+        self._project_state = project_state
+        self._swap_to = swap_to
+        self._swap_at_page_index = swap_at_page_index
+        self.load_labeled_calls: list[int] = []
+        self.run_ocr_calls: list[int] = []
+
+    def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
+        self.load_labeled_calls.append(page_index)
+        if page_index == self._swap_at_page_index:
+            self._project_state._loaded_project = self._swap_to
+            self._project_state._page_states = {}
+        return PageLoadOutcome(
+            page_index=page_index, source=PageSource.FILESYSTEM, payload=_blank_page(page_index)
+        )
+
+    def load_cached(self, page_index: int) -> PageLoadOutcome | None:
+        return None
+
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: PageKind | None = None,
+    ) -> PageLoadOutcome:
+        self.run_ocr_calls.append(page_index)
+        raise RuntimeError("run_ocr must never be called by propose_regions (allow_ocr=False)")
+
+
+def _build_book_swap_run(
+    tmp_path: Path, *, book_a_total_pages: int, swap_at_page_index: int
+) -> tuple[JobRunner, Job, ProjectState, Project, _BookSwappingPageLoader]:
+    book_a_root = tmp_path / "book-a"
+    book_b_root = tmp_path / "book-b"
+    book_a_root.mkdir()
+    book_b_root.mkdir()
+
+    book_a = Project(
+        project_id="book-a",
+        project_root=book_a_root,
+        image_paths=[book_a_root / f"{i:03d}.png" for i in range(book_a_total_pages)],
+        ground_truth_map={},
+        total_pages=book_a_total_pages,
+    )
+    book_b = Project(
+        project_id="book-b",
+        project_root=book_b_root,
+        image_paths=[book_b_root / "000.png"],
+        ground_truth_map={},
+        total_pages=1,
+    )
+
+    project_state = ProjectState()
+    project_state.set_loaded_project(book_a)
+
+    loader = _BookSwappingPageLoader(project_state, book_b, swap_at_page_index=swap_at_page_index)
+
+    context: dict[str, Any] = {
+        "project_state": project_state,
+        "propose_regions_measure_fn": _stub_measure_fn,
+        "page_loader": loader,
+    }
+    runner = JobRunner(JobEventBroker(), context=context)
+    job = Job(
+        job_id="proposal-run-book-swap-job",
+        job_type="propose_regions",
+        status=JobStatus.RUNNING,
+        project_id=book_a.project_id,
+        payload={"project_id": book_a.project_id},
+        created_at=datetime.now(UTC),
+    )
+    runner._jobs[job.job_id] = job
+
+    return runner, job, project_state, book_b, loader
+
+
+@pytest.fixture
+def proposal_run_book_swap_mid_load(
+    tmp_path: Path,
+) -> tuple[JobRunner, Job, ProjectState, Project, _BookSwappingPageLoader]:
+    """A three-page book; the loader swaps ``project_state.loaded_project``
+    to a different book while loading the second page (index 1).
+
+    Regression test for the book-pinning race: without a per-page re-check,
+    ``ensure_page_model`` would keep loading pages — including the third
+    page — straight into the swapped-in book's ``page_states``, and the
+    run would go on to journal proposals against the wrong book. The loop's
+    pre-check before the third page must catch the swap and abort first.
+
+    Yields ``(runner, job, project_state, book_b, loader)``.
+    """
+    return _build_book_swap_run(tmp_path, book_a_total_pages=3, swap_at_page_index=1)
+
+
+@pytest.fixture
+def proposal_run_book_swap_on_last_page(
+    tmp_path: Path,
+) -> tuple[JobRunner, Job, ProjectState, Project, _BookSwappingPageLoader]:
+    """Like ``proposal_run_book_swap_mid_load``, but the swap happens while
+    loading the *last* page of a two-page book — no further loop iteration
+    exists to catch it via the per-page pre-check, so only the one-time
+    re-check after the loop can.
+    """
+    return _build_book_swap_run(tmp_path, book_a_total_pages=2, swap_at_page_index=1)
+
+
+class _LegacyPayloadPageLoader:
+    """Fake ``PageLoader``: one page's labeled lane raises
+    ``LegacyTypographyPayloadError`` (removed review data present in stored
+    content); a fixed set of other pages hit normally. ``run_ocr`` always
+    raises.
+    """
+
+    def __init__(self, *, legacy_page_index: int, ok_hits: dict[int, PageLoadOutcome]) -> None:
+        self._legacy_page_index = legacy_page_index
+        self._ok_hits = ok_hits
+        self.load_labeled_calls: list[int] = []
+        self.run_ocr_calls: list[int] = []
+
+    def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
+        self.load_labeled_calls.append(page_index)
+        if page_index == self._legacy_page_index:
+            raise LegacyTypographyPayloadError("legacy char_ranges_map payload is unsupported")
+        return self._ok_hits.get(page_index)
+
+    def load_cached(self, page_index: int) -> PageLoadOutcome | None:
+        return None
+
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: PageKind | None = None,
+    ) -> PageLoadOutcome:
+        self.run_ocr_calls.append(page_index)
+        raise RuntimeError("run_ocr must never be called by propose_regions (allow_ocr=False)")
+
+
+@pytest.fixture
+def proposal_run_legacy_payload(
+    tmp_path: Path,
+) -> tuple[JobRunner, Job, ProjectState, _LegacyPayloadPageLoader]:
+    """A three-page book; page 1's stored content raises
+    ``LegacyTypographyPayloadError`` (removed review data) when loaded.
+    Pages 0 and 2 load normally and are reviewed.
+
+    Regression test: a raise from ``ensure_page_model`` during the
+    lazy-load pass must not abort the whole run — one page's un-migrated
+    legacy payload shouldn't cost every other page its proposals.
+
+    Yields ``(runner, job, project_state, loader)``.
+    """
+    image_paths = [tmp_path / f"{i:03d}.png" for i in range(3)]
+    project = Project(
+        project_id="book1",
+        project_root=tmp_path,
+        image_paths=image_paths,
+        ground_truth_map={},
+        total_pages=len(image_paths),
+    )
+    project_state = ProjectState()
+    project_state.set_loaded_project(project)
+
+    reviewed = PageKindReviewedStore(project.project_root)
+    for page_index in (0, 2):
+        reviewed.mark_reviewed(page_index, datetime.now(UTC).isoformat())
+
+    ok_hits = {
+        page_index: PageLoadOutcome(
+            page_index=page_index, source=PageSource.FILESYSTEM, payload=_blank_page(page_index)
+        )
+        for page_index in (0, 2)
+    }
+    loader = _LegacyPayloadPageLoader(legacy_page_index=1, ok_hits=ok_hits)
+
+    context: dict[str, Any] = {
+        "project_state": project_state,
+        "propose_regions_measure_fn": _stub_measure_fn,
+        "page_loader": loader,
+    }
+    runner = JobRunner(JobEventBroker(), context=context)
+    job = Job(
+        job_id="proposal-run-legacy-payload-job",
+        job_type="propose_regions",
+        status=JobStatus.RUNNING,
+        project_id=project.project_id,
+        payload={"project_id": project.project_id},
+        created_at=datetime.now(UTC),
+    )
+    runner._jobs[job.job_id] = job
+
+    return runner, job, project_state, loader
