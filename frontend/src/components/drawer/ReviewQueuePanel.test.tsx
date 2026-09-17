@@ -73,12 +73,16 @@ function currentUrl(): string {
 
 function mockReviewQueue(
   items: RegionReviewQueueItem[],
-  opts?: { onRequest?: (url: URL) => void },
+  opts?: { onRequest?: (url: URL) => void; totalUndecided?: number },
 ) {
   server.use(
     http.get(`/api/projects/${PROJECT_ID}/regions/review-queue`, ({ request }) => {
       opts?.onRequest?.(new URL(request.url));
-      return HttpResponse.json({ total_undecided: items.length, pages: [], items });
+      return HttpResponse.json({
+        total_undecided: opts?.totalUndecided ?? items.length,
+        pages: [],
+        items,
+      });
     }),
   );
 }
@@ -268,5 +272,42 @@ describe("ReviewQueuePanel — stable during a decision", () => {
 
     release?.();
     await waitFor(() => expect(qc.isFetching({ queryKey: ["review-queue", PROJECT_ID] })).toBe(0));
+  });
+});
+
+describe("ReviewQueuePanel — a book with more proposals than the list holds", () => {
+  it("says how many of the book's undecided proposals it is showing", async () => {
+    mockReviewQueue([item({ proposal_id: "p1" }), item({ proposal_id: "p2" })], {
+      totalUndecided: 412,
+    });
+    renderPanel();
+
+    const notice = await screen.findByTestId("review-queue-truncated");
+    expect(notice).toHaveTextContent("Showing 2 of 412");
+  });
+
+  it("says nothing when the list holds every undecided proposal", async () => {
+    mockReviewQueue([item({ proposal_id: "p1" })]);
+    renderPanel();
+
+    await screen.findByTestId("review-queue-item-0-p1");
+    expect(screen.queryByTestId("review-queue-truncated")).toBeNull();
+  });
+});
+
+describe("ReviewQueuePanel — the selected row", () => {
+  it("marks the selected row for assistive technology, not only for tests", async () => {
+    const user = userEvent.setup();
+    mockReviewQueue([item({ proposal_id: "p1" })]);
+    renderPanel();
+
+    const row = await screen.findByTestId("review-queue-item-0-p1");
+    expect(row).not.toHaveAttribute("aria-current");
+
+    await user.click(row);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("review-queue-item-0-p1")).toHaveAttribute("aria-current", "true");
+    });
   });
 });

@@ -532,6 +532,7 @@ badge (§2.14) reads. Clicking a row navigates to that proposal's page
 | `review-queue-order-confidence` | Order toggle: lowest confidence first |
 | `review-queue-loading` | Shown while the first fetch is in flight |
 | `review-queue-empty` | Shown once loaded with no undecided proposals |
+| `review-queue-truncated` | Shown when the list holds fewer items than the book's undecided count |
 | `review-queue-list` | Row list container |
 | `review-queue-item-{pageIndex}-{proposalId}` | One row; clicking it navigates to `pageIndex` and selects `proposalId` (no navigation when `pageIndex` is already the open page) |
 | `review-queue-item-evidence-{pageIndex}-{proposalId}` | The item's evidence signal, present only when the item carries one |

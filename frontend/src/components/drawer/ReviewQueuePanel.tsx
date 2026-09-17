@@ -132,6 +132,7 @@ function ReviewQueueRow({ item, selected, onClick }: ReviewQueueRowProps) {
         type="button"
         data-testid={itemTestId(item)}
         data-selected={selected ? "true" : undefined}
+        aria-current={selected ? "true" : undefined}
         onClick={onClick}
         className={cn(
           "w-full flex flex-col gap-0.5 text-left px-2 py-1.5 text-[11px] border-b border-border-1/40 transition-colors",
@@ -182,6 +183,11 @@ export function ReviewQueuePanel({ projectId, pageIndex }: ReviewQueuePanelProps
 
   const queueQ = useReviewQueue(projectId, { order, limit: ITEM_LIMIT });
   const items = queueQ.data?.items ?? [];
+  // The badges count every undecided proposal in the book; the list stops at
+  // ITEM_LIMIT. Say so, or a reader working the list to its end would take it
+  // for the whole book.
+  const totalUndecided = queueQ.data?.total_undecided ?? 0;
+  const truncated = items.length < totalUndecided;
 
   function handleItemClick(item: RegionReviewQueueItem) {
     if (item.page_index === pageIndex) {
@@ -227,18 +233,28 @@ export function ReviewQueuePanel({ projectId, pageIndex }: ReviewQueuePanelProps
             This book has no undecided proposals.
           </p>
         ) : (
-          <ul data-testid="review-queue-list" className="flex flex-col">
-            {items.map((item) => (
-              <ReviewQueueRow
-                key={`${String(item.page_index)}-${item.proposal_id}`}
-                item={item}
-                selected={isSelected(item)}
-                onClick={() => {
-                  handleItemClick(item);
-                }}
-              />
-            ))}
-          </ul>
+          <>
+            {truncated && (
+              <p
+                data-testid="review-queue-truncated"
+                className="px-2 py-1.5 text-[10px] text-ink-3 border-b border-border-1"
+              >
+                Showing {items.length} of {totalUndecided}. Decide these to see the rest.
+              </p>
+            )}
+            <ul data-testid="review-queue-list" className="flex flex-col">
+              {items.map((item) => (
+                <ReviewQueueRow
+                  key={`${String(item.page_index)}-${item.proposal_id}`}
+                  item={item}
+                  selected={isSelected(item)}
+                  onClick={() => {
+                    handleItemClick(item);
+                  }}
+                />
+              ))}
+            </ul>
+          </>
         )}
       </div>
     </div>
