@@ -385,7 +385,7 @@ async def test_handle_export_cancel_checked_via_shared_helper(tmp_path: Path) ->
         calls.append(job_id)
         return original_is_cancelled(job_id)
 
-    runner.is_cancelled = _tracking_is_cancelled  # type: ignore[method-assign]
+    runner.is_cancelled = _tracking_is_cancelled
 
     with patch("pdomain_ocr_labeler_spa.core.jobs.handlers.export._export_page"):
         await handle_export(runner, job)

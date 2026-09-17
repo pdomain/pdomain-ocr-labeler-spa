@@ -519,7 +519,7 @@ def test_cancel_during_lazy_load_journals_nothing(proposal_run_lazy_load: Any) -
             runner._jobs[job.job_id] = current.model_copy(update={"status": JobStatus.CANCELLED})
         return result
 
-    loader.load_labeled = _load_labeled_then_cancel  # type: ignore[method-assign]
+    loader.load_labeled = _load_labeled_then_cancel
 
     asyncio.run(handle_propose_regions(runner, job))
 
