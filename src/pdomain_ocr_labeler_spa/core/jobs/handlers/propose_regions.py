@@ -68,17 +68,17 @@ from ...page_kind.reviewed_store import PageKindReviewedStore
 from ...page_measurement import measure_book
 from ...project_state import PageState, ProjectState
 from ...regions.block_adapter import compute_page_facet_digests
-from ...regions.detector import DetectorInput, null_region_detector
+from ...regions.detector import BookFittedDetector, DetectorInput, null_region_detector
 from ...regions.models import ProposalRun, RegionProposal
 from ...regions.proposal_log import RegionProposalLog
 from ._labeling_page_lease import leased_labeling_page
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from uuid import UUID
 
     from ...page_kind.models import PageKindProposalRun
-    from ...page_measurement import MeasurePageFn
+    from ...page_measurement import MeasuredBook, MeasurePageFn
     from ...persistence.page_store import LabelerPageStore
     from ...regions.detector import DetectedRegion, RegionDetector
     from ..runner import Job, JobRunner
@@ -166,6 +166,42 @@ def _positions_by_page_index(page_indices: Sequence[int]) -> dict[int, int]:
     return {page_index: position for position, page_index in enumerate(page_indices)}
 
 
+def _book_fit_inputs(
+    eligible_indices: Sequence[int],
+    project_state: ProjectState,
+    measured: MeasuredBook,
+    measured_positions: Mapping[int, int],
+) -> list[DetectorInput]:
+    """One ``DetectorInput`` per eligible page that has both a live page and a measurement.
+
+    Needs no image read and no lease — a ``DetectorInput`` is just the page
+    object already held in memory plus the measurement data ``measure_book``
+    already produced. A page with no live page object, or whose lease failed
+    during the measurement pass (so it has no entry in ``measured_positions``),
+    is left out of the book a ``BookFittedDetector.fit`` sees, the same as it
+    is left out of the per-page detection loop below.
+    """
+    inputs: list[DetectorInput] = []
+    for idx in eligible_indices:
+        pstate = project_state.page_states[idx]
+        page = _resolve_live_page(pstate)
+        if page is None:
+            continue
+        measured_at = measured_positions.get(idx)
+        if measured_at is None:
+            continue
+        inputs.append(
+            DetectorInput(
+                page=page,
+                page_index=idx,
+                measurement=measured.measurements[measured_at],
+                classification=measured.classifications[measured_at],
+                templates=measured.templates,
+            )
+        )
+    return inputs
+
+
 async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     project_state, page_store = _get_required_context(runner)
     project = project_state.loaded_project
@@ -249,8 +285,14 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     # as ``propose_page_kinds``'s ``measure_fn`` injection seam — assigned straight
     # into the annotated variable rather than narrowed via ``callable()``, which
     # would synthesize a mismatched call signature against ``RegionDetector``.
+    #
+    # This is the raw injected object, not yet the per-page callable the loop
+    # below calls. A ``BookFittedDetector`` (isinstance-checked once the book
+    # is measured, below) needs the whole book before it can judge any one
+    # page; a plain ``RegionDetector`` callable is used exactly as it always
+    # was.
     ctx: dict[str, Any] = runner.context
-    detector: RegionDetector = ctx.get("region_detector") or null_region_detector
+    raw_detector: RegionDetector | BookFittedDetector = ctx.get("region_detector") or null_region_detector
 
     # The detector needs the book, not just one page: where the head band
     # belongs and how wide the text block is are book-level facts. Measure the
@@ -320,6 +362,37 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
         )
 
     measured_positions = _positions_by_page_index(measured.page_indices)
+
+    # A ``BookFittedDetector`` needs the whole book before it can judge any
+    # one page — the same "fit the whole book once" shape ``measure_book``
+    # already applies for templates. Building the per-page inputs needs no
+    # image read and no lease (see ``_book_fit_inputs``); only ``fit`` itself
+    # is CPU-bound (it walks every word box in the book), so only that call
+    # is offloaded. A plain callable skips this branch entirely and is used
+    # exactly as it always was.
+    detector: RegionDetector
+    if isinstance(raw_detector, BookFittedDetector):
+        fit_inputs = _book_fit_inputs(eligible_indices, project_state, measured, measured_positions)
+        try:
+            detector = await asyncio.to_thread(raw_detector.fit, fit_inputs)
+        except Exception:
+            # A whole-book fit failure is not one page's problem to isolate —
+            # unlike a per-page detector call, there is no single bad page to
+            # skip. Falling back to the no-op detector keeps the run from
+            # crashing and keeps its log loud, rather than guessing at a
+            # detector-specific fixed-share fallback the handler has no
+            # business knowing about (the seam is deliberately
+            # detector-agnostic — see DetectorInput's own docstring).
+            log.exception(
+                "propose_regions: run=%s project=%s detector.fit raised on %d page(s) of "
+                "book-fit input; proposing nothing for the rest of this run",
+                run_id,
+                project.project_id,
+                len(fit_inputs),
+            )
+            detector = null_region_detector
+    else:
+        detector = raw_detector
 
     await runner.update_progress(
         job.job_id,

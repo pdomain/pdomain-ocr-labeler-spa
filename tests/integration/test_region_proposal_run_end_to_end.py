@@ -11,11 +11,11 @@ from typing import Any
 
 
 def test_the_default_detector_is_the_furniture_detector(toolbar_loaded: Any) -> None:
-    from pdomain_ocr_labeler_spa.core.regions.furniture import furniture_region_detector
+    from pdomain_ocr_labeler_spa.core.regions.furniture import FurnitureDetector
 
     client, _project_state, _page = toolbar_loaded
     runner = client.app.state.job_runner
-    assert runner.context["region_detector"] is furniture_region_detector
+    assert isinstance(runner.context["region_detector"], FurnitureDetector)
 
 
 def test_a_confirmed_page_kind_lets_a_region_run_reach_that_page(toolbar_loaded: Any) -> None:
