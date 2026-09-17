@@ -836,6 +836,12 @@ export interface paths {
         /**
          * List Jobs
          * @description ``GET /api/jobs`` — in-memory job list.
+         *
+         *     Returns the public ``Job`` model directly so FastAPI's ``response_model``
+         *     actually validates/serializes the body — a raw ``JSONResponse`` here
+         *     bypassed that check and let the wire shape drift from the declared
+         *     OpenAPI ``Job`` (docs/issues/2026-07-21-jobs-api-openapi-mismatch.md,
+         *     P1-JOBS-API).
          */
         get: operations["list_jobs_api_jobs_get"];
         put?: never;
@@ -878,7 +884,10 @@ export interface paths {
          * @description ``GET /api/jobs/{job_id}/events`` — SSE stream.
          *
          *     Per spec §5.10: first frame = current snapshot; subsequent = broker
-         *     events; terminates on terminal state.
+         *     events; terminates on terminal state. Every frame's JSON payload is the
+         *     public ``Job`` model plus an ``event`` field naming the SSE event kind
+         *     (``snapshot`` / ``progress`` / ``complete`` / ``error`` / ``cancelled``)
+         *     — see ``JobRunner._emit`` and ``_job_snapshot`` for the shared shape.
          */
         get: operations["job_events_api_jobs__job_id__events_get"];
         put?: never;
@@ -3939,15 +3948,30 @@ export interface components {
         /**
          * JobStatus
          * @description Job lifecycle state — spec §1 ``JobStatus``.
+         *
+         *     Mirrors ``core.jobs.runner.JobStatus`` exactly (including ``CANCELLED``,
+         *     reached via cooperative cancel — spec §5.10). The two enums are kept
+         *     separate (runtime layer vs. wire layer) but
+         *     ``tests/unit/core/jobs/test_job_type_contract.py`` proves they agree so
+         *     they cannot silently drift — see
+         *     ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`` (P1-JOBS-API).
          * @enum {string}
          */
-        JobStatus: "queued" | "running" | "complete" | "error";
+        JobStatus: "queued" | "running" | "complete" | "error" | "cancelled";
         /**
          * JobType
          * @description Discriminant for background job kind — spec §1 ``JobType``.
+         *
+         *     Values are exactly the ``job_type`` strings the runner's registered
+         *     handlers accept (``core.jobs.runner._HANDLERS`` /
+         *     ``core.jobs.runner.registered_job_types()``); previously this enum
+         *     listed job types the runner never produced and omitted four it does —
+         *     see ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`` (P1-JOBS-API).
+         *     ``tests/unit/core/jobs/test_job_type_contract.py`` fails if a registered
+         *     handler has no matching member (or vice versa).
          * @enum {string}
          */
-        JobType: "refine_bboxes_page" | "expand_refine_bboxes_page" | "reload_ocr_page" | "export" | "save_project" | "refine_bboxes_project";
+        JobType: "reload_ocr" | "save_project" | "export" | "rotate_page" | "auto_rotate_all" | "refine_bboxes" | "propose_page_kinds" | "propose_regions";
         /**
          * LabelSource
          * @description Evidence sources that can assign a canonical label.
