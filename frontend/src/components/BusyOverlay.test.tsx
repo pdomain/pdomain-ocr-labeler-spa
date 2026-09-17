@@ -86,6 +86,63 @@ describe("BusyOverlay", () => {
     expect(screen.getByTestId("busy-overlay-cancel")).toBeInTheDocument();
   });
 
+  it("shows cancel button for auto_rotate_all job", () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <BusyOverlay
+          activeJob={{
+            id: "job-6",
+            type: "auto_rotate_all",
+            project_id: "proj-1",
+            status: "running",
+            progress: { current: 0, total: 0, message: "Rotating…" },
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId("busy-overlay-cancel")).toBeInTheDocument();
+  });
+
+  it("shows cancel button for propose_page_kinds job", () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <BusyOverlay
+          activeJob={{
+            id: "job-7",
+            type: "propose_page_kinds",
+            project_id: "proj-1",
+            status: "running",
+            progress: { current: 0, total: 0, message: "Measuring…" },
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId("busy-overlay-cancel")).toBeInTheDocument();
+  });
+
+  it("shows cancel button for propose_regions job", () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <BusyOverlay
+          activeJob={{
+            id: "job-8",
+            type: "propose_regions",
+            project_id: "proj-1",
+            status: "running",
+            progress: { current: 0, total: 0, message: "Proposing…" },
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId("busy-overlay-cancel")).toBeInTheDocument();
+  });
+
   it("shows cancel button with best-effort tooltip for reload_ocr_page", () => {
     render(
       <QueryClientProvider client={new QueryClient()}>

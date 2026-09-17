@@ -13,7 +13,10 @@
 //
 // BusyOverlay logic:
 //   visible when isMutating prop is true OR activeJob is non-null.
-//   Cancel button for save_project and export jobs (POST cancel endpoint).
+//   Cancel button for save_project, export, auto_rotate_all,
+//   propose_page_kinds, and propose_regions jobs (POST cancel endpoint) —
+//   every handler with cooperative cancel support (P1-CANCEL,
+//   docs/issues/2026-07-21-job-cancel-incomplete.md).
 //   Cancel button with "best-effort" tooltip for reload_ocr_page.
 //   No cancel button for refine_bboxes_page / expand_refine_bboxes_page /
 //   refine_bboxes_project.
@@ -23,13 +26,29 @@ import { OperationStatusPanel } from "@pdomain/pdomain-ui/status";
 import type { components } from "../api/types";
 
 type Job = components["schemas"]["Job"];
-type JobType = components["schemas"]["JobType"];
 
-/** Job types that support real cooperative cancel. */
-const CANCELLABLE = new Set<JobType>(["save_project", "export"]);
+/**
+ * Job types that support real cooperative cancel.
+ *
+ * Deliberately typed as a plain string set, not `Set<JobType>`: the
+ * generated `components["schemas"]["JobType"]` (from `openapi.json`) is
+ * stale and omits several job types the runner actually uses today
+ * (`rotate_page`, `auto_rotate_all`, `propose_page_kinds`,
+ * `propose_regions` — see docs/issues/2026-07-21-job-cancel-incomplete.md).
+ * `activeJob?.type` still carries the real runtime string regardless of
+ * what the generated schema declares, so this policy set must be free to
+ * name job types the schema hasn't caught up to.
+ */
+const CANCELLABLE = new Set<string>([
+  "save_project",
+  "export",
+  "auto_rotate_all",
+  "propose_page_kinds",
+  "propose_regions",
+]);
 
 /** Job type that has cancel button but with "best-effort" warning. */
-const BEST_EFFORT_CANCEL = new Set<JobType>(["reload_ocr_page"]);
+const BEST_EFFORT_CANCEL = new Set<string>(["reload_ocr_page"]);
 
 interface BusyOverlayProps {
   /** The currently active running job, if any. */
