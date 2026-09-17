@@ -154,17 +154,16 @@ def _proposed_page_indices(
     return indices
 
 
-def _position_of(page_indices: Sequence[int], page_index: int) -> int | None:
-    """Where ``page_index`` sits in the measured sequence, or ``None`` when unmeasured.
+def _positions_by_page_index(page_indices: Sequence[int]) -> dict[int, int]:
+    """Map each measured page's index to its position in the measured sequence.
 
     A page skipped for a failed lease is absent from the measurements, so
-    position and page index diverge. Looking up by value rather than indexing
-    by position is what keeps one page's geometry off another page.
+    position and page index diverge. Joining by value rather than by position
+    is what keeps one page's geometry off another page. Built once per run
+    rather than scanned per page: a linear search inside the detector loop
+    makes the join quadratic in the book's page count.
     """
-    try:
-        return page_indices.index(page_index)
-    except ValueError:
-        return None
+    return {page_index: position for position, page_index in enumerate(page_indices)}
 
 
 async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
@@ -259,11 +258,20 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     # pass — see core/page_measurement.py.
     measure_fn: MeasurePageFn = ctx.get("propose_regions_measure_fn") or profile_page
 
+    # A run has two phases: measure every page of the book, then detect over the
+    # eligible ones. They have different page counts, so reporting each against
+    # its own denominator makes ``progress_total`` change mid-run and
+    # ``progress_current`` reset to zero — a progress bar that goes backwards.
+    # Both phases report against one combined total instead, so progress only
+    # ever moves forward.
+    measure_total = len(project.image_paths)
+    combined_total = measure_total + total
+
     async def _report_measured(current: int, total_pages: int) -> None:
         await runner.update_progress(
             job.job_id,
             current=current,
-            total=total_pages,
+            total=combined_total,
             message=f"Measuring page {current}/{total_pages}",
         )
 
@@ -311,8 +319,13 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
             skipped_indices,
         )
 
+    measured_positions = _positions_by_page_index(measured.page_indices)
+
     await runner.update_progress(
-        job.job_id, current=0, total=total, message=f"Proposing regions for {total} page(s)"
+        job.job_id,
+        current=measure_total,
+        total=combined_total,
+        message=f"Proposing regions for {total} page(s)",
     )
     proposal_count = 0
     lease_failed_indices: list[int] = []
@@ -357,7 +370,7 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
                     # failed lease during the measurement pass opens a gap,
                     # and taking measurements[idx] would hand page 7's
                     # geometry to page 3.
-                    measured_at = _position_of(measured.page_indices, idx)
+                    measured_at = measured_positions.get(idx)
                     if measured_at is None:
                         log.warning(
                             "propose_regions: page=%d has no book measurement (its "
@@ -408,7 +421,9 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
                 ]
                 proposal_log.append_proposals(proposals)
                 proposal_count += len(proposals)
-        await runner.update_progress(job.job_id, current=i, total=total, message=f"page {idx}")
+        await runner.update_progress(
+            job.job_id, current=measure_total + i, total=combined_total, message=f"page {idx}"
+        )
 
     if lease_failed_indices:
         log.warning(
