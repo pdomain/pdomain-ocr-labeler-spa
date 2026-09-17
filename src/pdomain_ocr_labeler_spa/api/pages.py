@@ -7,7 +7,7 @@ import io
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
@@ -58,6 +58,9 @@ from .dependencies import (
     get_settings,
 )
 from .middleware.error_handler import ApiError
+
+if TYPE_CHECKING:
+    from pdomain_ops.pages import ProvenanceNode
 
 log = logging.getLogger(__name__)
 
@@ -947,6 +950,30 @@ def _assemble_page_payload(
     )
 
 
+def _page_head_node(*, page_store: LabelerPageStore | None, page_id: UUID | None) -> ProvenanceNode | None:
+    """Best-effort read of a page's current provenance head node.
+
+    Shared by ``_image_digest_for_page`` (the recorded image digest, index 1
+    of ``blob_refs``) and ``_image_drift_for_page`` (whether this
+    generation's OCR ran against edited bytes, ``extra["image_is_edited"]``)
+    so both read the same head via one aggregate fetch and one failure path.
+
+    A page must always render even when this can't be read (a missing
+    aggregate, an event-store hiccup) — spec §"Facet digests are computed,
+    never declared" doesn't require the read to succeed, only that a change
+    is caught when it can be. The failure is logged at WARNING, not silenced:
+    at DEBUG it would be invisible in production, where this runs.
+    """
+    if page_store is None or page_id is None:
+        return None
+    try:
+        agg_record = page_store.get_page(page_id).record
+    except Exception:
+        log.warning("_page_payload: image-digest read failed for page_id=%s", page_id, exc_info=True)
+        return None
+    return agg_record.provenance.head if agg_record.provenance else None
+
+
 def _image_digest_for_page(*, page_store: LabelerPageStore | None, page_id: UUID | None) -> str | None:
     """Best-effort image-provenance digest for a page's current head.
 
@@ -960,21 +987,8 @@ def _image_digest_for_page(*, page_store: LabelerPageStore | None, page_id: UUID
     geometry proposal on the page — the exact thing per-facet digests exist to
     prevent. An omitted facet compares unequal to a recorded one, so it reads
     as stale, never as falsely fresh.
-
-    A page must always render even when this facet can't be read (a missing
-    aggregate, an event-store hiccup) — spec §"Facet digests are computed,
-    never declared" doesn't require the read to succeed, only that a change
-    is caught when it can be. The failure is logged at WARNING, not silenced:
-    at DEBUG it would be invisible in production, where this runs.
     """
-    if page_store is None or page_id is None:
-        return None
-    try:
-        agg_record = page_store.get_page(page_id).record
-    except Exception:
-        log.warning("_page_payload: image-digest read failed for page_id=%s", page_id, exc_info=True)
-        return None
-    head = agg_record.provenance.head if agg_record.provenance else None
+    head = _page_head_node(page_store=page_store, page_id=page_id)
     if head is None or len(head.blob_refs) < 2:
         return None
     return head.blob_refs[1]
@@ -1038,24 +1052,41 @@ def _image_drift_for_page(
     into ``blob_refs[1]``. The untouched on-disk source can never match that
     digest, so comparing against it would report permanent drift, and the
     banner's advice (plain Reload OCR) would discard the user's edited OCR
-    result. Detected via ``pstate.edited_image_blob``: it and the head digest
-    are both content hashes of the same content-addressed blob store (see
-    ``_persist_edited_image_blob``), so they compare equal exactly when this
-    generation's OCR ran against that persisted edited image. The first
-    check of such a generation re-anchors the ground-truth digest to the
-    on-disk file's own hash at that moment, instead of the (permanently
-    mismatching) recorded head digest — chosen over treating "has an edited
-    image blob" as drift-not-applicable because it keeps detection alive: a
-    genuine on-disk change *after* that point still diverges from the
-    re-anchored baseline and is still caught, the same as an ordinary page.
+    result.
+
+    Detected via the durable marker ``_ingest_ocr_result`` stamps on the
+    provenance node itself — ``head.extra["image_is_edited"] is True`` —
+    not via ``PageState.edited_image_blob``, which is in-memory only and
+    never repopulated for a ``PageState`` built fresh after a restart (the
+    original version of this fix used it and didn't survive one). Reading
+    the marker back off the persisted head means detection is correct on
+    the very first fetch of a brand-new ``PageState``, with no dependency on
+    which requests happened to touch this process before. A head with no
+    ``extra`` at all — every generation written before this marker
+    existed — reads as "not edited" (``dict.get`` default), i.e. behaves
+    exactly like an ordinary OCR generation: harmless for a genuinely
+    pristine page, but a page that WAS edited-and-reloaded under the old
+    code keeps showing the same permanent false drift until it is
+    edited-and-reloaded again (which stamps the marker) or freshly OCR'd
+    (which naturally re-syncs the digest).
+
+    The first check of an edited-passthrough generation re-anchors the
+    ground-truth digest to the on-disk file's own hash at that moment,
+    instead of the (permanently mismatching) recorded head digest —
+    chosen over treating "OCR ran on edited bytes" as drift-not-applicable
+    because it keeps detection alive: a genuine on-disk change *after* that
+    point still diverges from the re-anchored baseline and is still caught,
+    the same as an ordinary page.
     """
     if project_state.has_book_labeling_session:
         return None
     if pstate is None:
         return None
-    digest = _image_digest_for_page(page_store=page_store, page_id=pstate.page_id)
-    if digest is None:
+    head = _page_head_node(page_store=page_store, page_id=pstate.page_id)
+    if head is None or len(head.blob_refs) < 2:
         return None
+    digest = head.blob_refs[1]
+    image_is_edited = bool(head.extra) and head.extra.get("image_is_edited") is True
     try:
         image_path = project_state.labeling_image_path(page_index)
         file_stat = image_path.stat()
@@ -1107,8 +1138,7 @@ def _image_drift_for_page(
         # New generation: edited-image passthrough (see docstring) anchors
         # to the on-disk file as it stands right now; an ordinary OCR
         # generation anchors to the recorded head digest as before.
-        edited_passthrough = pstate.edited_image_blob is not None and digest == pstate.edited_image_blob
-        ground_truth_digest = current_digest if edited_passthrough else digest
+        ground_truth_digest = current_digest if image_is_edited else digest
 
     # Cache the baseline regardless of the verdict — this is what lets an
     # unchanged first check, or a merely-touched file, skip hashing on the

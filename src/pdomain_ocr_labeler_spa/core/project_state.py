@@ -184,7 +184,10 @@ class PageState:
     # ``_image_drift_for_page`` re-anchors ``image_drift_digest`` to the
     # on-disk file's own digest at the moment that generation is first
     # seen, instead of comparing against a digest the disk file was never
-    # going to match.
+    # going to match. That generation is identified from the durable
+    # ``ProvenanceNode.extra["image_is_edited"]`` marker
+    # ``_ingest_ocr_result`` stamps (not from ``edited_image_blob`` above,
+    # which is in-memory only and does not survive a restart).
     image_drift_head_digest: str | None = field(default=None)
     image_drift_digest: str | None = field(default=None)
     image_drift_size: int | None = field(default=None)

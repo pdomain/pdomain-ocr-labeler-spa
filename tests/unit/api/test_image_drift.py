@@ -19,7 +19,6 @@ what matters here is the digest-vs-disk comparison, not OCR itself.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 from pathlib import Path
@@ -74,21 +73,25 @@ def _load_page_ocrd_on_edited_bytes(
     tmp_path: Path, *, disk_bytes: bytes, edited_bytes: bytes
 ) -> tuple[ProjectState, PageState, Path, LabelerPageStore]:
     """Simulate "erase pixels" + "Reload OCR (Edited)": OCR ran against
-    ``edited_bytes`` (so the recorded digest is the edited image's hash, per
-    ``local_doctr.py``'s ``run_ocr(edited_image_bytes=...)`` /
-    ``_run_ocr_on_path`` /  ``_ingest_ocr_result``), while the on-disk source
-    file still holds the untouched ``disk_bytes``. ``pstate.edited_image_blob``
-    is stamped with the same content hash ``_persist_edited_image_blob`` would
-    record — both are sha256 of the identical edited bytes via the
-    content-addressed blob store, so they match exactly the way the real
-    erase + reload-ocr-edited flow produces.
+    ``edited_bytes`` via ``_ingest_ocr_result(image_is_edited=True)`` (the
+    same call ``local_doctr.py``'s ``run_ocr(edited_image_bytes=...)`` /
+    ``_run_ocr_on_path`` makes), so the recorded head node carries both the
+    edited image's digest and the durable "OCR ran on edited bytes" marker —
+    while the on-disk source file still holds the untouched ``disk_bytes``.
+
+    The returned ``pstate`` is freshly constructed with only ``page_id`` set
+    (no ``edited_image_blob``) — the same shape a brand-new ``PageState``
+    has after a process restart, since ``edited_image_blob`` is in-memory
+    only. Detection must work from the durable head marker alone.
     """
     image_path = tmp_path / "001.png"
     image_path.write_bytes(disk_bytes)
 
     store = LabelerPageStore(project_dir=tmp_path)
     fake_page = _make_page_stub()
-    agg = _ingest_ocr_result(page=fake_page, image_bytes=edited_bytes, page_index=0, store=store)
+    agg = _ingest_ocr_result(
+        page=fake_page, image_bytes=edited_bytes, page_index=0, store=store, image_is_edited=True
+    )
 
     project = Project(
         project_id="book1",
@@ -101,7 +104,6 @@ def _load_page_ocrd_on_edited_bytes(
     project_state.set_loaded_project(project)
 
     pstate = PageState(page_index=0, page_id=agg.record.page_id)
-    pstate.edited_image_blob = hashlib.sha256(edited_bytes).hexdigest()
     project_state.set_page_state(0, pstate)
     return project_state, pstate, image_path, store
 
@@ -317,6 +319,43 @@ def test_reload_ocr_edited_still_detects_a_later_genuine_disk_change(tmp_path: P
 
     assert isinstance(result, ImageDrift)
     assert result.error == "image_changed"
+
+
+def test_reload_ocr_edited_head_survives_restart(tmp_path: Path) -> None:
+    """The edited-passthrough marker must be durable, not just in-memory.
+
+    ``pstate.edited_image_blob`` is never restored on a fresh ``PageState``
+    (e.g. after a process restart the page hasn't been fetched since) — only
+    ``page_id`` carries over, resolved from the durable ProjectAggregate
+    index→page_id map. A page whose current head's OCR ran on edited bytes
+    must still report no drift on the very first fetch of that fresh
+    ``PageState``, reading the marker back from the persisted provenance
+    node instead of relying on in-memory state that restart wiped out.
+    """
+    project_state, pstate, image_path, store = _load_page_ocrd_on_edited_bytes(
+        tmp_path,
+        disk_bytes=b"\x89PNG\r\n pristine disk bytes",
+        edited_bytes=b"\x89PNG\r\n erased/edited bytes",
+    )
+    # A brand-new PageState — like the one a fresh process constructs — with
+    # nothing set beyond the page_id resolved from the durable project index.
+    fresh_pstate = PageState(page_index=0, page_id=pstate.page_id)
+
+    first = _image_drift_for_page(
+        project_state=project_state, page_index=0, pstate=fresh_pstate, page_store=store
+    )
+    assert first is None
+
+    # Detection must still be alive after the restart-recovered baseline too.
+    image_path.write_bytes(b"\x89PNG\r\n a genuinely different replacement image")
+    new_mtime_ns = (fresh_pstate.image_drift_mtime_ns or 0) + 10_000_000_000
+    os.utime(image_path, ns=(new_mtime_ns, new_mtime_ns))
+
+    second = _image_drift_for_page(
+        project_state=project_state, page_index=0, pstate=fresh_pstate, page_store=store
+    )
+    assert isinstance(second, ImageDrift)
+    assert second.error == "image_changed"
 
 
 def test_book_labeling_session_skips_the_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
