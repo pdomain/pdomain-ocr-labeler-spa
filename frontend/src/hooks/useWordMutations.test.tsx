@@ -5,13 +5,13 @@
 //   - useDeleteWord POSTs the word delete-scope body
 //   - useNudgeWord POSTs deltas + refine_after flag
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import React from "react";
 import { server } from "../test/server";
-import { useDeleteWord, useNudgeWord } from "./useWordMutations";
+import { useDeleteWord, useNudgeWord, useErasePixels } from "./useWordMutations";
 
 function makeWrapper() {
   const qc = new QueryClient({
@@ -97,5 +97,93 @@ describe("useNudgeWord", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(body).toEqual({ left: 0, right: 1, top: 0, bottom: 0, refine_after: true });
+  });
+});
+
+// ─── useErasePixels regression (P1-CANVAS-ERASE) ────────────────────────────
+// Confirms the pre-existing word-detail panel erase path (WordDetail →
+// ErasePixelsSection → useErasePixels) still works unchanged after adding
+// the page-scoped useErasePagePixels sibling for canvas erase mode.
+
+describe("useErasePixels", () => {
+  it("POSTs a rect op to words/{li}/{wi}/erase-pixels with fill_value 255 and shape rect", async () => {
+    let body: unknown;
+    let path: string | undefined;
+    server.use(
+      http.post("/api/projects/p/pages/0/words/1/2/erase-pixels", async ({ request }) => {
+        path = new URL(request.url).pathname;
+        body = await request.json();
+        return HttpResponse.json({});
+      }),
+    );
+    const { result } = renderHook(() => useErasePixels("p", 0), {
+      wrapper: makeWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        lineIndex: 1,
+        wordIndex: 2,
+        ops: [{ tool: "rect", x: 5, y: 6, width: 7, height: 8 }],
+      });
+    });
+
+    expect(path).toBe("/api/projects/p/pages/0/words/1/2/erase-pixels");
+    expect(body).toEqual({
+      bbox: { x: 5, y: 6, width: 7, height: 8 },
+      fill_value: 255,
+      shape: "rect",
+    });
+  });
+
+  it("POSTs a brush op as a circle-shaped bbox inscribed within the AABB", async () => {
+    let body: unknown;
+    server.use(
+      http.post("/api/projects/p/pages/0/words/1/2/erase-pixels", async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({});
+      }),
+    );
+    const { result } = renderHook(() => useErasePixels("p", 0), {
+      wrapper: makeWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        lineIndex: 1,
+        wordIndex: 2,
+        ops: [{ tool: "brush", x: 10, y: 10, radius: 4 }],
+      });
+    });
+
+    expect(body).toEqual({
+      bbox: { x: 6, y: 6, width: 8, height: 8 },
+      fill_value: 255,
+      shape: "circle",
+    });
+  });
+
+  it("invalidates the page query on success", async () => {
+    server.use(
+      http.post("/api/projects/p/pages/0/words/1/2/erase-pixels", () => HttpResponse.json({})),
+    );
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const Wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useErasePixels("p", 0), { wrapper: Wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        lineIndex: 1,
+        wordIndex: 2,
+        ops: [{ tool: "rect", x: 0, y: 0, width: 1, height: 1 }],
+      });
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", "p", 0] });
   });
 });
