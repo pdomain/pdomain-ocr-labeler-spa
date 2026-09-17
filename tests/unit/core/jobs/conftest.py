@@ -66,16 +66,14 @@ def _stub_measure_fn(project_id: str, page: ProfileInputPage) -> PageMeasurement
     )
 
 
-@pytest.fixture
-def proposal_run_ready(tmp_path: Path) -> tuple[JobRunner, Job, ProjectState]:
-    """A ``propose_regions`` run ready to execute: two loaded pages, both with a
-    confirmed page kind, and a stub measure function wired into
-    ``runner.context``.
+def _build_two_page_run(
+    tmp_path: Path, *, reviewed_page_indices: tuple[int, ...]
+) -> tuple[JobRunner, Job, ProjectState]:
+    """Two loaded pages, a stub measure function, and a job ready to run.
 
-    Yields ``(runner, job, project_state)``. The ``Job`` is registered in
-    ``runner._jobs`` the way the existing tests at the bottom of
-    ``tests/integration/test_region_proposals_router.py`` do it, mirroring
-    ``runner._run_one``'s own bookkeeping.
+    Only the pages listed in ``reviewed_page_indices`` are marked reviewed
+    (page-kind confirmed); the rest carry no page-kind state at all, the same
+    as a page nobody has run "Propose page kinds" over yet.
     """
     image_paths = [tmp_path / "000.png", tmp_path / "001.png"]
     project = Project(
@@ -95,7 +93,8 @@ def proposal_run_ready(tmp_path: Path) -> tuple[JobRunner, Job, ProjectState]:
         pstate = PageState(page_index=page_index, page_record=outcome)
         pstate.page_id = uuid4()
         project_state._page_states[page_index] = pstate
-        reviewed.mark_reviewed(page_index, datetime.now(UTC).isoformat())
+        if page_index in reviewed_page_indices:
+            reviewed.mark_reviewed(page_index, datetime.now(UTC).isoformat())
 
     context: dict[str, Any] = {
         "project_state": project_state,
@@ -113,3 +112,38 @@ def proposal_run_ready(tmp_path: Path) -> tuple[JobRunner, Job, ProjectState]:
     runner._jobs[job.job_id] = job
 
     return runner, job, project_state
+
+
+@pytest.fixture
+def proposal_run_ready(tmp_path: Path) -> tuple[JobRunner, Job, ProjectState]:
+    """A ``propose_regions`` run ready to execute: two loaded pages, both with a
+    confirmed page kind, and a stub measure function wired into
+    ``runner.context``.
+
+    Yields ``(runner, job, project_state)``. The ``Job`` is registered in
+    ``runner._jobs`` the way the existing tests at the bottom of
+    ``tests/integration/test_region_proposals_router.py`` do it, mirroring
+    ``runner._run_one``'s own bookkeeping.
+    """
+    return _build_two_page_run(tmp_path, reviewed_page_indices=(0, 1))
+
+
+@pytest.fixture
+def proposal_run_one_page_missing_kind(tmp_path: Path) -> tuple[JobRunner, Job, ProjectState]:
+    """Like ``proposal_run_ready``, but only page 0 has page-kind state.
+
+    Page 1 has no confirmed page kind and no page-kind proposal — the case
+    the summary's "Skipped ... run Propose page kinds first" clause exists
+    for.
+    """
+    return _build_two_page_run(tmp_path, reviewed_page_indices=(0,))
+
+
+@pytest.fixture
+def proposal_run_no_kind_state(tmp_path: Path) -> tuple[JobRunner, Job, ProjectState]:
+    """Like ``proposal_run_ready``, but neither page has page-kind state.
+
+    The handler's early-return path: no page has a proposed or confirmed
+    page kind, so there is nothing to propose regions for.
+    """
+    return _build_two_page_run(tmp_path, reviewed_page_indices=())
