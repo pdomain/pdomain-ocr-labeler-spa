@@ -64,7 +64,6 @@ from ...page_kind.proposal_log import PageKindProposalLog
 from ...page_kind.reviewed_store import PageKindReviewedStore
 from ...project_state import PageState, ProjectState
 from ...regions.block_adapter import compute_page_facet_digests
-from ...regions.detector import RegionDetector, null_region_detector
 from ...regions.models import ProposalRun, RegionProposal
 from ...regions.proposal_log import RegionProposalLog
 from ._labeling_page_lease import leased_labeling_page
@@ -75,6 +74,7 @@ if TYPE_CHECKING:
 
     from ...page_kind.models import PageKindProposalRun
     from ...persistence.page_store import LabelerPageStore
+    from ...regions.detector import DetectedRegion
     from ..runner import Job, JobRunner
 
 log = logging.getLogger(__name__)
@@ -227,12 +227,6 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
         )
         return
 
-    # ``.get(...)`` returns ``Any`` here (``runner.context: dict[str, Any]``), same
-    # as ``propose_page_kinds``'s ``measure_fn`` injection seam — assigned straight
-    # into the annotated variable rather than narrowed via ``callable()``, which
-    # would synthesize a mismatched call signature against ``RegionDetector``.
-    detector: RegionDetector = runner.context.get("region_detector") or null_region_detector
-
     page_facet_digests: dict[int, dict[str, str]] = {}
     for idx in eligible_indices:
         pstate = project_state.page_states[idx]
@@ -311,13 +305,13 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
             else:
                 with stack:
                     try:
-                        # CPU-bound in the general case — slice 4's real
-                        # detector decodes images and runs numpy. Offloaded
-                        # for the same reason the facet-digest snapshot above
-                        # is; the lease stays bound for the duration of the
-                        # offloaded call, since ``asyncio.to_thread``
-                        # propagates the contextvar the binding uses.
-                        detected = await asyncio.to_thread(detector, page)
+                        # Task 2 supplies the book measurement this detector
+                        # call needs. Until it lands there is nothing to build
+                        # a DetectorInput from, so the run proposes nothing —
+                        # which is exactly what the default detector did
+                        # before the seam widened. Removing this guard is
+                        # Task 2's first step.
+                        detected: Sequence[DetectedRegion] | None = []
                     except Exception:
                         # The detector is a swap-in callable from
                         # ``runner.context``, so its failures are not this

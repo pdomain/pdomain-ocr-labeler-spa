@@ -15,6 +15,8 @@ from typing import Any
 
 from pdomain_book_contracts.annotation import RegionRole
 from pdomain_book_tools.ocr.page import Page
+from pdomain_pgdp_measure.page_templates import BookTemplates, PageClassification
+from pdomain_pgdp_measure.profile_models import PageMeasurement
 
 
 @dataclass(frozen=True)
@@ -30,14 +32,33 @@ class DetectedRegion:
     evidence: dict[str, Any]
 
 
-RegionDetector = Callable[[Page], Sequence[DetectedRegion]]
-"""Takes a ``pdomain_book_tools.ocr.page.Page`` and returns what it detected."""
+@dataclass(frozen=True)
+class DetectorInput:
+    """Everything a detector may read about one page of one book.
+
+    The seam started as ``Callable[[Page], ...]`` and that was not enough. A
+    detector needs the page's index to find its own classification, and the
+    book's fitted templates to know where the text block sits — the templates
+    are the book's own measured geometry, which is what a fixed threshold can
+    never be. Passing one frozen object rather than five arguments means a
+    later detector that needs a sixth signal does not change every call site.
+    """
+
+    page: Page
+    page_index: int
+    measurement: PageMeasurement
+    classification: PageClassification
+    templates: BookTemplates
 
 
-def null_region_detector(page: Page) -> list[DetectedRegion]:
-    """The default detector: proposes nothing. Keeps the job runnable before slice 4 lands."""
-    del page  # unused — this is the explicit no-op the seam defaults to
+RegionDetector = Callable[[DetectorInput], Sequence[DetectedRegion]]
+"""Takes one page and the book it belongs to, and returns what it detected."""
+
+
+def null_region_detector(detector_input: DetectorInput) -> list[DetectedRegion]:
+    """The default detector: proposes nothing. Keeps the job runnable with no engine wired."""
+    del detector_input  # unused — this is the explicit no-op the seam defaults to
     return []
 
 
-__all__ = ["DetectedRegion", "RegionDetector", "null_region_detector"]
+__all__ = ["DetectedRegion", "DetectorInput", "RegionDetector", "null_region_detector"]
