@@ -104,7 +104,7 @@ _FOLIO_PATTERN = re.compile(r"^[0-9ivxlcdmIVXLCDM]+$")
 
 
 class _ScaledWord(NamedTuple):
-    """One word, alongside its box converted to source pixels.
+    """One word, alongside its box converted to the page's pixel frame.
 
     Ink bands are always source-frame pixels (see the module docstring), so
     every comparison and every proposed region box downstream of
@@ -145,7 +145,7 @@ class _Cluster:
 
 
 class _BandWords(NamedTuple):
-    """One page's in-band words (converted to source pixels), plus the y range read against."""
+    """One page's in-band words (in the page's pixel frame), plus the y range read against."""
 
     words: list[_ScaledWord]
     top: int
@@ -179,7 +179,12 @@ def _text_width_px(detector_input: DetectorInput) -> int | None:
     if not templates:
         return None
     widths = [t.text_right_px - t.text_left_px for t in templates if t.text_right_px > t.text_left_px]
-    return max(widths) if widths else None
+    if not widths:
+        return None
+    # Templates are measured in the source frame; the words they are compared
+    # against are in the page frame. See ``_source_to_page_scale``.
+    scale_x, _ = _source_to_page_scale(detector_input)
+    return round(max(widths) * scale_x)
 
 
 def _page_is_normalized(detector_input: DetectorInput) -> bool | None:
@@ -200,36 +205,48 @@ def _page_is_normalized(detector_input: DetectorInput) -> bool | None:
         return None
 
 
-def _page_word_scale(detector_input: DetectorInput) -> tuple[float, float]:
-    """The ``(width, height)``, in pixels, to scale a normalized word box against.
+def _source_to_page_scale(
+    detector_input: DetectorInput, *, log_mismatch: bool = False
+) -> tuple[float, float]:
+    """Factors that carry source-frame pixels into the page's own pixel frame.
 
-    Prefers ``measurement.source_frame`` — the frame the ink bands were
-    measured in — since a band's y range and a converted word box must be
-    compared in that same pixel space. Falls back to the page's own
-    ``width``/``height`` when no source frame was recorded. When both exist
-    and disagree, the source frame wins and the disagreement is logged.
+    The API serves every box in the page's pixel frame, ``page.width`` by
+    ``page.height``: ``_bbox_to_model`` scales normalized word boxes by those
+    dimensions, and accepting a proposal converts its box against the same
+    ones. Ink bands and the book's fitted text edges are measured in
+    ``measurement.source_frame``, the decoded image. The two frames are
+    normally the same size and both factors are 1.0. When they differ, bands
+    and text width are rescaled into the page frame, so every box this
+    detector proposes is in the frame accept will read it back in.
+
+    Converting into the page frame, rather than converting words into the
+    source frame, is what keeps a proposal accept-safe: a box measured in the
+    source frame would be accepted into the page frame and silently land in
+    the wrong place whenever the two disagree.
     """
     page = detector_input.page
     frame = detector_input.measurement.source_frame
-    if frame is None:
-        return float(page.width), float(page.height)
-    if frame.width != page.width or frame.height != page.height:
+    if frame is None or frame.width <= 0 or frame.height <= 0:
+        return 1.0, 1.0
+    scale_x = page.width / frame.width
+    scale_y = page.height / frame.height
+    if log_mismatch and (frame.width != page.width or frame.height != page.height):
         log.warning(
-            "furniture: page=%s source_frame is %dx%d but page.width/height is "
-            "%dx%d; converting normalized word boxes against source_frame",
+            "furniture: page=%s source_frame is %dx%d but page.width/height is %dx%d; "
+            "rescaling bands and text width into the page frame",
             detector_input.classification.page_name,
             frame.width,
             frame.height,
             page.width,
             page.height,
         )
-    return float(frame.width), float(frame.height)
+    return scale_x, scale_y
 
 
 def _word_box_px(
-    word: Word, *, page_is_normalized: bool, scale: tuple[float, float]
+    word: Word, *, page_is_normalized: bool, page_size: tuple[float, float]
 ) -> tuple[float, float, float, float] | None:
-    """The word's box in source pixels, or ``None`` when it cannot be compared against a band.
+    """The word's box in the page's pixel frame, or ``None`` when it cannot be compared against a band.
 
     Excludes a box with a non-finite corner (see ``has_usable_coordinates``)
     and a word whose own ``is_normalized`` flag disagrees with
@@ -242,7 +259,7 @@ def _word_box_px(
     left, top, right, bottom = bbox.to_ltrb()
     if not page_is_normalized:
         return left, top, right, bottom
-    width, height = scale
+    width, height = page_size
     return left * width, top * height, right * width, bottom * height
 
 
@@ -258,19 +275,24 @@ def _band_y_range(detector_input: DetectorInput, ordinals: Sequence[int]) -> tup
             len(bands),
         )
         return None
-    return (min(bands[o].y_start for o in ordinals), max(bands[o].y_end for o in ordinals))
+    _, scale_y = _source_to_page_scale(detector_input, log_mismatch=True)
+    return (
+        round(min(bands[o].y_start for o in ordinals) * scale_y),
+        round(max(bands[o].y_end for o in ordinals) * scale_y),
+    )
 
 
 def _in_band_words(detector_input: DetectorInput) -> _BandWords | None:
-    """Every word inside one page's furniture bands, converted to source pixels.
+    """Every word inside one page's furniture bands, in the page's pixel frame.
 
     ``None`` when the page has none to read. Applies the same skip
     conditions the detector always applied: no furniture bands named, and
     band ordinals inside the profile's recorded bands — plus a page that
     mixes normalized and pixel-space word boxes, the one skip condition this
     fix keeps. A page whose words are all normalized is no longer skipped:
-    its words are converted to source pixels (``_word_box_px``) before being
-    compared against the band, which is already source-frame pixels. Shared
+    its words are converted to the page's pixel frame (``_word_box_px``), and
+    the band is rescaled into that same frame (``_band_y_range``), before the
+    two are compared. Shared
     between per-page detection and book-level gap pooling (``_pooled_gaps``),
     so both walk exactly the same pixel coordinates.
     """
@@ -284,10 +306,11 @@ def _in_band_words(detector_input: DetectorInput) -> _BandWords | None:
     if y_range is None:
         return None
     top, bottom = y_range
-    scale = _page_word_scale(detector_input) if page_is_normalized else (1.0, 1.0)
+    page = detector_input.page
+    page_size = (float(page.width), float(page.height))
     words: list[_ScaledWord] = []
-    for word in _page_words(detector_input.page):
-        box = _word_box_px(word, page_is_normalized=page_is_normalized, scale=scale)
+    for word in _page_words(page):
+        box = _word_box_px(word, page_is_normalized=page_is_normalized, page_size=page_size)
         if box is None:
             continue
         if top <= (box[1] + box[3]) / 2 <= bottom:

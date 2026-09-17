@@ -309,23 +309,79 @@ def test_a_page_mixing_normalized_and_pixel_boxes_is_skipped() -> None:
     assert furniture_region_detector(detector_input) == []
 
 
-def test_word_scale_prefers_the_source_frame_over_page_dimensions() -> None:
-    from pdomain_ocr_labeler_spa.core.regions.furniture import _page_word_scale
+def test_a_source_frame_differing_from_the_page_still_proposes_in_the_page_frame() -> None:
+    """Accept converts a proposal's box against page.width/height, so the proposal must be in that frame.
 
-    mismatched_frame = CoordinateFrame(width=1200, height=1800)
-    detector_input = _input([_word("THE", 100, 105, 170, 125)], source_frame=mismatched_frame)
+    Here the decoded image is twice the page's recorded size. Bands and text
+    edges are measured in that larger frame; the words are in the page frame.
+    The detector must rescale the bands and text width, not the words, so the
+    proposed boxes match the same-frame case exactly.
+    """
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectorInput
+    from pdomain_ocr_labeler_spa.core.regions.furniture import furniture_region_detector
 
-    assert _page_word_scale(detector_input) == (1200.0, 1800.0)
+    double_frame = CoordinateFrame(width=_PAGE_WIDTH * 2, height=_PAGE_HEIGHT * 2)
+    double_template = PageTemplate(
+        page_class="normal_recto",
+        first_band_top_px=200,
+        first_band_spread_px=12,
+        text_left_px=200,
+        text_right_px=1800,
+        band_count=30,
+        page_count=200,
+        page_share=0.5,
+    )
+    words = [
+        _word("THE", 100, 105, 170, 125),
+        _word("VOYAGE", 180, 105, 320, 125),
+        _word("17", 870, 105, 900, 125),
+    ]
+    same_frame = furniture_region_detector(_input(words))
+    doubled = furniture_region_detector(
+        DetectorInput(
+            page=_page(words),
+            page_index=0,
+            measurement=_measurement((InkBand(200, 260),), source_frame=double_frame),
+            classification=PageClassification("001.png", "normal_recto", 2, (0,), 0.9),
+            templates=BookTemplates(200.0, 8.0, 32.0, (double_template,), 0.9),
+        )
+    )
+
+    assert [d.box for d in doubled] == [d.box for d in same_frame]
+    assert [d.box for d in doubled] == [(100, 105, 320, 125), (870, 105, 900, 125)]
+
+    # The reviewer's scenario: a normalized OCR page. Its words must be scaled by
+    # the page's own size, not the source frame's, or the proposal lands in the
+    # source frame and accept later reads it in the page frame.
+    w, h = _PAGE_WIDTH, _PAGE_HEIGHT
+    normalized_words = [
+        _word(text, left / w, top / h, right / w, bottom / h, normalized=True)
+        for text, left, top, right, bottom in (
+            ("THE", 100, 105, 170, 125),
+            ("VOYAGE", 180, 105, 320, 125),
+            ("17", 870, 105, 900, 125),
+        )
+    ]
+    doubled_normalized = furniture_region_detector(
+        DetectorInput(
+            page=_page(normalized_words),
+            page_index=0,
+            measurement=_measurement((InkBand(200, 260),), source_frame=double_frame),
+            classification=PageClassification("001.png", "normal_recto", 2, (0,), 0.9),
+            templates=BookTemplates(200.0, 8.0, 32.0, (double_template,), 0.9),
+        )
+    )
+    assert [d.box for d in doubled_normalized] == [(100, 105, 320, 125), (870, 105, 900, 125)]
 
 
-def test_word_scale_disagreement_with_page_dimensions_is_logged(caplog: pytest.LogCaptureFixture) -> None:
-    from pdomain_ocr_labeler_spa.core.regions.furniture import _page_word_scale
+def test_a_source_frame_mismatch_is_logged(caplog: pytest.LogCaptureFixture) -> None:
+    from pdomain_ocr_labeler_spa.core.regions.furniture import furniture_region_detector
 
     mismatched_frame = CoordinateFrame(width=1200, height=1800)
     detector_input = _input([_word("THE", 100, 105, 170, 125)], source_frame=mismatched_frame)
 
     with caplog.at_level(logging.WARNING):
-        _page_word_scale(detector_input)
+        furniture_region_detector(detector_input)
 
     assert any(
         "source_frame" in record.getMessage()
@@ -335,10 +391,10 @@ def test_word_scale_disagreement_with_page_dimensions_is_logged(caplog: pytest.L
     )
 
 
-def test_word_scale_falls_back_to_page_dimensions_when_source_frame_is_missing() -> None:
+def test_a_missing_source_frame_leaves_bands_and_text_width_unscaled() -> None:
     """A measurement with no decoded image metadata carries no ``source_frame`` at all."""
     from pdomain_ocr_labeler_spa.core.regions.detector import DetectorInput
-    from pdomain_ocr_labeler_spa.core.regions.furniture import _page_word_scale
+    from pdomain_ocr_labeler_spa.core.regions.furniture import _source_to_page_scale
 
     unavailable_measurement = PageMeasurement(
         page_name="001.png",
@@ -362,7 +418,7 @@ def test_word_scale_falls_back_to_page_dimensions_when_source_frame_is_missing()
         templates=_templates(),
     )
 
-    assert _page_word_scale(detector_input) == (float(_PAGE_WIDTH), float(_PAGE_HEIGHT))
+    assert _source_to_page_scale(detector_input) == (1.0, 1.0)
 
 
 def test_the_pooled_gaps_are_identical_pixel_values_across_page_conventions() -> None:
