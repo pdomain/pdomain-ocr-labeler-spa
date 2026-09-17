@@ -198,6 +198,19 @@ def test_allow_ocr_false_still_returns_a_labeled_or_cached_hit() -> None:
     assert loader.run_ocr_calls == []
 
 
+def test_force_ocr_true_and_allow_ocr_false_raises() -> None:
+    """``force_ocr=True`` demands OCR unconditionally; ``allow_ocr=False``
+    forbids it — a contradiction. Falling through to the ``allow_ocr=False``
+    early-return would silently report "no content" instead of surfacing
+    the caller's bug, so this combination raises instead."""
+    state = ProjectState()
+    state.set_loaded_project(_make_project())
+    loader = StubLoader()
+    with pytest.raises(ValueError, match="force_ocr=True and allow_ocr=False"):
+        ensure_page_model(state, 0, loader=loader, force_ocr=True, allow_ocr=False)
+    assert loader.run_ocr_calls == []
+
+
 # ─── 3. Idempotency / cache (the big one) ─────────────────────────────────
 
 

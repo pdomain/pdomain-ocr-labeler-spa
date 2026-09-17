@@ -221,11 +221,20 @@ def ensure_page_model(
     None-return on out-of-range would mask a bug rather than recover from
     one.
 
+    ``force_ocr=True`` combined with ``allow_ocr=False`` is a contradiction
+    — the former demands OCR unconditionally, the latter forbids it — and
+    *raises* ``ValueError`` rather than silently returning ``None``. Letting
+    it fall through to the ``allow_ocr=False`` early-return would report
+    "no content" for a caller that actually asked to force a re-OCR, masking
+    the bug instead of surfacing it.
+
     Lock contract: holds ``state._lock`` for the entire load,
     including OCR. See module docstring for the rationale (per-project
     lock, OCR is intrinsically the slow path, prevents double-OCR
     under contention).
     """
+    if force_ocr and not allow_ocr:
+        raise ValueError("ensure_page_model: force_ocr=True and allow_ocr=False are contradictory")
     project = state.loaded_project
     if project is None:
         return None
