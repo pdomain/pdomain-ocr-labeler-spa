@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pydantic
 import pytest
 
 from pdomain_ocr_labeler_spa.core.jobs import handlers as handlers_pkg
@@ -29,6 +30,7 @@ from pdomain_ocr_labeler_spa.core.jobs.runner import (
     to_public_job,
 )
 from pdomain_ocr_labeler_spa.core.models import Job as PublicJob
+from pdomain_ocr_labeler_spa.core.models import JobProgress as PublicJobProgress
 from pdomain_ocr_labeler_spa.core.models import JobStatus as PublicJobStatus
 from pdomain_ocr_labeler_spa.core.models import JobType as PublicJobType
 
@@ -163,14 +165,32 @@ def test_to_public_job_carries_save_project_skipped_page_result(status: RunnerJo
     public_job = to_public_job(runner_job)
 
     assert public_job.result is not None
-    assert public_job.result["skipped_pages"] == 1
-    assert public_job.result["skipped_indices"] == [3]
-    assert public_job.result["failures"] == [{"page_index": 2, "error": "disk full"}]
+    assert public_job.result.get("skipped_pages") == 1
+    assert public_job.result.get("skipped_indices") == [3]
+    assert public_job.result.get("failures") == [{"page_index": 2, "error": "disk full"}]
 
 
 def test_to_public_job_result_is_none_when_nothing_was_written() -> None:
     runner_job = _make_runner_job(payload={}, result={})
     assert to_public_job(runner_job).result is None
+
+
+def test_job_result_rejects_wrong_value_type_for_a_known_key() -> None:
+    """``Job.result`` is a typed ``JobResult`` (a ``TypedDict``), not
+    ``dict[str, Any]`` — pydantic validates known keys' value types.
+    Under the old ``dict[str, Any] | None`` field type, an ``Any`` value
+    was accepted for every key, so this would not have raised."""
+    with pytest.raises(pydantic.ValidationError):
+        PublicJob(
+            id="job-1",
+            type=PublicJobType.SAVE_PROJECT,
+            project_id="proj-1",
+            status=PublicJobStatus.COMPLETE,
+            progress=PublicJobProgress(),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            result={"skipped_pages": "not-an-int"},  # pyright: ignore[reportArgumentType]
+        )
 
 
 def test_to_public_job_merges_job_result_alongside_payload_output_keys() -> None:

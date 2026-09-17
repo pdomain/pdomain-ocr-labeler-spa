@@ -3924,10 +3924,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /** Result */
-            result?: {
-                [key: string]: unknown;
-            } | null;
+            result?: components["schemas"]["JobResult"] | null;
         };
         /**
          * JobProgress
@@ -3951,6 +3948,61 @@ export interface components {
              * @default
              */
             message: string;
+        };
+        /**
+         * JobResult
+         * @description Job-type-specific extra data a handler produced — spec §1 ``Job.result``.
+         *
+         *     Flat and optional (``total=False``) across every job type rather than a
+         *     ``JobType``-discriminated union: the union would be brittle as handlers
+         *     change, and this flat shape still gives the generated TypeScript real
+         *     field names — see
+         *     ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`` (P1-JOBS-API).
+         *     ``core.jobs.runner.to_public_job`` populates these from the runner's
+         *     ``Job.payload`` (allowlisted via ``core.jobs.runner._PAYLOAD_RESULT_KEYS``)
+         *     and ``Job.result``. Keys that exist today:
+         *
+         *     - ``save_project``: ``failures``, ``skipped_pages`` (int — pages not yet
+         *       registered in the store), ``skipped_indices``.
+         *     - ``refine_bboxes``: ``refined`` (int — words touched).
+         *     - ``propose_page_kinds``: ``run_id``, ``proposal_count``.
+         *     - ``export``: ``words_exported_detection``, ``words_exported_recognition``,
+         *       ``pages_skipped_not_validated`` — also merged flat at the SSE frame's
+         *       top level for backward compatibility (``JobRunner._emit``); both
+         *       places carry the same data.
+         *
+         *     ``reload_ocr``, ``rotate_page``, ``auto_rotate_all`` and
+         *     ``propose_regions`` do not populate this field today.
+         */
+        JobResult: {
+            /** Failures */
+            failures?: components["schemas"]["JobResultFailure"][];
+            /** Skipped Pages */
+            skipped_pages?: number;
+            /** Skipped Indices */
+            skipped_indices?: number[];
+            /** Refined */
+            refined?: number;
+            /** Run Id */
+            run_id?: string;
+            /** Proposal Count */
+            proposal_count?: number;
+            /** Words Exported Detection */
+            words_exported_detection?: number;
+            /** Words Exported Recognition */
+            words_exported_recognition?: number;
+            /** Pages Skipped Not Validated */
+            pages_skipped_not_validated?: number;
+        };
+        /**
+         * JobResultFailure
+         * @description One page save failure — mirrors ``api.pages.SaveFailure``'s shape.
+         */
+        JobResultFailure: {
+            /** Page Index */
+            page_index: number;
+            /** Error */
+            error: string;
         };
         /**
          * JobStatus

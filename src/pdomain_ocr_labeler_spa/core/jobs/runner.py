@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 
 from ..models import Job as PublicJob
 from ..models import JobProgress as PublicJobProgress
+from ..models import JobResult as PublicJobResult
 from ..models import JobStatus as PublicJobStatus
 from ..models import JobType as PublicJobType
 from .events import JobEventBroker
@@ -96,6 +97,41 @@ def payload_result_keys() -> frozenset[str]:
     return _PAYLOAD_RESULT_KEYS
 
 
+def _build_public_result(job: Job) -> PublicJobResult:
+    """Merge ``job.payload``'s allowlisted output keys with ``job.result``
+    into the typed public ``JobResult`` shape.
+
+    Written key-by-key (not a loop over ``_PAYLOAD_RESULT_KEYS``) because
+    ``JobResult`` is a ``TypedDict``: static key-by-key assignment lets
+    basedpyright check every key/value type here with no ``cast`` or
+    ``# type: ignore``, at the cost of listing each key twice (once in
+    ``_PAYLOAD_RESULT_KEYS``/``JobResult``, once here) —
+    ``tests/unit/core/jobs/test_job_type_contract.py`` proves
+    ``_PAYLOAD_RESULT_KEYS`` and ``JobResult`` agree, and this function's
+    own keys are exercised by the same test suite's ``result`` assertions.
+    """
+    result: PublicJobResult = {}
+    if "failures" in job.payload:
+        result["failures"] = job.payload["failures"]
+    if "skipped_pages" in job.payload:
+        result["skipped_pages"] = job.payload["skipped_pages"]
+    if "skipped_indices" in job.payload:
+        result["skipped_indices"] = job.payload["skipped_indices"]
+    if "refined" in job.payload:
+        result["refined"] = job.payload["refined"]
+    if "run_id" in job.payload:
+        result["run_id"] = job.payload["run_id"]
+    if "proposal_count" in job.payload:
+        result["proposal_count"] = job.payload["proposal_count"]
+    if "words_exported_detection" in job.result:
+        result["words_exported_detection"] = job.result["words_exported_detection"]
+    if "words_exported_recognition" in job.result:
+        result["words_exported_recognition"] = job.result["words_exported_recognition"]
+    if "pages_skipped_not_validated" in job.result:
+        result["pages_skipped_not_validated"] = job.result["pages_skipped_not_validated"]
+    return result
+
+
 def to_public_job(job: Job) -> PublicJob:
     """Adapt an internal runner ``Job`` into the public wire ``Job`` model.
 
@@ -116,8 +152,7 @@ def to_public_job(job: Job) -> PublicJob:
     both places now carry the same data). ``None`` when neither channel
     wrote anything.
     """
-    result: dict[str, Any] = {k: v for k, v in job.payload.items() if k in _PAYLOAD_RESULT_KEYS}
-    result.update(job.result)
+    result = _build_public_result(job)
     return PublicJob(
         id=job.job_id,
         type=PublicJobType(job.job_type),

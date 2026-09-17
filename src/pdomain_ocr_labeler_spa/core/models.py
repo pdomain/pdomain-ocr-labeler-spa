@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 from pdomain_book_contracts.annotation import RegionRole
 from pydantic import BaseModel, ConfigDict, Field
@@ -322,6 +322,49 @@ class JobProgress(BaseModel):
     message: str = ""
 
 
+class JobResultFailure(TypedDict):
+    """One page save failure — mirrors ``api.pages.SaveFailure``'s shape."""
+
+    page_index: int
+    error: str
+
+
+class JobResult(TypedDict, total=False):
+    """Job-type-specific extra data a handler produced — spec §1 ``Job.result``.
+
+    Flat and optional (``total=False``) across every job type rather than a
+    ``JobType``-discriminated union: the union would be brittle as handlers
+    change, and this flat shape still gives the generated TypeScript real
+    field names — see
+    ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`` (P1-JOBS-API).
+    ``core.jobs.runner.to_public_job`` populates these from the runner's
+    ``Job.payload`` (allowlisted via ``core.jobs.runner._PAYLOAD_RESULT_KEYS``)
+    and ``Job.result``. Keys that exist today:
+
+    - ``save_project``: ``failures``, ``skipped_pages`` (int — pages not yet
+      registered in the store), ``skipped_indices``.
+    - ``refine_bboxes``: ``refined`` (int — words touched).
+    - ``propose_page_kinds``: ``run_id``, ``proposal_count``.
+    - ``export``: ``words_exported_detection``, ``words_exported_recognition``,
+      ``pages_skipped_not_validated`` — also merged flat at the SSE frame's
+      top level for backward compatibility (``JobRunner._emit``); both
+      places carry the same data.
+
+    ``reload_ocr``, ``rotate_page``, ``auto_rotate_all`` and
+    ``propose_regions`` do not populate this field today.
+    """
+
+    failures: list[JobResultFailure]
+    skipped_pages: int
+    skipped_indices: list[int]
+    refined: int
+    run_id: str
+    proposal_count: int
+    words_exported_detection: int
+    words_exported_recognition: int
+    pages_skipped_not_validated: int
+
+
 class Job(BaseModel):
     """Background job record — spec §1 ``Job``. Mirrors pgdp-prep ``core/models.py``."""
 
@@ -333,26 +376,9 @@ class Job(BaseModel):
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime
-    result: dict[str, Any] | None = None
+    result: JobResult | None = None
     """Job-type-specific extra data the handler produced; ``None`` when the
-    handler wrote nothing. Open-ended by design (like
-    ``RegionProposalView.evidence`` above) — shape depends on ``type``.
-    Keys that exist today (``core.jobs.runner.to_public_job`` merges these
-    from the runner's ``Job.payload``/``Job.result``):
-
-    - ``save_project``: ``failures`` (list of ``{page_index, error}``),
-      ``skipped_pages`` (int — pages not yet registered in the store),
-      ``skipped_indices`` (list[int]).
-    - ``refine_bboxes``: ``refined`` (int — words touched).
-    - ``propose_page_kinds``: ``run_id`` (str), ``proposal_count`` (int).
-    - ``export``: ``words_exported_detection``, ``words_exported_recognition``,
-      ``pages_skipped_not_validated`` — also merged flat at the SSE frame's
-      top level for backward compatibility (``JobRunner._emit``); both
-      places carry the same data.
-
-    ``reload_ocr``, ``rotate_page``, ``auto_rotate_all`` and
-    ``propose_regions`` do not populate this field today.
-    """
+    handler wrote nothing. See ``JobResult`` for the documented shape."""
 
 
 __all__ = [
@@ -361,6 +387,8 @@ __all__ = [
     "GlyphAnnotationsModel",
     "Job",
     "JobProgress",
+    "JobResult",
+    "JobResultFailure",
     "JobStatus",
     "JobType",
     "LigatureMarkModel",
