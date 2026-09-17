@@ -341,6 +341,84 @@ def test_openapi_has_undo_redo_and_history(tmp_path: Path) -> None:
 _ = json
 
 
+# ── History markers on a page-kind change (page-kind-review-design.md) ───────
+#
+# "undo and redo in api/history.py append a history marker when the page's
+# kind changed, after the page save succeeds."
+
+
+@pytest.mark.integration
+def test_undo_past_the_first_confirm_withdraws_the_review(client: TestClient, seeded_project: Path) -> None:
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+
+    _get_history(client)  # prime: loads the page into memory
+    r = client.post("/api/projects/book1/pages/0/page-kind", json={"kind": "body"})
+    assert r.status_code == 200, r.text
+    r = client.post("/api/projects/book1/pages/0/page-kind", json={"kind": "title page"})
+    assert r.status_code == 200, r.text
+
+    r = client.post("/api/projects/book1/pages/0/undo")
+    assert r.status_code == 200, r.text
+    marker = PageKindReviewedStore(seeded_project).latest_for_page(0)
+    assert marker is not None
+    assert marker.kind is not None
+    assert marker.kind.value == "body"
+    assert marker.method == "history"
+    assert PageKindReviewedStore(seeded_project).is_reviewed(0) is True
+
+    r = client.post("/api/projects/book1/pages/0/undo")
+    assert r.status_code == 200, r.text
+    assert r.json()["page_kind"] is None
+    marker = PageKindReviewedStore(seeded_project).latest_for_page(0)
+    assert marker is not None
+    assert marker.kind is None
+    assert marker.method == "history"
+    assert PageKindReviewedStore(seeded_project).is_reviewed(0) is False
+
+
+@pytest.mark.integration
+def test_undo_that_does_not_change_the_kind_writes_no_history_marker(
+    client: TestClient, seeded_project: Path
+) -> None:
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+
+    _get_history(client)  # prime: loads the page into memory
+    r = client.post("/api/projects/book1/pages/0/page-kind", json={"kind": "body"})
+    assert r.status_code == 200, r.text
+    r = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "the"})
+    assert r.status_code == 200, r.text
+
+    r = client.post("/api/projects/book1/pages/0/undo")
+    assert r.status_code == 200, r.text
+    assert r.json()["page_kind"] == "body"
+
+    marker = PageKindReviewedStore(seeded_project).latest_for_page(0)
+    assert marker is not None
+    assert marker.method == "single"  # still the original confirm — undo wrote nothing
+
+
+@pytest.mark.integration
+def test_a_failed_history_marker_append_still_returns_the_undo_result(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+
+    _get_history(client)  # prime: loads the page into memory
+    r = client.post("/api/projects/book1/pages/0/page-kind", json={"kind": "body"})
+    assert r.status_code == 200, r.text
+    r = client.post("/api/projects/book1/pages/0/page-kind", json={"kind": "title page"})
+    assert r.status_code == 200, r.text
+
+    def _raise(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("simulated journal write failure")
+
+    monkeypatch.setattr(PageKindReviewedStore, "mark_reviewed", _raise)
+
+    r = client.post("/api/projects/book1/pages/0/undo")
+    assert r.status_code == 200, r.text
+    assert r.json()["page_kind"] == "body"
+
+
 # ── Depth bound (U-8, slice H-D) ─────────────────────────────────────────────
 
 

@@ -14,12 +14,14 @@ free: the marker node's ``blob_refs[0]`` is what the restart read path
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from ..core.models import PageSource
 from ..core.page_history import HistoryOp, build_history_marker_node, derive_history
+from ..core.page_kind.reviewed_store import PageKindReviewedStore
 from ..core.page_state import PageLoadOutcome
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.page_store import LabelerPageStore
@@ -38,6 +40,7 @@ from .pages import (
     _build_history_info,
     _check_project_and_page,
     _page_payload,
+    _resolve_page_object_for_pages,
     _resolve_undo_depth,
 )
 
@@ -80,6 +83,9 @@ def _execute_history_op(
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
         return err
+    project = project_state.loaded_project
+    if project is None:  # _check_project_and_page guarantees; explicit to survive -O
+        raise RuntimeError("project is None after _check_project_and_page passed — invariant violated")
 
     pstate = project_state.get_page_state(page_index)
     if store is None or pstate is None or pstate.page_id is None:
@@ -88,6 +94,8 @@ def _execute_history_op(
             f"page {page_index} has no event-store history; load the page first",
         )
     page_id = pstate.page_id
+    prior_page = _resolve_page_object_for_pages(pstate)
+    prior_kind = prior_page.page_kind if prior_page is not None else None
 
     try:
         agg = store.get_page(page_id)
@@ -158,6 +166,28 @@ def _execute_history_op(
         changes=[{"type": op, "restores": target, "undoes": current}],
     )
     store.save_page(agg)
+
+    # pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
+    # "An undo or redo that changes the kind writes a marker too": the
+    # restored blob can carry an earlier (or no) kind, and without a marker
+    # here the reviewed journal would keep the kind the undo just removed.
+    # Appended after the page save above succeeds, the order confirm_page_kind
+    # already uses. A ``None`` restored kind withdraws the review — see
+    # ``PageKindReviewedMarker``. A failed append logs a warning; the page
+    # change already happened and this route still returns its result.
+    new_kind = restored_page.page_kind
+    if new_kind != prior_kind:
+        try:
+            PageKindReviewedStore(project.project_root).mark_reviewed(
+                page_index,
+                datetime.now(UTC).isoformat(),
+                kind=new_kind,
+                method="history",
+            )
+        except Exception:
+            log.warning(
+                "%s: page-kind reviewed-marker append failed for page=%d", op, page_index, exc_info=True
+            )
 
     # Swap the in-memory payload under the per-page lock; re-stamp the
     # aggregate id so subsequent mutations target the same aggregate
