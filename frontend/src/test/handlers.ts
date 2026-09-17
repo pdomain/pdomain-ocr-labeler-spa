@@ -118,4 +118,20 @@ export const handlers: RequestHandler[] = [
   http.get("/api/projects/:pid/regions/review-queue", () =>
     HttpResponse.json({ total_undecided: 0, pages: [], items: [] }),
   ),
+
+  // Page-kind review (pdomain-ocr-synth's
+  // docs/specs/2026-09-17-page-kind-review-design.md) — baseline handlers for
+  // the book-wide list, the bulk confirm route, and the single-page confirm
+  // route, so components/hooks that mount without an explicit override don't
+  // hit onUnhandledRequest: "error". Tests that assert route behavior
+  // register their own server.use(...) override.
+  http.get("/api/projects/:pid/page-kinds", () =>
+    HttpResponse.json({ total_pages: 0, reviewed_count: 0, pages: [] }),
+  ),
+  http.post("/api/projects/:pid/page-kinds/confirm", () =>
+    HttpResponse.json({ results: [], confirmed_count: 0 }),
+  ),
+  http.post("/api/projects/:pid/pages/:idx/page-kind", () =>
+    HttpResponse.json({ project_id: "", page_index: 0, page_kind_reviewed: false }),
+  ),
 ];
