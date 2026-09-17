@@ -19,16 +19,17 @@ that added it here):
   running against whatever happens to be loaded now would write one book's
   run into another book's journal. The handler refuses instead, the same way
   ``propose_page_kinds`` does.
-- **Off the event loop.** A detector reads word boxes, line structure, and
-  the page image, and slice 4's real geometry engine will decode images and
-  run numpy over them — CPU-bound work that would stall every request,
-  including this job's own SSE progress stream, if run inline for a
-  400-page book. ``detector(page)`` and the per-page facet-digest snapshot
-  (which does page-store I/O to read the image digest) are both offloaded via
-  ``asyncio.to_thread``, the same pattern ``propose_page_kinds`` uses for
-  ``profile_page``.
-- **Read through a verified lease.** ``detector(page)`` is called with a
-  per-page lease held (``core/jobs/handlers/_labeling_page_lease.
+- **Off the event loop.** The book measurement pass (``core/page_measurement.
+  measure_book``, shared with ``propose_page_kinds``) decodes every page's
+  image and scans it with numpy, and a detector reads word boxes and line
+  structure over a whole page — CPU-bound work that would stall every
+  request, including this job's own SSE progress stream, if run inline for a
+  400-page book. ``detector(detector_input)`` and the per-page facet-digest
+  snapshot (which does page-store I/O to read the image digest) are both
+  offloaded via ``asyncio.to_thread``, the same pattern ``propose_page_kinds``
+  uses for ``profile_page``.
+- **Read through a verified lease.** ``detector(detector_input)`` is called
+  with a per-page lease held (``core/jobs/handlers/_labeling_page_lease.
   leased_labeling_page``) — on a book-labeling project this is what makes
   ``ProjectState.labeling_image_path`` resolve to the sealed
   ``/proc/self/fd/N`` descriptor instead of raising, and what a real detector
@@ -36,7 +37,8 @@ that added it here):
   Held unconditionally, even for the default no-op detector: the seam exists
   to be swapped by slice 4's real detector, and a conditional lease would be
   wrong the moment it is. A page whose lease fails to verify is logged and
-  skipped, the same as ``propose_page_kinds``.
+  skipped, the same as ``propose_page_kinds`` — both during the book
+  measurement pass and, separately, around the detector call itself.
 
 The page-kind journals are each read in full, once, up front — not once per
 page. ``PageKindReviewedStore.reviewed_page_indices`` returns every reviewed
@@ -59,11 +61,14 @@ from typing import TYPE_CHECKING, Any
 
 from eventsourcing.application import AggregateNotFoundError
 from pdomain_book_tools.ocr.page import Page
+from pdomain_pgdp_measure.profiling import profile_page
 
 from ...page_kind.proposal_log import PageKindProposalLog
 from ...page_kind.reviewed_store import PageKindReviewedStore
+from ...page_measurement import measure_book
 from ...project_state import PageState, ProjectState
 from ...regions.block_adapter import compute_page_facet_digests
+from ...regions.detector import DetectorInput, null_region_detector
 from ...regions.models import ProposalRun, RegionProposal
 from ...regions.proposal_log import RegionProposalLog
 from ._labeling_page_lease import leased_labeling_page
@@ -73,8 +78,9 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from ...page_kind.models import PageKindProposalRun
+    from ...page_measurement import MeasurePageFn
     from ...persistence.page_store import LabelerPageStore
-    from ...regions.detector import DetectedRegion
+    from ...regions.detector import DetectedRegion, RegionDetector
     from ..runner import Job, JobRunner
 
 log = logging.getLogger(__name__)
@@ -146,6 +152,19 @@ def _proposed_page_indices(
     for run in kind_runs:
         indices.update(p.page_index for p in proposal_log.proposals_for_run(run.run_id))
     return indices
+
+
+def _position_of(page_indices: Sequence[int], page_index: int) -> int | None:
+    """Where ``page_index`` sits in the measured sequence, or ``None`` when unmeasured.
+
+    A page skipped for a failed lease is absent from the measurements, so
+    position and page index diverge. Looking up by value rather than indexing
+    by position is what keeps one page's geometry off another page.
+    """
+    try:
+        return page_indices.index(page_index)
+    except ValueError:
+        return None
 
 
 async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
@@ -227,6 +246,34 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
         )
         return
 
+    # ``.get(...)`` returns ``Any`` here (``runner.context: dict[str, Any]``), same
+    # as ``propose_page_kinds``'s ``measure_fn`` injection seam — assigned straight
+    # into the annotated variable rather than narrowed via ``callable()``, which
+    # would synthesize a mismatched call signature against ``RegionDetector``.
+    ctx: dict[str, Any] = runner.context
+    detector: RegionDetector = ctx.get("region_detector") or null_region_detector
+
+    # The detector needs the book, not just one page: where the head band
+    # belongs and how wide the text block is are book-level facts. Measure the
+    # whole volume the way propose_page_kinds does, through the same shared
+    # pass — see core/page_measurement.py.
+    measure_fn: MeasurePageFn = ctx.get("propose_regions_measure_fn") or profile_page
+
+    async def _report_measured(current: int, total_pages: int) -> None:
+        await runner.update_progress(
+            job.job_id,
+            current=current,
+            total=total_pages,
+            message=f"Measuring page {current}/{total_pages}",
+        )
+
+    measured = await measure_book(
+        project,
+        project_state=project_state,
+        measure_fn=measure_fn,
+        on_page_measured=_report_measured,
+    )
+
     page_facet_digests: dict[int, dict[str, str]] = {}
     for idx in eligible_indices:
         pstate = project_state.page_states[idx]
@@ -292,6 +339,7 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
             # failed lease would send the next reader looking at the manifest
             # instead of the page.
             stack = ExitStack()
+            detected: Sequence[DetectedRegion] | None
             try:
                 stack.enter_context(leased_labeling_page(project_state, idx))
             except ValueError as exc:
@@ -304,24 +352,47 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
                 detected = None
             else:
                 with stack:
-                    try:
-                        # Task 2 supplies the book measurement this detector
-                        # call needs. Until it lands there is nothing to build
-                        # a DetectorInput from, so the run proposes nothing —
-                        # which is exactly what the default detector did
-                        # before the seam widened. Removing this guard is
-                        # Task 2's first step.
-                        detected: Sequence[DetectedRegion] | None = []
-                    except Exception:
-                        # The detector is a swap-in callable from
-                        # ``runner.context``, so its failures are not this
-                        # handler's bugs to distinguish. One bad page must not
-                        # kill a 400-page run, and the traceback is logged
-                        # rather than swallowed, so a broken detector is still
-                        # loud.
-                        detector_failed_indices.append(idx)
-                        log.exception("propose_regions: detector raised on page=%d; skipping it", idx)
+                    # Map the page index to its measurement through
+                    # page_indices, never by position: a page skipped for a
+                    # failed lease during the measurement pass opens a gap,
+                    # and taking measurements[idx] would hand page 7's
+                    # geometry to page 3.
+                    measured_at = _position_of(measured.page_indices, idx)
+                    if measured_at is None:
+                        log.warning(
+                            "propose_regions: page=%d has no book measurement (its "
+                            "lease failed during the measurement pass); skipping the "
+                            "detector for it",
+                            idx,
+                        )
                         detected = None
+                    else:
+                        detector_input = DetectorInput(
+                            page=page,
+                            page_index=idx,
+                            measurement=measured.measurements[measured_at],
+                            classification=measured.classifications[measured_at],
+                            templates=measured.templates,
+                        )
+                        try:
+                            # CPU-bound in the general case — slice 4's
+                            # furniture detector walks every word box on the
+                            # page. Offloaded for the same reason the
+                            # facet-digest snapshot is; the lease stays bound
+                            # for the duration of the offloaded call, since
+                            # ``asyncio.to_thread`` propagates the contextvar
+                            # the binding uses.
+                            detected = await asyncio.to_thread(detector, detector_input)
+                        except Exception:
+                            # The detector is a swap-in callable from
+                            # ``runner.context``, so its failures are not this
+                            # handler's bugs to distinguish. One bad page must
+                            # not kill a 400-page run, and the traceback is
+                            # logged rather than swallowed, so a broken
+                            # detector is still loud.
+                            detector_failed_indices.append(idx)
+                            log.exception("propose_regions: detector raised on page=%d; skipping it", idx)
+                            detected = None
             if detected:
                 proposals = [
                     RegionProposal(

@@ -34,38 +34,25 @@ in ``core/jobs/runner._HANDLERS["propose_page_kinds"]``.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import uuid
-from contextlib import ExitStack
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 from pdomain_book_contracts.annotation import PageKind
-from pdomain_pgdp_measure.page_templates import (
-    PAGE_TEMPLATE_METHOD,
-    PageClassification,
-    classify_pages,
-    fit_book_templates,
-)
-from pdomain_pgdp_measure.profile_input import ProfileInputPage
-from pdomain_pgdp_measure.profile_models import PageMeasurement
+from pdomain_pgdp_measure.page_templates import PAGE_TEMPLATE_METHOD, PageClassification
 from pdomain_pgdp_measure.profiling import profile_page
 
 from ...notifications import NotificationKind, NotificationQueue
 from ...page_kind.models import PageKindProposal, PageKindProposalRun
 from ...page_kind.proposal_log import PageKindProposalLog
+from ...page_measurement import MeasurePageFn, measure_book
 from ...project_state import ProjectState
-from ._labeling_page_lease import leased_labeling_page
 
 if TYPE_CHECKING:
     from ..runner import Job, JobRunner
 
 log = logging.getLogger(__name__)
-
-
-class _MeasurePageFn(Protocol):
-    def __call__(self, project_id: str, page: ProfileInputPage) -> PageMeasurement: ...
 
 
 # pdomain-pgdp-measure.page_templates.PageClass values -> PageKind. Not a
@@ -82,7 +69,7 @@ _PAGE_CLASS_TO_KIND: dict[str, PageKind] = {
 
 def _get_required_context(
     runner: JobRunner,
-) -> tuple[ProjectState, NotificationQueue, _MeasurePageFn]:
+) -> tuple[ProjectState, NotificationQueue, MeasurePageFn]:
     ctx: dict[str, Any] = runner.context
     project_state = ctx.get("project_state")
     notification_queue = ctx.get("notification_queue")
@@ -92,7 +79,7 @@ def _get_required_context(
         raise RuntimeError("propose_page_kinds: runner.context['notification_queue'] is not wired")
     # Test injection point, mirroring auto_rotate_all's "auto_rotate_ocr_fn" —
     # production always measures the real image on disk via profile_page.
-    measure_fn: _MeasurePageFn = ctx.get("propose_page_kinds_measure_fn") or profile_page
+    measure_fn: MeasurePageFn = ctx.get("propose_page_kinds_measure_fn") or profile_page
     return project_state, notification_queue, measure_fn
 
 
@@ -158,72 +145,26 @@ async def handle_propose_page_kinds(runner: JobRunner, job: Job) -> None:
     log.info("propose_page_kinds: project=%s pages=%d job=%s", project.project_id, total, job.job_id)
     await runner.update_progress(job.job_id, current=0, total=total, message=f"Measuring {total} page(s)")
 
-    # A book-labeling project's bytes are only trustworthy behind a verified
-    # per-page lease (``ProjectState.open_labeling_page`` /
-    # ``labeling_image_path``) — reading ``image_path`` directly, as this loop
-    # used to, would bypass the manifest hash pin. An ordinary project has
-    # nothing to lease: ``leased_labeling_page`` is then a no-op and
-    # ``labeling_image_path`` degrades to ``image_path`` unchanged, so one
-    # code path serves both project kinds.
-    #
-    # A page whose lease fails to verify (``ValueError``) is logged and
-    # skipped rather than failing the whole run — one unreadable page must
-    # not abort a 400-page book. ``measured_page_indices`` tracks which
-    # original page_index each entry in ``measured`` came from, since a skip
-    # opens a gap that plain positional recovery below can no longer assume
-    # away.
-    measured: list[PageMeasurement] = []
-    measured_page_indices: list[int] = []
-    skipped_page_indices: list[int] = []
-    for page_index, image_path in enumerate(project.image_paths):
-        # The lease is entered through an ``ExitStack`` rather than a ``with``
-        # inside a ``try``, so only ``open_labeling_page``'s own ``ValueError``
-        # is attributed to the lease. A measurement function may raise
-        # ``ValueError`` of its own, and reporting that as a failed lease
-        # would send the next reader looking at the manifest instead of the
-        # measurement.
-        stack = ExitStack()
-        try:
-            stack.enter_context(leased_labeling_page(project_state, page_index))
-        except ValueError as exc:
-            skipped_page_indices.append(page_index)
-            log.warning(
-                "propose_page_kinds: skipping page=%d — could not open a verified page lease: %s",
-                page_index,
-                exc,
-            )
-            await runner.update_progress(
-                job.job_id,
-                current=page_index + 1,
-                total=total,
-                message=f"Skipped unreadable page {page_index + 1}/{total}",
-            )
-            continue
-        with stack:
-            input_page = ProfileInputPage(
-                name=image_path.name,
-                image_path=project_state.labeling_image_path(page_index),
-                source_path=f"{project.project_id}/{image_path.name}",
-            )
-            # ``profile_page`` decodes the image and scans it with numpy —
-            # CPU-bound work that would block the one event loop for the whole
-            # book. Offload it the way every other image-touching handler does
-            # (``reload_ocr``, ``rotate``, ``auto_rotate_all``) so the confirm
-            # route and this job's own SSE progress stream keep being served
-            # while the run proceeds. The lease stays bound for the duration
-            # of the offloaded call — ``asyncio.to_thread`` propagates the
-            # contextvar the binding uses.
-            measurement = await asyncio.to_thread(measure_fn, project.project_id, input_page)
-        measured.append(measurement)
-        measured_page_indices.append(page_index)
+    # ``measure_book`` is the shared measure-fit-classify pass
+    # ``propose_regions`` also calls — see ``core/page_measurement.py`` for
+    # the verified-lease details this loop used to spell out inline.
+    async def _report(current: int, total_pages: int) -> None:
         await runner.update_progress(
             job.job_id,
-            current=page_index + 1,
-            total=total,
-            message=f"Measured page {page_index + 1}/{total}",
+            current=current,
+            total=total_pages,
+            message=f"Measured page {current}/{total_pages}",
         )
 
-    if not measured:
+    measured = await measure_book(
+        project, project_state=project_state, measure_fn=measure_fn, on_page_measured=_report
+    )
+    classifications = measured.classifications
+    # A page absent from ``page_indices`` failed to open a verified lease
+    # during measurement; every other page index in the book measured fine.
+    skipped_page_indices = [i for i in range(total) if i not in set(measured.page_indices)]
+
+    if not measured.measurements:
         log.warning(
             "propose_page_kinds: project=%s job=%s — every page failed to open a verified "
             "lease; nothing to classify",
@@ -232,22 +173,6 @@ async def handle_propose_page_kinds(runner: JobRunner, job: Job) -> None:
         )
         await runner.update_progress(job.job_id, current=total, total=total, message="No page could be read")
         return
-
-    templates = fit_book_templates(measured)
-    # classify_pages preserves input order, so zipping it against
-    # measured_page_indices recovers each classification's original page_index
-    # without depending on page_name uniqueness. That order-preservation is
-    # documented behavior, not a type-checked contract, so the length check
-    # below is what makes relying on it safe: a future release that filters
-    # or reorders results fails loudly here instead of silently attributing
-    # every proposal after the first divergence to the wrong page.
-    classifications = classify_pages(measured, templates)
-    if len(classifications) != len(measured):  # explicit to survive -O
-        raise RuntimeError(
-            "propose_page_kinds: classify_pages returned "
-            f"{len(classifications)} classification(s) for {len(measured)} measured "
-            "page(s) — page_index recovery by position is no longer safe"
-        )
 
     run = PageKindProposalRun(
         run_id=uuid.uuid4().hex,
@@ -262,7 +187,7 @@ async def handle_propose_page_kinds(runner: JobRunner, job: Job) -> None:
         page_count=len(classifications),
     )
     proposals: list[PageKindProposal] = []
-    for original_page_index, classification in zip(measured_page_indices, classifications, strict=True):
+    for original_page_index, classification in zip(measured.page_indices, classifications, strict=True):
         kind, confidence = _to_kind_and_confidence(classification)
         proposals.append(
             PageKindProposal(

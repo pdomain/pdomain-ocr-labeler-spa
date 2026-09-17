@@ -871,21 +871,10 @@ def test_reviewed_store_is_read_once_per_run_not_once_per_eligible_page(
 
 
 def test_an_ordinary_project_detector_sees_the_plain_on_disk_image_path(toolbar_loaded: Any) -> None:
-    """Pinned to the detector seam's widening (geometry-region-proposals Task 1).
-
-    ``RegionDetector`` is mid-widen from ``Callable[[Page], ...]`` to
-    ``Callable[[DetectorInput], ...]``. Task 1 hard-codes the per-page
-    ``detected`` result to an empty list rather than building a fake
-    ``DetectorInput`` — the book measurement a real one needs does not exist
-    until Task 2's ``measure_book`` lands — so no injected detector is called
-    at all right now, regardless of what ``runner.context["region_detector"]``
-    holds. This test is pinned to that intermediate state; Task 2 restores a
-    real call and should restore an assertion that the detector observes the
-    plain on-disk path here.
-    """
     from datetime import UTC, datetime
 
     from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectorInput
 
     client, project_state, _page = toolbar_loaded
     project = project_state.loaded_project
@@ -894,30 +883,26 @@ def test_an_ordinary_project_detector_sees_the_plain_on_disk_image_path(toolbar_
 
     recorded: list[Path] = []
 
-    def _detector(page: Any) -> list[Any]:
-        del page
-        recorded.append(project_state.labeling_image_path(0))
+    def _detector(detector_input: DetectorInput) -> list[Any]:
+        recorded.append(project_state.labeling_image_path(detector_input.page_index))
         return []
 
     _run_propose_regions_job(client, detector=_detector)
 
-    assert recorded == []
+    assert recorded == [project.image_paths[0]]
 
 
 def test_a_book_labeling_project_detector_sees_the_sealed_descriptor(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Pinned to the detector seam's widening (geometry-region-proposals Task 1).
-
-    See ``test_an_ordinary_project_detector_sees_the_plain_on_disk_image_path``
-    for why no injected detector is called right now. Task 2 restores a real
-    call and should restore this test's assertion that a book-labeling
-    project's detector sees the verified sealed descriptor, never the raw
-    manifest path.
+    """The defect this fix closes: a real detector reading the page image on a
+    book-labeling project must see the verified sealed descriptor, never the
+    raw manifest path.
     """
     from datetime import UTC, datetime
 
     from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectorInput
 
     client = _load_book_client(tmp_path, monkeypatch, page_count=1)
     _seed_page(client, 0)
@@ -928,31 +913,27 @@ def test_a_book_labeling_project_detector_sees_the_sealed_descriptor(
 
     recorded: list[Path] = []
 
-    def _detector(page: Any) -> list[Any]:
-        del page
-        recorded.append(project_state.labeling_image_path(0))
+    def _detector(detector_input: DetectorInput) -> list[Any]:
+        recorded.append(project_state.labeling_image_path(detector_input.page_index))
         return []
 
     _run_propose_regions_job(client, detector=_detector)
 
-    assert recorded == []
+    assert len(recorded) == 1
+    assert str(recorded[0]).startswith("/proc/self/fd/")
+    # The lease is scoped to the ``detector(page)`` call — once the run has
+    # finished, the descriptor it resolved to must no longer be readable.
+    with pytest.raises(OSError):
+        recorded[0].read_bytes()
 
 
 def test_the_book_lease_is_closed_even_when_the_detector_raises(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Pinned to the detector seam's widening (geometry-region-proposals Task 1).
-
-    See ``test_an_ordinary_project_detector_sees_the_plain_on_disk_image_path``
-    for why no injected detector is called right now — so it cannot raise
-    either, and this test can no longer exercise the lease-closes-on-detector-
-    failure path it is named for. Task 2 restores a real call and should
-    restore this test's assertion that the lease is closed even when the
-    detector raises.
-    """
     from datetime import UTC, datetime
 
     from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectorInput
 
     client = _load_book_client(tmp_path, monkeypatch, page_count=1)
     _seed_page(client, 0)
@@ -963,18 +944,18 @@ def test_the_book_lease_is_closed_even_when_the_detector_raises(
 
     captured: list[Path] = []
 
-    def _detector(page: Any) -> list[Any]:
-        del page
-        captured.append(project_state.labeling_image_path(0))
+    def _detector(detector_input: DetectorInput) -> list[Any]:
+        captured.append(project_state.labeling_image_path(detector_input.page_index))
         raise RuntimeError("boom")
 
-    # The detector is a swap-in callable, so a real invocation's failure would
-    # be logged and skipped rather than aborting the whole run. Right now it
-    # is never invoked at all (see the docstring), so the run simply proposes
-    # nothing and raises nothing.
+    # The detector is a swap-in callable, so the handler logs its failure and
+    # skips that page rather than letting it abort the whole run. The lease
+    # must still be closed on that path, which is what this test pins.
     _run_propose_regions_job(client, detector=_detector)
 
-    assert captured == []
+    assert len(captured) == 1
+    with pytest.raises(OSError):
+        captured[0].read_bytes()
 
 
 def test_a_detector_that_raises_skips_its_page_and_does_not_kill_the_run(
@@ -999,8 +980,8 @@ def test_a_detector_that_raises_skips_its_page_and_does_not_kill_the_run(
     assert project is not None
     PageKindReviewedStore(project.project_root).mark_reviewed(0, datetime.now(UTC).isoformat())
 
-    def _exploding_detector(page: Any) -> list[Any]:
-        del page
+    def _exploding_detector(detector_input: Any) -> list[Any]:
+        del detector_input
         raise ValueError("page mixes normalized and pixel word boxes")
 
     runner.context["region_detector"] = _exploding_detector

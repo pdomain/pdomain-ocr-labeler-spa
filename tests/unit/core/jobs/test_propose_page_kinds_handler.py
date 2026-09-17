@@ -206,10 +206,13 @@ async def test_a_classify_pages_length_mismatch_raises_loudly(
     proposals to the wrong page.
 
     ``classify_pages`` isn't currently an injectable seam on the runner
-    context, so this monkeypatches the handler module's imported name rather
-    than adding a second production seam just for this test.
+    context, so this monkeypatches the imported name in the shared
+    ``page_measurement`` module ``measure_book`` actually calls it from
+    (geometry-region-proposals Task 2 moved the call there out of this
+    handler) rather than adding a second production seam just for this test.
     """
     import pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds as handler_module
+    import pdomain_ocr_labeler_spa.core.page_measurement as page_measurement_module
 
     project = _project(tmp_path, 3)
     runner, job = _runner_and_job(project, tops=[300, 302, 298])
@@ -219,7 +222,7 @@ async def test_a_classify_pages_length_mismatch_raises_loudly(
     ) -> tuple[PageClassification, ...]:
         return _real_classify_pages(pages, templates)[:-1]
 
-    monkeypatch.setattr(handler_module, "classify_pages", _classify_pages_dropping_one)
+    monkeypatch.setattr(page_measurement_module, "classify_pages", _classify_pages_dropping_one)
 
     with pytest.raises(RuntimeError) as exc_info:
         await handler_module.handle_propose_page_kinds(runner, job)
@@ -338,6 +341,7 @@ async def test_an_unmappable_page_class_proposes_unknown_without_a_confidence(
     that was never given.
     """
     import pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds as handler_module
+    import pdomain_ocr_labeler_spa.core.page_measurement as page_measurement_module
 
     project = _project(tmp_path, 3)
     runner, job = _runner_and_job(project, tops=[300, 302, 298])
@@ -351,7 +355,7 @@ async def test_an_unmappable_page_class_proposes_unknown_without_a_confidence(
             *classified[1:],
         )
 
-    monkeypatch.setattr(handler_module, "classify_pages", _classify_pages_with_a_future_class)
+    monkeypatch.setattr(page_measurement_module, "classify_pages", _classify_pages_with_a_future_class)
 
     await handler_module.handle_propose_page_kinds(runner, job)
 
