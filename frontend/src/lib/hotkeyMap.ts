@@ -8,7 +8,8 @@
 // Combo syntax: "mod+s", "mod+shift+r", "?" etc.
 // "mod" maps to Ctrl on Windows/Linux and Cmd on Mac (react-hotkeys-hook convention).
 
-export type Scope = "global" | "viewport" | "matches" | "dialog" | "source-folder" | "gt-input";
+export type Scope =
+  "global" | "viewport" | "matches" | "dialog" | "source-folder" | "gt-input" | "region-review";
 
 export interface HotkeyEntry {
   combo: string;
@@ -91,4 +92,12 @@ export const HOTKEY_MAP: HotkeyEntry[] = [
   { combo: "shift+tab", scope: "gt-input", description: "Move to previous GT input" },
   { combo: "enter", scope: "gt-input", description: "Commit GT" },
   { combo: "escape", scope: "gt-input", description: "Revert GT" },
+
+  // ── Region review ─────────────────────────────────────────────────────────
+  { combo: "5", scope: "region-review", description: "Select region target" },
+  { combo: "n", scope: "region-review", description: "Next undecided proposal" },
+  { combo: "p", scope: "region-review", description: "Previous undecided proposal" },
+  { combo: "enter", scope: "region-review", description: "Accept selected proposal" },
+  { combo: "x", scope: "region-review", description: "Reject selected proposal" },
+  { combo: "delete", scope: "region-review", description: "Delete selected region (with confirm)" },
 ];

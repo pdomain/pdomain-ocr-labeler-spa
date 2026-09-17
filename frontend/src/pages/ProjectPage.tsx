@@ -114,6 +114,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { RightPanel } from "../components/shell/RightPanel";
 import { WordDetail } from "../components/right-panel/WordDetail";
 import { useBreadcrumbHotkeys } from "../hooks/useBreadcrumbHotkeys";
+import { useRegionReviewHotkeys } from "../hooks/useRegionReviewHotkeys";
 
 import type {
   Selection as ToolbarSelection,
@@ -352,6 +353,18 @@ export default function ProjectPage() {
   // ── Breadcrumb / hierarchy hotkeys (Alt+arrows) ────────────────────────
   // Registered at the page level so they work anywhere on the project page.
   useBreadcrumbHotkeys({ page: pagePayload ?? undefined });
+
+  // ── Region review hotkeys (n/p/enter/x/delete) ──────────────────────────
+  // Registered at the page level, same as useBreadcrumbHotkeys above. A
+  // proposal or confirmed region can only be selected once a page has
+  // loaded, so the `projectId ?? ""` fallback below is never exercised by
+  // an actual mutation — it only keeps the hook's required `string` prop
+  // satisfied before the route param resolves.
+  useRegionReviewHotkeys({
+    page: pagePayload ?? undefined,
+    projectId: projectId ?? "",
+    pageIndex: idx0,
+  });
 
   // ── ⌘K QuickSearch (D-047) ─────────────────────────────────────────────
   // QuickSearch relocated from the chrome header into the Drawer worklist

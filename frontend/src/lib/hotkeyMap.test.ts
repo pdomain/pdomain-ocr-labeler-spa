@@ -18,6 +18,7 @@ const VALID_SCOPES: Scope[] = [
   "dialog",
   "source-folder",
   "gt-input",
+  "region-review",
 ];
 
 describe("hotkeyMap", () => {
@@ -70,5 +71,10 @@ describe("hotkeyMap", () => {
   it("includes Mod+R (Reload OCR) global hotkey", () => {
     const entry = HOTKEY_MAP.find((e) => e.scope === "global" && e.combo === "mod+r");
     expect(entry).toBeDefined();
+  });
+
+  it("includes the region-review scope's six keys (Task 5)", () => {
+    const combos = HOTKEY_MAP.filter((e) => e.scope === "region-review").map((e) => e.combo);
+    expect(combos.sort()).toEqual(["5", "delete", "enter", "n", "p", "x"].sort());
   });
 });
