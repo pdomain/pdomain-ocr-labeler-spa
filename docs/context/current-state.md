@@ -43,15 +43,17 @@ persist rotation metadata. The implementation is in
 `tests/e2e/test_rotate_parity.py`. Earlier documentation that called these
 handlers stubs was stale.
 
-The labeling track runs end to end on synthetic test pages, and not yet on a real book. It was
-designed in `pdomain-ocr-synth` and built here.
+The labeling track runs end to end on a real book: a machine proposes regions from real OCR output
+and a person reviews them. It was designed in `pdomain-ocr-synth` and built here.
 
-**On real OCR output the region pipeline fails, and a fix is in progress.** The first run on a real
-book, 2026-09-17, found that DocTR word boxes are normalized to 0-to-1 coordinates while every
-region test builds pixel-space pages. As a result the furniture detector skips every real page and
-proposes nothing, accepting a proposal returns 400 mislabelled `invalid_region_role`, and a confirmed
-region would be served in 0-to-1 coordinates. The API already serves word boxes in source pixels
-through `_bbox_to_model`; region boxes need the same conversion at the boundary.
+**It was verified on real data on 2026-09-17.** 80 real pages of `projectID657550412c8dc` went
+through DocTR OCR, page-kind proposal, region proposal and an accept: 29 proposals on 15 pages, and
+the accepted header served back at exactly its pixel box. That first real run also found that the
+pipeline had never worked on real data. DocTR emits word boxes normalized to 0 to 1, and every
+region test built pixel-space pages. Region boxes now convert at the API boundary the way word boxes
+always have, in `core/regions/coordinates.py`, and `tests/integration/conftest.py` has a
+`normalized_page_loaded` fixture shaped like real OCR output. Evidence is in
+`/workspaces/pdomain/.m15f-evidence/real-book-region-run/`.
 
 As of 2026-09-17:
 
