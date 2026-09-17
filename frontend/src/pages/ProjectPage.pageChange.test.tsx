@@ -12,7 +12,7 @@
 // useNavigate — real navigation is what exercises the pageIndex change this
 // fix reacts to. `nav-next-button` (ProjectNavigationControls) drives it.
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -29,6 +29,10 @@ import {
   selectProposal,
   selectRegion,
 } from "../stores/selection-store";
+import {
+  reviewSelectionIntentStore,
+  setReviewSelectionIntent,
+} from "../stores/review-selection-intent-store";
 import type { components } from "../api/types";
 
 type RegionView = components["schemas"]["RegionView"];
@@ -189,6 +193,7 @@ describe("ProjectPage — region selection is scoped to its page (defect 2)", ()
   beforeEach(() => {
     dialogStore.reset();
     clearSelection();
+    reviewSelectionIntentStore.setState({ intent: null });
     useUiPrefs.setState({ drawerOpen: true, rightPanelOpen: true });
     server.use(
       http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
@@ -197,6 +202,10 @@ describe("ProjectPage — region selection is scoped to its page (defect 2)", ()
         return HttpResponse.json(pageFixture(idx));
       }),
     );
+  });
+
+  afterEach(() => {
+    reviewSelectionIntentStore.setState({ intent: null });
   });
 
   it("clears a selected proposal when the page index changes", async () => {
@@ -242,5 +251,100 @@ describe("ProjectPage — region selection is scoped to its page (defect 2)", ()
     await waitFor(() => expect(screen.getByTestId("nav-page-input")).toHaveValue(2));
     expect(selectionStore.getState().level).toBe("line");
     expect(selectionStore.getState().path).toEqual({ lineId: 3 });
+  });
+});
+
+// ─── Book review queue design: the '['/']' selection intent survives the
+// page-change region clear ────────────────────────────────────────────────
+// Design: docs/specs/2026-09-17-book-review-queue-design.md
+//   "Selecting after navigation needs an intent, not a direct call".
+//
+// These tests set the intent directly (rather than pressing ']') because
+// the navigation itself is already covered by useRegionReviewHotkeys.test.tsx
+// — what matters here is effect ordering on ProjectPage: the page-change
+// clear above must not undo the selection this intent makes once the
+// destination page's payload arrives.
+
+describe("ProjectPage — the review-queue selection intent survives the page-change clear", () => {
+  beforeEach(() => {
+    dialogStore.reset();
+    clearSelection();
+    reviewSelectionIntentStore.setState({ intent: null });
+    useUiPrefs.setState({ drawerOpen: true, rightPanelOpen: true });
+    server.use(
+      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid/pages/:idx", ({ params }) => {
+        const idx = Number(params["idx"]);
+        return HttpResponse.json(pageFixture(idx));
+      }),
+    );
+  });
+
+  afterEach(() => {
+    reviewSelectionIntentStore.setState({ intent: null });
+  });
+
+  it("selects the intent's proposal once the destination page loads, surviving the page-change clear", async () => {
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    // A pre-existing region selection so the page-change clear (which only
+    // acts when level === "region") has something to actually clear —
+    // proving the intent's later selection isn't a no-op survivor.
+    selectProposal("prop-1");
+    setReviewSelectionIntent({ pageIndex: 1, proposalId: "prop-1" });
+
+    const nextButton = await screen.findByTestId("nav-next-button");
+    await waitFor(() => expect(nextButton).not.toBeDisabled());
+    fireEvent.click(nextButton);
+
+    await waitFor(() => expect(screen.getByTestId("nav-page-input")).toHaveValue(2));
+    await waitFor(() => expect(selectionStore.getState().path.proposalId).toBe("prop-1"));
+    expect(reviewSelectionIntentStore.getState().intent).toBeNull();
+  });
+
+  it("survives the clear even when the destination page's payload is already cached (same-commit ordering)", async () => {
+    // Visit page 2 once so its payload lands in the QueryClient cache, then
+    // return to page 1 — this is the case the ordering comment calls out:
+    // navigating back to page 2 a second time resolves `usePage` from cache
+    // in the SAME render as the idx0 change, so both the page-change clear
+    // effect and the intent-consuming effect below it run in one commit
+    // rather than across two (fresh-load) renders. If the clear effect ran
+    // *after* the intent effect, it would wipe the selection made here.
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+
+    const nextButton = await screen.findByTestId("nav-next-button");
+    await waitFor(() => expect(nextButton).not.toBeDisabled());
+    fireEvent.click(nextButton);
+    await waitFor(() => expect(screen.getByTestId("nav-page-input")).toHaveValue(2));
+
+    const prevButton = await screen.findByTestId("nav-prev-button");
+    await waitFor(() => expect(prevButton).not.toBeDisabled());
+    fireEvent.click(prevButton);
+    await waitFor(() => expect(screen.getByTestId("nav-page-input")).toHaveValue(1));
+
+    selectProposal("prop-1");
+    expect(selectionStore.getState().level).toBe("region");
+    setReviewSelectionIntent({ pageIndex: 1, proposalId: "prop-1" });
+
+    fireEvent.click(await screen.findByTestId("nav-next-button"));
+
+    await waitFor(() => expect(screen.getByTestId("nav-page-input")).toHaveValue(2));
+    await waitFor(() => expect(selectionStore.getState().path.proposalId).toBe("prop-1"));
+    expect(reviewSelectionIntentStore.getState().intent).toBeNull();
+  });
+
+  it("clears an intent whose proposal is absent from the loaded page, selecting nothing", async () => {
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    setReviewSelectionIntent({ pageIndex: 1, proposalId: "not-on-page-2" });
+
+    const nextButton = await screen.findByTestId("nav-next-button");
+    await waitFor(() => expect(nextButton).not.toBeDisabled());
+    fireEvent.click(nextButton);
+
+    await waitFor(() => expect(screen.getByTestId("nav-page-input")).toHaveValue(2));
+    await waitFor(() => expect(reviewSelectionIntentStore.getState().intent).toBeNull());
+    expect(selectionStore.getState().level).toBe("none");
   });
 });

@@ -73,8 +73,10 @@ describe("hotkeyMap", () => {
     expect(entry).toBeDefined();
   });
 
-  it("includes the region-review scope's six keys (Task 5)", () => {
+  it("includes the region-review scope's eight keys (Task 5 + book review queue)", () => {
     const combos = HOTKEY_MAP.filter((e) => e.scope === "region-review").map((e) => e.combo);
-    expect(combos.sort()).toEqual(["5", "delete", "enter", "n", "p", "x"].sort());
+    expect(combos.sort()).toEqual(
+      ["5", "delete", "enter", "n", "p", "x", "bracketleft", "bracketright"].sort(),
+    );
   });
 });
