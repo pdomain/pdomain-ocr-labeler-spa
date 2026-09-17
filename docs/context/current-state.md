@@ -43,29 +43,31 @@ persist rotation metadata. The implementation is in
 `tests/e2e/test_rotate_parity.py`. Earlier documentation that called these
 handlers stubs was stale.
 
-The region and page-kind backend is complete, and no surface reads it yet.
-This is the labeling track, designed in `pdomain-ocr-synth` and built here. As
-of 2026-09-17:
+The labeling track now runs end to end: a machine proposes regions and a person reviews them.
+It was designed in `pdomain-ocr-synth` and built here. As of 2026-09-17:
 
-- A page's kind is proposed by a book-scoped `propose_page_kinds` job that
-  measures every page through `pdomain-pgdp-measure` and classifies the book
-  against its own fitted templates, and confirmed by a person through
-  `POST .../pages/{index}/page-kind`. `PagePayload` carries `page_kind` and
-  `page_kind_reviewed` as typed fields, so a confirmed kind survives a plain
-  `GET`.
-- Regions are `Block` objects in the page tree, marked by a `region_id` in
-  `additional_block_attributes`. Eight routes cover create, edit, delete, word
-  membership, list proposals, accept, reject, and the book-scoped
-  `POST .../regions/propose`. Proposals and decisions live in JSONL journals
-  under the project's `.pd-pages/`, never in the page blob.
-- `propose_regions` runs a swappable detector from
-  `JobRunner.context["region_detector"]`, defaulting to one that proposes
-  nothing. The geometry engine that fills it is planned at `pdomain-ocr-synth`'s
-  `docs/plans/2026-09-17-geometry-region-proposals.md`.
-- **No region or page-kind review surface exists.** The frontend has generated
-  types for every one of these routes and no client code that calls one. A
-  person can see a region on the canvas and cannot draw, edit, accept, or
-  reject one.
+- **Page kind** is proposed by a book-scoped `propose_page_kinds` job, which measures every page
+  through `pdomain-pgdp-measure` and classifies the book against its own fitted templates. A person
+  confirms it through `POST .../pages/{index}/page-kind`. `PagePayload` carries `page_kind` and
+  `page_kind_reviewed` as typed fields.
+- **Regions** are `Block` objects in the page tree, marked by a `region_id` in
+  `additional_block_attributes`. Eight routes cover create, edit, delete, word membership, list
+  proposals, accept, reject, and the book-scoped `POST .../regions/propose`. Proposals and decisions
+  live in JSONL journals under the project's `.pd-pages/`, never in the page blob. A repeat reject
+  records nothing new.
+- **Proposals come from a geometry engine.** `propose_regions` measures the whole book and runs
+  `FurnitureDetector` by default. It proposes a `page header` and a `page number` from each page's top
+  furniture bands, splitting head from folio at a gap threshold fitted to each book's own word gaps.
+  Both proposal jobs read page images through a verified per-page lease. A run ends with a summary
+  message saying how many proposals it made and why any pages were skipped.
+- **A person reviews proposals in the SPA.** Key `5` selects the region rail target. A canvas click
+  selects the smallest region or proposal under it, and `RegionDetail` accepts, accepts as another
+  role, or rejects it, or changes the role of or deletes a confirmed region. From the keyboard, `n`
+  and `p` step through undecided proposals, `enter` accepts, `x` rejects, and selection advances by
+  itself. The page actions menu starts both proposal runs. `tests/e2e/test_region_review_loop.py`
+  drives the loop in a real browser.
+- **Not built yet:** drawing a region, resizing a box, editing word membership in the UI, reviewing
+  page kinds, and a book-wide review queue.
 
 Page lifecycle types now have one import owner. Production and test callers
 import `PageRecord` and `RotationSource` from `pdomain_ops.pages`; the temporary
