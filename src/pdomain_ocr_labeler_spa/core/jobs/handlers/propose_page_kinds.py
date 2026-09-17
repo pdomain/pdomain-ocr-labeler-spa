@@ -108,13 +108,19 @@ async def handle_propose_page_kinds(runner: JobRunner, job: Job) -> None:
         return
 
     # The run was queued against one book; whoever dequeues it may find a
-    # different one loaded (the start route sets ``payload["project_id"]``,
-    # and a load in between swaps ``loaded_project``). Proposals are durable
-    # and book-scoped, so classifying whatever happens to be loaded now would
-    # write book A's run into book B's journal. Refuse instead, reported the
-    # same way as the no-project-loaded case.
-    submitted_project_id = job.payload.get("project_id")
-    if isinstance(submitted_project_id, str) and submitted_project_id != project.project_id:
+    # different one loaded (the start route sets both ``Job.project_id`` and
+    # ``payload["project_id"]``, and a load in between swaps
+    # ``loaded_project``). Proposals are durable and book-scoped, so
+    # classifying whatever happens to be loaded now would write book A's run
+    # into book B's journal. Refuse instead, reported the same way as the
+    # no-project-loaded case. ``Job.project_id`` is the typed field every
+    # submitter sets; the untyped payload key is only a fallback for a
+    # submitter that omitted it.
+    submitted_project_id = job.project_id
+    if submitted_project_id is None:
+        payload_project_id = job.payload.get("project_id")
+        submitted_project_id = payload_project_id if isinstance(payload_project_id, str) else None
+    if submitted_project_id is not None and submitted_project_id != project.project_id:
         log.warning(
             "propose_page_kinds: job=%s was queued for project=%s but project=%s is loaded — refusing",
             job.job_id,
