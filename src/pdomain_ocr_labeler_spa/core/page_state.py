@@ -86,11 +86,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from .models import PageSource, Project
 from .persistence.paths import labeled_projects_root
 from .project_state import PageState, ProjectState
+
+if TYPE_CHECKING:
+    from pdomain_book_contracts.annotation import PageKind
 
 
 @dataclass(frozen=True)
@@ -162,13 +165,24 @@ class PageLoader(Protocol):
 
     def load_labeled(self, page_index: int) -> PageLoadOutcome | None: ...
     def load_cached(self, page_index: int) -> PageLoadOutcome | None: ...
-    def run_ocr(self, page_index: int, *, edited_image_bytes: bytes | None = ...) -> PageLoadOutcome:
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = ...,
+        page_kind: PageKind | None = ...,
+    ) -> PageLoadOutcome:
         """Run OCR for ``page_index``.
 
         ``edited_image_bytes`` (Lane A / Task A4): when supplied, OCR runs
         against those raw image bytes (the post-erase edited page image)
         instead of the pristine on-disk source. ``None`` / omitted uses the
         on-disk file. Implementations may accept the keyword and ignore it.
+
+        ``page_kind`` (pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-
+        review-design.md "Re-OCR and rotation keep the confirmed kind"): the
+        prior confirmed kind, set on the fresh ``Page`` before it is saved so
+        reload OCR, rotation, and auto-rotate-all don't silently drop it.
         """
         ...
 

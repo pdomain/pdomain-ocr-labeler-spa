@@ -88,7 +88,7 @@ async def handle_rotate_page(runner: JobRunner, job: Job) -> None:
     from ....settings import Settings
     from ...notifications import NotificationKind, NotificationQueue
     from ...project_state import ProjectState
-    from ..handlers.reload_ocr import _apply_reocr_outcome, _get_page_loader
+    from ..handlers.reload_ocr import _apply_reocr_outcome, _get_page_loader, _prior_confirmed_page_kind
 
     payload: dict[str, Any] = job.payload
     project_id: str = str(payload.get("project_id", ""))
@@ -160,9 +160,13 @@ async def handle_rotate_page(runner: JobRunner, job: Job) -> None:
 
     # Step 2: Re-run OCR using the reload_ocr machinery (DRY — shared helper).
     loader = _get_page_loader(runner, project_state, settings)
+    # pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
+    # "Re-OCR and rotation keep the confirmed kind" — read before the fresh
+    # Page from run_ocr replaces this one.
+    page_kind = _prior_confirmed_page_kind(project_state, page_index)
 
     try:
-        outcome = await asyncio.to_thread(loader.run_ocr, page_index)
+        outcome = await asyncio.to_thread(loader.run_ocr, page_index, page_kind=page_kind)
     except Exception as exc:
         notification_queue.queue(
             NotificationKind.NEGATIVE,

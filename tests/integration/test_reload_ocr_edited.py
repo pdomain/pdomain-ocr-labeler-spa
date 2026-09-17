@@ -87,7 +87,13 @@ class _RecordingLoader:
         self.edited_bytes_seen: bytes | None = None
         self.calls: list[int] = []
 
-    def run_ocr(self, page_index: int, *, edited_image_bytes: bytes | None = None) -> PageLoadOutcome:
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: object | None = None,
+    ) -> PageLoadOutcome:
         self.calls.append(page_index)
         self.edited_bytes_seen = edited_image_bytes
         return PageLoadOutcome(page_index=page_index, source=PageSource.OCR, payload=_make_page())

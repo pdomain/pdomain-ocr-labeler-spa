@@ -616,6 +616,44 @@ def test_run_ocr_swallows_cache_write_failure(
         assert list(page_images_dir.glob("*_envelope.json")) == []
 
 
+# ── page_kind carried through run_ocr (page-kind-review-design.md) ───────
+#
+# "run_ocr gains a keyword, page_kind, which it sets on the fresh Page
+# before _ingest_ocr_result writes it."
+
+
+def test_run_ocr_sets_page_kind_on_the_fresh_page(
+    tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
+) -> None:
+    from pdomain_book_contracts.annotation import PageKind
+
+    project = _make_project(tmp_path)
+    loader = LocalDoctrPageLoader(
+        project=project,
+        predictor_cache=stub_predictor_cache,
+        detection_key="stock",
+        recognition_key="stock",
+        hf_revision=None,
+    )
+    outcome = loader.run_ocr(0, page_kind=PageKind.BODY)
+    assert outcome.payload.page_kind == PageKind.BODY
+
+
+def test_run_ocr_defaults_page_kind_to_none(
+    tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
+) -> None:
+    project = _make_project(tmp_path)
+    loader = LocalDoctrPageLoader(
+        project=project,
+        predictor_cache=stub_predictor_cache,
+        detection_key="stock",
+        recognition_key="stock",
+        hf_revision=None,
+    )
+    outcome = loader.run_ocr(0)
+    assert outcome.payload.page_kind is None
+
+
 def test_run_ocr_outcome_carries_detection_and_recognition_keys(
     tmp_path: Path, stub_pdomain_book_tools, stub_predictor_cache: PredictorCache
 ) -> None:

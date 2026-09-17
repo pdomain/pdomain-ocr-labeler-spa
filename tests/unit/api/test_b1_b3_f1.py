@@ -157,7 +157,9 @@ class _FakePageLoader:
         self.load_labeled_calls: list[int] = []
         self.load_cached_calls: list[int] = []
 
-    def run_ocr(self, page_index: int) -> PageLoadOutcome:
+    def run_ocr(
+        self, page_index: int, *, edited_image_bytes: bytes | None = None, page_kind: object | None = None
+    ) -> PageLoadOutcome:
         self.run_ocr_calls.append(page_index)
         return PageLoadOutcome(
             page_index=page_index,

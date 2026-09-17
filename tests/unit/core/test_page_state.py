@@ -95,7 +95,9 @@ class StubLoader:
         self.load_cached_calls.append(page_index)
         return self.cached_hits.get(page_index)
 
-    def run_ocr(self, page_index: int) -> PageLoadOutcome:
+    def run_ocr(
+        self, page_index: int, *, edited_image_bytes: bytes | None = None, page_kind: object | None = None
+    ) -> PageLoadOutcome:
         self.run_ocr_calls.append(page_index)
         if page_index in self.image_missing:
             raise PageImageNotFoundError(f"image for page_index={page_index} not found")
@@ -279,7 +281,9 @@ def test_concurrent_callers_do_not_double_run_ocr() -> None:
             self.load_cached_calls.append(page_index)
             return None
 
-        def run_ocr(self, page_index: int) -> PageLoadOutcome:
+        def run_ocr(
+            self, page_index: int, *, edited_image_bytes: bytes | None = None, page_kind: object | None = None
+        ) -> PageLoadOutcome:
             # Wait for both threads to be inside run_ocr's caller before
             # returning — simulates two contending OCR runs.
             barrier.wait(timeout=2.0)

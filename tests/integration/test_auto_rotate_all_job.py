@@ -95,6 +95,8 @@ def _seed_page_in_store(
     page_index: int,
     image_bytes: bytes,
     project_state: ProjectState,
+    *,
+    page_kind: object | None = None,
 ) -> None:
     """Seed a page in the event store and stamp page_id on project_state.
 
@@ -102,6 +104,7 @@ def _seed_page_in_store(
     the handler can find a page_id for calling rotation_updated.
     """
     page = _make_fake_page()
+    page.page_kind = page_kind
     agg = _ingest_ocr_result(
         page=page,
         image_bytes=image_bytes,
@@ -122,12 +125,21 @@ class _FakePageLoaderWithIngest:
 
     def __init__(self, store: LabelerPageStore, project: Project) -> None:
         self.calls: list[int] = []
+        self.page_kind_calls: list[object] = []
         self._store = store
         self._project = project
 
-    def run_ocr(self, page_index: int) -> PageLoadOutcome:
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: object | None = None,
+    ) -> PageLoadOutcome:
         self.calls.append(page_index)
+        self.page_kind_calls.append(page_kind)
         page = _make_fake_page()
+        page.page_kind = page_kind
         agg = _ingest_ocr_result(
             page=page,
             image_bytes=_make_png(100, 200),
@@ -250,6 +262,60 @@ def test_auto_rotate_rotates_sideways_page(tmp_path: Path, projects_root_two_pag
         assert untouched_1.shape[:2] == (100, 200), (
             f"page 1 expected (100,200) unchanged, got {untouched_1.shape[:2]}"
         )
+
+
+def test_auto_rotate_all_passes_the_prior_confirmed_kind_to_run_ocr(
+    tmp_path: Path, projects_root_two_pages: Path
+) -> None:
+    """pdomain-ocr-synth's 2026-09-17-page-kind-review-design.md "Re-OCR and
+    rotation keep the confirmed kind": auto-rotate-all reads each rotated
+    page's prior confirmed kind before re-OCR and passes it through.
+    """
+    from pdomain_book_contracts.annotation import PageKind
+
+    settings = _make_settings(tmp_path, source_projects_root=projects_root_two_pages)
+    app = build_app(settings)
+    recorded: list[dict[str, Any]] = []
+
+    with TestClient(app) as c:
+        _wrap_broker_publish(c.app.state.job_events, recorded)  # type: ignore[attr-defined]
+        resp = c.post(
+            "/api/projects/load",
+            json={"project_root": str(projects_root_two_pages / "book2")},
+        )
+        assert resp.status_code == 200, resp.text
+
+        project_state: ProjectState = c.app.state.project_state  # type: ignore[attr-defined]
+        page_store: LabelerPageStore = c.app.state.page_store  # type: ignore[attr-defined]
+        project = project_state.loaded_project
+        assert project is not None
+
+        image_bytes = _make_png(100, 200)
+        # Page 0 confirmed "body"; page 1 has no confirmed kind.
+        _seed_page_in_store(page_store, project, 0, image_bytes, project_state, page_kind=PageKind.BODY)
+        _seed_page_in_store(page_store, project, 1, image_bytes, project_state)
+
+        loader = _FakePageLoaderWithIngest(store=page_store, project=project)
+        c.app.state.job_runner.context["page_loader"] = loader  # type: ignore[attr-defined]
+
+        # Both pages report a sideways rotation, so both re-OCR.
+        sideways_doc, sideways_probes = _make_sideways_document()
+
+        def fake_detect(image, *, ocr_fn, confidence_threshold=0.6, **kw):  # type: ignore[no-untyped-def]
+            return (90, sideways_doc, sideways_probes)
+
+        c.app.state.job_runner.context["auto_rotate_detect_fn"] = fake_detect  # type: ignore[attr-defined]
+
+        resp2 = c.post(
+            "/api/projects/book2/auto-rotate-all",
+            json={"overwrite_manual": False},
+        )
+        assert resp2.status_code == 202, resp2.text
+        _wait_for_terminal(recorded)
+        assert recorded[-1].get("type") == "complete", recorded[-1]
+
+        assert loader.calls == [0, 1]
+        assert loader.page_kind_calls == [PageKind.BODY, None]
 
 
 def test_auto_rotate_skips_manual_pages_by_default(tmp_path: Path, projects_root_two_pages: Path) -> None:

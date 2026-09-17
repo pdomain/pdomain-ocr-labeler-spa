@@ -54,7 +54,9 @@ class _SpyLoader:
         self.load_labeled_calls: list[int] = []
         self.load_cached_calls: list[int] = []
 
-    def run_ocr(self, page_index: int) -> PageLoadOutcome:
+    def run_ocr(
+        self, page_index: int, *, edited_image_bytes: bytes | None = None, page_kind: object | None = None
+    ) -> PageLoadOutcome:
         self.run_ocr_calls.append(page_index)
         return PageLoadOutcome(
             page_index=page_index,
@@ -186,7 +188,9 @@ def test_prefetch_swallows_loader_errors(tmp_path: Path) -> None:
     runner = app.state.job_runner
 
     class _BoomLoader:
-        def run_ocr(self, page_index: int) -> PageLoadOutcome:
+        def run_ocr(
+            self, page_index: int, *, edited_image_bytes: bytes | None = None, page_kind: object | None = None
+        ) -> PageLoadOutcome:
             raise RuntimeError("boom")
 
         def load_labeled(self, page_index: int) -> PageLoadOutcome | None:

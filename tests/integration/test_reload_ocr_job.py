@@ -69,10 +69,18 @@ class _FakePageLoader:
 
     def __init__(self, *, raise_on_run: Exception | None = None) -> None:
         self.calls: list[int] = []
+        self.page_kind_calls: list[object] = []
         self._raise = raise_on_run
 
-    def run_ocr(self, page_index: int) -> PageLoadOutcome:
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: object | None = None,
+    ) -> PageLoadOutcome:
         self.calls.append(page_index)
+        self.page_kind_calls.append(page_kind)
         if self._raise is not None:
             raise self._raise
         return PageLoadOutcome(
@@ -159,6 +167,50 @@ def test_reload_ocr_success_emits_four_progress_events_in_order(
 
     assert events[-1].get("type") == "complete", events[-1]
     assert loader.calls == [0]
+
+
+def test_reload_ocr_passes_the_prior_confirmed_kind_to_run_ocr(
+    loaded_client_with_loader: tuple[TestClient, _FakePageLoader, list[dict[str, Any]]],
+) -> None:
+    """pdomain-ocr-synth's 2026-09-17-page-kind-review-design.md "Re-OCR and
+    rotation keep the confirmed kind": reload OCR reads the page's prior
+    confirmed kind from state before it runs OCR and passes it through.
+    """
+    from types import SimpleNamespace
+
+    from pdomain_book_contracts.annotation import PageKind
+
+    c, loader, events = loaded_client_with_loader
+    project_state = c.app.state.project_state  # type: ignore[attr-defined]
+    from pdomain_ocr_labeler_spa.core.project_state import PageState
+
+    pstate = PageState(
+        page_index=0,
+        page_record=PageLoadOutcome(
+            page_index=0, source=PageSource.OCR, payload=SimpleNamespace(page_kind=PageKind.BODY)
+        ),
+    )
+    project_state._page_states[0] = pstate
+
+    ocr_resp = c.post("/api/projects/book1/pages/0/reload-ocr", json={})
+    assert ocr_resp.status_code == 202
+
+    _wait_for_terminal(events)
+    assert events[-1].get("type") == "complete", events[-1]
+    assert loader.page_kind_calls == [PageKind.BODY]
+
+
+def test_reload_ocr_passes_none_when_the_page_has_no_confirmed_kind(
+    loaded_client_with_loader: tuple[TestClient, _FakePageLoader, list[dict[str, Any]]],
+) -> None:
+    c, loader, events = loaded_client_with_loader
+
+    ocr_resp = c.post("/api/projects/book1/pages/0/reload-ocr", json={})
+    assert ocr_resp.status_code == 202
+
+    _wait_for_terminal(events)
+    assert events[-1].get("type") == "complete", events[-1]
+    assert loader.page_kind_calls == [None]
 
 
 def test_reload_ocr_stores_outcome_on_project_state(
@@ -276,7 +328,13 @@ class _SlowPageLoader:
         self._sleep_s = sleep_s
         self.calls: list[int] = []
 
-    def run_ocr(self, page_index: int) -> PageLoadOutcome:
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: object | None = None,
+    ) -> PageLoadOutcome:
         self.calls.append(page_index)
         time.sleep(self._sleep_s)
         return PageLoadOutcome(

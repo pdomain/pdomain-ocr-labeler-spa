@@ -111,7 +111,7 @@ async def handle_auto_rotate_all(runner: JobRunner, job: Job) -> None:
     from ....settings import Settings
     from ...notifications import NotificationKind, NotificationQueue
     from ...project_state import ProjectState
-    from ..handlers.reload_ocr import _apply_reocr_outcome, _get_page_loader
+    from ..handlers.reload_ocr import _apply_reocr_outcome, _get_page_loader, _prior_confirmed_page_kind
     from ..handlers.rotate import _rotate_png_on_disk, _within
 
     payload: dict[str, Any] = job.payload
@@ -253,7 +253,11 @@ async def handle_auto_rotate_all(runner: JobRunner, job: Job) -> None:
             try:
                 await asyncio.to_thread(_rotate_png_on_disk, src_path, chosen)
 
-                outcome = await asyncio.to_thread(loader.run_ocr, page_idx)
+                # pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-
+                # design.md "Re-OCR and rotation keep the confirmed kind" —
+                # read before the fresh Page from run_ocr replaces this one.
+                page_kind = _prior_confirmed_page_kind(project_state, page_idx)
+                outcome = await asyncio.to_thread(loader.run_ocr, page_idx, page_kind=page_kind)
                 _apply_reocr_outcome(project_state, page_idx, outcome)
 
                 if store is not None:

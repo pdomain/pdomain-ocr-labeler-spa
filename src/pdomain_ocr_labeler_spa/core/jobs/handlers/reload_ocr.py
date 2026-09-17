@@ -78,6 +78,8 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from pdomain_book_contracts.annotation import PageKind
+
 from ....settings import Settings
 from ...notifications import NotificationKind, NotificationQueue
 from ...ocr.predictor import PredictorCache
@@ -197,6 +199,26 @@ def _read_edited_image_blob(
         return None
 
 
+def _prior_confirmed_page_kind(project_state: ProjectState, page_index: int) -> PageKind | None:
+    """The page's current confirmed kind, read before OCR replaces its ``Page``.
+
+    pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
+    "Re-OCR and rotation keep the confirmed kind": each caller (reload OCR,
+    rotation, auto-rotate-all) reads the prior kind from page state before it
+    runs OCR and passes it to ``run_ocr``, which sets it on the fresh ``Page``
+    before the OCR result is saved. Duck-typed (not an ``isinstance(Page)``
+    check) so this works the same whether the loaded payload is a real
+    ``pdomain_book_tools.ocr.page.Page`` or a test double exposing the same
+    attribute. Returns ``None`` when no page is loaded or it carries no
+    confirmed kind.
+    """
+    pstate = project_state.get_page_state(page_index)
+    if pstate is None or pstate.page_record is None:
+        return None
+    kind = getattr(pstate.page_record.payload, "page_kind", None)
+    return kind if isinstance(kind, PageKind) else None
+
+
 def _apply_reocr_outcome(
     project_state: ProjectState,
     page_index: int,
@@ -302,12 +324,19 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
                 page_index,
             )
 
+    # pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
+    # "Re-OCR and rotation keep the confirmed kind" — read before the fresh
+    # Page replaces this one.
+    page_kind = _prior_confirmed_page_kind(project_state, page_index)
+
     timeout_s = settings.ocr_timeout_s
     try:
         if edited_image_bytes is not None:
-            ocr_coro = asyncio.to_thread(loader.run_ocr, page_index, edited_image_bytes=edited_image_bytes)
+            ocr_coro = asyncio.to_thread(
+                loader.run_ocr, page_index, edited_image_bytes=edited_image_bytes, page_kind=page_kind
+            )
         else:
-            ocr_coro = asyncio.to_thread(loader.run_ocr, page_index)
+            ocr_coro = asyncio.to_thread(loader.run_ocr, page_index, page_kind=page_kind)
         if timeout_s > 0:
             outcome: PageLoadOutcome = await asyncio.wait_for(ocr_coro, timeout=timeout_s)
         else:
@@ -360,4 +389,4 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
     )
 
 
-__all__ = ["_apply_reocr_outcome", "_get_page_loader", "handle_reload_ocr"]
+__all__ = ["_apply_reocr_outcome", "_get_page_loader", "_prior_confirmed_page_kind", "handle_reload_ocr"]

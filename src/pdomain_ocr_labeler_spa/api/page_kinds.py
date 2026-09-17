@@ -69,7 +69,13 @@ class _NullPageLoader:
     def load_cached(self, page_index: int) -> PageLoadOutcome | None:
         return None
 
-    def run_ocr(self, page_index: int, *, edited_image_bytes: bytes | None = None) -> PageLoadOutcome:
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: PageKind | None = None,
+    ) -> PageLoadOutcome:
         raise RuntimeError("_NullPageLoader.run_ocr should never be called (allow_ocr=False)")
 
 
