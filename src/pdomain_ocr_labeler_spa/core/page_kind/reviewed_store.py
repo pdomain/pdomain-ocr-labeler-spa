@@ -87,7 +87,7 @@ class PageKindReviewedMarker:
         )
 
 
-def _is_active_review(marker: PageKindReviewedMarker | None) -> bool:
+def is_marker_reviewed(marker: PageKindReviewedMarker | None) -> bool:
     """Whether ``marker`` counts as a live review, not a withdrawn one.
 
     A ``history`` marker with no ``kind`` withdraws the review — see
@@ -193,7 +193,7 @@ class PageKindReviewedStore:
 
     def is_reviewed(self, page_index: int) -> bool:
         """Whether this page carries a live (non-withdrawn) review marker."""
-        return _is_active_review(self.latest_for_page(page_index))
+        return is_marker_reviewed(self.latest_for_page(page_index))
 
     def reviewed_page_indices(self) -> frozenset[int]:
         """Every page index carrying a live review marker, from one read.
@@ -204,4 +204,4 @@ class PageKindReviewedStore:
         journal, so a per-page loop over it costs one full-file parse per
         page instead of one for the whole loop.
         """
-        return frozenset(idx for idx, marker in self.latest_by_page().items() if _is_active_review(marker))
+        return frozenset(idx for idx, marker in self.latest_by_page().items() if is_marker_reviewed(marker))
