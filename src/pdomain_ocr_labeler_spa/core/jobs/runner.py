@@ -26,6 +26,10 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
+from ..models import Job as PublicJob
+from ..models import JobProgress as PublicJobProgress
+from ..models import JobStatus as PublicJobStatus
+from ..models import JobType as PublicJobType
 from .events import JobEventBroker
 
 log = logging.getLogger(__name__)
@@ -62,6 +66,33 @@ class Job(BaseModel):
 _TERMINAL = {JobStatus.COMPLETE, JobStatus.ERROR, JobStatus.CANCELLED}
 
 Handler = Callable[["JobRunner", Job], Coroutine[Any, Any, None]]
+
+
+def to_public_job(job: Job) -> PublicJob:
+    """Adapt an internal runner ``Job`` into the public wire ``Job`` model.
+
+    Single source of truth for the runner → public field mapping, shared by
+    both REST responses (``api/jobs.py``) and SSE frames (``_emit`` below) —
+    see ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`` (P1-JOBS-API).
+    Field renames from the old ad hoc dump: ``job_id`` → ``id``, ``job_type``
+    → ``type``, ``progress_current``/``progress_total``/``message`` → nested
+    ``progress.current``/``progress.total``/``progress.message``,
+    ``started_at``/``completed_at`` collapse into a single ``updated_at``.
+    """
+    return PublicJob(
+        id=job.job_id,
+        type=PublicJobType(job.job_type),
+        project_id=job.project_id,
+        status=PublicJobStatus(job.status.value),
+        progress=PublicJobProgress(
+            current=job.progress_current,
+            total=job.progress_total,
+            message=job.message,
+        ),
+        error_message=job.error_message or None,
+        created_at=job.created_at,
+        updated_at=job.completed_at or job.started_at or job.created_at,
+    )
 
 
 class LabelingPageLease(Protocol):
@@ -274,20 +305,22 @@ class JobRunner:
         await self._emit(updated)
 
     async def _emit(self, job: Job) -> None:
-        terminal = {JobStatus.COMPLETE, JobStatus.ERROR, JobStatus.CANCELLED}
-        ev_type = job.status.value if job.status in terminal else "progress"
-        event = {
-            "type": ev_type,
-            "status": job.status.value,
-            "current": job.progress_current,
-            "total": job.progress_total,
-            "message": job.message,
-            "error": job.error_message,
-        }
+        """Publish an SSE frame: the public ``Job`` model plus an ``event`` field.
+
+        ``event`` names the SSE event kind (``progress`` while running,
+        else the terminal status value). It is a distinct field from the
+        job model's own ``type`` (job kind, e.g. ``"export"``) — the old
+        flat shape used ``type`` for the event kind, which would collide
+        with the public model's ``type`` field, hence the rename. See
+        ``docs/issues/2026-07-21-job-sse-fe-be-shape-mismatch.md`` (P1-JOB-SSE).
+        """
+        ev_type = job.status.value if job.status in _TERMINAL else "progress"
+        event: dict[str, object] = dict(to_public_job(job).model_dump(mode="json"))
+        event["event"] = ev_type
         if job.result:
             event.update(job.result)
         await self._broker.publish(job.job_id, event)
-        if job.status in terminal:
+        if job.status in _TERMINAL:
             await self._broker.close(job.job_id)
 
     async def _run_one(self, job: Job) -> None:
@@ -460,4 +493,16 @@ _HANDLERS: dict[str, Handler] = {
 }
 
 
-__all__ = ["Job", "JobRunner", "JobStatus"]
+def registered_job_types() -> frozenset[str]:
+    """Return every ``job_type`` string a registered handler accepts.
+
+    Public accessor so tests (and the public ``JobType`` enum) can be
+    checked for agreement without reaching into the private ``_HANDLERS``
+    dict — see ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md``
+    (P1-JOBS-API), "Derive the job type list from the runner's registered
+    handlers."
+    """
+    return frozenset(_HANDLERS)
+
+
+__all__ = ["Job", "JobRunner", "JobStatus", "registered_job_types", "to_public_job"]

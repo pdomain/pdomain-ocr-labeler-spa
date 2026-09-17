@@ -274,23 +274,43 @@ class LineFilter(StrEnum):
 
 
 class JobStatus(StrEnum):
-    """Job lifecycle state — spec §1 ``JobStatus``."""
+    """Job lifecycle state — spec §1 ``JobStatus``.
+
+    Mirrors ``core.jobs.runner.JobStatus`` exactly (including ``CANCELLED``,
+    reached via cooperative cancel — spec §5.10). The two enums are kept
+    separate (runtime layer vs. wire layer) but
+    ``tests/unit/core/jobs/test_job_type_contract.py`` proves they agree so
+    they cannot silently drift — see
+    ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`` (P1-JOBS-API).
+    """
 
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETE = "complete"
     ERROR = "error"
+    CANCELLED = "cancelled"
 
 
 class JobType(StrEnum):
-    """Discriminant for background job kind — spec §1 ``JobType``."""
+    """Discriminant for background job kind — spec §1 ``JobType``.
 
-    REFINE_BBOXES_PAGE = "refine_bboxes_page"
-    EXPAND_REFINE_BBOXES_PAGE = "expand_refine_bboxes_page"
-    RELOAD_OCR_PAGE = "reload_ocr_page"
-    EXPORT = "export"
+    Values are exactly the ``job_type`` strings the runner's registered
+    handlers accept (``core.jobs.runner._HANDLERS`` /
+    ``core.jobs.runner.registered_job_types()``); previously this enum
+    listed job types the runner never produced and omitted four it does —
+    see ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`` (P1-JOBS-API).
+    ``tests/unit/core/jobs/test_job_type_contract.py`` fails if a registered
+    handler has no matching member (or vice versa).
+    """
+
+    RELOAD_OCR = "reload_ocr"
     SAVE_PROJECT = "save_project"
-    REFINE_BBOXES_PROJECT = "refine_bboxes_project"
+    EXPORT = "export"
+    ROTATE_PAGE = "rotate_page"
+    AUTO_ROTATE_ALL = "auto_rotate_all"
+    REFINE_BBOXES = "refine_bboxes"
+    PROPOSE_PAGE_KINDS = "propose_page_kinds"
+    PROPOSE_REGIONS = "propose_regions"
 
 
 class JobProgress(BaseModel):
