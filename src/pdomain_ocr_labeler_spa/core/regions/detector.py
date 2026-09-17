@@ -9,9 +9,10 @@ plan does not compute a single proposal itself.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 from pdomain_book_contracts.annotation import RegionRole
 from pdomain_book_tools.ocr.page import Page
@@ -55,9 +56,16 @@ RegionDetector = Callable[[DetectorInput], Sequence[DetectedRegion]]
 """Takes one page and the book it belongs to, and returns what it detected."""
 
 
-@runtime_checkable
-class BookFittedDetector(Protocol):
+class BookFittedDetector(ABC):
     """A detector that must see the whole book before it judges any page.
+
+    A nominal base class, not a structural ``Protocol``. ``isinstance`` against
+    a ``runtime_checkable`` protocol checks only that an object has an
+    attribute named ``fit``, and ``fit`` is about the most common method name
+    in machine learning: any scikit-learn-style model has ``fit(X, y)``. A later
+    model-backed detector wrapping one would be routed down the book-fit path,
+    call an incompatible ``fit``, and propose nothing for the whole run. A
+    detector opts in by subclassing.
 
     Mirrors the "fit the whole book once, then judge each page" shape
     ``fit_book_templates`` already established (``core/page_measurement.py``).
@@ -70,7 +78,9 @@ class BookFittedDetector(Protocol):
     called directly, unchanged, with no ``fit`` step at all.
     """
 
-    def fit(self, book: Sequence[DetectorInput]) -> RegionDetector: ...
+    @abstractmethod
+    def fit(self, book: Sequence[DetectorInput]) -> RegionDetector:
+        """Fit to the whole book and return the per-page detector to use."""
 
 
 def null_region_detector(detector_input: DetectorInput) -> list[DetectedRegion]:

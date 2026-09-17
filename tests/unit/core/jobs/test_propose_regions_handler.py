@@ -130,7 +130,7 @@ def test_a_book_fitted_detector_gets_fit_called_once_with_one_input_per_page(
     fit_calls: list[Sequence[DetectorInput]] = []
     judged: list[DetectorInput] = []
 
-    class _RecordingBookFittedDetector:
+    class _RecordingBookFittedDetector(BookFittedDetector):
         def fit(self, book: Sequence[DetectorInput]) -> RegionDetector:
             fit_calls.append(book)
 
@@ -171,3 +171,41 @@ def test_a_plain_callable_detector_is_called_directly_with_no_fit(proposal_run_r
     asyncio.run(handle_propose_regions(runner, job))
 
     assert [d.page_index for d in seen] == [0, 1]
+
+
+def test_an_object_with_an_unrelated_fit_method_is_not_a_book_fitted_detector(
+    proposal_run_ready: Any,
+) -> None:
+    """Only a subclass of BookFittedDetector takes the book-fit path.
+
+    ``fit`` is the most common method name in machine learning. A callable
+    detector that happens to wrap something with ``fit(X, y)`` must be called
+    per page as a plain detector, never routed into the book-fit branch, where
+    calling its unrelated ``fit`` would fail and the run would propose nothing.
+    """
+    import asyncio
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
+    from pdomain_ocr_labeler_spa.core.regions.detector import (
+        BookFittedDetector,
+    )
+
+    runner, job, _project_state = proposal_run_ready
+    judged: list[DetectorInput] = []
+    unrelated_fit_calls: list[object] = []
+
+    class _ModelBackedDetector:
+        def fit(self, features: object, labels: object) -> None:
+            unrelated_fit_calls.append((features, labels))
+
+        def __call__(self, detector_input: DetectorInput) -> list[DetectedRegion]:
+            judged.append(detector_input)
+            return []
+
+    detector = _ModelBackedDetector()
+    assert not isinstance(detector, BookFittedDetector)
+    runner.context["region_detector"] = detector
+    asyncio.run(handle_propose_regions(runner, job))
+
+    assert unrelated_fit_calls == []
+    assert [d.page_index for d in judged] == [0, 1]

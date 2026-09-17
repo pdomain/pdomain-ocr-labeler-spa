@@ -8,6 +8,7 @@ from pdomain_book_contracts.annotation import RegionRole
 from pdomain_book_tools.ocr.page import Page
 from pdomain_pgdp_measure.page_templates import (
     BookTemplates,
+    PageClass,
     PageClassification,
     PageTemplate,
 )
@@ -111,7 +112,7 @@ def _input(
     *,
     bands: tuple[InkBand, ...] = (InkBand(100, 130),),
     ordinals: tuple[int, ...] = (0,),
-    page_class: str = "normal_recto",
+    page_class: PageClass = "normal_recto",
     confidence: float | None = 0.9,
     extra_line: list[dict[str, object]] | None = None,
 ) -> Any:

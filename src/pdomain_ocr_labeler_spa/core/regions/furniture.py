@@ -40,7 +40,7 @@ from pdomain_book_contracts.annotation import RegionRole
 from pdomain_book_tools.ocr.block import Block
 from pdomain_book_tools.ocr.word import Word
 
-from .detector import DetectedRegion, DetectorInput
+from .detector import BookFittedDetector, DetectedRegion, DetectorInput
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -403,7 +403,7 @@ def furniture_region_detector(detector_input: DetectorInput) -> list[DetectedReg
 
 
 @dataclass(frozen=True)
-class FurnitureDetector:
+class FurnitureDetector(BookFittedDetector):
     """A ``BookFittedDetector`` that fits the furniture gap threshold to its own book.
 
     ``fit`` pools every in-band word gap across the book (the same in-band
