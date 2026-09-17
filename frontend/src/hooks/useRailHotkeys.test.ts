@@ -117,6 +117,72 @@ describe("useRailHotkeys (Slice 10 / P1.f)", () => {
     expect(railStore.getState().mode).toBe("erase");
   });
 
+  it("'E' (uppercase, no Shift) also sets mode to erase", () => {
+    setup();
+    fireEvent.keyDown(document, { key: "E" });
+    expect(railStore.getState().mode).toBe("erase");
+  });
+
+  it("'A' (uppercase, no Shift) also sets mode to annotate", () => {
+    setup();
+    fireEvent.keyDown(document, { key: "A" });
+    expect(railStore.getState().mode).toBe("annotate");
+  });
+
+  // Reviewer finding 3 (P1-CANVAS-ERASE follow-up): Shift+E and Shift+A
+  // belong to the viewport's own hotkeys (useViewportHotkeys "shift+e"
+  // toggle-erase, "shift+a" add-word). Both this hook and useViewportHotkeys
+  // listen at document scope, so a single Shift+E keypress used to fire
+  // BOTH — this hook's own "E" mode binding raced the viewport's toggle and
+  // netted a no-op the user could never escape by pressing the key again.
+  // The same rule the Shift+digit guard above already applies now extends to
+  // these two letters: rail mode must NOT change while Shift is held for E
+  // or A, leaving the viewport hotkey as the sole handler.
+  it("Shift+'e' does NOT change rail mode (belongs to the viewport's shift+e)", () => {
+    setup();
+    railStore.getState().setMode("view");
+    fireEvent.keyDown(document, { key: "e", shiftKey: true });
+    expect(railStore.getState().mode).toBe("view");
+  });
+
+  it("Shift+'E' does NOT change rail mode (belongs to the viewport's shift+e)", () => {
+    setup();
+    railStore.getState().setMode("view");
+    fireEvent.keyDown(document, { key: "E", shiftKey: true });
+    expect(railStore.getState().mode).toBe("view");
+  });
+
+  it("Shift+'a' does NOT change rail mode (belongs to the viewport's shift+a)", () => {
+    setup();
+    railStore.getState().setMode("view");
+    fireEvent.keyDown(document, { key: "a", shiftKey: true });
+    expect(railStore.getState().mode).toBe("view");
+  });
+
+  it("Shift+'A' does NOT change rail mode (belongs to the viewport's shift+a)", () => {
+    setup();
+    railStore.getState().setMode("view");
+    fireEvent.keyDown(document, { key: "A", shiftKey: true });
+    expect(railStore.getState().mode).toBe("view");
+  });
+
+  // V and R are NOT viewport hotkeys — Shift+V / Shift+R must keep driving
+  // rail mode exactly as before (regression guard: the fix must not widen
+  // past the two letters the viewport actually owns).
+  it("Shift+'v' still sets mode to view (V is not a viewport hotkey)", () => {
+    setup();
+    railStore.getState().setMode("erase");
+    fireEvent.keyDown(document, { key: "v", shiftKey: true });
+    expect(railStore.getState().mode).toBe("view");
+  });
+
+  it("Shift+'R' still sets mode to region (R is not a viewport hotkey)", () => {
+    setup();
+    railStore.getState().setMode("view");
+    fireEvent.keyDown(document, { key: "R", shiftKey: true });
+    expect(railStore.getState().mode).toBe("region");
+  });
+
   it("unrelated keys do not change state", () => {
     setup();
     pressKey("x");

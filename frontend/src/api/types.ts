@@ -416,12 +416,18 @@ export interface paths {
          *     ``page_record`` and ``line_matches`` without requiring a separate
          *     Reload OCR click.
          *
-         *     A loader failure on that on-demand call degrades to an empty
-         *     ``page_record`` rather than a 500 — the request still succeeds so the
-         *     image renders — but is logged at WARNING and stamped onto
-         *     ``PagePayload.page_load_error`` (issue
+         *     A failure on that on-demand call degrades to an empty ``page_record``
+         *     rather than a 500 — the request still succeeds so the image renders —
+         *     but is stamped onto ``PagePayload.page_load_error`` (issue
          *     2026-08-08-get-page-hides-ocr-failures), distinguishing it from a page
-         *     that legitimately has no OCR text.
+         *     that legitimately has no OCR text. Two distinct causes get two codes:
+         *
+         *     - ``ocr_unavailable`` — the loader itself couldn't be built (DocTR not
+         *       installed, production context keys unwired). A deployment-wide
+         *       condition, not a fact about this page; logged at WARNING once per
+         *       project, DEBUG after.
+         *     - ``ocr_load_failed`` — the loader built fine but this page's OCR run
+         *       raised. Logged at WARNING every time.
          */
         get: operations["get_page_api_projects__project_id__pages__page_index__get"];
         put?: never;
@@ -673,6 +679,43 @@ export interface paths {
          *     part of the saved labeled envelope.
          */
         post: operations["update_selection_api_projects__project_id__pages__page_index__selection_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/erase-pixels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Erase Page Pixels
+         * @description ``POST .../pages/{page_index}/erase-pixels`` — erase a page-space bbox.
+         *
+         *     P1-CANVAS-ERASE (``docs/issues/2026-07-21-canvas-erase-mode-noop.md``):
+         *     the page-scoped counterpart to
+         *     ``POST .../words/{li}/{wi}/erase-pixels`` (``api/words.py``). That
+         *     route's own docstring already establishes that ``(line_index,
+         *     word_index)`` only anchors the operation onto a word for selection
+         *     feedback — the erase rectangle always comes from ``body.bbox``, in
+         *     page-image coordinates. A canvas drag (``PageImageCanvas`` erase mode)
+         *     has no word to anchor to, so this route erases directly against the
+         *     page image with no word-resolution step at all — it works on a page
+         *     with no words on it, which the word-scoped route cannot serve.
+         *
+         *     Both routes call the shared ``_erase_pixels_on_page_image`` helper (this
+         *     module) under their own per-page lock, so the clamping,
+         *     ``finalize_page_structure`` call, post-erase image-blob persistence
+         *     (Lane A / Task A4 — "Reload OCR (Edited)"), event-store write, and
+         *     failure envelopes cannot drift between them.
+         */
+        post: operations["erase_page_pixels"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1293,17 +1336,19 @@ export interface paths {
          *
          *     Spec 23 §9 row 11 names ``page.erase_pixels(bbox, fill_value=255)``,
          *     which does not exist in pdomain-book-tools (tracking ConcaveTrillion/
-         *     pdomain-book-tools#53). The handler mirrors the legacy labeler's inline
-         *     implementation at ``pd_ocr_labeler/state/page_state.py:1802``:
+         *     pdomain-book-tools#53). The actual erase (clamp bbox to image extents,
+         *     fill, ``page.finalize_page_structure()``, post-erase image-blob
+         *     persistence, event-store write) is delegated to the shared
+         *     ``api.pages._erase_pixels_on_page_image`` helper — mirrors the legacy
+         *     labeler's inline implementation at
+         *     ``pd_ocr_labeler/state/page_state.py:1802`` — which this route shares
+         *     with the page-scoped ``POST .../pages/{page_index}/erase-pixels`` route
+         *     (P1-CANVAS-ERASE) so the two cannot drift.
          *
-         *     1. Resolve ``page.cv2_numpy_page_image`` → numpy ndarray.
-         *     2. Clamp the bbox to image extents.
-         *     3. Assign ``image[top:bottom, left:right] = clamped_fill_value``.
-         *     4. Call ``page.finalize_page_structure()`` so derived caches reset.
-         *
-         *     Note that ``(line_index, word_index)`` is only used to anchor the
-         *     operation onto a specific word for selection feedback; the actual
-         *     erase rectangle is taken from ``body.bbox`` (image-coordinate, not
+         *     ``(line_index, word_index)`` here is only used to resolve a target word
+         *     (returning 404 ``word_not_found`` when it doesn't exist) and to anchor
+         *     the changelog entry for selection feedback; the actual erase rectangle
+         *     is always taken from ``body.bbox`` (image-coordinate, not
          *     word-relative).
          */
         post: operations["erase_pixels_api_projects__project_id__pages__page_index__words__line_index___word_index__erase_pixels_post"];
@@ -3480,7 +3525,7 @@ export interface components {
         };
         /**
          * ErasePixelsRequest
-         * @description Spec §2 lines 330-332.
+         * @description Body for ``POST .../erase-pixels`` (page- and word-scoped variants).
          *
          *     ``shape`` controls how the fill is applied within the bbox:
          *
@@ -3491,6 +3536,13 @@ export interface components {
          *       ``cv2.ellipse`` with a numpy mask.  Use this for brush ops so that
          *       the corners of the bounding square are **not** erased — only the
          *       circular region the user actually painted.
+         *
+         *     Defined here (rather than in ``api/words.py``) because both the
+         *     page-scoped ``POST .../pages/{page_index}/erase-pixels`` route (this
+         *     module) and the word-scoped
+         *     ``POST .../words/{li}/{wi}/erase-pixels`` route (``api/words.py``) need
+         *     it, and ``api/words.py`` already imports from this module — the reverse
+         *     import would be circular.
          */
         ErasePixelsRequest: {
             bbox: components["schemas"]["BBox"];
@@ -6650,6 +6702,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["UpdateSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    erase_page_pixels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ErasePixelsRequest"];
             };
         };
         responses: {
