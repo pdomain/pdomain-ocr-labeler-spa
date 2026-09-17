@@ -67,7 +67,7 @@ export interface PageActionsCompactProps {
 // ProjectPage's own BusyOverlay-tracked job.
 
 /**
- * reload_ocr_page is in BusyOverlay's BEST_EFFORT_CANCEL set, not its
+ * reload_ocr is in BusyOverlay's BEST_EFFORT_CANCEL set, not its
  * CANCELLABLE set: reload_ocr.py never polls `runner.is_cancelled` between
  * its stages, so a cancel request only flips the job's status — OCR keeps
  * running in its background thread and may still complete. Matches
@@ -326,7 +326,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     onError: (jobId) => {
       toast.error("OCR failed", { id: jobId });
     },
-    // P1-CANCEL: reload_ocr_page is best-effort only (BusyOverlay's
+    // P1-CANCEL: reload_ocr is best-effort only (BusyOverlay's
     // BEST_EFFORT_CANCEL, not CANCELLABLE) — reload_ocr.py never polls
     // is_cancelled between its stages, so the terminal "cancelled" event's
     // own progress message is just whatever OCR stage happened to be in
