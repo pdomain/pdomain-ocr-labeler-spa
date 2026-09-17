@@ -507,6 +507,13 @@ export default function ProjectPage() {
   // `isAnyMutationPending` is computed here (before isMutating below) from
   // the already-declared mutation hooks so useGlobalHotkeys receives a value
   // in the same render pass.
+  //
+  // 2026-09-17 review finding: while a `load_page` job is in flight,
+  // `pagePayload` has no `page_record` / `line_matches` yet (see
+  // `pageLoadJobId` above) — the same "nothing to act on" state any other
+  // pending mutation represents. Without `pageLoadJobId` here, Mod+S / Mod+R
+  // etc. stayed live and fired against that empty payload. Gated the same
+  // way as every other in-flight mutation.
   const isAnyMutationPending =
     reloadOcr.isPending ||
     reloadOcrEdited.isPending ||
@@ -515,7 +522,8 @@ export default function ProjectPage() {
     loadPage.isPending ||
     rematchGt.isPending ||
     undoPage.isPending ||
-    redoPage.isPending;
+    redoPage.isPending ||
+    pageLoadJobId !== null;
   const totalPages = projectQ.data?.image_paths?.length ?? 0;
   const currentPageNo = idx0 + 1;
   useGlobalHotkeys({
@@ -649,7 +657,15 @@ export default function ProjectPage() {
   // instead (see its render below).
   const isProjectLoading = projectQ.isLoading;
 
-  // Busy state — any mutation in flight OR an active job.
+  // Busy state — any mutation in flight OR an active job. Drives
+  // `BusyOverlay`, which is `fixed inset-0` (full viewport). Deliberately
+  // does NOT include `pageLoadJobId`, unlike `isAnyMutationPending` above:
+  // folding it in here would put the full-viewport overlay back up for the
+  // page-load wait, which is exactly the shell-blocking behavior
+  // `PageLoadStatus` (scoped to `image-pane` only) replaced — see
+  // `isProjectLoading`'s comment. The hotkey gate and the overlay gate serve
+  // different ends: one guards against acting on an empty payload, the
+  // other is a visibility choice about how much of the shell a wait covers.
   const isMutating =
     reloadOcr.isPending ||
     reloadOcrEdited.isPending ||

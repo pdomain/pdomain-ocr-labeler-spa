@@ -27,7 +27,7 @@
 // in the hook under test can construct it (Vitest 5 / JS spec).
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -454,5 +454,48 @@ describe("ProjectPage — on-demand page-OCR job progress (2026-08-08)", () => {
     expect(screen.queryByTestId("page-load-status")).toBeNull();
     expect(screen.queryByTestId("page-load-error")).toBeNull();
     expect(esConstructor).not.toHaveBeenCalled();
+  });
+
+  it("2026-09-17 review: gates the Save-page hotkey while the load job is in flight", async () => {
+    // While `page-load-status` is showing, `pagePayload` has no
+    // `page_record` / `line_matches` yet — Mod+S must be a no-op, the same
+    // as it is during any other in-flight mutation (isAnyMutationPending).
+    // Un-gates once the job completes and the page has real content.
+    let saveCalls = 0;
+    let pageCalls = 0;
+    server.use(
+      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid/pages/:idx", () => {
+        pageCalls += 1;
+        return HttpResponse.json(pageCalls === 1 ? pendingPageFixture() : loadedPageFixture());
+      }),
+      http.post("/api/projects/:pid/pages/:idx/save", () => {
+        saveCalls += 1;
+        return HttpResponse.json({ saved: true, page_source: "labeled" });
+      }),
+    );
+    renderProjectPage();
+    await screen.findByTestId("page-load-status");
+
+    fireEvent.keyDown(document, { key: "s", code: "KeyS", ctrlKey: true });
+    // Give a wrongly-fired mutation a real chance to land before asserting
+    // the negative — `waitFor` alone can't prove an absence.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(saveCalls).toBe(0);
+
+    // Complete the job — the page refetches and the gate lifts.
+    act(() => {
+      sources[0]?._emit(
+        "complete",
+        loadPageFrame({
+          status: "complete",
+          progress: { current: 2, total: 2, message: "Page loaded." },
+        }),
+      );
+    });
+    await waitFor(() => expect(screen.queryByTestId("page-load-status")).toBeNull());
+
+    fireEvent.keyDown(document, { key: "s", code: "KeyS", ctrlKey: true });
+    await waitFor(() => expect(saveCalls).toBe(1));
   });
 });
