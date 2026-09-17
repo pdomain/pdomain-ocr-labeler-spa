@@ -543,3 +543,18 @@ and browser gates pass on the merged tree.
   `tests/integration/test_page_erase_pixels_router.py` and
   `tests/e2e/test_canvas_erase.py`.
 - Remaining work: none
+
+### [2026-09-17] Retired: keyboard line navigation moved only the worklist
+
+- Old path: `docs/issues/2026-07-21-match-nav-selection-desync.md`
+- Outcome: implemented
+- Superseded by: `frontend/src/stores/worklist-focus.ts` (`focusWorklistLine`)
+- Resolved by: `f1d227f` (merge of `fix/match-nav`)
+- Rationale kept: `j` and `k` used to move `worklistStore.selectedLineIndex`
+  while a row click also called `selectLine`, so the canvas, breadcrumb and
+  right panel stayed on another line and an action hotkey could act on a line
+  the rest of the UI did not show as selected. Both paths now call one
+  function, and nothing else writes that index. Evidence:
+  `frontend/src/stores/worklist-focus.test.ts` and
+  `tests/e2e/test_match_nav_selection_sync.py`.
+- Remaining work: none

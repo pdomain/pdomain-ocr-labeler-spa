@@ -267,7 +267,7 @@ Each row is a governed issue under `docs/issues/`. Prefer implementing by issue
 | 3b | done 2026-09-17 in `fe396c3`; see the tombstone in `docs/context/decisions.md` | P1-CANVAS-ERASE |
 | 3b | [`docs/issues/2026-07-21-image-drift-banner-hard-off.md`](../issues/2026-07-21-image-drift-banner-hard-off.md) | P1-IMAGE-DRIFT |
 | 3b | [`docs/issues/2026-07-21-job-cancel-incomplete.md`](../issues/2026-07-21-job-cancel-incomplete.md) | P1-CANCEL |
-| 3b | [`docs/issues/2026-07-21-match-nav-selection-desync.md`](../issues/2026-07-21-match-nav-selection-desync.md) | P1-MATCH-NAV |
+| 3b | done 2026-09-17 in `f1d227f`; see the tombstone in `docs/context/decisions.md` | P1-MATCH-NAV |
 | 3b | [`docs/issues/2026-07-21-bbox-refine-crop-misleading.md`](../issues/2026-07-21-bbox-refine-crop-misleading.md) | P1-BBOX-UI |
 | 3b | (existing) [`docs/context/open-findings.md`](../context/open-findings.md) + open-findings plan | KBD / XDG / RELOAD / HIER |
 | 4 | [`docs/issues/2026-05-22-gh-430-ci-equivalence.md`](../issues/2026-05-22-gh-430-ci-equivalence.md) | P1-CI-GATES |
