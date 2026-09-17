@@ -514,6 +514,34 @@ kind for filtered, bulk review.
 conformance test asserts only the static/trigger testids above, the same
 convention §2.15 uses for its parameterised testids.
 
+### 2.18 Review queue panel (spec `2026-09-17-book-review-queue-design.md`)
+
+A fourth Drawer tab, "Queue", lists the book-wide review queue: every
+undecided region proposal, in reading order (default) or lowest-confidence-
+first order. Its count badge is fed by the same `total_undecided` the Rail
+badge (§2.14) reads. Clicking a row navigates to that proposal's page
+(unless it is already the open page) and selects it, reusing the same
+`review-selection-intent-store` the `]`/`[` hotkeys use.
+
+| Testid | What it is |
+|---|---|
+| `drawer-tab-queue` | Queue tab trigger (Drawer header, alongside `drawer-tab-worklist` etc.) |
+| `drawer-tab-count-queue` | Count badge on the Queue tab (shown once `total_undecided > 0`) |
+| `review-queue-panel` | Outer panel container |
+| `review-queue-order-reading` | Order toggle: reading order (default) |
+| `review-queue-order-confidence` | Order toggle: lowest confidence first |
+| `review-queue-loading` | Shown while the first fetch is in flight |
+| `review-queue-empty` | Shown once loaded with no undecided proposals |
+| `review-queue-list` | Row list container |
+| `review-queue-item-{pageIndex}-{proposalId}` | One row; clicking it navigates to `pageIndex` and selects `proposalId` (no navigation when `pageIndex` is already the open page) |
+| `review-queue-item-evidence-{pageIndex}-{proposalId}` | The item's evidence signal, present only when the item carries one |
+
+`review-queue-item-{pageIndex}-{proposalId}` and its evidence sub-testid are
+parameterised by the 0-based `page_index` (driver-contract §5's resource-key
+convention) and the proposal id; the conformance test asserts only the
+static/trigger testids above, the same convention §2.15 and §2.17 use for
+their parameterised testids.
+
 ---
 
 ## 3. ARIA + accessible-name guarantees
