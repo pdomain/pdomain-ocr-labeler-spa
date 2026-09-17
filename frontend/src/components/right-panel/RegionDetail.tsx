@@ -38,6 +38,7 @@ import {
   useRejectProposal,
   useEditRegion,
   useDeleteRegion,
+  useRegionDecisionPending,
 } from "../../hooks/useRegionMutations";
 import type { components } from "../../api/types";
 
@@ -141,6 +142,11 @@ export function RegionDetail({ page, projectId, pageIndex }: RegionDetailProps) 
   const rejectProposal = useRejectProposal(projectId, pageIndex);
   const editRegion = useEditRegion(projectId, pageIndex);
   const deleteRegion = useDeleteRegion(projectId, pageIndex);
+  // Whole-branch review defect 1: a keyboard decision (useRegionReviewHotkeys,
+  // a separate hook instance) shares its in-flight signal with this panel's
+  // own mutations through the mutationKey, so every action button below is
+  // also disabled while a keyboard-initiated decision is pending.
+  const decisionPending = useRegionDecisionPending(projectId, pageIndex);
 
   if (level !== "region") {
     return <NotSelected />;
@@ -160,6 +166,7 @@ export function RegionDetail({ page, projectId, pageIndex }: RegionDetailProps) 
         proposal={proposal}
         acceptProposal={acceptProposal}
         rejectProposal={rejectProposal}
+        decisionPending={decisionPending}
       />
     );
   }
@@ -176,6 +183,7 @@ export function RegionDetail({ page, projectId, pageIndex }: RegionDetailProps) 
         region={region}
         editRegion={editRegion}
         deleteRegion={deleteRegion}
+        decisionPending={decisionPending}
       />
     );
   }
@@ -240,6 +248,7 @@ interface ProposalDetailProps {
   proposal: RegionProposalView | undefined;
   acceptProposal: ReturnType<typeof useAcceptProposal>;
   rejectProposal: ReturnType<typeof useRejectProposal>;
+  decisionPending: boolean;
 }
 
 function ProposalDetail({
@@ -248,6 +257,7 @@ function ProposalDetail({
   proposal,
   acceptProposal,
   rejectProposal,
+  decisionPending,
 }: ProposalDetailProps) {
   const [acceptAsRole, setAcceptAsRole] = useState<RegionRole | "">("");
   const evidenceEntries = Object.entries(proposal?.evidence ?? {});
@@ -293,7 +303,7 @@ function ProposalDetail({
         <button
           type="button"
           data-testid="region-detail-accept"
-          disabled={acceptProposal.isPending}
+          disabled={acceptProposal.isPending || decisionPending}
           onClick={() => {
             acceptProposal.mutate({ proposalId });
           }}
@@ -315,12 +325,12 @@ function ProposalDetail({
             testId="region-detail-accept-as-select"
             value={acceptAsRole}
             onChange={setAcceptAsRole}
-            disabled={acceptProposal.isPending}
+            disabled={acceptProposal.isPending || decisionPending}
           />
           <button
             type="button"
             data-testid="region-detail-accept-as-apply"
-            disabled={acceptProposal.isPending || acceptAsRole === ""}
+            disabled={acceptProposal.isPending || decisionPending || acceptAsRole === ""}
             onClick={() => {
               if (acceptAsRole === "") return;
               acceptProposal.mutate({ proposalId, role: acceptAsRole });
@@ -334,7 +344,7 @@ function ProposalDetail({
         <button
           type="button"
           data-testid="region-detail-reject"
-          disabled={rejectProposal.isPending}
+          disabled={rejectProposal.isPending || decisionPending}
           onClick={() => {
             rejectProposal.mutate({ proposalId });
           }}
@@ -362,6 +372,7 @@ interface ConfirmedRegionDetailProps {
   region: RegionView;
   editRegion: ReturnType<typeof useEditRegion>;
   deleteRegion: ReturnType<typeof useDeleteRegion>;
+  decisionPending: boolean;
 }
 
 function ConfirmedRegionDetail({
@@ -369,6 +380,7 @@ function ConfirmedRegionDetail({
   region,
   editRegion,
   deleteRegion,
+  decisionPending,
 }: ConfirmedRegionDetailProps) {
   const [changeRoleValue, setChangeRoleValue] = useState<RegionRole | "">("");
   const origin = region.proposal_id ? "From a proposal" : "Drawn by hand";
@@ -400,12 +412,12 @@ function ConfirmedRegionDetail({
             testId="region-detail-change-role-select"
             value={changeRoleValue}
             onChange={setChangeRoleValue}
-            disabled={editRegion.isPending}
+            disabled={editRegion.isPending || decisionPending}
           />
           <button
             type="button"
             data-testid="region-detail-change-role-apply"
-            disabled={editRegion.isPending || changeRoleValue === ""}
+            disabled={editRegion.isPending || decisionPending || changeRoleValue === ""}
             onClick={() => {
               if (changeRoleValue === "") return;
               editRegion.mutate({ regionId, role: changeRoleValue });
@@ -427,7 +439,7 @@ function ConfirmedRegionDetail({
         <button
           type="button"
           data-testid="region-detail-delete"
-          disabled={deleteRegion.isPending}
+          disabled={deleteRegion.isPending || decisionPending}
           onClick={handleDelete}
           className="text-[11px] py-1.5 rounded-sm border border-status-mismatch/60 text-status-mismatch hover:bg-status-mismatch/10 transition-colors disabled:opacity-40"
         >

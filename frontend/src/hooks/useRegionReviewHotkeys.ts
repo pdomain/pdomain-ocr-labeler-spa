@@ -28,6 +28,16 @@
 // from the page payload the caller already holds — the mutation's success
 // refetches the page and the decided proposal is gone from that payload, so
 // computing the neighbour afterwards would find the wrong one.
+//
+// Whole-branch review defect 1 (double-fire / silent keyboard failure):
+//   - `decisionPending` (from `useRegionDecisionPending`, a shared
+//     `useIsMutating` read) gates enter/x/delete so a held or double-tapped
+//     key — or a key pressed while `RegionDetail`'s button is mid-request —
+//     cannot fire a second request. See useRegionMutations.ts.
+//   - Every mutate call below gets an `onError` that toasts a short
+//     "<Action> failed" message, so a failed keyboard decision is no longer
+//     silent. `onSuccess` (auto-advance) does not run on failure, so nothing
+//     advances when the request fails.
 
 import { useSyncExternalStore } from "react";
 import { useHotkey } from "./useHotkey";
@@ -35,7 +45,12 @@ import { railStore } from "../stores/rail-store";
 import { selectionStore, selectProposal, clearSelection } from "../stores/selection-store";
 import type { SelectionPath } from "../lib/selection-walk";
 import { orderedUndecidedProposals } from "../lib/region-hit-test";
-import { useAcceptProposal, useRejectProposal, useDeleteRegion } from "./useRegionMutations";
+import {
+  useAcceptProposal,
+  useRejectProposal,
+  useDeleteRegion,
+  useRegionDecisionPending,
+} from "./useRegionMutations";
 import { dialogStore } from "../stores/dialog-store";
 import { toast } from "../lib/toast";
 import type { components } from "../api/types";
@@ -113,6 +128,7 @@ export function useRegionReviewHotkeys({
   const acceptProposal = useAcceptProposal(projectId, pageIndex);
   const rejectProposal = useRejectProposal(projectId, pageIndex);
   const deleteRegion = useDeleteRegion(projectId, pageIndex);
+  const decisionPending = useRegionDecisionPending(projectId, pageIndex);
 
   const regionTargetActive = railTarget === "region";
   const selectedProposalId = path.proposalId;
@@ -144,6 +160,9 @@ export function useRegionReviewHotkeys({
         onSuccess: () => {
           advanceTo(next);
         },
+        onError: () => {
+          toast.error("Accept failed");
+        },
       },
     );
   }
@@ -156,6 +175,9 @@ export function useRegionReviewHotkeys({
         onSuccess: () => {
           advanceTo(next);
         },
+        onError: () => {
+          toast.error("Reject failed");
+        },
       },
     );
   }
@@ -165,7 +187,14 @@ export function useRegionReviewHotkeys({
       title: "Delete region",
       body: "This confirmed region will be permanently deleted.",
       onConfirm: () => {
-        deleteRegion.mutate({ regionId });
+        deleteRegion.mutate(
+          { regionId },
+          {
+            onError: () => {
+              toast.error("Delete failed");
+            },
+          },
+        );
       },
     });
   }
@@ -189,6 +218,7 @@ export function useRegionReviewHotkeys({
   useHotkey(
     "enter",
     () => {
+      if (decisionPending) return;
       if (selectedProposalId !== undefined) acceptSelected(selectedProposalId);
     },
     { enabled: regionTargetActive && selectedProposalId !== undefined },
@@ -197,6 +227,7 @@ export function useRegionReviewHotkeys({
   useHotkey(
     "x",
     () => {
+      if (decisionPending) return;
       if (selectedProposalId !== undefined) rejectSelected(selectedProposalId);
     },
     { enabled: regionTargetActive && selectedProposalId !== undefined },
@@ -205,6 +236,7 @@ export function useRegionReviewHotkeys({
   useHotkey(
     "delete",
     () => {
+      if (decisionPending) return;
       if (selectedRegionId !== undefined) deleteSelected(selectedRegionId);
     },
     { enabled: selectedRegionId !== undefined },
