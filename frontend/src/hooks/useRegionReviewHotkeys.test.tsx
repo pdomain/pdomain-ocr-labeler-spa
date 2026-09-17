@@ -112,6 +112,38 @@ function renderHotkeys(
   };
 }
 
+/**
+ * Like `renderHotkeys`, but returns `rerender` wired to swap in a new
+ * `page`/`pageIndex` pair without unmounting — used to simulate navigating
+ * between pages within one hook instance's lifetime (its `useRef` state
+ * persists across the rerender, same as it would across a real route change
+ * within one mounted `ProjectPage`).
+ */
+function renderHotkeysReRenderable(
+  page: PagePayload,
+  options?: { navigate?: NavigateFunction; pageIndex?: number },
+) {
+  const qc = makeQueryClient();
+  const navigate: NavigateFunction = options?.navigate ?? vi.fn();
+  const pageIndex = options?.pageIndex ?? PAGE_IDX;
+  const utils = renderHook(
+    (props: { page: PagePayload; pageIndex: number }) =>
+      useRegionReviewHotkeys({
+        page: props.page,
+        projectId: PROJECT_ID,
+        pageIndex: props.pageIndex,
+        navigate,
+      }),
+    {
+      initialProps: { page, pageIndex },
+      wrapper: ({ children }: { children: React.ReactNode }) => (
+        <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+      ),
+    },
+  );
+  return { ...utils, navigate, qc };
+}
+
 // react-hotkeys-hook 5 matches against the physical `KeyboardEvent.code`
 // (e.g. "KeyN"), not `.key` — jsdom does not derive it from `key`, so every
 // combo used in these tests needs its code spelled out explicitly.
@@ -301,6 +333,67 @@ describe("useRegionReviewHotkeys: x rejects and clears at the end of the list", 
     await waitFor(() => expect(rejectedId).toBe("only"));
     expect(infoSpy).toHaveBeenCalledWith(
       "No undecided proposals left on this page. 12 left in the book; press ] for the next.",
+    );
+  });
+
+  // Finding 3 (low, ~line 245): `bookRemainingAfter` used to subtract a flat
+  // 1 from whatever total_undecided was already cached. Two page-emptying
+  // decisions that both settle before the review-queue invalidation refetch
+  // resolves — the cache stays stale the whole time in this test, since the
+  // queue route only ever answers once — both used to read `total - 1` and
+  // report the same "12 left" count. Deciding on two different pages (the
+  // second via `rerender`, simulating navigating there) means the second
+  // decision isn't blocked by the shared-mutation-key `decisionPending` gate
+  // (whole-branch review defect 1), which only covers one page at a time.
+  it("counts decisions made since the cached queue value, not just the most recent one", async () => {
+    const infoSpy = vi.spyOn(toast, "info");
+    let queueFetchCount = 0;
+    server.use(
+      http.get("/api/projects/:pid/regions/review-queue", () => {
+        queueFetchCount += 1;
+        if (queueFetchCount > 1) return new Promise<Response>(() => {}); // invalidation refetch: never resolves
+        return HttpResponse.json({
+          total_undecided: 13,
+          pages: [
+            { page_index: 5, undecided: 1, first_proposal_id: "onlyA", last_proposal_id: "onlyA" },
+            { page_index: 6, undecided: 1, first_proposal_id: "onlyB", last_proposal_id: "onlyB" },
+          ],
+          items: [],
+        });
+      }),
+      http.post(
+        "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject",
+        ({ params }) => HttpResponse.json({ ...PAGE, regions: [], page_index: Number(params.idx) }),
+      ),
+    );
+    const pageOnlyA: PagePayload = { ...PAGE, page_index: 5, regions: [proposal("onlyA", 0)] };
+    const pageOnlyB: PagePayload = { ...PAGE, page_index: 6, regions: [proposal("onlyB", 0)] };
+
+    act(() => selectProposal("onlyA"));
+    const { rerender, qc } = renderHotkeysReRenderable(pageOnlyA, { pageIndex: 5 });
+    await waitFor(() =>
+      expect(qc.getQueryData(["review-queue", PROJECT_ID, "reading", 0])).toBeDefined(),
+    );
+
+    pressKey("x");
+    await waitFor(() =>
+      expect(infoSpy).toHaveBeenLastCalledWith(
+        "No undecided proposals left on this page. 12 left in the book; press ] for the next.",
+      ),
+    );
+
+    // Simulate navigating to a different page with its own single proposal,
+    // before the first decision's invalidation refetch (still pending, per
+    // the handler above) has resolved — the queue cache is still the same
+    // stale `total_undecided: 13`.
+    rerender({ page: pageOnlyB, pageIndex: 6 });
+    act(() => selectProposal("onlyB"));
+
+    pressKey("x");
+    await waitFor(() =>
+      expect(infoSpy).toHaveBeenLastCalledWith(
+        "No undecided proposals left on this page. 11 left in the book; press ] for the next.",
+      ),
     );
   });
 

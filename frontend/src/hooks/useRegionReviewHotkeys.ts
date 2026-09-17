@@ -69,7 +69,7 @@
 // ordered *after* its page-change clear so the clear cannot undo it (see
 // that file's comment on the two effects' ordering).
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { NavigateFunction } from "react-router-dom";
 import { useHotkey } from "./useHotkey";
@@ -207,6 +207,28 @@ export function useRegionReviewHotkeys({
   const queueQ = useReviewQueue(projectId);
   const queuePages = queueQ.data?.pages ?? [];
 
+  // Finding 3 (low, ~line 245): how many page-emptying decisions have
+  // completed since the review-queue cache last landed a fetch. Reset
+  // whenever `queueQ.dataUpdatedAt` changes — that is the instant a fresh
+  // fetch (e.g. the invalidation refetch a decision itself triggers) lands
+  // in the cache, so counting starts over against the new baseline. Two
+  // page-emptying decisions that both settle before that refetch resolves
+  // each bump the count, so the toast subtracts 2 (not 1 twice) from the
+  // stale cached total. The reset lives in an effect (rather than a
+  // render-time ref mutation, which `eslint-plugin-react-hooks`'s `refs`
+  // rule forbids) — it still lands before any decision made after the next
+  // commit, since a decision is always a later, separate event (a keypress
+  // or a mutation's `onSuccess`), never something that can run inside the
+  // same render pass as the `dataUpdatedAt` change itself.
+  const decisionsSinceFetchRef = useRef(0);
+  const queueDataUpdatedAtRef = useRef(queueQ.dataUpdatedAt);
+  useEffect(() => {
+    if (queueDataUpdatedAtRef.current !== queueQ.dataUpdatedAt) {
+      queueDataUpdatedAtRef.current = queueQ.dataUpdatedAt;
+      decisionsSinceFetchRef.current = 0;
+    }
+  }, [queueQ.dataUpdatedAt]);
+
   const regionTargetActive = railTarget === "region";
   const selectedProposalId = path.proposalId;
   const selectedRegionId = path.regionId;
@@ -239,15 +261,19 @@ export function useRegionReviewHotkeys({
    * decision that just emptied this page — its own invalidation
    * (useRegionMutations.ts) has only just fired and the refetch is still in
    * flight, so waiting for it would delay the toast on an unrelated network
-   * round trip. Subtracting one from the value already in hand is exact for
-   * a single decision and available synchronously in the same tick as the
-   * mutation's `onSuccess`.
+   * round trip. Subtracting the number of page-emptying decisions made since
+   * that fetch (tracked by `decisionsSinceFetchRef`, floored at 0) stays
+   * exact even when a second decision settles before the first decision's
+   * invalidation refetch resolves — otherwise both would subtract 1 from the
+   * same stale total and report the same count.
    */
   function bookRemainingAfter(decided: boolean): number | undefined {
     const cached = qc.getQueryData<RegionReviewQueueResponse>(reviewQueueKey(projectId));
     const total = cached?.total_undecided;
     if (total === undefined) return undefined;
-    return decided ? Math.max(total - 1, 0) : total;
+    if (!decided) return total;
+    decisionsSinceFetchRef.current += 1;
+    return Math.max(total - decisionsSinceFetchRef.current, 0);
   }
 
   /** Select `next`, or clear the selection and say so when there is none. */
