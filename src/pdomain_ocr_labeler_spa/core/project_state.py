@@ -68,7 +68,7 @@ for the symmetric view from the route side.)
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -199,9 +199,11 @@ class ProjectState:
 
     One instance lives on ``app.state.project_state`` (when wired —
     iter-5+ will add the bootstrap step). Mutated under a
-    ``threading.Lock`` so concurrent route handlers (sync via
+    ``threading.RLock`` so concurrent route handlers (sync via
     threadpool, async via event loop) can safely call ``set_*``
-    methods without lost updates on the ``generation`` counter.
+    methods without lost updates on the ``generation`` counter, and so
+    a caller already holding it (``claim_load_page_job``) can call back
+    into another locking method without deadlocking itself.
 
     Generation contract (mirrors ``ActiveProjectCarrier``):
     every successful mutation bumps ``generation`` by exactly one.
@@ -211,7 +213,17 @@ class ProjectState:
     """
 
     def __init__(self) -> None:
-        self._lock = threading.Lock()
+        # RLock, not Lock: ``claim_load_page_job`` holds ``self._lock`` while
+        # its caller-supplied ``submit`` callable runs, and that callable may
+        # itself call ``open_labeling_page`` (also ``self._lock``) to resolve
+        # a book-labeling lease for the job — a plain ``Lock`` would
+        # deadlock the same thread on that nested acquisition. Every other
+        # user of ``self._lock`` (here and in ``core/page_state.py`` /
+        # ``core/jobs/handlers/*.py``) takes it exactly once per call, so
+        # reentrancy adds no new behavior for them — same reasoning
+        # ``core/persistence/book_labeling_session.py`` already used for its
+        # own lock.
+        self._lock = threading.RLock()
         self._loaded_project: Project | None = None
         self._loaded_labeling_bundle: LoadedLabelingBundle | None = None
         self._book_labeling_session: BookLabelingSession | None = None
@@ -225,6 +237,20 @@ class ProjectState:
         # (threadpool workers), and threading.Lock is safe to take from
         # both sync and async contexts via FastAPI's threadpool dispatch.
         self._page_locks: dict[int, threading.Lock] = {}
+        # In-flight ``load_page`` job id per page index, for the currently
+        # loaded project only — docs/issues/2026-08-08-page-load-progress-
+        # unbuilt.md follow-up (duplicate jobs on concurrent cold fetches).
+        # Guarded by ``self._lock`` via ``claim_load_page_job`` so two
+        # concurrent ``GET`` fetches of the same cold page cannot both
+        # decide "no job yet" and both submit one, which used to run OCR
+        # twice with no ordering on which result got written — the
+        # regression ``ensure_page_model``'s own docstring warns about
+        # (holding the project lock across OCR is what used to prevent
+        # this; OCR now runs inside the job, off that lock). Reset
+        # alongside ``_page_states``/``_page_locks`` on every project swap
+        # so a stale job id from a previous project is never read back as
+        # "pending" for the newly loaded one.
+        self._pending_load_jobs: dict[int, str] = {}
 
     # ── read-only views ──────────────────────────────────────────────────
 
@@ -345,6 +371,7 @@ class ProjectState:
             self._book_labeling_session = book_labeling_session
             self._page_states = {}
             self._page_locks = {}
+            self._pending_load_jobs = {}
             self._current_page_index = project.current_page_index
             self._generation += 1
 
@@ -362,8 +389,53 @@ class ProjectState:
             self._loaded_project = None
             self._page_states = {}
             self._page_locks = {}
+            self._pending_load_jobs = {}
             self._current_page_index = 0
             self._generation += 1
+
+    def claim_load_page_job(
+        self,
+        page_index: int,
+        *,
+        is_pending: Callable[[str], bool],
+        submit: Callable[[], str],
+    ) -> tuple[str, bool]:
+        """Return the in-flight ``load_page`` job for *page_index*, or submit one.
+
+        The whole "check, then maybe submit" decision runs under ``self._lock``
+        so two concurrent ``GET`` fetches of the same cold page cannot both
+        observe "nothing pending" and each submit their own job — the
+        regression this method fixes: OCR would then run twice for the same
+        page with no ordering on which result got written, exactly the
+        double-OCR-under-contention race ``ensure_page_model``'s own
+        docstring says holding the project lock across OCR used to prevent
+        (OCR now runs inside the job, off that lock).
+
+        ``is_pending`` lets the caller ask the job runner whether a
+        previously recorded job id is still queued or running, without this
+        module importing ``core.jobs.runner`` — ``core/jobs`` already
+        imports ``core/project_state``, so the reverse import would cycle.
+        A recorded job id that is no longer pending (it completed, errored,
+        or was cancelled) is treated the same as no job at all: ``submit``
+        runs and replaces the stale entry, so a failed or cancelled load
+        never permanently blocks a later attempt at the same page.
+
+        ``submit`` is called at most once, still under the lock, only when
+        needed — its result is recorded before the lock releases, so no
+        other caller can race it. Any exception ``submit`` raises (e.g. an
+        invalid book-labeling lease) propagates to the caller with nothing
+        recorded.
+
+        Returns ``(job_id, created)`` — ``created`` is ``True`` only when
+        ``submit`` actually ran this time.
+        """
+        with self._lock:
+            existing = self._pending_load_jobs.get(page_index)
+            if existing is not None and is_pending(existing):
+                return existing, False
+            job_id = submit()
+            self._pending_load_jobs[page_index] = job_id
+            return job_id, True
 
     def open_labeling_page(self, page_index: int) -> LoadedLabelingBundle | None:
         """Open a caller-owned verified page lease without mutating global state."""

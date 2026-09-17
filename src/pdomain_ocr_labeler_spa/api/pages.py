@@ -22,7 +22,7 @@ from pydantic import BaseModel, BeforeValidator, Field
 from ..core import text_normalize
 from ..core.glyph.bulk_mark import GlyphBulkMarkParams, apply_bulk_mark
 from ..core.ground_truth_matcher import rematch_page
-from ..core.jobs import JobRunner
+from ..core.jobs import JobRunner, JobStatus
 from ..core.labeler_extension import LabelerPageExtension
 from ..core.models import (
     BBox,
@@ -196,9 +196,38 @@ class PagePayload(BaseModel):
     page_kind_proposal: PageKindProposalView | None = None
     # Loader-failure marker — ``None`` when the page loaded normally,
     # including when it legitimately has no OCR text. Stamped by
-    # ``get_page`` when the on-demand ``ensure_page_model`` call raises;
-    # ``_page_payload`` itself never sets this. See ``PageLoadError``.
+    # ``get_page`` when the *synchronous* lane check (loader build, or a
+    # labeled/cached-lane read) raises; ``_page_payload`` itself never sets
+    # this. See ``PageLoadError``.
+    #
+    # Relationship to ``page_load_job_id`` below (docs/specs/2026-08-08-
+    # page-load-progress-design.md "Move page loading onto the job system"):
+    # a genuine OCR failure — as opposed to a synchronous lane-check failure
+    # — happens inside the ``load_page`` job this GET submits on a store
+    # miss, off this synchronous path entirely. That failure never sets
+    # ``page_load_error``; it reaches the client as the job's terminal
+    # ``error`` event on the stream the SPA subscribes to via
+    # ``page_load_job_id`` (``GET /api/jobs/{job_id}/events``). The two
+    # fields are mutually exclusive on one response: this GET either
+    # returns a page (hit or synchronous-failure, ``page_load_job_id is
+    # None``) or hands off to a job (``page_load_error is None``,
+    # ``page_load_job_id`` set). See
+    # ``core.jobs.handlers.load_page`` for the full failure-channel
+    # writeup.
     page_load_error: PageLoadError | None = None
+    # Set only when this GET found neither an in-memory page nor a labeled-
+    # store hit, and either submitted a ``load_page`` job or found one
+    # already in flight for this page (``ProjectState.claim_load_page_job``
+    # — concurrent fetches of the same cold page share one job rather than
+    # each submitting their own). The SPA subscribes to
+    # ``GET /api/jobs/{job_id}/events`` for named stage progress and the
+    # terminal outcome. A subsequent GET for the same page re-checks
+    # in-memory/store state fresh; once the in-flight job reaches a
+    # terminal state (including error or cancelled) it no longer counts as
+    # pending, so a failed load gets a fresh job on the next fetch rather
+    # than blocking forever — matching ``ensure_page_model``'s existing
+    # retry contract.
+    page_load_job_id: str | None = None
     # Source-image drift marker — ``None`` when the on-disk image still
     # matches what this page was OCR'd from, or when that can't be
     # determined. Stamped by ``_page_payload`` itself (unlike
@@ -407,6 +436,20 @@ def _check_project_and_page(
     if page_index < 0 or page_index >= project.total_pages:
         return _page_not_found(page_index)
     return None
+
+
+def _load_page_job_is_pending(runner: JobRunner, job_id: str) -> bool:
+    """Whether ``job_id`` is a still-queued-or-running ``load_page`` job.
+
+    The predicate ``ProjectState.claim_load_page_job`` uses to decide
+    whether a recorded job id still blocks a new submission for the same
+    page. A missing job (evicted, or a test double that never registered
+    it) or one that already reached a terminal state — complete, error, or
+    cancelled — is not pending: a failed or cancelled load must not
+    permanently block every later fetch of the same page.
+    """
+    job = runner.get_job(job_id)
+    return job is not None and job.status in (JobStatus.QUEUED, JobStatus.RUNNING)
 
 
 def _page_not_loaded(page_index: int) -> JSONResponse:
@@ -1616,36 +1659,53 @@ def get_page(
     Spec authority: ``specs/23-page-payload-backend.md §3`` (issue #306,
     spec-23-A).  The keystone backend slice — every Phase D mutation
     endpoint (spec-23-C/D/E) reuses the ``_page_payload`` helper this
-    slice introduces.
+    slice introduces. OCR-on-first-load moved onto the job system per
+    ``docs/specs/2026-08-08-page-load-progress-design.md`` "Move page
+    loading onto the job system" (issue
+    2026-08-08-page-load-progress-unbuilt) — see below.
 
-    B1 fix (issue #330): when no page_record is cached for this page,
-    calls ``ensure_page_model`` with an on-demand ``LocalDoctrPageLoader``
-    (same pattern as ``reload_ocr`` handler + ``load`` route).  This means
-    the first GET on a fresh page synchronously triggers the labeled →
-    cached → OCR lane probes, so the response has a populated
-    ``page_record`` and ``line_matches`` without requiring a separate
-    Reload OCR click.
+    B1 fix (issue #330), narrowed by the job move above: when no
+    page_record is cached for this page, this still synchronously probes
+    the labeled/cached lanes via ``ensure_page_model(..., allow_ocr=False)``
+    (same on-demand ``LocalDoctrPageLoader`` build as the ``reload_ocr``
+    handler + ``load`` route) — cheap store reads only, no OCR. A lane hit
+    returns the page exactly as before, with no job and no added latency
+    (design acceptance criterion: "A page served from a warm store still
+    returns immediately... and creates no job"). Only a genuine miss on
+    both lanes — the case that used to block this request for seconds to
+    half a minute running OCR under the project lock — submits a
+    ``load_page`` job and returns a pending ``PagePayload`` carrying
+    ``page_load_job_id`` instead of blocking. The SPA subscribes to that
+    job's event stream for named-stage progress and the OCR outcome.
 
-    A failure on that on-demand call degrades to an empty ``page_record``
-    rather than a 500 — the request still succeeds so the image renders —
-    but is stamped onto ``PagePayload.page_load_error`` (issue
-    2026-08-08-get-page-hides-ocr-failures), distinguishing it from a page
-    that legitimately has no OCR text. Two distinct causes get two codes:
+    A synchronous lane-check failure still degrades to an empty
+    ``page_record`` rather than a 500 — the request still succeeds so the
+    image renders — but is stamped onto ``PagePayload.page_load_error``
+    (issue 2026-08-08-get-page-hides-ocr-failures), distinguishing it from a
+    page that legitimately has no OCR text. Two distinct causes get two
+    codes:
 
     - ``ocr_unavailable`` — the loader itself couldn't be built (DocTR not
       installed, production context keys unwired). A deployment-wide
       condition, not a fact about this page; logged at WARNING once per
       project, DEBUG after.
-    - ``ocr_load_failed`` — the loader built fine but this page's OCR run
-      raised. Logged at WARNING every time.
+    - ``ocr_load_failed`` — the loader built fine but the labeled/cached
+      lane read for this page raised. Logged at WARNING every time.
+
+    A genuine *OCR* failure (as opposed to a lane-check failure) now
+    happens inside the ``load_page`` job, off this synchronous path — see
+    ``core.jobs.handlers.load_page`` and the ``page_load_error`` /
+    ``page_load_job_id`` field docs on ``PagePayload`` for how that failure
+    reaches the client instead.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
         return err
 
-    # B1: auto-trigger ensure_page_model when no page_record is cached.
+    # B1: auto-trigger a page load when no page_record is cached.
     pstate = project_state.get_page_state(page_index)
     page_load_error: PageLoadError | None = None
+    page_load_job_id: str | None = None
     if pstate is None or pstate.page_record is None:
         loader: PageLoader | None = None
         try:
@@ -1676,22 +1736,30 @@ def get_page(
 
         if loader is not None:
             try:
-                ensure_page_model(project_state, page_index, loader=loader)
+                # allow_ocr=False: only the labeled/cached lanes, never OCR
+                # itself — docs/specs/2026-08-08-page-load-progress-design.md
+                # "The page request keeps its existing synchronous check. It
+                # looks in the in-memory page state, then the store." A hit
+                # here (a real PageLoadOutcome) means the store already had
+                # this page; ``None`` means a genuine miss that must move
+                # onto the job system below.
+                hit = ensure_page_model(project_state, page_index, loader=loader, allow_ocr=False)
             except Exception as exc:
-                # A loader that builds fine can still fail on this specific
-                # page (a genuine OCR failure) — degrade gracefully to an
-                # empty page_record so the SPA can still show the image and
-                # let the user trigger Reload OCR manually. Logged at
-                # WARNING every time (unlike the deployment-wide branch
-                # above): a per-page OCR failure is not routine, and DEBUG
-                # output never reaches an operator running this server
-                # (issue 2026-08-08-get-page-hides-ocr-failures) — the same
+                # A loader that builds fine can still fail reading the
+                # labeled/cached lane for this specific page — degrade
+                # gracefully to an empty page_record so the SPA can still
+                # show the image and let the user trigger Reload OCR
+                # manually. Logged at WARNING every time (unlike the
+                # deployment-wide branch above): a per-page failure is not
+                # routine, and DEBUG output never reaches an operator
+                # running this server (issue
+                # 2026-08-08-get-page-hides-ocr-failures) — the same
                 # reasoning ``_page_payload``'s image-digest read failure
                 # already uses for a request that survives but must still
                 # surface. The marker below (not just the log line) lets
-                # the SPA tell "OCR failed" apart from "OCR ran and found no
-                # text". ``message`` is client-facing (goes over the wire),
-                # so it's curated to the exception type name only —
+                # the SPA tell "load failed" apart from "OCR ran and found
+                # no text". ``message`` is client-facing (goes over the
+                # wire), so it's curated to the exception type name only —
                 # ``str(exc)`` can carry server filesystem paths. Full
                 # detail is already captured in the WARNING's exc_info.
                 log.warning(
@@ -1705,6 +1773,44 @@ def get_page(
                     error="ocr_load_failed",
                     message=f"OCR failed to load page {page_index} ({type(exc).__name__}).",
                 )
+                hit = None
+
+            if hit is None and page_load_error is None:
+                # Genuine store miss — the expensive path. Move OCR onto
+                # the job system instead of blocking here (design "Move
+                # page loading onto the job system"). Mirrors the
+                # reload-ocr route's own job-submission shape (same
+                # verified-page lease pattern for book-labeling sessions;
+                # a no-op lease for ordinary projects).
+                #
+                # ``claim_load_page_job`` — not a bare ``runner.submit`` —
+                # so two concurrent fetches of the same cold page share one
+                # job instead of each submitting their own and running OCR
+                # twice with no ordering on which result gets written. See
+                # that method's docstring for the atomicity contract.
+                def _submit_load_page_job() -> str:
+                    job_lease = project_state.open_labeling_page(page_index)
+                    return runner.submit(
+                        "load_page",
+                        project_id=project_id,
+                        payload={"page_index": page_index},
+                        labeling_page_lease=job_lease,
+                    )
+
+                try:
+                    page_load_job_id, _ = project_state.claim_load_page_job(
+                        page_index,
+                        is_pending=lambda job_id: _load_page_job_is_pending(runner, job_id),
+                        submit=_submit_load_page_job,
+                    )
+                except ValueError as exc:
+                    return JSONResponse(
+                        status_code=422,
+                        content=ApiError(
+                            error="invalid_labeling_page",
+                            message=str(exc),
+                        ).model_dump(),
+                    )
 
     payload = _page_payload(
         project_id=project_id,
@@ -1716,6 +1822,8 @@ def get_page(
     )
     if page_load_error is not None:
         payload.page_load_error = page_load_error
+    if page_load_job_id is not None:
+        payload.page_load_job_id = page_load_job_id
 
     # Undo/redo flags — spec 2026-06-12-event-store-undo. Stamped here (not in
     # ``_page_payload``) so the helper stays store-free; mutation routes refresh

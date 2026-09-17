@@ -1,20 +1,38 @@
 """Tests for the loader-failure marker on ``GET /pages/{idx}``.
 
-Issue: ``docs/issues/2026-08-08-get-page-hides-ocr-failures.md``.
+Issues: ``docs/issues/2026-08-08-get-page-hides-ocr-failures.md`` and
+``docs/issues/2026-08-08-page-load-progress-unbuilt.md``.
 
-``get_page`` auto-triggers ``ensure_page_model`` (B1, issue #330) when no
-page_record is cached for the page yet. A genuine loader failure there used
-to degrade silently to an empty ``page_record``, logged only at DEBUG — an
-operator never saw it, and the response looked identical to a page whose OCR
-ran and legitimately found no text.
+``get_page`` auto-triggers a page load (B1, issue #330) when no page_record
+is cached for the page yet. Per
+``docs/specs/2026-08-08-page-load-progress-design.md`` "Move page loading
+onto the job system", that trigger now has two parts:
 
-This module covers the fix:
+1. A synchronous, cheap check of the labeled/cached lanes only
+   (``ensure_page_model(..., allow_ocr=False)``) — never runs OCR. A
+   failure there (this repo's fake loaders can raise from ``load_labeled``)
+   is a deployment/lane-read problem, not an OCR failure, and still stamps
+   ``PagePayload.page_load_error`` synchronously, exactly as before.
+2. A genuine miss on both lanes submits a ``load_page`` job instead of
+   running OCR inline; the GET returns immediately with
+   ``page_load_job_id`` set and ``page_load_error`` left ``None``. A GET's
+   OCR failure — the old subject of this module — is now an async job
+   outcome, covered by ``tests/integration/test_load_page_job.py`` instead
+   of here.
 
-- A loader that raises logs a WARNING (with project id + page index, and
-  ``exc_info``) and stamps ``PagePayload.page_load_error``.
-- A loader that succeeds but finds no words leaves ``page_load_error``
-  ``None`` and logs no WARNING — a page with genuinely no text still
-  renders without an error marker.
+This module covers what's left synchronous:
+
+- A labeled/cached-lane read that raises logs a WARNING (with project id +
+  page index, and ``exc_info``) and stamps ``PagePayload.page_load_error``
+  with a curated (exception-type-only) message.
+- A loader that can't be built at all (``ocr_unavailable``) is unchanged —
+  it happens before any lane check.
+- A labeled/cached-lane *hit* (this repo's fake loaders return it from
+  ``load_labeled``) returns the page immediately, including a legitimately
+  empty page — leaves both ``page_load_error`` and ``page_load_job_id``
+  ``None``, and logs no warning. This also covers the design's "a page
+  served from a warm store still returns immediately... and creates no
+  job" acceptance criterion for the labeled-lane-hit case.
 """
 
 from __future__ import annotations
@@ -85,54 +103,45 @@ class _EmptyStubPage:
         return self.paragraphs_
 
 
-class _RaisingPageLoader:
-    """A ``PageLoader`` whose ``run_ocr`` always raises."""
+class _RaisingOnLabeledLanePageLoader:
+    """A ``PageLoader`` whose ``load_labeled`` always raises.
 
-    def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
-        return None
-
-    def load_cached(self, page_index: int) -> PageLoadOutcome | None:
-        return None
-
-    def run_ocr(
-        self,
-        page_index: int,
-        *,
-        edited_image_bytes: bytes | None = None,
-        page_kind: object | None = None,
-    ) -> PageLoadOutcome:
-        raise RuntimeError("doctr predictor unavailable")
-
-
-class _RaisingWithPathPageLoader:
-    """A ``PageLoader`` whose ``run_ocr`` raises with a filesystem path in
-    its message — the client-facing ``page_load_error.message`` must not
-    leak that path (finding 2, issue 2026-08-08-get-page-hides-ocr-failures).
+    The synchronous lane check (``ensure_page_model(..., allow_ocr=False)``)
+    calls ``load_labeled``/``load_cached`` directly with no self-catch of
+    arbitrary exceptions (unlike the real ``LocalDoctrPageLoader``, whose
+    ``load_labeled`` only ever re-raises ``LegacyTypographyPayloadError``) —
+    this test double raises a plain exception to exercise ``get_page``'s own
+    try/except around that call.
     """
 
     _PATH = "/var/lib/pdomain/models/db_resnet50/weights.pt"
 
     def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
-        return None
-
-    def load_cached(self, page_index: int) -> PageLoadOutcome | None:
-        return None
-
-    def run_ocr(
-        self,
-        page_index: int,
-        *,
-        edited_image_bytes: bytes | None = None,
-        page_kind: object | None = None,
-    ) -> PageLoadOutcome:
         raise RuntimeError(f"failed to read weights at {self._PATH}")
 
+    def load_cached(self, page_index: int) -> PageLoadOutcome | None:
+        return None
 
-class _EmptyTextPageLoader:
-    """A ``PageLoader`` whose ``run_ocr`` succeeds but finds no words."""
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: object | None = None,
+    ) -> PageLoadOutcome:
+        raise AssertionError("run_ocr must not be called — the lane check must fail first")
+
+
+class _EmptyTextLabeledLoader:
+    """A ``PageLoader`` whose ``load_labeled`` hits with a page that has no words.
+
+    Distinct from ``run_ocr`` finding no text (that path is now async — see
+    ``tests/integration/test_load_page_job.py``): a labeled-lane hit is the
+    synchronous, no-job path, and this is its "legitimately empty" case.
+    """
 
     def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
-        return None
+        return PageLoadOutcome(page_index=page_index, source=PageSource.OCR, payload=_EmptyStubPage())
 
     def load_cached(self, page_index: int) -> PageLoadOutcome | None:
         return None
@@ -144,7 +153,7 @@ class _EmptyTextPageLoader:
         edited_image_bytes: bytes | None = None,
         page_kind: object | None = None,
     ) -> PageLoadOutcome:
-        return PageLoadOutcome(page_index=page_index, source=PageSource.OCR, payload=_EmptyStubPage())
+        raise AssertionError("run_ocr must not be called — the labeled lane already hit")
 
 
 @pytest.fixture
@@ -162,11 +171,11 @@ def app_client(tmp_path: Path, projects_root: Path) -> Iterator[TestClient]:
         yield c
 
 
-def test_loader_failure_stamps_page_load_error_and_logs_warning(
+def test_labeled_lane_failure_stamps_page_load_error_and_logs_warning(
     app_client: TestClient,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    app_client.app.state.job_runner.context["page_loader"] = _RaisingPageLoader()  # type: ignore[attr-defined]
+    app_client.app.state.job_runner.context["page_loader"] = _RaisingOnLabeledLanePageLoader()  # type: ignore[attr-defined]
 
     with caplog.at_level(logging.WARNING, logger="pdomain_ocr_labeler_spa.api.pages"):
         resp = app_client.get("/api/projects/book1/pages/0")
@@ -175,24 +184,25 @@ def test_loader_failure_stamps_page_load_error_and_logs_warning(
     body = resp.json()
     assert body["page_load_error"] is not None
     assert body["page_load_error"]["error"] == "ocr_load_failed"
+    assert body["page_load_job_id"] is None
     # Client-facing message is curated to the exception type, not str(exc) —
-    # see test_per_page_failure_message_does_not_leak_exception_details for
-    # the dedicated no-path-leak coverage.
+    # see test_lane_failure_message_does_not_leak_exception_details for the
+    # dedicated no-path-leak coverage.
     assert "RuntimeError" in body["page_load_error"]["message"]
 
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
-    assert warnings, "expected a WARNING-level log record for the loader failure"
+    assert warnings, "expected a WARNING-level log record for the lane-check failure"
     record = warnings[0]
     assert "book1" in record.getMessage()
     assert "page=0" in record.getMessage()
     assert record.exc_info is not None, "the WARNING must keep exc_info for the traceback"
 
 
-def test_no_text_page_leaves_page_load_error_none_and_logs_no_warning(
+def test_labeled_lane_hit_leaves_page_load_error_none_and_creates_no_job(
     app_client: TestClient,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    app_client.app.state.job_runner.context["page_loader"] = _EmptyTextPageLoader()  # type: ignore[attr-defined]
+    app_client.app.state.job_runner.context["page_loader"] = _EmptyTextLabeledLoader()  # type: ignore[attr-defined]
 
     with caplog.at_level(logging.WARNING, logger="pdomain_ocr_labeler_spa.api.pages"):
         resp = app_client.get("/api/projects/book1/pages/0")
@@ -200,9 +210,12 @@ def test_no_text_page_leaves_page_load_error_none_and_logs_no_warning(
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["page_load_error"] is None
+    assert body["page_load_job_id"] is None
     assert body["line_matches"] == []
 
     assert not any("ensure_page_model failed" in r.getMessage() for r in caplog.records)
+    runner = app_client.app.state.job_runner  # type: ignore[attr-defined]
+    assert runner.list_jobs() == [], "a labeled-lane hit must not submit a job"
 
 
 def _raise_loader_unavailable(runner: Any, project_state: Any, settings: Any) -> PageLoader:
@@ -225,7 +238,8 @@ def test_loader_build_failure_stamps_ocr_unavailable_and_warns_once_per_project(
     per-page one: it gets its own error code (not ``ocr_load_failed``), and
     only the FIRST page fetched for a project logs a WARNING — later fetches
     (any page) log at DEBUG instead, so navigating a whole book in this state
-    doesn't produce one WARNING per page.
+    doesn't produce one WARNING per page. Happens before any lane check, so
+    this path is unaffected by the job move.
     """
     from pdomain_ocr_labeler_spa.api import pages as pages_mod
 
@@ -243,6 +257,7 @@ def test_loader_build_failure_stamps_ocr_unavailable_and_warns_once_per_project(
         assert body["page_load_error"] is not None
         assert body["page_load_error"]["error"] == "ocr_unavailable"
         assert "not available in this deployment" in body["page_load_error"]["message"]
+        assert body["page_load_job_id"] is None
 
     relevant = [r for r in caplog.records if "OCR loader unavailable for project=book1" in r.getMessage()]
     warnings = [r for r in relevant if r.levelno == logging.WARNING]
@@ -251,16 +266,16 @@ def test_loader_build_failure_stamps_ocr_unavailable_and_warns_once_per_project(
     assert len(debugs) == 1, f"expected the second fetch to log at DEBUG, got {len(debugs)}"
 
 
-def test_per_page_failure_warns_on_every_fetch(
+def test_lane_failure_warns_on_every_fetch(
     app_client: TestClient,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Unlike the deployment-wide loader-unavailable case, a per-page OCR
-    failure on a loader that builds fine warns every time — the failure is
-    specific to this page's OCR run, not a standing deployment condition, so
-    there's nothing to de-duplicate.
+    """Unlike the deployment-wide loader-unavailable case, a per-page
+    lane-check failure on a loader that builds fine warns every time — the
+    failure is specific to this page's read, not a standing deployment
+    condition, so there's nothing to de-duplicate.
     """
-    app_client.app.state.job_runner.context["page_loader"] = _RaisingPageLoader()  # type: ignore[attr-defined]
+    app_client.app.state.job_runner.context["page_loader"] = _RaisingOnLabeledLanePageLoader()  # type: ignore[attr-defined]
 
     with caplog.at_level(logging.WARNING, logger="pdomain_ocr_labeler_spa.api.pages"):
         resp1 = app_client.get("/api/projects/book1/pages/0")
@@ -271,10 +286,10 @@ def test_per_page_failure_warns_on_every_fetch(
         assert resp.json()["page_load_error"]["error"] == "ocr_load_failed"
 
     warnings = [r for r in caplog.records if "ensure_page_model failed" in r.getMessage()]
-    assert len(warnings) == 2, f"expected a WARNING for each per-page OCR failure, got {len(warnings)}"
+    assert len(warnings) == 2, f"expected a WARNING for each per-page failure, got {len(warnings)}"
 
 
-def test_per_page_failure_message_does_not_leak_exception_details(
+def test_lane_failure_message_does_not_leak_exception_details(
     app_client: TestClient,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -283,7 +298,7 @@ def test_per_page_failure_message_does_not_leak_exception_details(
     curated to the exception type at most. Full detail (the path) still
     belongs in the WARNING's exc_info for whoever reads the server log.
     """
-    loader = _RaisingWithPathPageLoader()
+    loader = _RaisingOnLabeledLanePageLoader()
     app_client.app.state.job_runner.context["page_loader"] = loader  # type: ignore[attr-defined]
 
     with caplog.at_level(logging.WARNING, logger="pdomain_ocr_labeler_spa.api.pages"):
@@ -295,7 +310,7 @@ def test_per_page_failure_message_does_not_leak_exception_details(
     assert "RuntimeError" in message, "curated message should still name the exception type"
 
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
-    assert warnings, "expected a WARNING-level log record for the loader failure"
+    assert warnings, "expected a WARNING-level log record for the lane-check failure"
     record = warnings[0]
     assert record.exc_info is not None
     exc = record.exc_info[1]

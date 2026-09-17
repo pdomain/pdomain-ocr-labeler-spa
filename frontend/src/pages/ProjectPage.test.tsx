@@ -378,14 +378,36 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     expect(screen.queryByTestId("confirm-dialog")).toBeNull();
   });
 
-  it("shows the ProjectLoadingOverlay while usePage is loading", async () => {
-    // Override page handler to never resolve — keeps the query in loading state.
+  it("shows the ProjectLoadingOverlay while the project itself is loading", async () => {
+    // Override the project handler to never resolve — keeps that query in
+    // loading state. The page handler resolves normally; the overlay must
+    // key off project loading, not page loading (2026-08-08 defect 3).
     server.use(
-      http.get("/api/projects/:pid/pages/:idx", () => new Promise(() => {})),
-      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid", () => new Promise(() => {})),
+      http.get("/api/projects/:pid/pages/:idx", () => HttpResponse.json(pageFixture())),
     );
     renderProjectPage();
     expect(await screen.findByTestId("project-loading-overlay")).toBeInTheDocument();
+  });
+
+  it("2026-08-08 defect 3: does NOT show the ProjectLoadingOverlay while only the page is loading", async () => {
+    // The overlay used to track `pageQ.isLoading`, so it stayed up
+    // "Loading project" for the entire page fetch — including the
+    // up-to-30s OCR wait that now runs as a `load_page` job off this
+    // request. The project resolves immediately; the page handler never
+    // resolves. The overlay must clear (never show) once the project data
+    // has arrived, regardless of how long the page fetch takes.
+    server.use(
+      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid/pages/:idx", () => new Promise(() => {})),
+    );
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    // The project query starts loading too (it resolves via a microtask,
+    // same as the fixture above) — wait for it to actually settle so the
+    // assertion checks the steady state, not the brief initial-loading
+    // instant both queries share at mount.
+    await waitFor(() => expect(screen.queryByTestId("project-loading-overlay")).toBeNull());
   });
 
   it("does not render OcrFailedBanner from the unused page_record.ocr_failed flag", async () => {

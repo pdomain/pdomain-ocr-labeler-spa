@@ -187,10 +187,10 @@ class LabelingPageLease(Protocol):
 # docs/architecture/02-backend.md: job types whose handlers
 # call ``loader.run_ocr`` on an ``asyncio.to_thread`` worker — the only
 # handlers gated by ``JobRunner``'s OCR concurrency semaphore. Verified
-# against the handlers registered below: ``reload_ocr.py``,
-# ``rotate.py``, and ``auto_rotate_all.py`` each call ``loader.run_ocr``;
+# against the handlers registered below: ``reload_ocr.py``, ``rotate.py``,
+# ``auto_rotate_all.py``, and ``load_page.py`` each call ``loader.run_ocr``;
 # ``save_project`` / ``export`` / ``refine_bboxes`` do not.
-_OCR_HEAVY_JOB_TYPES = frozenset({"reload_ocr", "rotate_page", "auto_rotate_all"})
+_OCR_HEAVY_JOB_TYPES = frozenset({"reload_ocr", "rotate_page", "auto_rotate_all", "load_page"})
 
 
 class JobRunner:
@@ -557,6 +557,20 @@ async def _handle_propose_regions(runner: JobRunner, job: Job) -> None:
     await handle_propose_regions(runner, job)
 
 
+async def _handle_load_page(runner: JobRunner, job: Job) -> None:
+    """Load-page handler — delegates to ``core/jobs/handlers/load_page``.
+
+    docs/specs/2026-08-08-page-load-progress-design.md "Move page loading
+    onto the job system": submitted by ``GET .../pages/{idx}`` only on a
+    genuine store miss (in-memory state and the labeled store both empty),
+    so the OCR-on-first-load cost reports named stages instead of blocking
+    the request silently.
+    """
+    from .handlers.load_page import handle_load_page  # lazy import
+
+    await handle_load_page(runner, job)
+
+
 _HANDLERS: dict[str, Handler] = {
     "reload_ocr": _handle_reload_ocr,
     "save_project": _handle_save_project,
@@ -566,6 +580,7 @@ _HANDLERS: dict[str, Handler] = {
     "refine_bboxes": _handle_refine_bboxes,
     "propose_page_kinds": _handle_propose_page_kinds,
     "propose_regions": _handle_propose_regions,
+    "load_page": _handle_load_page,
 }
 
 
