@@ -621,3 +621,50 @@ def test_the_book_that_motivated_this_fit_splits_where_the_fixed_share_joins() -
     assert len(fitted) == 2, "the fitted threshold should split the head from the folio"
     assert fitted[0].evidence["gap_threshold_source"] == "book_fit"
     assert fitted[1].evidence["gap_threshold_source"] == "book_fit"
+
+
+# ---------------------------------------------------------------------------
+# Fix 1 — a band far taller than its own words merged the running head with
+# the body text below it (projectID408c1dd9b9318 page 41, ratio 68.9). Skip
+# it, on both the per-page path and the book-level gap pool.
+# ---------------------------------------------------------------------------
+
+
+def test_a_band_far_taller_than_its_words_is_skipped_and_pools_no_gaps() -> None:
+    """Ratio 7: over the 6x bar. Every word stacked across several lines passes the plain y-range filter."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import (
+        _in_band_words,
+        _pooled_gaps,
+        furniture_region_detector,
+    )
+
+    words = [
+        _word("RUNNING", 100, 105, 200, 125),
+        _word("body1", 100, 140, 190, 160),
+        _word("body2", 100, 170, 190, 190),
+        _word("body3", 100, 200, 190, 220),
+        _word("body4", 100, 222, 190, 242),
+    ]
+    # band height 140px, median word height 20px -> ratio 7, over the 6x bar.
+    detector_input = _input(words, bands=(InkBand(100, 240),))
+
+    assert _in_band_words(detector_input) is None
+    assert furniture_region_detector(detector_input) == []
+    assert _pooled_gaps([detector_input]) == []
+
+
+def test_a_band_at_three_point_five_times_its_words_is_not_skipped() -> None:
+    """The tallest legitimate band seen (projectID3fc3d7d03c613 page 30) scored 3.5 — under the bar."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import _in_band_words, furniture_region_detector
+
+    words = [
+        _word("THE", 100, 105, 170, 125),
+        _word("VOYAGE", 180, 105, 320, 125),
+    ]
+    # band height 70px, median word height 20px -> ratio 3.5.
+    detector_input = _input(words, bands=(InkBand(100, 170),))
+
+    band = _in_band_words(detector_input)
+    assert band is not None
+    assert len(band.words) == 2
+    assert len(furniture_region_detector(detector_input)) == 1

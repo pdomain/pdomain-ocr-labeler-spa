@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import re
+import statistics
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, NamedTuple
 
@@ -101,6 +102,14 @@ could be the top line of body text under a misplaced band."""
 
 _FOLIO_PATTERN = re.compile(r"^[0-9ivxlcdmIVXLCDM]+$")
 """Digits, roman numerals, or both. Anything else reads as a running head."""
+
+_MAX_BAND_TO_WORD_HEIGHT_RATIO = 6
+"""A band this many times taller than the median height of its own in-band
+words is not one furniture band — it merged the running head with the body
+text below it. Measured on real OCR'd pages:
+``projectID408c1dd9b9318`` page 41's merged head+body band scored 68.9; the
+tallest legitimate band seen, page 30 of ``projectID3fc3d7d03c613``, scored
+3.5. 6 sits well clear of both."""
 
 
 class _ScaledWord(NamedTuple):
@@ -292,7 +301,15 @@ def _in_band_words(detector_input: DetectorInput) -> _BandWords | None:
     fix keeps. A page whose words are all normalized is no longer skipped:
     its words are converted to the page's pixel frame (``_word_box_px``), and
     the band is rescaled into that same frame (``_band_y_range``), before the
-    two are compared. Shared
+    two are compared. A band far taller than its own words is a fourth skip
+    condition — see ``_MAX_BAND_TO_WORD_HEIGHT_RATIO`` — because a profiler
+    can merge the running head with the body text below it into one ink band;
+    every word on the page then passes the plain y-range filter, and the
+    page-wide cluster that results also floods the book-level gap pool
+    (``_pooled_gaps``) with the zero and negative gaps between stacked lines.
+    A band with no in-band words, or whose words all measure zero height,
+    skips this check — there is nothing to compare a height ratio against —
+    and is returned as-is rather than treated as suspect. Shared
     between per-page detection and book-level gap pooling (``_pooled_gaps``),
     so both walk exactly the same pixel coordinates.
     """
@@ -315,6 +332,20 @@ def _in_band_words(detector_input: DetectorInput) -> _BandWords | None:
             continue
         if top <= (box[1] + box[3]) / 2 <= bottom:
             words.append(_ScaledWord(word, box))
+    if words:
+        median_word_height = statistics.median(box[3] - box[1] for _, box in words)
+        band_height = bottom - top
+        if median_word_height > 0 and band_height > _MAX_BAND_TO_WORD_HEIGHT_RATIO * median_word_height:
+            log.warning(
+                "furniture: page=%s band height %dpx is %.1fx its words' median height "
+                "%.1fpx (over %dx) — likely merged with body text; skipping the page",
+                detector_input.classification.page_name,
+                band_height,
+                band_height / median_word_height,
+                median_word_height,
+                _MAX_BAND_TO_WORD_HEIGHT_RATIO,
+            )
+            return None
     return _BandWords(words, top, bottom)
 
 
