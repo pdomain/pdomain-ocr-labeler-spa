@@ -1026,3 +1026,253 @@ def test_rejecting_an_already_rejected_proposal_records_nothing_new(toolbar_load
     decisions = [d for d in RegionDecisionLog(project_root).decisions() if d.proposal_id == "p1"]
     assert len(decisions) == 1
     assert decisions[0].disposition is Disposition.REJECTED
+
+
+# ── Route: GET .../regions/review-queue ──────────────────────────────────
+
+_REVIEW_QUEUE_BASE = "/api/projects/book1/regions/review-queue"
+
+
+def _seed_region_proposal(
+    project_root: Path,
+    *,
+    proposal_id: str,
+    run_id: str = "r1",
+    page_index: int = 0,
+    box: tuple[int, int, int, int] = (5, 5, 50, 50),
+    confidence: float = 0.8,
+    role: Any = None,
+) -> None:
+    """Write one proposal straight to the journal — no run record needed.
+
+    The review queue never reads ``RegionProposalLog.runs()``: staleness (the
+    only thing a run record is for) is explicitly out of scope for this route.
+    """
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.regions.models import RegionProposal
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    if role is None:
+        role = RegionRole.POETRY
+
+    RegionProposalLog(project_root).append_proposals(
+        [
+            RegionProposal(
+                proposal_id=proposal_id,
+                run_id=run_id,
+                page_index=page_index,
+                role=role,
+                box=box,
+                confidence=confidence,
+                evidence={},
+            )
+        ]
+    )
+
+
+def _seed_many_region_proposals(project_root: Path, count: int, *, page_index: int = 0) -> None:
+    """Seed ``count`` undecided proposals in one journal append (one fsync)."""
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.regions.models import RegionProposal
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    proposals = [
+        RegionProposal(
+            proposal_id=f"bulk-{i}",
+            run_id="r1",
+            page_index=page_index,
+            role=RegionRole.POETRY,
+            box=(5, 5 + i, 50, 50 + i),
+            confidence=0.8,
+            evidence={},
+        )
+        for i in range(count)
+    ]
+    RegionProposalLog(project_root).append_proposals(proposals)
+
+
+def _reject_proposal_directly(project_root: Path, *, proposal_id: str, run_id: str = "r1") -> None:
+    """Record a rejection without going through the route, which requires the
+    proposal's page to be loaded. The review queue tests seed proposals on
+    pages the ``toolbar_loaded`` fixture never loads.
+    """
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition, RegionDecision
+
+    RegionDecisionLog(project_root).append(
+        RegionDecision(
+            decision_id=f"d-{proposal_id}",
+            run_id=run_id,
+            proposal_id=proposal_id,
+            disposition=Disposition.REJECTED,
+            region_id=None,
+            actor="default",
+            decided_at="2026-09-08T10:00:00+00:00",
+        )
+    )
+
+
+def test_review_queue_parity_with_the_page_views_unconfirmed_regions(toolbar_loaded: Any) -> None:
+    """The queue's undecided set for a page must equal exactly what the page
+    view shows as unconfirmed, or `]` in the UI can land on a page with
+    nothing to review.
+    """
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_region_proposal(project_root, proposal_id="p-undecided", box=(5, 5, 50, 50))
+    _seed_region_proposal(project_root, proposal_id="p-accepted", box=(60, 5, 100, 50))
+    _seed_region_proposal(project_root, proposal_id="p-rejected", box=(5, 60, 50, 100))
+
+    assert client.post(f"{_BASE}/regions/proposals/p-accepted/accept").status_code == 200
+    assert client.post(f"{_BASE}/regions/proposals/p-rejected/reject").status_code == 200
+
+    page_view = client.get(_BASE)
+    assert page_view.status_code == 200, page_view.text
+    page_unconfirmed = {
+        reg["proposal_id"]
+        for reg in page_view.json()["regions"]
+        if not reg["confirmed"] and reg["proposal_id"] is not None
+    }
+
+    queue = client.get(_REVIEW_QUEUE_BASE, params={"limit": 10})
+    assert queue.status_code == 200, queue.text
+    body = queue.json()
+    queue_undecided = {item["proposal_id"] for item in body["items"]}
+
+    assert queue_undecided == page_unconfirmed == {"p-undecided"}
+    assert body["total_undecided"] == 1
+
+
+def test_pages_lists_only_pages_with_work_in_page_order_with_counts_and_reading_order_ids(
+    toolbar_loaded: Any,
+) -> None:
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    # Page 2: two undecided proposals, seeded out of reading order.
+    _seed_region_proposal(project_root, proposal_id="p2-b", page_index=2, box=(5, 100, 50, 150))
+    _seed_region_proposal(project_root, proposal_id="p2-a", page_index=2, box=(5, 5, 50, 50))
+    # Page 0: one undecided proposal.
+    _seed_region_proposal(project_root, proposal_id="p0-a", page_index=0, box=(5, 5, 50, 50))
+    # Page 5: its only proposal is decided, so it carries no work.
+    _seed_region_proposal(project_root, proposal_id="p5-a", page_index=5, box=(5, 5, 50, 50))
+    _reject_proposal_directly(project_root, proposal_id="p5-a")
+
+    r = client.get(_REVIEW_QUEUE_BASE, params={"limit": 100})
+    assert r.status_code == 200, r.text
+    body = r.json()
+
+    assert [p["page_index"] for p in body["pages"]] == [0, 2]
+    page0 = next(p for p in body["pages"] if p["page_index"] == 0)
+    assert page0["undecided"] == 1
+    assert page0["first_proposal_id"] == page0["last_proposal_id"] == "p0-a"
+    page2 = next(p for p in body["pages"] if p["page_index"] == 2)
+    assert page2["undecided"] == 2
+    assert page2["first_proposal_id"] == "p2-a"
+    assert page2["last_proposal_id"] == "p2-b"
+
+
+def test_limit_zero_returns_no_items_but_still_counts_and_summarizes(toolbar_loaded: Any) -> None:
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_region_proposal(project_root, proposal_id="p1", box=(5, 5, 50, 50))
+    _seed_region_proposal(project_root, proposal_id="p2", box=(60, 5, 100, 50))
+
+    r = client.get(_REVIEW_QUEUE_BASE)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["items"] == []
+    assert body["total_undecided"] == 2
+    assert [p["page_index"] for p in body["pages"]] == [0]
+
+
+def test_limit_two_returns_exactly_two_items(toolbar_loaded: Any) -> None:
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_many_region_proposals(project_root, 5)
+
+    r = client.get(_REVIEW_QUEUE_BASE, params={"limit": 2})
+    assert r.status_code == 200, r.text
+    assert len(r.json()["items"]) == 2
+
+
+def test_limit_above_500_is_clamped_to_500(toolbar_loaded: Any) -> None:
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_many_region_proposals(project_root, 510)
+
+    r = client.get(_REVIEW_QUEUE_BASE, params={"limit": 10000})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["total_undecided"] == 510
+    assert len(body["items"]) == 500
+
+
+def test_negative_limit_is_rejected_with_a_4xx(toolbar_loaded: Any) -> None:
+    client, _project_state, _page = toolbar_loaded
+    r = client.get(_REVIEW_QUEUE_BASE, params={"limit": -1})
+    assert 400 <= r.status_code < 500, r.text
+
+
+def test_order_confidence_sorts_ascending_with_reading_order_ties(toolbar_loaded: Any) -> None:
+    """``RegionProposal.confidence`` is dataclass-validated to always be a
+    float in ``[0.0, 1.0]`` (``RegionProposal.__post_init__``), so a "missing
+    confidence sorts first" proposal cannot be constructed through the
+    legitimate write path — this exercises the reachable half: ascending
+    confidence, ties broken by reading order.
+    """
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_region_proposal(project_root, proposal_id="high", confidence=0.9, box=(5, 5, 50, 50))
+    _seed_region_proposal(project_root, proposal_id="low-right", confidence=0.2, box=(60, 5, 100, 50))
+    _seed_region_proposal(project_root, proposal_id="low-left", confidence=0.2, box=(5, 5, 50, 50))
+
+    r = client.get(_REVIEW_QUEUE_BASE, params={"order": "confidence", "limit": 10})
+    assert r.status_code == 200, r.text
+    assert [item["proposal_id"] for item in r.json()["items"]] == ["low-left", "low-right", "high"]
+
+
+def test_review_queue_reads_each_journal_once_per_request(
+    toolbar_loaded: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_region_proposal(project_root, proposal_id="p1", box=(5, 5, 50, 50))
+    _seed_region_proposal(project_root, proposal_id="p2", page_index=1, box=(5, 5, 50, 50))
+
+    proposal_reads = 0
+    original_proposal_read = RegionProposalLog._read
+
+    def _counting_proposal_read(self: RegionProposalLog) -> list[Any]:
+        nonlocal proposal_reads
+        proposal_reads += 1
+        return original_proposal_read(self)
+
+    monkeypatch.setattr(RegionProposalLog, "_read", _counting_proposal_read)
+
+    decision_reads = 0
+    original_decisions = RegionDecisionLog.decisions
+
+    def _counting_decisions(self: RegionDecisionLog) -> list[Any]:
+        nonlocal decision_reads
+        decision_reads += 1
+        return original_decisions(self)
+
+    monkeypatch.setattr(RegionDecisionLog, "decisions", _counting_decisions)
+
+    r = client.get(_REVIEW_QUEUE_BASE, params={"limit": 10})
+
+    assert r.status_code == 200, r.text
+    assert proposal_reads == 1
+    assert decision_reads == 1
+
+
+def test_review_queue_returns_404_for_an_unloaded_project(toolbar_loaded: Any) -> None:
+    client, _project_state, _page = toolbar_loaded
+    r = client.get("/api/projects/other_book/regions/review-queue")
+    assert r.status_code == 404, r.text
+    assert r.json()["error"] == "project_not_found"

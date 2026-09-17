@@ -23,7 +23,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pdomain_book_contracts.annotation import RegionRole
 from pdomain_book_contracts.geometry.bounding_box import BoundingBox
@@ -43,6 +43,7 @@ from ..core.regions.coordinates import pixel_box_to_bounding_box
 from ..core.regions.decision_log import RegionDecisionLog
 from ..core.regions.models import Disposition, RegionDecision, RegionProposal
 from ..core.regions.proposal_log import RegionProposalLog
+from ..core.regions.resolver import is_undecided
 from ..settings import Settings
 from .dependencies import (
     bind_page_labeling_lease,
@@ -148,6 +149,45 @@ class StartRegionProposalRunRequest(BaseModel):
 
 class StartRegionProposalRunResponse(BaseModel):
     job_id: str
+
+
+class RegionReviewQueuePageSummary(BaseModel):
+    """One page with at least one undecided proposal.
+
+    ``first_proposal_id``/``last_proposal_id`` are that page's undecided
+    proposals in reading order (top to bottom, then left to right) — what a
+    person landing on the page via ``]``/``[`` should select first or last.
+    """
+
+    page_index: int
+    undecided: int
+    first_proposal_id: str
+    last_proposal_id: str
+
+
+class RegionReviewQueueItem(BaseModel):
+    """One undecided proposal, enough to act on it without a further fetch."""
+
+    page_index: int
+    proposal_id: str
+    run_id: str
+    role: RegionRole
+    confidence: float
+    box: BBox
+
+
+class RegionReviewQueueResponse(BaseModel):
+    """The book-level answer to "what is still undecided, and in what order".
+
+    ``pages`` is always present, in page order, and bounded by the book's page
+    count — a person navigating with ``]``/``[`` never needs ``items``.
+    ``items`` is the same undecided set, capped at ``limit`` and ordered by
+    the request's ``order``, for a caller that wants the proposals themselves.
+    """
+
+    total_undecided: int
+    pages: list[RegionReviewQueuePageSummary]
+    items: list[RegionReviewQueueItem]
 
 
 # ── Shared helpers ───────────────────────────────────────────────────────
@@ -1154,6 +1194,117 @@ def start_region_proposal_run(
     return JSONResponse(status_code=202, content={"job_id": job_id})
 
 
+# ── Routes: book-level review queue ──────────────────────────────────────
+
+_REVIEW_QUEUE_ITEM_LIMIT_MAX = 500
+
+
+def _reading_order_key(proposal: RegionProposal) -> tuple[int, int, int]:
+    """Page index, then top-to-bottom, then left-to-right — how a person works through a book."""
+    left, top, _right, _bottom = proposal.box
+    return (proposal.page_index, top, left)
+
+
+def _confidence_order_key(proposal: RegionProposal) -> tuple[float, int, int, int]:
+    """Lowest confidence first, ties broken by reading order.
+
+    ``RegionProposal.confidence`` is dataclass-validated to always be a float in
+    ``[0.0, 1.0]`` (``RegionProposal.__post_init__``) — nothing in this codebase
+    can construct or persist one with a missing confidence, so there is no
+    "confidence unknown" proposal for this route to sort first.
+    """
+    return (proposal.confidence, *_reading_order_key(proposal))
+
+
+def _review_queue_item(proposal: RegionProposal) -> RegionReviewQueueItem:
+    left, top, right, bottom = proposal.box
+    return RegionReviewQueueItem(
+        page_index=proposal.page_index,
+        proposal_id=proposal.proposal_id,
+        run_id=proposal.run_id,
+        role=proposal.role,
+        confidence=proposal.confidence,
+        box=BBox(x=left, y=top, width=right - left, height=bottom - top),
+    )
+
+
+def _review_queue_project_not_found(project_id: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content=ApiError(error="project_not_found", message=f"project not found: {project_id}").model_dump(),
+    )
+
+
+@router.get(
+    "/{project_id}/regions/review-queue",
+    response_model=RegionReviewQueueResponse,
+    operation_id="get_region_review_queue",
+)
+def get_region_review_queue(
+    project_id: str,
+    order: Literal["reading", "confidence"] = "reading",
+    limit: int = Query(default=0, ge=0),
+    project_state: ProjectState = Depends(get_project_state),
+) -> JSONResponse:
+    """The book-level answer to "what is still undecided, and in what order".
+
+    Shares ``is_undecided`` with ``resolve_regions`` (``core/regions/resolver.py``)
+    so this queue and the page view can never disagree about what still needs a
+    decision: a proposal this route reports as undecided is exactly one
+    ``PagePayload.regions`` still shows as unconfirmed, and vice versa.
+
+    Both journals are read once each this request — ``RegionProposalLog.proposals()``
+    and ``RegionDecisionLog.latest_by_proposal()`` — never once per page, which is
+    what made the per-page accessors unusable for a book-scoped question.
+
+    ``resolve_regions``'s confidence threshold plays no part here: the queue
+    counts a proposal as undecided work regardless of confidence. The threshold
+    decides whether a proposal can stand in for a missing confirmed region on
+    one page view, a question this route never asks. ``order=confidence`` only
+    changes how ``items`` are sorted, never which proposals are undecided.
+
+    ``pages`` is always present, in page order, bounded by the book's page
+    count, and unaffected by ``order`` — a person navigating with ``]``/``[``
+    never needs ``items``. ``items`` is the same undecided set, capped at
+    ``limit`` (clamped to 500; a negative ``limit`` is rejected by FastAPI's
+    own query validation before this body runs) and ordered by ``order``.
+
+    Staleness is left out: judging it needs each page loaded to compare facet
+    digests, and this route answers a navigation question from the two
+    journals alone, without loading any page.
+    """
+    project = project_state.loaded_project
+    if project is None or project.project_id != project_id:
+        return _review_queue_project_not_found(project_id)
+
+    proposals = RegionProposalLog(project.project_root).proposals()
+    latest_decisions = RegionDecisionLog(project.project_root).latest_by_proposal()
+    undecided = [p for p in proposals if is_undecided(latest_decisions.get((p.proposal_id, p.run_id)))]
+
+    by_page: dict[int, list[RegionProposal]] = {}
+    for p in undecided:
+        by_page.setdefault(p.page_index, []).append(p)
+
+    pages: list[RegionReviewQueuePageSummary] = []
+    for page_index in sorted(by_page):
+        page_proposals = sorted(by_page[page_index], key=_reading_order_key)
+        pages.append(
+            RegionReviewQueuePageSummary(
+                page_index=page_index,
+                undecided=len(page_proposals),
+                first_proposal_id=page_proposals[0].proposal_id,
+                last_proposal_id=page_proposals[-1].proposal_id,
+            )
+        )
+
+    clamped_limit = min(limit, _REVIEW_QUEUE_ITEM_LIMIT_MAX)
+    sort_key = _confidence_order_key if order == "confidence" else _reading_order_key
+    items = [_review_queue_item(p) for p in sorted(undecided, key=sort_key)[:clamped_limit]]
+
+    response = RegionReviewQueueResponse(total_undecided=len(undecided), pages=pages, items=items)
+    return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
+
+
 def install_regions_router(app: FastAPI) -> None:
     """Register the regions router. Called from ``bootstrap.build_app``."""
     app.include_router(router)
@@ -1165,6 +1316,9 @@ __all__ = [
     "EditRegionRequest",
     "ListRegionProposalsResponse",
     "RegionProposalListItem",
+    "RegionReviewQueueItem",
+    "RegionReviewQueuePageSummary",
+    "RegionReviewQueueResponse",
     "SetRegionWordMembershipRequest",
     "StartRegionProposalRunRequest",
     "StartRegionProposalRunResponse",
