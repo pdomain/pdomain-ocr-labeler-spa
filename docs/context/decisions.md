@@ -580,3 +580,29 @@ and browser gates pass on the merged tree.
 - Remaining work: the save-time half. Nothing yet refuses an edit written
   against an image that changed underneath it; `08-page-actions.md` §14 now says
   so plainly instead of describing it as resolved.
+
+### [2026-09-17] Retired: Cancel marked a job cancelled while the work ran on
+
+- Old path: `docs/issues/2026-07-21-job-cancel-incomplete.md`
+- Outcome: implemented
+- Superseded by: `src/pdomain_ocr_labeler_spa/core/jobs/runner.py`
+  (`JobRunner.is_cancelled`), the handlers under `core/jobs/handlers/`, and
+  `frontend/src/hooks/useCancelJob.ts`
+- Resolved by: `10ba8b6` (merge of `fix/job-cancel`)
+- Rationale kept: only the export handler ever noticed a cancel, so cancelling
+  an auto-rotate left the book rotating and re-OCRing to the end. Export,
+  auto-rotate-all, save-project, propose-page-kinds and propose-regions now share
+  one `is_cancelled` check between units of work, finish the page in flight, and
+  end with a message saying what they had done. `measure_book` takes a
+  `should_stop` hook for the two measuring runs. Cancel is also reachable from
+  every place a person starts one of these jobs, which it was not: the overlay
+  offered it for two job types, and the toolbar's runs had no affordance at all.
+  A best-effort cancel says so rather than implying the work stops at once.
+  Evidence: `tests/unit/core/jobs/test_is_cancelled.py`,
+  `test_auto_rotate_all_cancel.py`, `test_save_project_cancel.py`, the cancel
+  cases in the propose-run handler tests, and `useCancelJob.test.tsx`.
+- Remaining work: `rotate_page`, `reload_ocr` and `refine_bboxes` stay
+  uncancellable by design, having no unit-of-work boundary to stop at. A
+  handler's post-cancel summary still reaches a closed SSE channel, so it is
+  shown through a notification toast instead; reaching the live stream would
+  mean changing when the job event stream terminates, for every job type.

@@ -266,7 +266,7 @@ Each row is a governed issue under `docs/issues/`. Prefer implementing by issue
 | 3a | [`docs/issues/2026-07-21-job-sse-fe-be-shape-mismatch.md`](../issues/2026-07-21-job-sse-fe-be-shape-mismatch.md) | P1-JOB-SSE, P1-JOB-TYPE |
 | 3b | done 2026-09-17 in `fe396c3`; see the tombstone in `docs/context/decisions.md` | P1-CANVAS-ERASE |
 | 3b | done 2026-09-17 in `81a0325`; see the tombstone in `docs/context/decisions.md` | P1-IMAGE-DRIFT |
-| 3b | [`docs/issues/2026-07-21-job-cancel-incomplete.md`](../issues/2026-07-21-job-cancel-incomplete.md) | P1-CANCEL |
+| 3b | done 2026-09-17 in `10ba8b6`; see the tombstone in `docs/context/decisions.md` | P1-CANCEL |
 | 3b | done 2026-09-17 in `f1d227f`; see the tombstone in `docs/context/decisions.md` | P1-MATCH-NAV |
 | 3b | [`docs/issues/2026-07-21-bbox-refine-crop-misleading.md`](../issues/2026-07-21-bbox-refine-crop-misleading.md) | P1-BBOX-UI |
 | 3b | (existing) [`docs/context/open-findings.md`](../context/open-findings.md) + open-findings plan | KBD / XDG / RELOAD / HIER |
