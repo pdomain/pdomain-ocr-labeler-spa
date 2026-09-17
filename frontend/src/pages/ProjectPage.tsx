@@ -90,8 +90,13 @@ import {
   applyLineSelection,
   applyParagraphSelection,
   promoteCompleteWordLines,
+  selectProposal,
   type SelectionState,
 } from "../stores/selection-store";
+import {
+  reviewSelectionIntentStore,
+  clearReviewSelectionIntent,
+} from "../stores/review-selection-intent-store";
 import { worklistStore } from "../stores/worklist-store";
 import { pageNoUrl } from "../lib/routes";
 
@@ -364,6 +369,7 @@ export default function ProjectPage() {
     page: pagePayload ?? undefined,
     projectId: projectId ?? "",
     pageIndex: idx0,
+    navigate,
   });
 
   // ── Region selection scoping (whole-branch review defect 2) ────────────
@@ -383,6 +389,61 @@ export default function ProjectPage() {
       prevPageIndexRef.current = idx0;
     }
   }, [idx0]);
+
+  // ── Review-queue selection intent (book review queue design: "Selecting
+  // after navigation needs an intent, not a direct call") ─────────────────
+  // '['/']' in useRegionReviewHotkeys record {pageIndex, proposalId} in
+  // reviewSelectionIntentStore before navigating — a store the page-change
+  // clear above does not touch, since the destination page's payload has
+  // not loaded at the moment the key fires and there is nothing to select
+  // against yet. This effect applies the intent once the current page's
+  // payload matches it.
+  //
+  // Ordering: this effect is declared AFTER the page-change clear above, so
+  // React flushes both in source order within one commit. That matters for
+  // the case where the destination page's payload is already cached (e.g. a
+  // revisited page) — both effects then run in the SAME render, and if the
+  // clear ran second it would wipe the selection this effect just made. With
+  // it declared first, the clear always resolves before the intent is
+  // applied, so it never undoes it. Moving this effect above the clear (or
+  // merging them) would reintroduce that bug — keep this order.
+  // ProjectPage.pageChange.test.tsx's "same-commit ordering" test fails if
+  // this effect is moved above the clear — verified while writing it.
+  //
+  // Abandoning the intent (finding 1, medium): the intent used to be
+  // consumed only when idx0 happened to equal intent.pageIndex, and was
+  // never cleared otherwise. So pressing ']' (intent for page 7), then
+  // navigating elsewhere with ordinary prev/next before page 7 loaded, left
+  // the intent pending indefinitely — later reaching page 7 through normal
+  // navigation silently auto-selected that proposal. `prevIdx0Ref` tracks
+  // the previous idx0 so this effect can tell a genuine navigation (idx0
+  // actually changed) apart from a re-run triggered only by `pagePayload`
+  // changing at the same idx0 (e.g. the destination page's fetch resolving).
+  // Only a genuine navigation that lands somewhere other than the intent's
+  // own pageIndex abandons it — the navigation ']' itself triggers (which
+  // changes idx0 TO intent.pageIndex) must not clear the intent it just set.
+  const prevIdx0Ref = useRef(idx0);
+  useEffect(() => {
+    const idx0Changed = prevIdx0Ref.current !== idx0;
+    prevIdx0Ref.current = idx0;
+
+    const intent = reviewSelectionIntentStore.getState().intent;
+    if (!intent) return;
+
+    if (idx0Changed && intent.pageIndex !== idx0) {
+      clearReviewSelectionIntent();
+      return;
+    }
+    if (intent.pageIndex !== idx0) return;
+    if (!pagePayload) return; // destination page not loaded yet — wait
+    const isUndecided = (pagePayload.regions ?? []).some(
+      (r) => !r.confirmed && r.proposal_id === intent.proposalId,
+    );
+    if (isUndecided) {
+      selectProposal(intent.proposalId);
+    }
+    clearReviewSelectionIntent();
+  }, [idx0, pagePayload]);
 
   // ── ⌘K QuickSearch (D-047) ─────────────────────────────────────────────
   // QuickSearch relocated from the chrome header into the Drawer worklist

@@ -1026,3 +1026,615 @@ def test_rejecting_an_already_rejected_proposal_records_nothing_new(toolbar_load
     decisions = [d for d in RegionDecisionLog(project_root).decisions() if d.proposal_id == "p1"]
     assert len(decisions) == 1
     assert decisions[0].disposition is Disposition.REJECTED
+
+
+# ── Route: GET .../regions/review-queue ──────────────────────────────────
+
+_REVIEW_QUEUE_BASE = "/api/projects/book1/regions/review-queue"
+
+
+def _seed_region_proposal(
+    project_root: Path,
+    *,
+    proposal_id: str,
+    run_id: str = "r1",
+    page_index: int = 0,
+    box: tuple[int, int, int, int] = (5, 5, 50, 50),
+    confidence: float = 0.8,
+    role: Any = None,
+) -> None:
+    """Write one proposal straight to the journal — no run record needed.
+
+    The review queue never reads ``RegionProposalLog.runs()``: staleness (the
+    only thing a run record is for) is explicitly out of scope for this route.
+    """
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.regions.models import RegionProposal
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    if role is None:
+        role = RegionRole.POETRY
+
+    RegionProposalLog(project_root).append_proposals(
+        [
+            RegionProposal(
+                proposal_id=proposal_id,
+                run_id=run_id,
+                page_index=page_index,
+                role=role,
+                box=box,
+                confidence=confidence,
+                evidence={},
+            )
+        ]
+    )
+
+
+def _seed_many_region_proposals(project_root: Path, count: int, *, page_index: int = 0) -> None:
+    """Seed ``count`` undecided proposals in one journal append (one fsync)."""
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.regions.models import RegionProposal
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    proposals = [
+        RegionProposal(
+            proposal_id=f"bulk-{i}",
+            run_id="r1",
+            page_index=page_index,
+            role=RegionRole.POETRY,
+            box=(5, 5 + i, 50, 50 + i),
+            confidence=0.8,
+            evidence={},
+        )
+        for i in range(count)
+    ]
+    RegionProposalLog(project_root).append_proposals(proposals)
+
+
+def _reject_proposal_directly(project_root: Path, *, proposal_id: str, run_id: str = "r1") -> None:
+    """Record a rejection without going through the route, which requires the
+    proposal's page to be loaded. The review queue tests seed proposals on
+    pages the ``toolbar_loaded`` fixture never loads.
+    """
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition, RegionDecision
+
+    RegionDecisionLog(project_root).append(
+        RegionDecision(
+            decision_id=f"d-{proposal_id}",
+            run_id=run_id,
+            proposal_id=proposal_id,
+            disposition=Disposition.REJECTED,
+            region_id=None,
+            actor="default",
+            decided_at="2026-09-08T10:00:00+00:00",
+        )
+    )
+
+
+def test_review_queue_parity_with_the_page_views_unconfirmed_regions(toolbar_loaded: Any) -> None:
+    """The queue's undecided set for a page must equal exactly what the page
+    view shows as unconfirmed, or `]` in the UI can land on a page with
+    nothing to review.
+    """
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_region_proposal(project_root, proposal_id="p-undecided", box=(5, 5, 50, 50))
+    _seed_region_proposal(project_root, proposal_id="p-accepted", box=(60, 5, 100, 50))
+    _seed_region_proposal(project_root, proposal_id="p-rejected", box=(5, 60, 50, 100))
+
+    assert client.post(f"{_BASE}/regions/proposals/p-accepted/accept").status_code == 200
+    assert client.post(f"{_BASE}/regions/proposals/p-rejected/reject").status_code == 200
+
+    page_view = client.get(_BASE)
+    assert page_view.status_code == 200, page_view.text
+    page_unconfirmed = {
+        reg["proposal_id"]
+        for reg in page_view.json()["regions"]
+        if not reg["confirmed"] and reg["proposal_id"] is not None
+    }
+
+    queue = client.get(_REVIEW_QUEUE_BASE, params={"limit": 10})
+    assert queue.status_code == 200, queue.text
+    body = queue.json()
+    queue_undecided = {item["proposal_id"] for item in body["items"]}
+
+    assert queue_undecided == page_unconfirmed == {"p-undecided"}
+    assert body["total_undecided"] == 1
+
+
+def test_pages_lists_only_pages_with_work_in_page_order_with_counts_and_reading_order_ids(
+    toolbar_loaded: Any,
+) -> None:
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    # Page 2: two undecided proposals, seeded out of reading order.
+    _seed_region_proposal(project_root, proposal_id="p2-b", page_index=2, box=(5, 100, 50, 150))
+    _seed_region_proposal(project_root, proposal_id="p2-a", page_index=2, box=(5, 5, 50, 50))
+    # Page 0: one undecided proposal.
+    _seed_region_proposal(project_root, proposal_id="p0-a", page_index=0, box=(5, 5, 50, 50))
+    # Page 5: its only proposal is decided, so it carries no work.
+    _seed_region_proposal(project_root, proposal_id="p5-a", page_index=5, box=(5, 5, 50, 50))
+    _reject_proposal_directly(project_root, proposal_id="p5-a")
+
+    r = client.get(_REVIEW_QUEUE_BASE, params={"limit": 100})
+    assert r.status_code == 200, r.text
+    body = r.json()
+
+    assert [p["page_index"] for p in body["pages"]] == [0, 2]
+    page0 = next(p for p in body["pages"] if p["page_index"] == 0)
+    assert page0["undecided"] == 1
+    assert page0["first_proposal_id"] == page0["last_proposal_id"] == "p0-a"
+    page2 = next(p for p in body["pages"] if p["page_index"] == 2)
+    assert page2["undecided"] == 2
+    assert page2["first_proposal_id"] == "p2-a"
+    assert page2["last_proposal_id"] == "p2-b"
+
+
+def test_limit_zero_returns_no_items_but_still_counts_and_summarizes(toolbar_loaded: Any) -> None:
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_region_proposal(project_root, proposal_id="p1", box=(5, 5, 50, 50))
+    _seed_region_proposal(project_root, proposal_id="p2", box=(60, 5, 100, 50))
+
+    r = client.get(_REVIEW_QUEUE_BASE)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["items"] == []
+    assert body["total_undecided"] == 2
+    assert [p["page_index"] for p in body["pages"]] == [0]
+
+
+def test_limit_two_returns_exactly_two_items(toolbar_loaded: Any) -> None:
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_many_region_proposals(project_root, 5)
+
+    r = client.get(_REVIEW_QUEUE_BASE, params={"limit": 2})
+    assert r.status_code == 200, r.text
+    assert len(r.json()["items"]) == 2
+
+
+def test_limit_above_500_is_clamped_to_500(toolbar_loaded: Any) -> None:
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_many_region_proposals(project_root, 510)
+
+    r = client.get(_REVIEW_QUEUE_BASE, params={"limit": 10000})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["total_undecided"] == 510
+    assert len(body["items"]) == 500
+
+
+def test_negative_limit_is_rejected_with_a_4xx(toolbar_loaded: Any) -> None:
+    client, _project_state, _page = toolbar_loaded
+    r = client.get(_REVIEW_QUEUE_BASE, params={"limit": -1})
+    assert 400 <= r.status_code < 500, r.text
+
+
+def test_order_confidence_sorts_ascending_with_reading_order_ties(toolbar_loaded: Any) -> None:
+    """``RegionProposal.confidence`` is dataclass-validated to always be a
+    float in ``[0.0, 1.0]`` (``RegionProposal.__post_init__``), so a "missing
+    confidence sorts first" proposal cannot be constructed through the
+    legitimate write path — this exercises the reachable half: ascending
+    confidence, ties broken by reading order.
+    """
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_region_proposal(project_root, proposal_id="high", confidence=0.9, box=(5, 5, 50, 50))
+    _seed_region_proposal(project_root, proposal_id="low-right", confidence=0.2, box=(60, 5, 100, 50))
+    _seed_region_proposal(project_root, proposal_id="low-left", confidence=0.2, box=(5, 5, 50, 50))
+
+    r = client.get(_REVIEW_QUEUE_BASE, params={"order": "confidence", "limit": 10})
+    assert r.status_code == 200, r.text
+    assert [item["proposal_id"] for item in r.json()["items"]] == ["low-left", "low-right", "high"]
+
+
+def test_review_queue_reads_each_journal_once_per_request(
+    toolbar_loaded: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_region_proposal(project_root, proposal_id="p1", box=(5, 5, 50, 50))
+    _seed_region_proposal(project_root, proposal_id="p2", page_index=1, box=(5, 5, 50, 50))
+
+    proposal_reads = 0
+    original_proposal_read = RegionProposalLog._read
+
+    def _counting_proposal_read(self: RegionProposalLog) -> list[Any]:
+        nonlocal proposal_reads
+        proposal_reads += 1
+        return original_proposal_read(self)
+
+    monkeypatch.setattr(RegionProposalLog, "_read", _counting_proposal_read)
+
+    decision_reads = 0
+    original_decisions = RegionDecisionLog.decisions
+
+    def _counting_decisions(self: RegionDecisionLog) -> list[Any]:
+        nonlocal decision_reads
+        decision_reads += 1
+        return original_decisions(self)
+
+    monkeypatch.setattr(RegionDecisionLog, "decisions", _counting_decisions)
+
+    r = client.get(_REVIEW_QUEUE_BASE, params={"limit": 10})
+
+    assert r.status_code == 200, r.text
+    assert proposal_reads == 1
+    assert decision_reads == 1
+
+
+def test_review_queue_returns_404_for_an_unloaded_project(toolbar_loaded: Any) -> None:
+    client, _project_state, _page = toolbar_loaded
+    r = client.get("/api/projects/other_book/regions/review-queue")
+    assert r.status_code == 404, r.text
+    assert r.json()["error"] == "project_not_found"
+
+
+# ── Decision carry-forward (Task: carry across runs) ─────────────────────
+#
+# pdomain-ocr-synth's docs/specs/2026-09-17-book-review-queue-design.md
+# "Decisions must carry across runs first, or the queue fills with work
+# already done" — a new proposal that matches a confirmed region (same role,
+# box IoU >= 0.7) carries that region's earlier confirmation forward as its
+# own ``carried`` decision, so a re-run does not re-propose work already
+# done.
+
+
+def _mark_page_reviewed(project_root: Path, page_index: int = 0) -> None:
+    from datetime import UTC, datetime
+
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+
+    PageKindReviewedStore(project_root).mark_reviewed(page_index, datetime.now(UTC).isoformat())
+
+
+def _accept_seeded_proposal(client: Any, project_root: Path, *, proposal_id: str, role: Any) -> str:
+    """Seed and accept one proposal; return the confirmed region's id."""
+    _seed_proposal(client, project_root, proposal_id=proposal_id, role=role)
+    accepted = client.post(f"{_BASE}/regions/proposals/{proposal_id}/accept")
+    assert accepted.status_code == 200, accepted.text
+    return next(reg["region_id"] for reg in accepted.json()["regions"] if reg["confirmed"])
+
+
+def test_a_matching_proposal_carries_the_confirmed_decision_forward(toolbar_loaded: Any) -> None:
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    region_id = _accept_seeded_proposal(client, project_root, proposal_id="p1", role=RegionRole.POETRY)
+    _mark_page_reviewed(project_root)
+
+    def _overlapping_detector(detector_input: Any) -> list[DetectedRegion]:
+        del detector_input
+        return [DetectedRegion(role=RegionRole.POETRY, box=(5, 5, 50, 50), confidence=0.6, evidence={})]
+
+    _run_propose_regions_job(client, detector=_overlapping_detector)
+
+    new_proposals = [p for p in RegionProposalLog(project_root).proposals_for_page(0) if p.run_id != "r1"]
+    assert len(new_proposals) == 1
+    new_proposal = new_proposals[0]
+
+    decision_log = RegionDecisionLog(project_root)
+    decision = decision_log.decision_for(new_proposal.proposal_id, run_id=new_proposal.run_id)
+    assert decision is not None
+    assert decision.disposition is Disposition.CARRIED
+    assert decision.proposal_id == new_proposal.proposal_id
+    assert decision.run_id == new_proposal.run_id
+    assert decision.region_id == region_id
+    assert decision.carried_from_proposal_id == "p1"
+    assert decision.carried_from_run_id == "r1"
+    assert decision.actor == "propose_regions"
+
+    # latest_by_proposal() must find it under the *new* proposal's own key —
+    # writing the origin's run id here would make the lookup miss.
+    latest = decision_log.latest_by_proposal()
+    assert latest[(new_proposal.proposal_id, new_proposal.run_id)] == decision
+
+    payload = client.get(_BASE).json()
+    assert all(reg.get("proposal_id") != new_proposal.proposal_id for reg in payload["regions"])
+
+
+def test_a_different_role_carries_nothing(toolbar_loaded: Any) -> None:
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _accept_seeded_proposal(client, project_root, proposal_id="p1", role=RegionRole.POETRY)
+    _mark_page_reviewed(project_root)
+
+    def _same_box_different_role(detector_input: Any) -> list[DetectedRegion]:
+        del detector_input
+        return [DetectedRegion(role=RegionRole.PAGE_HEADER, box=(5, 5, 50, 50), confidence=0.6, evidence={})]
+
+    _run_propose_regions_job(client, detector=_same_box_different_role)
+
+    decisions = RegionDecisionLog(project_root).decisions()
+    assert all(d.disposition is not Disposition.CARRIED for d in decisions)
+
+
+def test_iou_below_threshold_carries_nothing(toolbar_loaded: Any) -> None:
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    # Confirmed region is (5, 5, 50, 50), a 45x45 box (area 2025).
+    _accept_seeded_proposal(client, project_root, proposal_id="p1", role=RegionRole.POETRY)
+    _mark_page_reviewed(project_root)
+
+    def _barely_overlapping(detector_input: Any) -> list[DetectedRegion]:
+        del detector_input
+        # Shifted box: intersection is small relative to the union, well under
+        # the 0.7 threshold, same role.
+        return [DetectedRegion(role=RegionRole.POETRY, box=(40, 40, 85, 85), confidence=0.6, evidence={})]
+
+    _run_propose_regions_job(client, detector=_barely_overlapping)
+
+    decisions = RegionDecisionLog(project_root).decisions()
+    assert all(d.disposition is not Disposition.CARRIED for d in decisions)
+
+
+def test_a_third_run_carries_from_the_original_accepted_decision(toolbar_loaded: Any) -> None:
+    """The origin lookup filters to accepted/edited decisions, never a carried one,
+    so a second re-run does not name the first re-run's carry as the origin.
+    """
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _accept_seeded_proposal(client, project_root, proposal_id="p1", role=RegionRole.POETRY)
+    _mark_page_reviewed(project_root)
+
+    def _overlapping_detector(detector_input: Any) -> list[DetectedRegion]:
+        del detector_input
+        return [DetectedRegion(role=RegionRole.POETRY, box=(5, 5, 50, 50), confidence=0.6, evidence={})]
+
+    _run_propose_regions_job(client, detector=_overlapping_detector)
+    _run_propose_regions_job(client, detector=_overlapping_detector)
+
+    proposal_log = RegionProposalLog(project_root)
+    decision_log = RegionDecisionLog(project_root)
+    all_proposals = proposal_log.proposals_for_page(0)
+    seeded_run_ids = {"r1"}
+    later_proposals = [p for p in all_proposals if p.run_id not in seeded_run_ids]
+    assert len(later_proposals) == 2, "each of the two later runs should have proposed one region"
+
+    carried = [decision_log.decision_for(p.proposal_id, run_id=p.run_id) for p in later_proposals]
+    assert all(d is not None and d.disposition is Disposition.CARRIED for d in carried)
+    assert all(d is not None and d.carried_from_proposal_id == "p1" for d in carried)
+    assert all(d is not None and d.carried_from_run_id == "r1" for d in carried)
+
+
+def test_a_proposal_overlapping_a_hand_drawn_region_carries_nothing(toolbar_loaded: Any) -> None:
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    created = client.post(
+        f"{_BASE}/regions",
+        json={"role": "poetry", "box": {"x": 5, "y": 5, "width": 45, "height": 45}},
+    )
+    assert created.status_code == 200, created.text
+    _mark_page_reviewed(project_root)
+
+    def _overlapping_hand_drawn(detector_input: Any) -> list[Any]:
+        del detector_input
+        from pdomain_book_contracts.annotation import RegionRole
+
+        return [DetectedRegion(role=RegionRole.POETRY, box=(5, 5, 50, 50), confidence=0.6, evidence={})]
+
+    _run_propose_regions_job(client, detector=_overlapping_hand_drawn)
+
+    decisions = RegionDecisionLog(project_root).decisions()
+    assert all(d.disposition is not Disposition.CARRIED for d in decisions)
+
+
+def test_the_run_summary_reports_the_carried_count(toolbar_loaded: Any) -> None:
+    import asyncio
+    from datetime import UTC, datetime
+
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
+    from pdomain_ocr_labeler_spa.core.jobs.runner import Job, JobStatus
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion
+
+    client, project_state, _page = toolbar_loaded
+    project = project_state.loaded_project
+    assert project is not None
+    project_root = project.project_root
+    _accept_seeded_proposal(client, project_root, proposal_id="p1", role=RegionRole.POETRY)
+    _mark_page_reviewed(project_root)
+
+    def _overlapping_detector(detector_input: Any) -> list[DetectedRegion]:
+        del detector_input
+        return [DetectedRegion(role=RegionRole.POETRY, box=(5, 5, 50, 50), confidence=0.6, evidence={})]
+
+    runner = client.app.state.job_runner
+    runner.context["region_detector"] = _overlapping_detector
+    job = Job(
+        job_id="carry-summary-job",
+        job_type="propose_regions",
+        status=JobStatus.RUNNING,
+        project_id=project.project_id,
+        payload={"project_id": project.project_id},
+        created_at=datetime.now(UTC),
+    )
+    runner._jobs[job.job_id] = job
+    asyncio.run(handle_propose_regions(runner, job))
+
+    reported = runner.get_job(job.job_id)
+    assert reported is not None
+    assert "Carried 1 decision(s) from earlier runs." in reported.message
+
+
+# ── Deleting a carried region rejects every proposal that decided it ─────
+
+
+def test_deleting_a_region_carried_twice_rejects_the_source_and_both_carries(
+    toolbar_loaded: Any,
+) -> None:
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    region_id = _accept_seeded_proposal(client, project_root, proposal_id="p1", role=RegionRole.POETRY)
+    _mark_page_reviewed(project_root)
+
+    def _overlapping_detector(detector_input: Any) -> list[DetectedRegion]:
+        del detector_input
+        return [DetectedRegion(role=RegionRole.POETRY, box=(5, 5, 50, 50), confidence=0.6, evidence={})]
+
+    _run_propose_regions_job(client, detector=_overlapping_detector)
+    _run_propose_regions_job(client, detector=_overlapping_detector)
+
+    proposal_log = RegionProposalLog(project_root)
+    carried_proposal_ids = {p.proposal_id for p in proposal_log.proposals_for_page(0) if p.run_id != "r1"}
+    assert len(carried_proposal_ids) == 2
+    all_proposal_ids = {"p1", *carried_proposal_ids}
+
+    deleted = client.delete(f"{_BASE}/regions/{region_id}")
+    assert deleted.status_code == 200, deleted.text
+
+    decision_log = RegionDecisionLog(project_root)
+    latest = decision_log.latest_by_proposal()
+    rejected_proposal_ids = {
+        pid for (pid, _run_id), decision in latest.items() if decision.disposition is Disposition.REJECTED
+    }
+    assert rejected_proposal_ids == all_proposal_ids
+    for pid, run_id in latest:
+        if pid in all_proposal_ids:
+            decision = latest[(pid, run_id)]
+            assert decision.disposition is Disposition.REJECTED
+            assert decision.region_id is None
+            assert decision.run_id == run_id
+
+    payload = client.get(_BASE).json()
+    assert not any(reg["confirmed"] for reg in payload["regions"])
+    proposal_views = {p["proposal_id"]: p for p in payload["proposals"]}
+    for pid in all_proposal_ids:
+        assert proposal_views[pid]["disposition"] == "rejected"
+        assert proposal_views[pid]["decided_region_id"] is None
+
+
+def test_two_proposals_matching_one_region_both_carry_and_delete_rejects_both(
+    toolbar_loaded: Any,
+) -> None:
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    region_id = _accept_seeded_proposal(client, project_root, proposal_id="p1", role=RegionRole.POETRY)
+    _mark_page_reviewed(project_root)
+
+    def _two_overlapping(detector_input: Any) -> list[DetectedRegion]:
+        del detector_input
+        return [
+            DetectedRegion(role=RegionRole.POETRY, box=(5, 5, 50, 50), confidence=0.6, evidence={}),
+            DetectedRegion(role=RegionRole.POETRY, box=(6, 6, 50, 50), confidence=0.5, evidence={}),
+        ]
+
+    _run_propose_regions_job(client, detector=_two_overlapping)
+
+    new_proposals = [p for p in RegionProposalLog(project_root).proposals_for_page(0) if p.run_id != "r1"]
+    assert len(new_proposals) == 2
+    latest = RegionDecisionLog(project_root).latest_by_proposal()
+    for proposal in new_proposals:
+        decision = latest[(proposal.proposal_id, proposal.run_id)]
+        assert decision.disposition is Disposition.CARRIED
+        assert decision.region_id == region_id
+
+    deleted = client.delete(f"{_BASE}/regions/{region_id}")
+    assert deleted.status_code == 200, deleted.text
+
+    latest = RegionDecisionLog(project_root).latest_by_proposal()
+    for proposal in new_proposals:
+        assert latest[(proposal.proposal_id, proposal.run_id)].disposition is Disposition.REJECTED
+
+
+def test_carry_waits_for_the_page_lock_before_reading_or_appending(toolbar_loaded: Any) -> None:
+    """A carry must not read a block tree a region route is mutating."""
+    import threading
+
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import _carry_page
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition, RegionProposal
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    region_id = _accept_seeded_proposal(client, project_root, proposal_id="p1", role=RegionRole.POETRY)
+    decision_log = RegionDecisionLog(project_root)
+    origin = next(d for d in decision_log.decisions() if d.region_id == region_id)
+    proposal = RegionProposal(
+        proposal_id="p2",
+        run_id="r2",
+        page_index=0,
+        role=RegionRole.POETRY,
+        box=(5, 5, 50, 50),
+        confidence=0.6,
+        evidence={},
+    )
+    results: list[tuple[int, int]] = []
+
+    def _carry() -> None:
+        results.append(
+            _carry_page(
+                project_state=project_state,
+                decision_log=decision_log,
+                page_index=0,
+                proposals=[proposal],
+                origin_by_region_id={region_id: origin},
+                decided_at="2026-09-17T12:00:00+00:00",
+            )
+        )
+
+    lock = project_state.get_page_lock(0)
+    with lock:
+        worker = threading.Thread(target=_carry)
+        worker.start()
+        worker.join(timeout=0.3)
+        assert worker.is_alive()
+        assert all(d.disposition is not Disposition.CARRIED for d in decision_log.decisions())
+    worker.join(timeout=5)
+    assert not worker.is_alive()
+    assert results == [(1, 0)]
+    assert any(d.disposition is Disposition.CARRIED for d in decision_log.decisions())

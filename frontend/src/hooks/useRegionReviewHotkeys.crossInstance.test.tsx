@@ -13,11 +13,12 @@
 // pass here and still fail in production.
 
 import React from "react";
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
+import type { NavigateFunction } from "react-router-dom";
 import { server } from "../test/server";
 import { useRegionReviewHotkeys } from "./useRegionReviewHotkeys";
 import { RegionDetail } from "../components/right-panel/RegionDetail";
@@ -69,7 +70,8 @@ function makeQueryClient() {
  * ProjectPage renders.
  */
 function Harness({ page }: { page: PagePayload }) {
-  useRegionReviewHotkeys({ page, projectId: PROJECT_ID, pageIndex: PAGE_IDX });
+  const navigate: NavigateFunction = vi.fn();
+  useRegionReviewHotkeys({ page, projectId: PROJECT_ID, pageIndex: PAGE_IDX, navigate });
   return <RegionDetail page={page} projectId={PROJECT_ID} pageIndex={PAGE_IDX} />;
 }
 

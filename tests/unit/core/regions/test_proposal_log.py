@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
+import pytest
 from pdomain_book_contracts.annotation import RegionRole
 
 from pdomain_ocr_labeler_spa.core.regions.models import ProposalRun, RegionProposal
@@ -63,6 +65,50 @@ def test_proposals_are_filtered_by_page(tmp_path: Path) -> None:
     log.append_proposals([_proposal("p1", page_index=0), _proposal("p2", page_index=1)])
 
     assert [p.proposal_id for p in log.proposals_for_page(1)] == ["p2"]
+
+
+def test_proposals_returns_every_page_and_run_in_one_pass(tmp_path: Path) -> None:
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    log = RegionProposalLog(tmp_path)
+    log.append_run(_run("r1"))
+    log.append_proposals(
+        [_proposal("p1", run_id="r1", page_index=0), _proposal("p2", run_id="r1", page_index=1)]
+    )
+    log.append_run(_run("r2"))
+    log.append_proposals([_proposal("p3", run_id="r2", page_index=2)])
+
+    assert sorted(p.proposal_id for p in log.proposals()) == ["p1", "p2", "p3"]
+
+
+def test_proposals_on_a_fresh_log_is_empty(tmp_path: Path) -> None:
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    log = RegionProposalLog(tmp_path)
+    assert log.proposals() == []
+
+
+def test_proposals_reads_the_journal_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    log = RegionProposalLog(tmp_path)
+    log.append_run(_run())
+    log.append_proposals([_proposal("p1", page_index=0), _proposal("p2", page_index=1)])
+
+    read_calls = 0
+    original_read = RegionProposalLog._read
+
+    def _counting_read(self: RegionProposalLog) -> list[Any]:
+        nonlocal read_calls
+        read_calls += 1
+        return original_read(self)
+
+    monkeypatch.setattr(RegionProposalLog, "_read", _counting_read)
+
+    found = log.proposals()
+
+    assert sorted(p.proposal_id for p in found) == ["p1", "p2"]
+    assert read_calls == 1
 
 
 def test_a_second_run_does_not_disturb_the_first(tmp_path: Path) -> None:

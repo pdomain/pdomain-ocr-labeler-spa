@@ -206,6 +206,11 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     setActiveJobId: setPageKindsJobId,
     invalidationKey: ["page", projectId, pageIndex],
     onComplete: (jobId, event) => {
+      // Book review queue design ("A count stays visible"): a page-kinds
+      // run can change which pages a later region run touches, so the queue
+      // is invalidated here too — cheap at limit=0, and correct even though
+      // this run alone never changes `total_undecided`.
+      void qc.invalidateQueries({ queryKey: ["review-queue", projectId] });
       const msg = event.progress.message || "Page kind proposals complete";
       toast.success(msg, { id: jobId });
     },
@@ -232,6 +237,11 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     setActiveJobId: setRegionsJobId,
     invalidationKey: ["page", projectId, pageIndex],
     onComplete: (jobId, event) => {
+      // Book review queue design ("A count stays visible"): a completed
+      // region run is exactly what fills or empties the queue, so the Rail
+      // badge and bracket-key navigation must see the fresh count and page
+      // summary once this invalidation's refetch lands.
+      void qc.invalidateQueries({ queryKey: ["review-queue", projectId] });
       const msg = event.progress.message || "Region proposals complete";
       if (msg.toLowerCase().includes("propose page kinds first")) {
         toast.warn(msg, { id: jobId });

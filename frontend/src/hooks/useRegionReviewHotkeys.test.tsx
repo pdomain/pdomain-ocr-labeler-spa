@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
+import type { NavigateFunction } from "react-router-dom";
 import { server } from "../test/server";
 import { useRegionReviewHotkeys } from "./useRegionReviewHotkeys";
 import { railStore } from "../stores/rail-store";
@@ -23,6 +24,7 @@ import {
   selectRegion,
   clearSelection,
 } from "../stores/selection-store";
+import { reviewSelectionIntentStore } from "../stores/review-selection-intent-store";
 import { worklistStore } from "../stores/worklist-store";
 import { dialogStore } from "../stores/dialog-store";
 import { toast } from "../lib/toast";
@@ -89,16 +91,57 @@ function makeQueryClient() {
   });
 }
 
-function renderHotkeys(page: PagePayload) {
+function renderHotkeys(
+  page: PagePayload,
+  options?: { navigate?: NavigateFunction; pageIndex?: number },
+) {
   const qc = makeQueryClient();
-  return renderHook(
-    () => useRegionReviewHotkeys({ page, projectId: PROJECT_ID, pageIndex: PAGE_IDX }),
+  const navigate: NavigateFunction = options?.navigate ?? vi.fn();
+  const pageIndex = options?.pageIndex ?? PAGE_IDX;
+  return {
+    ...renderHook(
+      () => useRegionReviewHotkeys({ page, projectId: PROJECT_ID, pageIndex, navigate }),
+      {
+        wrapper: ({ children }: { children: React.ReactNode }) => (
+          <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+        ),
+      },
+    ),
+    navigate,
+    qc,
+  };
+}
+
+/**
+ * Like `renderHotkeys`, but returns `rerender` wired to swap in a new
+ * `page`/`pageIndex` pair without unmounting — used to simulate navigating
+ * between pages within one hook instance's lifetime (its `useRef` state
+ * persists across the rerender, same as it would across a real route change
+ * within one mounted `ProjectPage`).
+ */
+function renderHotkeysReRenderable(
+  page: PagePayload,
+  options?: { navigate?: NavigateFunction; pageIndex?: number },
+) {
+  const qc = makeQueryClient();
+  const navigate: NavigateFunction = options?.navigate ?? vi.fn();
+  const pageIndex = options?.pageIndex ?? PAGE_IDX;
+  const utils = renderHook(
+    (props: { page: PagePayload; pageIndex: number }) =>
+      useRegionReviewHotkeys({
+        page: props.page,
+        projectId: PROJECT_ID,
+        pageIndex: props.pageIndex,
+        navigate,
+      }),
     {
+      initialProps: { page, pageIndex },
       wrapper: ({ children }: { children: React.ReactNode }) => (
         <QueryClientProvider client={qc}>{children}</QueryClientProvider>
       ),
     },
   );
+  return { ...utils, navigate, qc };
 }
 
 // react-hotkeys-hook 5 matches against the physical `KeyboardEvent.code`
@@ -110,6 +153,8 @@ const KEY_CODE: Record<string, string> = {
   x: "KeyX",
   enter: "Enter",
   delete: "Delete",
+  "[": "BracketLeft",
+  "]": "BracketRight",
 };
 
 function pressKey(key: string) {
@@ -131,6 +176,7 @@ beforeEach(() => {
   clearSelection();
   worklistStore.reset();
   dialogStore.reset();
+  reviewSelectionIntentStore.setState({ intent: null });
 });
 
 afterEach(() => {
@@ -138,6 +184,7 @@ afterEach(() => {
   clearSelection();
   worklistStore.reset();
   dialogStore.reset();
+  reviewSelectionIntentStore.setState({ intent: null });
   vi.restoreAllMocks();
 });
 
@@ -202,10 +249,26 @@ describe("useRegionReviewHotkeys: enter accepts and auto-advances", () => {
 });
 
 describe("useRegionReviewHotkeys: x rejects and clears at the end of the list", () => {
-  it("POSTs reject for the last remaining proposal, clears selection, and shows the toast", async () => {
+  it("POSTs reject for the last remaining proposal in an otherwise-empty book, clears selection, and shows the book-empty toast", async () => {
+    // The book's queue mirrors PAGE_ONE_PROPOSAL exactly: "only" is the sole
+    // undecided proposal in the whole book, so deciding it should leave 0.
     const infoSpy = vi.spyOn(toast, "info");
     let rejectedId: string | undefined;
     server.use(
+      http.get("/api/projects/:pid/regions/review-queue", () =>
+        HttpResponse.json({
+          total_undecided: 1,
+          pages: [
+            {
+              page_index: PAGE_IDX,
+              undecided: 1,
+              first_proposal_id: "only",
+              last_proposal_id: "only",
+            },
+          ],
+          items: [],
+        }),
+      ),
       http.post(
         "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject",
         ({ params }) => {
@@ -215,13 +278,125 @@ describe("useRegionReviewHotkeys: x rejects and clears at the end of the list", 
       ),
     );
     act(() => selectProposal("only"));
-    renderHotkeys(PAGE_ONE_PROPOSAL);
+    const { qc } = renderHotkeys(PAGE_ONE_PROPOSAL);
+    await waitFor(() =>
+      expect(qc.getQueryData(["review-queue", PROJECT_ID, "reading", 0])).toBeDefined(),
+    );
 
     pressKey("x");
 
     await waitFor(() => expect(rejectedId).toBe("only"));
     await waitFor(() => expect(selectionStore.getState().level).toBe("none"));
-    expect(infoSpy).toHaveBeenCalledWith("No undecided proposals left on this page");
+    expect(infoSpy).toHaveBeenCalledWith(
+      "No undecided proposals left on this page. None left in the book.",
+    );
+  });
+
+  it("names the book's remaining count and the ] key when the book still has work", async () => {
+    const infoSpy = vi.spyOn(toast, "info");
+    let rejectedId: string | undefined;
+    server.use(
+      http.get("/api/projects/:pid/regions/review-queue", () =>
+        HttpResponse.json({
+          total_undecided: 13,
+          pages: [
+            {
+              page_index: PAGE_IDX,
+              undecided: 1,
+              first_proposal_id: "only",
+              last_proposal_id: "only",
+            },
+            {
+              page_index: PAGE_IDX + 3,
+              undecided: 12,
+              first_proposal_id: "q1",
+              last_proposal_id: "q12",
+            },
+          ],
+          items: [],
+        }),
+      ),
+      http.post(
+        "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject",
+        ({ params }) => {
+          rejectedId = params.proposalId as string;
+          return HttpResponse.json({ ...PAGE_ONE_PROPOSAL });
+        },
+      ),
+    );
+    act(() => selectProposal("only"));
+    const { qc } = renderHotkeys(PAGE_ONE_PROPOSAL);
+    await waitFor(() =>
+      expect(qc.getQueryData(["review-queue", PROJECT_ID, "reading", 0])).toBeDefined(),
+    );
+
+    pressKey("x");
+
+    await waitFor(() => expect(rejectedId).toBe("only"));
+    expect(infoSpy).toHaveBeenCalledWith(
+      "No undecided proposals left on this page. 12 left in the book; press ] for the next.",
+    );
+  });
+
+  // Finding 3 (low, ~line 245): `bookRemainingAfter` used to subtract a flat
+  // 1 from whatever total_undecided was already cached. Two page-emptying
+  // decisions that both settle before the review-queue invalidation refetch
+  // resolves — the cache stays stale the whole time in this test, since the
+  // queue route only ever answers once — both used to read `total - 1` and
+  // report the same "12 left" count. Deciding on two different pages (the
+  // second via `rerender`, simulating navigating there) means the second
+  // decision isn't blocked by the shared-mutation-key `decisionPending` gate
+  // (whole-branch review defect 1), which only covers one page at a time.
+  it("counts decisions made since the cached queue value, not just the most recent one", async () => {
+    const infoSpy = vi.spyOn(toast, "info");
+    let queueFetchCount = 0;
+    server.use(
+      http.get("/api/projects/:pid/regions/review-queue", () => {
+        queueFetchCount += 1;
+        if (queueFetchCount > 1) return new Promise<Response>(() => {}); // invalidation refetch: never resolves
+        return HttpResponse.json({
+          total_undecided: 13,
+          pages: [
+            { page_index: 5, undecided: 1, first_proposal_id: "onlyA", last_proposal_id: "onlyA" },
+            { page_index: 6, undecided: 1, first_proposal_id: "onlyB", last_proposal_id: "onlyB" },
+          ],
+          items: [],
+        });
+      }),
+      http.post(
+        "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject",
+        ({ params }) => HttpResponse.json({ ...PAGE, regions: [], page_index: Number(params.idx) }),
+      ),
+    );
+    const pageOnlyA: PagePayload = { ...PAGE, page_index: 5, regions: [proposal("onlyA", 0)] };
+    const pageOnlyB: PagePayload = { ...PAGE, page_index: 6, regions: [proposal("onlyB", 0)] };
+
+    act(() => selectProposal("onlyA"));
+    const { rerender, qc } = renderHotkeysReRenderable(pageOnlyA, { pageIndex: 5 });
+    await waitFor(() =>
+      expect(qc.getQueryData(["review-queue", PROJECT_ID, "reading", 0])).toBeDefined(),
+    );
+
+    pressKey("x");
+    await waitFor(() =>
+      expect(infoSpy).toHaveBeenLastCalledWith(
+        "No undecided proposals left on this page. 12 left in the book; press ] for the next.",
+      ),
+    );
+
+    // Simulate navigating to a different page with its own single proposal,
+    // before the first decision's invalidation refetch (still pending, per
+    // the handler above) has resolved — the queue cache is still the same
+    // stale `total_undecided: 13`.
+    rerender({ page: pageOnlyB, pageIndex: 6 });
+    act(() => selectProposal("onlyB"));
+
+    pressKey("x");
+    await waitFor(() =>
+      expect(infoSpy).toHaveBeenLastCalledWith(
+        "No undecided proposals left on this page. 11 left in the book; press ] for the next.",
+      ),
+    );
   });
 
   it("wraps to the first proposal when others remain undecided", async () => {
@@ -457,5 +632,158 @@ describe("useRegionReviewHotkeys: the selection must still be on the current pag
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(acceptCount).toBe(0);
+  });
+});
+
+// ─── Book review queue: '['/']' move between pages that have work ─────────
+// Design: docs/specs/2026-09-17-book-review-queue-design.md
+//   "Two keys move between pages that have work".
+
+describe("useRegionReviewHotkeys: ']' and '[' move between pages with work", () => {
+  // A page index comfortably away from 0 so "previous page" cases exercise
+  // real page indices rather than incidentally passing at the book's start.
+  const CURRENT = 5;
+
+  function queueWith(pages: { page_index: number; first: string; last: string }[]) {
+    return http.get("/api/projects/:pid/regions/review-queue", () =>
+      HttpResponse.json({
+        total_undecided: pages.length,
+        pages: pages.map((p) => ({
+          page_index: p.page_index,
+          undecided: 1,
+          first_proposal_id: p.first,
+          last_proposal_id: p.last,
+        })),
+        items: [],
+      }),
+    );
+  }
+
+  async function renderAtCurrentPage() {
+    const rendered = renderHotkeys(PAGE, { pageIndex: CURRENT });
+    await waitFor(() =>
+      expect(rendered.qc.getQueryData(["review-queue", PROJECT_ID, "reading", 0])).toBeDefined(),
+    );
+    return rendered;
+  }
+
+  it("']' navigates to the next page with work and records its first proposal to select", async () => {
+    server.use(
+      queueWith([
+        { page_index: CURRENT, first: "p-here", last: "p-here" },
+        { page_index: CURRENT + 2, first: "q-first", last: "q-last" },
+      ]),
+    );
+    const { navigate } = await renderAtCurrentPage();
+
+    pressKey("]");
+
+    expect(navigate).toHaveBeenCalledWith(
+      `/projects/${PROJECT_ID}/pages/pageno/${String(CURRENT + 2 + 1)}`,
+    );
+    expect(reviewSelectionIntentStore.getState().intent).toEqual({
+      pageIndex: CURRENT + 2,
+      proposalId: "q-first",
+    });
+  });
+
+  it("'[' navigates to the previous page with work and records its last proposal to select", async () => {
+    server.use(
+      queueWith([
+        { page_index: CURRENT - 3, first: "r-first", last: "r-last" },
+        { page_index: CURRENT, first: "p-here", last: "p-here" },
+      ]),
+    );
+    const { navigate } = await renderAtCurrentPage();
+
+    pressKey("[");
+
+    expect(navigate).toHaveBeenCalledWith(
+      `/projects/${PROJECT_ID}/pages/pageno/${String(CURRENT - 3 + 1)}`,
+    );
+    expect(reviewSelectionIntentStore.getState().intent).toEqual({
+      pageIndex: CURRENT - 3,
+      proposalId: "r-last",
+    });
+  });
+
+  it("']' with no later page shows the toast and does not navigate", async () => {
+    const infoSpy = vi.spyOn(toast, "info");
+    server.use(queueWith([{ page_index: CURRENT, first: "p-here", last: "p-here" }]));
+    const { navigate } = await renderAtCurrentPage();
+
+    pressKey("]");
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalledWith("No more pages with undecided proposals after this page.");
+    expect(reviewSelectionIntentStore.getState().intent).toBeNull();
+  });
+
+  it("'[' with no earlier page shows the toast and does not navigate", async () => {
+    const infoSpy = vi.spyOn(toast, "info");
+    server.use(queueWith([{ page_index: CURRENT, first: "p-here", last: "p-here" }]));
+    const { navigate } = await renderAtCurrentPage();
+
+    pressKey("[");
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalledWith("No pages with undecided proposals before this page.");
+    expect(reviewSelectionIntentStore.getState().intent).toBeNull();
+  });
+
+  it("'[' and ']' do nothing when the rail target is not region", async () => {
+    railStore.getState().setTarget("word");
+    server.use(
+      queueWith([
+        { page_index: CURRENT - 1, first: "r-first", last: "r-last" },
+        { page_index: CURRENT + 1, first: "q-first", last: "q-last" },
+      ]),
+    );
+    const { navigate } = await renderAtCurrentPage();
+
+    pressKey("]");
+    pressKey("[");
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(reviewSelectionIntentStore.getState().intent).toBeNull();
+  });
+
+  // Finding 2 (medium, ~line 296): before the first queue fetch resolves,
+  // `queueQ.data` is undefined, so `queueQ.data?.pages ?? []` reads as an
+  // empty page list — indistinguishable from a book with no work at all.
+  // Pressing ']'/'[' in that window showed the "no more pages" toast even
+  // when work exists elsewhere in the book.
+  it("']' shows a loading toast and does not navigate when the queue has not fetched yet", async () => {
+    const infoSpy = vi.spyOn(toast, "info");
+    server.use(
+      http.get(
+        "/api/projects/:pid/regions/review-queue",
+        () => new Promise<Response>(() => {}), // never resolves in this test
+      ),
+    );
+    const { navigate } = renderHotkeys(PAGE, { pageIndex: CURRENT });
+
+    pressKey("]");
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalledWith("Review queue is still loading.");
+    expect(reviewSelectionIntentStore.getState().intent).toBeNull();
+  });
+
+  it("'[' shows a loading toast and does not navigate when the queue has not fetched yet", async () => {
+    const infoSpy = vi.spyOn(toast, "info");
+    server.use(
+      http.get(
+        "/api/projects/:pid/regions/review-queue",
+        () => new Promise<Response>(() => {}), // never resolves in this test
+      ),
+    );
+    const { navigate } = renderHotkeys(PAGE, { pageIndex: CURRENT });
+
+    pressKey("[");
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalledWith("Review queue is still loading.");
+    expect(reviewSelectionIntentStore.getState().intent).toBeNull();
   });
 });

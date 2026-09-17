@@ -53,6 +53,57 @@ def _run_with_digests(
     )
 
 
+def test_is_undecided_is_true_with_no_decision() -> None:
+    from pdomain_ocr_labeler_spa.core.regions.resolver import is_undecided
+
+    assert is_undecided(None) is True
+
+
+def test_is_undecided_is_false_for_a_rejected_decision() -> None:
+    from pdomain_ocr_labeler_spa.core.regions.resolver import is_undecided
+
+    rejected = RegionDecision(
+        decision_id="d1",
+        run_id="r1",
+        proposal_id="p1",
+        disposition=Disposition.REJECTED,
+        region_id=None,
+        actor="default",
+        decided_at="2026-09-08T10:00:00+00:00",
+    )
+    assert is_undecided(rejected) is False
+
+
+def test_is_undecided_is_false_for_a_decision_naming_a_region() -> None:
+    """Covers accepted, edited and carried alike — all three name a region_id."""
+    from pdomain_ocr_labeler_spa.core.regions.resolver import is_undecided
+
+    for disposition in (Disposition.ACCEPTED, Disposition.EDITED):
+        decided = RegionDecision(
+            decision_id="d1",
+            run_id="r1",
+            proposal_id="p1",
+            disposition=disposition,
+            region_id="reg-1",
+            actor="default",
+            decided_at="2026-09-08T10:00:00+00:00",
+        )
+        assert is_undecided(decided) is False
+
+    carried = RegionDecision(
+        decision_id="d2",
+        run_id="r2",
+        proposal_id="p2",
+        disposition=Disposition.CARRIED,
+        region_id="reg-1",
+        actor="propose_regions",
+        decided_at="2026-09-08T10:00:00+00:00",
+        carried_from_run_id="r1",
+        carried_from_proposal_id="p1",
+    )
+    assert is_undecided(carried) is False
+
+
 def test_a_confirmed_region_wins_over_a_proposal() -> None:
     """ "Wins over" means the specific proposal promoted into this region, not the page."""
     from pdomain_ocr_labeler_spa.core.regions.resolver import resolve_regions

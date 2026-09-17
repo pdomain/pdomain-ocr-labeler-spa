@@ -100,4 +100,16 @@ export const HOTKEY_MAP: HotkeyEntry[] = [
   { combo: "enter", scope: "region-review", description: "Accept selected proposal" },
   { combo: "x", scope: "region-review", description: "Reject selected proposal" },
   { combo: "delete", scope: "region-review", description: "Delete selected region (with confirm)" },
+  // Book review queue (docs/specs/2026-09-17-book-review-queue-design.md):
+  // move between pages that have undecided proposals.
+  {
+    combo: "bracketright",
+    scope: "region-review",
+    description: "Next page with undecided proposals",
+  },
+  {
+    combo: "bracketleft",
+    scope: "region-review",
+    description: "Previous page with undecided proposals",
+  },
 ];

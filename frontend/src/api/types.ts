@@ -1425,12 +1425,14 @@ export interface paths {
          * @description Delete a region. Its member words (if any) are recovered, never dropped.
          *
          *     Deleting a region a person accepted from a proposal records a ``rejected``
-         *     decision naming that proposal. Without it the ``accepted`` decision would go
-         *     on naming a ``region_id`` that no longer exists, and the resolver's "already
-         *     promoted into a confirmed region" branch would suppress the proposal forever:
-         *     it would vanish from the payload and the canvas with no record that anybody
-         *     removed it — a rejection expressed as an absence, which is the one thing this
-         *     design refuses to do.
+         *     decision naming that proposal — and, once a region has been carried forward
+         *     into later proposal runs, naming every other proposal whose latest decision
+         *     also names this region. Without it, a decision naming a ``region_id`` that
+         *     no longer exists would keep going through the resolver's "already promoted
+         *     into a confirmed region" branch, and the proposal it belongs to would vanish
+         *     from the payload and the canvas with no record that anybody removed it — a
+         *     rejection expressed as an absence, which is the one thing this design
+         *     refuses to do.
          *
          *     ``Disposition.REJECTED`` is the only value that says a person declined the
          *     proposal; the enum is owned upstream and gains no member here. Because the
@@ -1615,6 +1617,51 @@ export interface paths {
          *     (``api/projects.py``).
          */
         post: operations["start_region_proposal_run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/regions/review-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Region Review Queue
+         * @description The book-level answer to "what is still undecided, and in what order".
+         *
+         *     Shares ``is_undecided`` with ``resolve_regions`` (``core/regions/resolver.py``)
+         *     so this queue and the page view can never disagree about what still needs a
+         *     decision: a proposal this route reports as undecided is exactly one
+         *     ``PagePayload.regions`` still shows as unconfirmed, and vice versa.
+         *
+         *     Both journals are read once each this request — ``RegionProposalLog.proposals()``
+         *     and ``RegionDecisionLog.latest_by_proposal()`` — never once per page, which is
+         *     what made the per-page accessors unusable for a book-scoped question.
+         *
+         *     ``resolve_regions``'s confidence threshold plays no part here: the queue
+         *     counts a proposal as undecided work regardless of confidence. The threshold
+         *     decides whether a proposal can stand in for a missing confirmed region on
+         *     one page view, a question this route never asks. ``order=confidence`` only
+         *     changes how ``items`` are sorted, never which proposals are undecided.
+         *
+         *     ``pages`` is always present, in page order, bounded by the book's page
+         *     count, and unaffected by ``order`` — a person navigating with ``]``/``[``
+         *     never needs ``items``. ``items`` is the same undecided set, capped at
+         *     ``limit`` (clamped to 500; a negative ``limit`` is rejected by FastAPI's
+         *     own query validation before this body runs) and ordered by ``order``.
+         *
+         *     Staleness is left out: judging it needs each page loaded to compare facet
+         *     digests, and this route answers a navigation question from the two
+         *     journals alone, without loading any page.
+         */
+        get: operations["get_region_review_queue"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4654,6 +4701,57 @@ export interface components {
             decided_region_id?: string | null;
         };
         /**
+         * RegionReviewQueueItem
+         * @description One undecided proposal, enough to act on it without a further fetch.
+         */
+        RegionReviewQueueItem: {
+            /** Page Index */
+            page_index: number;
+            /** Proposal Id */
+            proposal_id: string;
+            /** Run Id */
+            run_id: string;
+            role: components["schemas"]["RegionRole"];
+            /** Confidence */
+            confidence: number;
+            box: components["schemas"]["BBox"];
+        };
+        /**
+         * RegionReviewQueuePageSummary
+         * @description One page with at least one undecided proposal.
+         *
+         *     ``first_proposal_id``/``last_proposal_id`` are that page's undecided
+         *     proposals in reading order (top to bottom, then left to right) — what a
+         *     person landing on the page via ``]``/``[`` should select first or last.
+         */
+        RegionReviewQueuePageSummary: {
+            /** Page Index */
+            page_index: number;
+            /** Undecided */
+            undecided: number;
+            /** First Proposal Id */
+            first_proposal_id: string;
+            /** Last Proposal Id */
+            last_proposal_id: string;
+        };
+        /**
+         * RegionReviewQueueResponse
+         * @description The book-level answer to "what is still undecided, and in what order".
+         *
+         *     ``pages`` is always present, in page order, and bounded by the book's page
+         *     count — a person navigating with ``]``/``[`` never needs ``items``.
+         *     ``items`` is the same undecided set, capped at ``limit`` and ordered by
+         *     the request's ``order``, for a caller that wants the proposals themselves.
+         */
+        RegionReviewQueueResponse: {
+            /** Total Undecided */
+            total_undecided: number;
+            /** Pages */
+            pages: components["schemas"]["RegionReviewQueuePageSummary"][];
+            /** Items */
+            items: components["schemas"]["RegionReviewQueueItem"][];
+        };
+        /**
          * RegionRole
          * @description The meaning a page region carries.
          * @enum {string}
@@ -7592,6 +7690,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StartRegionProposalRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_region_review_queue: {
+        parameters: {
+            query?: {
+                order?: "reading" | "confidence";
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionReviewQueueResponse"];
                 };
             };
             /** @description Validation Error */

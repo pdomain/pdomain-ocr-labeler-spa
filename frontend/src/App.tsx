@@ -296,7 +296,7 @@ function AppInner() {
             />
           </>
         }
-        rail={onProjectRoute ? <Rail /> : undefined}
+        rail={onProjectRoute ? <Rail projectId={projectId} /> : undefined}
         main={
           <main className="h-full min-h-0 overflow-hidden">
             <Routes>

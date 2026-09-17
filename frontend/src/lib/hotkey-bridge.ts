@@ -39,6 +39,8 @@ const TOKEN_DISPLAY: Record<string, string> = {
   end: "End",
   tab: "Tab",
   space: "Space",
+  bracketleft: "[",
+  bracketright: "]",
 };
 
 /**
