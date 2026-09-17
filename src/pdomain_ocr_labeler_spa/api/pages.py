@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import logging
 from datetime import UTC, datetime
@@ -128,6 +129,23 @@ class PageLoadError(BaseModel):
     message: str
 
 
+class ImageDrift(BaseModel):
+    """Marks that this page's on-disk source image changed since it was
+    OCR'd — issue 2026-07-21-image-drift-banner-hard-off.
+
+    Shaped like ``PageLoadError`` (an ``error`` tag plus a human-readable
+    ``message``) for the same reason: a typed model that can say something
+    useful, not a bare boolean. ``PagePayload.image_drift`` is ``None`` both
+    when the image is unchanged and when drift can't be determined (no
+    recorded OCR-time digest yet, or the file can't be read) — see
+    ``_image_drift_for_page`` for the detection strategy and why an
+    inconclusive read reports no drift rather than a false alarm.
+    """
+
+    error: str
+    message: str
+
+
 class PagePayload(BaseModel):
     """Full per-page payload — spec §5.3 / §1 ``PagePayload``.
 
@@ -178,6 +196,13 @@ class PagePayload(BaseModel):
     # ``get_page`` when the on-demand ``ensure_page_model`` call raises;
     # ``_page_payload`` itself never sets this. See ``PageLoadError``.
     page_load_error: PageLoadError | None = None
+    # Source-image drift marker — ``None`` when the on-disk image still
+    # matches what this page was OCR'd from, or when that can't be
+    # determined. Stamped by ``_page_payload`` itself (unlike
+    # ``page_load_error``, which only ``get_page`` sets) since every
+    # mutation endpoint that reuses ``_page_payload`` should reflect current
+    # drift state. See ``ImageDrift`` / ``_image_drift_for_page``.
+    image_drift: ImageDrift | None = None
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -955,6 +980,90 @@ def _image_digest_for_page(*, page_store: LabelerPageStore | None, page_id: UUID
     return head.blob_refs[1]
 
 
+def _image_drift_for_page(
+    *,
+    project_state: ProjectState,
+    page_index: int,
+    pstate: PageState | None,
+    page_store: LabelerPageStore | None,
+) -> ImageDrift | None:
+    """Best-effort image-drift detector — issue
+    2026-07-21-image-drift-banner-hard-off.
+
+    Compares the page's recorded OCR-time image digest
+    (``_image_digest_for_page``, ``ProvenanceNode.blob_refs[1]``) against the
+    file ``project_state.labeling_image_path(page_index)`` names today. Runs
+    on every page fetch, so it is deliberately cheap: ``pstate`` caches the
+    source file's ``st_size`` / ``st_mtime_ns`` from the last time this
+    function checked it against the *current* digest, and only hashes the
+    file (the expensive path) when one of those moved. A page whose digest or
+    file can't be read reports no drift rather than a false alarm — the same
+    discipline ``_image_digest_for_page`` itself uses.
+
+    Book-labeling projects are skipped entirely
+    (``project_state.has_book_labeling_session``). ``labeling_image_path``
+    resolves those pages to a ``/proc/self/fd/<n>`` descriptor for a sealed,
+    immutable memfd lease that ``BookLabelingSession`` opens fresh per
+    request — its stat metadata changes on every call, which would report
+    drift constantly rather than never. That lease also already hashes every
+    pinned artifact against the book's manifest at open time and raises
+    before any page-payload code runs, so a genuinely changed book-source
+    file is already a request-level error on that path (a verified-source
+    guarantee, not a soft banner) — this check would be redundant even if it
+    could read a stable stat for that path.
+
+    Baseline handling: the first time this function sees a page for a given
+    OCR-time digest — a fresh process, or the digest just changed because the
+    page was re-OCR'd — ``pstate`` has no matching baseline yet. Rather than
+    hash on that first call, it records the current stat as the new baseline
+    and reports no drift; the next fetch is the first one that can actually
+    compare. This is the documented cheap-path trade-off (spec: "prefer the
+    cheap path"): a file that already drifted before this baseline was
+    recorded goes undetected until it drifts again, in exchange for never
+    hashing on every single page fetch.
+    """
+    if project_state.has_book_labeling_session:
+        return None
+    if pstate is None:
+        return None
+    digest = _image_digest_for_page(page_store=page_store, page_id=pstate.page_id)
+    if digest is None:
+        return None
+    try:
+        image_path = project_state.labeling_image_path(page_index)
+        file_stat = image_path.stat()
+    except (OSError, ValueError):
+        return None
+
+    if pstate.image_drift_digest != digest:
+        # New OCR generation (or first check this process) — nothing to
+        # compare against yet; record the baseline and don't cry wolf.
+        pstate.image_drift_digest = digest
+        pstate.image_drift_size = file_stat.st_size
+        pstate.image_drift_mtime_ns = file_stat.st_mtime_ns
+        return None
+
+    if pstate.image_drift_size == file_stat.st_size and pstate.image_drift_mtime_ns == file_stat.st_mtime_ns:
+        return None
+
+    try:
+        current_digest = hashlib.sha256(image_path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+    if current_digest == digest:
+        # Stat moved (touched, re-copied) but the bytes didn't — refresh the
+        # cheap baseline so the next fetch doesn't re-hash for nothing.
+        pstate.image_drift_size = file_stat.st_size
+        pstate.image_drift_mtime_ns = file_stat.st_mtime_ns
+        return None
+
+    return ImageDrift(
+        error="image_changed",
+        message=f"The source image changed on disk after this page was OCR'd ({image_path.name}).",
+    )
+
+
 def _resolve_regions_and_proposals(
     *,
     page: Page,
@@ -1070,7 +1179,12 @@ def _page_payload(
     here.  The mutation endpoints that call this helper hold the
     per-project lock for their state change; the snapshot returned
     here is consistent with the state at the moment the lock was
-    released.
+    released. One exception: ``_image_drift_for_page`` opportunistically
+    caches a cheap stat baseline on ``pstate`` (issue
+    2026-07-21-image-drift-banner-hard-off) — a best-effort write tolerant of
+    races the same way ``edited_image_blob`` and friends already are; a lost
+    update there costs one extra file hash on the next call, never a wrong
+    verdict.
     """
     project = project_state.loaded_project
     # Pre-condition guaranteed by _check_project_and_page on the HTTP
@@ -1348,6 +1462,24 @@ def _page_payload(
             exc_info=True,
         )
 
+    # image_drift: best-effort cheap comparison of the current source image
+    # against the digest it was OCR'd from — see ``_image_drift_for_page``.
+    image_drift: ImageDrift | None = None
+    try:
+        image_drift = _image_drift_for_page(
+            project_state=project_state,
+            page_index=page_index,
+            pstate=pstate,
+            page_store=page_store,
+        )
+    except Exception:  # pragma: no cover - defensive
+        log.debug(
+            "_page_payload: image-drift check failed for project=%s page=%d",
+            project_id,
+            page_index,
+            exc_info=True,
+        )
+
     return PagePayload(
         project_id=project_id,
         page_index=page_index,
@@ -1365,6 +1497,7 @@ def _page_payload(
         page_kind=page_kind,
         page_kind_reviewed=page_kind_reviewed,
         page_kind_proposal=page_kind_proposal,
+        image_drift=image_drift,
     )
 
 
@@ -2530,6 +2663,7 @@ __all__ = [
     "_build_image_url",
     "_build_provenance_summary",
     "_image_digest_for_page",
+    "_image_drift_for_page",
     "_page_payload",
     "_prefetch_adjacent_pages",
     "_render_plaintext",

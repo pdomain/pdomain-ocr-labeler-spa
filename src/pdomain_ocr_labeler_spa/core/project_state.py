@@ -158,6 +158,20 @@ class PageState:
     # ``use_edited_image=True`` so OCR re-runs against the erased image instead
     # of the pristine on-disk source file. ``None`` until the first erase.
     edited_image_blob: str | None = field(default=None)
+    # Cheap image-drift baseline (issue 2026-07-21-image-drift-banner-hard-off).
+    # ``api.pages._image_drift_for_page`` records the source image's
+    # ``st_size`` / ``st_mtime_ns`` here the first time it checks a page
+    # against a given OCR-time digest (``image_drift_digest``), then compares
+    # against these cached values on every later fetch so it only re-hashes
+    # the file when the cheap stat check actually moved. Reset (by digest
+    # mismatch, not by clearing these fields) whenever the page is re-OCR'd,
+    # since a new digest invalidates the old baseline. Best-effort, in-process
+    # cache only — like ``edited_image_blob``, not part of the durable record;
+    # a lost update under concurrent requests only costs one extra hash, never
+    # a wrong drift verdict.
+    image_drift_digest: str | None = field(default=None)
+    image_drift_size: int | None = field(default=None)
+    image_drift_mtime_ns: int | None = field(default=None)
 
 
 class ProjectState:
