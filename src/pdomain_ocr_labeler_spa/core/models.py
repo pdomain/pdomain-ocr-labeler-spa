@@ -311,6 +311,12 @@ class JobType(StrEnum):
     REFINE_BBOXES = "refine_bboxes"
     PROPOSE_PAGE_KINDS = "propose_page_kinds"
     PROPOSE_REGIONS = "propose_regions"
+    # A store-miss page load moved onto the job system —
+    # docs/specs/2026-08-08-page-load-progress-design.md "Move page loading
+    # onto the job system". GET /api/projects/{id}/pages/{idx} submits this
+    # only when the page is absent from both in-memory state and the labeled
+    # store; a hit stays fully synchronous and submits no job.
+    LOAD_PAGE = "load_page"
 
 
 class JobProgress(BaseModel):
@@ -350,8 +356,8 @@ class JobResult(TypedDict, total=False):
       top level for backward compatibility (``JobRunner._emit``); both
       places carry the same data.
 
-    ``reload_ocr``, ``rotate_page``, ``auto_rotate_all`` and
-    ``propose_regions`` do not populate this field today.
+    ``reload_ocr``, ``rotate_page``, ``auto_rotate_all``, ``propose_regions``
+    and ``load_page`` do not populate this field today.
     """
 
     failures: list[JobResultFailure]
