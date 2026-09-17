@@ -445,14 +445,10 @@ def test_rotate_recheck_saves_a_confirm_that_landed_during_ocr(tmp_path: Path, p
                 self.calls.append(page_index)
 
                 # A confirm lands on the OLD page while this "OCR" is in flight.
-                confirm_page = old_pstate.page_record.payload  # type: ignore[union-attr]
                 error = _confirm_page_kind_locked(
                     project_root=project.project_root,
                     project_state=project_state,
                     page_index=page_index,
-                    pstate=old_pstate,
-                    page=confirm_page,
-                    page_id=old_pstate.page_id,
                     page_store=page_store,
                     kind=PageKind.TITLE_PAGE,
                     note=None,
