@@ -1,6 +1,8 @@
 // useWordMutations.ts — TanStack Query mutations for word-level actions.
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 16 (BBoxSection).
 // S1.1: useDeleteWord + useNudgeWord (parity-gap-completion plan).
+// P1-BBOX-UI (docs/issues/2026-07-21-bbox-refine-crop-misleading.md):
+// useRefineWordBbox (word-scope refine job).
 //
 // Endpoints:
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/rebox         → PagePayload
@@ -8,6 +10,7 @@
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/split         → PagePayload
 //   POST /api/projects/{pid}/pages/{idx}/words/delete-batch            → PagePayload (P1.3)
 //   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/nudge         → PagePayload (S1.1)
+//   POST /api/projects/{pid}/pages/{idx}/refine                        → 202 {job_id} (P1-BBOX-UI)
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { components } from "../api/types";
@@ -21,6 +24,7 @@ type ApplyComponentRequest = components["schemas"]["ApplyComponentRequest"];
 type AddWordRequest = components["schemas"]["AddWordRequest"];
 type UpdateWordGroundTruthRequest = components["schemas"]["UpdateWordGroundTruthRequest"];
 type NudgeBboxRequest = components["schemas"]["NudgeBboxRequest"];
+type RefineScopeRequest = components["schemas"]["RefineScopeRequest"];
 
 // ─── internal helpers ──────────────────────────────────────────────────────
 
@@ -73,6 +77,53 @@ export function useReboxWord(projectId: string, pageIndex: number) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+// ─── useRefineWordBbox (P1-BBOX-UI) ────────────────────────────────────────
+
+/** Response for `POST .../refine` — 202 Accepted + job id. */
+export interface RefineWordBboxResponse {
+  job_id: string;
+}
+
+/**
+ * Queue a real bbox-refinement job (`refine_bboxes`) scoped to a single word.
+ *
+ * Unlike `useReboxWord` (a synchronous plain rebox), this hits the actual
+ * refine endpoint (``POST .../refine``, `api/refine.py`) which enqueues a
+ * `refine_bboxes` job that — per `core/jobs/handlers/refine.py` — snaps the
+ * word's bbox to ink (`mode: "refine"`), expands then snaps
+ * (`mode: "expand_then_refine"`), or only expands by `paddingPx`
+ * (`mode: "expand_only"`). Returns `{ job_id }`; the caller tracks
+ * completion via `useJobProgress` and invalidates the page query itself
+ * (this hook does not — the 202 response precedes any actual bbox change).
+ */
+export function useRefineWordBbox(projectId: string, pageIndex: number) {
+  return useMutation<
+    RefineWordBboxResponse,
+    Error,
+    {
+      lineIndex: number;
+      wordIndex: number;
+      mode: RefineScopeRequest["mode"];
+      paddingPx: number;
+    }
+  >({
+    mutationFn: ({ lineIndex, wordIndex, mode, paddingPx }) => {
+      const body: RefineScopeRequest = {
+        scope: "word",
+        mode,
+        padding_px: paddingPx,
+        paragraph_indices: [],
+        line_indices: [],
+        word_indices: [[lineIndex, wordIndex]],
+      };
+      return apiPost<RefineWordBboxResponse>(
+        `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}/refine`,
+        body,
+      );
     },
   });
 }

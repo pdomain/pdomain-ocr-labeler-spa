@@ -4,27 +4,62 @@
 // P3.a additions:
 //   - Coordinate readout strip inside the section body (Gap 33).
 //   - Coordinate hint exported via bboxUtils.bboxHint() for AccordionTrigger.
-//   - Refine operations sub-row: Refine / Expand+Refine / Crop buttons.
+//   - Refine operations sub-row: Refine / Expand+Refine / Expand buttons.
 //   - Nudge sub-row: step input (px) + L/R/T/B button group (Gap 34).
 //
-// All original testids preserved. New testids (P3.a):
-//   bbox-nudge-step           — step px input
-//   bbox-nudge-left           — nudge left button
-//   bbox-nudge-right          — nudge right button
-//   bbox-nudge-top            — nudge top/up button
-//   bbox-nudge-bottom         — nudge bottom/down button
-//   bbox-refine-button        — Refine button
-//   bbox-expand-refine-button — Expand+Refine button
-//   bbox-crop-button          — Crop to BBox button
+// P1-BBOX-UI (docs/issues/2026-07-21-bbox-refine-crop-misleading.md): the
+// Refine / Expand+Refine / Crop buttons used to all call the plain rebox
+// mutation (`commitBbox`) — no refine or crop ever ran. They now call the
+// real `refine_bboxes` job (`POST .../refine`, `useRefineWordBbox`), scoped
+// to this word, mapped onto the three modes the backend handler
+// (`core/jobs/handlers/refine.py`) actually implements:
+//   Refine         → mode: "refine"              (snap bbox to ink)
+//   Expand+Refine  → mode: "expand_then_refine"   (expand, then snap to ink)
+//   Expand         → mode: "expand_only"          (expand only, no snap)
+// The backend has no image-crop operation at all — "Crop" never matched any
+// real capability, so it is renamed to "Expand" (honest name for the third
+// mode) rather than kept as a rebox pretending to crop. Gated by the
+// `useRefineAvailable` capability probe: when unavailable, the three
+// refine buttons are disabled and say so instead of failing on click.
+// `refine_bboxes` is not in the backend's cancellable job set (BusyOverlay's
+// CANCELLABLE / BEST_EFFORT_CANCEL policy sets), so no Cancel action is
+// offered for these jobs.
+//
+// All original testids preserved except `bbox-crop-button`, renamed to
+// `bbox-expand-button` (see above). New testids (P3.a + P1-BBOX-UI):
+//   bbox-nudge-step             — step px input
+//   bbox-nudge-left             — nudge left button
+//   bbox-nudge-right            — nudge right button
+//   bbox-nudge-top              — nudge top/up button
+//   bbox-nudge-bottom           — nudge bottom/down button
+//   bbox-refine-button          — Refine button (mode: refine)
+//   bbox-expand-refine-button   — Expand+Refine button (mode: expand_then_refine)
+//   bbox-expand-button          — Expand button (mode: expand_only; was bbox-crop-button)
+//   bbox-refine-unavailable     — shown when useRefineAvailable() reports unavailable
 
 import { useState } from "react";
 import { Input } from "@pdomain/pdomain-ui/primitives";
 import { Button } from "@pdomain/pdomain-ui/primitives";
-import { useReboxWord } from "../../../hooks/useWordMutations";
+import { useReboxWord, useRefineWordBbox } from "../../../hooks/useWordMutations";
+import { useJobProgress } from "../../../hooks/useJobProgress";
+import { useJobCompletionInvalidation } from "../../../hooks/useJobCompletionInvalidation";
+import { useRefineAvailable } from "../../../hooks/useRefineAvailable";
+import { toast } from "../../../lib/toast";
 import type { components } from "../../../api/types";
 
 type BBox = components["schemas"]["BBox"];
 type WordMatch = components["schemas"]["WordMatch"];
+type RefineMode = components["schemas"]["RefineScopeRequest"]["mode"];
+
+/** `padding_px` sent with `mode: "refine"` / `"expand_then_refine"` — matches
+ * the `RefineScopeRequest` schema default. `expand_then_refine`'s handler
+ * ignores `padding_px` (`word.expand_then_refine_bbox` takes no padding
+ * argument), but the field is required on the wire, so both modes share it. */
+const REFINE_PADDING_PX = 2;
+
+/** `padding_px` sent with `mode: "expand_only"` — preserves the 4px-per-side
+ * expansion the old (fake) "Expand + Refine" button used to apply via rebox. */
+const EXPAND_ONLY_PADDING_PX = 4;
 
 export interface BBoxSectionProps {
   word: WordMatch;
@@ -72,6 +107,7 @@ function applyNudge(bbox: BBox, dir: NudgeDir, step: number): BBox {
 
 export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
   const reboxMutation = useReboxWord(projectId, pageIndex);
+  const refineMutation = useRefineWordBbox(projectId, pageIndex);
 
   // Local draft state — mirrors word.bbox, reset on word identity change.
   const [draft, setDraft] = useState<BBox>(() => ({ ...word.bbox }));
@@ -82,6 +118,95 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
 
   // Keep a ref to the original bbox for Reset.
   const originalBbox = word.bbox;
+
+  // P1-BBOX-UI: every other path that changes `draft` (nudge, blur-commit,
+  // reset) already knows the new bbox locally and calls `setDraft` itself —
+  // `draft` never needs to resync from the `word` prop for those. A refine
+  // job is different: the server computes the new bbox, so `draft` only
+  // ever knows the real value once the completed job's invalidation
+  // refetches the page query and a fresh `word.bbox` arrives as a prop.
+  // `pendingRefineSync` is set once, in the job's `onComplete` below, and
+  // consumed the next time `word.bbox` actually changes — adjusting state
+  // during render (not in an effect, and not a ref — refs may not be read
+  // during render, only state) the same way `useJobProgress` resets
+  // `latest` on `jobId` change, so this doesn't cost an extra render or use
+  // an effect to watch a prop. Gating on the flag (rather than resyncing on
+  // every `word.bbox` change unconditionally) matters: an unconditional
+  // resync would also fire after an ordinary nudge/reset's own
+  // invalidation-triggered refetch, which could stomp a newer local edit
+  // made while that round trip was still in flight.
+  const [pendingRefineSync, setPendingRefineSync] = useState(false);
+  const bboxSignature = `${String(word.bbox.x)},${String(word.bbox.y)},${String(word.bbox.width)},${String(word.bbox.height)}`;
+  const [prevBboxSignature, setPrevBboxSignature] = useState(bboxSignature);
+  if (bboxSignature !== prevBboxSignature) {
+    setPrevBboxSignature(bboxSignature);
+    if (pendingRefineSync) {
+      setPendingRefineSync(false);
+      setDraft({ ...word.bbox });
+    }
+  }
+
+  // P1-BBOX-UI: capability probe — the Refine / Expand+Refine / Expand
+  // buttons are disabled (with an explanatory message) rather than failing
+  // on click when the server has no refine engine wired.
+  const refineProbe = useRefineAvailable();
+  const refineAvailable = refineProbe.data?.available ?? false;
+  const refineProbeLoading = refineProbe.isLoading;
+
+  // Tracks the in-flight refine_bboxes job (Refine / Expand+Refine / Expand
+  // all share one tracker — only one can run at a time from this section).
+  const [refineJobId, setRefineJobId] = useState<string | null>(null);
+  const refineJobProgress = useJobProgress(refineJobId);
+  const refineJobRunning =
+    refineJobId !== null &&
+    (refineJobProgress === null ||
+      (refineJobProgress.status !== "complete" &&
+        refineJobProgress.status !== "error" &&
+        refineJobProgress.status !== "cancelled"));
+
+  useJobCompletionInvalidation({
+    activeJobId: refineJobId,
+    jobProgress: refineJobProgress,
+    setActiveJobId: setRefineJobId,
+    invalidationKey: ["page", projectId, pageIndex],
+    onComplete: (jobId) => {
+      setPendingRefineSync(true);
+      toast.success("Bbox refine complete", { id: jobId });
+    },
+    onError: (jobId, errorMessage) => {
+      toast.error(errorMessage ?? "Bbox refine failed", { id: jobId });
+    },
+    // refine_bboxes is not in the backend's cancellable set — no Cancel
+    // action is offered, so a "cancelled" status is not expected here in
+    // practice, but the transition is still handled for completeness.
+    onCancelled: (jobId, event) => {
+      toast.warn(event.progress.message || "Bbox refine cancelled", { id: jobId });
+    },
+    onRunning: (jobId, event) => {
+      const msg = event.progress.message || "Refining bbox…";
+      void import("sonner").then(({ toast: sonnerToast }) => {
+        sonnerToast.loading(msg, { id: jobId });
+      });
+    },
+  });
+
+  /** Queue a `refine_bboxes` job scoped to this word. */
+  function startRefine(mode: RefineMode, paddingPx: number, loadingMessage: string) {
+    refineMutation.mutate(
+      { lineIndex: word.line_index, wordIndex: word.word_index ?? 0, mode, paddingPx },
+      {
+        onSuccess: (data) => {
+          setRefineJobId(data.job_id);
+          void import("sonner").then(({ toast: sonnerToast }) => {
+            sonnerToast.loading(loadingMessage, { id: data.job_id });
+          });
+        },
+        onError: (err) => {
+          toast.error(err instanceof Error ? err.message : "Failed to start bbox refine");
+        },
+      },
+    );
+  }
 
   function handleChange(field: BBoxField, value: string) {
     const num = Number(value);
@@ -116,7 +241,17 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
     commitBbox(updated);
   }
 
-  const busy = reboxMutation.isPending;
+  const busy = reboxMutation.isPending || refineMutation.isPending || refineJobRunning;
+
+  // Refine-button-specific disabled reason: the probe still loading, or the
+  // engine reported unavailable. `busy` (above) separately covers an
+  // in-flight rebox/refine mutation and disables every button in this
+  // section, refine or not.
+  const refineDisabledTitle = refineProbeLoading
+    ? "Checking refine availability…"
+    : !refineAvailable
+      ? "Refine is not available in this deployment."
+      : null;
 
   return (
     <div data-testid="bbox-section" data-word-key={wordKey} className="flex flex-col gap-2 py-1">
@@ -269,7 +404,10 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
         </div>
       </div>
 
-      {/* Refine / Expand+Refine / Crop action sub-row (Gap 33) */}
+      {/* Refine / Expand+Refine / Expand action sub-row (Gap 33 / P1-BBOX-UI).
+          Each button queues the real `refine_bboxes` job, scoped to this
+          word — see the module doc comment for the mode mapping and why
+          the old "Crop" button was renamed "Expand". */}
       <div className="flex flex-col gap-1">
         <p className="text-[10px] text-ink-3 uppercase tracking-wide">Actions</p>
         <div className="flex flex-wrap gap-1.5">
@@ -277,10 +415,10 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
             data-testid="bbox-refine-button"
             variant="secondary"
             size="sm"
-            disabled={busy}
-            title="Snap bbox to ink boundary"
+            disabled={busy || !refineAvailable}
+            title={refineDisabledTitle ?? "Snap bbox to ink boundary"}
             onClick={() => {
-              commitBbox(draft);
+              startRefine("refine", REFINE_PADDING_PX, "Refining bbox…");
             }}
           >
             Refine
@@ -289,34 +427,35 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
             data-testid="bbox-expand-refine-button"
             variant="secondary"
             size="sm"
-            disabled={busy}
-            title="Expand bbox by 4px on each side then refine"
+            disabled={busy || !refineAvailable}
+            title={refineDisabledTitle ?? "Expand bbox, then snap to ink boundary"}
             onClick={() => {
-              const expanded: BBox = {
-                x: draft.x - 4,
-                y: draft.y - 4,
-                width: draft.width + 8,
-                height: draft.height + 8,
-              };
-              setDraft(expanded);
-              commitBbox(expanded);
+              startRefine("expand_then_refine", REFINE_PADDING_PX, "Expanding + refining bbox…");
             }}
           >
             Expand + Refine
           </Button>
           <Button
-            data-testid="bbox-crop-button"
+            data-testid="bbox-expand-button"
             variant="secondary"
             size="sm"
-            disabled={busy}
-            title="Crop the page image to this bbox"
+            disabled={busy || !refineAvailable}
+            title={
+              refineDisabledTitle ??
+              `Expand bbox by ${String(EXPAND_ONLY_PADDING_PX)}px on each side (no refine)`
+            }
             onClick={() => {
-              commitBbox(draft);
+              startRefine("expand_only", EXPAND_ONLY_PADDING_PX, "Expanding bbox…");
             }}
           >
-            Crop
+            Expand
           </Button>
         </div>
+        {refineDisabledTitle && (
+          <p data-testid="bbox-refine-unavailable" className="text-[10px] text-ink-4 italic">
+            {refineDisabledTitle}
+          </p>
+        )}
       </div>
 
       {/* Reset */}
