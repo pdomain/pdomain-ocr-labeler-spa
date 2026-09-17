@@ -11,7 +11,7 @@
 // shows an error toast and leaves the page query un-invalidated.
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -31,11 +31,9 @@ let capturedOnErasePixels:
   ((rect: { x: number; y: number; width: number; height: number }) => void) | null = null;
 let capturedEncodedScale: number | null = null;
 
-const mockNavigate = vi.fn();
-vi.mock("react-router-dom", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("react-router-dom")>();
-  return { ...actual, useNavigate: () => mockNavigate };
-});
+// Unlike ProjectPage.rebox.test.tsx, this file does NOT mock react-router-dom's
+// useNavigate — the page-navigation guard test below needs real navigation to
+// exercise the idx0 change (see ProjectPage.pageChange.test.tsx, same reason).
 
 // Mock the local PageImageCanvas component to capture onErasePixels.
 vi.mock("../components/PageImageCanvas", () => ({
@@ -176,16 +174,17 @@ function renderProjectPage(path = "/projects/p1/pages/pageno/1") {
   );
 }
 
+// GET /api/projects/{id} returns the flat Project model (useProject.ts) —
+// NOT a {project, current_page_index, generation} wrapper. ProjectNavigation
+// Controls reads `data.image_paths.length` directly for nav bounds, so the
+// nav-next-button test below needs the real shape (>=2 image_paths) to be
+// enabled.
 function projectFixture() {
   return {
-    project: {
-      project_id: "p1",
-      project_root: "/data/p1",
-      image_paths: ["page_001.png", "page_002.png"],
-      ground_truth_map: {},
-    },
-    current_page_index: 0,
-    generation: 1,
+    project_id: "p1",
+    project_root: "/data/p1",
+    image_paths: ["page_001.png", "page_002.png"],
+    ground_truth_map: {},
   };
 }
 
@@ -254,7 +253,6 @@ describe("ProjectPage — onErasePixels wired to PageImageCanvas (P1-CANVAS-ERAS
     capturedOnErasePixels = null;
     capturedEncodedScale = null;
     dialogStore.reset();
-    mockNavigate.mockReset();
     viewportStore.setState({ mode: "select", pendingReboxTarget: null });
     useUiPrefs.setState({ drawerOpen: true, rightPanelOpen: true });
     server.use(
@@ -379,5 +377,81 @@ describe("ProjectPage — onErasePixels wired to PageImageCanvas (P1-CANVAS-ERAS
 
     await new Promise((r) => setTimeout(r, 80));
     expect(postCount).toBe(1);
+  });
+
+  // Reviewer finding 1 (medium): the in-flight guard was one plain boolean
+  // that never remounts across page navigation — an erase started on page 0
+  // that has not settled silently blocked a legitimate erase on page 1.
+  it("does not block a legitimate erase drag on a different page while the previous page's erase is still in flight", async () => {
+    let page0Started = false;
+    let resolvePage0Started: (() => void) | undefined;
+    const page0Started$ = new Promise<void>((resolve) => {
+      resolvePage0Started = resolve;
+    });
+    let page1Body: unknown;
+    let page1GetCount = 0;
+    server.use(
+      // Page 1's own GET must resolve (settling `pagePayload`/`encoded_dims`
+      // for the NEW page) before the second drag fires below — otherwise the
+      // handler would still read the stale (or default) scale.
+      http.get("/api/projects/:pid/pages/1", () => {
+        page1GetCount += 1;
+        return HttpResponse.json(pageFixtureWithWords());
+      }),
+      http.post("/api/projects/:pid/pages/0/erase-pixels", async () => {
+        page0Started = true;
+        resolvePage0Started?.();
+        // Held open well past this test's own assertions — simulates a
+        // request still in flight when the user navigates to another page.
+        await new Promise((r) => setTimeout(r, 5_000));
+        return HttpResponse.json(pageFixtureWithWords());
+      }),
+      http.post("/api/projects/:pid/pages/1/erase-pixels", async ({ request }) => {
+        page1Body = await request.json();
+        return HttpResponse.json(pageFixtureWithWords());
+      }),
+    );
+
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    await waitFor(() => {
+      expect(capturedEncodedScale).toBe(0.5);
+    });
+
+    // Start an erase on page 0 (index 0) and let it start, but not settle.
+    act(() => {
+      viewportStore.setState({ mode: "erase" });
+    });
+    act(() => {
+      capturedOnErasePixels?.({ x: 20, y: 10, width: 40, height: 15 });
+    });
+    await page0Started$;
+    expect(page0Started).toBe(true);
+
+    // Navigate to page 2 (index 1) while page 0's erase is still pending.
+    const nextButton = await screen.findByTestId("nav-next-button");
+    await waitFor(() => expect(nextButton).not.toBeDisabled());
+    fireEvent.click(nextButton);
+    await waitFor(() => expect(screen.getByTestId("nav-page-input")).toHaveValue(2));
+    // Wait for page 1's own payload to have loaded (its GET settled) before
+    // dragging — otherwise the handler could read page 0's stale scale.
+    await waitFor(() => expect(page1GetCount).toBeGreaterThan(0));
+
+    // A drag on the NEW page must still post — it is a different target
+    // from the still-in-flight page-0 erase, so the guard must not block it.
+    act(() => {
+      viewportStore.setState({ mode: "erase" });
+    });
+    act(() => {
+      capturedOnErasePixels?.({ x: 20, y: 10, width: 40, height: 15 });
+    });
+
+    await waitFor(() => {
+      expect(page1Body).toEqual({
+        bbox: { x: 40, y: 20, width: 80, height: 30 },
+        fill_value: 255,
+        shape: "rect",
+      });
+    });
   });
 });
