@@ -767,6 +767,54 @@ def test_a_book_fitted_detector_peels_a_digit_folio_off_a_long_head() -> None:
     assert head.evidence["gap_threshold_source"] == "book_fit"
 
 
+def test_a_book_fitted_detector_peels_a_digit_folio_off_the_start_of_a_long_head() -> None:
+    """The verso case: the folio leads the head line, 54px before it, against a 30px median word space.
+
+    Mirrors the right-edge peel test. The target page contributes the same gaps
+    (54, 30, 30) in a different order, so the book fits to the same threshold and
+    median word space.
+    """
+    from pdomain_ocr_labeler_spa.core.regions.furniture import FurnitureDetector
+
+    target_words = [
+        _word("27", 100, 105, 126, 125),
+        _word("HEAD", 180, 105, 230, 125),
+        _word("HEAD", 260, 105, 310, 125),
+        _word("HEAD", 340, 105, 390, 125),
+    ]
+    book = [_input(target_words)] + [_input(words) for words in _peel_book_other_pages()]
+
+    per_page_detect = FurnitureDetector().fit(book)
+    detected = per_page_detect(book[0])
+
+    assert len(detected) == 2
+    folio, head = sorted(detected, key=lambda d: d.box[0])
+    assert folio.role is RegionRole.PAGE_NUMBER
+    assert folio.box == (100, 105, 126, 125)
+    assert head.role is RegionRole.PAGE_HEADER
+    assert head.box == (180, 105, 390, 125)
+    assert head.evidence["gap_threshold_source"] == "book_fit"
+
+
+def test_no_qualifying_word_space_means_no_median_and_no_peel() -> None:
+    """Overlapping or touching words leave no gap above zero, so there is no basis to peel."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import (
+        _cluster,
+        _in_band_words,
+        _median_word_space_px,
+        _peel_edge_folios,
+    )
+
+    assert _median_word_space_px([], 100.0) is None
+    assert _median_word_space_px([-30.0, -5.0, 0.0], 100.0) is None
+    assert _median_word_space_px([150.0, 200.0], 100.0) is None
+
+    band_words = _in_band_words(_input(_peel_book_pages_with_folio("27")))
+    assert band_words is not None
+    clusters = _cluster(band_words.words, 127.0)
+    assert _peel_edge_folios(clusters, None) is clusters
+
+
 def test_a_book_fitted_detector_does_not_peel_a_digit_that_is_part_of_the_head() -> None:
     """projectID3fc3d7d03c613's verso head ends ``[ETH. ANN. 33``: 22px gap against a 20px median (1.1x)."""
     from pdomain_ocr_labeler_spa.core.regions.furniture import FurnitureDetector
