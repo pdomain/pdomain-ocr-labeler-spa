@@ -170,6 +170,32 @@ def test_ocr_runs_when_no_labeled_or_cached() -> None:
     assert loader.run_ocr_calls == [0]
 
 
+# ─── 2b. allow_ocr — pdomain-ocr-synth 2026-09-17-page-kind-review-design.md ──
+
+
+def test_allow_ocr_false_returns_none_when_neither_lane_has_content() -> None:
+    """``allow_ocr=False`` must never call ``run_ocr`` — confirming a kind
+    (or any other read that opts out of OCR) must not start it."""
+    state = ProjectState()
+    state.set_loaded_project(_make_project())
+    loader = StubLoader()
+    result = ensure_page_model(state, 0, loader=loader, allow_ocr=False)
+    assert result is None
+    assert loader.run_ocr_calls == []
+    assert loader.load_labeled_calls == [0]
+    assert loader.load_cached_calls == [0]
+
+
+def test_allow_ocr_false_still_returns_a_labeled_or_cached_hit() -> None:
+    state = ProjectState()
+    state.set_loaded_project(_make_project())
+    cached = PageLoadOutcome(page_index=0, source=PageSource.CACHED_OCR, payload="cached")
+    loader = StubLoader(cached_hits={0: cached})
+    result = ensure_page_model(state, 0, loader=loader, allow_ocr=False)
+    assert result is cached
+    assert loader.run_ocr_calls == []
+
+
 # ─── 3. Idempotency / cache (the big one) ─────────────────────────────────
 
 

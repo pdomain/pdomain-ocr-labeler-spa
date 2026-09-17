@@ -179,6 +179,7 @@ def ensure_page_model(
     *,
     loader: PageLoader,
     force_ocr: bool = False,
+    allow_ocr: bool = True,
 ) -> PageLoadOutcome | None:
     """Lazy page-load with labeled → cached → OCR precedence.
 
@@ -188,13 +189,23 @@ def ensure_page_model(
     probes, going straight to OCR (legacy parity:
     ``project_state.py:580-585``).
 
+    ``allow_ocr=False`` (pdomain-ocr-synth's docs/specs/2026-09-17-
+    page-kind-review-design.md "One route confirms many pages") returns
+    ``None`` instead of calling ``loader.run_ocr`` when neither the labeled
+    nor the cached lane has content for this page — a caller that must never
+    start OCR (e.g. the bulk page-kind confirm route) passes this instead of
+    calling the loader directly, so it still gets the full labeled → cached
+    precedence, the ``PageState`` creation, the ``page_id`` stamp, and the
+    char-sidecar application that calling the loader directly would skip.
+
     Returns ``None`` only when no project is loaded (mirrors legacy
-    ``ensure_page_model:451-453`` early-return). Out-of-range indices
-    *raise* ``PageIndexOutOfRangeError`` — the legacy implementation
-    returned ``None`` for those too, but in the SPA the route layer
-    has already validated the URL-shape ``page_index ∈ [0,
-    total_pages)``, so a None-return on out-of-range would mask a
-    bug rather than recover from one.
+    ``ensure_page_model:451-453`` early-return), or when ``allow_ocr=False``
+    and no lane has content. Out-of-range indices *raise*
+    ``PageIndexOutOfRangeError`` — the legacy implementation returned
+    ``None`` for those too, but in the SPA the route layer has already
+    validated the URL-shape ``page_index ∈ [0, total_pages)``, so a
+    None-return on out-of-range would mask a bug rather than recover from
+    one.
 
     Lock contract: holds ``state._lock`` for the entire load,
     including OCR. See module docstring for the rationale (per-project
@@ -222,16 +233,13 @@ def ensure_page_model(
         # Lane probes happen under the lock so a concurrent
         # ``set_loaded_project`` swap can't shift the project out from
         # under us mid-load.
-        outcome: PageLoadOutcome
+        lane_outcome: PageLoadOutcome | None = None
         if not force_ocr:
             labeled = loader.load_labeled(page_index)
-            if labeled is not None:
-                outcome = labeled
-            else:
-                cached = loader.load_cached(page_index)
-                outcome = cached if cached is not None else loader.run_ocr(page_index)
-        else:
-            outcome = loader.run_ocr(page_index)
+            lane_outcome = labeled if labeled is not None else loader.load_cached(page_index)
+        if lane_outcome is None and not allow_ocr:
+            return None
+        outcome: PageLoadOutcome = lane_outcome if lane_outcome is not None else loader.run_ocr(page_index)
 
         # Cache the outcome on the existing PageState (or create one).
         # Note: ``ProjectState.set_page_state`` would re-acquire the
