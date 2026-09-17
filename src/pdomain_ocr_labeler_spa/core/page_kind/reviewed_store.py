@@ -114,3 +114,14 @@ class PageKindReviewedStore:
     def is_reviewed(self, page_index: int) -> bool:
         """Whether any review marker exists for this page."""
         return self.latest_for_page(page_index) is not None
+
+    def reviewed_page_indices(self) -> frozenset[int]:
+        """Every page index carrying at least one review marker, from one read.
+
+        A caller checking many pages (e.g. a book-scoped job walking every
+        loaded page) should call this once rather than ``is_reviewed`` per
+        page — each ``is_reviewed`` call re-reads and re-parses the whole
+        journal, so a per-page loop over it costs one full-file parse per
+        page instead of one for the whole loop.
+        """
+        return frozenset(marker.page_index for marker in self._read())

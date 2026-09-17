@@ -9,8 +9,9 @@ Never calls ``save_page_content_to_store`` or ``save_page_to_store`` — a
 proposal run is a machine's claim, and the page blob is only ever written by
 a human action.
 
-Two invariants mirror ``propose_page_kinds`` (its own handler fixed the same
-defects in commit ``8cb5a58``):
+Three invariants mirror ``propose_page_kinds`` (its own handler fixed the
+same defects in commit ``8cb5a58``, plus the lease below in the same change
+that added it here):
 
 - **Pinned to its book.** The run was queued against one project; whoever
   dequeues it may find a different one loaded (a load in between swaps
@@ -26,17 +27,25 @@ defects in commit ``8cb5a58``):
   (which does page-store I/O to read the image digest) are both offloaded via
   ``asyncio.to_thread``, the same pattern ``propose_page_kinds`` uses for
   ``profile_page``.
+- **Read through a verified lease.** ``detector(page)`` is called with a
+  per-page lease held (``core/jobs/handlers/_labeling_page_lease.
+  leased_labeling_page``) — on a book-labeling project this is what makes
+  ``ProjectState.labeling_image_path`` resolve to the sealed
+  ``/proc/self/fd/N`` descriptor instead of raising, and what a real detector
+  that reads the page image must see rather than the raw manifest path.
+  Held unconditionally, even for the default no-op detector: the seam exists
+  to be swapped by slice 4's real detector, and a conditional lease would be
+  wrong the moment it is. A page whose lease fails to verify is logged and
+  skipped, the same as ``propose_page_kinds``.
 
 The page-kind journals are each read in full, once, up front — not once per
-page. ``PageKindReviewedStore`` only exposes a per-page ``is_reviewed`` query
-(no bulk accessor), so its full-file read is unavoidably paid once per page;
-what this handler removes is the plan's duplicate re-reads of the *same*
-page (the eligibility loop, plus ``page_kind_was_confirmed``'s second pass)
-by memoizing each page's reviewed status the first time it is looked up.
-``PageKindProposalLog`` does expose a bulk-ish path — ``runs()`` plus
-``proposals_for_run(run_id)`` — so the proposed-page-index set is built from
-that (one read per run, not one per page), replacing the plan's per-page
-``latest_proposal_for_page`` calls.
+page. ``PageKindReviewedStore.reviewed_page_indices`` returns every reviewed
+page index from one read, so the eligibility loop and
+``page_kind_was_confirmed``'s second pass both consult that one set rather
+than re-parsing the journal per page. ``PageKindProposalLog`` is read the
+same way, via ``runs()`` plus ``proposals_for_run(run_id)`` — one read per
+run, not one per page — so the proposed-page-index set is built from that,
+rather than the plan's per-page ``latest_proposal_for_page`` calls.
 """
 
 from __future__ import annotations
@@ -44,6 +53,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from contextlib import ExitStack
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -57,6 +67,7 @@ from ...regions.block_adapter import compute_page_facet_digests
 from ...regions.detector import RegionDetector, null_region_detector
 from ...regions.models import ProposalRun, RegionProposal
 from ...regions.proposal_log import RegionProposalLog
+from ._labeling_page_lease import leased_labeling_page
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -186,21 +197,19 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     page_kind_reviewed = PageKindReviewedStore(project.project_root)
     kind_runs = page_kind_proposals.runs()
     proposed_page_indices = _proposed_page_indices(page_kind_proposals, kind_runs)
-    reviewed_page_indices: dict[int, bool] = {}
+    reviewed_page_indices = page_kind_reviewed.reviewed_page_indices()
 
     def _is_kind_confirmed(idx: int) -> bool:
         """A page's kind is confirmed when the live page carries one, or a person reviewed it.
 
-        ``reviewed_page_indices`` memoizes each page's ``is_reviewed`` result
-        the first time it is looked up, so a page already checked in the
-        eligibility loop below is a dict lookup here, not a second full-file
-        read of the reviewed-store journal.
+        ``reviewed_page_indices`` is the whole journal's reviewed-page set,
+        read once up front (see the module docstring), so this is a set
+        lookup rather than a second full-file read of the reviewed-store
+        journal.
         """
-        if idx not in reviewed_page_indices:
-            reviewed_page_indices[idx] = page_kind_reviewed.is_reviewed(idx)
         pstate = project_state.page_states[idx]
         page = _resolve_live_page(pstate)
-        return (page is not None and page.page_kind is not None) or reviewed_page_indices[idx]
+        return (page is not None and page.page_kind is not None) or idx in reviewed_page_indices
 
     eligible_indices: list[int] = []
     skipped_indices: list[int] = []
@@ -265,14 +274,60 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
         job.job_id, current=0, total=total, message=f"Proposing regions for {total} page(s)"
     )
     proposal_count = 0
+    lease_failed_indices: list[int] = []
+    detector_failed_indices: list[int] = []
     for i, idx in enumerate(eligible_indices, start=1):
         pstate = project_state.page_states[idx]
         page = _resolve_live_page(pstate)
         if page is not None:
-            # CPU-bound in the general case (slice 4's real detector decodes
-            # images and runs numpy) — offloaded for the same reason the
-            # facet-digest snapshot above is.
-            detected = await asyncio.to_thread(detector, page)
+            # A detector reads the page image on a book-labeling project only
+            # through a verified per-page lease — reading
+            # ``project.image_paths`` directly would bypass the manifest hash
+            # pin the same way the defect this fixes did for
+            # ``propose_page_kinds``. Held unconditionally, even for the
+            # default no-op detector: the seam exists to be swapped by slice
+            # 4's real detector, and a conditional lease would be wrong the
+            # moment it is.
+            #
+            # The lease is entered through an ``ExitStack`` rather than a
+            # ``with`` inside a ``try``, so only ``open_labeling_page``'s own
+            # ``ValueError`` is attributed to the lease. A detector is
+            # entitled to raise ``ValueError`` of its own — slice 4's reads
+            # ``Page.is_content_normalized``, which raises on a page mixing
+            # normalized and pixel word boxes — and reporting that as a
+            # failed lease would send the next reader looking at the manifest
+            # instead of the page.
+            stack = ExitStack()
+            try:
+                stack.enter_context(leased_labeling_page(project_state, idx))
+            except ValueError as exc:
+                lease_failed_indices.append(idx)
+                log.warning(
+                    "propose_regions: skipping page=%d — could not open a verified page lease: %s",
+                    idx,
+                    exc,
+                )
+                detected = None
+            else:
+                with stack:
+                    try:
+                        # CPU-bound in the general case — slice 4's real
+                        # detector decodes images and runs numpy. Offloaded
+                        # for the same reason the facet-digest snapshot above
+                        # is; the lease stays bound for the duration of the
+                        # offloaded call, since ``asyncio.to_thread``
+                        # propagates the contextvar the binding uses.
+                        detected = await asyncio.to_thread(detector, page)
+                    except Exception:
+                        # The detector is a swap-in callable from
+                        # ``runner.context``, so its failures are not this
+                        # handler's bugs to distinguish. One bad page must not
+                        # kill a 400-page run, and the traceback is logged
+                        # rather than swallowed, so a broken detector is still
+                        # loud.
+                        detector_failed_indices.append(idx)
+                        log.exception("propose_regions: detector raised on page=%d; skipping it", idx)
+                        detected = None
             if detected:
                 proposals = [
                     RegionProposal(
@@ -289,6 +344,24 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
                 proposal_log.append_proposals(proposals)
                 proposal_count += len(proposals)
         await runner.update_progress(job.job_id, current=i, total=total, message=f"page {idx}")
+
+    if lease_failed_indices:
+        log.warning(
+            "propose_regions: run=%s project=%s skipped %d page(s) with no verified lease: %s",
+            run_id,
+            project.project_id,
+            len(lease_failed_indices),
+            lease_failed_indices,
+        )
+
+    if detector_failed_indices:
+        log.warning(
+            "propose_regions: run=%s project=%s detector raised on %d page(s): %s",
+            run_id,
+            project.project_id,
+            len(detector_failed_indices),
+            detector_failed_indices,
+        )
 
     log.info(
         "propose_regions: run=%s project=%s pages=%d proposals=%d",

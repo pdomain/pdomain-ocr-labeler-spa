@@ -16,12 +16,18 @@ from pdomain_pgdp_measure.page_templates import (
 from pdomain_pgdp_measure.page_templates import classify_pages as _real_classify_pages
 from pdomain_pgdp_measure.profile_models import CoordinateFrame, InkBand, PageMeasurement
 
+from pdomain_ocr_labeler_spa.api.projects import _build_project_from_book_labeling_manifest
 from pdomain_ocr_labeler_spa.core.jobs.events import JobEventBroker
 from pdomain_ocr_labeler_spa.core.jobs.runner import Job, JobRunner
 from pdomain_ocr_labeler_spa.core.models import Project
 from pdomain_ocr_labeler_spa.core.notifications import NotificationQueue
 from pdomain_ocr_labeler_spa.core.page_kind.proposal_log import PageKindProposalLog
+from pdomain_ocr_labeler_spa.core.persistence.book_labeling_manifest import (
+    load_book_labeling_manifest_directory,
+)
+from pdomain_ocr_labeler_spa.core.persistence.book_labeling_session import BookLabelingSession
 from pdomain_ocr_labeler_spa.core.project_state import ProjectState
+from tests.unit.core.persistence.test_book_labeling_session import _write_book
 
 _WIDTH = 1000
 _HEIGHT = 1600
@@ -354,6 +360,141 @@ async def test_an_unmappable_page_class_proposes_unknown_without_a_confidence(
     assert proposal.kind.value == "unknown"
     assert proposal.confidence is None
     assert proposal.evidence["page_class"] == "illustration_plate"
+
+
+def _book_runner_and_job(root: Path, *, page_count: int = 2) -> tuple[JobRunner, Job, list[Path]]:
+    """A runner with a *book-labeling* project loaded, plus every measured page's
+    resolved image path, in the order the handler measured them.
+    """
+    _write_book(root, page_count=page_count, valid_images=True)
+    session = BookLabelingSession(load_book_labeling_manifest_directory(root))
+    project = _build_project_from_book_labeling_manifest(session)
+    project_state = ProjectState()
+    project_state.set_loaded_project(project, book_labeling_session=session)
+
+    recorded_paths: list[Path] = []
+
+    def _measure_fn(project_id: str, page: object) -> PageMeasurement:
+        image_path = page.image_path  # type: ignore[attr-defined]
+        recorded_paths.append(image_path)
+        return _measured(f"page-{len(recorded_paths) - 1}", first_band_top=300)
+
+    runner = JobRunner(
+        JobEventBroker(),
+        context={
+            "project_state": project_state,
+            "notification_queue": NotificationQueue(),
+            "propose_page_kinds_measure_fn": _measure_fn,
+        },
+    )
+    job = Job(
+        job_id="j1",
+        job_type="propose_page_kinds",
+        created_at=datetime.now(UTC),
+        payload={"project_id": project.project_id},
+    )
+    runner._jobs[job.job_id] = job
+    return runner, job, recorded_paths
+
+
+async def test_an_ordinary_project_measures_through_the_plain_on_disk_path(tmp_path: Path) -> None:
+    """No labeling bundle, no book session — ``labeling_image_path`` degrades to
+    ``project.image_paths[i]`` unchanged, so the measured path is exactly that.
+    """
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds import (
+        handle_propose_page_kinds,
+    )
+
+    project = _project(tmp_path, 2)
+    runner, job = _runner_and_job(project, tops=[300, 300])
+    project_state = runner.context["project_state"]
+
+    await handle_propose_page_kinds(runner, job)
+
+    proposal_log = PageKindProposalLog(project.project_root)
+    assert len(proposal_log.runs()) == 1
+    for idx, image_path in enumerate(project.image_paths):
+        assert project_state.labeling_image_path(idx) == image_path
+
+
+async def test_a_book_labeling_project_measures_through_the_sealed_descriptor(
+    tmp_path: Path,
+) -> None:
+    """A book-labeling project's pages must be measured from the verified lease's
+    sealed ``/proc/self/fd/N`` descriptor, never the raw manifest path — the
+    defect this fix closes.
+    """
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds import (
+        handle_propose_page_kinds,
+    )
+
+    runner, job, recorded_paths = _book_runner_and_job(tmp_path / "book", page_count=2)
+
+    await handle_propose_page_kinds(runner, job)
+
+    assert len(recorded_paths) == 2
+    assert all(str(p).startswith("/proc/self/fd/") for p in recorded_paths)
+
+    proposal_log = PageKindProposalLog(runner.context["project_state"].loaded_project.project_root)
+    assert len(proposal_log.runs()) == 1
+    assert len(proposal_log.proposals_for_run(proposal_log.runs()[0].run_id)) == 2
+
+
+async def test_a_book_labeling_lease_is_closed_after_each_page_is_measured(
+    tmp_path: Path,
+) -> None:
+    """The per-page lease is scoped to that page's measurement — once the run
+    finishes, every recorded descriptor path must no longer be readable.
+    """
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds import (
+        handle_propose_page_kinds,
+    )
+
+    runner, job, recorded_paths = _book_runner_and_job(tmp_path / "book", page_count=2)
+
+    await handle_propose_page_kinds(runner, job)
+
+    assert len(recorded_paths) == 2
+    for path in recorded_paths:
+        with pytest.raises(OSError):
+            path.read_bytes()
+
+
+async def test_an_unreadable_page_is_skipped_and_the_rest_of_the_book_still_runs(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A tampered page fails ``open_labeling_page`` with ``ValueError`` — the run
+    must log it, skip only that page, and keep classifying the rest, with
+    proposals still attributed to the correct (non-contiguous) page indices.
+    """
+    import logging
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds import (
+        handle_propose_page_kinds,
+    )
+
+    root = tmp_path / "book"
+    runner, job, recorded_paths = _book_runner_and_job(root, page_count=3)
+
+    # Tamper page index 1's materialization pin so its lease fails to verify.
+    pages_dir = root / "pages"
+    tampered_dir = next(p for p in pages_dir.iterdir() if p.name.startswith("0001-"))
+    (tampered_dir / "materialization.json").write_bytes(b"{}\n")
+
+    with caplog.at_level(logging.WARNING):
+        await handle_propose_page_kinds(runner, job)
+
+    # Only pages 0 and 2 were measured — page 1's lease never opened.
+    assert len(recorded_paths) == 2
+    assert any("page=1" in message or "page 1" in message for message in caplog.messages) or any(
+        "1" in r.getMessage() for r in caplog.records
+    )
+
+    proposal_log = PageKindProposalLog(runner.context["project_state"].loaded_project.project_root)
+    run = proposal_log.runs()[0]
+    proposals = proposal_log.proposals_for_run(run.run_id)
+    assert {p.page_index for p in proposals} == {0, 2}
+    assert run.page_count == len(proposals) == 2
 
 
 async def test_the_runs_page_count_is_the_number_of_proposals_it_wrote(tmp_path: Path) -> None:

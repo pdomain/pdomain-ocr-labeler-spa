@@ -77,6 +77,33 @@ def test_a_valid_json_line_of_the_wrong_shape_is_skipped_too(tmp_path: Path) -> 
     assert store.is_reviewed(0) is True
 
 
+def test_reviewed_page_indices_returns_every_reviewed_page_in_one_read(tmp_path: Path) -> None:
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+
+    store = PageKindReviewedStore(tmp_path)
+    store.mark_reviewed(0, "2026-09-08T10:00:00+00:00")
+    store.mark_reviewed(2, "2026-09-08T10:05:00+00:00")
+
+    assert store.reviewed_page_indices() == frozenset({0, 2})
+
+
+def test_reviewed_page_indices_is_empty_with_no_journal(tmp_path: Path) -> None:
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+
+    store = PageKindReviewedStore(tmp_path)
+    assert store.reviewed_page_indices() == frozenset()
+
+
+def test_reviewed_page_indices_counts_a_repeatedly_marked_page_once(tmp_path: Path) -> None:
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+
+    store = PageKindReviewedStore(tmp_path)
+    store.mark_reviewed(0, "2026-09-08T10:00:00+00:00")
+    store.mark_reviewed(0, "2026-09-08T11:00:00+00:00")
+
+    assert store.reviewed_page_indices() == frozenset({0})
+
+
 def test_an_explicit_null_actor_falls_back_to_default_not_the_string_none(
     tmp_path: Path,
 ) -> None:
