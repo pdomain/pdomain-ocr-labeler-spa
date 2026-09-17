@@ -33,6 +33,7 @@ from ..core.models import (
     RegionView,
     Selection,
 )
+from ..core.page_kind.proposal_log import PageKindProposalLog
 from ..core.page_kind.reviewed_store import PageKindReviewedStore
 from ..core.page_state import PageLoader, ensure_page_model, save_page_content_to_store, save_page_to_store
 from ..core.page_to_line_matches import page_to_line_matches
@@ -83,6 +84,22 @@ class PageHistoryInfo(BaseModel):
     depth: int = 50
 
 
+class PageKindProposalView(BaseModel):
+    """One page's latest page-kind proposal — spec pdomain-ocr-synth's
+    docs/specs/2026-09-17-page-kind-review-design.md "The page payload
+    carries the latest proposal".
+    """
+
+    proposal_id: str
+    run_id: str
+    kind: PageKind
+    confidence: float | None
+    # Open-ended: shape varies per classifier version — mirrors
+    # ``RegionProposalListItem.evidence`` in ``api/regions.py``, equally
+    # open-ended for the same reason.
+    evidence: dict[str, Any]
+
+
 class PagePayload(BaseModel):
     """Full per-page payload — spec §5.3 / §1 ``PagePayload``.
 
@@ -122,6 +139,12 @@ class PagePayload(BaseModel):
     # ``PageKindReviewedStore``, independent of ``page_kind`` itself (a
     # page can carry a machine-unset ``page_kind`` and still be unreviewed).
     page_kind_reviewed: bool = False
+    # The classifier's latest claim about this page's kind, read best-effort
+    # from ``PageKindProposalLog`` the same way ``page_kind_reviewed`` reads
+    # ``PageKindReviewedStore`` — a failed read logs and leaves this ``None``
+    # rather than failing the page. ``None`` when no run has proposed a kind
+    # for this page yet.
+    page_kind_proposal: PageKindProposalView | None = None
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -1008,6 +1031,28 @@ def _page_payload(
             exc_info=True,
         )
 
+    # page_kind_proposal: best-effort read of the durable proposal journal,
+    # the same degrade-to-None-on-failure discipline as page_kind_reviewed
+    # above.
+    page_kind_proposal: PageKindProposalView | None = None
+    try:
+        proposal = PageKindProposalLog(project.project_root).latest_proposal_for_page(page_index)
+        if proposal is not None:
+            page_kind_proposal = PageKindProposalView(
+                proposal_id=proposal.proposal_id,
+                run_id=proposal.run_id,
+                kind=proposal.kind,
+                confidence=proposal.confidence,
+                evidence=dict(proposal.evidence),
+            )
+    except Exception:  # pragma: no cover - defensive
+        log.debug(
+            "_page_payload: page-kind-proposal read failed for project=%s page=%d",
+            project_id,
+            page_index,
+            exc_info=True,
+        )
+
     return PagePayload(
         project_id=project_id,
         page_index=page_index,
@@ -1024,6 +1069,7 @@ def _page_payload(
         proposals=proposals,
         page_kind=page_kind,
         page_kind_reviewed=page_kind_reviewed,
+        page_kind_proposal=page_kind_proposal,
     )
 
 
@@ -2045,6 +2091,7 @@ __all__ = [
     "GlyphBulkMarkRequest",
     "GlyphBulkMarkResponse",
     "PageHistoryInfo",
+    "PageKindProposalView",
     "PagePayload",
     "ReloadOCRRequest",
     "ReloadOCRResponse",

@@ -155,6 +155,62 @@ def test_a_confirmed_kind_reaches_a_later_plain_get(loaded_client: TestClient) -
     assert body["page_kind_reviewed"] is True
 
 
+def test_a_proposed_kind_reaches_the_page_payload(loaded_client: TestClient, projects_root: Path) -> None:
+    """pdomain-ocr-synth's 2026-09-17-page-kind-review-design.md "The page
+    payload carries the latest proposal" — read best-effort, like
+    ``page_kind_reviewed``.
+    """
+    from pdomain_book_contracts.annotation import PageKind
+
+    from pdomain_ocr_labeler_spa.core.page_kind.models import PageKindProposal, PageKindProposalRun
+    from pdomain_ocr_labeler_spa.core.page_kind.proposal_log import PageKindProposalLog
+
+    page = Page(width=100, height=100, page_index=0, blocks=[])
+    _seed_page_state(loaded_client, page_index=0, page=page)
+
+    log = PageKindProposalLog(projects_root / "book1")
+    log.append_run(
+        PageKindProposalRun(
+            run_id="r1",
+            model_id="pgdp-measure/page-templates",
+            model_version="v3",
+            created_at="2026-09-08T10:00:00+00:00",
+            page_count=1,
+        )
+    )
+    log.append_proposals(
+        [
+            PageKindProposal(
+                proposal_id="p1",
+                run_id="r1",
+                page_index=0,
+                kind=PageKind.BODY,
+                confidence=0.82,
+                evidence={"page_class": "body"},
+            )
+        ]
+    )
+
+    resp = loaded_client.get("/api/projects/book1/pages/0")
+    assert resp.status_code == 200, resp.text
+    proposal = resp.json()["page_kind_proposal"]
+    assert proposal is not None
+    assert proposal["proposal_id"] == "p1"
+    assert proposal["run_id"] == "r1"
+    assert proposal["kind"] == "body"
+    assert proposal["confidence"] == 0.82
+    assert proposal["evidence"] == {"page_class": "body"}
+
+
+def test_an_unproposed_page_reports_no_page_kind_proposal(loaded_client: TestClient) -> None:
+    page = Page(width=100, height=100, page_index=0, blocks=[])
+    _seed_page_state(loaded_client, page_index=0, page=page)
+
+    resp = loaded_client.get("/api/projects/book1/pages/0")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["page_kind_proposal"] is None
+
+
 def test_an_unconfirmed_page_reports_no_kind_and_not_reviewed(loaded_client: TestClient) -> None:
     page = Page(width=100, height=100, page_index=0, blocks=[])
     _seed_page_state(loaded_client, page_index=0, page=page)
