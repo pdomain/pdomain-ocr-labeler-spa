@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -81,15 +82,22 @@ async def test_cancel_partway_leaves_remaining_pages_dirty(tmp_path: Path) -> No
     original_update_progress = runner.update_progress
     calls = 0
 
-    async def _update_progress_then_maybe_cancel(*args: object, **kwargs: object) -> None:
+    async def _update_progress_then_maybe_cancel(
+        job_id: str,
+        *,
+        current: int,
+        total: int,
+        message: str = "",
+        result: dict[str, Any] | None = None,
+    ) -> None:
         nonlocal calls
         calls += 1
-        await original_update_progress(*args, **kwargs)  # type: ignore[arg-type]
+        await original_update_progress(job_id, current=current, total=total, message=message, result=result)
         if calls == 2:  # 1 = pre-loop "Saving N page(s)"; 2 = page 0's own report.
-            current = runner._jobs["j1"]
-            runner._jobs["j1"] = current.model_copy(update={"status": JobStatus.CANCELLED})
+            current_job = runner._jobs["j1"]
+            runner._jobs["j1"] = current_job.model_copy(update={"status": JobStatus.CANCELLED})
 
-    runner.update_progress = _update_progress_then_maybe_cancel  # type: ignore[method-assign]
+    runner.update_progress = _update_progress_then_maybe_cancel
 
     await handle_save_project(runner, job)
 
