@@ -33,6 +33,7 @@ from pdomain_book_tools.ocr.reorganize_page_utils import build_recovered_words_b
 from pdomain_book_tools.ocr.word import Word
 from pydantic import BaseModel
 
+from ..core.jobs import JobRunner
 from ..core.models import BBox
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.page_store import LabelerPageStore
@@ -45,6 +46,7 @@ from ..settings import Settings
 from .dependencies import (
     bind_page_labeling_lease,
     get_app_config,
+    get_job_runner,
     get_page_store_optional,
     get_project_state,
     get_settings,
@@ -131,6 +133,20 @@ class RegionProposalListItem(BaseModel):
 
 class ListRegionProposalsResponse(BaseModel):
     proposals: list[RegionProposalListItem]
+
+
+class StartRegionProposalRunRequest(BaseModel):
+    """No page-kind fields: the handler reads that state itself from the page-kind
+    stores (``PageKindProposalLog``, ``PageKindReviewedStore``) rather than trusting
+    a caller's say-so — see the job handler's docstring.
+    """
+
+    model_id: str = "null-detector"
+    model_version: str = "0.0.0"
+
+
+class StartRegionProposalRunResponse(BaseModel):
+    job_id: str
 
 
 # ── Shared helpers ───────────────────────────────────────────────────────
@@ -1045,6 +1061,42 @@ def reject_region_proposal(
     )
 
 
+@router.post(
+    "/{project_id}/regions/propose",
+    status_code=202,
+    response_model=StartRegionProposalRunResponse,
+    operation_id="start_region_proposal_run",
+)
+def start_region_proposal_run(
+    project_id: str,
+    body: StartRegionProposalRunRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    runner: JobRunner = Depends(get_job_runner),
+) -> JSONResponse:
+    """Start a book-scoped proposal run. Progress and completion stream via ``/api/jobs``.
+
+    The queued job must be pinned to the book it was submitted for — its
+    handler refuses to run against a different project loaded in the
+    meantime — so ``project_id`` is stamped into the job payload alongside
+    the request body, following ``post_propose_page_kinds``'s precedent
+    (``api/projects.py``).
+    """
+    project = project_state.loaded_project
+    if project is None or project.project_id != project_id:
+        return JSONResponse(
+            status_code=404,
+            content=ApiError(
+                error="project_not_found", message=f"project not found: {project_id}"
+            ).model_dump(),
+        )
+    job_id = runner.submit(
+        "propose_regions",
+        project_id=project_id,
+        payload={"project_id": project_id, **body.model_dump()},
+    )
+    return JSONResponse(status_code=202, content={"job_id": job_id})
+
+
 def install_regions_router(app: FastAPI) -> None:
     """Register the regions router. Called from ``bootstrap.build_app``."""
     app.include_router(router)
@@ -1057,6 +1109,8 @@ __all__ = [
     "ListRegionProposalsResponse",
     "RegionProposalListItem",
     "SetRegionWordMembershipRequest",
+    "StartRegionProposalRunRequest",
+    "StartRegionProposalRunResponse",
     "WordRef",
     "install_regions_router",
     "router",

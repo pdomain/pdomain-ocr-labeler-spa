@@ -575,3 +575,159 @@ def test_rejecting_on_a_page_that_is_not_loaded_writes_nothing(toolbar_loaded: A
     assert rejected.json()["error"] == "page_not_loaded"
     # The assertion that matters: nothing was written on the way out.
     assert _journal_bytes(project_root) == b""
+
+
+# ── The proposal-run job and its book-scoped route (Task 5) ──────────────
+
+
+def test_start_proposal_run_returns_a_job_id(toolbar_loaded: Any) -> None:
+    client, _ps, _page = toolbar_loaded
+    r = client.post("/api/projects/book1/regions/propose", json={})
+    assert r.status_code == 202, r.text
+    assert r.json()["job_id"]
+
+
+def test_start_proposal_run_stamps_project_id_into_the_job_payload(toolbar_loaded: Any) -> None:
+    """The handler reads ``job.payload["project_id"]`` to pin itself to the book
+    it was queued for; the route must put it there. ``StartRegionProposalRunRequest``
+    carries only ``model_id``/``model_version``, so this cannot come from
+    ``body.model_dump()`` alone — see ``api/projects.py``'s ``post_propose_page_kinds``.
+    """
+    client, _ps, _page = toolbar_loaded
+    runner = client.app.state.job_runner
+
+    r = client.post("/api/projects/book1/regions/propose", json={})
+    assert r.status_code == 202, r.text
+
+    job = runner.get_job(r.json()["job_id"])
+    assert job is not None
+    assert job.payload["project_id"] == "book1"
+
+
+def test_start_proposal_run_on_unloaded_project_returns_404(toolbar_loaded: Any) -> None:
+    client, _ps, _page = toolbar_loaded
+    r = client.post("/api/projects/does-not-exist/regions/propose", json={})
+    assert r.status_code == 404, r.text
+
+
+def test_proposal_run_never_writes_the_page_blob(toolbar_loaded: Any, tmp_path: Path) -> None:
+    """The invariant test: run a proposal job over a page, assert the blob is untouched.
+
+    Marks page 0's kind reviewed first — the handler now reads page-kind state itself
+    and skips any page lacking it, so an unmarked page would make this test vacuous.
+    """
+    import asyncio
+    from datetime import UTC, datetime
+
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+
+    client, project_state, _page = toolbar_loaded
+    store = client.app.state.page_store
+    runner = client.app.state.job_runner
+    project = project_state.loaded_project
+    assert project is not None
+    PageKindReviewedStore(project.project_root).mark_reviewed(0, datetime.now(UTC).isoformat())
+
+    pstate = project_state.page_states[0]
+    agg_before = store.get_page(pstate.page_id)
+    hash_before = (
+        agg_before.record.provenance.head.blob_refs[0]
+        if agg_before.record.provenance and agg_before.record.provenance.head
+        else None
+    )
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
+    from pdomain_ocr_labeler_spa.core.jobs.runner import Job, JobStatus
+
+    job = Job(
+        job_id="test-job",
+        job_type="propose_regions",
+        status=JobStatus.RUNNING,
+        project_id=project.project_id,
+        payload={"project_id": project.project_id},
+        created_at=datetime.now(UTC),
+    )
+    runner._jobs[job.job_id] = job  # test-only direct enqueue, mirrors runner._run_one's bookkeeping
+    asyncio.run(handle_propose_regions(runner, job))
+
+    agg_after = store.get_page(pstate.page_id)
+    hash_after = (
+        agg_after.record.provenance.head.blob_refs[0]
+        if agg_after.record.provenance and agg_after.record.provenance.head
+        else None
+    )
+    assert hash_after == hash_before
+
+
+def test_a_page_with_no_page_kind_state_gets_no_region_proposals(toolbar_loaded: Any) -> None:
+    """The job reads page-kind state itself; an unproposed, unconfirmed page is skipped.
+
+    No page in this fixture has a proposed or confirmed kind, so the run never even
+    starts — nothing is written to the proposal journal.
+    """
+    import asyncio
+    from datetime import UTC, datetime
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
+    from pdomain_ocr_labeler_spa.core.jobs.runner import Job, JobStatus
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    client, project_state, _page = toolbar_loaded
+    runner = client.app.state.job_runner
+    project = project_state.loaded_project
+    assert project is not None
+
+    job = Job(
+        job_id="test-job-2",
+        job_type="propose_regions",
+        status=JobStatus.RUNNING,
+        project_id=project.project_id,
+        payload={"project_id": project.project_id},
+        created_at=datetime.now(UTC),
+    )
+    runner._jobs[job.job_id] = job
+    asyncio.run(handle_propose_regions(runner, job))
+
+    assert RegionProposalLog(project.project_root).runs() == []
+
+
+def test_a_run_queued_for_another_book_refuses_to_propose_for_the_loaded_one(
+    toolbar_loaded: Any,
+) -> None:
+    """Jobs dequeue later than they are submitted, and a load in between swaps
+    ``loaded_project``. Proposals are durable and book-scoped, so proposing
+    regions for whatever is loaded now would write one book's run into another
+    book's journal. The handler must refuse rather than proceed — the same
+    defect ``propose_page_kinds`` was fixed for in commit 8cb5a58.
+    """
+    import asyncio
+    from datetime import UTC, datetime
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
+    from pdomain_ocr_labeler_spa.core.jobs.runner import Job, JobStatus
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    client, project_state, _page = toolbar_loaded
+    runner = client.app.state.job_runner
+    project = project_state.loaded_project
+    assert project is not None
+    PageKindReviewedStore(project.project_root).mark_reviewed(0, datetime.now(UTC).isoformat())
+
+    job = Job(
+        job_id="test-job-3",
+        job_type="propose_regions",
+        status=JobStatus.RUNNING,
+        project_id="some-other-book",
+        payload={"project_id": "some-other-book"},
+        created_at=datetime.now(UTC),
+    )
+    runner._jobs[job.job_id] = job
+    asyncio.run(handle_propose_regions(runner, job))
+
+    assert RegionProposalLog(project.project_root).runs() == []
+
+    reported = runner.get_job(job.job_id)
+    assert reported is not None
+    assert "some-other-book" in reported.message
+    assert project.project_id in reported.message

@@ -1595,6 +1595,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/regions/propose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Region Proposal Run
+         * @description Start a book-scoped proposal run. Progress and completion stream via ``/api/jobs``.
+         *
+         *     The queued job must be pinned to the book it was submitted for — its
+         *     handler refuses to run against a different project loaded in the
+         *     meantime — so ``project_id`` is stamped into the job payload alongside
+         *     the request body, following ``post_propose_page_kinds``'s precedent
+         *     (``api/projects.py``).
+         */
+        post: operations["start_region_proposal_run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/typography/contract": {
         parameters: {
             query?: never;
@@ -5059,6 +5085,29 @@ export interface components {
             direction: "horizontal" | "vertical";
         };
         /**
+         * StartRegionProposalRunRequest
+         * @description No page-kind fields: the handler reads that state itself from the page-kind
+         *     stores (``PageKindProposalLog``, ``PageKindReviewedStore``) rather than trusting
+         *     a caller's say-so — see the job handler's docstring.
+         */
+        StartRegionProposalRunRequest: {
+            /**
+             * Model Id
+             * @default null-detector
+             */
+            model_id: string;
+            /**
+             * Model Version
+             * @default 0.0.0
+             */
+            model_version: string;
+        };
+        /** StartRegionProposalRunResponse */
+        StartRegionProposalRunResponse: {
+            /** Job Id */
+            job_id: string;
+        };
+        /**
          * ToggleValidatedRequest
          * @description Spec §2 lines 297-298.
          */
@@ -7502,6 +7551,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_region_proposal_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartRegionProposalRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartRegionProposalRunResponse"];
                 };
             };
             /** @description Validation Error */
