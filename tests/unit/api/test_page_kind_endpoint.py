@@ -104,8 +104,8 @@ def test_confirming_a_page_kind_writes_it_and_marks_it_reviewed(
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["extra"]["page_kind"] == "title page"
-    assert body["extra"]["page_kind_reviewed"] is True
+    assert body["page_kind"] == "title page"
+    assert body["page_kind_reviewed"] is True
     assert page.page_kind is not None
     assert page.page_kind.value == "title page"
     assert pstate.generation == gen_before + 1
@@ -113,6 +113,36 @@ def test_confirming_a_page_kind_writes_it_and_marks_it_reviewed(
     reviewed = PageKindReviewedStore(projects_root / "book1").latest_for_page(0)
     assert reviewed is not None
     assert reviewed.note == "looks right"
+
+
+def test_a_confirmed_kind_reaches_a_later_plain_get(loaded_client: TestClient) -> None:
+    """The confirmed kind and its reviewed marker must survive a reload —
+    ``_page_payload`` (used by both the confirm route and the plain GET) has
+    to carry them as typed fields, not stuff them only into the confirm
+    response's ``extra`` dict.
+    """
+    page = Page(width=100, height=100, page_index=0, blocks=[])
+    _seed_page_state(loaded_client, page_index=0, page=page)
+
+    confirm_resp = loaded_client.post("/api/projects/book1/pages/0/page-kind", json={"kind": "title page"})
+    assert confirm_resp.status_code == 200, confirm_resp.text
+
+    get_resp = loaded_client.get("/api/projects/book1/pages/0")
+    assert get_resp.status_code == 200, get_resp.text
+    body = get_resp.json()
+    assert body["page_kind"] == "title page"
+    assert body["page_kind_reviewed"] is True
+
+
+def test_an_unconfirmed_page_reports_no_kind_and_not_reviewed(loaded_client: TestClient) -> None:
+    page = Page(width=100, height=100, page_index=0, blocks=[])
+    _seed_page_state(loaded_client, page_index=0, page=page)
+
+    resp = loaded_client.get("/api/projects/book1/pages/0")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["page_kind"] is None
+    assert body["page_kind_reviewed"] is False
 
 
 def test_an_invalid_page_kind_is_rejected_by_body_validation(loaded_client: TestClient) -> None:
@@ -141,7 +171,7 @@ def test_an_underscored_page_kind_is_normalized_to_the_canonical_spelling(
 
     resp = loaded_client.post("/api/projects/book1/pages/0/page-kind", json={"kind": "chapter_opening"})
     assert resp.status_code == 200, resp.text
-    assert resp.json()["extra"]["page_kind"] == "chapter opening"
+    assert resp.json()["page_kind"] == "chapter opening"
     assert page.page_kind is not None
     assert page.page_kind.value == "chapter opening"
 

@@ -33,6 +33,7 @@ from ..core.models import (
     RegionView,
     Selection,
 )
+from ..core.page_kind.reviewed_store import PageKindReviewedStore
 from ..core.page_state import PageLoader, ensure_page_model, save_page_content_to_store, save_page_to_store
 from ..core.page_to_line_matches import page_to_line_matches
 from ..core.persistence.config_yaml import AppConfig
@@ -109,6 +110,18 @@ class PagePayload(BaseModel):
     history: PageHistoryInfo | None = None
     regions: list[RegionView] = Field(default_factory=list)
     proposals: list[RegionProposalView] = Field(default_factory=list)
+    # Confirmed page kind — spec pdomain-ocr-synth's docs/specs/2026-09-07-
+    # region-provenance-and-persistence-design.md "Page kind needs a marker,
+    # not a decision log". Typed as the real ``PageKind`` union (not
+    # ``str | None``) so the generated TypeScript client gets the actual
+    # vocabulary, mirroring ``ConfirmPageKindRequest.kind``. ``None`` until
+    # the confirm route's human action sets it; ``propose_page_kinds`` (a
+    # machine job) never touches ``Page.page_kind``.
+    page_kind: PageKind | None = None
+    # Whether a person has reviewed this page's kind — read from
+    # ``PageKindReviewedStore``, independent of ``page_kind`` itself (a
+    # page can carry a machine-unset ``page_kind`` and still be unreviewed).
+    page_kind_reviewed: bool = False
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -969,6 +982,32 @@ def _page_payload(
             page_id=pstate.page_id if pstate is not None else None,
         )
 
+    # Confirmed page kind: lifted from the same resolved ``Page`` object
+    # regions/proposals above use — only the confirm route's human action
+    # ever sets ``Page.page_kind``, so a page with no such object yet has
+    # no kind to surface.
+    page_kind: PageKind | None = (
+        _resolved_page_for_regions.page_kind if _resolved_page_for_regions is not None else None
+    )
+
+    # page_kind_reviewed: best-effort read of the durable review journal.
+    # ``PageKindReviewedStore.is_reviewed`` re-reads and re-parses the whole
+    # JSONL journal on every call, but ``_page_payload`` runs once per page
+    # GET (not in a loop), so that cost is acceptable here. Degrades to
+    # ``False`` — "not yet reviewed" — rather than failing the whole payload
+    # on a read error, the same degrade the rotation-metadata read above
+    # uses.
+    page_kind_reviewed = False
+    try:
+        page_kind_reviewed = PageKindReviewedStore(project.project_root).is_reviewed(page_index)
+    except Exception:  # pragma: no cover - defensive
+        log.debug(
+            "_page_payload: page-kind-reviewed read failed for project=%s page=%d",
+            project_id,
+            page_index,
+            exc_info=True,
+        )
+
     return PagePayload(
         project_id=project_id,
         page_index=page_index,
@@ -983,6 +1022,8 @@ def _page_payload(
         page_text_gt=page_text_gt,
         regions=regions,
         proposals=proposals,
+        page_kind=page_kind,
+        page_kind_reviewed=page_kind_reviewed,
     )
 
 
@@ -1497,8 +1538,6 @@ def confirm_page_kind(
     this page — is refused with ``503 store_unavailable`` and leaves no
     marker behind.
     """
-    from ..core.page_kind.reviewed_store import PageKindReviewedStore
-
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
         return err
@@ -1579,12 +1618,7 @@ def confirm_page_kind(
         app_config=app_config,
         page_store=page_store,
     )
-    updated = payload.model_copy(
-        update={
-            "extra": {**payload.extra, "page_kind": kind.value, "page_kind_reviewed": True},
-        }
-    )
-    return JSONResponse(status_code=200, content=updated.model_dump(mode="json"))
+    return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
 @router.post("/{page_index}/rotate", status_code=202, response_model=RotatePageResponse)
