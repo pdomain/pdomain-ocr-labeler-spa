@@ -87,7 +87,10 @@ As of 2026-09-17:
   per-page summary, and up to 500 items in reading or confidence order. It uses the same
   undecided rule as the page view. In the SPA, `]` and `[` jump to the next or previous page with
   undecided proposals, the rail's region target shows the book's count as a badge, and emptying a
-  page says how many remain in the book. `tests/e2e/test_review_queue_navigation.py` drives it.
+  page says how many remain in the book. A Queue drawer tab lists the undecided proposals themselves,
+  in reading or lowest-confidence-first order, with the detector's evidence; clicking one jumps to it
+  and selects it. `tests/e2e/test_review_queue_navigation.py` and `test_review_queue_panel.py` drive
+  both.
 - **A person reviews page kinds.** `PagePayload` carries the latest `page_kind_proposal`. The page
   toolbar shows the page's kind, confirmed or proposed with its confidence, and confirms or changes
   it. "Review page kinds" opens a book-wide list with filters and checkboxes, backed by
