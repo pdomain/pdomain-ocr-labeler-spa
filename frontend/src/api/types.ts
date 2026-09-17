@@ -280,9 +280,12 @@ export interface paths {
          *
          *     Spec §5.3: long-running save of all loaded pages. Returns 202 Accepted.
          *     Callers track progress via ``GET /api/jobs/{job_id}/events``.
-         *     On completion, ``GET /api/jobs/{job_id}`` exposes ``payload.skipped_pages``
-         *     and ``payload.skipped_indices`` for pages that could not be persisted
+         *     On completion, ``GET /api/jobs/{job_id}`` exposes ``result.skipped_pages``
+         *     and ``result.skipped_indices`` for pages that could not be persisted
          *     because they are not yet registered in the store (``page_id is None``).
+         *     (Renamed from ``payload.skipped_pages``/``payload.skipped_indices`` —
+         *     see ``core.models.Job.result`` and ``core.jobs.runner.to_public_job``;
+         *     docs/issues/2026-07-21-jobs-api-openapi-mismatch.md, P1-JOBS-API.)
          */
         post: operations["save_all_api_projects__project_id__save_all_post"];
         delete?: never;
@@ -3921,6 +3924,10 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** Result */
+            result?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * JobProgress

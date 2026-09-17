@@ -11,15 +11,20 @@ status is added without a matching public ``JobStatus`` member, or
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 import pytest
 
+from pdomain_ocr_labeler_spa.core.jobs import handlers as handlers_pkg
 from pdomain_ocr_labeler_spa.core.jobs.runner import Job as RunnerJob
 from pdomain_ocr_labeler_spa.core.jobs.runner import (
     JobStatus as RunnerJobStatus,
 )
 from pdomain_ocr_labeler_spa.core.jobs.runner import (
+    payload_result_keys,
     registered_job_types,
     to_public_job,
 )
@@ -60,6 +65,8 @@ def _make_runner_job(
     progress_total: int = 10,
     message: str = "working",
     error_message: str = "",
+    payload: dict[str, Any] | None = None,
+    result: dict[str, Any] | None = None,
     created_at: datetime | None = None,
     started_at: datetime | None = None,
     completed_at: datetime | None = None,
@@ -73,6 +80,8 @@ def _make_runner_job(
         progress_total=progress_total,
         message=message,
         error_message=error_message,
+        payload=payload or {},
+        result=result or {},
         created_at=created_at or datetime.now(UTC),
         started_at=started_at,
         completed_at=completed_at,
@@ -128,3 +137,75 @@ def test_to_public_job_rejects_an_unregistered_job_type() -> None:
     runner_job = _make_runner_job(job_type="not_a_real_job_type")
     with pytest.raises(ValueError, match="not_a_real_job_type"):
         to_public_job(runner_job)
+
+
+# ── result field: handler-written payload/result data reaches the public model ──
+
+
+@pytest.mark.parametrize("status", [RunnerJobStatus.COMPLETE, RunnerJobStatus.CANCELLED])
+def test_to_public_job_carries_save_project_skipped_page_result(status: RunnerJobStatus) -> None:
+    """A cancelled or completed ``save_project`` job's ``payload["skipped_pages"]``/
+    ``payload["skipped_indices"]`` (written by ``handle_save_project``) must be
+    reachable through the public model — ``PageActionsCompact`` reads exactly
+    this to warn a person that pages were skipped
+    (docs/issues/2026-07-21-jobs-api-openapi-mismatch.md, P1-JOBS-API)."""
+    runner_job = _make_runner_job(
+        job_type="save_project",
+        status=status,
+        payload={
+            "failures": [{"page_index": 2, "error": "disk full"}],
+            "skipped_pages": 1,
+            "skipped_indices": [3],
+        },
+        completed_at=datetime.now(UTC),
+    )
+
+    public_job = to_public_job(runner_job)
+
+    assert public_job.result is not None
+    assert public_job.result["skipped_pages"] == 1
+    assert public_job.result["skipped_indices"] == [3]
+    assert public_job.result["failures"] == [{"page_index": 2, "error": "disk full"}]
+
+
+def test_to_public_job_result_is_none_when_nothing_was_written() -> None:
+    runner_job = _make_runner_job(payload={}, result={})
+    assert to_public_job(runner_job).result is None
+
+
+def test_to_public_job_merges_job_result_alongside_payload_output_keys() -> None:
+    """The export terminal-stats channel (``job.result``, merged flat into the
+    SSE frame today) and the ``job.payload`` output channel (``save_project``/
+    ``refine_bboxes``/``propose_page_kinds``) both land in the same public
+    ``result`` field — the two paths agree at the public-model boundary."""
+    runner_job = _make_runner_job(
+        job_type="export",
+        payload={"skipped_pages": 0},
+        result={"words_exported_detection": 5},
+    )
+    public_job = to_public_job(runner_job)
+    assert public_job.result == {"skipped_pages": 0, "words_exported_detection": 5}
+
+
+def test_payload_result_keys_cover_every_key_a_handler_writes() -> None:
+    """Contract test: every ``job.payload["<key>"] = ...`` write in any
+    handler module must be in ``payload_result_keys()`` — the allowlist
+    ``to_public_job`` uses to surface ``job.payload`` output through the
+    public model. A handler that starts writing a new output key without
+    updating the allowlist fails this test instead of silently dropping
+    the field off the wire, the way ``skipped_pages``/``skipped_indices``
+    did (docs/issues/2026-07-21-jobs-api-openapi-mismatch.md, P1-JOBS-API).
+    """
+    handlers_dir = Path(handlers_pkg.__file__).parent
+    pattern = re.compile(r'job\.payload\["([A-Za-z0-9_]+)"\]\s*=')
+
+    written_keys: set[str] = set()
+    for path in handlers_dir.glob("*.py"):
+        written_keys |= set(pattern.findall(path.read_text(encoding="utf-8")))
+
+    allowlist = payload_result_keys()
+    missing = written_keys - allowlist
+    assert not missing, (
+        f"handler(s) write job.payload key(s) not in payload_result_keys(): {missing} "
+        f"— add them to runner._PAYLOAD_RESULT_KEYS so to_public_job() surfaces them"
+    )

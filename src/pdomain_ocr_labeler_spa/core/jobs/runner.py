@@ -67,6 +67,34 @@ _TERMINAL = {JobStatus.COMPLETE, JobStatus.ERROR, JobStatus.CANCELLED}
 
 Handler = Callable[["JobRunner", Job], Coroutine[Any, Any, None]]
 
+# Keys individual handlers write into ``job.payload`` as OUTPUT (not the
+# caller-submitted input echoed in that same dict) — the allowlist
+# ``to_public_job`` uses to surface them through the public model's
+# ``result`` field. ``tests/unit/core/jobs/test_job_type_contract.py``
+# statically greps every handler module for ``job.payload["<key>"] = ``
+# writes and fails if one is missing here, so a new output key can't
+# silently go missing from the wire the way ``skipped_pages`` did
+# (docs/issues/2026-07-21-jobs-api-openapi-mismatch.md, P1-JOBS-API).
+_PAYLOAD_RESULT_KEYS: frozenset[str] = frozenset(
+    {
+        "failures",  # save_project
+        "skipped_pages",  # save_project
+        "skipped_indices",  # save_project
+        "refined",  # refine_bboxes
+        "run_id",  # propose_page_kinds
+        "proposal_count",  # propose_page_kinds
+    }
+)
+
+
+def payload_result_keys() -> frozenset[str]:
+    """Return the ``job.payload`` output keys ``to_public_job`` surfaces.
+
+    Public accessor mirroring ``registered_job_types()`` so tests can check
+    the allowlist without reaching into the private ``_PAYLOAD_RESULT_KEYS``.
+    """
+    return _PAYLOAD_RESULT_KEYS
+
 
 def to_public_job(job: Job) -> PublicJob:
     """Adapt an internal runner ``Job`` into the public wire ``Job`` model.
@@ -78,7 +106,18 @@ def to_public_job(job: Job) -> PublicJob:
     → ``type``, ``progress_current``/``progress_total``/``message`` → nested
     ``progress.current``/``progress.total``/``progress.message``,
     ``started_at``/``completed_at`` collapse into a single ``updated_at``.
+
+    ``result`` unifies the runner's two ad hoc output channels into one
+    public field: the allowlisted output keys handlers write into
+    ``job.payload`` (``_PAYLOAD_RESULT_KEYS`` — e.g. ``save_project``'s
+    ``skipped_pages``/``skipped_indices``), plus ``job.result`` (today only
+    ``export``'s terminal stats, which ``JobRunner._emit`` also keeps
+    merging flat at the SSE frame's top level for backward compatibility —
+    both places now carry the same data). ``None`` when neither channel
+    wrote anything.
     """
+    result: dict[str, Any] = {k: v for k, v in job.payload.items() if k in _PAYLOAD_RESULT_KEYS}
+    result.update(job.result)
     return PublicJob(
         id=job.job_id,
         type=PublicJobType(job.job_type),
@@ -92,6 +131,7 @@ def to_public_job(job: Job) -> PublicJob:
         error_message=job.error_message or None,
         created_at=job.created_at,
         updated_at=job.completed_at or job.started_at or job.created_at,
+        result=result or None,
     )
 
 

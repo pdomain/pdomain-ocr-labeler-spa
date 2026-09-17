@@ -333,6 +333,26 @@ class Job(BaseModel):
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime
+    result: dict[str, Any] | None = None
+    """Job-type-specific extra data the handler produced; ``None`` when the
+    handler wrote nothing. Open-ended by design (like
+    ``RegionProposalView.evidence`` above) — shape depends on ``type``.
+    Keys that exist today (``core.jobs.runner.to_public_job`` merges these
+    from the runner's ``Job.payload``/``Job.result``):
+
+    - ``save_project``: ``failures`` (list of ``{page_index, error}``),
+      ``skipped_pages`` (int — pages not yet registered in the store),
+      ``skipped_indices`` (list[int]).
+    - ``refine_bboxes``: ``refined`` (int — words touched).
+    - ``propose_page_kinds``: ``run_id`` (str), ``proposal_count`` (int).
+    - ``export``: ``words_exported_detection``, ``words_exported_recognition``,
+      ``pages_skipped_not_validated`` — also merged flat at the SSE frame's
+      top level for backward compatibility (``JobRunner._emit``); both
+      places carry the same data.
+
+    ``reload_ocr``, ``rotate_page``, ``auto_rotate_all`` and
+    ``propose_regions`` do not populate this field today.
+    """
 
 
 __all__ = [
