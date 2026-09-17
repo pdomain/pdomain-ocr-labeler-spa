@@ -1582,6 +1582,8 @@ def confirm_page_kind(
 
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
+        prior_kind = page.page_kind
+        prior_generation = pstate.generation
         page.page_kind = kind
         pstate.generation += 1
 
@@ -1594,6 +1596,14 @@ def confirm_page_kind(
                 labeler_sidecars=pstate,
             )
         except Exception as exc:
+            # The store never received this confirmation, and no reviewed
+            # marker is written below — restore the prior in-memory state so
+            # it doesn't claim a confirmation that didn't happen. Otherwise a
+            # later route that persists this same Page object would write a
+            # human-set page_kind with no matching marker, and the page would
+            # come back as unreviewed despite carrying a confirmed kind.
+            page.page_kind = prior_kind
+            pstate.generation = prior_generation
             log.exception("confirm_page_kind: store write failed page_id=%s", page_id)
             return JSONResponse(
                 status_code=503,

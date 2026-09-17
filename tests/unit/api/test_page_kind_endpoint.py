@@ -145,6 +145,37 @@ def test_an_unconfirmed_page_reports_no_kind_and_not_reviewed(loaded_client: Tes
     assert body["page_kind_reviewed"] is False
 
 
+def test_a_confirm_that_fails_to_persist_restores_the_prior_kind_and_generation(
+    loaded_client: TestClient, projects_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When ``save_page_content_to_store`` raises, the route returns 503 and
+    writes no reviewed marker — but the in-memory ``page.page_kind`` and the
+    bumped ``pstate.generation`` must not survive the failure either. Otherwise
+    a later route that persists this same ``Page`` object would write a
+    human-set ``page_kind`` with no matching marker, and the page would come
+    back as unreviewed despite carrying a confirmed kind.
+    """
+    import pdomain_ocr_labeler_spa.api.pages as pages_module
+
+    page = Page(width=100, height=100, page_index=0, blocks=[])
+    pstate = _seed_page_state(loaded_client, page_index=0, page=page)
+    prior_kind = page.page_kind
+    gen_before = pstate.generation
+
+    def _raise(**_kwargs: object) -> str:
+        raise RuntimeError("simulated store failure")
+
+    monkeypatch.setattr(pages_module, "save_page_content_to_store", _raise)
+
+    resp = loaded_client.post("/api/projects/book1/pages/0/page-kind", json={"kind": "body"})
+
+    assert resp.status_code == 503, resp.text
+    assert resp.json()["error"] == "store_persist_failed"
+    assert page.page_kind == prior_kind
+    assert pstate.generation == gen_before
+    assert PageKindReviewedStore(projects_root / "book1").latest_for_page(0) is None
+
+
 def test_an_invalid_page_kind_is_rejected_by_body_validation(loaded_client: TestClient) -> None:
     """``kind`` is the ``PageKind`` enum, so pydantic rejects an unknown kind
     before the route body runs — the same path a bad ``role`` takes on the
