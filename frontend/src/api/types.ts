@@ -415,6 +415,13 @@ export interface paths {
          *     cached → OCR lane probes, so the response has a populated
          *     ``page_record`` and ``line_matches`` without requiring a separate
          *     Reload OCR click.
+         *
+         *     A loader failure on that on-demand call degrades to an empty
+         *     ``page_record`` rather than a 500 — the request still succeeds so the
+         *     image renders — but is logged at WARNING and stamped onto
+         *     ``PagePayload.page_load_error`` (issue
+         *     2026-08-08-get-page-hides-ocr-failures), distinguishing it from a page
+         *     that legitimately has no OCR text.
          */
         get: operations["get_page_api_projects__project_id__pages__page_index__get"];
         put?: never;
@@ -4456,6 +4463,25 @@ export interface components {
             pages: components["schemas"]["PageKindsListItem"][];
         };
         /**
+         * PageLoadError
+         * @description Marks a genuine loader failure for this page GET — issue
+         *     2026-08-08-get-page-hides-ocr-failures.
+         *
+         *     ``get_page`` auto-triggers ``ensure_page_model`` (B1) when no
+         *     page_record is cached yet.  A failure there used to degrade silently to
+         *     an empty page_record, indistinguishable from a page that legitimately
+         *     has no OCR text.  ``PagePayload.page_load_error`` is that distinction:
+         *     non-``None`` only when the loader itself raised, never when OCR ran and
+         *     found nothing.  Shaped like ``ApiError`` (``error`` tag + human-readable
+         *     ``message``) but scoped to one page rather than the whole request.
+         */
+        PageLoadError: {
+            /** Error */
+            error: string;
+            /** Message */
+            message: string;
+        };
+        /**
          * PagePayload
          * @description Full per-page payload — spec §5.3 / §1 ``PagePayload``.
          *
@@ -4500,6 +4526,7 @@ export interface components {
              */
             page_kind_reviewed: boolean;
             page_kind_proposal?: components["schemas"]["PageKindProposalView"] | null;
+            page_load_error?: components["schemas"]["PageLoadError"] | null;
             /** Extra */
             extra?: {
                 [key: string]: unknown;

@@ -205,6 +205,7 @@ function pageFixture() {
     generation: 1,
     page_text_ocr: "ocr text",
     page_text_gt: "gt text",
+    page_load_error: null as { error: string; message: string } | null,
     extra: {},
   };
 }
@@ -386,7 +387,13 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     expect(await screen.findByTestId("project-loading-overlay")).toBeInTheDocument();
   });
 
-  it("renders the InlineBanners.OcrFailedBanner when page_record.ocr_failed is true", async () => {
+  it("does not render OcrFailedBanner from the unused page_record.ocr_failed flag", async () => {
+    // page_record.ocr_failed comes from pdomain_ops.PageRecord (an upstream
+    // dependency) and nothing in this backend ever sets it — the real
+    // signal is PagePayload.page_load_error (issue
+    // 2026-08-08-get-page-hides-ocr-failures). ProjectPage must not read
+    // the dead flag; see "renders OcrFailedBanner with the loader message
+    // when page_load_error is set" for the real trigger.
     server.use(
       http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
       http.get("/api/projects/:pid/pages/:idx", () => {
@@ -396,7 +403,42 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       }),
     );
     renderProjectPage();
-    expect(await screen.findByTestId("banner-ocr-failed")).toBeInTheDocument();
+    // Wait for the page fetch to actually resolve (page-name-label only
+    // renders once pageQ.data?.page_record is present) rather than asserting
+    // absence the instant "project-page" mounts, which would pass
+    // vacuously before the mocked fetch even settles.
+    await screen.findByTestId("page-name-label");
+    expect(screen.queryByTestId("banner-ocr-failed")).toBeNull();
+  });
+
+  it("does not render OcrFailedBanner for a page with no text and no page_load_error", async () => {
+    // issue 2026-08-08-get-page-hides-ocr-failures: a page that genuinely
+    // has no OCR text (the default fixture: empty line_matches, no
+    // page_load_error) must render exactly as it does today — no banner.
+    server.use(
+      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid/pages/:idx", () => HttpResponse.json(pageFixture())),
+    );
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    expect(screen.queryByTestId("banner-ocr-failed")).toBeNull();
+  });
+
+  it("renders OcrFailedBanner with the loader message when page_load_error is set", async () => {
+    // issue 2026-08-08-get-page-hides-ocr-failures: a genuine loader
+    // failure must be visible, distinct from "OCR ran and found no text".
+    server.use(
+      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid/pages/:idx", () => {
+        const page = pageFixture();
+        page.page_load_error = { error: "ocr_load_failed", message: "doctr predictor unavailable" };
+        return HttpResponse.json(page);
+      }),
+    );
+    renderProjectPage();
+    const banner = await screen.findByTestId("banner-ocr-failed");
+    expect(banner).toBeInTheDocument();
+    expect(banner.textContent).toContain("doctr predictor unavailable");
   });
 
   it("IS-1: auto-redirects to / and does NOT render ProjectNotFoundBanner when project 404s", async () => {

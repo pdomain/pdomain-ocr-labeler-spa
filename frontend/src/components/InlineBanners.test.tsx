@@ -22,6 +22,18 @@ describe("OcrFailedBanner", () => {
     const { container } = render(<OcrFailedBanner />);
     expect(container.querySelector("[data-testid='banner-ocr-failed']")).toBeNull();
   });
+
+  it("includes the loader message when provided (issue 2026-08-08-get-page-hides-ocr-failures)", () => {
+    render(<OcrFailedBanner ocrFailed message="doctr predictor unavailable" />);
+    const banner = screen.getByTestId("banner-ocr-failed");
+    expect(banner.textContent).toContain("doctr predictor unavailable");
+  });
+
+  it("renders without a parenthetical when no message is provided", () => {
+    render(<OcrFailedBanner ocrFailed />);
+    const banner = screen.getByTestId("banner-ocr-failed");
+    expect(banner.textContent).not.toContain("(");
+  });
 });
 
 describe("ProjectNotFoundBanner", () => {
