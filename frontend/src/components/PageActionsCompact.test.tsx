@@ -56,15 +56,17 @@ function makeQC() {
   });
 }
 
-function renderCompact(projectId = "proj-1", pageIndex = 0) {
-  const qc = makeQC();
-  return render(
-    <QueryClientProvider client={qc}>
-      <MemoryRouter>
-        <PageActionsCompact projectId={projectId} pageIndex={pageIndex} />
-      </MemoryRouter>
-    </QueryClientProvider>,
-  );
+function renderCompact(projectId = "proj-1", pageIndex = 0, qc: QueryClient = makeQC()) {
+  return {
+    qc,
+    ...render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <PageActionsCompact projectId={projectId} pageIndex={pageIndex} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 function stubJobNoop() {
@@ -564,6 +566,193 @@ describe("PageActionsCompact: auto-rotate-all trigger (P2 / C29)", () => {
       );
       expect(errCall).toBeDefined();
     });
+  });
+});
+
+// ─── Task 6: propose page kinds / propose regions book actions ──────────────
+// Plan: docs/plans/2026-09-17-region-review-surface.md — Task 6 frontend half.
+// Design: docs/specs/2026-09-17-region-review-surface-design.md
+//   "Two book actions start the runs".
+//
+// Both actions follow the auto-rotate-all pattern (mutation stores the job
+// id, opens a loading toast keyed by it; useJobCompletionInvalidation drives
+// completion). On completion each shows the job's terminal progress message
+// rather than a generic string, and Propose regions shows it as a warning
+// (not success) when the run skipped every page for having no page kind.
+
+/** Stub EventSource capturing the SSE listener so a test can dispatch a
+ * synthetic job-progress event, mirroring the reload-ocr toast-lifecycle
+ * tests above. */
+function mockEventSource() {
+  let progressListener: ((e: MessageEvent) => void) | null = null;
+  const mockES = {
+    addEventListener: vi.fn((type: string, fn: unknown) => {
+      if (type === "progress") progressListener = fn as (e: MessageEvent) => void;
+    }),
+    removeEventListener: vi.fn(),
+    close: vi.fn(),
+    readyState: 1 as number,
+  };
+  vi.stubGlobal(
+    "EventSource",
+    vi.fn(function () {
+      return mockES;
+    }),
+  );
+  return {
+    dispatch(data: unknown) {
+      act(() => {
+        progressListener?.({ data: JSON.stringify(data) } as MessageEvent);
+      });
+    },
+  };
+}
+
+describe("PageActionsCompact: propose page kinds / propose regions (Task 6)", () => {
+  it("renders propose-page-kinds-button and propose-regions-button in the overflow menu", async () => {
+    stubPage(false);
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    expect(await screen.findByTestId("propose-page-kinds-button")).toBeInTheDocument();
+    expect(screen.getByTestId("propose-regions-button")).toBeInTheDocument();
+  });
+
+  it("clicking Propose page kinds POSTs the propose-page-kinds route", async () => {
+    stubPage(false);
+    const spy = vi.fn(() => HttpResponse.json({ job_id: "job-pk-1" }, { status: 202 }));
+    server.use(http.post("/api/projects/proj-1/propose-page-kinds", spy));
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("propose-page-kinds-button"));
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+  });
+
+  it("clicking Propose regions POSTs the regions/propose route", async () => {
+    stubPage(false);
+    const spy = vi.fn(() => HttpResponse.json({ job_id: "job-rg-1" }, { status: 202 }));
+    server.use(http.post("/api/projects/proj-1/regions/propose", spy));
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("propose-regions-button"));
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+  });
+
+  it("a region run that skipped every page for having no page kind shows a warn toast with the terminal message", async () => {
+    stubPage(false);
+    server.use(
+      http.post("/api/projects/proj-1/regions/propose", () =>
+        HttpResponse.json({ job_id: "job-rg-skip" }, { status: 202 }),
+      ),
+    );
+    const es = mockEventSource();
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("propose-regions-button"));
+    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
+
+    const message =
+      "Proposed 0 region(s) on 0 page(s). Skipped 3 page(s) with no page kind; run Propose page kinds first.";
+    es.dispatch({ job_id: "job-rg-skip", status: "complete", progress: { message } });
+
+    await waitFor(() => {
+      const calls = toastMock.mock.calls as [unknown, { style?: { borderLeft?: string } }?][];
+      const warnCall = calls.find(
+        ([msg, opts]) => msg === message && opts?.style?.borderLeft?.includes("status-fuzzy"),
+      );
+      expect(warnCall).toBeDefined();
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("a completed region run with proposals shows a success toast with the terminal message", async () => {
+    stubPage(false);
+    server.use(
+      http.post("/api/projects/proj-1/regions/propose", () =>
+        HttpResponse.json({ job_id: "job-rg-ok" }, { status: 202 }),
+      ),
+    );
+    const es = mockEventSource();
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("propose-regions-button"));
+    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
+
+    const message = "Proposed 12 region(s) on 6 page(s).";
+    es.dispatch({ job_id: "job-rg-ok", status: "complete", progress: { message } });
+
+    await waitFor(() => {
+      const calls = toastMock.mock.calls as [unknown, { style?: { borderLeft?: string } }?][];
+      const successCall = calls.find(
+        ([msg, opts]) => msg === message && opts?.style?.borderLeft?.includes("status-exact"),
+      );
+      expect(successCall).toBeDefined();
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("propose page kinds completion invalidates the page query", async () => {
+    stubPage(false);
+    server.use(
+      http.post("/api/projects/proj-1/propose-page-kinds", () =>
+        HttpResponse.json({ job_id: "job-pk-inv" }, { status: 202 }),
+      ),
+    );
+    const qc = makeQC();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const es = mockEventSource();
+    const user = userEvent.setup();
+    renderCompact("proj-1", 0, qc);
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("propose-page-kinds-button"));
+    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
+
+    es.dispatch({
+      job_id: "job-pk-inv",
+      status: "complete",
+      progress: { message: "Proposed page kinds on 4 page(s)." },
+    });
+
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", "proj-1", 0] }),
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  it("propose regions completion invalidates the page query", async () => {
+    stubPage(false);
+    server.use(
+      http.post("/api/projects/proj-1/regions/propose", () =>
+        HttpResponse.json({ job_id: "job-rg-inv" }, { status: 202 }),
+      ),
+    );
+    const qc = makeQC();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const es = mockEventSource();
+    const user = userEvent.setup();
+    renderCompact("proj-1", 0, qc);
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("propose-regions-button"));
+    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
+
+    es.dispatch({
+      job_id: "job-rg-inv",
+      status: "complete",
+      progress: { message: "Proposed 12 region(s) on 6 page(s)." },
+    });
+
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", "proj-1", 0] }),
+    );
+
+    vi.unstubAllGlobals();
   });
 });
 

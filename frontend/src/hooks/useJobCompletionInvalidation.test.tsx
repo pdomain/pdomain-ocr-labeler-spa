@@ -39,7 +39,7 @@ interface HarnessOptions {
   activeJobId: string | null;
   jobProgress: JobProgressEvent | null;
   invalidationKey?: readonly unknown[];
-  onComplete?: (jobId: string) => void;
+  onComplete?: (jobId: string, event: JobProgressEvent) => void;
   onError?: (jobId: string, err: string | null) => void;
   onRunning?: (jobId: string, event: JobProgressEvent) => void;
 }
@@ -129,7 +129,37 @@ describe("useJobCompletionInvalidation", () => {
     expect(setActiveJobId).toHaveBeenCalledTimes(1);
     expect(setActiveJobId).toHaveBeenCalledWith(null);
     expect(onComplete).toHaveBeenCalledTimes(1);
-    expect(onComplete).toHaveBeenCalledWith("job-1");
+    expect(onComplete).toHaveBeenCalledWith("job-1", COMPLETE_EVENT);
+  });
+
+  it("passes the terminal jobProgress event through to onComplete", () => {
+    // Call sites need the terminal event's message (e.g. a job's run
+    // summary) to build their completion toast — onComplete must receive
+    // it directly rather than the caller reading a closed-over jobProgress,
+    // which depends on render timing this hook does not guarantee.
+    const onComplete = vi.fn();
+    const { rerender } = renderHarness({
+      activeJobId: "job-1",
+      jobProgress: RUNNING_EVENT,
+      onComplete,
+    });
+
+    const terminalEvent: JobProgressEvent = {
+      job_id: "job-1",
+      status: "complete",
+      progress: { current: 6, total: 6, message: "Proposed 12 region(s) on 6 page(s)." },
+    };
+
+    act(() => {
+      rerender({
+        activeJobId: "job-1",
+        jobProgress: terminalEvent,
+        onComplete,
+      });
+    });
+
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledWith("job-1", terminalEvent);
   });
 
   it("fires onError and clears activeJobId on 'error' but does NOT invalidate", () => {
