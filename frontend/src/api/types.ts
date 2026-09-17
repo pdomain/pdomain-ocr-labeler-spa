@@ -3836,6 +3836,25 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * ImageDrift
+         * @description Marks that this page's on-disk source image changed since it was
+         *     OCR'd — issue 2026-07-21-image-drift-banner-hard-off.
+         *
+         *     Shaped like ``PageLoadError`` (an ``error`` tag plus a human-readable
+         *     ``message``) for the same reason: a typed model that can say something
+         *     useful, not a bare boolean. ``PagePayload.image_drift`` is ``None`` both
+         *     when the image is unchanged and when drift can't be determined (no
+         *     recorded OCR-time digest yet, or the file can't be read) — see
+         *     ``_image_drift_for_page`` for the detection strategy and why an
+         *     inconclusive read reports no drift rather than a false alarm.
+         */
+        ImageDrift: {
+            /** Error */
+            error: string;
+            /** Message */
+            message: string;
+        };
+        /**
          * ImportedTextValidationResponse
          * @description Persistent text-validation head for one imported bundle word.
          */
@@ -4579,6 +4598,7 @@ export interface components {
             page_kind_reviewed: boolean;
             page_kind_proposal?: components["schemas"]["PageKindProposalView"] | null;
             page_load_error?: components["schemas"]["PageLoadError"] | null;
+            image_drift?: components["schemas"]["ImageDrift"] | null;
             /** Extra */
             extra?: {
                 [key: string]: unknown;
