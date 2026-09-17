@@ -1014,13 +1014,15 @@ def _image_drift_for_page(
 
     Baseline handling: the first time this function sees a page for a given
     OCR-time digest — a fresh process, or the digest just changed because the
-    page was re-OCR'd — ``pstate`` has no matching baseline yet. Rather than
-    hash on that first call, it records the current stat as the new baseline
-    and reports no drift; the next fetch is the first one that can actually
-    compare. This is the documented cheap-path trade-off (spec: "prefer the
-    cheap path"): a file that already drifted before this baseline was
-    recorded goes undetected until it drifts again, in exchange for never
-    hashing on every single page fetch.
+    page was re-OCR'd — ``pstate`` has no matching baseline yet. That first
+    check hashes the file once and compares it directly to the recorded
+    digest, rather than blindly trusting the current stat as a fresh
+    baseline: a page whose image was replaced while the server was down (or
+    before this process ever looked at it) must be caught the first time
+    it's fetched, not only after a *second* on-disk change. This costs one
+    hash per page per process — the same order of work ``get_page`` already
+    does per page fetch (OCR, dims, provenance reads) — after which the
+    cheap stat comparison takes over for every later fetch of the same page.
     """
     if project_state.has_book_labeling_session:
         return None
@@ -1035,27 +1037,32 @@ def _image_drift_for_page(
     except (OSError, ValueError):
         return None
 
-    if pstate.image_drift_digest != digest:
-        # New OCR generation (or first check this process) — nothing to
-        # compare against yet; record the baseline and don't cry wolf.
-        pstate.image_drift_digest = digest
-        pstate.image_drift_size = file_stat.st_size
-        pstate.image_drift_mtime_ns = file_stat.st_mtime_ns
+    has_baseline = pstate.image_drift_digest == digest
+    if (
+        has_baseline
+        and pstate.image_drift_size == file_stat.st_size
+        and pstate.image_drift_mtime_ns == file_stat.st_mtime_ns
+    ):
+        # Cheap path: a baseline already exists for this digest and neither
+        # size nor mtime moved since — trust it without hashing.
         return None
 
-    if pstate.image_drift_size == file_stat.st_size and pstate.image_drift_mtime_ns == file_stat.st_mtime_ns:
-        return None
-
+    # No baseline yet (first check for this digest — new process or a fresh
+    # OCR generation) or the cheap stat check moved: hash once, either to
+    # establish the real baseline or to confirm/deny a suspected change.
     try:
         current_digest = hashlib.sha256(image_path.read_bytes()).hexdigest()
     except OSError:
         return None
 
+    # Cache the stat baseline for this digest regardless of the verdict —
+    # this is what lets an unchanged first check, or a merely-touched file,
+    # skip hashing on the next fetch.
+    pstate.image_drift_digest = digest
+    pstate.image_drift_size = file_stat.st_size
+    pstate.image_drift_mtime_ns = file_stat.st_mtime_ns
+
     if current_digest == digest:
-        # Stat moved (touched, re-copied) but the bytes didn't — refresh the
-        # cheap baseline so the next fetch doesn't re-hash for nothing.
-        pstate.image_drift_size = file_stat.st_size
-        pstate.image_drift_mtime_ns = file_stat.st_mtime_ns
         return None
 
     return ImageDrift(

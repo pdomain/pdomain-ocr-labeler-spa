@@ -3,10 +3,13 @@
 
 ``_image_drift_for_page`` compares a page's recorded OCR-time image digest
 (``_image_digest_for_page`` — ``ProvenanceNode.blob_refs[1]``) against the
-file its project currently names on disk. The cheap path (spec: this runs
-on every page fetch) compares ``st_size`` / ``st_mtime_ns`` cached on
-``PageState`` against the current stat, and only hashes the file when those
-moved.
+file its project currently names on disk. The first check for a page (no
+cached baseline yet — a fresh process, or a fresh OCR generation) hashes the
+file once and compares it directly to the recorded digest, so a page whose
+image was replaced before this process ever looked at it is still caught
+immediately. Every later check of the same page takes the cheap path:
+compare ``st_size`` / ``st_mtime_ns`` cached on ``PageState`` against the
+current stat, and only re-hash when those moved.
 
 These tests call ``_image_drift_for_page`` directly against a real
 ``LabelerPageStore`` (same event-store-write pattern
@@ -66,7 +69,10 @@ def _load_ocrd_page(
 
 
 def test_first_check_records_baseline_and_reports_no_drift(tmp_path: Path) -> None:
-    """No prior baseline on ``pstate`` — records one, reports no drift."""
+    """No prior baseline on ``pstate`` and the file matches its recorded
+    digest — the first check hashes once, confirms no drift, and caches the
+    baseline so later checks can take the cheap path.
+    """
     project_state, pstate, _image_path, store = _load_ocrd_page(tmp_path, b"\x89PNG\r\n original bytes")
 
     result = _image_drift_for_page(project_state=project_state, page_index=0, pstate=pstate, page_store=store)
@@ -77,13 +83,32 @@ def test_first_check_records_baseline_and_reports_no_drift(tmp_path: Path) -> No
     assert pstate.image_drift_mtime_ns is not None
 
 
+def test_changed_image_reports_drift_on_first_check(tmp_path: Path) -> None:
+    """A file replaced while no baseline is cached yet — e.g. the server was
+    down when the replacement happened, so this process never saw the
+    original bytes — must report drift on the very first check, not just
+    the second one.
+    """
+    project_state, pstate, image_path, store = _load_ocrd_page(tmp_path, b"\x89PNG\r\n original bytes")
+    image_path.write_bytes(b"\x89PNG\r\n replaced bytes, different content")
+
+    result = _image_drift_for_page(project_state=project_state, page_index=0, pstate=pstate, page_store=store)
+
+    assert isinstance(result, ImageDrift)
+    assert result.error == "image_changed"
+
+
 def test_unchanged_image_reports_no_drift_on_second_check(tmp_path: Path) -> None:
-    """Same bytes, same stat — second check stays cheap and reports no drift."""
+    """The first check hashes once and caches the baseline; a second check of
+    the same unchanged file must take the cheap stat path and not hash again.
+    """
     project_state, pstate, _image_path, store = _load_ocrd_page(tmp_path, b"\x89PNG\r\n original bytes")
+    # First check: no baseline yet, so this legitimately hashes once to
+    # establish it (see test_first_check_records_baseline_and_reports_no_drift).
     _image_drift_for_page(project_state=project_state, page_index=0, pstate=pstate, page_store=store)
 
     def _boom(_data: bytes) -> object:
-        raise AssertionError("cheap path must not hash when stat is unchanged")
+        raise AssertionError("cheap path must not hash again when stat is unchanged")
 
     original_sha256 = pages_mod.hashlib.sha256
     pages_mod.hashlib.sha256 = _boom  # type: ignore[assignment]
