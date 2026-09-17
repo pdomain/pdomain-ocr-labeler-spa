@@ -62,6 +62,7 @@ import {
   useRotatePage,
   useUndoPage,
   useRedoPage,
+  useErasePagePixels,
 } from "../hooks/usePageMutations";
 import {
   useValidateLine,
@@ -329,6 +330,11 @@ export default function ProjectPage() {
 
   // ── Word mutations shared by canvas and right-panel controls ─────────────
   const reboxWord = useReboxWord(pid, idx0);
+
+  // ── Canvas erase mode (P1-CANVAS-ERASE) ───────────────────────────────
+  const erasePagePixels = useErasePagePixels(pid, idx0);
+  // Synchronous in-flight guard for handleErasePixels — see its docstring.
+  const erasingRef = useRef(false);
 
   // ── Derived view state ─────────────────────────────────────────────────
   const pagePayload = pageQ.data ?? null;
@@ -894,6 +900,41 @@ export default function ProjectPage() {
     reboxWord.mutate({ lineIndex: t.lineIndex, wordIndex: t.wordIndex, bbox: srcBbox });
   }
 
+  // P1-CANVAS-ERASE: a completed erase draw. `rect` is in display pixels;
+  // convert to source pixels before POSTing to .../pages/{idx}/erase-pixels.
+  // Uses the same fill value (255) and "rect" shape the right-panel
+  // ErasePixelsSection sends for its rect tool (useErasePixels,
+  // useWordMutations.ts).
+  //
+  // Guarded by `erasingRef` — a plain ref flipped synchronously before
+  // `mutate()` and cleared in `onSettled` — rather than `erasePagePixels
+  // .isPending`: PageImageCanvas resets to "select" mode as soon as the drag
+  // ends (not once the request settles), so a user can re-enter erase mode
+  // and start a second drag before the first request's pending state has
+  // propagated back through a re-render. The ref reads and writes
+  // synchronously within this handler, so it can never race a second call
+  // the way a value drawn from React state could.
+  function handleErasePixels(rect: { x: number; y: number; width: number; height: number }) {
+    if (erasingRef.current) return;
+    erasingRef.current = true;
+    const scale = pagePayload?.encoded_dims?.scale ?? 1;
+    const srcBbox = displayToSrc(rect, scale);
+    erasePagePixels.mutate(
+      { bbox: srcBbox, fillValue: 255, shape: "rect" },
+      {
+        onSuccess: () => {
+          toast.success("Erased.");
+        },
+        onError: (err) => {
+          toast.error(err.message || "Erase failed.");
+        },
+        onSettled: () => {
+          erasingRef.current = false;
+        },
+      },
+    );
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────
 
   // ── Slot content ──────────────────────────────────────────────────────
@@ -969,6 +1010,7 @@ export default function ProjectPage() {
           onBoxSelect={handleBoxSelect}
           onAddWord={handleAddWord}
           onRebox={handleRebox}
+          onErasePixels={handleErasePixels}
         />
       </div>
       <div data-testid="inline-banners" className="flex flex-col gap-1 p-1">
