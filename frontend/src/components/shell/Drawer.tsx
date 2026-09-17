@@ -10,7 +10,7 @@
 // - Active tab persisted via useUiPrefs.drawerTab.
 
 import { useSyncExternalStore } from "react";
-import { ChevronLeft, ChevronRight } from "@pdomain/pdomain-ui/icons";
+import { ChevronLeft, ChevronRight, CheckCircle } from "@pdomain/pdomain-ui/icons";
 import { List, GitBranch, FileText } from "@/icons/local-shims";
 import { cn } from "@/lib/utils";
 import { useUiPrefs, type DrawerTab } from "../../stores/ui-prefs";
@@ -19,6 +19,7 @@ import type { WorklistProps } from "../drawer/Worklist";
 import { Hierarchy } from "../drawer/Hierarchy";
 import type { HierarchyProps } from "../drawer/Hierarchy";
 import { PlaintextGtOcrView } from "../PlaintextGtOcrView";
+import { ReviewQueuePanel } from "../drawer/ReviewQueuePanel";
 
 // ─── Selectors (use useUiPrefs.subscribe directly — store already exposes it) ─
 
@@ -64,6 +65,13 @@ const TABS: TabConfig[] = [
     label: "Text",
     testid: "drawer-tab-text",
     icon: <FileText size={13} />,
+  },
+  {
+    // Book review queue design: the book-wide undecided-proposal queue.
+    id: "queue",
+    label: "Queue",
+    testid: "drawer-tab-queue",
+    icon: <CheckCircle size={13} />,
   },
 ];
 
@@ -214,9 +222,11 @@ export function Drawer({
               <Worklist lineMatches={lineMatches} projectId={projectId} pageIndex={pageIndex} />
             ) : activeTab === "hierarchy" ? (
               <Hierarchy page={page} />
-            ) : (
+            ) : activeTab === "text" ? (
               /* S2.2: Visible full-page GT/OCR read-only text view */
               <PlaintextGtOcrView pageTextGt={pageTextGt} pageTextOcr={pageTextOcr} />
+            ) : (
+              <ReviewQueuePanel projectId={projectId} pageIndex={pageIndex} />
             )}
           </div>
         </div>

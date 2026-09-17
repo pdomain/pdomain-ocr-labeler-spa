@@ -120,6 +120,7 @@ import { RightPanel } from "../components/shell/RightPanel";
 import { WordDetail } from "../components/right-panel/WordDetail";
 import { useBreadcrumbHotkeys } from "../hooks/useBreadcrumbHotkeys";
 import { useRegionReviewHotkeys } from "../hooks/useRegionReviewHotkeys";
+import { useReviewQueue } from "../hooks/useReviewQueue";
 
 import type {
   Selection as ToolbarSelection,
@@ -371,6 +372,12 @@ export default function ProjectPage() {
     pageIndex: idx0,
     navigate,
   });
+
+  // Book review queue design ("A count stays visible" / Queue drawer tab):
+  // limit=0 so this carries only total_undecided and the page summary — the
+  // Queue tab's own count badge, same shape Rail.tsx's badge reads. The
+  // Queue tab's item list is fetched separately, by ReviewQueuePanel itself.
+  const reviewQueueQ = useReviewQueue(projectId);
 
   // ── Region selection scoping (whole-branch review defect 2) ────────────
   // A region or proposal id belongs to the page it was selected on. Nothing
@@ -904,6 +911,7 @@ export default function ProjectPage() {
   const drawerTabCounts: Partial<Record<DrawerTab, number>> = {
     worklist: worklistCount,
     hierarchy: lines.length,
+    queue: reviewQueueQ.data?.total_undecided ?? 0,
   };
   const drawerSlot = (
     <Drawer

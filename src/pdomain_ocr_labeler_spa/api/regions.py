@@ -174,6 +174,10 @@ class RegionReviewQueueItem(BaseModel):
     role: RegionRole
     confidence: float
     box: BBox
+    # Open-ended, exactly as ``RegionProposalListItem.evidence`` is: the queue
+    # exists so a caller can act on a proposal without a second fetch, and the
+    # evidence is what says why the detector proposed it.
+    evidence: dict[str, Any]
 
 
 class RegionReviewQueueResponse(BaseModel):
@@ -1256,6 +1260,7 @@ def _review_queue_item(proposal: RegionProposal) -> RegionReviewQueueItem:
         role=proposal.role,
         confidence=proposal.confidence,
         box=BBox(x=left, y=top, width=right - left, height=bottom - top),
+        evidence=dict(proposal.evidence),
     )
 
 

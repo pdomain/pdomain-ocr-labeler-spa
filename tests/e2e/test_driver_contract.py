@@ -218,6 +218,24 @@ _PAGE_KINDS_DIALOG_TESTIDS = [
     "page-kinds-dialog-close-footer",
 ]
 
+# Review queue panel (driver-contract §2.18, spec
+# 2026-09-17-book-review-queue-design.md). `drawer-tab-queue` is an
+# always-rendered real control in Drawer.tsx's tab strip once a project
+# page loads.
+_REVIEW_QUEUE_TAB_TESTIDS = [
+    "drawer-tab-queue",
+]
+
+# Testids inside the panel body, rendered as soon as the Queue tab opens.
+# `review-queue-loading` / `review-queue-empty` / `review-queue-list` are
+# state-dependent (loading vs. empty vs. populated) and NOT asserted here,
+# following the convention §2.17 uses for its own state-dependent testids.
+_REVIEW_QUEUE_PANEL_TESTIDS = [
+    "review-queue-panel",
+    "review-queue-order-reading",
+    "review-queue-order-confidence",
+]
+
 
 def _all_stub_or_present(page: Page, testids: list[str]) -> list[str]:
     """Return list of testids that are completely absent from the DOM."""
@@ -768,4 +786,48 @@ def test_page_kinds_dialog_testids_present(live_server: LiveServer, page: Page) 
     missing = _all_stub_or_present(page, _PAGE_KINDS_DIALOG_TESTIDS)
     assert not missing, (
         f"Review page kinds dialog testids missing after opening it (driver-contract §2.17): {missing}"
+    )
+
+
+# ── Review queue panel (driver-contract §2.18) ──────────────────────────────
+
+
+@pytest.mark.e2e
+def test_review_queue_tab_present(live_server: LiveServer, page: Page) -> None:
+    """Driver-contract §2.18: drawer-tab-queue always rendered on a loaded project page."""
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
+    page.goto(url, timeout=15_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+    wait_for_project_ready(page)
+
+    missing = _all_stub_or_present(page, _REVIEW_QUEUE_TAB_TESTIDS)
+    assert not missing, (
+        f"Review queue tab testid missing from project page (driver-contract §2.18): {missing}"
+    )
+
+
+@pytest.mark.e2e
+def test_review_queue_panel_testids_present(live_server: LiveServer, page: Page) -> None:
+    """Driver-contract §2.18: review-queue-panel testids present once the Queue tab opens.
+
+    Opens the dialog-free Queue tab via ``drawer-tab-queue``, then asserts the
+    always-rendered §2.18 static/trigger testids are present. The order
+    toggle renders unconditionally alongside the panel body (loading/empty/
+    populated), so both are already present as soon as the tab is open.
+    """
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
+    page.goto(url, timeout=15_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+    wait_for_project_ready(page)
+
+    page.click('[data-testid="drawer-tab-queue"]')
+    page.wait_for_selector('[data-testid="review-queue-panel"]', timeout=10_000)
+
+    missing = _all_stub_or_present(page, _REVIEW_QUEUE_PANEL_TESTIDS)
+    assert not missing, (
+        f"Review queue panel testids missing after opening the Queue tab (driver-contract §2.18): {missing}"
     )

@@ -27,6 +27,7 @@
 
 import { createStore } from "zustand/vanilla";
 import { useSyncExternalStore } from "react";
+import type { ReviewQueueOrder } from "../hooks/useReviewQueue";
 
 export interface LayerVisibility {
   block: boolean;
@@ -64,8 +65,13 @@ export function nextMatchFilter(current: MatchFilter): MatchFilter {
   return MATCH_FILTER_CYCLE[nextIdx]!;
 }
 
-/** S2.2: "text" tab added for the visible full-page GT/OCR read-only view. */
-export type DrawerTab = "worklist" | "hierarchy" | "text";
+/**
+ * S2.2: "text" tab added for the visible full-page GT/OCR read-only view.
+ * Book review queue design ("What this increment does not build" — the
+ * queue panel this tab now builds): "queue" added for the book-wide
+ * review-queue panel.
+ */
+export type DrawerTab = "worklist" | "hierarchy" | "text" | "queue";
 
 /** Slice 24 — theme preference. */
 export type ThemePreference = "dark" | "light" | "system";
@@ -87,6 +93,14 @@ export interface UiPrefsState {
   drawerOpen: boolean;
   /** Active drawer tab. Spec: Slice 11. */
   drawerTab: DrawerTab;
+  /**
+   * Book review queue design: the Queue tab's item order, remembered for
+   * the session next to `drawerTab`. Defaults to "reading" — the order a
+   * person works through a book; "confidence" surfaces the lowest-confidence
+   * proposals first. Fed straight into `useReviewQueue`'s `order` argument,
+   * whose query key already separates the two orders' caches.
+   */
+  reviewQueueOrder: ReviewQueueOrder;
   /** IS-6: Whether the right panel is open. Default: true. */
   rightPanelOpen: boolean;
   /** Theme preference — Slice 24. Default: "system". */
@@ -190,6 +204,7 @@ const INITIAL_PREFS: UiPrefsState = {
   matchFilter: "unvalidated",
   drawerOpen: true,
   drawerTab: "worklist",
+  reviewQueueOrder: "reading",
   rightPanelOpen: true,
   theme: readPersistedTheme(),
   matchFilterMode: "all",

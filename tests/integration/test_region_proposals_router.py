@@ -1197,6 +1197,21 @@ def test_limit_two_returns_exactly_two_items(toolbar_loaded: Any) -> None:
     assert len(r.json()["items"]) == 2
 
 
+def test_an_item_carries_the_proposal_evidence(toolbar_loaded: Any) -> None:
+    """The queue exists so a caller can act without a second fetch, and the
+    evidence is what says why the detector proposed the region."""
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_proposal(client, project_root, proposal_id="p1")
+
+    r = client.get(_REVIEW_QUEUE_BASE, params={"limit": 1})
+
+    assert r.status_code == 200, r.text
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["evidence"] == {"signal": "indent"}
+
+
 def test_limit_above_500_is_clamped_to_500(toolbar_loaded: Any) -> None:
     client, project_state, _page = toolbar_loaded
     project_root = project_state.loaded_project.project_root
