@@ -995,10 +995,11 @@ def _image_drift_for_page(
     file ``project_state.labeling_image_path(page_index)`` names today. Runs
     on every page fetch, so it is deliberately cheap: ``pstate`` caches the
     source file's ``st_size`` / ``st_mtime_ns`` from the last time this
-    function checked it against the *current* digest, and only hashes the
-    file (the expensive path) when one of those moved. A page whose digest or
-    file can't be read reports no drift rather than a false alarm — the same
-    discipline ``_image_digest_for_page`` itself uses.
+    function checked it against the *current* head digest
+    (``image_drift_head_digest``), and only hashes the file (the expensive
+    path) when one of those moved. A page whose digest or file can't be read
+    reports no drift rather than a false alarm — the same discipline
+    ``_image_digest_for_page`` itself uses.
 
     Book-labeling projects are skipped entirely
     (``project_state.has_book_labeling_session``). ``labeling_image_path``
@@ -1013,16 +1014,36 @@ def _image_drift_for_page(
     could read a stable stat for that path.
 
     Baseline handling: the first time this function sees a page for a given
-    OCR-time digest — a fresh process, or the digest just changed because the
-    page was re-OCR'd — ``pstate`` has no matching baseline yet. That first
-    check hashes the file once and compares it directly to the recorded
-    digest, rather than blindly trusting the current stat as a fresh
+    OCR-time head digest — a fresh process, or the digest just changed
+    because the page was re-OCR'd — ``pstate`` has no matching baseline yet.
+    That first check hashes the file once and compares it against the
+    ground-truth digest for this generation (see "edited-image passthrough"
+    below), rather than blindly trusting the current stat as a fresh
     baseline: a page whose image was replaced while the server was down (or
     before this process ever looked at it) must be caught the first time
     it's fetched, not only after a *second* on-disk change. This costs one
     hash per page per process — the same order of work ``get_page`` already
     does per page fetch (OCR, dims, provenance reads) — after which the
     cheap stat comparison takes over for every later fetch of the same page.
+
+    Edited-image passthrough (issue 2026-07-21-image-drift-banner-hard-off,
+    Wave 3b follow-up): "Reload OCR (Edited)" (``ReloadOCRRequest.
+    use_edited_image=True``) OCRs the persisted post-erase image, not the
+    pristine on-disk source — ``local_doctr.py``'s ``run_ocr`` writes the
+    edited bytes to a temp file and ``_run_ocr_on_path`` hashes *that* file
+    into ``blob_refs[1]``. The untouched on-disk source can never match that
+    digest, so comparing against it would report permanent drift, and the
+    banner's advice (plain Reload OCR) would discard the user's edited OCR
+    result. Detected via ``pstate.edited_image_blob``: it and the head digest
+    are both content hashes of the same content-addressed blob store (see
+    ``_persist_edited_image_blob``), so they compare equal exactly when this
+    generation's OCR ran against that persisted edited image. The first
+    check of such a generation re-anchors the ground-truth digest to the
+    on-disk file's own hash at that moment, instead of the (permanently
+    mismatching) recorded head digest — chosen over treating "has an edited
+    image blob" as drift-not-applicable because it keeps detection alive: a
+    genuine on-disk change *after* that point still diverges from the
+    re-anchored baseline and is still caught, the same as an ordinary page.
     """
     if project_state.has_book_labeling_session:
         return None
@@ -1037,32 +1058,48 @@ def _image_drift_for_page(
     except (OSError, ValueError):
         return None
 
-    has_baseline = pstate.image_drift_digest == digest
+    has_baseline = pstate.image_drift_head_digest == digest
     if (
         has_baseline
         and pstate.image_drift_size == file_stat.st_size
         and pstate.image_drift_mtime_ns == file_stat.st_mtime_ns
     ):
-        # Cheap path: a baseline already exists for this digest and neither
-        # size nor mtime moved since — trust it without hashing.
+        # Cheap path: a baseline already exists for this head digest and
+        # neither size nor mtime moved since — trust it without hashing.
         return None
 
-    # No baseline yet (first check for this digest — new process or a fresh
-    # OCR generation) or the cheap stat check moved: hash once, either to
-    # establish the real baseline or to confirm/deny a suspected change.
+    # No baseline yet (first check for this head digest — new process or a
+    # fresh OCR generation) or the cheap stat check moved: hash once, either
+    # to establish the real baseline or to confirm/deny a suspected change.
     try:
         current_digest = hashlib.sha256(image_path.read_bytes()).hexdigest()
     except OSError:
         return None
 
-    # Cache the stat baseline for this digest regardless of the verdict —
-    # this is what lets an unchanged first check, or a merely-touched file,
-    # skip hashing on the next fetch.
-    pstate.image_drift_digest = digest
+    if has_baseline:
+        # A baseline already exists for this generation (only the stat
+        # moved) — reuse the ground truth it was anchored to rather than
+        # re-deriving it, so a real drift keeps comparing against the
+        # original reference instead of trivially matching itself.
+        ground_truth_digest = pstate.image_drift_digest
+    else:
+        # New generation: edited-image passthrough (see docstring) anchors
+        # to the on-disk file as it stands right now; an ordinary OCR
+        # generation anchors to the recorded head digest as before.
+        edited_passthrough = pstate.edited_image_blob is not None and digest == pstate.edited_image_blob
+        ground_truth_digest = current_digest if edited_passthrough else digest
+
+    # Cache the baseline regardless of the verdict — this is what lets an
+    # unchanged first check, or a merely-touched file, skip hashing on the
+    # next fetch. ``image_drift_digest`` (the ground truth) only changes
+    # when the generation itself changes, above; here it is just written
+    # back unchanged in the has_baseline case.
+    pstate.image_drift_head_digest = digest
+    pstate.image_drift_digest = ground_truth_digest
     pstate.image_drift_size = file_stat.st_size
     pstate.image_drift_mtime_ns = file_stat.st_mtime_ns
 
-    if current_digest == digest:
+    if current_digest == ground_truth_digest:
         return None
 
     return ImageDrift(

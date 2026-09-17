@@ -19,6 +19,7 @@ what matters here is the digest-vs-disk comparison, not OCR itself.
 
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -64,6 +65,42 @@ def _load_ocrd_page(
     project_state.set_loaded_project(project)
 
     pstate = PageState(page_index=0, page_id=agg.record.page_id)
+    project_state.set_page_state(0, pstate)
+    return project_state, pstate, image_path, store
+
+
+def _load_page_ocrd_on_edited_bytes(
+    tmp_path: Path, *, disk_bytes: bytes, edited_bytes: bytes
+) -> tuple[ProjectState, PageState, Path, LabelerPageStore]:
+    """Simulate "erase pixels" + "Reload OCR (Edited)": OCR ran against
+    ``edited_bytes`` (so the recorded digest is the edited image's hash, per
+    ``local_doctr.py``'s ``run_ocr(edited_image_bytes=...)`` /
+    ``_run_ocr_on_path`` /  ``_ingest_ocr_result``), while the on-disk source
+    file still holds the untouched ``disk_bytes``. ``pstate.edited_image_blob``
+    is stamped with the same content hash ``_persist_edited_image_blob`` would
+    record — both are sha256 of the identical edited bytes via the
+    content-addressed blob store, so they match exactly the way the real
+    erase + reload-ocr-edited flow produces.
+    """
+    image_path = tmp_path / "001.png"
+    image_path.write_bytes(disk_bytes)
+
+    store = LabelerPageStore(project_dir=tmp_path)
+    fake_page = _make_page_stub()
+    agg = _ingest_ocr_result(page=fake_page, image_bytes=edited_bytes, page_index=0, store=store)
+
+    project = Project(
+        project_id="book1",
+        project_root=tmp_path,
+        image_paths=[image_path],
+        total_pages=1,
+        ground_truth_map={},
+    )
+    project_state = ProjectState()
+    project_state.set_loaded_project(project)
+
+    pstate = PageState(page_index=0, page_id=agg.record.page_id)
+    pstate.edited_image_blob = hashlib.sha256(edited_bytes).hexdigest()
     project_state.set_page_state(0, pstate)
     return project_state, pstate, image_path, store
 
@@ -189,6 +226,49 @@ def test_unreadable_file_reports_no_drift(tmp_path: Path) -> None:
     result = _image_drift_for_page(project_state=project_state, page_index=0, pstate=pstate, page_store=store)
 
     assert result is None
+
+
+def test_reload_ocr_edited_reports_no_drift_on_either_fetch(tmp_path: Path) -> None:
+    """ "Reload OCR (Edited)" OCRs the persisted post-erase image, not the
+    pristine on-disk source, so the recorded digest is the edited bytes'
+    hash and will never match the untouched disk file. That mismatch is not
+    drift — the page must not permanently show the drift banner, whose
+    advice (plain Reload OCR) would discard the user's edited OCR result.
+    """
+    project_state, pstate, _image_path, store = _load_page_ocrd_on_edited_bytes(
+        tmp_path,
+        disk_bytes=b"\x89PNG\r\n pristine disk bytes",
+        edited_bytes=b"\x89PNG\r\n erased/edited bytes",
+    )
+
+    first = _image_drift_for_page(project_state=project_state, page_index=0, pstate=pstate, page_store=store)
+    second = _image_drift_for_page(project_state=project_state, page_index=0, pstate=pstate, page_store=store)
+
+    assert first is None
+    assert second is None
+
+
+def test_reload_ocr_edited_still_detects_a_later_genuine_disk_change(tmp_path: Path) -> None:
+    """Drift detection stays alive after an edited-OCR generation: once the
+    baseline is re-anchored to the pristine disk file, a real subsequent
+    on-disk change must still be caught.
+    """
+    project_state, pstate, image_path, store = _load_page_ocrd_on_edited_bytes(
+        tmp_path,
+        disk_bytes=b"\x89PNG\r\n pristine disk bytes",
+        edited_bytes=b"\x89PNG\r\n erased/edited bytes",
+    )
+    # Establishes the re-anchored baseline against the pristine disk bytes.
+    _image_drift_for_page(project_state=project_state, page_index=0, pstate=pstate, page_store=store)
+
+    image_path.write_bytes(b"\x89PNG\r\n a genuinely different replacement image")
+    new_mtime_ns = (pstate.image_drift_mtime_ns or 0) + 10_000_000_000
+    os.utime(image_path, ns=(new_mtime_ns, new_mtime_ns))
+
+    result = _image_drift_for_page(project_state=project_state, page_index=0, pstate=pstate, page_store=store)
+
+    assert isinstance(result, ImageDrift)
+    assert result.error == "image_changed"
 
 
 def test_book_labeling_session_skips_the_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
