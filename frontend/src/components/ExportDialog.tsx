@@ -177,7 +177,7 @@ export function ExportDialog({
       setHistory((prev) => [
         ...prev,
         {
-          id: progress.job_id,
+          id: progress.id,
           scope,
           styleFilters: selectedStyles,
           pagesExported: progress.progress?.total ?? 0,

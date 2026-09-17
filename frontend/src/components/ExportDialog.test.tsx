@@ -209,7 +209,7 @@ describe("ExportDialog", () => {
 
     // Simulate complete event
     mockUseJobProgress.mockReturnValue({
-      job_id: "job-abc",
+      id: "job-abc",
       status: "complete",
       progress: { current: 3, total: 3, current_page: 2, message: "done" },
     });
@@ -240,7 +240,7 @@ describe("ExportDialog", () => {
 
     // Simulate a terminal complete event carrying the stats breakdown.
     mockUseJobProgress.mockReturnValue({
-      job_id: "job-stats",
+      id: "job-stats",
       status: "complete",
       progress: { current: 5, total: 5, current_page: 4, message: "done" },
       words_exported_detection: 42,
@@ -422,7 +422,7 @@ describe("Send-to-trainer affordance", () => {
 
     // Simulate complete event so history row appears
     mockUseJobProgress.mockReturnValue({
-      job_id: jobId,
+      id: jobId,
       status: "complete",
       progress: { current: 1, total: 1, current_page: 0, message: "done" },
       words_exported_detection: 5,
