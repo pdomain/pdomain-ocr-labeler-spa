@@ -213,6 +213,82 @@ describe("useDeleteRegion", () => {
   });
 });
 
+// ─── review-queue invalidation (book review queue design) ───────────────────
+//
+// Design: docs/specs/2026-09-17-book-review-queue-design.md "A count stays
+// visible" — every decision (accept/reject/edit/delete) also invalidates the
+// ["review-queue", projectId] prefix, alongside the existing page invalidation.
+
+describe("review-queue invalidation", () => {
+  it("useAcceptProposal invalidates the review queue on success", async () => {
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept", () =>
+        HttpResponse.json({ project_id: PROJECT_ID, page_index: PAGE_IDX, line_matches: [] }),
+      ),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useAcceptProposal(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapper(qc),
+    });
+
+    await act(() => result.current.mutateAsync({ proposalId: "prop-1" }));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["review-queue", PROJECT_ID] });
+  });
+
+  it("useRejectProposal invalidates the review queue on success", async () => {
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject", () =>
+        HttpResponse.json({ project_id: PROJECT_ID, page_index: PAGE_IDX, line_matches: [] }),
+      ),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useRejectProposal(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapper(qc),
+    });
+
+    await act(() => result.current.mutateAsync({ proposalId: "prop-1" }));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["review-queue", PROJECT_ID] });
+  });
+
+  it("useEditRegion invalidates the review queue on success", async () => {
+    server.use(
+      http.patch("/api/projects/:pid/pages/:idx/regions/:regionId", () =>
+        HttpResponse.json({ project_id: PROJECT_ID, page_index: PAGE_IDX, line_matches: [] }),
+      ),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useEditRegion(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapper(qc),
+    });
+
+    await act(() => result.current.mutateAsync({ regionId: "region-1", role: "paragraph" }));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["review-queue", PROJECT_ID] });
+  });
+
+  it("useDeleteRegion invalidates the review queue on success", async () => {
+    server.use(
+      http.delete("/api/projects/:pid/pages/:idx/regions/:regionId", () =>
+        HttpResponse.json({ project_id: PROJECT_ID, page_index: PAGE_IDX, line_matches: [] }),
+      ),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useDeleteRegion(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapper(qc),
+    });
+
+    await act(() => result.current.mutateAsync({ regionId: "region-1" }));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["review-queue", PROJECT_ID] });
+  });
+});
+
 // ─── useRegionDecisionPending ────────────────────────────────────────────────
 //
 // Whole-branch review defect 1: the four mutations above share a

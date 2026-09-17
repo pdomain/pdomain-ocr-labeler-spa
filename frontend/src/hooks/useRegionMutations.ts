@@ -13,6 +13,11 @@
 // the routes return a full PagePayload, but this file deliberately never calls
 // setQueryData with it.
 //
+// Design: docs/specs/2026-09-17-book-review-queue-design.md "A count stays
+// visible" — every decision also invalidates the ["review-queue", projectId]
+// prefix, so the Rail badge and any future queue-driven navigation see the
+// updated count and page summary once they next refetch.
+//
 // Whole-branch review defect 1 (a decision can be sent twice): `RegionDetail`
 // and `useRegionReviewHotkeys` each create their own instances of these four
 // mutations, so one instance's `isPending` never sees the other's in-flight
@@ -72,6 +77,22 @@ function pageBase(projectId: string, pageIndex: number): string {
   return `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}`;
 }
 
+/**
+ * Invalidate both the decided page and the book-level review queue.
+ *
+ * The queue key is invalidated by its `["review-queue", projectId]` prefix
+ * (TanStack Query's default `invalidateQueries` match), which covers every
+ * `order`/`limit` variant `useReviewQueue` may have cached.
+ */
+function invalidateAfterDecision(
+  qc: ReturnType<typeof useQueryClient>,
+  projectId: string,
+  pageIndex: number,
+): void {
+  void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+  void qc.invalidateQueries({ queryKey: ["review-queue", projectId] });
+}
+
 // ─── useAcceptProposal ─────────────────────────────────────────────────────
 
 /**
@@ -94,7 +115,7 @@ export function useAcceptProposal(projectId: string, pageIndex: number) {
       );
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      invalidateAfterDecision(qc, projectId, pageIndex);
     },
   });
 }
@@ -112,7 +133,7 @@ export function useRejectProposal(projectId: string, pageIndex: number) {
         "POST",
       ),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      invalidateAfterDecision(qc, projectId, pageIndex);
     },
   });
 }
@@ -133,7 +154,7 @@ export function useEditRegion(projectId: string, pageIndex: number) {
       );
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      invalidateAfterDecision(qc, projectId, pageIndex);
     },
   });
 }
@@ -151,7 +172,7 @@ export function useDeleteRegion(projectId: string, pageIndex: number) {
         "DELETE",
       ),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      invalidateAfterDecision(qc, projectId, pageIndex);
     },
   });
 }

@@ -108,4 +108,14 @@ export const handlers: RequestHandler[] = [
   http.post("/api/projects/:pid/regions/propose", () =>
     HttpResponse.json({ job_id: "job-1" }, { status: 202 }),
   ),
+
+  // Book review queue (docs/specs/2026-09-17-book-review-queue-design.md) —
+  // baseline handler so any component/hook mounting useReviewQueue (Rail's
+  // badge, useRegionReviewHotkeys' bracket keys) without an explicit
+  // override doesn't hit onUnhandledRequest: "error". Default: an empty
+  // queue. Tests that assert queue-driven behavior register their own
+  // server.use(...) override.
+  http.get("/api/projects/:pid/regions/review-queue", () =>
+    HttpResponse.json({ total_undecided: 0, pages: [], items: [] }),
+  ),
 ];

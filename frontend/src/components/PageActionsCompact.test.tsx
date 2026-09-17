@@ -754,6 +754,70 @@ describe("PageActionsCompact: propose page kinds / propose regions (Task 6)", ()
 
     vi.unstubAllGlobals();
   });
+
+  // ── Book review queue design: "A count stays visible" ──────────────────
+  // Both book-scoped runs invalidate the review queue by its
+  // ["review-queue", projectId] prefix, alongside the existing page
+  // invalidation, so the Rail badge and bracket-key navigation see a fresh
+  // count and page summary once the refetch lands.
+
+  it("propose page kinds completion invalidates the review queue", async () => {
+    stubPage(false);
+    server.use(
+      http.post("/api/projects/proj-1/propose-page-kinds", () =>
+        HttpResponse.json({ job_id: "job-pk-rq" }, { status: 202 }),
+      ),
+    );
+    const qc = makeQC();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const es = mockEventSource();
+    const user = userEvent.setup();
+    renderCompact("proj-1", 0, qc);
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("propose-page-kinds-button"));
+    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
+
+    es.dispatch({
+      job_id: "job-pk-rq",
+      status: "complete",
+      progress: { message: "Proposed page kinds on 4 page(s)." },
+    });
+
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["review-queue", "proj-1"] }),
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  it("propose regions completion invalidates the review queue", async () => {
+    stubPage(false);
+    server.use(
+      http.post("/api/projects/proj-1/regions/propose", () =>
+        HttpResponse.json({ job_id: "job-rg-rq" }, { status: 202 }),
+      ),
+    );
+    const qc = makeQC();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const es = mockEventSource();
+    const user = userEvent.setup();
+    renderCompact("proj-1", 0, qc);
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("propose-regions-button"));
+    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
+
+    es.dispatch({
+      job_id: "job-rg-rq",
+      status: "complete",
+      progress: { message: "Proposed 12 region(s) on 6 page(s)." },
+    });
+
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["review-queue", "proj-1"] }),
+    );
+
+    vi.unstubAllGlobals();
+  });
 });
 
 // ─── toast lifecycle tests ────────────────────────────────────────────────────
