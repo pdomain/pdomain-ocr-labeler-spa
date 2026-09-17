@@ -575,7 +575,7 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     if no_measurement_indices:
         unprocessed_parts.append(f"{len(no_measurement_indices)} page(s) had no measurement")
     if detector_failed_indices:
-        unprocessed_parts.append(f"{len(detector_failed_indices)} page(s) where the detector failed")
+        unprocessed_parts.append(f"{len(detector_failed_indices)} page(s) had a detector error")
     if unprocessed_parts:
         summary_parts.append("; ".join(unprocessed_parts) + ".")
 
