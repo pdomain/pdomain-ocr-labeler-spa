@@ -22,7 +22,7 @@ from pydantic import BaseModel, BeforeValidator, Field
 from ..core import text_normalize
 from ..core.glyph.bulk_mark import GlyphBulkMarkParams, apply_bulk_mark
 from ..core.ground_truth_matcher import rematch_page
-from ..core.jobs import JobRunner
+from ..core.jobs import JobRunner, JobStatus
 from ..core.labeler_extension import LabelerPageExtension
 from ..core.models import (
     BBox,
@@ -216,11 +216,17 @@ class PagePayload(BaseModel):
     # writeup.
     page_load_error: PageLoadError | None = None
     # Set only when this GET found neither an in-memory page nor a labeled-
-    # store hit and submitted a ``load_page`` job instead of blocking for
-    # OCR. The SPA subscribes to ``GET /api/jobs/{job_id}/events`` for named
-    # stage progress and the terminal outcome; a subsequent GET for the same
-    # page re-checks in-memory/store state fresh (no caching of "a job is in
-    # flight"), matching ``ensure_page_model``'s existing retry contract.
+    # store hit, and either submitted a ``load_page`` job or found one
+    # already in flight for this page (``ProjectState.claim_load_page_job``
+    # — concurrent fetches of the same cold page share one job rather than
+    # each submitting their own). The SPA subscribes to
+    # ``GET /api/jobs/{job_id}/events`` for named stage progress and the
+    # terminal outcome. A subsequent GET for the same page re-checks
+    # in-memory/store state fresh; once the in-flight job reaches a
+    # terminal state (including error or cancelled) it no longer counts as
+    # pending, so a failed load gets a fresh job on the next fetch rather
+    # than blocking forever — matching ``ensure_page_model``'s existing
+    # retry contract.
     page_load_job_id: str | None = None
     # Source-image drift marker — ``None`` when the on-disk image still
     # matches what this page was OCR'd from, or when that can't be
@@ -430,6 +436,20 @@ def _check_project_and_page(
     if page_index < 0 or page_index >= project.total_pages:
         return _page_not_found(page_index)
     return None
+
+
+def _load_page_job_is_pending(runner: JobRunner, job_id: str) -> bool:
+    """Whether ``job_id`` is a still-queued-or-running ``load_page`` job.
+
+    The predicate ``ProjectState.claim_load_page_job`` uses to decide
+    whether a recorded job id still blocks a new submission for the same
+    page. A missing job (evicted, or a test double that never registered
+    it) or one that already reached a terminal state — complete, error, or
+    cancelled — is not pending: a failed or cancelled load must not
+    permanently block every later fetch of the same page.
+    """
+    job = runner.get_job(job_id)
+    return job is not None and job.status in (JobStatus.QUEUED, JobStatus.RUNNING)
 
 
 def _page_not_loaded(page_index: int) -> JSONResponse:
@@ -1762,8 +1782,27 @@ def get_page(
                 # reload-ocr route's own job-submission shape (same
                 # verified-page lease pattern for book-labeling sessions;
                 # a no-op lease for ordinary projects).
-                try:
+                #
+                # ``claim_load_page_job`` — not a bare ``runner.submit`` —
+                # so two concurrent fetches of the same cold page share one
+                # job instead of each submitting their own and running OCR
+                # twice with no ordering on which result gets written. See
+                # that method's docstring for the atomicity contract.
+                def _submit_load_page_job() -> str:
                     job_lease = project_state.open_labeling_page(page_index)
+                    return runner.submit(
+                        "load_page",
+                        project_id=project_id,
+                        payload={"page_index": page_index},
+                        labeling_page_lease=job_lease,
+                    )
+
+                try:
+                    page_load_job_id, _ = project_state.claim_load_page_job(
+                        page_index,
+                        is_pending=lambda job_id: _load_page_job_is_pending(runner, job_id),
+                        submit=_submit_load_page_job,
+                    )
                 except ValueError as exc:
                     return JSONResponse(
                         status_code=422,
@@ -1772,12 +1811,6 @@ def get_page(
                             message=str(exc),
                         ).model_dump(),
                     )
-                page_load_job_id = runner.submit(
-                    "load_page",
-                    project_id=project_id,
-                    payload={"page_index": page_index},
-                    labeling_page_lease=job_lease,
-                )
 
     payload = _page_payload(
         project_id=project_id,

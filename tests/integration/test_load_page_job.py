@@ -95,6 +95,40 @@ class _StoreMissPageLoader:
         )
 
 
+class _SlowStoreMissPageLoader:
+    """Like ``_StoreMissPageLoader``, but ``run_ocr`` sleeps first.
+
+    Gives a concurrent second fetch a wide, deterministic window in which
+    the first fetch's job is still queued or running — used to exercise the
+    duplicate-job race without needing real multi-threaded orchestration.
+    """
+
+    def __init__(self, *, sleep_s: float) -> None:
+        self._sleep_s = sleep_s
+        self.calls: list[int] = []
+
+    def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
+        return None
+
+    def load_cached(self, page_index: int) -> PageLoadOutcome | None:
+        return None
+
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: object | None = None,
+    ) -> PageLoadOutcome:
+        self.calls.append(page_index)
+        time.sleep(self._sleep_s)
+        return PageLoadOutcome(
+            page_index=page_index,
+            source=PageSource.OCR,
+            payload={"fake": "page", "idx": page_index},
+        )
+
+
 def _wrap_broker_publish(broker: JobEventBroker, sink: list[dict[str, Any]]) -> None:
     """Patch ``broker.publish`` to append every event to ``sink``."""
     original = broker.publish
@@ -317,3 +351,75 @@ def test_warm_store_returns_with_no_job_and_no_latency(tmp_path: Path, projects_
 
         runner = c.app.state.job_runner  # type: ignore[attr-defined]
         assert runner.list_jobs() == [], "an in-memory hit must not submit a job"
+
+
+# ── Duplicate-job regression: concurrent fetches of one cold page ─────────
+
+
+def test_concurrent_fetches_of_the_same_cold_page_submit_one_job(tmp_path: Path, projects_root: Path) -> None:
+    """Two fetches racing a store miss for the same page must share one
+    ``load_page`` job, not each submit their own — that would run OCR
+    twice with no ordering on which result got written, the exact race
+    ``ensure_page_model``'s own docstring says holding the project lock
+    across OCR used to prevent (OCR now runs inside the job, off that
+    lock). The loader sleeps so the first job is still queued/running when
+    the second fetch arrives moments later.
+    """
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    loader = _SlowStoreMissPageLoader(sleep_s=0.3)
+
+    with TestClient(app) as c:
+        c.app.state.job_runner.context["page_loader"] = loader  # type: ignore[attr-defined]
+        resp = c.post("/api/projects/load", json={"project_root": str(projects_root / "book1")})
+        assert resp.status_code == 200, resp.text
+
+        first = c.get("/api/projects/book1/pages/0")
+        second = c.get("/api/projects/book1/pages/0")
+
+        assert first.status_code == 200, first.text
+        assert second.status_code == 200, second.text
+        first_job_id = first.json()["page_load_job_id"]
+        second_job_id = second.json()["page_load_job_id"]
+        assert first_job_id, "expected a job id on the first fetch"
+        assert second_job_id == first_job_id, (
+            f"expected the second fetch to reuse the in-flight job, got a different one: "
+            f"{first_job_id!r} vs {second_job_id!r}"
+        )
+
+        runner = c.app.state.job_runner  # type: ignore[attr-defined]
+        assert len(runner.list_jobs()) == 1, "expected exactly one load_page job, not two"
+        assert loader.calls == [0], f"expected run_ocr to run once, ran for: {loader.calls}"
+
+
+def test_a_fetch_after_the_job_fails_submits_a_new_job(tmp_path: Path, projects_root: Path) -> None:
+    """A failed load must not permanently block every later attempt at the
+    same page: once the in-flight job reaches a terminal ``error`` state,
+    the next fetch submits a fresh one."""
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    loader = _StoreMissPageLoader(raise_on_run=RuntimeError("doctr exploded"))
+    recorded: list[dict[str, Any]] = []
+
+    with TestClient(app) as c:
+        c.app.state.job_runner.context["page_loader"] = loader  # type: ignore[attr-defined]
+        _wrap_broker_publish(c.app.state.job_events, recorded)  # type: ignore[attr-defined]
+        resp = c.post("/api/projects/load", json={"project_root": str(projects_root / "book1")})
+        assert resp.status_code == 200, resp.text
+
+        first = c.get("/api/projects/book1/pages/0")
+        assert first.status_code == 200, first.text
+        first_job_id = first.json()["page_load_job_id"]
+        assert first_job_id
+
+        _wait_for_terminal(recorded)
+        assert recorded[-1].get("event") == "error", recorded[-1]
+
+        second = c.get("/api/projects/book1/pages/0")
+        assert second.status_code == 200, second.text
+        second_job_id = second.json()["page_load_job_id"]
+        assert second_job_id, "expected a fresh job after the first one failed"
+        assert second_job_id != first_job_id
+
+        runner = c.app.state.job_runner  # type: ignore[attr-defined]
+        assert len(runner.list_jobs()) == 2, "expected two distinct load_page jobs"
