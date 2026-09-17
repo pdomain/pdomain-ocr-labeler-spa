@@ -922,4 +922,34 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       expect(detailCol.children.length).toBeGreaterThan(0);
     });
   });
+
+  // ── Book review queue design: Queue tab count badge ───────────────────────
+
+  describe("Queue drawer tab — count badge fed from the review queue", () => {
+    it("drawer-tab-count-queue reflects the review queue's total_undecided", async () => {
+      server.use(
+        http.get("/api/projects/:pid/regions/review-queue", () =>
+          HttpResponse.json({ total_undecided: 5, pages: [], items: [] }),
+        ),
+      );
+      renderProjectPage();
+      await screen.findByTestId("drawer-tab-queue");
+      await waitFor(() => {
+        expect(screen.getByTestId("drawer-tab-count-queue")).toHaveTextContent("5");
+      });
+    });
+
+    it("no count badge when the review queue has no undecided proposals", async () => {
+      server.use(
+        http.get("/api/projects/:pid/regions/review-queue", () =>
+          HttpResponse.json({ total_undecided: 0, pages: [], items: [] }),
+        ),
+      );
+      renderProjectPage();
+      await screen.findByTestId("drawer-tab-queue");
+      await waitFor(() => {
+        expect(screen.queryByTestId("drawer-tab-count-queue")).not.toBeInTheDocument();
+      });
+    });
+  });
 });
