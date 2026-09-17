@@ -424,6 +424,17 @@ async def _handle_propose_page_kinds(runner: JobRunner, job: Job) -> None:
     await handle_propose_page_kinds(runner, job)
 
 
+async def _handle_propose_regions(runner: JobRunner, job: Job) -> None:
+    """propose_regions handler — delegates to ``core/jobs/handlers/propose_regions``.
+
+    Book-scoped region proposal run. Never writes the page blob — see the handler's
+    own docstring for the invariant it holds.
+    """
+    from .handlers.propose_regions import handle_propose_regions  # lazy import
+
+    await handle_propose_regions(runner, job)
+
+
 _HANDLERS: dict[str, Handler] = {
     "reload_ocr": _handle_reload_ocr,
     "save_project": _handle_save_project,
@@ -432,6 +443,7 @@ _HANDLERS: dict[str, Handler] = {
     "auto_rotate_all": _handle_auto_rotate_all,
     "refine_bboxes": _handle_refine_bboxes,
     "propose_page_kinds": _handle_propose_page_kinds,
+    "propose_regions": _handle_propose_regions,
 }
 
 
