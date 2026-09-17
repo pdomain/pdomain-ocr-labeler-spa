@@ -185,6 +185,38 @@ export function PageKindsDialog({ open, projectId, onClose }: PageKindsDialogPro
   const allVisibleSelected =
     visibleIndices.length > 0 && visibleIndices.every((i) => selected.has(i));
 
+  /** The page indices a given filter pair would show, computed from `rows`. */
+  function visibleIndicesFor(rf: ReviewFilter, kf: PageKind | ""): Set<number> {
+    const visible = new Set<number>();
+    for (const row of rows) {
+      if (rf === "unreviewed" && row.reviewed) continue;
+      if (kf !== "" && row.proposed_kind !== kf) continue;
+      visible.add(row.page_index);
+    }
+    return visible;
+  }
+
+  /** Drop every selected page the given filter pair would hide. */
+  function pruneSelectionTo(visible: Set<number>) {
+    setSelected((prev) => {
+      const next = new Set<number>();
+      for (const i of prev) {
+        if (visible.has(i)) next.add(i);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }
+
+  function handleReviewFilterChange(next: ReviewFilter) {
+    setReviewFilter(next);
+    pruneSelectionTo(visibleIndicesFor(next, kindFilter));
+  }
+
+  function handleKindFilterChange(next: PageKind | "") {
+    setKindFilter(next);
+    pruneSelectionTo(visibleIndicesFor(reviewFilter, next));
+  }
+
   function toggleRow(pageIndex: number) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -214,7 +246,9 @@ export function PageKindsDialog({ open, projectId, onClose }: PageKindsDialogPro
     void navigate(pageNoUrl(projectId, pageIndex + 1));
   }
 
-  const selectedRows = rows.filter((r) => selected.has(r.page_index));
+  // Built from `filtered`, not `rows`: a page the current filters hide must
+  // never reach a bulk action, even if `selected` still names it.
+  const selectedRows = filtered.filter((r) => selected.has(r.page_index));
   const confirmAsProposedItems: BulkConfirmPageKindItem[] = selectedRows
     .filter(hasUsableProposal)
     .map((r) => ({ page_index: r.page_index, kind: r.proposed_kind }));
@@ -280,7 +314,7 @@ export function PageKindsDialog({ open, projectId, onClose }: PageKindsDialogPro
               data-testid="page-kinds-filter-unreviewed"
               data-active={reviewFilter === "unreviewed" ? "true" : undefined}
               onClick={() => {
-                setReviewFilter("unreviewed");
+                handleReviewFilterChange("unreviewed");
               }}
               className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
                 reviewFilter === "unreviewed"
@@ -295,7 +329,7 @@ export function PageKindsDialog({ open, projectId, onClose }: PageKindsDialogPro
               data-testid="page-kinds-filter-all"
               data-active={reviewFilter === "all" ? "true" : undefined}
               onClick={() => {
-                setReviewFilter("all");
+                handleReviewFilterChange("all");
               }}
               className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
                 reviewFilter === "all"
@@ -310,7 +344,7 @@ export function PageKindsDialog({ open, projectId, onClose }: PageKindsDialogPro
               aria-label="Filter by proposed kind"
               value={kindFilter}
               onChange={(e) => {
-                setKindFilter(e.target.value as PageKind | "");
+                handleKindFilterChange(e.target.value as PageKind | "");
               }}
               className="text-[11px] border border-border-2 rounded-sm px-1 py-0.5 bg-bg-sunk text-ink-2"
             >

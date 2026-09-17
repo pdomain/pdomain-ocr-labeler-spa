@@ -321,6 +321,41 @@ describe("PageKindsDialog: Set kind", () => {
     });
   });
 
+  it("changing the kind filter drops a now-hidden page from the selection and from Set kind's request", async () => {
+    let sentBody: unknown;
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/page-kinds/confirm`, async ({ request }) => {
+        sentBody = await request.json();
+        return HttpResponse.json({
+          results: [{ page_index: 0, status: "confirmed" }],
+          confirmed_count: 1,
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderDialog();
+    await waitFor(() => expect(screen.getByTestId("page-kinds-row-0")).toBeInTheDocument());
+
+    // Default "Unreviewed" filter shows page 0 (proposed body) and page 2
+    // (no proposal); page 1 is reviewed and hidden. Select both visible rows.
+    await user.click(screen.getByTestId("page-kinds-select-all-visible"));
+    expect(screen.getByTestId("page-kinds-bulk-count")).toHaveTextContent("2 selected");
+
+    // Narrow the kind filter to "body": page 0 stays visible, page 2 (no
+    // proposal) is now hidden — its selection must be dropped.
+    await user.selectOptions(screen.getByTestId("page-kinds-kind-filter-select"), "body");
+
+    expect(screen.getByTestId("page-kinds-bulk-count")).toHaveTextContent("1 selected");
+    expect(screen.queryByTestId("page-kinds-row-2")).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByTestId("page-kinds-bulk-set-kind-select"), "blank");
+    await user.click(screen.getByTestId("page-kinds-bulk-set-kind-apply"));
+
+    await waitFor(() => {
+      expect(sentBody).toEqual({ pages: [{ page_index: 0, kind: "blank" }], note: null });
+    });
+  });
+
   it("disables Set kind's apply button until a kind is chosen", async () => {
     const user = userEvent.setup();
     renderDialog();
