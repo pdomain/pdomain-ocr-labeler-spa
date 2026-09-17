@@ -652,4 +652,43 @@ describe("useRegionReviewHotkeys: ']' and '[' move between pages with work", () 
     expect(navigate).not.toHaveBeenCalled();
     expect(reviewSelectionIntentStore.getState().intent).toBeNull();
   });
+
+  // Finding 2 (medium, ~line 296): before the first queue fetch resolves,
+  // `queueQ.data` is undefined, so `queueQ.data?.pages ?? []` reads as an
+  // empty page list — indistinguishable from a book with no work at all.
+  // Pressing ']'/'[' in that window showed the "no more pages" toast even
+  // when work exists elsewhere in the book.
+  it("']' shows a loading toast and does not navigate when the queue has not fetched yet", async () => {
+    const infoSpy = vi.spyOn(toast, "info");
+    server.use(
+      http.get(
+        "/api/projects/:pid/regions/review-queue",
+        () => new Promise<Response>(() => {}), // never resolves in this test
+      ),
+    );
+    const { navigate } = renderHotkeys(PAGE, { pageIndex: CURRENT });
+
+    pressKey("]");
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalledWith("Review queue is still loading.");
+    expect(reviewSelectionIntentStore.getState().intent).toBeNull();
+  });
+
+  it("'[' shows a loading toast and does not navigate when the queue has not fetched yet", async () => {
+    const infoSpy = vi.spyOn(toast, "info");
+    server.use(
+      http.get(
+        "/api/projects/:pid/regions/review-queue",
+        () => new Promise<Response>(() => {}), // never resolves in this test
+      ),
+    );
+    const { navigate } = renderHotkeys(PAGE, { pageIndex: CURRENT });
+
+    pressKey("[");
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalledWith("Review queue is still loading.");
+    expect(reviewSelectionIntentStore.getState().intent).toBeNull();
+  });
 });

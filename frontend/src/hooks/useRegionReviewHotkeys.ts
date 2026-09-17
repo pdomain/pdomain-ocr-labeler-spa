@@ -97,6 +97,7 @@ const NO_PROPOSALS_ON_PAGE_MESSAGE = "No undecided proposals left on this page";
 const NO_PROPOSALS_IN_BOOK_MESSAGE = "No undecided proposals left in the book.";
 const NO_NEXT_PAGE_MESSAGE = "No more pages with undecided proposals after this page.";
 const NO_PREV_PAGE_MESSAGE = "No pages with undecided proposals before this page.";
+const QUEUE_LOADING_MESSAGE = "Review queue is still loading.";
 
 export interface UseRegionReviewHotkeysArgs {
   page: PagePayload | undefined;
@@ -295,6 +296,15 @@ export function useRegionReviewHotkeys({
 
   /** Navigate to the next page with work and record who to select there. */
   function goToNextPageWithWork(): void {
+    // Finding 2 (medium, ~line 296): before the first queue fetch resolves,
+    // `queueQ.data` is undefined and `queuePages` reads as `[]` — the same
+    // shape as a book with no work at all. Without this guard, pressing ']'
+    // in that window showed "no more pages" even when work exists elsewhere
+    // in the book, because the queue just hadn't answered yet.
+    if (queueQ.data === undefined) {
+      toast.info(QUEUE_LOADING_MESSAGE);
+      return;
+    }
     const next = nextPageWithWork(queuePages, pageIndex);
     if (next === null) {
       toast.info(NO_NEXT_PAGE_MESSAGE);
@@ -306,6 +316,10 @@ export function useRegionReviewHotkeys({
 
   /** Navigate to the previous page with work and record who to select there. */
   function goToPrevPageWithWork(): void {
+    if (queueQ.data === undefined) {
+      toast.info(QUEUE_LOADING_MESSAGE);
+      return;
+    }
     const prev = prevPageWithWork(queuePages, pageIndex);
     if (prev === null) {
       toast.info(NO_PREV_PAGE_MESSAGE);
