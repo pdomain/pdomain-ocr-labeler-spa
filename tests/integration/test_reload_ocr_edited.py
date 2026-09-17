@@ -118,7 +118,7 @@ def _wrap_broker_publish(broker: JobEventBroker, sink: list[dict[str, Any]]) -> 
 def _wait_for_terminal(events: list[dict[str, Any]], *, timeout: float = 5.0) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if any(e.get("type") in ("complete", "error", "cancelled") for e in events):
+        if any(e.get("event") in ("complete", "error", "cancelled") for e in events):
             return
         time.sleep(0.01)
     raise AssertionError(f"no terminal event after {timeout}s; events={events}")
@@ -174,7 +174,7 @@ def test_reload_ocr_use_edited_image_ocrs_erased_pixels(tmp_path: Path) -> None:
         assert resp.status_code == 202, resp.text
 
         _wait_for_terminal(recorded)
-        assert recorded[-1].get("type") == "complete", recorded[-1]
+        assert recorded[-1].get("event") == "complete", recorded[-1]
 
         # The loader was handed the edited (erased) image bytes — NOT None.
         assert loader.edited_bytes_seen is not None, "reload-ocr did not pass the edited image to the loader"

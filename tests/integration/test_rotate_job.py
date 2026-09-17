@@ -178,7 +178,7 @@ def _wait_for_terminal(events: list[dict[str, Any]], *, timeout: float = 10.0) -
     """Spin until a terminal event lands in ``events``."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if any(e.get("type") in ("complete", "error", "cancelled") for e in events):
+        if any(e.get("event") in ("complete", "error", "cancelled") for e in events):
             return
         time.sleep(0.05)
     raise AssertionError(f"no terminal event after {timeout}s; events={events}")
@@ -222,7 +222,7 @@ def test_rotate_90_transposes_image_dimensions(
     assert resp.status_code == 202, resp.text
 
     _wait_for_terminal(events)
-    assert events[-1].get("type") == "complete", events[-1]
+    assert events[-1].get("event") == "complete", events[-1]
 
     # After 90° rotate: dims should be transposed to height=200, width=100
     rotated = cv2.imdecode(np.frombuffer(image_path.read_bytes(), np.uint8), cv2.IMREAD_UNCHANGED)
@@ -244,7 +244,7 @@ def test_rotate_triggers_reocr(
     assert resp.status_code == 202, resp.text
 
     _wait_for_terminal(events)
-    assert events[-1].get("type") == "complete", events[-1]
+    assert events[-1].get("event") == "complete", events[-1]
 
     assert loader.calls == [0], f"expected run_ocr called with page=0, got {loader.calls}"
 
@@ -283,7 +283,7 @@ def test_rotate_updates_rotation_degrees_in_aggregate(tmp_path: Path, projects_r
         assert resp2.status_code == 202, resp2.text
 
         _wait_for_terminal(recorded)
-        assert recorded[-1].get("type") == "complete", recorded[-1]
+        assert recorded[-1].get("event") == "complete", recorded[-1]
 
         # Check that page_id was stamped and aggregate has rotation_degrees == 90.
         pstate = project_state.page_states.get(0)
@@ -360,7 +360,7 @@ def test_rotate_keeps_a_confirmed_kind_in_stored_content(tmp_path: Path, project
         )
         assert resp2.status_code == 202, resp2.text
         _wait_for_terminal(recorded)
-        assert recorded[-1].get("type") == "complete", recorded[-1]
+        assert recorded[-1].get("event") == "complete", recorded[-1]
 
         pstate_after = project_state.page_states.get(0)
         assert pstate_after is not None
@@ -485,7 +485,7 @@ def test_rotate_recheck_saves_a_confirm_that_landed_during_ocr(tmp_path: Path, p
         )
         assert resp2.status_code == 202, resp2.text
         _wait_for_terminal(recorded)
-        assert recorded[-1].get("type") == "complete", recorded[-1]
+        assert recorded[-1].get("event") == "complete", recorded[-1]
 
         pstate_after = project_state.page_states.get(0)
         assert pstate_after is not None
@@ -531,7 +531,7 @@ def test_rotate_path_traversal_rejected(
 
     _wait_for_terminal(events)
     terminal = events[-1]
-    assert terminal.get("type") == "error", f"expected error terminal for path-traversal, got {terminal}"
+    assert terminal.get("event") == "error", f"expected error terminal for path-traversal, got {terminal}"
 
 
 def test_rotate_ccw_transposes_image_dimensions(
@@ -563,7 +563,7 @@ def test_rotate_ccw_transposes_image_dimensions(
     assert resp.status_code == 202, resp.text
 
     _wait_for_terminal(events)
-    assert events[-1].get("type") == "complete", (
+    assert events[-1].get("event") == "complete", (
         f"CCW rotate (-90) produced a terminal error — expected complete; last event={events[-1]}"
     )
 
@@ -608,7 +608,7 @@ def test_rotate_ccw_persists_normalised_rotation_degrees(
         assert resp2.status_code == 202, resp2.text
 
         _wait_for_terminal(recorded)
-        assert recorded[-1].get("type") == "complete", recorded[-1]
+        assert recorded[-1].get("event") == "complete", recorded[-1]
 
         pstate = project_state.page_states.get(0)
         assert pstate is not None

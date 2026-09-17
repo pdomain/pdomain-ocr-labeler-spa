@@ -179,7 +179,7 @@ def test_refine_sse_reaches_terminal_complete(tmp_path: Path, projects_root: Pat
                         event_data = json.loads(data_str)
                     except json.JSONDecodeError:
                         continue
-                    if event_data.get("type") in ("complete", "error"):
+                    if event_data.get("event") in ("complete", "error"):
                         terminal_seen = True
                         break
                 if line.startswith("event:"):
