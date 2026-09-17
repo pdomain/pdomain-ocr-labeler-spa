@@ -1002,3 +1002,27 @@ def test_a_detector_that_raises_skips_its_page_and_does_not_kill_the_run(
     runs = log.runs()
     assert len(runs) == 1
     assert log.proposals_for_page(0, run_id=runs[0].run_id) == []
+
+
+def test_rejecting_an_already_rejected_proposal_records_nothing_new(toolbar_loaded: Any) -> None:
+    """A second reject is a no-op, not a second decision.
+
+    A held or double-tapped reject key sends the request twice. The decision
+    journal is what slice 5 calibrates confidence against, so a duplicate
+    rejection would count one person's single "no" twice.
+    """
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_proposal(client, project_root)
+
+    first = client.post(f"{_BASE}/regions/proposals/p1/reject")
+    assert first.status_code == 200, first.text
+    second = client.post(f"{_BASE}/regions/proposals/p1/reject")
+    assert second.status_code == 200, second.text
+
+    decisions = [d for d in RegionDecisionLog(project_root).decisions() if d.proposal_id == "p1"]
+    assert len(decisions) == 1
+    assert decisions[0].disposition is Disposition.REJECTED
