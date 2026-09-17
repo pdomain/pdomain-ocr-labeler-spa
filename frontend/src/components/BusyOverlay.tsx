@@ -17,29 +17,25 @@
 //   propose_page_kinds, and propose_regions jobs (POST cancel endpoint) —
 //   every handler with cooperative cancel support (P1-CANCEL,
 //   docs/issues/2026-07-21-job-cancel-incomplete.md).
-//   Cancel button with "best-effort" tooltip for reload_ocr_page.
-//   No cancel button for refine_bboxes_page / expand_refine_bboxes_page /
-//   refine_bboxes_project.
+//   Cancel button with "best-effort" tooltip for reload_ocr.
+//   No cancel button for refine_bboxes or rotate_page.
 
 import { OperationStatusPanel } from "@pdomain/pdomain-ui/status";
 import type { components } from "../api/types";
 import { useCancelJob } from "../hooks/useCancelJob";
 
 type Job = components["schemas"]["Job"];
+type JobType = components["schemas"]["JobType"];
 
 /**
  * Job types that support real cooperative cancel.
  *
- * Deliberately typed as a plain string set, not `Set<JobType>`: the
- * generated `components["schemas"]["JobType"]` (from `openapi.json`) is
- * stale and omits several job types the runner actually uses today
- * (`rotate_page`, `auto_rotate_all`, `propose_page_kinds`,
- * `propose_regions` — see docs/issues/2026-07-21-job-cancel-incomplete.md).
- * `activeJob?.type` still carries the real runtime string regardless of
- * what the generated schema declares, so this policy set must be free to
- * name job types the schema hasn't caught up to.
+ * `JobType` is now exactly the eight job kinds the runner's registered
+ * handlers accept — `tests/unit/core/jobs/test_job_type_contract.py` on the
+ * backend fails if the two ever drift again (P1-JOBS-API) — so this policy
+ * set is a real `Set<JobType>` again rather than a plain string set.
  */
-const CANCELLABLE = new Set<string>([
+const CANCELLABLE = new Set<JobType>([
   "save_project",
   "export",
   "auto_rotate_all",
@@ -48,7 +44,7 @@ const CANCELLABLE = new Set<string>([
 ]);
 
 /** Job type that has cancel button but with "best-effort" warning. */
-const BEST_EFFORT_CANCEL = new Set<string>(["reload_ocr_page"]);
+const BEST_EFFORT_CANCEL = new Set<JobType>(["reload_ocr"]);
 
 interface BusyOverlayProps {
   /** The currently active running job, if any. */

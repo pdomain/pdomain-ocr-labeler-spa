@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 from pdomain_book_contracts.annotation import RegionRole
 from pydantic import BaseModel, ConfigDict, Field
@@ -274,23 +274,43 @@ class LineFilter(StrEnum):
 
 
 class JobStatus(StrEnum):
-    """Job lifecycle state — spec §1 ``JobStatus``."""
+    """Job lifecycle state — spec §1 ``JobStatus``.
+
+    Mirrors ``core.jobs.runner.JobStatus`` exactly (including ``CANCELLED``,
+    reached via cooperative cancel — spec §5.10). The two enums are kept
+    separate (runtime layer vs. wire layer) but
+    ``tests/unit/core/jobs/test_job_type_contract.py`` proves they agree so
+    they cannot silently drift — see
+    ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`` (P1-JOBS-API).
+    """
 
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETE = "complete"
     ERROR = "error"
+    CANCELLED = "cancelled"
 
 
 class JobType(StrEnum):
-    """Discriminant for background job kind — spec §1 ``JobType``."""
+    """Discriminant for background job kind — spec §1 ``JobType``.
 
-    REFINE_BBOXES_PAGE = "refine_bboxes_page"
-    EXPAND_REFINE_BBOXES_PAGE = "expand_refine_bboxes_page"
-    RELOAD_OCR_PAGE = "reload_ocr_page"
-    EXPORT = "export"
+    Values are exactly the ``job_type`` strings the runner's registered
+    handlers accept (``core.jobs.runner._HANDLERS`` /
+    ``core.jobs.runner.registered_job_types()``); previously this enum
+    listed job types the runner never produced and omitted four it does —
+    see ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`` (P1-JOBS-API).
+    ``tests/unit/core/jobs/test_job_type_contract.py`` fails if a registered
+    handler has no matching member (or vice versa).
+    """
+
+    RELOAD_OCR = "reload_ocr"
     SAVE_PROJECT = "save_project"
-    REFINE_BBOXES_PROJECT = "refine_bboxes_project"
+    EXPORT = "export"
+    ROTATE_PAGE = "rotate_page"
+    AUTO_ROTATE_ALL = "auto_rotate_all"
+    REFINE_BBOXES = "refine_bboxes"
+    PROPOSE_PAGE_KINDS = "propose_page_kinds"
+    PROPOSE_REGIONS = "propose_regions"
 
 
 class JobProgress(BaseModel):
@@ -300,6 +320,49 @@ class JobProgress(BaseModel):
     total: int = 0
     current_page: int | None = None
     message: str = ""
+
+
+class JobResultFailure(TypedDict):
+    """One page save failure — mirrors ``api.pages.SaveFailure``'s shape."""
+
+    page_index: int
+    error: str
+
+
+class JobResult(TypedDict, total=False):
+    """Job-type-specific extra data a handler produced — spec §1 ``Job.result``.
+
+    Flat and optional (``total=False``) across every job type rather than a
+    ``JobType``-discriminated union: the union would be brittle as handlers
+    change, and this flat shape still gives the generated TypeScript real
+    field names — see
+    ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`` (P1-JOBS-API).
+    ``core.jobs.runner.to_public_job`` populates these from the runner's
+    ``Job.payload`` (allowlisted via ``core.jobs.runner._PAYLOAD_RESULT_KEYS``)
+    and ``Job.result``. Keys that exist today:
+
+    - ``save_project``: ``failures``, ``skipped_pages`` (int — pages not yet
+      registered in the store), ``skipped_indices``.
+    - ``refine_bboxes``: ``refined`` (int — words touched).
+    - ``propose_page_kinds``: ``run_id``, ``proposal_count``.
+    - ``export``: ``words_exported_detection``, ``words_exported_recognition``,
+      ``pages_skipped_not_validated`` — also merged flat at the SSE frame's
+      top level for backward compatibility (``JobRunner._emit``); both
+      places carry the same data.
+
+    ``reload_ocr``, ``rotate_page``, ``auto_rotate_all`` and
+    ``propose_regions`` do not populate this field today.
+    """
+
+    failures: list[JobResultFailure]
+    skipped_pages: int
+    skipped_indices: list[int]
+    refined: int
+    run_id: str
+    proposal_count: int
+    words_exported_detection: int
+    words_exported_recognition: int
+    pages_skipped_not_validated: int
 
 
 class Job(BaseModel):
@@ -313,6 +376,9 @@ class Job(BaseModel):
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime
+    result: JobResult | None = None
+    """Job-type-specific extra data the handler produced; ``None`` when the
+    handler wrote nothing. See ``JobResult`` for the documented shape."""
 
 
 __all__ = [
@@ -321,6 +387,8 @@ __all__ = [
     "GlyphAnnotationsModel",
     "Job",
     "JobProgress",
+    "JobResult",
+    "JobResultFailure",
     "JobStatus",
     "JobType",
     "LigatureMarkModel",

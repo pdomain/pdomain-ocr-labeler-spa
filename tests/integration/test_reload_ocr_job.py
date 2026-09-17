@@ -111,7 +111,7 @@ def _wait_for_terminal(events: list[dict[str, Any]], *, timeout: float = 5.0) ->
     """Spin until a terminal event lands in ``events``."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if any(e.get("type") in ("complete", "error", "cancelled") for e in events):
+        if any(e.get("event") in ("complete", "error", "cancelled") for e in events):
             return
         time.sleep(0.01)
     raise AssertionError(f"no terminal event after {timeout}s; events={events}")
@@ -152,8 +152,10 @@ def test_reload_ocr_success_emits_four_progress_events_in_order(
 
     _wait_for_terminal(events)
 
-    progress_events = [e for e in events if e.get("type") == "progress"]
-    fractions = [e["current"] / e["total"] for e in progress_events if e.get("total")]
+    progress_events = [e for e in events if e.get("event") == "progress"]
+    fractions = [
+        e["progress"]["current"] / e["progress"]["total"] for e in progress_events if e["progress"]["total"]
+    ]
     spec_fractions = [0.0, 0.1, 0.9, 1.0]
     for expected in spec_fractions:
         assert any(abs(f - expected) < 1e-6 for f in fractions), (
@@ -165,7 +167,7 @@ def test_reload_ocr_success_emits_four_progress_events_in_order(
     ]
     assert first_indices == sorted(first_indices), f"progress fractions out of order: {fractions}"
 
-    assert events[-1].get("type") == "complete", events[-1]
+    assert events[-1].get("event") == "complete", events[-1]
     assert loader.calls == [0]
 
 
@@ -196,7 +198,7 @@ def test_reload_ocr_passes_the_prior_confirmed_kind_to_run_ocr(
     assert ocr_resp.status_code == 202
 
     _wait_for_terminal(events)
-    assert events[-1].get("type") == "complete", events[-1]
+    assert events[-1].get("event") == "complete", events[-1]
     assert loader.page_kind_calls == [PageKind.BODY]
 
 
@@ -209,7 +211,7 @@ def test_reload_ocr_passes_none_when_the_page_has_no_confirmed_kind(
     assert ocr_resp.status_code == 202
 
     _wait_for_terminal(events)
-    assert events[-1].get("type") == "complete", events[-1]
+    assert events[-1].get("event") == "complete", events[-1]
     assert loader.page_kind_calls == [None]
 
 
@@ -225,7 +227,7 @@ def test_reload_ocr_stores_outcome_on_project_state(
     assert ocr_resp.status_code == 202
 
     _wait_for_terminal(events)
-    assert events[-1].get("type") == "complete", events[-1]
+    assert events[-1].get("event") == "complete", events[-1]
 
     project_state = c.app.state.project_state  # type: ignore[attr-defined]
     pstate = project_state.page_states.get(0)
@@ -261,8 +263,8 @@ def test_reload_ocr_failure_emits_error_and_ocr_failed_notification(
         _wait_for_terminal(recorded)
 
         terminal = recorded[-1]
-        assert terminal.get("type") == "error", terminal
-        assert "doctr exploded" in terminal.get("error", ""), terminal
+        assert terminal.get("event") == "error", terminal
+        assert "doctr exploded" in (terminal.get("error_message") or ""), terminal
 
         notif_queue = c.app.state.notification_queue  # type: ignore[attr-defined]
         notifications = notif_queue.snapshot()
@@ -314,7 +316,7 @@ def test_reload_ocr_with_production_context_wiring(tmp_path: Path, projects_root
         assert ocr_resp.status_code == 202
 
         _wait_for_terminal(recorded)
-        assert recorded[-1].get("type") == "complete", recorded[-1]
+        assert recorded[-1].get("event") == "complete", recorded[-1]
         assert loader.calls == [0]
 
 
@@ -377,8 +379,8 @@ def test_reload_ocr_times_out_and_marks_job_error(tmp_path: Path, projects_root:
         _wait_for_terminal(recorded, timeout=5.0)
 
         terminal = recorded[-1]
-        assert terminal.get("type") == "error", terminal
-        assert "timed out" in terminal.get("error", "").lower(), terminal
+        assert terminal.get("event") == "error", terminal
+        assert "timed out" in (terminal.get("error_message") or "").lower(), terminal
 
         notif_queue = c.app.state.notification_queue  # type: ignore[attr-defined]
         notifications = notif_queue.snapshot()
@@ -504,7 +506,7 @@ def test_reload_ocr_recheck_saves_a_confirm_that_landed_during_ocr(
         assert ocr_resp.status_code == 202, ocr_resp.text
 
         _wait_for_terminal(recorded)
-        assert recorded[-1].get("type") == "complete", recorded[-1]
+        assert recorded[-1].get("event") == "complete", recorded[-1]
 
         pstate_after = project_state.page_states.get(0)
         assert pstate_after is not None

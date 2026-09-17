@@ -4,25 +4,25 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ..core.jobs import Job as RunnerJob
-from ..core.jobs import JobEventBroker, JobRunner, JobStatus
-from ..core.models import Job, JobProgress, JobType  # noqa: F401
+from ..core.jobs import JobEventBroker, JobRunner, JobStatus, to_public_job
+from ..core.models import Job
 from .dependencies import get_job_events, get_job_runner
 from .middleware.error_handler import ApiError
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 _TERMINAL = {JobStatus.COMPLETE, JobStatus.ERROR, JobStatus.CANCELLED}
-
-
-def _runner_job_to_dict(job: RunnerJob) -> dict[str, object]:
-    return job.model_dump(mode="json")
 
 
 def _job_not_found(job_id: str) -> JSONResponse:
@@ -36,15 +36,14 @@ def _job_not_found(job_id: str) -> JSONResponse:
 
 
 def _job_snapshot(job: RunnerJob) -> dict[str, object]:
+    """Build the first SSE frame: the public ``Job`` model + an ``event`` field.
+
+    Same shape as every other SSE frame (``JobRunner._emit``) and every REST
+    ``Job`` response — see ``to_public_job`` for the field mapping.
+    """
     ev_type = job.status.value if job.status in _TERMINAL else "progress"
-    snapshot: dict[str, object] = {
-        "type": ev_type,
-        "status": job.status.value,
-        "current": job.progress_current,
-        "total": job.progress_total,
-        "message": job.message,
-        "error": job.error_message,
-    }
+    snapshot: dict[str, object] = dict(to_public_job(job).model_dump(mode="json"))
+    snapshot["event"] = ev_type
     # Merge any structured result (e.g. export stats) so a late subscriber
     # that arrives after the job completed still sees the breakdown.
     if job.result:
@@ -62,21 +61,28 @@ def _sse_line(event: str, data: dict[str, object]) -> str:
 @router.get("", response_model=list[Job])
 def list_jobs(
     runner: JobRunner = Depends(get_job_runner),
-) -> JSONResponse:
-    """``GET /api/jobs`` — in-memory job list."""
-    return JSONResponse(status_code=200, content=[_runner_job_to_dict(j) for j in runner.list_jobs()])
+) -> list[Job]:
+    """``GET /api/jobs`` — in-memory job list.
+
+    Returns the public ``Job`` model directly so FastAPI's ``response_model``
+    actually validates/serializes the body — a raw ``JSONResponse`` here
+    bypassed that check and let the wire shape drift from the declared
+    OpenAPI ``Job`` (docs/issues/2026-07-21-jobs-api-openapi-mismatch.md,
+    P1-JOBS-API).
+    """
+    return [to_public_job(j) for j in runner.list_jobs()]
 
 
 @router.get("/{job_id}", response_model=Job)
 def get_job(
     job_id: str,
     runner: JobRunner = Depends(get_job_runner),
-) -> JSONResponse:
+) -> Job | JSONResponse:
     """``GET /api/jobs/{job_id}`` — single job by id."""
     job = runner.get_job(job_id)
     if job is None:
         return _job_not_found(job_id)
-    return JSONResponse(status_code=200, content=_runner_job_to_dict(job))
+    return to_public_job(job)
 
 
 @router.get(
@@ -84,38 +90,39 @@ def get_job(
     response_class=StreamingResponse,
     # SSE: no Pydantic response_model; text/event-stream cannot be
     # declared as a typed schema — spec §5.10 intentional exception.
+    # response_model=None also stops FastAPI trying (and failing) to build
+    # a response field from the `StreamingResponse | JSONResponse` return
+    # annotation — both are raw Starlette Response types, not model data.
+    response_model=None,
 )
 async def job_events(
     job_id: str,
     runner: JobRunner = Depends(get_job_runner),
     broker: JobEventBroker = Depends(get_job_events),
-) -> StreamingResponse:
+) -> StreamingResponse | JSONResponse:
     """``GET /api/jobs/{job_id}/events`` — SSE stream.
 
     Per spec §5.10: first frame = current snapshot; subsequent = broker
-    events; terminates on terminal state.
+    events; terminates on terminal state. Every frame's JSON payload is the
+    public ``Job`` model plus an ``event`` field naming the SSE event kind
+    (``snapshot`` / ``progress`` / ``complete`` / ``error`` / ``cancelled``)
+    — see ``JobRunner._emit`` and ``_job_snapshot`` for the shared shape.
     """
     job = runner.get_job(job_id)
     if job is None:
-        return JSONResponse(  # type: ignore[return-value]  # pyright: ignore[reportReturnType]
-            status_code=404,
-            content=ApiError(
-                error="job_not_found",
-                message=f"job not found: {job_id}",
-            ).model_dump(),
-        )
+        return _job_not_found(job_id)
 
-    async def stream():
+    async def stream() -> AsyncIterator[str]:
         snapshot = _job_snapshot(job)
-        ev_name = snapshot["type"] if snapshot["type"] in ("complete", "error", "cancelled") else "snapshot"
-        yield _sse_line(ev_name, snapshot)
+        ev_name = snapshot["event"] if snapshot["event"] in ("complete", "error", "cancelled") else "snapshot"
+        yield _sse_line(str(ev_name), snapshot)
 
         if job.status in _TERMINAL:
             return
 
         async for event in broker.subscribe(job_id):
-            ev_type = event.get("type", "progress")
-            yield _sse_line(ev_type, event)
+            ev_type = event.get("event", "progress")
+            yield _sse_line(str(ev_type), event)
             if ev_type in ("complete", "error", "cancelled"):
                 return
 
@@ -126,7 +133,7 @@ async def job_events(
 async def cancel_job(
     job_id: str,
     runner: JobRunner = Depends(get_job_runner),
-) -> JSONResponse:
+) -> Job | JSONResponse:
     """``POST /api/jobs/{job_id}/cancel`` — cooperative cancel.
 
     Spec §5.10 line 337: cooperative cancel; only valid for queued /
@@ -148,7 +155,7 @@ async def cancel_job(
     updated = await runner.request_cancel(job_id)
     if updated is None:
         return _job_not_found(job_id)
-    return JSONResponse(status_code=200, content=_runner_job_to_dict(updated))
+    return to_public_job(updated)
 
 
 def install_jobs_router(app) -> None:  # type: ignore[no-untyped-def]

@@ -84,7 +84,7 @@ def test_list_jobs_after_submit(client: TestClient) -> None:
     job_id = _submit_export(client)
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
-    ids = [j["job_id"] for j in resp.json()]
+    ids = [j["id"] for j in resp.json()]
     assert job_id in ids
 
 
@@ -96,7 +96,7 @@ def test_get_job_returns_job(client: TestClient) -> None:
     job_id = _submit_export(client)
     resp = client.get(f"/api/jobs/{job_id}")
     assert resp.status_code == 200
-    assert resp.json()["job_id"] == job_id
+    assert resp.json()["id"] == job_id
 
 
 def test_get_job_unknown_id_returns_404(client: TestClient) -> None:
@@ -193,7 +193,7 @@ def test_cancel_queued_job_returns_200(tmp_path: Path) -> None:
     assert resp_cancel.status_code == 200, resp_cancel.text
     body = resp_cancel.json()
     assert body["status"] == "cancelled"
-    assert body["job_id"] == job_id
+    assert body["id"] == job_id
 
 
 def test_cancel_updates_job_status_to_cancelled(tmp_path: Path) -> None:

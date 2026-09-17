@@ -83,7 +83,7 @@ def _wrap_broker_publish(broker: Any, sink: list[dict[str, Any]]) -> None:
 def _wait_for_terminal(events: list[dict[str, Any]], *, timeout: float = 10.0) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if any(e.get("type") in ("complete", "error", "cancelled") for e in events):
+        if any(e.get("event") in ("complete", "error", "cancelled") for e in events):
             return
         time.sleep(0.05)
     raise AssertionError(f"no terminal event after {timeout}s; events={events}")
@@ -248,7 +248,7 @@ def test_auto_rotate_rotates_sideways_page(tmp_path: Path, projects_root_two_pag
         assert resp2.status_code == 202, resp2.text
 
         _wait_for_terminal(recorded)
-        assert recorded[-1].get("type") == "complete", recorded[-1]
+        assert recorded[-1].get("event") == "complete", recorded[-1]
 
         # Page 0 should be rotated (dims transposed).
         rotated_0 = cv2.imdecode(np.frombuffer(image_path_0.read_bytes(), np.uint8), cv2.IMREAD_UNCHANGED)
@@ -312,7 +312,7 @@ def test_auto_rotate_all_passes_the_prior_confirmed_kind_to_run_ocr(
         )
         assert resp2.status_code == 202, resp2.text
         _wait_for_terminal(recorded)
-        assert recorded[-1].get("type") == "complete", recorded[-1]
+        assert recorded[-1].get("event") == "complete", recorded[-1]
 
         assert loader.calls == [0, 1]
         assert loader.page_kind_calls == [PageKind.BODY, None]
@@ -369,7 +369,7 @@ def test_auto_rotate_skips_manual_pages_by_default(tmp_path: Path, projects_root
         assert resp2.status_code == 202, resp2.text
 
         _wait_for_terminal(recorded)
-        assert recorded[-1].get("type") == "complete", recorded[-1]
+        assert recorded[-1].get("event") == "complete", recorded[-1]
 
         # Page 0 should NOT be rotated (manual was skipped).
         result_0 = cv2.imdecode(np.frombuffer(image_path_0.read_bytes(), np.uint8), cv2.IMREAD_UNCHANGED)

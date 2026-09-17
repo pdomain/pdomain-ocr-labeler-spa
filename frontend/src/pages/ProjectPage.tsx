@@ -250,10 +250,11 @@ export default function ProjectPage() {
   const projectQ = useProject(projectId);
   const pageQ = usePage(projectId, idx0);
   // Active job tracking — fed by mutation hooks when they return job_ids.
+  // Wave 3a / P1-JOB-TYPE: every SSE frame is now the full public `Job`
+  // model, so `jobProgress.type` is the real job kind straight from the
+  // backend — no need to separately track or guess it for BusyOverlay's
+  // cancel policy (previously synthesized as a hard-coded placeholder).
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  // Wave 3a / P1-JOB-TYPE: real job type for BusyOverlay cancel policy.
-  const [activeJobType, setActiveJobType] =
-    useState<components["schemas"]["JobType"]>("reload_ocr_page");
   const jobProgress = useJobProgress(activeJobId);
 
   // ── Store subscribers ──────────────────────────────────────────────────
@@ -621,28 +622,17 @@ export default function ProjectPage() {
     undoPage.isPending ||
     redoPage.isPending;
 
-  // Pseudo-Job object for BusyOverlay. BusyOverlay accepts the full
-  // `components.schemas.Job` shape but only branches on `type` / `status`;
-  // we synthesize the minimal shape from the SSE progress event. The
-  // `id` / `project_id` / `created_at` / `updated_at` fields are required
-  // by the type but not consumed by the overlay — placeholder values keep
-  // tsc happy without inventing data.
-  const nowIso = new Date(0).toISOString();
+  // `jobProgress` is now every SSE frame's full public `Job` model plus the
+  // `event` field (see useJobProgress.ts) — structurally a `Job` already, so
+  // BusyOverlay's `activeJob` needs no synthesis (previously a hard-coded
+  // placeholder type — P1-JOB-TYPE). `null` once the job reaches a terminal
+  // status.
   const activeJob: components["schemas"]["Job"] | null =
     jobProgress &&
     jobProgress.status !== "complete" &&
     jobProgress.status !== "error" &&
-    (jobProgress.status as string) !== "cancelled"
-      ? {
-          id: jobProgress.job_id,
-          project_id: projectId ?? null,
-          type: activeJobType,
-          status: jobProgress.status,
-          progress: jobProgress.progress,
-          error_message: jobProgress.error_message ?? null,
-          created_at: nowIso,
-          updated_at: nowIso,
-        }
+    jobProgress.status !== "cancelled"
+      ? jobProgress
       : null;
 
   // ToolbarActionGrid plumbing
@@ -674,13 +664,9 @@ export default function ProjectPage() {
     void qc.invalidateQueries({ queryKey: ["page", projectId, idx0] });
   }
 
-  function trackJob(
-    result: { job_id?: string | null } | undefined | null,
-    jobType: components["schemas"]["JobType"] = "reload_ocr_page",
-  ) {
+  function trackJob(result: { job_id?: string | null } | undefined | null) {
     const jobId = result?.job_id ?? null;
     if (jobId) {
-      setActiveJobType(jobType);
       setActiveJobId(jobId);
     }
   }
@@ -699,7 +685,7 @@ export default function ProjectPage() {
       onConfirm: () => {
         reloadOcr.mutate(undefined, {
           onSuccess: (data) => {
-            trackJob(data as { job_id?: string | null } | undefined | null, "reload_ocr_page");
+            trackJob(data as { job_id?: string | null } | undefined | null);
           },
           onSettled: () => {
             invalidatePage();
@@ -724,7 +710,7 @@ export default function ProjectPage() {
   function handleSaveProject() {
     saveProject.mutate(undefined, {
       onSuccess: (data) => {
-        trackJob(data, "save_project");
+        trackJob(data);
       },
       onSettled: () => {
         invalidatePage();

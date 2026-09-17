@@ -209,7 +209,7 @@ describe("ExportDialog", () => {
 
     // Simulate complete event
     mockUseJobProgress.mockReturnValue({
-      job_id: "job-abc",
+      id: "job-abc",
       status: "complete",
       progress: { current: 3, total: 3, current_page: 2, message: "done" },
     });
@@ -238,14 +238,19 @@ describe("ExportDialog", () => {
       fireEvent.click(screen.getByTestId("export-button"));
     });
 
-    // Simulate a terminal complete event carrying the stats breakdown.
+    // Simulate a terminal complete event carrying the stats breakdown in
+    // `result` — the public Job model's field for handler-specific output
+    // (core.models.Job.result; docs/issues/2026-07-21-jobs-api-openapi-mismatch.md,
+    // P1-JOBS-API).
     mockUseJobProgress.mockReturnValue({
-      job_id: "job-stats",
+      id: "job-stats",
       status: "complete",
       progress: { current: 5, total: 5, current_page: 4, message: "done" },
-      words_exported_detection: 42,
-      words_exported_recognition: 40,
-      pages_skipped_not_validated: 2,
+      result: {
+        words_exported_detection: 42,
+        words_exported_recognition: 40,
+        pages_skipped_not_validated: 2,
+      },
     });
 
     rerender(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
@@ -422,12 +427,14 @@ describe("Send-to-trainer affordance", () => {
 
     // Simulate complete event so history row appears
     mockUseJobProgress.mockReturnValue({
-      job_id: jobId,
+      id: jobId,
       status: "complete",
       progress: { current: 1, total: 1, current_page: 0, message: "done" },
-      words_exported_detection: 5,
-      words_exported_recognition: 5,
-      pages_skipped_not_validated: 0,
+      result: {
+        words_exported_detection: 5,
+        words_exported_recognition: 5,
+        pages_skipped_not_validated: 0,
+      },
     });
     rerender(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
 

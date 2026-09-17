@@ -114,7 +114,7 @@ def test_export_job_is_visible_in_job_list(client: TestClient) -> None:
     )
     job_id = resp.json()["job_id"]
     jobs = client.get("/api/jobs").json()
-    assert any(j["job_id"] == job_id for j in jobs)
+    assert any(j["id"] == job_id for j in jobs)
 
 
 def test_export_job_has_correct_type(client: TestClient) -> None:
@@ -125,7 +125,7 @@ def test_export_job_has_correct_type(client: TestClient) -> None:
     )
     job_id = resp.json()["job_id"]
     job = client.get(f"/api/jobs/{job_id}").json()
-    assert job["job_type"] == "export"
+    assert job["type"] == "export"
 
 
 def test_export_job_carries_project_id(client: TestClient) -> None:
@@ -342,7 +342,7 @@ def test_export_excludes_pages_that_fail_to_load_before_enqueue(
                 parsed = _parse_sse_events(raw)
                 terminal = [e for e in parsed if e["event"] in terminal_events]
                 if terminal:
-                    terminal_message = terminal[0]["data"].get("message", "")
+                    terminal_message = terminal[0]["data"].get("progress", {}).get("message", "")
                     break
 
     assert terminal_message is not None, "SSE stream never delivered a terminal event"

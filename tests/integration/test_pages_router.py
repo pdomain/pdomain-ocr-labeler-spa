@@ -234,7 +234,7 @@ def test_reload_ocr_sse_reaches_terminal_complete(tmp_path: Path, projects_root:
                         event_data = json.loads(data_str)
                     except json.JSONDecodeError:
                         continue
-                    if event_data.get("type") in ("complete", "error"):
+                    if event_data.get("event") in ("complete", "error"):
                         terminal_seen = True
                         break
                 if line.startswith("event:"):
@@ -283,7 +283,7 @@ def test_save_all_sse_reaches_terminal_complete(tmp_path: Path, projects_root: P
                         ev = json.loads(data_str)
                     except json.JSONDecodeError:
                         continue
-                    if ev.get("type") in ("complete", "error"):
+                    if ev.get("event") in ("complete", "error"):
                         terminal_seen = True
                         break
 

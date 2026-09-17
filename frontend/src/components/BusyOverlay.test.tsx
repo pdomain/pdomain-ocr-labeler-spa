@@ -37,7 +37,7 @@ describe("BusyOverlay", () => {
         <BusyOverlay
           activeJob={{
             id: "job-1",
-            type: "reload_ocr_page",
+            type: "reload_ocr",
             project_id: "proj-1",
             status: "running",
             progress: { current: 0, total: 0, message: "Running OCR…" },
@@ -145,13 +145,13 @@ describe("BusyOverlay", () => {
     expect(screen.getByTestId("busy-overlay-cancel")).toBeInTheDocument();
   });
 
-  it("shows cancel button with best-effort tooltip for reload_ocr_page", () => {
+  it("shows cancel button with best-effort tooltip for reload_ocr", () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
         <BusyOverlay
           activeJob={{
             id: "job-4",
-            type: "reload_ocr_page",
+            type: "reload_ocr",
             project_id: "proj-1",
             status: "running",
             progress: { current: 0, total: 0, message: "Reloading OCR…" },
@@ -168,13 +168,13 @@ describe("BusyOverlay", () => {
     expect(cancelBtn.getAttribute("title")).toMatch(/best.effort/i);
   });
 
-  it("does NOT show cancel button for refine_bboxes_page job", () => {
+  it("does NOT show cancel button for refine_bboxes job", () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
         <BusyOverlay
           activeJob={{
             id: "job-5",
-            type: "refine_bboxes_page",
+            type: "refine_bboxes",
             project_id: "proj-1",
             status: "running",
             progress: { current: 0, total: 0, message: "Refining…" },

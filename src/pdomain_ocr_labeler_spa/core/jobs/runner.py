@@ -19,13 +19,19 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Mapping
 from datetime import UTC, datetime
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
+from ..models import Job as PublicJob
+from ..models import JobProgress as PublicJobProgress
+from ..models import JobResult as PublicJobResult
+from ..models import JobStatus as PublicJobStatus
+from ..models import JobType as PublicJobType
 from .events import JobEventBroker
 
 log = logging.getLogger(__name__)
@@ -62,6 +68,107 @@ class Job(BaseModel):
 _TERMINAL = {JobStatus.COMPLETE, JobStatus.ERROR, JobStatus.CANCELLED}
 
 Handler = Callable[["JobRunner", Job], Coroutine[Any, Any, None]]
+
+# Keys individual handlers write into ``job.payload`` as OUTPUT (not the
+# caller-submitted input echoed in that same dict) — the allowlist
+# ``to_public_job`` uses to surface them through the public model's
+# ``result`` field. ``tests/unit/core/jobs/test_job_type_contract.py``
+# statically greps every handler module for ``job.payload["<key>"] = ``
+# writes and fails if one is missing here, so a new output key can't
+# silently go missing from the wire the way ``skipped_pages`` did
+# (docs/issues/2026-07-21-jobs-api-openapi-mismatch.md, P1-JOBS-API).
+_PAYLOAD_RESULT_KEYS: frozenset[str] = frozenset(
+    {
+        "failures",  # save_project
+        "skipped_pages",  # save_project
+        "skipped_indices",  # save_project
+        "refined",  # refine_bboxes
+        "run_id",  # propose_page_kinds
+        "proposal_count",  # propose_page_kinds
+    }
+)
+
+
+def payload_result_keys() -> frozenset[str]:
+    """Return the ``job.payload`` output keys ``to_public_job`` surfaces.
+
+    Public accessor mirroring ``registered_job_types()`` so tests can check
+    the allowlist without reaching into the private ``_PAYLOAD_RESULT_KEYS``.
+    """
+    return _PAYLOAD_RESULT_KEYS
+
+
+def _build_public_result(job: Job) -> PublicJobResult:
+    """Merge ``job.payload``'s allowlisted output keys with ``job.result``
+    into the typed public ``JobResult`` shape.
+
+    Written key-by-key (not a loop over ``_PAYLOAD_RESULT_KEYS``) because
+    ``JobResult`` is a ``TypedDict``: static key-by-key assignment lets
+    basedpyright check every key/value type here with no ``cast`` or
+    ``# type: ignore``, at the cost of listing each key twice (once in
+    ``_PAYLOAD_RESULT_KEYS``/``JobResult``, once here) —
+    ``tests/unit/core/jobs/test_job_type_contract.py`` proves
+    ``_PAYLOAD_RESULT_KEYS`` and ``JobResult`` agree, and this function's
+    own keys are exercised by the same test suite's ``result`` assertions.
+    """
+    result: PublicJobResult = {}
+    if "failures" in job.payload:
+        result["failures"] = job.payload["failures"]
+    if "skipped_pages" in job.payload:
+        result["skipped_pages"] = job.payload["skipped_pages"]
+    if "skipped_indices" in job.payload:
+        result["skipped_indices"] = job.payload["skipped_indices"]
+    if "refined" in job.payload:
+        result["refined"] = job.payload["refined"]
+    if "run_id" in job.payload:
+        result["run_id"] = job.payload["run_id"]
+    if "proposal_count" in job.payload:
+        result["proposal_count"] = job.payload["proposal_count"]
+    if "words_exported_detection" in job.result:
+        result["words_exported_detection"] = job.result["words_exported_detection"]
+    if "words_exported_recognition" in job.result:
+        result["words_exported_recognition"] = job.result["words_exported_recognition"]
+    if "pages_skipped_not_validated" in job.result:
+        result["pages_skipped_not_validated"] = job.result["pages_skipped_not_validated"]
+    return result
+
+
+def to_public_job(job: Job) -> PublicJob:
+    """Adapt an internal runner ``Job`` into the public wire ``Job`` model.
+
+    Single source of truth for the runner → public field mapping, shared by
+    both REST responses (``api/jobs.py``) and SSE frames (``_emit`` below) —
+    see ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`` (P1-JOBS-API).
+    Field renames from the old ad hoc dump: ``job_id`` → ``id``, ``job_type``
+    → ``type``, ``progress_current``/``progress_total``/``message`` → nested
+    ``progress.current``/``progress.total``/``progress.message``,
+    ``started_at``/``completed_at`` collapse into a single ``updated_at``.
+
+    ``result`` unifies the runner's two ad hoc output channels into one
+    public field: the allowlisted output keys handlers write into
+    ``job.payload`` (``_PAYLOAD_RESULT_KEYS`` — e.g. ``save_project``'s
+    ``skipped_pages``/``skipped_indices``), plus ``job.result`` (today only
+    ``export``'s terminal stats, which ``JobRunner._emit`` also keeps
+    merging flat at the SSE frame's top level for backward compatibility —
+    both places now carry the same data). ``None`` when neither channel
+    wrote anything.
+    """
+    result = _build_public_result(job)
+    return PublicJob(
+        id=job.job_id,
+        type=PublicJobType(job.job_type),
+        project_id=job.project_id,
+        status=PublicJobStatus(job.status.value),
+        progress=PublicJobProgress(
+            current=job.progress_current,
+            total=job.progress_total,
+            message=job.message,
+        ),
+        error_message=job.error_message or None,
+        created_at=job.created_at,
+        updated_at=job.completed_at or job.started_at or job.created_at,
+        result=result or None,
+    )
 
 
 class LabelingPageLease(Protocol):
@@ -274,20 +381,22 @@ class JobRunner:
         await self._emit(updated)
 
     async def _emit(self, job: Job) -> None:
-        terminal = {JobStatus.COMPLETE, JobStatus.ERROR, JobStatus.CANCELLED}
-        ev_type = job.status.value if job.status in terminal else "progress"
-        event = {
-            "type": ev_type,
-            "status": job.status.value,
-            "current": job.progress_current,
-            "total": job.progress_total,
-            "message": job.message,
-            "error": job.error_message,
-        }
+        """Publish an SSE frame: the public ``Job`` model plus an ``event`` field.
+
+        ``event`` names the SSE event kind (``progress`` while running,
+        else the terminal status value). It is a distinct field from the
+        job model's own ``type`` (job kind, e.g. ``"export"``) — the old
+        flat shape used ``type`` for the event kind, which would collide
+        with the public model's ``type`` field, hence the rename. See
+        ``docs/issues/2026-07-21-job-sse-fe-be-shape-mismatch.md`` (P1-JOB-SSE).
+        """
+        ev_type = job.status.value if job.status in _TERMINAL else "progress"
+        event: dict[str, object] = dict(to_public_job(job).model_dump(mode="json"))
+        event["event"] = ev_type
         if job.result:
             event.update(job.result)
         await self._broker.publish(job.job_id, event)
-        if job.status in terminal:
+        if job.status in _TERMINAL:
             await self._broker.close(job.job_id)
 
     async def _run_one(self, job: Job) -> None:
@@ -460,4 +569,37 @@ _HANDLERS: dict[str, Handler] = {
 }
 
 
-__all__ = ["Job", "JobRunner", "JobStatus"]
+def registered_job_types() -> frozenset[str]:
+    """Return every ``job_type`` string a registered handler accepts.
+
+    Public accessor so tests (and the public ``JobType`` enum) can be
+    checked for agreement without reaching into the private ``_HANDLERS``
+    dict — see ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md``
+    (P1-JOBS-API), "Derive the job type list from the runner's registered
+    handlers."
+    """
+    return frozenset(_HANDLERS)
+
+
+def registered_handlers() -> Mapping[str, Handler]:
+    """Return the ``job_type -> handler wrapper`` registry, read-only.
+
+    Public accessor mirroring ``registered_job_types()``/
+    ``payload_result_keys()`` so tests can statically resolve each
+    handler's real implementation module (each wrapper does a lazy
+    ``from .handlers.<name> import <fn>`` inside its body — see
+    ``tests/unit/core/jobs/test_job_type_contract.py``) without reaching
+    into the private ``_HANDLERS`` dict.
+    """
+    return MappingProxyType(_HANDLERS)
+
+
+__all__ = [
+    "Job",
+    "JobRunner",
+    "JobStatus",
+    "payload_result_keys",
+    "registered_handlers",
+    "registered_job_types",
+    "to_public_job",
+]

@@ -117,10 +117,7 @@ export function useJobCompletionInvalidation({
   useEffect(() => {
     if (!activeJobId || jobProgress === null) return;
 
-    // "cancelled" is a valid wire status the backend emits (P1-CANCEL) even
-    // though the generated `JobStatus` union is stale and omits it — see
-    // useJobProgress.ts's own note on the same gap.
-    const status: string = jobProgress.status;
+    const status = jobProgress.status;
 
     if (status === "complete") {
       void qc.invalidateQueries({ queryKey: invalidationKey });

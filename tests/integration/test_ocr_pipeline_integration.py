@@ -68,8 +68,8 @@ def _drain_sse_to_terminal(client: TestClient, job_id: str) -> str | None:
             if line.startswith("data:"):
                 try:
                     ev = json.loads(line[5:].strip())
-                    if ev.get("type") in ("complete", "error"):
-                        terminal_type = ev.get("type")
+                    if ev.get("event") in ("complete", "error"):
+                        terminal_type = ev.get("event")
                         break
                 except json.JSONDecodeError:
                     pass

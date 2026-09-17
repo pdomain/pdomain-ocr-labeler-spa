@@ -59,6 +59,21 @@ interface RunHistoryEntry {
   pagesSkippedNotValidated?: number | undefined;
 }
 
+/**
+ * Read a numeric field off a job's `result` — export's terminal stats
+ * (words_exported_detection / words_exported_recognition /
+ * pages_skipped_not_validated) live there (core.models.Job.result;
+ * docs/issues/2026-07-21-jobs-api-openapi-mismatch.md, P1-JOBS-API).
+ * `result` values are `unknown`, so every read is narrowed before use.
+ */
+function numberResultField(
+  result: Record<string, unknown> | null | undefined,
+  key: string,
+): number | undefined {
+  const value = result?.[key];
+  return typeof value === "number" ? value : undefined;
+}
+
 interface ExportDialogProps {
   /** Whether the dialog is visible. */
   open: boolean;
@@ -177,14 +192,17 @@ export function ExportDialog({
       setHistory((prev) => [
         ...prev,
         {
-          id: progress.job_id,
+          id: progress.id,
           scope,
           styleFilters: selectedStyles,
           pagesExported: progress.progress?.total ?? 0,
           timestamp: new Date().toLocaleTimeString(),
-          wordsDetection: progress.words_exported_detection,
-          wordsRecognition: progress.words_exported_recognition,
-          pagesSkippedNotValidated: progress.pages_skipped_not_validated,
+          wordsDetection: numberResultField(progress.result, "words_exported_detection"),
+          wordsRecognition: numberResultField(progress.result, "words_exported_recognition"),
+          pagesSkippedNotValidated: numberResultField(
+            progress.result,
+            "pages_skipped_not_validated",
+          ),
         },
       ]);
     } else {

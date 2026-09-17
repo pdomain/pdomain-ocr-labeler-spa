@@ -29,13 +29,13 @@ them; the store is left consistent either way. The final progress message
 states it was cancelled and how many pages had already been saved
 (P1-CANCEL, ``docs/issues/2026-07-21-job-cancel-incomplete.md``).
 
-Failures list shape: the handler stashes the list on
-``job.payload["failures"]`` so a follow-up ``GET /api/jobs/{id}``
-caller can read it; the SSE stream also carries the failures
-inline in the terminal event when emitted via
-``JobRunner.update_progress`` (the runner's emit shape doesn't include
-arbitrary payload fields today; this is documented as a follow-up and
-the in-memory ``Job`` instance keeps the full list for any HTTP poller).
+Failures/skipped-pages shape: the handler stashes ``failures``,
+``skipped_pages`` and ``skipped_indices`` on ``job.payload``.
+``core.jobs.runner.to_public_job`` surfaces those (allowlisted via
+``_PAYLOAD_RESULT_KEYS``) as ``core.models.Job.result``, so both a
+follow-up ``GET /api/jobs/{id}`` poll and every SSE frame for this job
+(``JobRunner._emit`` calls the same adapter) carry the same data —
+see ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`` (P1-JOBS-API).
 """
 
 from __future__ import annotations

@@ -580,6 +580,31 @@ describe("PageActionsCompact: auto-rotate-all trigger (P2 / C29)", () => {
 // rather than a generic string, and Propose regions shows it as a warning
 // (not success) when the run skipped every page for having no page kind.
 
+/**
+ * Build a synthetic SSE frame in the real wire shape — the public `Job`
+ * model plus an `event` field naming the SSE event kind (Wave 3a /
+ * P1-JOB-SSE) — from the handful of fields each test actually cares about.
+ * `job_id` / `status` are required; everything else defaults to a value the
+ * assertions under test don't inspect.
+ */
+function jobFrame(input: {
+  job_id: string;
+  status: string;
+  progress?: { message?: string; current?: number; total?: number };
+  type?: string;
+}) {
+  return {
+    id: input.job_id,
+    type: input.type ?? "reload_ocr",
+    project_id: "proj-1",
+    status: input.status,
+    progress: { current: 0, total: 0, message: "", ...input.progress },
+    created_at: new Date(0).toISOString(),
+    updated_at: new Date(0).toISOString(),
+    event: input.status,
+  };
+}
+
 /** Stub EventSource capturing the SSE listener so a test can dispatch a
  * synthetic job-progress event, mirroring the reload-ocr toast-lifecycle
  * tests above. */
@@ -600,9 +625,9 @@ function mockEventSource() {
     }),
   );
   return {
-    dispatch(data: unknown) {
+    dispatch(data: Parameters<typeof jobFrame>[0]) {
       act(() => {
-        progressListener?.({ data: JSON.stringify(data) } as MessageEvent);
+        progressListener?.({ data: JSON.stringify(jobFrame(data)) } as MessageEvent);
       });
     },
   };
@@ -1505,7 +1530,9 @@ describe("PageActionsCompact: toast lifecycle for reload-ocr", () => {
 
     // Simulate SSE "complete" event.
     const completeEvent = {
-      data: JSON.stringify({ job_id: "j1", status: "complete", progress: { message: "Done" } }),
+      data: JSON.stringify(
+        jobFrame({ job_id: "j1", status: "complete", progress: { message: "Done" } }),
+      ),
     } as MessageEvent;
     act(() => {
       progressListener?.(completeEvent);
@@ -1551,7 +1578,9 @@ describe("PageActionsCompact: toast lifecycle for reload-ocr", () => {
     await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
 
     const errorEvent = {
-      data: JSON.stringify({ job_id: "j2", status: "error", progress: { message: "OCR failed" } }),
+      data: JSON.stringify(
+        jobFrame({ job_id: "j2", status: "error", progress: { message: "OCR failed" } }),
+      ),
     } as MessageEvent;
     act(() => {
       progressListener?.(errorEvent);
@@ -1568,7 +1597,7 @@ describe("PageActionsCompact: toast lifecycle for reload-ocr", () => {
 });
 
 // ─── S5.2: Save-project skipped-page warning toast ───────────────────────────
-// When save-all completes with payload.skipped_pages > 0, the component must
+// When save-all completes with result.skipped_pages > 0, the component must
 // show a warning toast (not a success toast) mentioning the skipped pages.
 // Definition of done: skipping is never silent.
 
@@ -1599,17 +1628,21 @@ describe("PageActionsCompact: S5.2 save-project skipped-page warning", () => {
         HttpResponse.json({ job_id: "j-save-skip" }, { status: 202 }),
       ),
     );
-    // GET /api/jobs/j-save-skip → job result with skipped_pages: 1.
+    // GET /api/jobs/j-save-skip → the public Job's `result` field carries
+    // save_project's skipped_pages/skipped_indices/failures output
+    // (core.models.Job.result; docs/issues/2026-07-21-jobs-api-openapi-mismatch.md,
+    // P1-JOBS-API).
     server.use(
       http.get("/api/jobs/j-save-skip", () =>
         HttpResponse.json({
-          job_id: "j-save-skip",
-          job_type: "save_project",
+          id: "j-save-skip",
+          type: "save_project",
+          project_id: "proj-1",
           status: "complete",
-          progress_current: 1,
-          progress_total: 1,
-          message: "Saved",
-          payload: {
+          progress: { current: 1, total: 1, message: "Saved" },
+          created_at: new Date(0).toISOString(),
+          updated_at: new Date(0).toISOString(),
+          result: {
             failures: [],
             skipped_pages: 1,
             skipped_indices: [0],
@@ -1634,11 +1667,9 @@ describe("PageActionsCompact: S5.2 save-project skipped-page warning", () => {
     // Simulate SSE complete event.
     act(() => {
       progressListener.current?.({
-        data: JSON.stringify({
-          job_id: "j-save-skip",
-          status: "complete",
-          progress: { message: "Saved" },
-        }),
+        data: JSON.stringify(
+          jobFrame({ job_id: "j-save-skip", status: "complete", progress: { message: "Saved" } }),
+        ),
       } as MessageEvent);
     });
 
@@ -1671,13 +1702,14 @@ describe("PageActionsCompact: S5.2 save-project skipped-page warning", () => {
     server.use(
       http.get("/api/jobs/j-save-ok", () =>
         HttpResponse.json({
-          job_id: "j-save-ok",
-          job_type: "save_project",
+          id: "j-save-ok",
+          type: "save_project",
+          project_id: "proj-1",
           status: "complete",
-          progress_current: 1,
-          progress_total: 1,
-          message: "Saved",
-          payload: {
+          progress: { current: 1, total: 1, message: "Saved" },
+          created_at: new Date(0).toISOString(),
+          updated_at: new Date(0).toISOString(),
+          result: {
             failures: [],
             skipped_pages: 0,
             skipped_indices: [],
@@ -1698,11 +1730,9 @@ describe("PageActionsCompact: S5.2 save-project skipped-page warning", () => {
 
     act(() => {
       progressListener.current?.({
-        data: JSON.stringify({
-          job_id: "j-save-ok",
-          status: "complete",
-          progress: { message: "Saved" },
-        }),
+        data: JSON.stringify(
+          jobFrame({ job_id: "j-save-ok", status: "complete", progress: { message: "Saved" } }),
+        ),
       } as MessageEvent);
     });
 

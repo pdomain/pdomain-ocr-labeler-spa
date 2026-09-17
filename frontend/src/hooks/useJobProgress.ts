@@ -1,117 +1,117 @@
 // useJobProgress.ts — EventSource hook for GET /api/jobs/{jobId}/events.
 //
 // Spec: docs/specs/2026-05-12-frontend-shell-design.md §Hooks
-// Issue #192; Wave 3a / P1-JOB-SSE — adapt flat backend wire to nested FE shape.
+// Issue #192; Wave 3a / P1-JOB-SSE.
 //
-// Backend SSE frames (flat):
+// The backend now serializes the declared public `Job` model on every SSE
+// frame — the same shape `GET /api/jobs/{id}` returns — plus one extra
+// `event` field naming the SSE event kind. The event kind is a distinct
+// field from the job's own `type` (job kind, e.g. `"export"`): the old wire
+// shape reused `type` for the event kind, which collided with the model's
+// `type` field once the two were unified. See
+// docs/issues/2026-07-21-job-sse-fe-be-shape-mismatch.md and
+// docs/issues/2026-07-21-jobs-api-openapi-mismatch.md (P1-JOB-SSE,
+// P1-JOBS-API).
+//
+// Backend SSE frames:
 //   event: snapshot | progress | complete | error | cancelled
-//   data: { type, status, current, total, message, error, ...result }
-//
-// FE consumers expect nested JobProgressEvent:
-//   { job_id, status, progress: { current, total, message }, error_message }
+//   data: { id, type, project_id, status, progress: { current, total,
+//           current_page, message }, error_message, created_at, updated_at,
+//           result, event }. `result` is job-type-specific handler output
+//           (core.models.Job.result) — e.g. export's terminal stats
+//           (words_exported_detection / words_exported_recognition /
+//           pages_skipped_not_validated). The backend also still merges
+//           export's stats flat at the frame's top level for backward
+//           compatibility with older callers, but this hook reads them from
+//           `result`, the one field every job type uses.
 
 import { useEffect, useRef, useState } from "react";
 import type { components } from "../api/types";
 
+type Job = components["schemas"]["Job"];
 type JobStatus = components["schemas"]["JobStatus"];
 type JobProgress = components["schemas"]["JobProgress"];
 
-export interface JobProgressEvent {
-  job_id: string;
-  status: JobStatus;
-  progress: JobProgress;
-  error_message?: string | null;
-  // Export stats breakdown (Lane E3) — present on the terminal event of an
-  // export job. Flat top-level fields, matching the backend SSE wire format.
-  words_exported_detection?: number;
-  words_exported_recognition?: number;
-  pages_skipped_not_validated?: number;
+/** The SSE event kind — the `event:` line name, echoed in the frame's own `event` field. */
+export type JobEventKind = "snapshot" | "progress" | "complete" | "error" | "cancelled";
+
+/** A job-progress SSE frame: the public `Job` model plus the SSE event kind. */
+export interface JobProgressEvent extends Job {
+  event: JobEventKind;
 }
 
-/** Wire payload from the backend (flat) or already-nested OpenAPI shape. */
-interface WireJobEvent {
-  type?: string;
-  status?: string;
-  current?: number;
-  total?: number;
-  message?: string | null;
-  error?: string | null;
-  job_id?: string;
-  progress?: Partial<JobProgress> | null;
-  error_message?: string | null;
-  words_exported_detection?: number;
-  words_exported_recognition?: number;
-  pages_skipped_not_validated?: number;
-}
+const TERMINAL: ReadonlySet<JobStatus> = new Set(["complete", "error", "cancelled"]);
 
-const TERMINAL: ReadonlySet<string> = new Set(["complete", "error", "cancelled"]);
+const EVENT_NAMES: readonly JobEventKind[] = [
+  "snapshot",
+  "progress",
+  "complete",
+  "error",
+  "cancelled",
+];
 
 /**
- * Normalize a backend flat SSE payload (or a nested fixture) into JobProgressEvent.
+ * Parse an SSE frame's JSON payload into a `JobProgressEvent`.
+ *
+ * The payload crosses an untrusted boundary (network JSON), so every field
+ * this hook relies on is narrowed with `typeof` before use; malformed or
+ * incomplete frames are dropped (return `null`) rather than surfaced as a
+ * half-populated event. `type` / `status` / `event` are narrowed only to
+ * `string` here, then asserted to their declared literal unions: the
+ * backend is the single source of truth for those enums now that REST and
+ * SSE both serialize the same declared `Job` model (P1-JOBS-API), and the
+ * union members aren't re-derivable at runtime without a schema library
+ * this project doesn't otherwise depend on.
  */
-function normalizeJobProgressEvent(
-  raw: WireJobEvent,
-  fallbackJobId: string,
-): JobProgressEvent | null {
-  const statusRaw = raw.status ?? raw.type ?? "";
-  if (!statusRaw) {
+function parseJobProgressEvent(raw: unknown): JobProgressEvent | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const obj = raw as Record<string, unknown>;
+
+  const { id, type, status, event, progress } = obj;
+  if (
+    typeof id !== "string" ||
+    typeof type !== "string" ||
+    typeof status !== "string" ||
+    typeof event !== "string" ||
+    typeof progress !== "object" ||
+    progress === null
+  ) {
     return null;
   }
 
-  const nested = raw.progress;
-  const current =
-    typeof nested?.current === "number"
-      ? nested.current
-      : typeof raw.current === "number"
-        ? raw.current
-        : 0;
-  const total =
-    typeof nested?.total === "number"
-      ? nested.total
-      : typeof raw.total === "number"
-        ? raw.total
-        : 0;
-  let message = "";
-  if (typeof nested?.message === "string") {
-    message = nested.message;
-  } else if (typeof raw.message === "string") {
-    message = raw.message;
+  const rawProgress = progress as Record<string, unknown>;
+  const current = typeof rawProgress["current"] === "number" ? rawProgress["current"] : 0;
+  const total = typeof rawProgress["total"] === "number" ? rawProgress["total"] : 0;
+  const message = typeof rawProgress["message"] === "string" ? rawProgress["message"] : "";
+  const currentPage =
+    typeof rawProgress["current_page"] === "number" ? rawProgress["current_page"] : null;
+
+  const normalizedProgress: JobProgress = { current, total, message };
+  if (currentPage !== null) {
+    normalizedProgress.current_page = currentPage;
   }
 
-  let error_message: string | null | undefined;
-  if (raw.error_message !== undefined) {
-    error_message = raw.error_message;
-  } else if (raw.error !== undefined) {
-    error_message = raw.error;
-  }
-
-  // Keep cancelled as a terminal status string even if OpenAPI JobStatus is narrower.
-  const normalizedStatus = statusRaw as JobStatus;
-
-  const progress: JobProgress = {
-    current,
-    total,
-    message,
+  const parsed: JobProgressEvent = {
+    id,
+    // Validated string boundary; see doc comment above.
+    type: type as Job["type"],
+    project_id: typeof obj["project_id"] === "string" ? obj["project_id"] : null,
+    status: status as JobStatus,
+    progress: normalizedProgress,
+    created_at: typeof obj["created_at"] === "string" ? obj["created_at"] : "",
+    updated_at: typeof obj["updated_at"] === "string" ? obj["updated_at"] : "",
+    event: event as JobEventKind,
   };
-
-  const event: JobProgressEvent = {
-    job_id: typeof raw.job_id === "string" && raw.job_id ? raw.job_id : fallbackJobId,
-    status: normalizedStatus,
-    progress,
-  };
-  if (error_message !== undefined) {
-    event.error_message = error_message;
+  if (typeof obj["error_message"] === "string" || obj["error_message"] === null) {
+    parsed.error_message = obj["error_message"];
   }
-  if (typeof raw.words_exported_detection === "number") {
-    event.words_exported_detection = raw.words_exported_detection;
+  if (obj["result"] === null) {
+    parsed.result = null;
+  } else if (typeof obj["result"] === "object") {
+    // Validated string boundary (object check above); see doc comment above.
+    parsed.result = obj["result"] as Record<string, unknown>;
   }
-  if (typeof raw.words_exported_recognition === "number") {
-    event.words_exported_recognition = raw.words_exported_recognition;
-  }
-  if (typeof raw.pages_skipped_not_validated === "number") {
-    event.pages_skipped_not_validated = raw.pages_skipped_not_validated;
-  }
-  return event;
+  return parsed;
 }
 
 /**
@@ -148,35 +148,35 @@ export function useJobProgress(jobId: string | null | undefined): JobProgressEve
     esRef.current = es;
 
     function handleProgress(e: MessageEvent) {
-      let raw: WireJobEvent;
+      let raw: unknown;
       try {
-        raw = JSON.parse(e.data as string) as WireJobEvent;
+        raw = JSON.parse(e.data as string);
       } catch {
         return;
       }
 
-      const event = normalizeJobProgressEvent(raw, trackedJobId);
+      const event = parseJobProgressEvent(raw);
       if (!event) {
         return;
       }
 
       setLatest(event);
 
-      if (TERMINAL.has(event.status) || TERMINAL.has(String(raw.type ?? ""))) {
+      if (TERMINAL.has(event.status)) {
         es.close();
         esRef.current = null;
       }
     }
 
-    // Backend first frame is often `event: snapshot`; progress/complete/error
-    // follow. Listen for cancelled too (Wave 3a.2).
-    const names = ["snapshot", "progress", "complete", "error", "cancelled"] as const;
-    for (const name of names) {
+    // First frame is the current snapshot (`event: snapshot`, or the
+    // terminal event name if the job was already done); later frames are
+    // `progress` until a terminal `complete` / `error` / `cancelled`.
+    for (const name of EVENT_NAMES) {
       es.addEventListener(name, handleProgress);
     }
 
     return () => {
-      for (const name of names) {
+      for (const name of EVENT_NAMES) {
         es.removeEventListener(name, handleProgress);
       }
       if (es.readyState !== EventSource.CLOSED) {

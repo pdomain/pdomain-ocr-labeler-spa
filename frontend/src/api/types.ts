@@ -280,9 +280,12 @@ export interface paths {
          *
          *     Spec §5.3: long-running save of all loaded pages. Returns 202 Accepted.
          *     Callers track progress via ``GET /api/jobs/{job_id}/events``.
-         *     On completion, ``GET /api/jobs/{job_id}`` exposes ``payload.skipped_pages``
-         *     and ``payload.skipped_indices`` for pages that could not be persisted
+         *     On completion, ``GET /api/jobs/{job_id}`` exposes ``result.skipped_pages``
+         *     and ``result.skipped_indices`` for pages that could not be persisted
          *     because they are not yet registered in the store (``page_id is None``).
+         *     (Renamed from ``payload.skipped_pages``/``payload.skipped_indices`` —
+         *     see ``core.models.Job.result`` and ``core.jobs.runner.to_public_job``;
+         *     docs/issues/2026-07-21-jobs-api-openapi-mismatch.md, P1-JOBS-API.)
          */
         post: operations["save_all_api_projects__project_id__save_all_post"];
         delete?: never;
@@ -836,6 +839,12 @@ export interface paths {
         /**
          * List Jobs
          * @description ``GET /api/jobs`` — in-memory job list.
+         *
+         *     Returns the public ``Job`` model directly so FastAPI's ``response_model``
+         *     actually validates/serializes the body — a raw ``JSONResponse`` here
+         *     bypassed that check and let the wire shape drift from the declared
+         *     OpenAPI ``Job`` (docs/issues/2026-07-21-jobs-api-openapi-mismatch.md,
+         *     P1-JOBS-API).
          */
         get: operations["list_jobs_api_jobs_get"];
         put?: never;
@@ -878,7 +887,10 @@ export interface paths {
          * @description ``GET /api/jobs/{job_id}/events`` — SSE stream.
          *
          *     Per spec §5.10: first frame = current snapshot; subsequent = broker
-         *     events; terminates on terminal state.
+         *     events; terminates on terminal state. Every frame's JSON payload is the
+         *     public ``Job`` model plus an ``event`` field naming the SSE event kind
+         *     (``snapshot`` / ``progress`` / ``complete`` / ``error`` / ``cancelled``)
+         *     — see ``JobRunner._emit`` and ``_job_snapshot`` for the shared shape.
          */
         get: operations["job_events_api_jobs__job_id__events_get"];
         put?: never;
@@ -3912,6 +3924,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            result?: components["schemas"]["JobResult"] | null;
         };
         /**
          * JobProgress
@@ -3937,17 +3950,87 @@ export interface components {
             message: string;
         };
         /**
+         * JobResult
+         * @description Job-type-specific extra data a handler produced — spec §1 ``Job.result``.
+         *
+         *     Flat and optional (``total=False``) across every job type rather than a
+         *     ``JobType``-discriminated union: the union would be brittle as handlers
+         *     change, and this flat shape still gives the generated TypeScript real
+         *     field names — see
+         *     ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`` (P1-JOBS-API).
+         *     ``core.jobs.runner.to_public_job`` populates these from the runner's
+         *     ``Job.payload`` (allowlisted via ``core.jobs.runner._PAYLOAD_RESULT_KEYS``)
+         *     and ``Job.result``. Keys that exist today:
+         *
+         *     - ``save_project``: ``failures``, ``skipped_pages`` (int — pages not yet
+         *       registered in the store), ``skipped_indices``.
+         *     - ``refine_bboxes``: ``refined`` (int — words touched).
+         *     - ``propose_page_kinds``: ``run_id``, ``proposal_count``.
+         *     - ``export``: ``words_exported_detection``, ``words_exported_recognition``,
+         *       ``pages_skipped_not_validated`` — also merged flat at the SSE frame's
+         *       top level for backward compatibility (``JobRunner._emit``); both
+         *       places carry the same data.
+         *
+         *     ``reload_ocr``, ``rotate_page``, ``auto_rotate_all`` and
+         *     ``propose_regions`` do not populate this field today.
+         */
+        JobResult: {
+            /** Failures */
+            failures?: components["schemas"]["JobResultFailure"][];
+            /** Skipped Pages */
+            skipped_pages?: number;
+            /** Skipped Indices */
+            skipped_indices?: number[];
+            /** Refined */
+            refined?: number;
+            /** Run Id */
+            run_id?: string;
+            /** Proposal Count */
+            proposal_count?: number;
+            /** Words Exported Detection */
+            words_exported_detection?: number;
+            /** Words Exported Recognition */
+            words_exported_recognition?: number;
+            /** Pages Skipped Not Validated */
+            pages_skipped_not_validated?: number;
+        };
+        /**
+         * JobResultFailure
+         * @description One page save failure — mirrors ``api.pages.SaveFailure``'s shape.
+         */
+        JobResultFailure: {
+            /** Page Index */
+            page_index: number;
+            /** Error */
+            error: string;
+        };
+        /**
          * JobStatus
          * @description Job lifecycle state — spec §1 ``JobStatus``.
+         *
+         *     Mirrors ``core.jobs.runner.JobStatus`` exactly (including ``CANCELLED``,
+         *     reached via cooperative cancel — spec §5.10). The two enums are kept
+         *     separate (runtime layer vs. wire layer) but
+         *     ``tests/unit/core/jobs/test_job_type_contract.py`` proves they agree so
+         *     they cannot silently drift — see
+         *     ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`` (P1-JOBS-API).
          * @enum {string}
          */
-        JobStatus: "queued" | "running" | "complete" | "error";
+        JobStatus: "queued" | "running" | "complete" | "error" | "cancelled";
         /**
          * JobType
          * @description Discriminant for background job kind — spec §1 ``JobType``.
+         *
+         *     Values are exactly the ``job_type`` strings the runner's registered
+         *     handlers accept (``core.jobs.runner._HANDLERS`` /
+         *     ``core.jobs.runner.registered_job_types()``); previously this enum
+         *     listed job types the runner never produced and omitted four it does —
+         *     see ``docs/issues/2026-07-21-jobs-api-openapi-mismatch.md`` (P1-JOBS-API).
+         *     ``tests/unit/core/jobs/test_job_type_contract.py`` fails if a registered
+         *     handler has no matching member (or vice versa).
          * @enum {string}
          */
-        JobType: "refine_bboxes_page" | "expand_refine_bboxes_page" | "reload_ocr_page" | "export" | "save_project" | "refine_bboxes_project";
+        JobType: "reload_ocr" | "save_project" | "export" | "rotate_page" | "auto_rotate_all" | "refine_bboxes" | "propose_page_kinds" | "propose_regions";
         /**
          * LabelSource
          * @description Evidence sources that can assign a canonical label.

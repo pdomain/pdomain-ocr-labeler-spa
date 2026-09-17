@@ -16,38 +16,60 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useJobCompletionInvalidation } from "./useJobCompletionInvalidation";
 import type { JobProgressEvent } from "./useJobProgress";
 
-const RUNNING_EVENT: JobProgressEvent = {
-  job_id: "job-1",
+/**
+ * Build a `JobProgressEvent` fixture — the public `Job` model plus the SSE
+ * `event` field (Wave 3a / P1-JOB-SSE) — from the handful of fields each
+ * test actually cares about.
+ */
+function jobEvent(overrides: {
+  status: JobProgressEvent["status"];
+  progress: JobProgressEvent["progress"];
+  error_message?: string | null;
+}): JobProgressEvent {
+  return {
+    id: "job-1",
+    type: "reload_ocr",
+    project_id: "proj-1",
+    status: overrides.status,
+    progress: overrides.progress,
+    error_message: overrides.error_message ?? null,
+    created_at: new Date(0).toISOString(),
+    updated_at: new Date(0).toISOString(),
+    event:
+      overrides.status === "complete" ||
+      overrides.status === "error" ||
+      overrides.status === "cancelled"
+        ? overrides.status
+        : "progress",
+  };
+}
+
+const RUNNING_EVENT: JobProgressEvent = jobEvent({
   status: "running",
   progress: { current: 3, total: 10, message: "Processing…" },
-};
+});
 
-const COMPLETE_EVENT: JobProgressEvent = {
-  job_id: "job-1",
+const COMPLETE_EVENT: JobProgressEvent = jobEvent({
   status: "complete",
   progress: { current: 10, total: 10, message: "Done" },
-};
+});
 
-const ERROR_EVENT: JobProgressEvent = {
-  job_id: "job-1",
+const ERROR_EVENT: JobProgressEvent = jobEvent({
   status: "error",
   progress: { current: 5, total: 10, message: "Failed" },
   error_message: "OCR engine crashed",
-};
+});
 
-// "cancelled" is a valid wire status the backend emits (P1-CANCEL) even
-// though the generated `JobStatus` union is stale and omits it — see
-// useJobProgress.ts's own note on the same gap. Cast at the literal, same
-// as the hook itself and ProjectPage.tsx do.
-const CANCELLED_EVENT: JobProgressEvent = {
-  job_id: "job-1",
-  status: "cancelled" as JobProgressEvent["status"],
+// "cancelled" is a real `JobStatus` member now that REST and SSE both
+// serialize the declared public `Job` model (P1-JOBS-API) — no cast needed.
+const CANCELLED_EVENT: JobProgressEvent = jobEvent({
+  status: "cancelled",
   progress: {
     current: 3,
     total: 10,
     message: "Cancelled after processing 3 of 10 page(s); 1 rotated",
   },
-};
+});
 
 interface HarnessOptions {
   activeJobId: string | null;
@@ -160,11 +182,10 @@ describe("useJobCompletionInvalidation", () => {
       onComplete,
     });
 
-    const terminalEvent: JobProgressEvent = {
-      job_id: "job-1",
+    const terminalEvent: JobProgressEvent = jobEvent({
       status: "complete",
       progress: { current: 6, total: 6, message: "Proposed 12 region(s) on 6 page(s)." },
-    };
+    });
 
     act(() => {
       rerender({
