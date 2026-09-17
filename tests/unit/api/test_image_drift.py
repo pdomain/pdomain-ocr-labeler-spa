@@ -20,6 +20,7 @@ what matters here is the digest-vs-disk comparison, not OCR itself.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -226,6 +227,53 @@ def test_unreadable_file_reports_no_drift(tmp_path: Path) -> None:
     result = _image_drift_for_page(project_state=project_state, page_index=0, pstate=pstate, page_store=store)
 
     assert result is None
+
+
+def test_unreadable_file_logs_a_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    """A stat() failure (missing/unreadable file) degrades to no drift, but
+    must still be visible to an operator — silence alone would hide a
+    permissions problem or a mid-read disk error in production, the same
+    reasoning ``_image_digest_for_page``'s own read failure uses.
+    """
+    project_state, pstate, image_path, store = _load_ocrd_page(tmp_path, b"\x89PNG\r\n original bytes")
+    image_path.unlink()
+
+    with caplog.at_level(logging.WARNING, logger="pdomain_ocr_labeler_spa.api.pages"):
+        result = _image_drift_for_page(
+            project_state=project_state, page_index=0, pstate=pstate, page_store=store
+        )
+
+    assert result is None
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert warnings, "expected a WARNING-level log record for the stat() failure"
+    assert "page_index=0" in warnings[0].getMessage()
+    assert warnings[0].exc_info is not None, "the WARNING must keep exc_info for the traceback"
+
+
+def test_unreadable_bytes_logs_a_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A read_bytes() failure (e.g. a mid-read disk error) after stat()
+    succeeds degrades to no drift, but must also be logged rather than
+    silently swallowed.
+    """
+    project_state, pstate, _image_path, store = _load_ocrd_page(tmp_path, b"\x89PNG\r\n original bytes")
+
+    def _boom(self: Path) -> bytes:
+        raise OSError("simulated mid-read disk error")
+
+    monkeypatch.setattr(Path, "read_bytes", _boom)
+
+    with caplog.at_level(logging.WARNING, logger="pdomain_ocr_labeler_spa.api.pages"):
+        result = _image_drift_for_page(
+            project_state=project_state, page_index=0, pstate=pstate, page_store=store
+        )
+
+    assert result is None
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert warnings, "expected a WARNING-level log record for the read_bytes() failure"
+    assert "page_index=0" in warnings[0].getMessage()
+    assert warnings[0].exc_info is not None, "the WARNING must keep exc_info for the traceback"
 
 
 def test_reload_ocr_edited_reports_no_drift_on_either_fetch(tmp_path: Path) -> None:

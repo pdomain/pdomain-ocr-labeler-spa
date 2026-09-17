@@ -999,7 +999,11 @@ def _image_drift_for_page(
     (``image_drift_head_digest``), and only hashes the file (the expensive
     path) when one of those moved. A page whose digest or file can't be read
     reports no drift rather than a false alarm — the same discipline
-    ``_image_digest_for_page`` itself uses.
+    ``_image_digest_for_page`` itself uses. Unlike a missing digest (a
+    routine "no OCR yet" state), a ``stat()``/``read_bytes()`` failure on an
+    otherwise-OCR'd page's source file is logged at WARNING before returning
+    ``None``: a permissions problem or a mid-read disk error must stay
+    visible to an operator, not silently degrade to "no drift" forever.
 
     Book-labeling projects are skipped entirely
     (``project_state.has_book_labeling_session``). ``labeling_image_path``
@@ -1056,6 +1060,16 @@ def _image_drift_for_page(
         image_path = project_state.labeling_image_path(page_index)
         file_stat = image_path.stat()
     except (OSError, ValueError):
+        # WARNING not silence: a missing file or a permissions problem on an
+        # otherwise-OCR'd page is a production condition an operator needs
+        # to see, the same reasoning _image_digest_for_page's own read
+        # failure uses — degrading to "no drift" must not also mean
+        # degrading to invisible.
+        log.warning(
+            "_image_drift_for_page: could not stat source image for page_index=%d — degrading to no drift",
+            page_index,
+            exc_info=True,
+        )
         return None
 
     has_baseline = pstate.image_drift_head_digest == digest
@@ -1074,6 +1088,13 @@ def _image_drift_for_page(
     try:
         current_digest = hashlib.sha256(image_path.read_bytes()).hexdigest()
     except OSError:
+        # Same visibility reasoning as the stat() failure above: a mid-read
+        # disk error must not silently vanish into "no drift" forever.
+        log.warning(
+            "_image_drift_for_page: could not read source image for page_index=%d — degrading to no drift",
+            page_index,
+            exc_info=True,
+        )
         return None
 
     if has_baseline:
