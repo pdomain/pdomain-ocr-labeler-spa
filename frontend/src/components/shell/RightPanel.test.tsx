@@ -205,12 +205,14 @@ describe("STB-5: RightPanel never shows placeholder for implemented levels", () 
     expect(screen.getByTestId("paragraph-detail")).toBeInTheDocument();
   });
 
-  it("level=region shows the region placeholder (Task 4 replaces it)", () => {
+  it("level=region does NOT show the placeholder (renders RegionDetail)", () => {
     selectRegion("r1");
     renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
-    const placeholder = screen.getByTestId("right-panel-placeholder");
-    expect(placeholder).toBeInTheDocument();
-    expect(placeholder).toHaveTextContent(/region/i);
+    expect(screen.queryByTestId("right-panel-placeholder")).toBeNull();
+    // "r1" is in neither page.regions nor page.proposals in this fixture, so
+    // RegionDetail renders its not-found state — still RegionDetail, not the
+    // generic level placeholder Task 1 stood in with.
+    expect(screen.getByTestId("region-detail")).toBeInTheDocument();
   });
 
   it("level=word with wordSlot does NOT show the placeholder", () => {
