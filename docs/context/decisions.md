@@ -503,3 +503,43 @@ carry correction heads. Correction-bundle export is the separate artifact that
 selects and carries current journal heads and portable provenance. The phrase
 “freeze exact reviewed heads” above applies to correction-bundle export, not the
 general export job.
+
+## 2026-09-17 — Two product-honesty issue reports retired
+
+Both reports described a surface that looked like it worked and did not. Each
+is deleted per this repo's issue convention, which keeps `docs/issues/` as an
+index of open work only. Verified before retirement: the full backend, frontend
+and browser gates pass on the merged tree.
+
+### [2026-09-17] Retired: `get_page` hid OCR loader failures
+
+- Old path: `docs/issues/2026-08-08-get-page-hides-ocr-failures.md`
+- Outcome: implemented
+- Superseded by: `src/pdomain_ocr_labeler_spa/api/pages.py` (`get_page`,
+  `PageLoadError`)
+- Resolved by: `7d15545` (merge of `fix/get-page-hides-ocr-failures`)
+- Rationale kept: a loader failure logs at WARNING with `exc_info`, and the
+  payload carries a typed `page_load_error` the SPA shows, so a failed page no
+  longer looks like a page whose OCR found no text. A missing OCR install is a
+  separate `ocr_unavailable` code, warned once per project rather than once per
+  page, and the client-facing message names the exception type without its text,
+  so server paths do not reach the browser. Evidence:
+  `tests/unit/api/test_get_page_load_error.py`.
+- Remaining work: none
+
+### [2026-09-17] Retired: canvas erase mode was a no-op
+
+- Old path: `docs/issues/2026-07-21-canvas-erase-mode-noop.md`
+- Outcome: implemented
+- Superseded by: `src/pdomain_ocr_labeler_spa/api/pages.py`
+  (`erase_page_pixels`) and `frontend/src/hooks/usePageMutations.ts`
+  (`useErasePagePixels`)
+- Resolved by: `fe396c3` (merge of `fix/canvas-erase-noop`)
+- Rationale kept: a page-scoped erase route shares one helper with the
+  word-scoped route, so the canvas drag erases pixels through the same code the
+  right-panel path uses, and it works on a page with no words. The rail no longer
+  claims `Shift+E` and `Shift+A`, which the viewport owns, so erase mode can be
+  entered from the keyboard. Evidence:
+  `tests/integration/test_page_erase_pixels_router.py` and
+  `tests/e2e/test_canvas_erase.py`.
+- Remaining work: none

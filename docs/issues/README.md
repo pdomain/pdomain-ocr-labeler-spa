@@ -123,7 +123,6 @@ The normalize report stays open on its frontend half.
 
 | Issue | ID | Sev |
 | --- | --- | --- |
-| [`2026-07-21-canvas-erase-mode-noop.md`](2026-07-21-canvas-erase-mode-noop.md) | P1-CANVAS-ERASE | High |
 | [`2026-07-21-image-drift-banner-hard-off.md`](2026-07-21-image-drift-banner-hard-off.md) | P1-IMAGE-DRIFT | Medium |
 | [`2026-07-21-job-cancel-incomplete.md`](2026-07-21-job-cancel-incomplete.md) | P1-CANCEL | Medium |
 | [`2026-07-21-match-nav-selection-desync.md`](2026-07-21-match-nav-selection-desync.md) | P1-MATCH-NAV | Medium |
@@ -143,7 +142,6 @@ The normalize report stays open on its frontend half.
 | Issue | ID | Sev |
 | --- | --- | --- |
 | [`2026-08-08-page-load-progress-unbuilt.md`](2026-08-08-page-load-progress-unbuilt.md) | P0-PAGE-PROGRESS | High |
-| [`2026-08-08-get-page-hides-ocr-failures.md`](2026-08-08-get-page-hides-ocr-failures.md) | P1-PAGE-SILENT | Medium |
 
 ## Tooling (2026-08-08)
 

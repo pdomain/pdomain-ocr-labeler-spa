@@ -43,8 +43,9 @@ stages through the stream the SPA already consumes.
   during a wait where only one page's words are actually missing.
 - The message names the wrong stage. Project open finishes in milliseconds and
   the SPA keeps showing "Loading project" through the page fetch.
-- OCR failures are invisible on this path, tracked separately in
-  [`2026-08-08-get-page-hides-ocr-failures.md`](2026-08-08-get-page-hides-ocr-failures.md).
+- OCR failures used to be invisible on this path. Fixed 2026-09-17 in `7d15545`:
+  a failed load logs at WARNING and the payload carries `page_load_error`. See the
+  tombstone in `docs/context/decisions.md`.
 
 ## Environment / versions
 
@@ -143,9 +144,8 @@ ask what the first is doing.
   `from_image_ocr_via_doctr` or the default predictor path. Filed there as
   `docs/issues/2026-08-08-ocr-progress-hook.md`. Without it, "preparing the OCR
   engine" is one opaque 26-second block, which is still better than today.
-- The failure stage depends on
-  [`2026-08-08-get-page-hides-ocr-failures.md`](2026-08-08-get-page-hides-ocr-failures.md).
-  Do not build the loading screen on top of the current silent degrade.
+- The failure stage's precondition is met: `7d15545` replaced the silent degrade
+  with `PagePayload.page_load_error`, which the loading screen can report.
 - Adjacent to the Wave 3 job SSE frontend-to-backend shape work.
 
 ## Next steps

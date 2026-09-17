@@ -264,7 +264,7 @@ Each row is a governed issue under `docs/issues/`. Prefer implementing by issue
 | 1 | [`docs/issues/2026-07-21-export-normalize-flag-dead.md`](../issues/2026-07-21-export-normalize-flag-dead.md) | P1-NORMALIZE, 1.4 |
 | 2 | [`docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md`](../issues/2026-07-21-glyph-m11-usable-path-incomplete.md) | P0-GLYPH-*, Wave 2 / T1–T11 |
 | 3a | [`docs/issues/2026-07-21-job-sse-fe-be-shape-mismatch.md`](../issues/2026-07-21-job-sse-fe-be-shape-mismatch.md) | P1-JOB-SSE, P1-JOB-TYPE |
-| 3b | [`docs/issues/2026-07-21-canvas-erase-mode-noop.md`](../issues/2026-07-21-canvas-erase-mode-noop.md) | P1-CANVAS-ERASE |
+| 3b | done 2026-09-17 in `fe396c3`; see the tombstone in `docs/context/decisions.md` | P1-CANVAS-ERASE |
 | 3b | [`docs/issues/2026-07-21-image-drift-banner-hard-off.md`](../issues/2026-07-21-image-drift-banner-hard-off.md) | P1-IMAGE-DRIFT |
 | 3b | [`docs/issues/2026-07-21-job-cancel-incomplete.md`](../issues/2026-07-21-job-cancel-incomplete.md) | P1-CANCEL |
 | 3b | [`docs/issues/2026-07-21-match-nav-selection-desync.md`](../issues/2026-07-21-match-nav-selection-desync.md) | P1-MATCH-NAV |
