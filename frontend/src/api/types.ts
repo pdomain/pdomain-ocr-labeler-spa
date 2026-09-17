@@ -409,28 +409,44 @@ export interface paths {
          *     Spec authority: ``specs/23-page-payload-backend.md §3`` (issue #306,
          *     spec-23-A).  The keystone backend slice — every Phase D mutation
          *     endpoint (spec-23-C/D/E) reuses the ``_page_payload`` helper this
-         *     slice introduces.
+         *     slice introduces. OCR-on-first-load moved onto the job system per
+         *     ``docs/specs/2026-08-08-page-load-progress-design.md`` "Move page
+         *     loading onto the job system" (issue
+         *     2026-08-08-page-load-progress-unbuilt) — see below.
          *
-         *     B1 fix (issue #330): when no page_record is cached for this page,
-         *     calls ``ensure_page_model`` with an on-demand ``LocalDoctrPageLoader``
-         *     (same pattern as ``reload_ocr`` handler + ``load`` route).  This means
-         *     the first GET on a fresh page synchronously triggers the labeled →
-         *     cached → OCR lane probes, so the response has a populated
-         *     ``page_record`` and ``line_matches`` without requiring a separate
-         *     Reload OCR click.
+         *     B1 fix (issue #330), narrowed by the job move above: when no
+         *     page_record is cached for this page, this still synchronously probes
+         *     the labeled/cached lanes via ``ensure_page_model(..., allow_ocr=False)``
+         *     (same on-demand ``LocalDoctrPageLoader`` build as the ``reload_ocr``
+         *     handler + ``load`` route) — cheap store reads only, no OCR. A lane hit
+         *     returns the page exactly as before, with no job and no added latency
+         *     (design acceptance criterion: "A page served from a warm store still
+         *     returns immediately... and creates no job"). Only a genuine miss on
+         *     both lanes — the case that used to block this request for seconds to
+         *     half a minute running OCR under the project lock — submits a
+         *     ``load_page`` job and returns a pending ``PagePayload`` carrying
+         *     ``page_load_job_id`` instead of blocking. The SPA subscribes to that
+         *     job's event stream for named-stage progress and the OCR outcome.
          *
-         *     A failure on that on-demand call degrades to an empty ``page_record``
-         *     rather than a 500 — the request still succeeds so the image renders —
-         *     but is stamped onto ``PagePayload.page_load_error`` (issue
-         *     2026-08-08-get-page-hides-ocr-failures), distinguishing it from a page
-         *     that legitimately has no OCR text. Two distinct causes get two codes:
+         *     A synchronous lane-check failure still degrades to an empty
+         *     ``page_record`` rather than a 500 — the request still succeeds so the
+         *     image renders — but is stamped onto ``PagePayload.page_load_error``
+         *     (issue 2026-08-08-get-page-hides-ocr-failures), distinguishing it from a
+         *     page that legitimately has no OCR text. Two distinct causes get two
+         *     codes:
          *
          *     - ``ocr_unavailable`` — the loader itself couldn't be built (DocTR not
          *       installed, production context keys unwired). A deployment-wide
          *       condition, not a fact about this page; logged at WARNING once per
          *       project, DEBUG after.
-         *     - ``ocr_load_failed`` — the loader built fine but this page's OCR run
-         *       raised. Logged at WARNING every time.
+         *     - ``ocr_load_failed`` — the loader built fine but the labeled/cached
+         *       lane read for this page raised. Logged at WARNING every time.
+         *
+         *     A genuine *OCR* failure (as opposed to a lane-check failure) now
+         *     happens inside the ``load_page`` job, off this synchronous path — see
+         *     ``core.jobs.handlers.load_page`` and the ``page_load_error`` /
+         *     ``page_load_job_id`` field docs on ``PagePayload`` for how that failure
+         *     reaches the client instead.
          */
         get: operations["get_page_api_projects__project_id__pages__page_index__get"];
         put?: never;
@@ -3971,8 +3987,8 @@ export interface components {
          *       top level for backward compatibility (``JobRunner._emit``); both
          *       places carry the same data.
          *
-         *     ``reload_ocr``, ``rotate_page``, ``auto_rotate_all`` and
-         *     ``propose_regions`` do not populate this field today.
+         *     ``reload_ocr``, ``rotate_page``, ``auto_rotate_all``, ``propose_regions``
+         *     and ``load_page`` do not populate this field today.
          */
         JobResult: {
             /** Failures */
@@ -4030,7 +4046,7 @@ export interface components {
          *     handler has no matching member (or vice versa).
          * @enum {string}
          */
-        JobType: "reload_ocr" | "save_project" | "export" | "rotate_page" | "auto_rotate_all" | "refine_bboxes" | "propose_page_kinds" | "propose_regions";
+        JobType: "reload_ocr" | "save_project" | "export" | "rotate_page" | "auto_rotate_all" | "refine_bboxes" | "propose_page_kinds" | "propose_regions" | "load_page";
         /**
          * LabelSource
          * @description Evidence sources that can assign a canonical label.
@@ -4681,6 +4697,8 @@ export interface components {
             page_kind_reviewed: boolean;
             page_kind_proposal?: components["schemas"]["PageKindProposalView"] | null;
             page_load_error?: components["schemas"]["PageLoadError"] | null;
+            /** Page Load Job Id */
+            page_load_job_id?: string | null;
             image_drift?: components["schemas"]["ImageDrift"] | null;
             /** Extra */
             extra?: {
