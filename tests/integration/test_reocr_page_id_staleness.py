@@ -46,6 +46,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from pdomain_book_contracts.annotation import PageKind
 from pdomain_book_tools.ocr.page import Page
 
 from pdomain_ocr_labeler_spa.adapters.ocr.local_doctr import (
@@ -120,7 +121,13 @@ class _ExplodingLoader(LocalDoctrPageLoader):
         super().__init__(**kw)
         self.run_ocr_calls: int = 0
 
-    def run_ocr(self, page_index: int, *, edited_image_bytes: bytes | None = None) -> Any:
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: PageKind | None = None,
+    ) -> Any:
         self.run_ocr_calls += 1
         raise AssertionError(
             f"run_ocr called on restart read for page {page_index} — "
@@ -151,7 +158,13 @@ class _ReocrLoader(LocalDoctrPageLoader):
         self.run_ocr_calls: int = 0
         self.last_page_id: UUID | None = None
 
-    def run_ocr(self, page_index: int, *, edited_image_bytes: bytes | None = None) -> PageLoadOutcome:
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: PageKind | None = None,
+    ) -> PageLoadOutcome:
         self.run_ocr_calls += 1
         # Real ingest: new PageAggregate (fresh uuid4 page_id) + ProjectAggregate
         # page_ids[index] update. Mirrors local_doctr.run_ocr's store branch.
