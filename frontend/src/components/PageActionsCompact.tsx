@@ -33,6 +33,7 @@ import {
   useUndoPage,
   useRedoPage,
 } from "../hooks/usePageMutations";
+import { useProposePageKinds, useProposeRegions } from "../hooks/useProposalRuns";
 import { usePage } from "../hooks/usePage";
 import { useJobProgress } from "../hooks/useJobProgress";
 import { useJobCompletionInvalidation } from "../hooks/useJobCompletionInvalidation";
@@ -79,6 +80,14 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   const jobProgress = useJobProgress(activeJobId);
   const saveProjectProgress = useJobProgress(saveProjectJobId);
   const rotateProgress = useJobProgress(rotateJobId);
+
+  // Task 6 (region review surface): Propose page kinds / Propose regions job
+  // tracking — each gets its own active-job-id state so the two book-scoped
+  // runs can be in flight together without clobbering each other's toast.
+  const [pageKindsJobId, setPageKindsJobId] = useState<string | null>(null);
+  const [regionsJobId, setRegionsJobId] = useState<string | null>(null);
+  const pageKindsProgress = useJobProgress(pageKindsJobId);
+  const regionsProgress = useJobProgress(regionsJobId);
 
   // C2: read the page payload so the restored "Reload OCR (Edited)" button can
   // be gated on the real edited-image signal (labeler extension flag set by the
@@ -184,6 +193,61 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     },
   });
 
+  // Task 6 (region review surface): Propose page kinds completion.
+  //
+  // The plan says this run "invalidates nothing, since no page view shows a
+  // proposed kind yet." That hook parameter is required, though, so this
+  // invalidates the page query anyway — the same key every other mutation
+  // here invalidates. It is a cheap refetch and harmless even when nothing
+  // on the current page changed.
+  useJobCompletionInvalidation({
+    activeJobId: pageKindsJobId,
+    jobProgress: pageKindsProgress,
+    setActiveJobId: setPageKindsJobId,
+    invalidationKey: ["page", projectId, pageIndex],
+    onComplete: (jobId, event) => {
+      const msg = event.progress?.message || "Page kind proposals complete";
+      toast.success(msg, { id: jobId });
+    },
+    onError: (jobId) => {
+      toast.error("Page kind proposals failed", { id: jobId });
+    },
+    onRunning: (jobId, event) => {
+      const msg = event.progress?.message ?? "Proposing page kinds…";
+      void import("sonner").then(({ toast: sonnerToast }) => {
+        sonnerToast.loading(msg, { id: jobId });
+      });
+    },
+  });
+
+  // Task 6 (region review surface): Propose regions completion. A run that
+  // skipped every page for having no page kind still returns "complete" —
+  // the terminal message says so, and that message is shown as a warning
+  // (not success) because nothing useful happened and a person needs to act.
+  useJobCompletionInvalidation({
+    activeJobId: regionsJobId,
+    jobProgress: regionsProgress,
+    setActiveJobId: setRegionsJobId,
+    invalidationKey: ["page", projectId, pageIndex],
+    onComplete: (jobId, event) => {
+      const msg = event.progress?.message || "Region proposals complete";
+      if (msg.toLowerCase().includes("propose page kinds first")) {
+        toast.warn(msg, { id: jobId });
+      } else {
+        toast.success(msg, { id: jobId });
+      }
+    },
+    onError: (jobId) => {
+      toast.error("Region proposals failed", { id: jobId });
+    },
+    onRunning: (jobId, event) => {
+      const msg = event.progress?.message ?? "Proposing regions…";
+      void import("sonner").then(({ toast: sonnerToast }) => {
+        sonnerToast.loading(msg, { id: jobId });
+      });
+    },
+  });
+
   const reloadOcr = useReloadOcr(projectId, pageIndex);
   const reloadOcrEdited = useReloadOcrEdited(projectId, pageIndex);
   const savePage = useSavePage(projectId, pageIndex);
@@ -194,6 +258,8 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   const autoRotateAll = useAutoRotateAll(projectId);
   const undoPage = useUndoPage(projectId, pageIndex);
   const redoPage = useRedoPage(projectId, pageIndex);
+  const proposePageKinds = useProposePageKinds(projectId);
+  const proposeRegions = useProposeRegions(projectId);
 
   const isBusy =
     reloadOcr.isPending ||
@@ -213,6 +279,21 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     (rotateProgress !== null &&
       rotateProgress.status !== "complete" &&
       rotateProgress.status !== "error");
+
+  // Task 6 (region review surface): Propose page kinds / Propose regions are
+  // book-scoped background jobs that don't touch the current page directly,
+  // so — unlike the trackers folded into `isBusy` above — they gate only
+  // their own button rather than the whole toolbar.
+  const pageKindsRunning =
+    proposePageKinds.isPending ||
+    (pageKindsProgress !== null &&
+      pageKindsProgress.status !== "complete" &&
+      pageKindsProgress.status !== "error");
+  const regionsRunning =
+    proposeRegions.isPending ||
+    (regionsProgress !== null &&
+      regionsProgress.status !== "complete" &&
+      regionsProgress.status !== "error");
 
   // U-6 (spec 2026-06-12-event-store-undo): re-OCR creates a NEW page
   // aggregate — the undo history resets. Confirm before enqueueing.
@@ -382,6 +463,41 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
             ? "Auto-rotate unavailable (rotation module missing)"
             : "Auto-rotate failed",
         );
+      },
+    });
+  }
+
+  // Task 6 (region review surface): book-scoped runs that must run in this
+  // order — a region run skips any page whose kind was never proposed or
+  // confirmed, so Propose page kinds must run first.
+  function handleProposePageKinds() {
+    proposePageKinds.mutate(undefined, {
+      onSuccess: (data) => {
+        if (data?.job_id) {
+          setPageKindsJobId(data.job_id);
+          void import("sonner").then(({ toast: sonnerToast }) => {
+            sonnerToast.loading("Proposing page kinds…", { id: data.job_id });
+          });
+        }
+      },
+      onError: () => {
+        toast.error("Failed to start page kind proposals");
+      },
+    });
+  }
+
+  function handleProposeRegions() {
+    proposeRegions.mutate(undefined, {
+      onSuccess: (data) => {
+        if (data?.job_id) {
+          setRegionsJobId(data.job_id);
+          void import("sonner").then(({ toast: sonnerToast }) => {
+            sonnerToast.loading("Proposing regions…", { id: data.job_id });
+          });
+        }
+      },
+      onError: () => {
+        toast.error("Failed to start region proposals");
       },
     });
   }
@@ -611,6 +727,27 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
               onSelect={handleAutoRotateAll}
             >
               Auto-rotate all pages
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {/* Task 6 (region review surface): book actions that start the
+                page-kind and region proposal runs. Propose page kinds must
+                run first — a region run skips any page whose kind was never
+                proposed or confirmed. Neither blocks the rest of the
+                toolbar, so each is gated on its own job rather than the
+                shared `disabled`. */}
+            <DropdownMenuItem
+              data-testid="propose-page-kinds-button"
+              disabled={!projectId || pageKindsRunning}
+              onSelect={handleProposePageKinds}
+            >
+              Propose page kinds
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              data-testid="propose-regions-button"
+              disabled={!projectId || regionsRunning}
+              onSelect={handleProposeRegions}
+            >
+              Propose regions
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

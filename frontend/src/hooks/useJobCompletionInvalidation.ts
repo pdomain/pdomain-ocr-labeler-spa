@@ -50,9 +50,13 @@ export interface UseJobCompletionInvalidationOptions {
    * Optional callback fired once on the `"complete"` transition, after
    * the invalidation has been queued. Use for success-toast text or
    * other call-site-specific finalisation. The job id is passed through
-   * so the caller can address an existing loading toast by id.
+   * so the caller can address an existing loading toast by id, and the
+   * terminal `JobProgressEvent` is passed through too so the caller can
+   * read its `progress.message` (e.g. a run summary) directly — reading a
+   * closed-over `jobProgress` at the call site instead would depend on
+   * render timing this hook does not guarantee.
    */
-  onComplete?: (jobId: string) => void;
+  onComplete?: (jobId: string, event: JobProgressEvent) => void;
 
   /**
    * Optional callback fired once on the `"error"` transition. The job id
@@ -100,7 +104,7 @@ export function useJobCompletionInvalidation({
 
     if (jobProgress.status === "complete") {
       void qc.invalidateQueries({ queryKey: invalidationKey });
-      onComplete?.(activeJobId);
+      onComplete?.(activeJobId, jobProgress);
       setActiveJobId(null);
     } else if (jobProgress.status === "error") {
       onError?.(activeJobId, jobProgress.error_message ?? null);
