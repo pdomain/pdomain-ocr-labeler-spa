@@ -733,7 +733,64 @@ def test_a_run_queued_for_another_book_refuses_to_propose_for_the_loaded_one(
     assert project.project_id in reported.message
 
 
-# ── A bulk reviewed-store read, not once per eligible page ───────────────
+# ── Verified per-page leases + a bulk reviewed-store read ────────────────
+#
+# pdomain-ocr-synth's docs/issues/2026-09-16-page-kind-follow-ups-parked-
+# during-tasks-6-and-7.md "Still open: a run on a book-labeling project can
+# measure unpinned bytes" — the same fix ``propose_page_kinds`` got, applied
+# here because slice 4's real detector will read the page image too.
+
+
+def _load_book_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, page_count: int) -> Any:
+    """A ``TestClient`` with a book-labeling project loaded — no pages seeded yet."""
+    from types import SimpleNamespace
+
+    from fastapi.testclient import TestClient
+
+    from pdomain_ocr_labeler_spa.bootstrap import build_app
+    from tests.integration.conftest import _tb_make_settings
+    from tests.unit.core.persistence.test_book_labeling_session import _write_book
+
+    monkeypatch.setattr(
+        "pdomain_ocr_labeler_spa.api.typography.typography_page_review",
+        lambda *_args: SimpleNamespace(complete=True),
+    )
+
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    book_root = projects_root / "book1"
+    _write_book(book_root, page_count=page_count, valid_images=True)
+
+    settings = _tb_make_settings(tmp_path, projects_root=projects_root)
+    app = build_app(settings)
+    client = TestClient(app)
+    client.__enter__()
+    resp = client.post("/api/projects/load", json={"project_root": str(book_root)})
+    assert resp.status_code == 200, resp.text
+    return client
+
+
+def _seed_page(client: Any, index: int) -> None:
+    """Seed a real book-tools ``Page`` into ``PageState`` + the event store for *index*."""
+    from uuid import uuid4
+
+    from pdomain_ops.page_aggregate import PageAggregate
+    from pdomain_ops.pages import PageRecord
+
+    from pdomain_ocr_labeler_spa.core.page_state import PageLoadOutcome, PageSource
+    from pdomain_ocr_labeler_spa.core.project_state import PageState
+    from tests.integration.conftest import _tb_make_page
+
+    store = client.app.state.page_store
+    page = _tb_make_page()
+    page_id = uuid4()
+    store.save_page(PageAggregate(PageRecord(page_id=page_id, page_index=index, source="ocr")))
+
+    project_state = client.app.state.project_state
+    outcome = PageLoadOutcome(page_index=index, source=PageSource.OCR, payload=page)
+    pstate = PageState(page_index=index, page_record=outcome)
+    pstate.page_id = page_id
+    project_state._page_states[index] = pstate
 
 
 def _run_propose_regions_job(client: Any, *, detector: Any = None) -> Any:
@@ -811,3 +868,89 @@ def test_reviewed_store_is_read_once_per_run_not_once_per_eligible_page(
     _run_propose_regions_job(client)
 
     assert read_calls == 1
+
+
+def test_an_ordinary_project_detector_sees_the_plain_on_disk_image_path(toolbar_loaded: Any) -> None:
+    from datetime import UTC, datetime
+
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+
+    client, project_state, _page = toolbar_loaded
+    project = project_state.loaded_project
+    assert project is not None
+    PageKindReviewedStore(project.project_root).mark_reviewed(0, datetime.now(UTC).isoformat())
+
+    recorded: list[Path] = []
+
+    def _detector(page: Any) -> list[Any]:
+        del page
+        recorded.append(project_state.labeling_image_path(0))
+        return []
+
+    _run_propose_regions_job(client, detector=_detector)
+
+    assert recorded == [project.image_paths[0]]
+
+
+def test_a_book_labeling_project_detector_sees_the_sealed_descriptor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The defect this fix closes: a real detector reading the page image on a
+    book-labeling project must see the verified sealed descriptor, never the
+    raw manifest path — the same requirement ``propose_page_kinds`` now meets.
+    """
+    from datetime import UTC, datetime
+
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+
+    client = _load_book_client(tmp_path, monkeypatch, page_count=1)
+    _seed_page(client, 0)
+    project_state = client.app.state.project_state
+    project = project_state.loaded_project
+    assert project is not None
+    PageKindReviewedStore(project.project_root).mark_reviewed(0, datetime.now(UTC).isoformat())
+
+    recorded: list[Path] = []
+
+    def _detector(page: Any) -> list[Any]:
+        del page
+        recorded.append(project_state.labeling_image_path(0))
+        return []
+
+    _run_propose_regions_job(client, detector=_detector)
+
+    assert len(recorded) == 1
+    assert str(recorded[0]).startswith("/proc/self/fd/")
+    # The lease is scoped to the ``detector(page)`` call — once the run has
+    # finished, the descriptor it resolved to must no longer be readable.
+    with pytest.raises(OSError):
+        recorded[0].read_bytes()
+
+
+def test_the_book_lease_is_closed_even_when_the_detector_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime
+
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+
+    client = _load_book_client(tmp_path, monkeypatch, page_count=1)
+    _seed_page(client, 0)
+    project_state = client.app.state.project_state
+    project = project_state.loaded_project
+    assert project is not None
+    PageKindReviewedStore(project.project_root).mark_reviewed(0, datetime.now(UTC).isoformat())
+
+    captured: list[Path] = []
+
+    def _detector(page: Any) -> list[Any]:
+        del page
+        captured.append(project_state.labeling_image_path(0))
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        _run_propose_regions_job(client, detector=_detector)
+
+    assert len(captured) == 1
+    with pytest.raises(OSError):
+        captured[0].read_bytes()

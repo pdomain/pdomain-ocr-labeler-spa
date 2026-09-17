@@ -9,8 +9,9 @@ Never calls ``save_page_content_to_store`` or ``save_page_to_store`` — a
 proposal run is a machine's claim, and the page blob is only ever written by
 a human action.
 
-Two invariants mirror ``propose_page_kinds`` (its own handler fixed the same
-defects in commit ``8cb5a58``):
+Three invariants mirror ``propose_page_kinds`` (its own handler fixed the
+same defects in commit ``8cb5a58``, plus the lease below in the same change
+that added it here):
 
 - **Pinned to its book.** The run was queued against one project; whoever
   dequeues it may find a different one loaded (a load in between swaps
@@ -26,6 +27,16 @@ defects in commit ``8cb5a58``):
   (which does page-store I/O to read the image digest) are both offloaded via
   ``asyncio.to_thread``, the same pattern ``propose_page_kinds`` uses for
   ``profile_page``.
+- **Read through a verified lease.** ``detector(page)`` is called with a
+  per-page lease held (``core/jobs/handlers/_labeling_page_lease.
+  leased_labeling_page``) — on a book-labeling project this is what makes
+  ``ProjectState.labeling_image_path`` resolve to the sealed
+  ``/proc/self/fd/N`` descriptor instead of raising, and what a real detector
+  that reads the page image must see rather than the raw manifest path.
+  Held unconditionally, even for the default no-op detector: the seam exists
+  to be swapped by slice 4's real detector, and a conditional lease would be
+  wrong the moment it is. A page whose lease fails to verify is logged and
+  skipped, the same as ``propose_page_kinds``.
 
 The page-kind journals are each read in full, once, up front — not once per
 page. ``PageKindReviewedStore.reviewed_page_indices`` returns every reviewed
@@ -55,6 +66,7 @@ from ...regions.block_adapter import compute_page_facet_digests
 from ...regions.detector import RegionDetector, null_region_detector
 from ...regions.models import ProposalRun, RegionProposal
 from ...regions.proposal_log import RegionProposalLog
+from ._labeling_page_lease import leased_labeling_page
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -261,14 +273,35 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
         job.job_id, current=0, total=total, message=f"Proposing regions for {total} page(s)"
     )
     proposal_count = 0
+    lease_failed_indices: list[int] = []
     for i, idx in enumerate(eligible_indices, start=1):
         pstate = project_state.page_states[idx]
         page = _resolve_live_page(pstate)
         if page is not None:
-            # CPU-bound in the general case (slice 4's real detector decodes
-            # images and runs numpy) — offloaded for the same reason the
-            # facet-digest snapshot above is.
-            detected = await asyncio.to_thread(detector, page)
+            try:
+                # A detector reads the page image on a book-labeling project
+                # only through a verified per-page lease — reading
+                # ``project.image_paths`` directly would bypass the manifest
+                # hash pin the same way the defect this fixes did for
+                # ``propose_page_kinds``. Held unconditionally, even for the
+                # default no-op detector: the seam exists to be swapped by
+                # slice 4's real detector, and a conditional lease would be
+                # wrong the moment it is. CPU-bound in the general case
+                # (slice 4's real detector decodes images and runs numpy) —
+                # offloaded for the same reason the facet-digest snapshot
+                # above is; the lease stays bound for the duration of the
+                # offloaded call, since ``asyncio.to_thread`` propagates the
+                # contextvar it uses.
+                with leased_labeling_page(project_state, idx):
+                    detected = await asyncio.to_thread(detector, page)
+            except ValueError as exc:
+                lease_failed_indices.append(idx)
+                log.warning(
+                    "propose_regions: skipping page=%d — could not open a verified page lease: %s",
+                    idx,
+                    exc,
+                )
+                detected = None
             if detected:
                 proposals = [
                     RegionProposal(
@@ -285,6 +318,15 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
                 proposal_log.append_proposals(proposals)
                 proposal_count += len(proposals)
         await runner.update_progress(job.job_id, current=i, total=total, message=f"page {idx}")
+
+    if lease_failed_indices:
+        log.warning(
+            "propose_regions: run=%s project=%s skipped %d page(s) with no verified lease: %s",
+            run_id,
+            project.project_id,
+            len(lease_failed_indices),
+            lease_failed_indices,
+        )
 
     log.info(
         "propose_regions: run=%s project=%s pages=%d proposals=%d",
