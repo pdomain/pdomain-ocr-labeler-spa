@@ -290,3 +290,124 @@ def proposal_run_no_loader_with_unloaded_page(
     runner._jobs[job.job_id] = job
 
     return runner, job, project_state
+
+
+class _BookSwappingPageLoader:
+    """Fake ``PageLoader`` whose ``load_labeled`` swaps
+    ``project_state.loaded_project`` to a different book partway through a
+    run — simulates a concurrent ``POST .../load`` landing between two of
+    the lazy-load loop's per-page ``ensure_page_model`` calls (each takes
+    the project lock only for its own page, not once for the whole loop).
+
+    Mutates ``project_state._loaded_project`` / ``._page_states`` directly
+    rather than calling the public ``set_loaded_project`` — that method
+    re-acquires ``ProjectState._lock``, which ``ensure_page_model`` already
+    holds for the duration of this call, and would deadlock the worker
+    thread ``asyncio.to_thread`` runs this on.
+    """
+
+    def __init__(self, project_state: ProjectState, swap_to: Project, *, swap_at_page_index: int) -> None:
+        self._project_state = project_state
+        self._swap_to = swap_to
+        self._swap_at_page_index = swap_at_page_index
+        self.load_labeled_calls: list[int] = []
+        self.run_ocr_calls: list[int] = []
+
+    def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
+        self.load_labeled_calls.append(page_index)
+        if page_index == self._swap_at_page_index:
+            self._project_state._loaded_project = self._swap_to
+            self._project_state._page_states = {}
+        return PageLoadOutcome(
+            page_index=page_index, source=PageSource.FILESYSTEM, payload=_blank_page(page_index)
+        )
+
+    def load_cached(self, page_index: int) -> PageLoadOutcome | None:
+        return None
+
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: PageKind | None = None,
+    ) -> PageLoadOutcome:
+        self.run_ocr_calls.append(page_index)
+        raise RuntimeError("run_ocr must never be called by propose_regions (allow_ocr=False)")
+
+
+def _build_book_swap_run(
+    tmp_path: Path, *, book_a_total_pages: int, swap_at_page_index: int
+) -> tuple[JobRunner, Job, ProjectState, Project, _BookSwappingPageLoader]:
+    book_a_root = tmp_path / "book-a"
+    book_b_root = tmp_path / "book-b"
+    book_a_root.mkdir()
+    book_b_root.mkdir()
+
+    book_a = Project(
+        project_id="book-a",
+        project_root=book_a_root,
+        image_paths=[book_a_root / f"{i:03d}.png" for i in range(book_a_total_pages)],
+        ground_truth_map={},
+        total_pages=book_a_total_pages,
+    )
+    book_b = Project(
+        project_id="book-b",
+        project_root=book_b_root,
+        image_paths=[book_b_root / "000.png"],
+        ground_truth_map={},
+        total_pages=1,
+    )
+
+    project_state = ProjectState()
+    project_state.set_loaded_project(book_a)
+
+    loader = _BookSwappingPageLoader(project_state, book_b, swap_at_page_index=swap_at_page_index)
+
+    context: dict[str, Any] = {
+        "project_state": project_state,
+        "propose_regions_measure_fn": _stub_measure_fn,
+        "page_loader": loader,
+    }
+    runner = JobRunner(JobEventBroker(), context=context)
+    job = Job(
+        job_id="proposal-run-book-swap-job",
+        job_type="propose_regions",
+        status=JobStatus.RUNNING,
+        project_id=book_a.project_id,
+        payload={"project_id": book_a.project_id},
+        created_at=datetime.now(UTC),
+    )
+    runner._jobs[job.job_id] = job
+
+    return runner, job, project_state, book_b, loader
+
+
+@pytest.fixture
+def proposal_run_book_swap_mid_load(
+    tmp_path: Path,
+) -> tuple[JobRunner, Job, ProjectState, Project, _BookSwappingPageLoader]:
+    """A three-page book; the loader swaps ``project_state.loaded_project``
+    to a different book while loading the second page (index 1).
+
+    Regression test for the book-pinning race: without a per-page re-check,
+    ``ensure_page_model`` would keep loading pages — including the third
+    page — straight into the swapped-in book's ``page_states``, and the
+    run would go on to journal proposals against the wrong book. The loop's
+    pre-check before the third page must catch the swap and abort first.
+
+    Yields ``(runner, job, project_state, book_b, loader)``.
+    """
+    return _build_book_swap_run(tmp_path, book_a_total_pages=3, swap_at_page_index=1)
+
+
+@pytest.fixture
+def proposal_run_book_swap_on_last_page(
+    tmp_path: Path,
+) -> tuple[JobRunner, Job, ProjectState, Project, _BookSwappingPageLoader]:
+    """Like ``proposal_run_book_swap_mid_load``, but the swap happens while
+    loading the *last* page of a two-page book — no further loop iteration
+    exists to catch it via the per-page pre-check, so only the one-time
+    re-check after the loop can.
+    """
+    return _build_book_swap_run(tmp_path, book_a_total_pages=2, swap_at_page_index=1)

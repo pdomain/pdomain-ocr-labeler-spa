@@ -403,3 +403,64 @@ def test_no_loader_available_falls_back_to_loaded_pages_only(
     _current, _total, final_message = seen[-1]
     assert "no OCR output yet" not in final_message
     assert any("no page loader available" in record.message for record in caplog.records)
+
+
+def test_a_project_swap_mid_lazy_load_aborts_before_the_next_page(
+    proposal_run_book_swap_mid_load: Any,
+) -> None:
+    """A concurrent load swapping books mid-loop must not let this run keep
+    loading pages — or journal proposals — against the wrong book.
+
+    ``proposal_run_book_swap_mid_load``'s loader swaps
+    ``project_state.loaded_project`` to book B while loading book A's
+    second page (index 1). The pre-check before the third page must catch
+    that and abort before ever asking the loader about it.
+    """
+    import asyncio
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    runner, job, project_state, book_b, loader = proposal_run_book_swap_mid_load
+
+    asyncio.run(handle_propose_regions(runner, job))
+
+    assert loader.load_labeled_calls == [0, 1], "the third page must never have been requested"
+
+    reported = runner.get_job(job.job_id)
+    assert reported is not None
+    assert "book-a" in reported.message
+    assert "book-b" in reported.message
+
+    assert RegionProposalLog(book_b.project_root).runs() == [], "no run was journalled for either book"
+
+    # The swapped-in book's page_states were not written by this job after
+    # the swap: only the racy in-flight page (index 1, already returned by
+    # the loader when the swap happened) landed there.
+    assert 2 not in project_state.page_states
+
+
+def test_a_project_swap_on_the_last_page_is_caught_after_the_loop(
+    proposal_run_book_swap_on_last_page: Any,
+) -> None:
+    """A swap on the very last page has no further loop iteration to catch
+    it via the per-page pre-check — the one-time re-check after the loop
+    must still catch it before eligibility or journal work proceeds.
+    """
+    import asyncio
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    runner, job, _project_state, book_b, loader = proposal_run_book_swap_on_last_page
+
+    asyncio.run(handle_propose_regions(runner, job))
+
+    assert loader.load_labeled_calls == [0, 1]
+
+    reported = runner.get_job(job.job_id)
+    assert reported is not None
+    assert "book-a" in reported.message
+    assert "book-b" in reported.message
+
+    assert RegionProposalLog(book_b.project_root).runs() == []

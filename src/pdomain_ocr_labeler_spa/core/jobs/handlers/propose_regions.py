@@ -103,6 +103,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from uuid import UUID
 
+    from ...models import Project
     from ...ocr.predictor import PredictorCache
     from ...ocr_config_state import OCRConfigCarrier
     from ...page_kind.models import PageKindProposalRun
@@ -193,6 +194,59 @@ def _get_page_loader(
         data_root=settings.data_root,
         cache_root=settings.cache_root,
         store=page_store,
+    )
+
+
+def _loaded_project_id(project_state: ProjectState) -> str | None:
+    """The currently loaded project's id, or ``None`` if none is loaded."""
+    current = project_state.loaded_project
+    return current.project_id if current is not None else None
+
+
+def _project_still_pinned(project_state: ProjectState, project: Project) -> bool:
+    """Whether ``project`` — captured at the top of this run — is still loaded.
+
+    A concurrent ``POST .../load`` can swap ``ProjectState.loaded_project``
+    to a different book at any point during the lazy-load loop below:
+    ``ensure_page_model`` takes the project lock only for its own page, not
+    once for the whole loop, so a swap can land between two of the loop's
+    calls. Re-checked before every page load and once after the loop, so a
+    swap is caught before ``ensure_page_model`` can go on stamping the old
+    book's content into the new book's ``page_states``, and before any
+    journal write below uses the now-stale ``project``.
+    """
+    current = project_state.loaded_project
+    return current is not None and current.project_id == project.project_id
+
+
+async def _refuse_project_changed(
+    runner: JobRunner,
+    job: Job,
+    *,
+    expected_project_id: str,
+    found_project_id: str | None,
+) -> None:
+    """Abort the run: report that the loaded project no longer matches.
+
+    Shared by the book-pinning check at the top of the run and by the
+    lazy-load loop's per-page and post-loop re-checks — one wording, so a
+    person reading the SSE message sees the same sentence regardless of
+    when the mismatch was caught.
+    """
+    log.warning(
+        "propose_regions: job=%s expected project=%s but project=%s is loaded — refusing",
+        job.job_id,
+        expected_project_id,
+        found_project_id,
+    )
+    await runner.update_progress(
+        job.job_id,
+        current=0,
+        total=0,
+        message=(
+            f"Project changed since this run was queued: "
+            f"expected {expected_project_id}, found {found_project_id}"
+        ),
     )
 
 
@@ -454,20 +508,8 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     # the same defect ``propose_page_kinds`` was fixed for in 8cb5a58.
     submitted_project_id = job.payload.get("project_id")
     if isinstance(submitted_project_id, str) and submitted_project_id != project.project_id:
-        log.warning(
-            "propose_regions: job=%s was queued for project=%s but project=%s is loaded — refusing",
-            job.job_id,
-            submitted_project_id,
-            project.project_id,
-        )
-        await runner.update_progress(
-            job.job_id,
-            current=0,
-            total=0,
-            message=(
-                f"Project changed since this run was queued: "
-                f"expected {submitted_project_id}, found {project.project_id}"
-            ),
+        await _refuse_project_changed(
+            runner, job, expected_project_id=submitted_project_id, found_project_id=project.project_id
         )
         return
 
@@ -486,6 +528,18 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     no_ocr_yet_indices: list[int] = []
     if loader is not None:
         for idx in range(project.total_pages):
+            # A concurrent ``POST .../load`` can swap ``loaded_project`` to a
+            # different book between two of this loop's iterations — see
+            # ``_project_still_pinned``. Re-checked before every page load,
+            # not just once at the top of the run.
+            if not _project_still_pinned(project_state, project):
+                await _refuse_project_changed(
+                    runner,
+                    job,
+                    expected_project_id=project.project_id,
+                    found_project_id=_loaded_project_id(project_state),
+                )
+                return
             pstate = project_state.page_states.get(idx)
             if pstate is not None and pstate.page_record is not None:
                 continue
@@ -504,6 +558,18 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
             "considering only pages already in memory",
             project.project_id,
         )
+
+    # One more re-check after the loop: a swap during the *last* iteration's
+    # ``ensure_page_model`` call has no further iteration to catch it via
+    # the per-page check above.
+    if not _project_still_pinned(project_state, project):
+        await _refuse_project_changed(
+            runner,
+            job,
+            expected_project_id=project.project_id,
+            found_project_id=_loaded_project_id(project_state),
+        )
+        return
 
     if no_ocr_yet_indices:
         log.info(
