@@ -112,6 +112,7 @@ import { useHotkey } from "../hooks/useHotkey";
 import { ToolbarActionGrid } from "../components/ToolbarActionGrid";
 import { BulkWordActions } from "../components/BulkWordActions";
 import { BusyOverlay, ProjectLoadingOverlay } from "../components/BusyOverlay";
+import { PageLoadStatus } from "../components/PageLoadStatus";
 import PageImageCanvas from "../components/PageImageCanvas";
 import { OcrFailedBanner, ImageDriftBanner } from "../components/InlineBanners";
 import { TextTabs } from "../components/TextTabs";
@@ -257,6 +258,18 @@ export default function ProjectPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const jobProgress = useJobProgress(activeJobId);
 
+  // ── On-demand page-OCR job (2026-08-08-page-load-progress) ──────────────
+  // A store miss on `GET .../pages/{idx}` no longer blocks the request: the
+  // response returns immediately with `page_load_job_id` set and a
+  // `load_page` job running. `pageLoadJobId` is derived straight from the
+  // fetched payload (not component state) — a store hit never sets the
+  // field, so this is null (and `useJobProgress` opens no EventSource) on
+  // the ordinary warm-page path. `PageLoadStatus` renders the stages in the
+  // page region only; see its module doc for why it must not reuse
+  // `BusyOverlay`'s full-viewport treatment.
+  const pageLoadJobId = pageQ.data?.page_load_job_id ?? null;
+  const pageLoadJob = useJobProgress(pageLoadJobId);
+
   // ── Store subscribers ──────────────────────────────────────────────────
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefsSnapshot, getUiPrefsSnapshot);
   // IS-3: drawerOpen via store's native subscribe (catches Drawer's own setState).
@@ -304,6 +317,23 @@ export default function ProjectPage() {
     setActiveJobId,
     invalidationKey: ["page", projectId, idx0],
   });
+
+  // ── Page-load job completion → refetch the page (2026-08-08) ───────────
+  // `pageLoadJobId` is derived from the fetched payload rather than tracked
+  // component state (see its declaration above), so it is not a fit for
+  // `useJobCompletionInvalidation`'s `setActiveJobId` contract — there is no
+  // local state to clear. Once the job's terminal `complete` event arrives,
+  // the words it produced only exist in the store; refetching is what makes
+  // them appear (design acceptance criterion "re-fetch the page when the job
+  // completes"). Deliberately does NOT invalidate on `error` /
+  // `cancelled` — `PageLoadStatus` renders the terminal error in place, and
+  // a refetch would just reproduce the same store miss and submit a fresh
+  // job.
+  useEffect(() => {
+    if (pageLoadJobId && pageLoadJob?.status === "complete") {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, idx0] });
+    }
+  }, [pageLoadJobId, pageLoadJob?.status, projectId, idx0, qc]);
 
   // ── Mutations ──────────────────────────────────────────────────────────
   // `projectId` may be undefined on first render before the URL resolves;
@@ -607,8 +637,17 @@ export default function ProjectPage() {
     };
   }, [projectId, idx0]);
 
-  // Show ProjectLoadingOverlay during the initial page fetch.
-  const isPageLoading = pageQ.isLoading;
+  // Show ProjectLoadingOverlay only while the PROJECT itself is loading
+  // (2026-08-08-page-load-progress defect 3). It used to track
+  // `pageQ.isLoading`, which kept the full-viewport "Loading project"
+  // overlay up for the entire page fetch — including the up-to-30s OCR
+  // wait that now runs as a `load_page` job — mislabelling that wait and
+  // blocking the whole shell (rail, page list, panels) for it. Project open
+  // is genuinely a whole-view wait (design "Project open is a whole-view
+  // wait, and it is over in milliseconds"), so it keeps the full-overlay
+  // treatment; the page-load wait gets `PageLoadStatus` in the page region
+  // instead (see its render below).
+  const isProjectLoading = projectQ.isLoading;
 
   // Busy state — any mutation in flight OR an active job.
   const isMutating =
@@ -1014,6 +1053,7 @@ export default function ProjectPage() {
       </div>
       <div data-testid="image-pane" className="relative flex-1 min-h-0">
         <BusyOverlay activeJob={activeJob} isMutating={isMutating} />
+        <PageLoadStatus pageLoadJobId={pageLoadJobId} jobEvent={pageLoadJob} />
         <PageImageCanvas
           imageUrl={pagePayload?.image_url ?? ""}
           encoded={pagePayload?.encoded_dims ?? null}
@@ -1177,7 +1217,7 @@ export default function ProjectPage() {
 
   return (
     <div data-testid="project-page" className="flex flex-col h-full min-h-0">
-      <ProjectLoadingOverlay isLoading={isPageLoading} />
+      <ProjectLoadingOverlay isLoading={isProjectLoading} />
 
       {/* D-047: workspace toolbar band — full width, top of the project body. */}
       <div className="shrink-0">{workspaceToolbar}</div>
