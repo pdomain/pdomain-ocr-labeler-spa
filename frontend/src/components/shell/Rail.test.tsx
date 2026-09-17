@@ -98,12 +98,13 @@ describe("Rail — target + mode selectors (Slice 10 / P1.d,e,f)", () => {
 
   // ── Target cells (P1.d + P1.f — Gaps 11, 12, 14) ─────────────────────────
 
-  it("renders all four target buttons (block, para, line, word)", () => {
+  it("renders all five target buttons (block, para, line, word, region)", () => {
     render(<Rail />);
     expect(screen.getByTestId("rail-target-block")).toBeInTheDocument();
     expect(screen.getByTestId("rail-target-para")).toBeInTheDocument();
     expect(screen.getByTestId("rail-target-line")).toBeInTheDocument();
     expect(screen.getByTestId("rail-target-word")).toBeInTheDocument();
+    expect(screen.getByTestId("rail-target-region")).toBeInTheDocument();
   });
 
   it("target buttons show text labels", () => {
@@ -138,6 +139,19 @@ describe("Rail — target + mode selectors (Slice 10 / P1.d,e,f)", () => {
     render(<Rail />);
     fireEvent.click(screen.getByTestId("rail-target-line"));
     expect(railStore.getState().target).toBe("line");
+  });
+
+  it("clicking region target updates store to region", () => {
+    render(<Rail />);
+    fireEvent.click(screen.getByTestId("rail-target-region"));
+    expect(railStore.getState().target).toBe("region");
+  });
+
+  it("region target cell reads as active when the target is region", () => {
+    render(<Rail />);
+    fireEvent.click(screen.getByTestId("rail-target-region"));
+    expect(screen.getByTestId("rail-target-region")).toHaveAttribute("data-active", "true");
+    expect(screen.getByTestId("rail-target-word")).not.toHaveAttribute("data-active", "true");
   });
 
   it("active target button has layer-color border class", () => {

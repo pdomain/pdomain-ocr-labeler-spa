@@ -1091,6 +1091,41 @@ describe("PageImageCanvas — selection layer rendering (spec-21-A5, #300)", () 
       screen.getByTestId("bbox-overlay-selection-paragraphs").getAttribute("data-item-count"),
     ).toBe("1");
   });
+
+  it("selected proposal populates bbox-overlay-regions-selected with item-count=1", () => {
+    const page = makePage([makeLine(0, 0, [{ x: 10, y: 20, width: 30, height: 5 }])]);
+    page.regions = [
+      {
+        region_id: null,
+        proposal_id: "prop-1",
+        role: "paragraph",
+        box: { x: 100, y: 100, width: 40, height: 20 },
+        confirmed: false,
+        confidence: 0.9,
+        stale: false,
+      },
+    ];
+    selectionStore.setState({
+      selectedParagraphs: [],
+      selectedLines: [],
+      selectedWords: [],
+      dragRect: null,
+      level: "region",
+      path: { proposalId: "prop-1" },
+    });
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+    expect(
+      screen.getByTestId("bbox-overlay-regions-selected").getAttribute("data-item-count"),
+    ).toBe("1");
+  });
+
+  it("no region selected renders bbox-overlay-regions-selected with item-count=0", () => {
+    const page = makePage([makeLine(0, 0, [{ x: 10, y: 20, width: 30, height: 5 }])]);
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+    expect(
+      screen.getByTestId("bbox-overlay-regions-selected").getAttribute("data-item-count"),
+    ).toBe("0");
+  });
 });
 
 // ── Target click → selection action (canvas entry point wiring) ─────────────
@@ -1193,6 +1228,91 @@ describe("PageImageCanvas — target bbox click → selection action", () => {
     const sel = selectionStore.getState();
     expect(sel.level).toBe("block");
     expect(sel.path.blockId).toBe("9");
+  });
+
+  it("clicking a proposal's centre with region target selects the proposal", () => {
+    const page = makePage([]);
+    page.regions = [
+      {
+        region_id: null,
+        proposal_id: "prop-1",
+        role: "paragraph",
+        box: { x: 100, y: 200, width: 50, height: 20 },
+        confirmed: false,
+        confidence: 0.9,
+        stale: false,
+      },
+    ];
+    railStore.getState().setTarget("region");
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+    const overlay = getOverlay();
+    const point = sourceToDisplayPoint(125, 210);
+
+    fireEvent.mouseDown(overlay, { clientX: point.x, clientY: point.y });
+    fireEvent.mouseUp(overlay, { clientX: point.x, clientY: point.y });
+
+    const sel = selectionStore.getState();
+    expect(sel.level).toBe("region");
+    expect(sel.path.proposalId).toBe("prop-1");
+    expect(useUiPrefs.getState().rightPanelOpen).toBe(true);
+    expect(
+      screen.getByTestId("bbox-overlay-regions-selected").getAttribute("data-item-count"),
+    ).toBe("1");
+  });
+
+  it("clicking a confirmed region's centre with region target selects the region", () => {
+    const page = makePage([]);
+    page.regions = [
+      {
+        region_id: "reg-1",
+        proposal_id: null,
+        role: "paragraph",
+        box: { x: 100, y: 200, width: 50, height: 20 },
+        confirmed: true,
+        confidence: null,
+        stale: false,
+      },
+    ];
+    railStore.getState().setTarget("region");
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+    const overlay = getOverlay();
+    const point = sourceToDisplayPoint(125, 210);
+
+    fireEvent.mouseDown(overlay, { clientX: point.x, clientY: point.y });
+    fireEvent.mouseUp(overlay, { clientX: point.x, clientY: point.y });
+
+    const sel = selectionStore.getState();
+    expect(sel.level).toBe("region");
+    expect(sel.path.regionId).toBe("reg-1");
+  });
+
+  it("clicking a proposal's centre with word target does NOT select it", () => {
+    const page = makePage([]);
+    page.regions = [
+      {
+        region_id: null,
+        proposal_id: "prop-1",
+        role: "paragraph",
+        box: { x: 100, y: 200, width: 50, height: 20 },
+        confirmed: false,
+        confidence: 0.9,
+        stale: false,
+      },
+    ];
+    railStore.getState().setTarget("word");
+
+    render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
+    const overlay = getOverlay();
+    const point = sourceToDisplayPoint(125, 210);
+
+    fireEvent.mouseDown(overlay, { clientX: point.x, clientY: point.y });
+    fireEvent.mouseUp(overlay, { clientX: point.x, clientY: point.y });
+
+    const sel = selectionStore.getState();
+    expect(sel.level).toBe("none");
+    expect(sel.path.proposalId).toBeUndefined();
   });
 
   it("clicking within a word bbox opens the right panel (rightPanelOpen=true)", () => {
