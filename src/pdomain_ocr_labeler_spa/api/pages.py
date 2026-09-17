@@ -100,6 +100,23 @@ class PageKindProposalView(BaseModel):
     evidence: dict[str, Any]
 
 
+class PageLoadError(BaseModel):
+    """Marks a genuine loader failure for this page GET — issue
+    2026-08-08-get-page-hides-ocr-failures.
+
+    ``get_page`` auto-triggers ``ensure_page_model`` (B1) when no
+    page_record is cached yet.  A failure there used to degrade silently to
+    an empty page_record, indistinguishable from a page that legitimately
+    has no OCR text.  ``PagePayload.page_load_error`` is that distinction:
+    non-``None`` only when the loader itself raised, never when OCR ran and
+    found nothing.  Shaped like ``ApiError`` (``error`` tag + human-readable
+    ``message``) but scoped to one page rather than the whole request.
+    """
+
+    error: str
+    message: str
+
+
 class PagePayload(BaseModel):
     """Full per-page payload — spec §5.3 / §1 ``PagePayload``.
 
@@ -145,6 +162,11 @@ class PagePayload(BaseModel):
     # rather than failing the page. ``None`` when no run has proposed a kind
     # for this page yet.
     page_kind_proposal: PageKindProposalView | None = None
+    # Loader-failure marker — ``None`` when the page loaded normally,
+    # including when it legitimately has no OCR text. Stamped by
+    # ``get_page`` when the on-demand ``ensure_page_model`` call raises;
+    # ``_page_payload`` itself never sets this. See ``PageLoadError``.
+    page_load_error: PageLoadError | None = None
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -1102,6 +1124,13 @@ def get_page(
     cached → OCR lane probes, so the response has a populated
     ``page_record`` and ``line_matches`` without requiring a separate
     Reload OCR click.
+
+    A loader failure on that on-demand call degrades to an empty
+    ``page_record`` rather than a 500 — the request still succeeds so the
+    image renders — but is logged at WARNING and stamped onto
+    ``PagePayload.page_load_error`` (issue
+    2026-08-08-get-page-hides-ocr-failures), distinguishing it from a page
+    that legitimately has no OCR text.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -1109,20 +1138,32 @@ def get_page(
 
     # B1: auto-trigger ensure_page_model when no page_record is cached.
     pstate = project_state.get_page_state(page_index)
+    page_load_error: PageLoadError | None = None
     if pstate is None or pstate.page_record is None:
         try:
             loader = _build_page_loader_from_context(runner, project_state, settings)
             ensure_page_model(project_state, page_index, loader=loader)
-        except Exception:
+        except Exception as exc:
             # Loader unavailable (e.g. DocTR not installed, test env with no
-            # context keys) — degrade gracefully to empty page_record.  The
-            # SPA can still show the image and let the user trigger Reload OCR
-            # manually.  Log at DEBUG so test noise stays low.
-            log.debug(
-                "get_page: ensure_page_model failed for %s/%d — degrading to empty page_record",
+            # context keys) or a genuine OCR failure — degrade gracefully to
+            # an empty page_record so the SPA can still show the image and
+            # let the user trigger Reload OCR manually.  Logged at WARNING,
+            # not DEBUG: a loader failure is not routine, and DEBUG output
+            # never reaches an operator running this server (issue
+            # 2026-08-08-get-page-hides-ocr-failures) — the same reasoning
+            # ``_page_payload``'s image-digest read failure already uses for
+            # a request that survives but must still surface. The marker
+            # below (not just the log line) lets the SPA tell "OCR failed"
+            # apart from "OCR ran and found no text".
+            log.warning(
+                "get_page: ensure_page_model failed for project=%s page=%d — degrading to empty page_record",
                 project_id,
                 page_index,
                 exc_info=True,
+            )
+            page_load_error = PageLoadError(
+                error="ocr_load_failed",
+                message=f"OCR failed to load page {page_index}: {exc}",
             )
 
     payload = _page_payload(
@@ -1133,6 +1174,8 @@ def get_page(
         app_config=app_config,
         page_store=page_store,
     )
+    if page_load_error is not None:
+        payload.page_load_error = page_load_error
 
     # Undo/redo flags — spec 2026-06-12-event-store-undo. Stamped here (not in
     # ``_page_payload``) so the helper stays store-free; mutation routes refresh
