@@ -99,7 +99,13 @@ class _FakePageLoader:
         self.calls: list[int] = []
         self._raise = raise_on_run
 
-    def run_ocr(self, page_index: int) -> PageLoadOutcome:
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: object | None = None,
+    ) -> PageLoadOutcome:
         self.calls.append(page_index)
         if self._raise is not None:
             raise self._raise
@@ -129,9 +135,16 @@ class _FakePageLoaderWithIngest:
         self._project = project
         self.last_page_id: UUID | None = None
 
-    def run_ocr(self, page_index: int) -> PageLoadOutcome:
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: object | None = None,
+    ) -> PageLoadOutcome:
         self.calls.append(page_index)
         page = _make_fake_page()
+        page.page_kind = page_kind
         agg = _ingest_ocr_result(
             page=page,
             image_bytes=_make_png(100, 200),
@@ -301,6 +314,197 @@ def test_rotate_updates_rotation_degrees_in_aggregate(tmp_path: Path, projects_r
         )
         assert record["rotation_source"] == "manual", (
             f"payload rotation_source not surfaced after rotate: {record['rotation_source']!r}"
+        )
+
+
+def test_rotate_keeps_a_confirmed_kind_in_stored_content(tmp_path: Path, projects_root: Path) -> None:
+    """pdomain-ocr-synth's 2026-09-17-page-kind-review-design.md "Re-OCR and
+    rotation keep the confirmed kind": the kind must survive in the STORED
+    content blob, not only in the in-memory Page — verified by a fresh
+    ``LabelerPageStore`` handle reading the post-rotation content, the way a
+    process restart would.
+    """
+    from pdomain_book_contracts.annotation import PageKind
+
+    from pdomain_ocr_labeler_spa.api._page_content import load_page_from_store
+    from pdomain_ocr_labeler_spa.core.project_state import PageState
+
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    recorded: list[dict[str, Any]] = []
+
+    with TestClient(app) as c:
+        _wrap_broker_publish(c.app.state.job_events, recorded)  # type: ignore[attr-defined]
+        resp = c.post(
+            "/api/projects/load",
+            json={"project_root": str(projects_root / "book1")},
+        )
+        assert resp.status_code == 200, resp.text
+
+        project_state: ProjectState = c.app.state.project_state  # type: ignore[attr-defined]
+        page_store: LabelerPageStore = c.app.state.page_store  # type: ignore[attr-defined]
+        project = project_state.loaded_project
+        assert project is not None
+
+        # Seed page 0 already OCR'd and confirmed as "body", store-backed.
+        loader_with_ingest = _FakePageLoaderWithIngest(store=page_store, project=project)
+        outcome = loader_with_ingest.run_ocr(0, page_kind=PageKind.BODY)
+        pstate = PageState(page_index=0, page_record=outcome)
+        pstate.page_id = loader_with_ingest.last_page_id
+        project_state._page_states[0] = pstate
+        c.app.state.job_runner.context["page_loader"] = loader_with_ingest  # type: ignore[attr-defined]
+
+        resp2 = c.post(
+            "/api/projects/book1/pages/0/rotate",
+            json={"degrees": 90, "manual": True},
+        )
+        assert resp2.status_code == 202, resp2.text
+        _wait_for_terminal(recorded)
+        assert recorded[-1].get("type") == "complete", recorded[-1]
+
+        pstate_after = project_state.page_states.get(0)
+        assert pstate_after is not None
+        page_id = pstate_after.page_id
+        assert page_id is not None
+
+        fresh_store = LabelerPageStore(project_dir=projects_root / "book1")
+        try:
+            reloaded = load_page_from_store(fresh_store, page_id)
+        finally:
+            fresh_store.close()
+        assert reloaded is not None
+        assert reloaded.page_kind == PageKind.BODY
+
+
+def test_rotate_recheck_saves_a_confirm_that_landed_during_ocr(tmp_path: Path, projects_root: Path) -> None:
+    """pdomain-ocr-synth's 2026-09-17-page-kind-review-design.md "Re-OCR and
+    rotation keep the confirmed kind" — the re-OCR race (finding 1): a
+    confirm that lands on the OLD page while ``run_ocr`` is in flight (no
+    lock held) must still be reflected in the fresh page's stored content,
+    so the page blob's kind and the latest reviewed marker agree afterward.
+
+    The fake loader's ``run_ocr`` confirms the OLD page (via the same shared
+    ``_confirm_page_kind_locked`` the routes use) before it returns the fresh
+    OCR outcome carrying the STALE kind — simulating a confirm request that
+    completed while OCR ran.
+    """
+    from pdomain_book_contracts.annotation import PageKind
+
+    from pdomain_ocr_labeler_spa.api._page_content import load_page_from_store
+    from pdomain_ocr_labeler_spa.api.pages import _confirm_page_kind_locked
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+    from pdomain_ocr_labeler_spa.core.project_state import PageState
+
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    recorded: list[dict[str, Any]] = []
+
+    with TestClient(app) as c:
+        _wrap_broker_publish(c.app.state.job_events, recorded)  # type: ignore[attr-defined]
+        resp = c.post(
+            "/api/projects/load",
+            json={"project_root": str(projects_root / "book1")},
+        )
+        assert resp.status_code == 200, resp.text
+
+        project_state: ProjectState = c.app.state.project_state  # type: ignore[attr-defined]
+        page_store: LabelerPageStore = c.app.state.page_store  # type: ignore[attr-defined]
+        project = project_state.loaded_project
+        assert project is not None
+
+        # Seed page 0 as already OCR'd + confirmed "body", store-backed.
+        old_page = _make_fake_page()
+        old_page.page_kind = PageKind.BODY
+        old_agg = _ingest_ocr_result(
+            page=old_page,
+            image_bytes=_make_png(100, 200),
+            page_index=0,
+            store=page_store,
+            project=project,
+        )
+        old_pstate = PageState(
+            page_index=0,
+            page_record=PageLoadOutcome(page_index=0, source=PageSource.OCR, payload=old_page),
+        )
+        old_pstate.page_id = old_agg.record.page_id
+        project_state._page_states[0] = old_pstate
+
+        class _RaceLoader:
+            """``PageLoader`` double that confirms the OLD page mid-``run_ocr``."""
+
+            def __init__(self) -> None:
+                self.calls: list[int] = []
+
+            def run_ocr(
+                self,
+                page_index: int,
+                *,
+                edited_image_bytes: bytes | None = None,
+                page_kind: object | None = None,
+            ) -> PageLoadOutcome:
+                self.calls.append(page_index)
+
+                # A confirm lands on the OLD page while this "OCR" is in flight.
+                error = _confirm_page_kind_locked(
+                    project_root=project.project_root,
+                    project_state=project_state,
+                    page_index=page_index,
+                    page_store=page_store,
+                    kind=PageKind.TITLE_PAGE,
+                    note=None,
+                    method="single",
+                )
+                assert error is None, error
+
+                # The fresh OCR result still carries the STALE kind read
+                # before OCR started — exactly the race this test simulates.
+                fresh_page = _make_fake_page()
+                fresh_page.page_kind = page_kind
+                agg = _ingest_ocr_result(
+                    page=fresh_page,
+                    image_bytes=_make_png(100, 200),
+                    page_index=page_index,
+                    store=page_store,
+                    project=project,
+                )
+                object.__setattr__(fresh_page, "_labeler_page_id", agg.record.page_id)
+                return PageLoadOutcome(page_index=page_index, source=PageSource.OCR, payload=fresh_page)
+
+            def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
+                return None
+
+            def load_cached(self, page_index: int) -> PageLoadOutcome | None:
+                return None
+
+        loader = _RaceLoader()
+        c.app.state.job_runner.context["page_loader"] = loader  # type: ignore[attr-defined]
+
+        resp2 = c.post(
+            "/api/projects/book1/pages/0/rotate",
+            json={"degrees": 90, "manual": True},
+        )
+        assert resp2.status_code == 202, resp2.text
+        _wait_for_terminal(recorded)
+        assert recorded[-1].get("type") == "complete", recorded[-1]
+
+        pstate_after = project_state.page_states.get(0)
+        assert pstate_after is not None
+        new_page_id = pstate_after.page_id
+        assert new_page_id is not None
+        assert new_page_id != old_agg.record.page_id
+
+        marker = PageKindReviewedStore(projects_root / "book1").latest_for_page(0)
+        assert marker is not None
+        assert marker.kind == PageKind.TITLE_PAGE
+
+        fresh_store = LabelerPageStore(project_dir=projects_root / "book1")
+        try:
+            reloaded = load_page_from_store(fresh_store, new_page_id)
+        finally:
+            fresh_store.close()
+        assert reloaded is not None
+        assert reloaded.page_kind == PageKind.TITLE_PAGE, (
+            "the fresh page's stored content must agree with the latest reviewed marker"
         )
 
 

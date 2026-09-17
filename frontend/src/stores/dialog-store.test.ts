@@ -15,6 +15,7 @@ describe("dialog-store: initial state", () => {
     expect(state.ocrConfig.open).toBe(false);
     expect(state.export.open).toBe(false);
     expect(state.hotkeyHelp.open).toBe(false);
+    expect(state.pageKinds.open).toBe(false);
     expect(state.confirm.open).toBe(false);
   });
 
@@ -40,6 +41,11 @@ describe("dialog-store: open(simple key)", () => {
   it("opens hotkeyHelp", () => {
     dialogStore.open("hotkeyHelp");
     expect(dialogStore.getState().hotkeyHelp.open).toBe(true);
+  });
+
+  it("opens pageKinds", () => {
+    dialogStore.open("pageKinds");
+    expect(dialogStore.getState().pageKinds.open).toBe(true);
   });
 
   it("opening one dialog does not change others", () => {

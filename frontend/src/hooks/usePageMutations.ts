@@ -19,6 +19,7 @@ export type SaveProjectResponse = components["schemas"]["SaveProjectResponse"];
 export type PagePayload = components["schemas"]["PagePayload"];
 export type RotatePageResponse = components["schemas"]["RotatePageResponse"];
 export type AutoRotateAllResponse = components["schemas"]["AutoRotateAllResponse"];
+export type PageKind = components["schemas"]["PageKind"];
 
 // ─── internal helpers ──────────────────────────────────────────────────────
 
@@ -190,7 +191,12 @@ export function useAutoRotateAll(projectId: string) {
  *
  * POST .../undo → 200 PagePayload (restored state + refreshed `history`
  * flags) or 409 when nothing is undoable. On success, invalidate the page
- * query so canvas/worklist/right-panel refetch the restored content.
+ * query so canvas/worklist/right-panel refetch the restored content, and
+ * the `["page-kinds", projectId]` prefix — pdomain-ocr-synth's
+ * 2026-09-17-page-kind-review-design.md "A proposal run and page history
+ * both refresh the list": an undo can restore an earlier page blob that
+ * carries a different (or no) confirmed kind, so any book-wide list must
+ * refetch too.
  *
  * Spec: docs/specs/2026-06-12-event-store-undo.md (U-1).
  */
@@ -200,6 +206,7 @@ export function useUndoPage(projectId: string, pageIndex: number) {
     mutationFn: () => apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/undo`, {}),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["page-kinds", projectId] });
     },
   });
 }
@@ -207,7 +214,8 @@ export function useUndoPage(projectId: string, pageIndex: number) {
 /**
  * Re-apply the next undone version (symmetric to useUndoPage).
  *
- * POST .../redo → 200 PagePayload or 409 at the newest version.
+ * POST .../redo → 200 PagePayload or 409 at the newest version. Also
+ * invalidates the `["page-kinds", projectId]` prefix — see useUndoPage.
  *
  * Spec: docs/specs/2026-06-12-event-store-undo.md (U-2).
  */
@@ -217,6 +225,33 @@ export function useRedoPage(projectId: string, pageIndex: number) {
     mutationFn: () => apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/redo`, {}),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["page-kinds", projectId] });
+    },
+  });
+}
+
+// ─── useConfirmPageKind (page-kind review) ─────────────────────────────────
+
+/**
+ * Confirm the current page's kind — the single-page half of
+ * pdomain-ocr-synth's 2026-09-17-page-kind-review-design.md "The page
+ * toolbar shows and confirms the current page's kind".
+ *
+ * POST .../page-kind → 200 PagePayload. On success, invalidate the page
+ * query and the `["page-kinds", projectId]` prefix so a book-wide list
+ * reflects the new confirmation.
+ */
+export function useConfirmPageKind(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { kind: PageKind; note?: string | null }>({
+    mutationFn: ({ kind, note }) =>
+      apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/page-kind`, {
+        kind,
+        note: note ?? null,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["page-kinds", projectId] });
     },
   });
 }

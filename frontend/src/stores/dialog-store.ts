@@ -27,7 +27,7 @@ import { useSyncExternalStore } from "react";
 // ---------------------------------------------------------------------------
 
 /** Dialog keys with a plain `{ open: boolean }` shape. */
-type SimpleDialogKey = "ocrConfig" | "export" | "hotkeyHelp" | "sourceFolder";
+type SimpleDialogKey = "ocrConfig" | "export" | "hotkeyHelp" | "sourceFolder" | "pageKinds";
 
 interface ConfirmDialogState {
   open: boolean;
@@ -41,6 +41,9 @@ export interface DialogStoreState {
   export: { open: boolean };
   hotkeyHelp: { open: boolean };
   sourceFolder: { open: boolean };
+  /** "Review page kinds" — pdomain-ocr-synth's 2026-09-17-page-kind-review-design.md
+   *  "A book-wide list reviews many pages at once". */
+  pageKinds: { open: boolean };
   confirm: ConfirmDialogState;
 }
 
@@ -63,6 +66,7 @@ const INITIAL_STATE: DialogStoreState = {
   export: { open: false },
   hotkeyHelp: { open: false },
   sourceFolder: { open: false },
+  pageKinds: { open: false },
   confirm: { open: false },
 };
 

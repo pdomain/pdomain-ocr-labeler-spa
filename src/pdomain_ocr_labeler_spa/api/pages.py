@@ -6,7 +6,7 @@ import io
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
@@ -33,6 +33,7 @@ from ..core.models import (
     RegionView,
     Selection,
 )
+from ..core.page_kind.proposal_log import PageKindProposalLog
 from ..core.page_kind.reviewed_store import PageKindReviewedStore
 from ..core.page_state import PageLoader, ensure_page_model, save_page_content_to_store, save_page_to_store
 from ..core.page_to_line_matches import page_to_line_matches
@@ -83,6 +84,22 @@ class PageHistoryInfo(BaseModel):
     depth: int = 50
 
 
+class PageKindProposalView(BaseModel):
+    """One page's latest page-kind proposal — spec pdomain-ocr-synth's
+    docs/specs/2026-09-17-page-kind-review-design.md "The page payload
+    carries the latest proposal".
+    """
+
+    proposal_id: str
+    run_id: str
+    kind: PageKind
+    confidence: float | None
+    # Open-ended: shape varies per classifier version — mirrors
+    # ``RegionProposalListItem.evidence`` in ``api/regions.py``, equally
+    # open-ended for the same reason.
+    evidence: dict[str, Any]
+
+
 class PagePayload(BaseModel):
     """Full per-page payload — spec §5.3 / §1 ``PagePayload``.
 
@@ -122,6 +139,12 @@ class PagePayload(BaseModel):
     # ``PageKindReviewedStore``, independent of ``page_kind`` itself (a
     # page can carry a machine-unset ``page_kind`` and still be unreviewed).
     page_kind_reviewed: bool = False
+    # The classifier's latest claim about this page's kind, read best-effort
+    # from ``PageKindProposalLog`` the same way ``page_kind_reviewed`` reads
+    # ``PageKindReviewedStore`` — a failed read logs and leaves this ``None``
+    # rather than failing the page. ``None`` when no run has proposed a kind
+    # for this page yet.
+    page_kind_proposal: PageKindProposalView | None = None
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -1008,6 +1031,28 @@ def _page_payload(
             exc_info=True,
         )
 
+    # page_kind_proposal: best-effort read of the durable proposal journal,
+    # the same degrade-to-None-on-failure discipline as page_kind_reviewed
+    # above.
+    page_kind_proposal: PageKindProposalView | None = None
+    try:
+        proposal = PageKindProposalLog(project.project_root).latest_proposal_for_page(page_index)
+        if proposal is not None:
+            page_kind_proposal = PageKindProposalView(
+                proposal_id=proposal.proposal_id,
+                run_id=proposal.run_id,
+                kind=proposal.kind,
+                confidence=proposal.confidence,
+                evidence=dict(proposal.evidence),
+            )
+    except Exception:  # pragma: no cover - defensive
+        log.debug(
+            "_page_payload: page-kind-proposal read failed for project=%s page=%d",
+            project_id,
+            page_index,
+            exc_info=True,
+        )
+
     return PagePayload(
         project_id=project_id,
         page_index=page_index,
@@ -1024,6 +1069,7 @@ def _page_payload(
         proposals=proposals,
         page_kind=page_kind,
         page_kind_reviewed=page_kind_reviewed,
+        page_kind_proposal=page_kind_proposal,
     )
 
 
@@ -1509,6 +1555,82 @@ def rematch_gt(
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
+def _confirm_page_kind_locked(
+    *,
+    project_root: Path,
+    project_state: ProjectState,
+    page_index: int,
+    page_store: LabelerPageStore,
+    kind: PageKind,
+    note: str | None,
+    method: Literal["single", "bulk"],
+) -> str | None:
+    """Confirm one page's kind under its page lock — the shared body both the
+    single-page and bulk routes call.
+
+    Spec: pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
+    "One route confirms many pages" — "Extract the body of confirm_page_kind
+    into one function that both routes call... One code path means the bulk
+    route cannot drift from the single one."
+
+    Sets ``page.page_kind`` and saves the page to the store; only after the
+    save succeeds does it write the reviewed marker (with ``kind`` and
+    ``method`` so the book route and later calibration can tell a page
+    confirmed alone from one confirmed in a batch). Restores the prior kind
+    and generation if the save fails.
+
+    The page state, page and ``page_id`` are resolved inside the lock, never
+    taken from a caller's earlier snapshot: a re-OCR or rotation swaps in a
+    new ``Page`` under a new ``page_id`` while holding this same lock, and a
+    confirm that wrote to the replaced page would leave the stored kind and
+    the marker disagreeing.
+
+    Returns ``None`` on success, or a failure message (the prior in-memory
+    state has already been restored when a save failed).
+    """
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        pstate = project_state.get_page_state(page_index)
+        page = _resolve_page_object_for_pages(pstate)
+        if pstate is None or page is None or pstate.page_id is None:
+            log.warning("_confirm_page_kind_locked: page=%d is no longer loaded or store-backed", page_index)
+            return f"page {page_index} is no longer loaded or backed by the event store"
+        page_id = pstate.page_id
+        prior_kind = page.page_kind
+        prior_generation = pstate.generation
+        page.page_kind = kind
+        pstate.generation += 1
+
+        try:
+            save_page_content_to_store(
+                page_id=page_id,
+                page=page,
+                store=page_store,
+                changes=[{"type": "page_kind", "page_index": page_index, "kind": kind.value}],
+                labeler_sidecars=pstate,
+            )
+        except Exception as exc:
+            # The store never received this confirmation, and no reviewed
+            # marker is written below — restore the prior in-memory state so
+            # it doesn't claim a confirmation that didn't happen. Otherwise a
+            # later route that persists this same Page object would write a
+            # human-set page_kind with no matching marker, and the page would
+            # come back as unreviewed despite carrying a confirmed kind.
+            page.page_kind = prior_kind
+            pstate.generation = prior_generation
+            log.exception("_confirm_page_kind_locked: store write failed page_id=%s", page_id)
+            return str(exc)
+
+        PageKindReviewedStore(project_root).mark_reviewed(
+            page_index,
+            datetime.now(UTC).isoformat(),
+            note=note,
+            kind=kind,
+            method=method,
+        )
+    return None
+
+
 @router.post("/{page_index}/page-kind", response_model=PagePayload, operation_id="confirm_page_kind")
 def confirm_page_kind(
     *,
@@ -1580,44 +1702,25 @@ def confirm_page_kind(
             ).model_dump(),
         )
 
-    page_lock = project_state.get_page_lock(page_index)
-    with page_lock:
-        prior_kind = page.page_kind
-        prior_generation = pstate.generation
-        page.page_kind = kind
-        pstate.generation += 1
-
-        try:
-            save_page_content_to_store(
-                page_id=page_id,
-                page=page,
-                store=page_store,
-                changes=[{"type": "page_kind", "page_index": page_index, "kind": kind.value}],
-                labeler_sidecars=pstate,
-            )
-        except Exception as exc:
-            # The store never received this confirmation, and no reviewed
-            # marker is written below — restore the prior in-memory state so
-            # it doesn't claim a confirmation that didn't happen. Otherwise a
-            # later route that persists this same Page object would write a
-            # human-set page_kind with no matching marker, and the page would
-            # come back as unreviewed despite carrying a confirmed kind.
-            page.page_kind = prior_kind
-            pstate.generation = prior_generation
-            log.exception("confirm_page_kind: store write failed page_id=%s", page_id)
-            return JSONResponse(
-                status_code=503,
-                content=ApiError(
-                    error="store_persist_failed",
-                    message=(
-                        f"page kind applied in memory but failed to persist page "
-                        f"{page_index} to the event store: {exc}"
-                    ),
-                ).model_dump(),
-            )
-
-        PageKindReviewedStore(project.project_root).mark_reviewed(
-            page_index, datetime.now(UTC).isoformat(), note=body.note
+    save_error = _confirm_page_kind_locked(
+        project_root=project.project_root,
+        project_state=project_state,
+        page_index=page_index,
+        page_store=page_store,
+        kind=kind,
+        note=body.note,
+        method="single",
+    )
+    if save_error is not None:
+        return JSONResponse(
+            status_code=503,
+            content=ApiError(
+                error="store_persist_failed",
+                message=(
+                    f"page kind applied in memory but failed to persist page "
+                    f"{page_index} to the event store: {save_error}"
+                ),
+            ).model_dump(),
         )
 
     payload = _page_payload(
@@ -1994,6 +2097,7 @@ __all__ = [
     "GlyphBulkMarkRequest",
     "GlyphBulkMarkResponse",
     "PageHistoryInfo",
+    "PageKindProposalView",
     "PagePayload",
     "ReloadOCRRequest",
     "ReloadOCRResponse",

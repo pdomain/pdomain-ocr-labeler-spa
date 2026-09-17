@@ -34,7 +34,12 @@ import pytest
 from playwright.sync_api import Page
 
 from tests.e2e.conftest import LiveServer
-from tests.e2e.helpers import SEED_TIMEOUT, page_line_match_count, wait_for_project_ready
+from tests.e2e.helpers import (
+    SEED_TIMEOUT,
+    open_page_actions_overflow,
+    page_line_match_count,
+    wait_for_project_ready,
+)
 
 # ── testid groups per spec §2 ────────────────────────────────────────────────
 # These are the ALWAYS-PRESENT (possibly stub) driver-contract testids that
@@ -173,6 +178,44 @@ _WORD_EDIT_DIALOG_TESTIDS = [
     "dialog-apply-style-button",
     "dialog-apply-component-button",
     "dialog-clear-component-button",
+]
+
+# Page-kind review testids (driver-contract §2.17, spec
+# 2026-09-17-page-kind-review-design.md). `page-kind-control` and
+# `page-kind-status-button` are always-rendered real controls in
+# PageActionsCompact once a project page loads.
+_PAGE_KIND_TOOLBAR_TESTIDS = [
+    "page-kind-control",
+    "page-kind-status-button",
+]
+
+# `page-kind-select` and `page-kind-confirm-button` mount only once the
+# status button opens the control.
+_PAGE_KIND_TOOLBAR_OPEN_TESTIDS = [
+    "page-kind-select",
+    "page-kind-confirm-button",
+]
+
+# Review page kinds dialog testids (driver-contract §2.17). Checked after
+# opening the dialog via the overflow menu's review-page-kinds-button.
+# Parameterised row testids (`page-kinds-row-{pageIndex}` and sub-testids)
+# and state-dependent testids (`page-kinds-loading`, `page-kinds-error`,
+# `page-kinds-empty`, `page-kinds-bulk-count`, `page-kinds-bulk-excluded-note`)
+# are NOT listed here, following the convention §2.11 and §2.15 use for their
+# own parameterised/state-dependent testids.
+_PAGE_KINDS_DIALOG_TESTIDS = [
+    "page-kinds-dialog",
+    "page-kinds-dialog-close",
+    "page-kinds-filter-unreviewed",
+    "page-kinds-filter-all",
+    "page-kinds-kind-filter-select",
+    "page-kinds-select-all-visible",
+    "page-kinds-rows",
+    "page-kinds-bulk-bar",
+    "page-kinds-bulk-confirm-as-proposed",
+    "page-kinds-bulk-set-kind-select",
+    "page-kinds-bulk-set-kind-apply",
+    "page-kinds-dialog-close-footer",
 ]
 
 
@@ -633,4 +676,96 @@ def test_word_edit_dialog_testids_present(live_server: LiveServer, page: Page) -
     missing = _all_stub_or_present(page, _WORD_EDIT_DIALOG_TESTIDS)
     assert not missing, (
         f"Word-edit dialog testids missing after opening dialog (driver-contract §2.11, #454): {missing}"
+    )
+
+
+# ── Page kind review (driver-contract §2.17) ────────────────────────────────
+
+
+@pytest.mark.e2e
+def test_page_kind_toolbar_testids_present(live_server: LiveServer, page: Page) -> None:
+    """Driver-contract §2.17: page-kind-control and page-kind-status-button present.
+
+    Both are always-rendered real controls in PageActionsCompact once a
+    project page loads.
+    """
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
+    page.goto(url, timeout=15_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+    wait_for_project_ready(page)
+
+    missing = _all_stub_or_present(page, _PAGE_KIND_TOOLBAR_TESTIDS)
+    assert not missing, (
+        f"Page-kind toolbar testids missing from project page (driver-contract §2.17): {missing}"
+    )
+
+
+@pytest.mark.e2e
+def test_page_kind_toolbar_open_testids_present(live_server: LiveServer, page: Page) -> None:
+    """Driver-contract §2.17: the open-state kind-control testids present.
+
+    page-kind-select and page-kind-confirm-button mount only once
+    page-kind-status-button opens the control.
+    """
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
+    page.goto(url, timeout=15_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+    wait_for_project_ready(page)
+
+    page.click('[data-testid="page-kind-status-button"]')
+    page.wait_for_selector('[data-testid="page-kind-select"]', timeout=5_000)
+
+    missing = _all_stub_or_present(page, _PAGE_KIND_TOOLBAR_OPEN_TESTIDS)
+    assert not missing, (
+        f"Page-kind toolbar open-state testids missing after opening the control "
+        f"(driver-contract §2.17): {missing}"
+    )
+
+
+@pytest.mark.e2e
+def test_review_page_kinds_button_present_in_overflow_menu(live_server: LiveServer, page: Page) -> None:
+    """Driver-contract §2.17: review-page-kinds-button present in the overflow menu.
+
+    The button mounts only once the page-actions overflow menu opens.
+    """
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
+    page.goto(url, timeout=15_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+    wait_for_project_ready(page)
+
+    open_page_actions_overflow(page)
+
+    missing = _all_stub_or_present(page, ["review-page-kinds-button"])
+    assert not missing, (
+        f"review-page-kinds-button missing from the overflow menu (driver-contract §2.17): {missing}"
+    )
+
+
+@pytest.mark.e2e
+def test_page_kinds_dialog_testids_present(live_server: LiveServer, page: Page) -> None:
+    """Driver-contract §2.17: Review page kinds dialog testids present when open.
+
+    Opens the dialog via the overflow menu's review-page-kinds-button, then
+    asserts all §2.17 static/trigger testids are present in the DOM.
+    """
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
+    page.goto(url, timeout=15_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+    wait_for_project_ready(page)
+
+    open_page_actions_overflow(page)
+    page.click('[data-testid="review-page-kinds-button"]')
+    page.wait_for_selector('[data-testid="page-kinds-dialog"]', timeout=10_000)
+
+    missing = _all_stub_or_present(page, _PAGE_KINDS_DIALOG_TESTIDS)
+    assert not missing, (
+        f"Review page kinds dialog testids missing after opening it (driver-contract §2.17): {missing}"
     )

@@ -78,10 +78,12 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from pdomain_book_contracts.annotation import PageKind
+
 from ....settings import Settings
 from ...notifications import NotificationKind, NotificationQueue
 from ...ocr.predictor import PredictorCache
-from ...page_state import PageLoader, PageLoadOutcome
+from ...page_state import PageLoader, PageLoadOutcome, save_page_content_to_store
 from ...project_state import PageState, ProjectState
 
 if TYPE_CHECKING:
@@ -197,6 +199,26 @@ def _read_edited_image_blob(
         return None
 
 
+def _prior_confirmed_page_kind(project_state: ProjectState, page_index: int) -> PageKind | None:
+    """The page's current confirmed kind, read before OCR replaces its ``Page``.
+
+    pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
+    "Re-OCR and rotation keep the confirmed kind": each caller (reload OCR,
+    rotation, auto-rotate-all) reads the prior kind from page state before it
+    runs OCR and passes it to ``run_ocr``, which sets it on the fresh ``Page``
+    before the OCR result is saved. Duck-typed (not an ``isinstance(Page)``
+    check) so this works the same whether the loaded payload is a real
+    ``pdomain_book_tools.ocr.page.Page`` or a test double exposing the same
+    attribute. Returns ``None`` when no page is loaded or it carries no
+    confirmed kind.
+    """
+    pstate = project_state.get_page_state(page_index)
+    if pstate is None or pstate.page_record is None:
+        return None
+    kind = getattr(pstate.page_record.payload, "page_kind", None)
+    return kind if isinstance(kind, PageKind) else None
+
+
 def _apply_reocr_outcome(
     project_state: ProjectState,
     page_index: int,
@@ -244,6 +266,69 @@ def _apply_reocr_outcome(
         # passes pick it up.
         existing.generation += 1
         project_state._generation += 1
+
+
+def _finalize_reocr_outcome(
+    project_state: ProjectState,
+    page_index: int,
+    outcome: PageLoadOutcome,
+    *,
+    page_kind_sent: PageKind | None,
+    page_store: Any | None,
+) -> None:
+    """Recheck the confirmed kind for a race, then swap in the OCR outcome.
+
+    Fixes the re-OCR race in pdomain-ocr-synth's docs/specs/2026-09-17-page-
+    kind-review-design.md "Re-OCR and rotation keep the confirmed kind":
+    ``run_ocr`` runs for seconds with no lock held, so a confirm (single or
+    bulk) can land on the *old* page in that window, saving a fresh blob
+    under a new ``page_id`` with a correct marker while the OLD page's blob
+    (and this OCR outcome, already saved with the STALE ``page_kind_sent``)
+    disagree with it.
+
+    Holds this page's lock (the same lock ``_confirm_page_kind_locked``
+    takes) for the whole window: re-reads the live confirmed kind, and if a
+    confirm changed it while OCR ran, patches the fresh ``Page`` and re-saves
+    it to the store — the same save path the confirm route uses, under the
+    fresh ``page_id`` this OCR outcome carries — before performing the
+    ``_apply_reocr_outcome`` swap. No confirm can land between the recheck
+    and the swap because both critical sections serialize on the same lock.
+
+    ``page_kind_sent`` is duck-typed against the fresh payload the same way
+    ``_prior_confirmed_page_kind`` reads it: a payload without a settable
+    ``page_kind`` (a test double's plain ``dict``) is left alone.
+    """
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        current_kind = _prior_confirmed_page_kind(project_state, page_index)
+        if current_kind != page_kind_sent:
+            fresh_payload = getattr(outcome, "payload", None)
+            if fresh_payload is not None and hasattr(fresh_payload, "page_kind"):
+                fresh_payload.page_kind = current_kind
+                new_page_id = getattr(fresh_payload, "_labeler_page_id", None)
+                if page_store is not None and new_page_id is not None:
+                    try:
+                        save_page_content_to_store(
+                            page_id=new_page_id,
+                            page=fresh_payload,
+                            store=page_store,
+                            changes=[
+                                {
+                                    "type": "page_kind",
+                                    "page_index": page_index,
+                                    "kind": current_kind.value if current_kind is not None else None,
+                                }
+                            ],
+                        )
+                    except Exception as exc:
+                        log.warning(
+                            "_finalize_reocr_outcome: failed to re-persist the recheck kind "
+                            "page=%d page_id=%s: %s",
+                            page_index,
+                            new_page_id,
+                            exc,
+                        )
+        _apply_reocr_outcome(project_state, page_index, outcome)
 
 
 async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
@@ -302,12 +387,19 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
                 page_index,
             )
 
+    # pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
+    # "Re-OCR and rotation keep the confirmed kind" — read before the fresh
+    # Page replaces this one.
+    page_kind = _prior_confirmed_page_kind(project_state, page_index)
+
     timeout_s = settings.ocr_timeout_s
     try:
         if edited_image_bytes is not None:
-            ocr_coro = asyncio.to_thread(loader.run_ocr, page_index, edited_image_bytes=edited_image_bytes)
+            ocr_coro = asyncio.to_thread(
+                loader.run_ocr, page_index, edited_image_bytes=edited_image_bytes, page_kind=page_kind
+            )
         else:
-            ocr_coro = asyncio.to_thread(loader.run_ocr, page_index)
+            ocr_coro = asyncio.to_thread(loader.run_ocr, page_index, page_kind=page_kind)
         if timeout_s > 0:
             outcome: PageLoadOutcome = await asyncio.wait_for(ocr_coro, timeout=timeout_s)
         else:
@@ -340,7 +432,13 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
     current, message = _PROGRESS_STAGES[2]
     await runner.update_progress(job.job_id, current=current, total=_PROGRESS_TOTAL, message=message)
 
-    _apply_reocr_outcome(project_state, page_index, outcome)
+    _finalize_reocr_outcome(
+        project_state,
+        page_index,
+        outcome,
+        page_kind_sent=page_kind,
+        page_store=runner.context.get("page_store"),
+    )
 
     # Stage 4 — 1.0 / "Done".
     current, message = _PROGRESS_STAGES[3]
@@ -360,4 +458,10 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
     )
 
 
-__all__ = ["_apply_reocr_outcome", "_get_page_loader", "handle_reload_ocr"]
+__all__ = [
+    "_apply_reocr_outcome",
+    "_finalize_reocr_outcome",
+    "_get_page_loader",
+    "_prior_confirmed_page_kind",
+    "handle_reload_ocr",
+]

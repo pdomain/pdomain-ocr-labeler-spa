@@ -24,6 +24,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from pdomain_book_contracts.annotation import PageKind
 from pdomain_book_tools.ocr.page import Page
 
 from pdomain_ocr_labeler_spa.adapters.ocr.local_doctr import (
@@ -143,7 +144,13 @@ class _ShimLoader(LocalDoctrPageLoader):
         super().__init__(**kw)
         self.run_ocr_calls: int = 0
 
-    def run_ocr(self, page_index: int, *, edited_image_bytes: bytes | None = None) -> Any:
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: PageKind | None = None,
+    ) -> Any:
         self.run_ocr_calls += 1
         raise AssertionError(
             f"run_ocr called on restart read for page {page_index} — "

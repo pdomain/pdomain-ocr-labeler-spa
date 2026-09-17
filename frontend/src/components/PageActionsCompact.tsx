@@ -32,6 +32,9 @@ import {
   useAutoRotateAll,
   useUndoPage,
   useRedoPage,
+  useConfirmPageKind,
+  type PagePayload,
+  type PageKind,
 } from "../hooks/usePageMutations";
 import { useProposePageKinds, useProposeRegions } from "../hooks/useProposalRuns";
 import { usePage } from "../hooks/usePage";
@@ -39,11 +42,131 @@ import { useJobProgress } from "../hooks/useJobProgress";
 import { useJobCompletionInvalidation } from "../hooks/useJobCompletionInvalidation";
 import { dialogStore } from "../stores/dialog-store";
 import { toast } from "../lib/toast";
+import { PAGE_KINDS } from "../lib/pageKinds";
 import { BulkGlyphMarkDialog } from "./glyph/BulkGlyphMarkDialog";
 
 export interface PageActionsCompactProps {
   projectId: string;
   pageIndex: number;
+}
+
+// ─── page-kind control (page-kind review design) ───────────────────────────
+//
+// Spec: pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
+//   "The page toolbar shows and confirms the current page's kind".
+
+/** The kind a fresh control should preselect: confirmed, else proposed, else none. */
+function defaultKindSelection(page: PagePayload | undefined): PageKind | "" {
+  if (!page) return "";
+  if (page.page_kind_reviewed && page.page_kind) return page.page_kind;
+  if (page.page_kind_proposal) return page.page_kind_proposal.kind;
+  return "";
+}
+
+interface PageKindControlProps {
+  page: PagePayload | undefined;
+  confirmPageKind: ReturnType<typeof useConfirmPageKind>;
+}
+
+/**
+ * Shows the current page's kind — confirmed, proposed, or nothing yet — and,
+ * once opened, a native select of all fourteen kinds plus a Confirm button.
+ *
+ * The select's value is derived every render from `page` (confirmed, else
+ * proposed, else none) unless the person has picked something else in this
+ * open session — `override` holds only that pick, not a copy of server
+ * state, so a page payload that loads or refreshes after mount (the usual
+ * case: `usePage` is still fetching when this first renders) is picked up
+ * without an effect. `override` resets to `null` each time the control is
+ * opened, and keyed by `pageIndex` at the call site so navigating to a
+ * different page remounts this component and drops any stale pick.
+ */
+function PageKindControl({ page, confirmPageKind }: PageKindControlProps) {
+  const [open, setOpen] = useState(false);
+  const [override, setOverride] = useState<PageKind | "" | null>(null);
+  const selected = override ?? defaultKindSelection(page);
+
+  const proposal = page?.page_kind_proposal ?? null;
+  const confirmed = page?.page_kind_reviewed === true ? (page.page_kind ?? null) : null;
+
+  let statusLabel: string;
+  if (confirmed) {
+    statusLabel = `Confirmed: ${confirmed}`;
+  } else if (proposal) {
+    statusLabel =
+      proposal.kind === "unknown"
+        ? "Kind unknown"
+        : `Proposed: ${proposal.kind} (${typeof proposal.confidence === "number" ? proposal.confidence.toFixed(2) : "—"})`;
+  } else {
+    statusLabel = "No page kind";
+  }
+
+  return (
+    <div data-testid="page-kind-control" className="flex items-center gap-1 shrink-0">
+      <button
+        type="button"
+        data-testid="page-kind-status-button"
+        aria-expanded={open}
+        onClick={() => {
+          setOverride(null);
+          setOpen((v) => !v);
+        }}
+        title={proposal ? undefined : "No page kind — run Propose page kinds to get one"}
+        className="px-2 py-0.5 text-[11px] rounded-sm border border-border-2 bg-bg-raised text-ink-2 hover:text-ink-1 hover:border-accent transition-colors"
+      >
+        {statusLabel}
+        {!confirmed && !proposal && (
+          <span className="ml-1 text-ink-4">— run Propose page kinds</span>
+        )}
+      </button>
+      {open && (
+        <>
+          <select
+            data-testid="page-kind-select"
+            aria-label="Page kind"
+            value={selected}
+            disabled={confirmPageKind.isPending}
+            onChange={(e) => {
+              setOverride(e.target.value as PageKind | "");
+            }}
+            className="text-[11px] border border-border-2 rounded-sm px-1 py-0.5 bg-bg-sunk text-ink-2"
+          >
+            <option value="" disabled>
+              Choose a kind…
+            </option>
+            {PAGE_KINDS.map((kind) => (
+              <option key={kind} value={kind}>
+                {kind}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            data-testid="page-kind-confirm-button"
+            disabled={selected === "" || confirmPageKind.isPending}
+            onClick={() => {
+              if (selected === "") return;
+              confirmPageKind.mutate(
+                { kind: selected },
+                {
+                  onSuccess: () => {
+                    setOpen(false);
+                    setOverride(null);
+                  },
+                  onError: () => {
+                    toast.error("Confirm page kind failed");
+                  },
+                },
+              );
+            }}
+            className="px-2 py-0.5 text-[11px] rounded-sm border border-accent/60 text-accent hover:bg-accent/10 transition-colors disabled:opacity-40"
+          >
+            Confirm
+          </button>
+        </>
+      )}
+    </div>
+  );
 }
 
 /** Inline spinner — shown while a button's job is running. */
@@ -195,11 +318,9 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
 
   // Task 6 (region review surface): Propose page kinds completion.
   //
-  // The plan says this run "invalidates nothing, since no page view shows a
-  // proposed kind yet." That hook parameter is required, though, so this
-  // invalidates the page query anyway — the same key every other mutation
-  // here invalidates. It is a cheap refetch and harmless even when nothing
-  // on the current page changed.
+  // Invalidates the page query the same as every other mutation here — the
+  // page toolbar's kind control (below) reads `page_kind_proposal` off that
+  // query, so a completed run refreshes what it shows.
   useJobCompletionInvalidation({
     activeJobId: pageKindsJobId,
     jobProgress: pageKindsProgress,
@@ -211,6 +332,10 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       // is invalidated here too — cheap at limit=0, and correct even though
       // this run alone never changes `total_undecided`.
       void qc.invalidateQueries({ queryKey: ["review-queue", projectId] });
+      // Page-kind review design ("A proposal run and page history both
+      // refresh the list"): the book-wide Review page kinds dialog must see
+      // this run's fresh proposals too.
+      void qc.invalidateQueries({ queryKey: ["page-kinds", projectId] });
       const msg = event.progress.message || "Page kind proposals complete";
       toast.success(msg, { id: jobId });
     },
@@ -272,6 +397,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   const redoPage = useRedoPage(projectId, pageIndex);
   const proposePageKinds = useProposePageKinds(projectId);
   const proposeRegions = useProposeRegions(projectId);
+  const confirmPageKind = useConfirmPageKind(projectId, pageIndex);
 
   const isBusy =
     reloadOcr.isPending ||
@@ -761,6 +887,17 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
             >
               Propose regions
             </DropdownMenuItem>
+            {/* Page-kind review design: "A book-wide list reviews many pages
+                at once" — opens the Review page kinds dialog. */}
+            <DropdownMenuItem
+              data-testid="review-page-kinds-button"
+              disabled={!projectId}
+              onSelect={() => {
+                dialogStore.open("pageKinds");
+              }}
+            >
+              Review page kinds
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -831,6 +968,11 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
         >
           {pageSource ?? ""}
         </span>
+
+        {/* Page-kind review design: "The page toolbar shows and confirms the
+            current page's kind" — keyed by pageIndex so the control's local
+            open/selected state resets on navigation (see PageKindControl). */}
+        <PageKindControl key={pageIndex} page={pageQ.data} confirmPageKind={confirmPageKind} />
 
         {bulkGlyphOpen && (
           <BulkGlyphMarkDialog

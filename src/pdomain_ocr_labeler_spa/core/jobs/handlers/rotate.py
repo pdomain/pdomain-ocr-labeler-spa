@@ -19,7 +19,7 @@ The handler performs four steps:
 
 1. Rotate the source image in-place on disk (lossless via cv2 + np.rot90).
 2. Re-run OCR using the same path as ``reload_ocr`` (``_get_page_loader`` /
-   ``_apply_reocr_outcome`` — DRY, no copy-paste).
+   ``_finalize_reocr_outcome`` — DRY, no copy-paste).
 3. Persist durable rotation metadata via ``PageAggregate.rotation_updated``.
 4. Report progress.
 
@@ -88,7 +88,7 @@ async def handle_rotate_page(runner: JobRunner, job: Job) -> None:
     from ....settings import Settings
     from ...notifications import NotificationKind, NotificationQueue
     from ...project_state import ProjectState
-    from ..handlers.reload_ocr import _apply_reocr_outcome, _get_page_loader
+    from ..handlers.reload_ocr import _finalize_reocr_outcome, _get_page_loader, _prior_confirmed_page_kind
 
     payload: dict[str, Any] = job.payload
     project_id: str = str(payload.get("project_id", ""))
@@ -160,9 +160,13 @@ async def handle_rotate_page(runner: JobRunner, job: Job) -> None:
 
     # Step 2: Re-run OCR using the reload_ocr machinery (DRY — shared helper).
     loader = _get_page_loader(runner, project_state, settings)
+    # pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
+    # "Re-OCR and rotation keep the confirmed kind" — read before the fresh
+    # Page from run_ocr replaces this one.
+    page_kind = _prior_confirmed_page_kind(project_state, page_index)
 
     try:
-        outcome = await asyncio.to_thread(loader.run_ocr, page_index)
+        outcome = await asyncio.to_thread(loader.run_ocr, page_index, page_kind=page_kind)
     except Exception as exc:
         notification_queue.queue(
             NotificationKind.NEGATIVE,
@@ -178,8 +182,18 @@ async def handle_rotate_page(runner: JobRunner, job: Job) -> None:
         message="Persisting OCR result",
     )
 
-    # Write OCR outcome back to project state (shared helper — DRY).
-    _apply_reocr_outcome(project_state, page_index, outcome)
+    # Write OCR outcome back to project state (shared helper — DRY). Recheck
+    # the confirmed kind under this page's lock first — a confirm can have
+    # landed on the OLD page while OCR ran with no lock held; see
+    # ``_finalize_reocr_outcome``.
+    store = ctx.get("page_store")
+    _finalize_reocr_outcome(
+        project_state,
+        page_index,
+        outcome,
+        page_kind_sent=page_kind,
+        page_store=store,
+    )
 
     await runner.update_progress(
         job.job_id,
@@ -189,8 +203,7 @@ async def handle_rotate_page(runner: JobRunner, job: Job) -> None:
     )
 
     # Step 3: Persist durable rotation metadata via PageAggregate.
-    # Load the page aggregate (page_id may have been updated by _apply_reocr_outcome).
-    store = ctx.get("page_store")
+    # Load the page aggregate (page_id may have been updated by _finalize_reocr_outcome).
     if store is not None:
         with project_state._lock:
             pstate = project_state._page_states.get(page_index)

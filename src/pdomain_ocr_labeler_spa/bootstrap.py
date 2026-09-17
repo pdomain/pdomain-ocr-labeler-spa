@@ -58,6 +58,7 @@ from .api.middleware.request_id import RequestIdMiddleware
 from .api.normalize import install_normalize_router
 from .api.notifications import install_notifications_router
 from .api.ocr_config import _resolve_local_models_root, install_ocr_config_router
+from .api.page_kinds import install_page_kinds_router
 from .api.pages import install_pages_router
 from .api.projects import install_projects_router
 from .api.refine import install_refine_router
@@ -537,6 +538,7 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     install_refine_router(app)
     install_words_router(app)
     install_regions_router(app)
+    install_page_kinds_router(app)
     install_typography_router(app)
     install_lines_paragraphs_router(app)
 

@@ -86,11 +86,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from .models import PageSource, Project
 from .persistence.paths import labeled_projects_root
 from .project_state import PageState, ProjectState
+
+if TYPE_CHECKING:
+    from pdomain_book_contracts.annotation import PageKind
 
 
 @dataclass(frozen=True)
@@ -162,13 +165,24 @@ class PageLoader(Protocol):
 
     def load_labeled(self, page_index: int) -> PageLoadOutcome | None: ...
     def load_cached(self, page_index: int) -> PageLoadOutcome | None: ...
-    def run_ocr(self, page_index: int, *, edited_image_bytes: bytes | None = ...) -> PageLoadOutcome:
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = ...,
+        page_kind: PageKind | None = ...,
+    ) -> PageLoadOutcome:
         """Run OCR for ``page_index``.
 
         ``edited_image_bytes`` (Lane A / Task A4): when supplied, OCR runs
         against those raw image bytes (the post-erase edited page image)
         instead of the pristine on-disk source. ``None`` / omitted uses the
         on-disk file. Implementations may accept the keyword and ignore it.
+
+        ``page_kind`` (pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-
+        review-design.md "Re-OCR and rotation keep the confirmed kind"): the
+        prior confirmed kind, set on the fresh ``Page`` before it is saved so
+        reload OCR, rotation, and auto-rotate-all don't silently drop it.
         """
         ...
 
@@ -179,6 +193,7 @@ def ensure_page_model(
     *,
     loader: PageLoader,
     force_ocr: bool = False,
+    allow_ocr: bool = True,
 ) -> PageLoadOutcome | None:
     """Lazy page-load with labeled → cached → OCR precedence.
 
@@ -188,19 +203,38 @@ def ensure_page_model(
     probes, going straight to OCR (legacy parity:
     ``project_state.py:580-585``).
 
+    ``allow_ocr=False`` (pdomain-ocr-synth's docs/specs/2026-09-17-
+    page-kind-review-design.md "One route confirms many pages") returns
+    ``None`` instead of calling ``loader.run_ocr`` when neither the labeled
+    nor the cached lane has content for this page — a caller that must never
+    start OCR (e.g. the bulk page-kind confirm route) passes this instead of
+    calling the loader directly, so it still gets the full labeled → cached
+    precedence, the ``PageState`` creation, the ``page_id`` stamp, and the
+    char-sidecar application that calling the loader directly would skip.
+
     Returns ``None`` only when no project is loaded (mirrors legacy
-    ``ensure_page_model:451-453`` early-return). Out-of-range indices
-    *raise* ``PageIndexOutOfRangeError`` — the legacy implementation
-    returned ``None`` for those too, but in the SPA the route layer
-    has already validated the URL-shape ``page_index ∈ [0,
-    total_pages)``, so a None-return on out-of-range would mask a
-    bug rather than recover from one.
+    ``ensure_page_model:451-453`` early-return), or when ``allow_ocr=False``
+    and no lane has content. Out-of-range indices *raise*
+    ``PageIndexOutOfRangeError`` — the legacy implementation returned
+    ``None`` for those too, but in the SPA the route layer has already
+    validated the URL-shape ``page_index ∈ [0, total_pages)``, so a
+    None-return on out-of-range would mask a bug rather than recover from
+    one.
+
+    ``force_ocr=True`` combined with ``allow_ocr=False`` is a contradiction
+    — the former demands OCR unconditionally, the latter forbids it — and
+    *raises* ``ValueError`` rather than silently returning ``None``. Letting
+    it fall through to the ``allow_ocr=False`` early-return would report
+    "no content" for a caller that actually asked to force a re-OCR, masking
+    the bug instead of surfacing it.
 
     Lock contract: holds ``state._lock`` for the entire load,
     including OCR. See module docstring for the rationale (per-project
     lock, OCR is intrinsically the slow path, prevents double-OCR
     under contention).
     """
+    if force_ocr and not allow_ocr:
+        raise ValueError("ensure_page_model: force_ocr=True and allow_ocr=False are contradictory")
     project = state.loaded_project
     if project is None:
         return None
@@ -222,16 +256,13 @@ def ensure_page_model(
         # Lane probes happen under the lock so a concurrent
         # ``set_loaded_project`` swap can't shift the project out from
         # under us mid-load.
-        outcome: PageLoadOutcome
+        lane_outcome: PageLoadOutcome | None = None
         if not force_ocr:
             labeled = loader.load_labeled(page_index)
-            if labeled is not None:
-                outcome = labeled
-            else:
-                cached = loader.load_cached(page_index)
-                outcome = cached if cached is not None else loader.run_ocr(page_index)
-        else:
-            outcome = loader.run_ocr(page_index)
+            lane_outcome = labeled if labeled is not None else loader.load_cached(page_index)
+        if lane_outcome is None and not allow_ocr:
+            return None
+        outcome: PageLoadOutcome = lane_outcome if lane_outcome is not None else loader.run_ocr(page_index)
 
         # Cache the outcome on the existing PageState (or create one).
         # Note: ``ProjectState.set_page_state`` would re-acquire the

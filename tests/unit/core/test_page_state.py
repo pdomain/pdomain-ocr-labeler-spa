@@ -95,7 +95,9 @@ class StubLoader:
         self.load_cached_calls.append(page_index)
         return self.cached_hits.get(page_index)
 
-    def run_ocr(self, page_index: int) -> PageLoadOutcome:
+    def run_ocr(
+        self, page_index: int, *, edited_image_bytes: bytes | None = None, page_kind: object | None = None
+    ) -> PageLoadOutcome:
         self.run_ocr_calls.append(page_index)
         if page_index in self.image_missing:
             raise PageImageNotFoundError(f"image for page_index={page_index} not found")
@@ -168,6 +170,45 @@ def test_ocr_runs_when_no_labeled_or_cached() -> None:
     assert result is not None
     assert result.source == PageSource.OCR
     assert loader.run_ocr_calls == [0]
+
+
+# ─── 2b. allow_ocr — pdomain-ocr-synth 2026-09-17-page-kind-review-design.md ──
+
+
+def test_allow_ocr_false_returns_none_when_neither_lane_has_content() -> None:
+    """``allow_ocr=False`` must never call ``run_ocr`` — confirming a kind
+    (or any other read that opts out of OCR) must not start it."""
+    state = ProjectState()
+    state.set_loaded_project(_make_project())
+    loader = StubLoader()
+    result = ensure_page_model(state, 0, loader=loader, allow_ocr=False)
+    assert result is None
+    assert loader.run_ocr_calls == []
+    assert loader.load_labeled_calls == [0]
+    assert loader.load_cached_calls == [0]
+
+
+def test_allow_ocr_false_still_returns_a_labeled_or_cached_hit() -> None:
+    state = ProjectState()
+    state.set_loaded_project(_make_project())
+    cached = PageLoadOutcome(page_index=0, source=PageSource.CACHED_OCR, payload="cached")
+    loader = StubLoader(cached_hits={0: cached})
+    result = ensure_page_model(state, 0, loader=loader, allow_ocr=False)
+    assert result is cached
+    assert loader.run_ocr_calls == []
+
+
+def test_force_ocr_true_and_allow_ocr_false_raises() -> None:
+    """``force_ocr=True`` demands OCR unconditionally; ``allow_ocr=False``
+    forbids it — a contradiction. Falling through to the ``allow_ocr=False``
+    early-return would silently report "no content" instead of surfacing
+    the caller's bug, so this combination raises instead."""
+    state = ProjectState()
+    state.set_loaded_project(_make_project())
+    loader = StubLoader()
+    with pytest.raises(ValueError, match="force_ocr=True and allow_ocr=False"):
+        ensure_page_model(state, 0, loader=loader, force_ocr=True, allow_ocr=False)
+    assert loader.run_ocr_calls == []
 
 
 # ─── 3. Idempotency / cache (the big one) ─────────────────────────────────
@@ -253,7 +294,9 @@ def test_concurrent_callers_do_not_double_run_ocr() -> None:
             self.load_cached_calls.append(page_index)
             return None
 
-        def run_ocr(self, page_index: int) -> PageLoadOutcome:
+        def run_ocr(
+            self, page_index: int, *, edited_image_bytes: bytes | None = None, page_kind: object | None = None
+        ) -> PageLoadOutcome:
             # Wait for both threads to be inside run_ocr's caller before
             # returning — simulates two contending OCR runs.
             barrier.wait(timeout=2.0)

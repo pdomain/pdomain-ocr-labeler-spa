@@ -1668,6 +1668,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/page-kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Page Kinds
+         * @description Every page's proposed and confirmed kind, in page order.
+         *
+         *     Reads the proposal journal once (``PageKindProposalLog.latest_by_page``)
+         *     and the reviewed journal once (``PageKindReviewedStore.latest_by_page``)
+         *     — a book of any size costs exactly two file reads. ``confirmed_kind``
+         *     comes from the live page when it is loaded; otherwise from the latest
+         *     reviewed marker, which is ``None`` for a marker written before the
+         *     marker carried a kind (reported as "reviewed, kind not recorded").
+         */
+        get: operations["list_page_kinds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/page-kinds/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Page Kinds Bulk
+         * @description Confirm many pages in one request — each exactly as the single-page
+         *     route confirms it (``_confirm_page_kind_locked``).
+         *
+         *     A page index outside the book, or the same index requested twice, fails
+         *     the whole request with ``400`` before any page is written. Those two
+         *     checks also bound ``len(body.pages)`` at the book's page count: every
+         *     index is unique and in range, so more entries than that is impossible
+         *     without tripping one of them first.
+         *
+         *     Each page not already in memory is loaded through ``ensure_page_model``
+         *     with ``allow_ocr=False`` — confirming a kind must never start OCR — under
+         *     the project lock, which is released before this function takes that
+         *     page's lock to confirm it (the same order a page fetch followed by an
+         *     edit already uses).
+         */
+        post: operations["confirm_page_kinds_bulk"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/typography/contract": {
         parameters: {
             query?: never;
@@ -2997,6 +3057,51 @@ export interface components {
             note?: string | null;
         };
         /**
+         * ConfirmPageKindsBulkItem
+         * @description One page's requested kind in a bulk-confirm request.
+         */
+        ConfirmPageKindsBulkItem: {
+            /** Page Index */
+            page_index: number;
+            kind: components["schemas"]["PageKind"];
+        };
+        /**
+         * ConfirmPageKindsBulkRequest
+         * @description ``POST .../page-kinds/confirm`` request body.
+         */
+        ConfirmPageKindsBulkRequest: {
+            /** Pages */
+            pages: components["schemas"]["ConfirmPageKindsBulkItem"][];
+            /** Note */
+            note?: string | null;
+        };
+        /**
+         * ConfirmPageKindsBulkResponse
+         * @description ``POST .../page-kinds/confirm`` response body.
+         */
+        ConfirmPageKindsBulkResponse: {
+            /** Results */
+            results?: components["schemas"]["ConfirmPageKindsResultItem"][];
+            /**
+             * Confirmed Count
+             * @default 0
+             */
+            confirmed_count: number;
+        };
+        /**
+         * ConfirmPageKindsResultItem
+         * @description One page's outcome in a bulk-confirm response.
+         */
+        ConfirmPageKindsResultItem: {
+            /** Page Index */
+            page_index: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "confirmed" | "not_loaded" | "store_unavailable" | "persist_failed";
+        };
+        /**
          * CoordinateTransform
          * @description Named affine transform between portable coordinate spaces.
          */
@@ -4304,6 +4409,53 @@ export interface components {
          */
         PageKind: "body" | "chapter opening" | "title page" | "half title" | "contents" | "index" | "dedication" | "preface" | "errata" | "plate" | "blank" | "advertisement" | "colophon" | "unknown";
         /**
+         * PageKindProposalView
+         * @description One page's latest page-kind proposal — spec pdomain-ocr-synth's
+         *     docs/specs/2026-09-17-page-kind-review-design.md "The page payload
+         *     carries the latest proposal".
+         */
+        PageKindProposalView: {
+            /** Proposal Id */
+            proposal_id: string;
+            /** Run Id */
+            run_id: string;
+            kind: components["schemas"]["PageKind"];
+            /** Confidence */
+            confidence: number | null;
+            /** Evidence */
+            evidence: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * PageKindsListItem
+         * @description One page's row in the book-wide page-kinds list.
+         */
+        PageKindsListItem: {
+            /** Page Index */
+            page_index: number;
+            confirmed_kind: components["schemas"]["PageKind"] | null;
+            /** Reviewed */
+            reviewed: boolean;
+            proposed_kind: components["schemas"]["PageKind"] | null;
+            /** Confidence */
+            confidence: number | null;
+            /** Run Id */
+            run_id: string | null;
+        };
+        /**
+         * PageKindsListResponse
+         * @description ``GET .../page-kinds`` response.
+         */
+        PageKindsListResponse: {
+            /** Total Pages */
+            total_pages: number;
+            /** Reviewed Count */
+            reviewed_count: number;
+            /** Pages */
+            pages: components["schemas"]["PageKindsListItem"][];
+        };
+        /**
          * PagePayload
          * @description Full per-page payload — spec §5.3 / §1 ``PagePayload``.
          *
@@ -4347,6 +4499,7 @@ export interface components {
              * @default false
              */
             page_kind_reviewed: boolean;
+            page_kind_proposal?: components["schemas"]["PageKindProposalView"] | null;
             /** Extra */
             extra?: {
                 [key: string]: unknown;
@@ -7724,6 +7877,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RegionReviewQueueResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_page_kinds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageKindsListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_page_kinds_bulk: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmPageKindsBulkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmPageKindsBulkResponse"];
                 };
             };
             /** @description Validation Error */

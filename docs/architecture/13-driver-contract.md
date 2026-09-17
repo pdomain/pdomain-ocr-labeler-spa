@@ -3,13 +3,13 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-09-17
 ---
 
 # 13 — Driver-Compatibility Contract
 
 > **Status**: Active
-> **Last updated**: 2026-05-11
+> **Last updated**: 2026-09-17
 > **Spec-Issue**: pdomain/pdomain-ocr-labeler-spa#30
 
 The `pd-ocr-labeler-driver` agent operates the labeler UI through
@@ -470,6 +470,49 @@ Per-line buttons within each card reuse existing driver-contract testids
 `line-ocr-to-gt-button-{n}`, `line-delete-button-{n}`).
 Per-word inputs reuse `gt-text-input-{l}-{w}` and
 `word-validate-button-{l}-{w}`.
+
+### 2.17 Page kind review (spec `2026-09-17-page-kind-review-design.md`)
+
+A kind control sits in `PageActionsCompact` beside `page-source-badge` and
+shows the current page's confirmed or proposed kind. A book-wide "Review
+page kinds" dialog opens from the page-actions overflow menu (see §2.9's
+`page-actions-compact-overflow`, reused unchanged) and lists every page's
+kind for filtered, bulk review.
+
+| Testid | What it is |
+|---|---|
+| `page-kind-control` | Outer wrapper for the page-toolbar kind control |
+| `page-kind-status-button` | Shows the current kind (confirmed / proposed / none); click to open |
+| `page-kind-select` | Kind select; mounts once the status button opens the control |
+| `page-kind-confirm-button` | Confirm button; mounts alongside the select |
+| `review-page-kinds-button` | Overflow-menu entry that opens the Review page kinds dialog |
+| `page-kinds-dialog` | Outer `DialogContent` wrapper |
+| `page-kinds-dialog-close` | Header close button |
+| `page-kinds-filter-unreviewed` | "Unreviewed" filter button (default filter) |
+| `page-kinds-filter-all` | "All" filter button |
+| `page-kinds-kind-filter-select` | Proposed-kind filter select |
+| `page-kinds-select-all-visible` | Select-all-visible checkbox |
+| `page-kinds-loading` | Shown while the list loads |
+| `page-kinds-error` | Shown if the list fails to load |
+| `page-kinds-empty` | Shown when no row matches the current filters |
+| `page-kinds-rows` | Row list container |
+| `page-kinds-row-{pageIndex}` | One row |
+| `page-kinds-row-checkbox-{pageIndex}` | Row selection checkbox |
+| `page-kinds-row-page-link-{pageIndex}` | Page-number link (navigates + closes the dialog) |
+| `page-kinds-row-proposed-{pageIndex}` | Proposed kind + confidence text |
+| `page-kinds-row-confirmed-{pageIndex}` | Confirmed kind / review-status text |
+| `page-kinds-bulk-bar` | Selection bar (always mounted) |
+| `page-kinds-bulk-count` | "N selected" (shown once the selection is non-empty) |
+| `page-kinds-bulk-confirm-as-proposed` | "Confirm as proposed" button |
+| `page-kinds-bulk-excluded-note` | Count of selected pages excluded (unknown or missing proposal) |
+| `page-kinds-bulk-set-kind-select` | "Set kind" select |
+| `page-kinds-bulk-set-kind-apply` | "Set kind" apply button |
+| `page-kinds-dialog-close-footer` | Footer Close button |
+
+`page-kinds-row-{pageIndex}` and its per-row sub-testids are parameterised by
+`page_index` (0-based, matching §2.8's row-indexing convention); the
+conformance test asserts only the static/trigger testids above, the same
+convention §2.15 uses for its parameterised testids.
 
 ---
 

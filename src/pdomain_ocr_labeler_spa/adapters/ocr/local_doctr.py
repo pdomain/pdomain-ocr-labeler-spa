@@ -243,6 +243,7 @@ def _ingest_ocr_result(
 
 
 if TYPE_CHECKING:
+    from pdomain_book_contracts.annotation import PageKind
     from pdomain_book_tools.ocr.page import Page
 
 
@@ -400,7 +401,13 @@ class LocalDoctrPageLoader:
         """STUB: cached lane retired (M5b). Returns None — labeled lane handles reload."""
         return None
 
-    def run_ocr(self, page_index: int, *, edited_image_bytes: bytes | None = None) -> PageLoadOutcome:
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: PageKind | None = None,
+    ) -> PageLoadOutcome:
         if page_index < 0 or page_index >= len(self.project.image_paths):
             raise IndexError(
                 f"page_index {page_index} out of range (total_pages={len(self.project.image_paths)})"
@@ -426,12 +433,14 @@ class LocalDoctrPageLoader:
                 raise PageImageNotFoundError(f"Page image not found on disk: {image_path}")
 
         try:
-            return self._run_ocr_on_path(page_index, image_path)
+            return self._run_ocr_on_path(page_index, image_path, page_kind=page_kind)
         finally:
             if _tmp_dir is not None:
                 _tmp_dir.cleanup()
 
-    def _run_ocr_on_path(self, page_index: int, image_path: Path) -> PageLoadOutcome:
+    def _run_ocr_on_path(
+        self, page_index: int, image_path: Path, *, page_kind: PageKind | None = None
+    ) -> PageLoadOutcome:
         """Run OCR against a concrete on-disk image path (Lane A / A4 seam).
 
         Split out of ``run_ocr`` so the edited-image temp-file path and the
@@ -515,6 +524,14 @@ class LocalDoctrPageLoader:
                     image_path.name,
                     exc,
                 )
+
+        # pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
+        # "Re-OCR and rotation keep the confirmed kind": a fresh Page has no
+        # page_kind by default, so reload OCR, rotation, and auto-rotate-all
+        # would otherwise silently drop a confirmed kind. The kind must be on
+        # the page before the event-store write below, not added afterwards,
+        # so it is part of the same saved content — never a second write.
+        page_obj.page_kind = page_kind
 
         # Event-store write: persist OCR result as OcrCompleted event.
         # Best-effort: a write failure must not turn a successful OCR

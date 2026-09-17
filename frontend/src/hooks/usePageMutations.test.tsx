@@ -12,7 +12,7 @@
 //   - useRematchGt: synchronous POST to rematch-gt
 
 import React from "react";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
@@ -26,6 +26,7 @@ import {
   useRematchGt,
   useUndoPage,
   useRedoPage,
+  useConfirmPageKind,
 } from "./usePageMutations";
 
 function makeWrapper() {
@@ -292,5 +293,130 @@ describe("useRedoPage", () => {
       expect(result.current.isSuccess).toBe(true);
     });
     expect(called).toBe(1);
+  });
+});
+
+// ─── page-kinds invalidation (page-kind review design) ─────────────────────
+// Spec: pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
+//   "A proposal run and page history both refresh the list" — undo/redo
+//   invalidate the ["page-kinds", projectId] prefix alongside the page query.
+
+function makeQueryClient() {
+  return new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+}
+
+function makeWrapperFor(qc: QueryClient) {
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+  };
+}
+
+describe("useUndoPage: page-kinds invalidation", () => {
+  it("invalidates the page-kinds prefix on success, alongside the page query", async () => {
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/undo`, () =>
+        HttpResponse.json({ project_id: PROJECT_ID, page_index: PAGE_IDX }),
+      ),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useUndoPage(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapperFor(qc),
+    });
+
+    await act(async () => {
+      result.current.mutate();
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID, PAGE_IDX] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page-kinds", PROJECT_ID] });
+  });
+});
+
+describe("useRedoPage: page-kinds invalidation", () => {
+  it("invalidates the page-kinds prefix on success, alongside the page query", async () => {
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/redo`, () =>
+        HttpResponse.json({ project_id: PROJECT_ID, page_index: PAGE_IDX }),
+      ),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useRedoPage(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapperFor(qc),
+    });
+
+    await act(async () => {
+      result.current.mutate();
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID, PAGE_IDX] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page-kinds", PROJECT_ID] });
+  });
+});
+
+// ─── useConfirmPageKind ─────────────────────────────────────────────────────
+// Spec: pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
+//   "The page toolbar shows and confirms the current page's kind".
+
+describe("useConfirmPageKind", () => {
+  it("POSTs { kind, note } to .../page-kind and resolves with the PagePayload", async () => {
+    let method: string | undefined;
+    let path: string | undefined;
+    let body: unknown;
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/page-kind`, async ({ request }) => {
+        method = request.method;
+        path = new URL(request.url).pathname;
+        body = await request.json();
+        return HttpResponse.json({
+          project_id: PROJECT_ID,
+          page_index: PAGE_IDX,
+          page_kind: "title page",
+          page_kind_reviewed: true,
+        });
+      }),
+    );
+    const qc = makeQueryClient();
+    const { result } = renderHook(() => useConfirmPageKind(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapperFor(qc),
+    });
+
+    let data: { page_kind?: string | null } | undefined;
+    await act(async () => {
+      data = await result.current.mutateAsync({ kind: "title page" });
+    });
+
+    expect(method).toBe("POST");
+    expect(path).toBe(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/page-kind`);
+    expect(body).toEqual({ kind: "title page", note: null });
+    expect(data?.page_kind).toBe("title page");
+  });
+
+  it("invalidates the page query and the page-kinds prefix on success", async () => {
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/page-kind`, () =>
+        HttpResponse.json({
+          project_id: PROJECT_ID,
+          page_index: PAGE_IDX,
+          page_kind: "body",
+          page_kind_reviewed: true,
+        }),
+      ),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useConfirmPageKind(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapperFor(qc),
+    });
+
+    await act(() => result.current.mutateAsync({ kind: "body" }));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID, PAGE_IDX] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page-kinds", PROJECT_ID] });
   });
 });

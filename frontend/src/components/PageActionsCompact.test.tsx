@@ -818,6 +818,210 @@ describe("PageActionsCompact: propose page kinds / propose regions (Task 6)", ()
 
     vi.unstubAllGlobals();
   });
+
+  // ── Page-kind review design: "A proposal run ... refresh[es] the list" ──
+
+  it("propose page kinds completion invalidates the page-kinds prefix", async () => {
+    stubPage(false);
+    server.use(
+      http.post("/api/projects/proj-1/propose-page-kinds", () =>
+        HttpResponse.json({ job_id: "job-pk-pkinv" }, { status: 202 }),
+      ),
+    );
+    const qc = makeQC();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const es = mockEventSource();
+    const user = userEvent.setup();
+    renderCompact("proj-1", 0, qc);
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("propose-page-kinds-button"));
+    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
+
+    es.dispatch({
+      job_id: "job-pk-pkinv",
+      status: "complete",
+      progress: { message: "Proposed page kinds on 4 page(s)." },
+    });
+
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page-kinds", "proj-1"] }),
+    );
+
+    vi.unstubAllGlobals();
+  });
+});
+
+// ─── page-kind toolbar control (page-kind review design) ────────────────────
+// Spec: pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
+//   "The page toolbar shows and confirms the current page's kind" — three
+//   states: confirmed, proposed (with confidence, unknown shown as "Kind
+//   unknown"), and nothing yet (with a hint to run Propose page kinds).
+
+function pagePayloadWithKind(overrides: Record<string, unknown>) {
+  return {
+    project_id: "proj-1",
+    page_index: 0,
+    page_record: null,
+    line_matches: [],
+    selection: {
+      selection_mode: "word",
+      selected_paragraphs: [],
+      selected_lines: [],
+      selected_words: [],
+    },
+    encoded_dims: null,
+    line_filter: "all",
+    image_url: null,
+    generation: 1,
+    page_text_ocr: "",
+    page_text_gt: "",
+    page_kind_reviewed: false,
+    extra: {},
+    ...overrides,
+  };
+}
+
+function stubPageKind(overrides: Record<string, unknown>) {
+  server.use(
+    http.get("/api/projects/:pid/pages/:idx", () =>
+      HttpResponse.json(pagePayloadWithKind(overrides)),
+    ),
+  );
+}
+
+describe("PageActionsCompact: page-kind toolbar control", () => {
+  it("shows the confirmed kind when the page has been reviewed", async () => {
+    stubPageKind({ page_kind: "title page", page_kind_reviewed: true });
+    renderCompact();
+    await waitFor(() => {
+      expect(screen.getByTestId("page-kind-status-button")).toHaveTextContent(/title page/i);
+    });
+    expect(screen.getByTestId("page-kind-status-button")).toHaveTextContent(/confirmed/i);
+  });
+
+  it("shows the proposed kind with its confidence when unconfirmed", async () => {
+    stubPageKind({
+      page_kind_proposal: {
+        proposal_id: "p1",
+        run_id: "r1",
+        kind: "body",
+        confidence: 0.82,
+        evidence: {},
+      },
+    });
+    renderCompact();
+    await waitFor(() => {
+      expect(screen.getByTestId("page-kind-status-button")).toHaveTextContent("body");
+    });
+    expect(screen.getByTestId("page-kind-status-button")).toHaveTextContent("0.82");
+  });
+
+  it("shows 'Kind unknown' for an unknown proposal", async () => {
+    stubPageKind({
+      page_kind_proposal: {
+        proposal_id: "p1",
+        run_id: "r1",
+        kind: "unknown",
+        confidence: null,
+        evidence: {},
+      },
+    });
+    renderCompact();
+    await waitFor(() => {
+      expect(screen.getByTestId("page-kind-status-button")).toHaveTextContent(/kind unknown/i);
+    });
+  });
+
+  it("shows 'No page kind' with a hint when nothing has been proposed or confirmed", async () => {
+    stubPageKind({});
+    renderCompact();
+    await waitFor(() => {
+      expect(screen.getByTestId("page-kind-status-button")).toHaveTextContent(/no page kind/i);
+    });
+    expect(screen.getByTestId("page-kind-control")).toHaveTextContent(/propose page kinds/i);
+  });
+
+  it("opening the control preselects the confirmed kind and Confirm re-sends it", async () => {
+    stubPageKind({ page_kind: "blank", page_kind_reviewed: true });
+    const spy = vi.fn(() =>
+      HttpResponse.json(pagePayloadWithKind({ page_kind: "blank", page_kind_reviewed: true })),
+    );
+    server.use(http.post("/api/projects/proj-1/pages/0/page-kind", spy));
+    const user = userEvent.setup();
+    renderCompact();
+    await waitFor(() => screen.getByTestId("page-kind-status-button"));
+
+    await user.click(screen.getByTestId("page-kind-status-button"));
+    expect(screen.getByTestId("page-kind-select")).toHaveValue("blank");
+
+    await user.click(screen.getByTestId("page-kind-confirm-button"));
+
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+  });
+
+  it("opening the control preselects the proposed kind when unconfirmed", async () => {
+    stubPageKind({
+      page_kind_proposal: {
+        proposal_id: "p1",
+        run_id: "r1",
+        kind: "plate",
+        confidence: 0.6,
+        evidence: {},
+      },
+    });
+    const user = userEvent.setup();
+    renderCompact();
+    await waitFor(() => screen.getByTestId("page-kind-status-button"));
+
+    await user.click(screen.getByTestId("page-kind-status-button"));
+
+    expect(screen.getByTestId("page-kind-select")).toHaveValue("plate");
+  });
+
+  it("confirming a chosen kind POSTs to .../page-kind with that kind", async () => {
+    stubPageKind({});
+    let body: unknown;
+    server.use(
+      http.post("/api/projects/proj-1/pages/0/page-kind", async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json(
+          pagePayloadWithKind({ page_kind: "contents", page_kind_reviewed: true }),
+        );
+      }),
+    );
+    const user = userEvent.setup();
+    renderCompact();
+    await waitFor(() => screen.getByTestId("page-kind-status-button"));
+    await user.click(screen.getByTestId("page-kind-status-button"));
+
+    await user.selectOptions(screen.getByTestId("page-kind-select"), "contents");
+    await user.click(screen.getByTestId("page-kind-confirm-button"));
+
+    await waitFor(() => {
+      expect(body).toEqual({ kind: "contents", note: null });
+    });
+  });
+});
+
+// ─── "Review page kinds" menu entry ──────────────────────────────────────────
+
+describe("PageActionsCompact: Review page kinds menu entry", () => {
+  it("renders review-page-kinds-button in the overflow menu", async () => {
+    stubPage(false);
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    expect(await screen.findByTestId("review-page-kinds-button")).toBeInTheDocument();
+  });
+
+  it("clicking it opens the pageKinds dialog", async () => {
+    stubPage(false);
+    const user = userEvent.setup();
+    renderCompact();
+    await user.click(screen.getByTestId("page-actions-compact-overflow"));
+    await user.click(await screen.findByTestId("review-page-kinds-button"));
+    expect(dialogStore.getState().pageKinds.open).toBe(true);
+  });
 });
 
 // ─── toast lifecycle tests ────────────────────────────────────────────────────

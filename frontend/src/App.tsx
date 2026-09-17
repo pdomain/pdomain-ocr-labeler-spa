@@ -60,6 +60,7 @@ import { OCRConfigModal } from "./components/OCRConfigModal";
 import { ExportDialog } from "./components/ExportDialog";
 import { HotkeyHelpModal } from "./components/HotkeyHelpModal";
 import { SourceFolderDialog } from "./components/SourceFolderDialog";
+import { PageKindsDialog } from "./components/PageKindsDialog";
 import { dialogStore, useDialogStore } from "./stores/dialog-store";
 
 // One QueryClient for the app.
@@ -199,6 +200,7 @@ function AppInner() {
   const ocrConfigOpen = useDialogStore((s) => s.ocrConfig.open);
   const exportOpen = useDialogStore((s) => s.export.open);
   const sourceFolderOpen = useDialogStore((s) => s.sourceFolder.open);
+  const pageKindsOpen = useDialogStore((s) => s.pageKinds.open);
   const { projectId, pageIndex } = useRouteProjectContext();
 
   // D-047: HeaderBar is now chrome-only. The document/page-scoped controls
@@ -364,6 +366,15 @@ function AppInner() {
             currentPageIndex={pageIndex}
             onClose={() => {
               dialogStore.close("export");
+            }}
+          />
+        )}
+        {projectId && (
+          <PageKindsDialog
+            open={pageKindsOpen}
+            projectId={projectId}
+            onClose={() => {
+              dialogStore.close("pageKinds");
             }}
           />
         )}

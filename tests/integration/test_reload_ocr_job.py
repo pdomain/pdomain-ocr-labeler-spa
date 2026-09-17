@@ -69,10 +69,18 @@ class _FakePageLoader:
 
     def __init__(self, *, raise_on_run: Exception | None = None) -> None:
         self.calls: list[int] = []
+        self.page_kind_calls: list[object] = []
         self._raise = raise_on_run
 
-    def run_ocr(self, page_index: int) -> PageLoadOutcome:
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: object | None = None,
+    ) -> PageLoadOutcome:
         self.calls.append(page_index)
+        self.page_kind_calls.append(page_kind)
         if self._raise is not None:
             raise self._raise
         return PageLoadOutcome(
@@ -159,6 +167,50 @@ def test_reload_ocr_success_emits_four_progress_events_in_order(
 
     assert events[-1].get("type") == "complete", events[-1]
     assert loader.calls == [0]
+
+
+def test_reload_ocr_passes_the_prior_confirmed_kind_to_run_ocr(
+    loaded_client_with_loader: tuple[TestClient, _FakePageLoader, list[dict[str, Any]]],
+) -> None:
+    """pdomain-ocr-synth's 2026-09-17-page-kind-review-design.md "Re-OCR and
+    rotation keep the confirmed kind": reload OCR reads the page's prior
+    confirmed kind from state before it runs OCR and passes it through.
+    """
+    from types import SimpleNamespace
+
+    from pdomain_book_contracts.annotation import PageKind
+
+    c, loader, events = loaded_client_with_loader
+    project_state = c.app.state.project_state  # type: ignore[attr-defined]
+    from pdomain_ocr_labeler_spa.core.project_state import PageState
+
+    pstate = PageState(
+        page_index=0,
+        page_record=PageLoadOutcome(
+            page_index=0, source=PageSource.OCR, payload=SimpleNamespace(page_kind=PageKind.BODY)
+        ),
+    )
+    project_state._page_states[0] = pstate
+
+    ocr_resp = c.post("/api/projects/book1/pages/0/reload-ocr", json={})
+    assert ocr_resp.status_code == 202
+
+    _wait_for_terminal(events)
+    assert events[-1].get("type") == "complete", events[-1]
+    assert loader.page_kind_calls == [PageKind.BODY]
+
+
+def test_reload_ocr_passes_none_when_the_page_has_no_confirmed_kind(
+    loaded_client_with_loader: tuple[TestClient, _FakePageLoader, list[dict[str, Any]]],
+) -> None:
+    c, loader, events = loaded_client_with_loader
+
+    ocr_resp = c.post("/api/projects/book1/pages/0/reload-ocr", json={})
+    assert ocr_resp.status_code == 202
+
+    _wait_for_terminal(events)
+    assert events[-1].get("type") == "complete", events[-1]
+    assert loader.page_kind_calls == [None]
 
 
 def test_reload_ocr_stores_outcome_on_project_state(
@@ -276,7 +328,13 @@ class _SlowPageLoader:
         self._sleep_s = sleep_s
         self.calls: list[int] = []
 
-    def run_ocr(self, page_index: int) -> PageLoadOutcome:
+    def run_ocr(
+        self,
+        page_index: int,
+        *,
+        edited_image_bytes: bytes | None = None,
+        page_kind: object | None = None,
+    ) -> PageLoadOutcome:
         self.calls.append(page_index)
         time.sleep(self._sleep_s)
         return PageLoadOutcome(
@@ -331,6 +389,141 @@ def test_reload_ocr_times_out_and_marks_job_error(tmp_path: Path, projects_root:
         ]
         assert timeout_notifications, (
             f"expected an OCR-timeout notification; got {[(n.kind, n.message) for n in notifications]}"
+        )
+
+
+def test_reload_ocr_recheck_saves_a_confirm_that_landed_during_ocr(
+    tmp_path: Path, projects_root: Path
+) -> None:
+    """pdomain-ocr-synth's 2026-09-17-page-kind-review-design.md "Re-OCR and
+    rotation keep the confirmed kind" — the re-OCR race (finding 1): a confirm
+    that lands on the OLD page while ``run_ocr`` is in flight (no lock held)
+    must still be reflected in the fresh page's stored content, so the page
+    blob's kind and the latest reviewed marker agree afterward.
+
+    The fake loader's ``run_ocr`` confirms the OLD page (via the same shared
+    ``_confirm_page_kind_locked`` the routes use) before it returns the fresh
+    OCR outcome carrying the STALE kind — simulating a confirm request that
+    completed while OCR ran.
+    """
+    from pdomain_book_contracts.annotation import PageKind
+    from pdomain_book_tools.ocr.page import Page
+
+    from pdomain_ocr_labeler_spa.adapters.ocr.local_doctr import _ingest_ocr_result
+    from pdomain_ocr_labeler_spa.api._page_content import load_page_from_store
+    from pdomain_ocr_labeler_spa.api.pages import _confirm_page_kind_locked
+    from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+    from pdomain_ocr_labeler_spa.core.persistence.page_store import LabelerPageStore
+    from pdomain_ocr_labeler_spa.core.project_state import PageState
+
+    settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    recorded: list[dict[str, Any]] = []
+
+    with TestClient(app) as c:
+        _wrap_broker_publish(c.app.state.job_events, recorded)  # type: ignore[attr-defined]
+        resp = c.post(
+            "/api/projects/load",
+            json={"project_root": str(projects_root / "book1")},
+        )
+        assert resp.status_code == 200, resp.text
+
+        project_state: ProjectState = c.app.state.project_state  # type: ignore[attr-defined]
+        page_store: LabelerPageStore = c.app.state.page_store  # type: ignore[attr-defined]
+        project = project_state.loaded_project
+        assert project is not None
+
+        # Seed page 0 as already OCR'd + confirmed "body", store-backed.
+        old_page = Page(width=100, height=100, page_index=0, blocks=[])
+        old_page.page_kind = PageKind.BODY
+        old_agg = _ingest_ocr_result(
+            page=old_page,
+            image_bytes=b"\x89PNG\r\n",
+            page_index=0,
+            store=page_store,
+            project=project,
+        )
+        old_pstate = PageState(
+            page_index=0,
+            page_record=PageLoadOutcome(page_index=0, source=PageSource.OCR, payload=old_page),
+        )
+        old_pstate.page_id = old_agg.record.page_id
+        project_state._page_states[0] = old_pstate
+
+        class _RaceLoader:
+            """``PageLoader`` double that confirms the OLD page mid-``run_ocr``."""
+
+            def __init__(self) -> None:
+                self.calls: list[int] = []
+
+            def run_ocr(
+                self,
+                page_index: int,
+                *,
+                edited_image_bytes: bytes | None = None,
+                page_kind: PageKind | None = None,
+            ) -> PageLoadOutcome:
+                self.calls.append(page_index)
+
+                # A confirm lands on the OLD page while this "OCR" is in flight.
+                error = _confirm_page_kind_locked(
+                    project_root=project.project_root,
+                    project_state=project_state,
+                    page_index=page_index,
+                    page_store=page_store,
+                    kind=PageKind.TITLE_PAGE,
+                    note=None,
+                    method="single",
+                )
+                assert error is None, error
+
+                # The fresh OCR result still carries the STALE kind read
+                # before OCR started — exactly the race this test simulates.
+                fresh_page = Page(width=100, height=100, page_index=page_index, blocks=[])
+                fresh_page.page_kind = page_kind
+                agg = _ingest_ocr_result(
+                    page=fresh_page,
+                    image_bytes=b"\x89PNG\r\n",
+                    page_index=page_index,
+                    store=page_store,
+                    project=project,
+                )
+                object.__setattr__(fresh_page, "_labeler_page_id", agg.record.page_id)
+                return PageLoadOutcome(page_index=page_index, source=PageSource.OCR, payload=fresh_page)
+
+            def load_labeled(self, page_index: int) -> PageLoadOutcome | None:
+                return None
+
+            def load_cached(self, page_index: int) -> PageLoadOutcome | None:
+                return None
+
+        loader = _RaceLoader()
+        c.app.state.job_runner.context["page_loader"] = loader  # type: ignore[attr-defined]
+
+        ocr_resp = c.post("/api/projects/book1/pages/0/reload-ocr", json={})
+        assert ocr_resp.status_code == 202, ocr_resp.text
+
+        _wait_for_terminal(recorded)
+        assert recorded[-1].get("type") == "complete", recorded[-1]
+
+        pstate_after = project_state.page_states.get(0)
+        assert pstate_after is not None
+        new_page_id = pstate_after.page_id
+        assert new_page_id is not None
+        assert new_page_id != old_agg.record.page_id
+
+        marker = PageKindReviewedStore(projects_root / "book1").latest_for_page(0)
+        assert marker is not None
+        assert marker.kind == PageKind.TITLE_PAGE
+
+        fresh_store = LabelerPageStore(project_dir=projects_root / "book1")
+        try:
+            reloaded = load_page_from_store(fresh_store, new_page_id)
+        finally:
+            fresh_store.close()
+        assert reloaded is not None
+        assert reloaded.page_kind == PageKind.TITLE_PAGE, (
+            "the fresh page's stored content must agree with the latest reviewed marker"
         )
 
 
