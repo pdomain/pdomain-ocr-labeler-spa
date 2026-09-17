@@ -1425,12 +1425,14 @@ export interface paths {
          * @description Delete a region. Its member words (if any) are recovered, never dropped.
          *
          *     Deleting a region a person accepted from a proposal records a ``rejected``
-         *     decision naming that proposal. Without it the ``accepted`` decision would go
-         *     on naming a ``region_id`` that no longer exists, and the resolver's "already
-         *     promoted into a confirmed region" branch would suppress the proposal forever:
-         *     it would vanish from the payload and the canvas with no record that anybody
-         *     removed it — a rejection expressed as an absence, which is the one thing this
-         *     design refuses to do.
+         *     decision naming that proposal — and, once a region has been carried forward
+         *     into later proposal runs, naming every other proposal whose latest decision
+         *     also names this region. Without it, a decision naming a ``region_id`` that
+         *     no longer exists would keep going through the resolver's "already promoted
+         *     into a confirmed region" branch, and the proposal it belongs to would vanish
+         *     from the payload and the canvas with no record that anybody removed it — a
+         *     rejection expressed as an absence, which is the one thing this design
+         *     refuses to do.
          *
          *     ``Disposition.REJECTED`` is the only value that says a person declined the
          *     proposal; the enum is owned upstream and gains no member here. Because the
