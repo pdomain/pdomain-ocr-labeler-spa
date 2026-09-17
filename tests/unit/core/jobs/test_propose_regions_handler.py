@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion, DetectorInput, RegionDetector
 
 
 def test_the_handler_hands_the_detector_one_input_per_eligible_page(
@@ -18,7 +23,6 @@ def test_the_handler_hands_the_detector_one_input_per_eligible_page(
     import asyncio
 
     from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
-    from pdomain_ocr_labeler_spa.core.regions.detector import DetectorInput
 
     runner, job, _project_state = proposal_run_ready
     seen: list[DetectorInput] = []
@@ -42,7 +46,7 @@ def test_a_detected_region_becomes_a_proposal_in_the_journal(proposal_run_ready:
     from pdomain_book_contracts.annotation import RegionRole
 
     from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
-    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion, DetectorInput
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion
     from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
 
     runner, job, project_state = proposal_run_ready
@@ -108,3 +112,100 @@ def test_progress_never_goes_backwards_across_the_two_phases(proposal_run_ready:
     currents = [current for current, _total in seen]
     assert currents == sorted(currents), f"progress_current went backwards: {currents}"
     assert currents[-1] == totals.pop(), "the run did not finish at its own total"
+
+
+def test_a_book_fitted_detector_gets_fit_called_once_with_one_input_per_page(
+    proposal_run_ready: Any,
+) -> None:
+    """``BookFittedDetector.fit`` sees the whole book exactly once, before any page is judged."""
+    import asyncio
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
+    from pdomain_ocr_labeler_spa.core.regions.detector import (
+        BookFittedDetector,
+    )
+
+    runner, job, _project_state = proposal_run_ready
+
+    fit_calls: list[Sequence[DetectorInput]] = []
+    judged: list[DetectorInput] = []
+
+    class _RecordingBookFittedDetector(BookFittedDetector):
+        def fit(self, book: Sequence[DetectorInput]) -> RegionDetector:
+            fit_calls.append(book)
+
+            def _detect(detector_input: DetectorInput) -> list[DetectedRegion]:
+                judged.append(detector_input)
+                return []
+
+            return _detect
+
+    detector = _RecordingBookFittedDetector()
+    assert isinstance(detector, BookFittedDetector)
+    runner.context["region_detector"] = detector
+    asyncio.run(handle_propose_regions(runner, job))
+
+    assert len(fit_calls) == 1, "fit must run exactly once per run"
+    assert [d.page_index for d in fit_calls[0]] == [0, 1]
+    assert [d.page_index for d in judged] == [0, 1]
+
+
+def test_a_plain_callable_detector_is_called_directly_with_no_fit(proposal_run_ready: Any) -> None:
+    """A plain ``RegionDetector`` callable — no ``fit`` — is unaffected by the book-fit seam."""
+    import asyncio
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
+    from pdomain_ocr_labeler_spa.core.regions.detector import (
+        BookFittedDetector,
+    )
+
+    runner, job, _project_state = proposal_run_ready
+    seen: list[DetectorInput] = []
+
+    def _plain_detector(detector_input: DetectorInput) -> list[DetectedRegion]:
+        seen.append(detector_input)
+        return []
+
+    assert not isinstance(_plain_detector, BookFittedDetector)
+    runner.context["region_detector"] = _plain_detector
+    asyncio.run(handle_propose_regions(runner, job))
+
+    assert [d.page_index for d in seen] == [0, 1]
+
+
+def test_an_object_with_an_unrelated_fit_method_is_not_a_book_fitted_detector(
+    proposal_run_ready: Any,
+) -> None:
+    """Only a subclass of BookFittedDetector takes the book-fit path.
+
+    ``fit`` is the most common method name in machine learning. A callable
+    detector that happens to wrap something with ``fit(X, y)`` must be called
+    per page as a plain detector, never routed into the book-fit branch, where
+    calling its unrelated ``fit`` would fail and the run would propose nothing.
+    """
+    import asyncio
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
+    from pdomain_ocr_labeler_spa.core.regions.detector import (
+        BookFittedDetector,
+    )
+
+    runner, job, _project_state = proposal_run_ready
+    judged: list[DetectorInput] = []
+    unrelated_fit_calls: list[object] = []
+
+    class _ModelBackedDetector:
+        def fit(self, features: object, labels: object) -> None:
+            unrelated_fit_calls.append((features, labels))
+
+        def __call__(self, detector_input: DetectorInput) -> list[DetectedRegion]:
+            judged.append(detector_input)
+            return []
+
+    detector = _ModelBackedDetector()
+    assert not isinstance(detector, BookFittedDetector)
+    runner.context["region_detector"] = detector
+    asyncio.run(handle_propose_regions(runner, job))
+
+    assert unrelated_fit_calls == []
+    assert [d.page_index for d in judged] == [0, 1]
