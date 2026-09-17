@@ -138,7 +138,11 @@ async def handle_propose_page_kinds(runner: JobRunner, job: Job) -> None:
         )
         return
 
-    total = project.total_pages
+    # The progress denominator must come from the same sequence the loop
+    # below walks (``image_paths``), not ``project.total_pages`` — a
+    # separate field that can disagree with it, the same reconciliation
+    # already applied to the durable ``PageKindProposalRun.page_count``.
+    total = len(project.image_paths)
     log.info("propose_page_kinds: project=%s pages=%d job=%s", project.project_id, total, job.job_id)
     await runner.update_progress(job.job_id, current=0, total=total, message=f"Measuring {total} page(s)")
 

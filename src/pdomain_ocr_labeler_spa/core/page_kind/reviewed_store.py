@@ -1,8 +1,9 @@
 """Append-only journal recording that a person reviewed one page's kind.
 
 A page has one page kind, so the human's answer replaces the machine's whole
-— diffing the confirmed value against ``PageKindProposalLog.latest_proposal_for_page``
-already tells you accepted-or-changed. This store answers the other half:
+outright — the confirm route never diffs it against
+``PageKindProposalLog.latest_proposal_for_page``; nothing at that level needs
+to tell an acceptance from a change. This store answers a different question:
 whether anyone has looked at all. See pdomain-ocr-synth's docs/specs/2026-09-07-region-provenance-
 and-persistence-design.md "Page kind needs a marker, not a decision log".
 """

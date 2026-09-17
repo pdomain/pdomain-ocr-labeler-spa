@@ -301,6 +301,27 @@ async def test_a_job_carrying_project_id_but_an_empty_payload_still_refuses_the_
     assert "bookA" in reported.message
 
 
+async def test_progress_total_matches_the_sequence_the_loop_walks(tmp_path: Path) -> None:
+    """``project.total_pages`` is a separate field from ``image_paths`` — the
+    progress denominator has to come from the sequence the loop actually
+    walks, the same reconciliation already applied to the durable
+    ``PageKindProposalRun.page_count``.
+    """
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds import (
+        handle_propose_page_kinds,
+    )
+
+    project = _project(tmp_path, 3)
+    project.total_pages = 99
+    runner, job = _runner_and_job(project, tops=[300, 302, 298])
+
+    await handle_propose_page_kinds(runner, job)
+
+    reported = runner.get_job("j1")
+    assert reported is not None
+    assert reported.progress_total == 3
+
+
 async def test_an_unmappable_page_class_proposes_unknown_without_a_confidence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
