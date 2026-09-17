@@ -136,7 +136,6 @@ The normalize report stays open on its frontend half.
 
 | Issue | ID | Sev |
 | --- | --- | --- |
-| [`2026-08-08-page-load-progress-unbuilt.md`](2026-08-08-page-load-progress-unbuilt.md) | P0-PAGE-PROGRESS | High |
 
 ## Tooling (2026-08-08)
 

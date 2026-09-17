@@ -634,3 +634,28 @@ and browser gates pass on the merged tree.
   under `result`, kept for older callers; nothing in this frontend reads the flat
   copy. The payload-key test is static, so a key written through a helper in
   another module is still out of its reach, which its docstring says.
+
+### [2026-09-17] Retired: a cold page open looked like a hang
+
+- Old path: `docs/issues/2026-08-08-page-load-progress-unbuilt.md`
+- Outcome: implemented, with one stage coarser than the design wanted
+- Superseded by: `src/pdomain_ocr_labeler_spa/core/jobs/handlers/load_page.py`,
+  `api/pages.py` (`get_page`, `page_load_job_id`) and
+  `frontend/src/components/PageLoadStatus.tsx`
+- Resolved by: `9768576` (merge of `feat/page-load-progress`)
+- Rationale kept: opening a page that was not in the store blocked for up to
+  half a minute behind a full-screen spinner reading "Loading project", because
+  that overlay was tied to the page fetch. A miss now submits a `load_page` job
+  and the fetch returns at once with its id; the job names the store miss and
+  the device OCR will run on, and the SPA shows those stages inside the image
+  pane while the rest of the shell stays usable. A page already in the store
+  still returns immediately and creates no job. Two fetches of the same cold page
+  share one job, which keeps the protection against running OCR twice that moved
+  out from under the project lock. Evidence:
+  `tests/integration/test_load_page_job.py`,
+  `frontend/src/pages/ProjectPage.pageLoadProgress.test.tsx`,
+  `tests/e2e/test_page_load_progress.py`.
+- Remaining work: predictor build and the OCR pass are one stage, not two, because
+  `pdomain-book-tools` has no progress callback. The design's open question about
+  adding one stays open, as does whether the OCR engine should warm up at server
+  start.

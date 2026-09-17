@@ -4,7 +4,7 @@ created: 2026-08-08
 owner: maintainers
 kind: spec
 repo: pdomain/pdomain-ocr-labeler-spa
-status: draft
+status: implemented
 date: 2026-08-08
 ---
 
@@ -13,7 +13,7 @@ date: 2026-08-08
 ## Agent Index
 
 - **Kind:** spec
-- **Status:** draft
+- **Status:** implemented
 - **Read when:** the SPA appears to hang on "Loading project", you are adding
   progress reporting to a slow backend path, or you are coordinating an OCR
   progress hook with `pdomain-book-tools`.
@@ -226,6 +226,16 @@ Replacing the job system or the event stream is out of scope. The recommendation
 
 Redesigning the empty-page rendering is out of scope beyond the failure case, which has to change
 because it currently hides errors.
+
+## What shipped, and what did not
+
+Implemented 2026-09-17 in `9768576`. A store miss submits a `load_page` job and the page fetch
+returns at once with its id; the job names the store miss and the OCR device, and the SPA shows
+those stages in the image pane while the rest of the shell stays usable. A page already in the
+store returns immediately and creates no job.
+
+One stage is coarser than this design asks for. Predictor build and the OCR pass are reported as a
+single stage, because the callback named below does not exist yet in `pdomain-book-tools`.
 
 ## Open questions
 
