@@ -103,27 +103,40 @@ _FOLIO_PATTERN = re.compile(r"^[0-9ivxlcdmIVXLCDM]+$")
 """Digits, roman numerals, or both. Anything else reads as a running head."""
 
 
+class _ScaledWord(NamedTuple):
+    """One word, alongside its box converted to source pixels.
+
+    Ink bands are always source-frame pixels (see the module docstring), so
+    every comparison and every proposed region box downstream of
+    ``_in_band_words`` must work in the same frame — never the word's own
+    stored convention, which is normalized on a page DocTR OCR'd today.
+    """
+
+    word: Word
+    box: tuple[float, float, float, float]
+
+
 @dataclass(frozen=True)
 class _Cluster:
     """One horizontal run of words inside the furniture bands."""
 
-    words: list[Word]
+    words: list[_ScaledWord]
 
     @property
     def box(self) -> tuple[int, int, int, int]:
-        boxes = [w.bounding_box for w in self.words]
+        boxes = [sw.box for sw in self.words]
         return (
-            int(min(b.minX for b in boxes)),
-            int(min(b.minY for b in boxes)),
-            int(max(b.maxX for b in boxes)),
-            int(max(b.maxY for b in boxes)),
+            int(min(b[0] for b in boxes)),
+            int(min(b[1] for b in boxes)),
+            int(max(b[2] for b in boxes)),
+            int(max(b[3] for b in boxes)),
         )
 
     @property
     def text(self) -> str:
         # ``Word`` has no ``ocr_text`` attribute — the OCR text lives on the
         # ``text`` property, with ``ground_truth_text`` preferred when present.
-        return " ".join(w.ground_truth_text or w.text or "" for w in self.words).strip()
+        return " ".join(sw.word.ground_truth_text or sw.word.text or "" for sw in self.words).strip()
 
     @property
     def is_folio(self) -> bool:
@@ -132,9 +145,9 @@ class _Cluster:
 
 
 class _BandWords(NamedTuple):
-    """One page's in-band words, plus the combined y range they were read against."""
+    """One page's in-band words (converted to source pixels), plus the y range read against."""
 
-    words: list[Word]
+    words: list[_ScaledWord]
     top: int
     bottom: int
 
@@ -169,26 +182,68 @@ def _text_width_px(detector_input: DetectorInput) -> int | None:
     return max(widths) if widths else None
 
 
-def _page_is_pixel_space(detector_input: DetectorInput) -> bool:
-    """Whether the page's word boxes are safe to compare against source-frame bands."""
+def _page_is_normalized(detector_input: DetectorInput) -> bool | None:
+    """Whether the page's word boxes are normalized, or ``None`` when the page mixes conventions.
+
+    ``Page.is_content_normalized`` raises ``ValueError`` on a page that mixes
+    normalized and pixel-space word boxes. Neither this detector nor the
+    book-level fit can compare either convention against a band on such a
+    page, so it is skipped — the one skip condition this fix keeps.
+    """
     try:
-        if detector_input.page.is_content_normalized:
-            log.warning(
-                "furniture: page=%s has normalized word boxes; ink bands are "
-                "source-frame pixels, so this page is skipped",
-                detector_input.classification.page_name,
-            )
-            return False
+        return detector_input.page.is_content_normalized
     except ValueError:
-        # Page.is_content_normalized raises on a page that mixes normalized
-        # and pixel boxes. Neither this detector nor the book-level fit can
-        # compare either convention against a band, so the page is skipped.
         log.warning(
             "furniture: page=%s mixes normalized and pixel word boxes; skipping",
             detector_input.classification.page_name,
         )
-        return False
-    return True
+        return None
+
+
+def _page_word_scale(detector_input: DetectorInput) -> tuple[float, float]:
+    """The ``(width, height)``, in pixels, to scale a normalized word box against.
+
+    Prefers ``measurement.source_frame`` — the frame the ink bands were
+    measured in — since a band's y range and a converted word box must be
+    compared in that same pixel space. Falls back to the page's own
+    ``width``/``height`` when no source frame was recorded. When both exist
+    and disagree, the source frame wins and the disagreement is logged.
+    """
+    page = detector_input.page
+    frame = detector_input.measurement.source_frame
+    if frame is None:
+        return float(page.width), float(page.height)
+    if frame.width != page.width or frame.height != page.height:
+        log.warning(
+            "furniture: page=%s source_frame is %dx%d but page.width/height is "
+            "%dx%d; converting normalized word boxes against source_frame",
+            detector_input.classification.page_name,
+            frame.width,
+            frame.height,
+            page.width,
+            page.height,
+        )
+    return float(frame.width), float(frame.height)
+
+
+def _word_box_px(
+    word: Word, *, page_is_normalized: bool, scale: tuple[float, float]
+) -> tuple[float, float, float, float] | None:
+    """The word's box in source pixels, or ``None`` when it cannot be compared against a band.
+
+    Excludes a box with a non-finite corner (see ``has_usable_coordinates``)
+    and a word whose own ``is_normalized`` flag disagrees with
+    ``page_is_normalized`` — a straggler outside any ``LINE`` block, which
+    ``Page.is_content_normalized`` does not see and so cannot have judged.
+    """
+    bbox = word.bounding_box
+    if not bbox.has_usable_coordinates or bool(bbox.is_normalized) != page_is_normalized:
+        return None
+    left, top, right, bottom = bbox.to_ltrb()
+    if not page_is_normalized:
+        return left, top, right, bottom
+    width, height = scale
+    return left * width, top * height, right * width, bottom * height
 
 
 def _band_y_range(detector_input: DetectorInput, ordinals: Sequence[int]) -> tuple[int, int] | None:
@@ -207,48 +262,51 @@ def _band_y_range(detector_input: DetectorInput, ordinals: Sequence[int]) -> tup
 
 
 def _in_band_words(detector_input: DetectorInput) -> _BandWords | None:
-    """Every word inside one page's furniture bands, or ``None`` when the page has none to read.
+    """Every word inside one page's furniture bands, converted to source pixels.
 
-    Applies the same skip conditions the detector always applied: no
-    furniture bands named, source-frame word boxes, and band ordinals inside
-    the profile's recorded bands. Shared between per-page detection and
-    book-level gap pooling, so both walk exactly the same words.
+    ``None`` when the page has none to read. Applies the same skip
+    conditions the detector always applied: no furniture bands named, and
+    band ordinals inside the profile's recorded bands — plus a page that
+    mixes normalized and pixel-space word boxes, the one skip condition this
+    fix keeps. A page whose words are all normalized is no longer skipped:
+    its words are converted to source pixels (``_word_box_px``) before being
+    compared against the band, which is already source-frame pixels. Shared
+    between per-page detection and book-level gap pooling (``_pooled_gaps``),
+    so both walk exactly the same pixel coordinates.
     """
     ordinals = detector_input.classification.furniture_band_ordinals
     if not ordinals:
         return None
-    if not _page_is_pixel_space(detector_input):
+    page_is_normalized = _page_is_normalized(detector_input)
+    if page_is_normalized is None:
         return None
     y_range = _band_y_range(detector_input, ordinals)
     if y_range is None:
         return None
     top, bottom = y_range
-    words = [
-        word
-        for word in _page_words(detector_input.page)
-        if word.bounding_box.has_usable_coordinates
-        # The page-level guard above reads Page.is_content_normalized, which
-        # only walks words inside LINE blocks. _page_words walks the whole
-        # tree, so a normalized box on a word outside any line would otherwise
-        # be compared against a source-frame band y range.
-        and not word.bounding_box.is_normalized
-        and top <= (word.bounding_box.minY + word.bounding_box.maxY) / 2 <= bottom
-    ]
+    scale = _page_word_scale(detector_input) if page_is_normalized else (1.0, 1.0)
+    words: list[_ScaledWord] = []
+    for word in _page_words(detector_input.page):
+        box = _word_box_px(word, page_is_normalized=page_is_normalized, scale=scale)
+        if box is None:
+            continue
+        if top <= (box[1] + box[3]) / 2 <= bottom:
+            words.append(_ScaledWord(word, box))
     return _BandWords(words, top, bottom)
 
 
-def _cluster(words: list[Word], gap_px: float) -> list[_Cluster]:
+def _cluster(words: list[_ScaledWord], gap_px: float) -> list[_Cluster]:
     """Split words sorted by left edge wherever the gap to the next exceeds ``gap_px``."""
     if not words:
         return []
-    ordered = sorted(words, key=lambda w: w.bounding_box.minX)
-    clusters: list[list[Word]] = [[ordered[0]]]
-    for word in ordered[1:]:
-        previous_right = max(w.bounding_box.maxX for w in clusters[-1])
-        if word.bounding_box.minX - previous_right > gap_px:
-            clusters.append([word])
+    ordered = sorted(words, key=lambda sw: sw.box[0])
+    clusters: list[list[_ScaledWord]] = [[ordered[0]]]
+    for scaled_word in ordered[1:]:
+        previous_right = max(sw.box[2] for sw in clusters[-1])
+        if scaled_word.box[0] - previous_right > gap_px:
+            clusters.append([scaled_word])
         else:
-            clusters[-1].append(word)
+            clusters[-1].append(scaled_word)
     return [_Cluster(group) for group in clusters]
 
 
@@ -264,10 +322,8 @@ def _pooled_gaps(book: Sequence[DetectorInput]) -> list[float]:
         band = _in_band_words(detector_input)
         if band is None or len(band.words) < 2:
             continue
-        ordered = sorted(band.words, key=lambda w: w.bounding_box.minX)
-        gaps.extend(
-            ordered[i + 1].bounding_box.minX - ordered[i].bounding_box.maxX for i in range(len(ordered) - 1)
-        )
+        ordered = sorted(band.words, key=lambda sw: sw.box[0])
+        gaps.extend(ordered[i + 1].box[0] - ordered[i].box[2] for i in range(len(ordered) - 1))
     return gaps
 
 

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
+import pytest
 from pdomain_book_contracts.annotation import RegionRole
 from pdomain_book_tools.ocr.page import Page
 from pdomain_pgdp_measure.page_templates import (
@@ -12,7 +14,7 @@ from pdomain_pgdp_measure.page_templates import (
     PageClassification,
     PageTemplate,
 )
-from pdomain_pgdp_measure.profile_models import CoordinateFrame, InkBand, PageMeasurement
+from pdomain_pgdp_measure.profile_models import CoordinateFrame, InkBand, PageMeasurement, ProfileDiagnostic
 
 _PAGE_WIDTH = 1000
 _PAGE_HEIGHT = 1600
@@ -91,17 +93,22 @@ def _templates() -> BookTemplates:
 # margins that could only come from a decoded image, and the margins must equal
 # the bounds inset into the source frame. This shape satisfies all of it; I
 # constructed it against the real class to check.
-def _measurement(bands: tuple[InkBand, ...]) -> PageMeasurement:
+def _measurement(
+    bands: tuple[InkBand, ...], *, source_frame: CoordinateFrame | None = None
+) -> PageMeasurement:
+    frame = (
+        source_frame if source_frame is not None else CoordinateFrame(width=_PAGE_WIDTH, height=_PAGE_HEIGHT)
+    )
     return PageMeasurement(
         page_name="001.png",
         source_path="book1/001.png",
         sha256="a" * 64,
-        source_frame=CoordinateFrame(width=_PAGE_WIDTH, height=_PAGE_HEIGHT),
+        source_frame=frame,
         image_mode="L",
         grayscale_threshold=128,
         foreground_pixels=50_000,
         foreground_bounds=(100, 100, 900, 1500),
-        margins=(100, 100, _PAGE_WIDTH - 900, _PAGE_HEIGHT - 1500),
+        margins=(100, 100, frame.width - 900, frame.height - 1500),
         ink_bands=bands,
         page_class="normal_recto",
     )
@@ -115,6 +122,7 @@ def _input(
     page_class: PageClass = "normal_recto",
     confidence: float | None = 0.9,
     extra_line: list[dict[str, object]] | None = None,
+    source_frame: CoordinateFrame | None = None,
 ) -> Any:
     from pdomain_ocr_labeler_spa.core.regions.detector import DetectorInput
 
@@ -122,7 +130,7 @@ def _input(
     return DetectorInput(
         page=_page(*lines),
         page_index=0,
-        measurement=_measurement(bands),
+        measurement=_measurement(bands, source_frame=source_frame),
         classification=PageClassification("001.png", page_class, 2, ordinals, confidence),
         templates=_templates(),
     )
@@ -250,12 +258,39 @@ def test_the_evidence_names_the_fixed_share_threshold_source() -> None:
     assert detected[0].evidence["gap_threshold_px"] == 80.0
 
 
-def test_a_page_with_normalized_word_boxes_is_skipped() -> None:
-    """Ink bands are source-frame pixels; a 0-to-1 box cannot be compared against one."""
+@pytest.mark.parametrize("normalized", [False, True])
+def test_a_running_head_and_a_folio_become_two_regions_in_either_convention(normalized: bool) -> None:
+    """A normalized page proposes the same pixel boxes as its pixel-page equivalent.
+
+    Ink bands are always source-frame pixels; a normalized page's word boxes
+    are converted to source pixels (against ``measurement.source_frame``,
+    which here equals the page's own 1000x1600 dimensions) before being
+    compared against one — the fix for the defect that made every real book
+    propose nothing.
+    """
     from pdomain_ocr_labeler_spa.core.regions.furniture import furniture_region_detector
 
-    words = [_word("THE", 0.1, 0.05, 0.2, 0.08, normalized=True)]
-    assert furniture_region_detector(_input(words)) == []
+    def w(text: str, left: float, top: float, right: float, bottom: float) -> dict[str, object]:
+        if normalized:
+            return _word(
+                text,
+                left / _PAGE_WIDTH,
+                top / _PAGE_HEIGHT,
+                right / _PAGE_WIDTH,
+                bottom / _PAGE_HEIGHT,
+                normalized=True,
+            )
+        return _word(text, left, top, right, bottom)
+
+    words = [w("THE", 100, 105, 170, 125), w("VOYAGE", 180, 105, 320, 125), w("17", 870, 105, 900, 125)]
+    detected = furniture_region_detector(_input(words))
+
+    assert len(detected) == 2
+    head, folio = detected
+    assert head.role is RegionRole.PAGE_HEADER
+    assert head.box == (100, 105, 320, 125)
+    assert folio.role is RegionRole.PAGE_NUMBER
+    assert folio.box == (870, 105, 900, 125)
 
 
 def test_a_page_mixing_normalized_and_pixel_boxes_is_skipped() -> None:
@@ -272,6 +307,86 @@ def test_a_page_mixing_normalized_and_pixel_boxes_is_skipped() -> None:
         extra_line=[_word("17", 0.9, 0.05, 0.95, 0.08, normalized=True)],
     )
     assert furniture_region_detector(detector_input) == []
+
+
+def test_word_scale_prefers_the_source_frame_over_page_dimensions() -> None:
+    from pdomain_ocr_labeler_spa.core.regions.furniture import _page_word_scale
+
+    mismatched_frame = CoordinateFrame(width=1200, height=1800)
+    detector_input = _input([_word("THE", 100, 105, 170, 125)], source_frame=mismatched_frame)
+
+    assert _page_word_scale(detector_input) == (1200.0, 1800.0)
+
+
+def test_word_scale_disagreement_with_page_dimensions_is_logged(caplog: pytest.LogCaptureFixture) -> None:
+    from pdomain_ocr_labeler_spa.core.regions.furniture import _page_word_scale
+
+    mismatched_frame = CoordinateFrame(width=1200, height=1800)
+    detector_input = _input([_word("THE", 100, 105, 170, 125)], source_frame=mismatched_frame)
+
+    with caplog.at_level(logging.WARNING):
+        _page_word_scale(detector_input)
+
+    assert any(
+        "source_frame" in record.getMessage()
+        and "1200x1800" in record.getMessage()
+        and "1000x1600" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_word_scale_falls_back_to_page_dimensions_when_source_frame_is_missing() -> None:
+    """A measurement with no decoded image metadata carries no ``source_frame`` at all."""
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectorInput
+    from pdomain_ocr_labeler_spa.core.regions.furniture import _page_word_scale
+
+    unavailable_measurement = PageMeasurement(
+        page_name="001.png",
+        source_path="book1/001.png",
+        sha256=None,
+        source_frame=None,
+        image_mode=None,
+        grayscale_threshold=None,
+        foreground_pixels=None,
+        foreground_bounds=None,
+        margins=None,
+        ink_bands=None,
+        diagnostics=(ProfileDiagnostic(code="image_missing", message="no image on disk"),),
+        page_class="unknown",
+    )
+    detector_input = DetectorInput(
+        page=_page([_word("THE", 100, 105, 170, 125)]),
+        page_index=0,
+        measurement=unavailable_measurement,
+        classification=PageClassification("001.png", "unknown", 2, (), None),
+        templates=_templates(),
+    )
+
+    assert _page_word_scale(detector_input) == (float(_PAGE_WIDTH), float(_PAGE_HEIGHT))
+
+
+def test_the_pooled_gaps_are_identical_pixel_values_across_page_conventions() -> None:
+    """The book-level fit and the per-page detector must see identical pixel coordinates."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import _pooled_gaps
+
+    def w(text: str, left: float, top: float, right: float, bottom: float) -> dict[str, object]:
+        return _word(
+            text,
+            left / _PAGE_WIDTH,
+            top / _PAGE_HEIGHT,
+            right / _PAGE_WIDTH,
+            bottom / _PAGE_HEIGHT,
+            normalized=True,
+        )
+
+    words_px = [
+        _word("THE", 100, 105, 170, 125),
+        _word("VOYAGE", 180, 105, 320, 125),
+        _word("17", 870, 105, 900, 125),
+    ]
+    words_norm = [w("THE", 100, 105, 170, 125), w("VOYAGE", 180, 105, 320, 125), w("17", 870, 105, 900, 125)]
+
+    assert _pooled_gaps([_input(words_norm)]) == _pooled_gaps([_input(words_px)])
 
 
 # ---------------------------------------------------------------------------
