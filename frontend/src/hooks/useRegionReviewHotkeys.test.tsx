@@ -392,3 +392,70 @@ describe("useRegionReviewHotkeys: keyboard failures are no longer silent", () =>
     await waitFor(() => expect(errorSpy).toHaveBeenCalledWith("Delete failed"));
   });
 });
+
+// ─── Whole-branch review defect 2: a selection can outlive its page ────────
+
+describe("useRegionReviewHotkeys: the selection must still be on the current page", () => {
+  it("'enter' with a proposalId absent from page.regions sends nothing", async () => {
+    let acceptCount = 0;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept", () => {
+        acceptCount += 1;
+        return HttpResponse.json({ ...PAGE });
+      }),
+    );
+    act(() => selectProposal("stale-from-old-page"));
+    renderHotkeys(PAGE);
+
+    pressKey("enter");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(acceptCount).toBe(0);
+  });
+
+  it("'x' with a proposalId absent from page.regions sends nothing", async () => {
+    let rejectCount = 0;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject", () => {
+        rejectCount += 1;
+        return HttpResponse.json({ ...PAGE });
+      }),
+    );
+    act(() => selectProposal("stale-from-old-page"));
+    renderHotkeys(PAGE);
+
+    pressKey("x");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(rejectCount).toBe(0);
+  });
+
+  it("'delete' with a regionId absent from page.regions sends nothing and does not open the confirm dialog", async () => {
+    act(() => selectRegion("stale-region-from-old-page"));
+    renderHotkeys(PAGE);
+
+    pressKey("delete");
+
+    expect(dialogStore.getState().confirm.open).toBe(false);
+  });
+
+  it("'enter' with a proposalId that is now a confirmed region (not undecided) sends nothing", async () => {
+    // Simulates a refetch that just accepted the proposal from elsewhere:
+    // the id now names a confirmed region, not an undecided proposal.
+    let acceptCount = 0;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept", () => {
+        acceptCount += 1;
+        return HttpResponse.json({ ...PAGE });
+      }),
+    );
+    const page = pageWithConfirmedRegion();
+    act(() => selectProposal("r1"));
+    renderHotkeys(page);
+
+    pressKey("enter");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(acceptCount).toBe(0);
+  });
+});

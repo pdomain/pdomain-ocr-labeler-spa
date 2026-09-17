@@ -38,6 +38,13 @@
 //     "<Action> failed" message, so a failed keyboard decision is no longer
 //     silent. `onSuccess` (auto-advance) does not run on failure, so nothing
 //     advances when the request fails.
+//
+// Whole-branch review defect 2 (a selection can outlive its page):
+//   `isProposalCurrent`/`isRegionCurrent` confirm the selected id is still
+//   present on `page.regions`, with the right `confirmed` flag, before
+//   acting. `ProjectPage` also clears a region-level selection on page
+//   change (belt) — this check is the suspenders: it also covers a proposal
+//   a refetch has just removed without a page change.
 
 import { useSyncExternalStore } from "react";
 import { useHotkey } from "./useHotkey";
@@ -138,6 +145,16 @@ export function useRegionReviewHotkeys({
     return page ? orderedUndecidedProposals(page.regions ?? []) : [];
   }
 
+  /** True when `proposalId` is still an undecided proposal on `page`. */
+  function isProposalCurrent(proposalId: string): boolean {
+    return orderedProposals().includes(proposalId);
+  }
+
+  /** True when `regionId` is still a confirmed region on `page`. */
+  function isRegionCurrent(regionId: string): boolean {
+    return (page?.regions ?? []).some((r) => r.confirmed && r.region_id === regionId);
+  }
+
   /** Select `next`, or clear the selection and say so when there is none. */
   function advanceTo(next: string | null): void {
     if (next === null) {
@@ -219,7 +236,9 @@ export function useRegionReviewHotkeys({
     "enter",
     () => {
       if (decisionPending) return;
-      if (selectedProposalId !== undefined) acceptSelected(selectedProposalId);
+      if (selectedProposalId === undefined) return;
+      if (!isProposalCurrent(selectedProposalId)) return;
+      acceptSelected(selectedProposalId);
     },
     { enabled: regionTargetActive && selectedProposalId !== undefined },
   );
@@ -228,7 +247,9 @@ export function useRegionReviewHotkeys({
     "x",
     () => {
       if (decisionPending) return;
-      if (selectedProposalId !== undefined) rejectSelected(selectedProposalId);
+      if (selectedProposalId === undefined) return;
+      if (!isProposalCurrent(selectedProposalId)) return;
+      rejectSelected(selectedProposalId);
     },
     { enabled: regionTargetActive && selectedProposalId !== undefined },
   );
@@ -237,7 +258,9 @@ export function useRegionReviewHotkeys({
     "delete",
     () => {
       if (decisionPending) return;
-      if (selectedRegionId !== undefined) deleteSelected(selectedRegionId);
+      if (selectedRegionId === undefined) return;
+      if (!isRegionCurrent(selectedRegionId)) return;
+      deleteSelected(selectedRegionId);
     },
     { enabled: selectedRegionId !== undefined },
   );
