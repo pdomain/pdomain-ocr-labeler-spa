@@ -24,7 +24,7 @@ The handler:
    tests — same injection pattern as ``page_loader``).
 3. For pages where chosen != 0 and confidence ≥ threshold, applies the SAME
    rotation path as ``handle_rotate_page`` (reuses ``_rotate_png_on_disk``,
-   ``_apply_reocr_outcome``, ``_get_page_loader`` — DRY).
+   ``_finalize_reocr_outcome``, ``_get_page_loader`` — DRY).
 4. Honors ``overwrite_manual``: skips pages whose aggregate
    ``rotation_source == "manual"`` unless set.
 5. Emits real per-page progress events.
@@ -111,7 +111,7 @@ async def handle_auto_rotate_all(runner: JobRunner, job: Job) -> None:
     from ....settings import Settings
     from ...notifications import NotificationKind, NotificationQueue
     from ...project_state import ProjectState
-    from ..handlers.reload_ocr import _apply_reocr_outcome, _get_page_loader, _prior_confirmed_page_kind
+    from ..handlers.reload_ocr import _finalize_reocr_outcome, _get_page_loader, _prior_confirmed_page_kind
     from ..handlers.rotate import _rotate_png_on_disk, _within
 
     payload: dict[str, Any] = job.payload
@@ -258,7 +258,16 @@ async def handle_auto_rotate_all(runner: JobRunner, job: Job) -> None:
                 # read before the fresh Page from run_ocr replaces this one.
                 page_kind = _prior_confirmed_page_kind(project_state, page_idx)
                 outcome = await asyncio.to_thread(loader.run_ocr, page_idx, page_kind=page_kind)
-                _apply_reocr_outcome(project_state, page_idx, outcome)
+                # Recheck the confirmed kind under this page's lock first — a
+                # confirm can have landed on the OLD page while OCR ran with
+                # no lock held; see ``_finalize_reocr_outcome``.
+                _finalize_reocr_outcome(
+                    project_state,
+                    page_idx,
+                    outcome,
+                    page_kind_sent=page_kind,
+                    page_store=store,
+                )
 
                 if store is not None:
                     with project_state._lock:
