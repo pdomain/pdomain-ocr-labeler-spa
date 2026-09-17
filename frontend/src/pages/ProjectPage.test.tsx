@@ -32,7 +32,7 @@ import { server } from "../test/server";
 import { ROUTES } from "../lib/routes";
 import { dialogStore } from "../stores/dialog-store";
 import { useUiPrefs } from "../stores/ui-prefs";
-import { clearSelection, selectLine } from "../stores/selection-store";
+import { clearSelection, selectLine, selectWord, selectionStore } from "../stores/selection-store";
 
 // ─── IS-1: mock useNavigate ──────────────────────────────────────────────────
 const mockNavigate = vi.fn();
@@ -641,36 +641,211 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     });
   });
 
-  // ── BUG-KBD-3: useMatchesHotkeys wired in ProjectPage ─────────────────────
+  // ── BUG-KBD-3 / P1-MATCH-NAV: useMatchesHotkeys wired in ProjectPage ───────
+  // docs/issues/2026-07-21-match-nav-selection-desync.md — J/K must take the
+  // same `focusWorklistLine` path as a Worklist row click, so the worklist
+  // highlight and the hierarchical selection (canvas / breadcrumb / right
+  // panel) cannot drift apart.
 
-  describe("BUG-KBD-3: useMatchesHotkeys wired (J/K navigate worklist)", () => {
-    it("J key advances worklistStore.selectedLineIndex by 1", async () => {
-      // This import is inside the test so the store is reset between test runs.
+  describe("BUG-KBD-3 / P1-MATCH-NAV: J/K navigate the worklist with no lines", () => {
+    it("J key is a no-op when the page has no lines (nothing to select)", async () => {
+      // Default `pageFixture()` has line_matches: [] — there is no line 0 to
+      // focus, so J must leave both stores untouched rather than pointing
+      // the worklist and selectionStore at a line index that does not exist.
       const { worklistStore: wl } = await import("../stores/worklist-store");
       wl.setSelectedLineIndex(null);
+      clearSelection();
 
       renderProjectPage();
       await screen.findByTestId("project-page");
 
       fireEvent.keyDown(document, { key: "j", code: "KeyJ", bubbles: true });
+
+      // Give the hotkey handler a tick to (not) run, then assert no change.
       await waitFor(() => {
-        // null → null + 1 = 0 (clamped to 0 since lines=[]).
-        expect(wl.getState().selectedLineIndex).toBe(0);
+        expect(screen.getByTestId("project-page")).toBeInTheDocument();
       });
+      expect(wl.getState().selectedLineIndex).toBeNull();
+      expect(selectionStore.getState().level).toBe("none");
     });
 
-    it("K key decrements worklistStore.selectedLineIndex (does not go below 0)", async () => {
+    it("K key is a no-op when the page has no lines", async () => {
       const { worklistStore: wl } = await import("../stores/worklist-store");
       wl.setSelectedLineIndex(null);
+      clearSelection();
 
       renderProjectPage();
       await screen.findByTestId("project-page");
 
-      // K from null → clamped to 0.
+      fireEvent.keyDown(document, { key: "k", code: "KeyK", bubbles: true });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("project-page")).toBeInTheDocument();
+      });
+      expect(wl.getState().selectedLineIndex).toBeNull();
+      expect(selectionStore.getState().level).toBe("none");
+    });
+  });
+
+  describe("P1-MATCH-NAV: J/K keep worklistStore and selectionStore in sync", () => {
+    // Two-line fixture so navigation has somewhere to go and a "next" line
+    // for the stale-index recovery test below.
+    function matchesNavLine(lineIndex: number) {
+      return {
+        line_index: lineIndex,
+        paragraph_index: 0,
+        ocr_line_text: `ocr ${lineIndex}`,
+        ground_truth_line_text: `gt ${lineIndex}`,
+        word_matches: [],
+        overall_match_status: "exact" as const,
+        exact_count: 0,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+        validated_word_count: 0,
+        total_word_count: 0,
+        is_fully_validated: false,
+      };
+    }
+
+    function matchesNavPageFixture() {
+      return { ...pageFixture(), line_matches: [matchesNavLine(0), matchesNavLine(1)] };
+    }
+
+    beforeEach(async () => {
+      const { worklistStore: wl } = await import("../stores/worklist-store");
+      wl.setSelectedLineIndex(null);
+      clearSelection();
+      server.use(
+        http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+        http.get("/api/projects/:pid/pages/:idx", () => HttpResponse.json(matchesNavPageFixture())),
+      );
+    });
+
+    // Firing a hotkey before the 2-line fixture has actually loaded would
+    // race the empty-page ([]) guard in onLineNav (lines.length === 0 is a
+    // deliberate no-op) — wait for WordMatchView's empty-state span to be
+    // gone so `lines` really has the fixture's two entries first.
+    async function waitForLinesLoaded() {
+      await screen.findByTestId("project-page");
+      await waitFor(() => {
+        expect(screen.queryByTestId("word-match-empty")).toBeNull();
+      });
+    }
+
+    it("J advances worklistStore.selectedLineIndex AND selects the same line in selectionStore", async () => {
+      const { worklistStore: wl } = await import("../stores/worklist-store");
+
+      renderProjectPage();
+      await waitForLinesLoaded();
+
+      fireEvent.keyDown(document, { key: "j", code: "KeyJ", bubbles: true });
+      await waitFor(() => {
+        expect(wl.getState().selectedLineIndex).toBe(0);
+      });
+      // Same triple a Worklist row click writes: selectedLines, level, path.
+      expect(selectionStore.getState().selectedLines).toEqual([0]);
+      expect(selectionStore.getState().level).toBe("line");
+      expect(selectionStore.getState().path.lineId).toBe(0);
+    });
+
+    it("K decrements worklistStore.selectedLineIndex AND selects the same line in selectionStore", async () => {
+      const { worklistStore: wl } = await import("../stores/worklist-store");
+
+      renderProjectPage();
+      await waitForLinesLoaded();
+
+      // K from null → clamped to 0, same as J.
       fireEvent.keyDown(document, { key: "k", code: "KeyK", bubbles: true });
       await waitFor(() => {
         expect(wl.getState().selectedLineIndex).toBe(0);
       });
+      expect(selectionStore.getState().selectedLines).toEqual([0]);
+      expect(selectionStore.getState().level).toBe("line");
+      expect(selectionStore.getState().path.lineId).toBe(0);
+    });
+
+    it("J opens the right panel, matching the Worklist row-click behavior (STB-4)", async () => {
+      useUiPrefs.setState({ rightPanelOpen: false });
+
+      renderProjectPage();
+      await waitForLinesLoaded();
+
+      fireEvent.keyDown(document, { key: "j", code: "KeyJ", bubbles: true });
+      await waitFor(() => {
+        expect(useUiPrefs.getState().rightPanelOpen).toBe(true);
+      });
+    });
+
+    it("J replaces an existing word selection, the same way a row click would", async () => {
+      // A person mid-word-edit on the canvas presses J. A row click would
+      // clobber that selection too (it always calls selectLine); J/K must
+      // not special-case this into leaving the word selection in place.
+      selectWord(0, 0);
+      expect(selectionStore.getState().level).toBe("word");
+
+      renderProjectPage();
+      await waitForLinesLoaded();
+
+      fireEvent.keyDown(document, { key: "j", code: "KeyJ", bubbles: true });
+      await waitFor(() => {
+        expect(selectionStore.getState().level).toBe("line");
+      });
+      expect(selectionStore.getState().selectedWords).toEqual([]);
+      expect(selectionStore.getState().path.lineId).toBe(0);
+    });
+
+    it("recovers when worklistStore.selectedLineIndex is stale after the page refetches with fewer lines", async () => {
+      // Simulate a line index left over from before a delete/refetch shrank
+      // line_matches to 2 entries (valid indices 0, 1).
+      const { worklistStore: wl } = await import("../stores/worklist-store");
+      wl.setSelectedLineIndex(5);
+
+      renderProjectPage();
+      await waitForLinesLoaded();
+
+      fireEvent.keyDown(document, { key: "k", code: "KeyK", bubbles: true });
+      await waitFor(() => {
+        // Clamped into the current [0, 1] range, not left dangling at 4.
+        expect(wl.getState().selectedLineIndex).toBe(1);
+      });
+      expect(selectionStore.getState().path.lineId).toBe(1);
+      expect(selectionStore.getState().level).toBe("line");
+    });
+
+    it("an action hotkey (V) validates the line the person just navigated to with J", async () => {
+      const calls: { body: unknown }[] = [];
+      server.use(
+        http.post("/api/projects/:pid/pages/:idx/words/validate-batch", async ({ request }) => {
+          calls.push({ body: await request.json() });
+          return HttpResponse.json(matchesNavPageFixture());
+        }),
+      );
+      const { worklistStore: wl } = await import("../stores/worklist-store");
+
+      renderProjectPage();
+      await waitForLinesLoaded();
+
+      // J, J → worklist line 1 (0 → 1).
+      fireEvent.keyDown(document, { key: "j", code: "KeyJ", bubbles: true });
+      await waitFor(() => {
+        expect(wl.getState().selectedLineIndex).toBe(0);
+      });
+      fireEvent.keyDown(document, { key: "j", code: "KeyJ", bubbles: true });
+      await waitFor(() => {
+        expect(wl.getState().selectedLineIndex).toBe(1);
+      });
+      // The selection the rest of the UI shows must agree before the mutation fires.
+      expect(selectionStore.getState().path.lineId).toBe(1);
+
+      fireEvent.keyDown(document, { key: "v", code: "KeyV", bubbles: true });
+      await waitFor(() => {
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+      });
+      expect(calls[0]!.body).toEqual(
+        expect.objectContaining({ scope: "line", line_indices: [1], validated: true }),
+      );
     });
   });
 

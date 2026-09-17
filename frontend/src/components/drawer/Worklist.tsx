@@ -24,8 +24,7 @@ import { useSyncExternalStore } from "react";
 import type { components } from "../../api/types";
 import { cn } from "@/lib/utils";
 import { worklistStore, type MatchFilter, type WorklistSort } from "../../stores/worklist-store";
-import { selectLine } from "../../stores/selection-store";
-import { useUiPrefs } from "../../stores/ui-prefs";
+import { focusWorklistLine } from "../../stores/worklist-focus";
 import { filterLines } from "../../lib/filter-predicates";
 import { StatusPip } from "@pdomain/pdomain-ui/primitives";
 import { BulkActions } from "./BulkActions";
@@ -422,10 +421,8 @@ export function Worklist({ lineMatches = [], projectId, pageIndex }: WorklistPro
             onSelect={(idx) => {
               const item = wordItems[idx];
               if (!item) return;
-              worklistStore.setSelectedLineIndex(item._lineMatch.line_index);
-              selectLine(item._lineMatch.line_index);
-              // STB-4: reveal the right panel when collapsed so operations are visible.
-              useUiPrefs.setState({ rightPanelOpen: true });
+              // STB-4: focusWorklistLine also reveals the right panel when collapsed.
+              focusWorklistLine(item._lineMatch.line_index);
             }}
             aria-label="Line worklist queue"
             className="h-full"
