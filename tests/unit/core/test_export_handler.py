@@ -286,7 +286,7 @@ async def test_handle_export_cancel_removes_partial_output(tmp_path: Path) -> No
     from datetime import UTC, datetime
 
     from pdomain_ocr_labeler_spa.core.jobs.handlers.export import handle_export
-    from pdomain_ocr_labeler_spa.core.jobs.runner import Job
+    from pdomain_ocr_labeler_spa.core.jobs.runner import Job, JobStatus
 
     data_root = tmp_path / "data"
     proj_dir = data_root / "labeled-projects" / "proj2"
@@ -316,8 +316,6 @@ async def test_handle_export_cancel_removes_partial_output(tmp_path: Path) -> No
             call_count += 1
             if call_count == 2:
                 # Simulate cancel on second page by updating job status.
-                from pdomain_ocr_labeler_spa.core.jobs.runner import JobStatus
-
                 job_in_runner = runner._jobs.get("j3")
                 if job_in_runner:
                     runner._jobs["j3"] = job_in_runner.model_copy(update={"status": JobStatus.CANCELLED})
@@ -337,6 +335,62 @@ async def test_handle_export_cancel_removes_partial_output(tmp_path: Path) -> No
 
     # Partial output directory must have been removed.
     assert not partial_dir.exists()
+
+    # The remaining (third) page was never loaded — export stopped before
+    # starting it once the cancel (set mid-page-two's load) was noticed at
+    # the top of the next iteration.
+    assert call_count == 2
+
+    # The job's final message states it was cancelled and how much was done,
+    # so an HTTP poller sees the same honest summary an SSE client missed.
+    # Pages 0 and 1 both finished exporting before the cancel was noticed —
+    # the check runs at the top of each iteration, so a cancel that lands
+    # mid-page never interrupts that page's own export.
+    final_job = runner.get_job("j3")
+    assert final_job is not None
+    assert final_job.status is JobStatus.CANCELLED
+    assert "cancelled" in final_job.message.lower()
+    assert "2 of 3" in final_job.message
+
+
+async def test_handle_export_cancel_checked_via_shared_helper(tmp_path: Path) -> None:
+    """The cancel check goes through ``JobRunner.is_cancelled``, not a raw status poll."""
+    from datetime import UTC, datetime
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.export import handle_export
+    from pdomain_ocr_labeler_spa.core.jobs.runner import Job
+
+    data_root = tmp_path / "data"
+    proj_dir = data_root / "labeled-projects" / "proj4"
+    proj_dir.mkdir(parents=True)
+    _write_envelope(proj_dir / "proj4_000.json", validated=True)
+    (proj_dir / "proj4_000.png").write_bytes(b"\x00")
+
+    runner, _settings = _make_runner_with_settings(tmp_path)
+    runner.context["settings"] = MagicMock(data_root=data_root)
+
+    job = Job(
+        job_id="j4",
+        job_type="export",
+        project_id="proj4",
+        payload={"scope": "all_validated"},
+        created_at=datetime.now(UTC),
+    )
+    runner._jobs["j4"] = job
+
+    calls: list[str] = []
+    original_is_cancelled = runner.is_cancelled
+
+    def _tracking_is_cancelled(job_id: str) -> bool:
+        calls.append(job_id)
+        return original_is_cancelled(job_id)
+
+    runner.is_cancelled = _tracking_is_cancelled  # type: ignore[method-assign]
+
+    with patch("pdomain_ocr_labeler_spa.core.jobs.handlers.export._export_page"):
+        await handle_export(runner, job)
+
+    assert calls == ["j4"]
 
 
 # ---------------------------------------------------------------------------
