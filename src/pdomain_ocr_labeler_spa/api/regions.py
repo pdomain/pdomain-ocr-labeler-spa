@@ -39,6 +39,7 @@ from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import ProjectState
 from ..core.regions.block_adapter import find_region_block
+from ..core.regions.coordinates import pixel_box_to_bounding_box
 from ..core.regions.decision_log import RegionDecisionLog
 from ..core.regions.models import Disposition, RegionDecision, RegionProposal
 from ..core.regions.proposal_log import RegionProposalLog
@@ -158,8 +159,7 @@ def _bbox_to_ltrb(box: BBox) -> tuple[int, int, int, int]:
 
 def _build_region_block(
     *,
-    box: tuple[int, int, int, int],
-    is_content_normalized: bool,
+    bounding_box: BoundingBox,
     child_type: BlockChildType,
     role: RegionRole,
     region_id: str,
@@ -170,15 +170,19 @@ def _build_region_block(
     Shared by ``create_region`` (a person drew this region unprompted —
     ``source_proposal_id`` is the hand-drawn sentinel) and
     ``accept_region_proposal`` (a person confirmed a machine's proposal —
-    ``source_proposal_id`` is the real proposal id). Both stamp ``region_id``
-    and ``source_proposal_id`` into ``additional_block_attributes`` and let
+    ``source_proposal_id`` is the real proposal id). ``bounding_box`` is
+    already converted to the page's own storage convention by the caller,
+    via ``pixel_box_to_bounding_box`` — that conversion can itself raise
+    ``ValueError`` for an out-of-bounds box, which is why it runs before this
+    function, not inside its ``try``. Both stamp ``region_id`` and
+    ``source_proposal_id`` into ``additional_block_attributes`` and let
     ``Block.__init__`` raise ``ValueError`` for an unsupported role; the
-    caller maps that to the 400 ``invalid_region_role`` envelope.
+    caller maps *that* ``ValueError`` to the 400 ``invalid_region_role``
+    envelope.
     """
-    left, top, right, bottom = box
     return Block(
         items=[],
-        bounding_box=BoundingBox.from_ltrb(left, top, right, bottom, is_normalized=is_content_normalized),
+        bounding_box=bounding_box,
         child_type=child_type,
         block_category=BlockCategory.BLOCK,
         block_role_labels=[role.value],
@@ -253,6 +257,23 @@ def _invalid_region_role(exc: ValueError) -> JSONResponse:
     return JSONResponse(
         status_code=400,
         content=ApiError(error="invalid_region_role", message=str(exc)).model_dump(),
+    )
+
+
+def _invalid_region_box(exc: ValueError) -> JSONResponse:
+    """400 when a pixel box cannot be converted to the page's storage convention.
+
+    Raised by ``pixel_box_to_bounding_box`` for a box that reaches past the
+    edge of a normalized page — its projection onto ``[0, 1]`` overflows, so
+    ``BoundingBox`` itself refuses it — or for a page reporting a zero-sized
+    dimension. Reading the conversion outside the role ``try`` (below) is
+    what keeps this distinct from ``invalid_region_role``: before this fix,
+    the conversion ran inside that same ``try`` and any bad box was reported
+    as an unsupported role, which named the wrong cause.
+    """
+    return JSONResponse(
+        status_code=400,
+        content=ApiError(error="invalid_region_box", message=str(exc)).model_dump(),
     )
 
 
@@ -483,9 +504,17 @@ def create_region(
         except ValueError as exc:
             return _mixed_page_coordinates(exc)
         try:
+            bounding_box = pixel_box_to_bounding_box(
+                (left, top, right, bottom),
+                page_width=page.width,
+                page_height=page.height,
+                is_normalized=is_normalized,
+            )
+        except ValueError as exc:
+            return _invalid_region_box(exc)
+        try:
             region = _build_region_block(
-                box=(left, top, right, bottom),
-                is_content_normalized=is_normalized,
+                bounding_box=bounding_box,
                 child_type=child_type,
                 role=body.role,
                 region_id=region_id,
@@ -561,7 +590,15 @@ def edit_region(
             except ValueError as exc:
                 return _mixed_page_coordinates(exc)
             left, top, right, bottom = _bbox_to_ltrb(body.box)
-            region.bounding_box = BoundingBox.from_ltrb(left, top, right, bottom, is_normalized=is_normalized)
+            try:
+                region.bounding_box = pixel_box_to_bounding_box(
+                    (left, top, right, bottom),
+                    page_width=page.width,
+                    page_height=page.height,
+                    is_normalized=is_normalized,
+                )
+            except ValueError as exc:
+                return _invalid_region_box(exc)
         pstate.generation += 1
         if not _save_to_store_best_effort(
             pstate=pstate,
@@ -928,9 +965,14 @@ def accept_region_proposal(
         except ValueError as exc:
             return _mixed_page_coordinates(exc)
         try:
+            bounding_box = pixel_box_to_bounding_box(
+                box, page_width=page.width, page_height=page.height, is_normalized=is_normalized
+            )
+        except ValueError as exc:
+            return _invalid_region_box(exc)
+        try:
             region = _build_region_block(
-                box=box,
-                is_content_normalized=is_normalized,
+                bounding_box=bounding_box,
                 child_type=BlockChildType.WORDS,
                 role=role,
                 region_id=region_id,
