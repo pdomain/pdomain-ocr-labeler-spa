@@ -353,6 +353,67 @@ async def test_handle_export_cancel_removes_partial_output(tmp_path: Path) -> No
     assert "2 of 3" in final_job.message
 
 
+@pytest.mark.asyncio
+async def test_handle_export_cancel_queues_a_notification_toast(tmp_path: Path) -> None:
+    """Cancel queues a toast naming how much was exported — matching
+    auto_rotate_all / save_project / propose_page_kinds, whose cancel paths
+    all queue one. Export's cancel previously reached neither the SSE
+    client (channel already closed by request_cancel) nor a toast, so
+    "how much was done" was invisible by any channel.
+    """
+    from datetime import UTC, datetime
+
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.export import handle_export
+    from pdomain_ocr_labeler_spa.core.jobs.runner import Job, JobStatus
+    from pdomain_ocr_labeler_spa.core.notifications import NotificationKind, NotificationQueue
+
+    data_root = tmp_path / "data"
+    proj_dir = data_root / "labeled-projects" / "proj5"
+    proj_dir.mkdir(parents=True)
+    for i in range(2):
+        _write_envelope(proj_dir / f"proj5_{i:03d}.json", validated=True)
+        (proj_dir / f"proj5_{i:03d}.png").write_bytes(b"\x00")
+
+    runner, _settings = _make_runner_with_settings(tmp_path)
+    runner.context["settings"] = MagicMock(data_root=data_root)
+    notification_queue = NotificationQueue()
+    runner.context["notification_queue"] = notification_queue
+
+    call_count = 0
+
+    with (
+        patch("pdomain_ocr_labeler_spa.core.jobs.handlers.export._export_page"),
+        patch("pdomain_ocr_labeler_spa.core.jobs.handlers.export._load_page_from_envelope_file") as mock_load,
+    ):
+
+        def side_effect(path):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                job_in_runner = runner._jobs.get("j5")
+                if job_in_runner:
+                    runner._jobs["j5"] = job_in_runner.model_copy(update={"status": JobStatus.CANCELLED})
+            return _make_page([["validated"]])
+
+        mock_load.side_effect = side_effect
+
+        job = Job(
+            job_id="j5",
+            job_type="export",
+            project_id="proj5",
+            payload={"scope": "all_validated"},
+            created_at=datetime.now(UTC),
+        )
+        runner._jobs["j5"] = job
+        await handle_export(runner, job)
+
+    notifications = notification_queue.snapshot()
+    assert len(notifications) == 1
+    assert notifications[0].kind == NotificationKind.INFO
+    assert "cancel" in notifications[0].message.lower()
+    assert "1 of 2" in notifications[0].message
+
+
 async def test_handle_export_cancel_checked_via_shared_helper(tmp_path: Path) -> None:
     """The cancel check goes through ``JobRunner.is_cancelled``, not a raw status poll."""
     from datetime import UTC, datetime

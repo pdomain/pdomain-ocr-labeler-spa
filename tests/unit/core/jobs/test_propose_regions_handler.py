@@ -506,9 +506,12 @@ def test_cancel_during_lazy_load_journals_nothing(proposal_run_lazy_load: Any) -
 
     from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
     from pdomain_ocr_labeler_spa.core.jobs.runner import JobStatus
+    from pdomain_ocr_labeler_spa.core.notifications import NotificationKind, NotificationQueue
     from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
 
     runner, job, project_state, loader = proposal_run_lazy_load
+    notification_queue = NotificationQueue()
+    runner.context["notification_queue"] = notification_queue
     original_load_labeled = loader.load_labeled
 
     def _load_labeled_then_cancel(page_index: int) -> Any:
@@ -537,6 +540,13 @@ def test_cancel_during_lazy_load_journals_nothing(proposal_run_lazy_load: Any) -
     assert "cancelled" in final_job.message.lower()
     assert "nothing recorded" in final_job.message.lower()
 
+    # A toast reaches a live client even though the SSE channel closed the
+    # instant request_cancel emitted the terminal frame.
+    notifications = notification_queue.snapshot()
+    assert len(notifications) == 1
+    assert notifications[0].kind == NotificationKind.INFO
+    assert "cancel" in notifications[0].message.lower()
+
 
 def test_cancel_during_measurement_journals_nothing(proposal_run_ready: Any) -> None:
     """A cancel noticed mid-measurement also leaves nothing journalled.
@@ -548,9 +558,12 @@ def test_cancel_during_measurement_journals_nothing(proposal_run_ready: Any) -> 
 
     from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
     from pdomain_ocr_labeler_spa.core.jobs.runner import JobStatus
+    from pdomain_ocr_labeler_spa.core.notifications import NotificationKind, NotificationQueue
     from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
 
     runner, job, project_state = proposal_run_ready
+    notification_queue = NotificationQueue()
+    runner.context["notification_queue"] = notification_queue
     original_measure_fn = runner.context["propose_regions_measure_fn"]
     calls = 0
 
@@ -578,6 +591,11 @@ def test_cancel_during_measurement_journals_nothing(proposal_run_ready: Any) -> 
     assert "cancelled" in final_job.message.lower()
     assert "nothing recorded" in final_job.message.lower()
 
+    notifications = notification_queue.snapshot()
+    assert len(notifications) == 1
+    assert notifications[0].kind == NotificationKind.INFO
+    assert "cancel" in notifications[0].message.lower()
+
 
 def test_cancel_during_detection_journals_only_what_was_already_proposed(
     proposal_run_ready: Any,
@@ -595,10 +613,13 @@ def test_cancel_during_detection_journals_only_what_was_already_proposed(
 
     from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_regions import handle_propose_regions
     from pdomain_ocr_labeler_spa.core.jobs.runner import JobStatus
+    from pdomain_ocr_labeler_spa.core.notifications import NotificationKind, NotificationQueue
     from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion
     from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
 
     runner, job, project_state = proposal_run_ready
+    notification_queue = NotificationQueue()
+    runner.context["notification_queue"] = notification_queue
     detector_calls: list[int] = []
 
     def _detector(detector_input: DetectorInput) -> list[DetectedRegion]:
@@ -638,3 +659,8 @@ def test_cancel_during_detection_journals_only_what_was_already_proposed(
     assert "cancelled" in final_job.message.lower()
     assert "1 region" in final_job.message
     assert "1 of 2" in final_job.message
+
+    notifications = notification_queue.snapshot()
+    assert len(notifications) == 1
+    assert notifications[0].kind == NotificationKind.INFO
+    assert "cancel" in notifications[0].message.lower()

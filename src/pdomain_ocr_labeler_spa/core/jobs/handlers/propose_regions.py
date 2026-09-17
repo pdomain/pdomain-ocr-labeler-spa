@@ -55,7 +55,12 @@ run row and exactly the proposals actually written, which the terminal
 message states plainly rather than implying a full pass completed. A cancel
 during the detection loop skips the carry-decisions pass for the pages it
 did process — that pass is further page-level work in its own right, not
-part of finishing the page already in flight.
+part of finishing the page already in flight. Every cancel branch also
+queues a ``NotificationKind.INFO`` toast (``_queue_cancel_notification``,
+when a notification queue is wired) with the same message: ``request_cancel``
+emits the terminal SSE frame and closes the broker the instant cancel is
+requested, well before this handler notices, so the toast is the channel a
+live client still has open for "how much was done."
 
 **Pages load lazily.** A page only enters ``project_state.page_states`` once
 someone opens it — after a server restart, or on a book nobody has paged
@@ -113,6 +118,7 @@ from pdomain_pgdp_measure.profiling import profile_page
 
 from ....settings import Settings
 from ...labeler_sidecars import LegacyTypographyPayloadError
+from ...notifications import NotificationKind, NotificationQueue
 from ...page_kind.proposal_log import PageKindProposalLog
 from ...page_kind.reviewed_store import PageKindReviewedStore
 from ...page_measurement import measure_book
@@ -274,6 +280,22 @@ async def _refuse_project_changed(
             f"expected {expected_project_id}, found {found_project_id}"
         ),
     )
+
+
+def _queue_cancel_notification(runner: JobRunner, message: str) -> None:
+    """Queue an INFO toast on cancel, when a notification queue is wired.
+
+    Matches auto_rotate_all / save_project / propose_page_kinds, whose
+    cancel paths already queue one (P1-CANCEL). ``request_cancel`` emits the
+    terminal SSE frame and closes the broker the instant cancel is
+    requested — well before a cooperative handler like this one notices —
+    so by the time this handler's own cancel summary is ready, the SSE
+    channel is already closed. A toast is the channel a live client still
+    has open; ``GET /api/jobs/{id}`` remains the durable fallback either way.
+    """
+    notification_queue = runner.context.get("notification_queue")
+    if isinstance(notification_queue, NotificationQueue):
+        notification_queue.queue(NotificationKind.INFO, message)
 
 
 def _resolve_live_page(pstate: PageState) -> Page | None:
@@ -576,15 +598,12 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
             # measurement pass below), so stopping here is honest with
             # "nothing recorded" (P1-CANCEL).
             if runner.is_cancelled(job.job_id):
-                await runner.update_progress(
-                    job.job_id,
-                    current=0,
-                    total=0,
-                    message=(
-                        f"Cancelled while loading pages for review ({idx} of "
-                        f"{project.total_pages} loaded); nothing recorded"
-                    ),
+                cancel_message = (
+                    f"Cancelled while loading pages for review ({idx} of "
+                    f"{project.total_pages} loaded); nothing recorded"
                 )
+                _queue_cancel_notification(runner, cancel_message)
+                await runner.update_progress(job.job_id, current=0, total=0, message=cancel_message)
                 return
             # A concurrent ``POST .../load`` can swap ``loaded_project`` to a
             # different book between two of this loop's iterations — see
@@ -757,25 +776,29 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     # measurement pass and the facet-digest pass) is still honest with
     # "nothing recorded" (P1-CANCEL).
     if runner.is_cancelled(job.job_id):
+        cancel_message = (
+            f"Cancelled after measuring {len(measured.measurements)} of {measure_total} "
+            "page(s); nothing recorded"
+        )
+        _queue_cancel_notification(runner, cancel_message)
         await runner.update_progress(
             job.job_id,
             current=len(measured.measurements),
             total=combined_total,
-            message=(
-                f"Cancelled after measuring {len(measured.measurements)} of {measure_total} "
-                "page(s); nothing recorded"
-            ),
+            message=cancel_message,
         )
         return
 
     page_facet_digests: dict[int, dict[str, str]] = {}
     for idx in eligible_indices:
         if runner.is_cancelled(job.job_id):
+            cancel_message = f"Cancelled while preparing {total} page(s) for detection; nothing recorded"
+            _queue_cancel_notification(runner, cancel_message)
             await runner.update_progress(
                 job.job_id,
                 current=measure_total,
                 total=combined_total,
-                message=f"Cancelled while preparing {total} page(s) for detection; nothing recorded",
+                message=cancel_message,
             )
             return
         pstate = project_state.page_states[idx]
@@ -984,14 +1007,16 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
             len(detected_page_indices),
             total,
         )
+        cancel_message = (
+            f"Cancelled after proposing {proposal_count} region(s) on "
+            f"{len(detected_page_indices)} of {total} page(s)."
+        )
+        _queue_cancel_notification(runner, cancel_message)
         await runner.update_progress(
             job.job_id,
             current=measure_total + cancelled_after,
             total=combined_total,
-            message=(
-                f"Cancelled after proposing {proposal_count} region(s) on "
-                f"{len(detected_page_indices)} of {total} page(s)."
-            ),
+            message=cancel_message,
         )
         return
 
