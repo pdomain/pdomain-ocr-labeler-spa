@@ -84,4 +84,28 @@ export const handlers: RequestHandler[] = [
       heads: [],
     }),
   ),
+
+  // Region review surface (docs/plans/2026-09-17-region-review-surface.md,
+  // Task 3) — baseline handlers for the six region routes so tests that mount
+  // components using useRegionMutations / useProposalRuns without overriding
+  // a specific route don't hit onUnhandledRequest: "error". Tests that assert
+  // method/path/body register their own server.use(...) override.
+  http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept", () =>
+    HttpResponse.json({ project_id: "", page_index: 0, line_matches: [] }),
+  ),
+  http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject", () =>
+    HttpResponse.json({ project_id: "", page_index: 0, line_matches: [] }),
+  ),
+  http.patch("/api/projects/:pid/pages/:idx/regions/:regionId", () =>
+    HttpResponse.json({ project_id: "", page_index: 0, line_matches: [] }),
+  ),
+  http.delete("/api/projects/:pid/pages/:idx/regions/:regionId", () =>
+    HttpResponse.json({ project_id: "", page_index: 0, line_matches: [] }),
+  ),
+  http.post("/api/projects/:pid/propose-page-kinds", () =>
+    HttpResponse.json({ job_id: "job-1" }, { status: 202 }),
+  ),
+  http.post("/api/projects/:pid/regions/propose", () =>
+    HttpResponse.json({ job_id: "job-1" }, { status: 202 }),
+  ),
 ];
