@@ -25,6 +25,7 @@ import { Square, Keyboard, LayoutList } from "@/icons/local-shims";
 import { railStore, type RailTarget, type RailMode } from "../../stores/rail-store";
 import { useRailHotkeys } from "../../hooks/useRailHotkeys";
 import { useLayerColors } from "../../hooks/useLayerColors";
+import { useReviewQueue } from "../../hooks/useReviewQueue";
 import { LAYER_COLORS } from "../BBoxOverlay";
 import { dialogStore } from "../../stores/dialog-store";
 import { useUiPrefs, type LayerVisibility } from "../../stores/ui-prefs";
@@ -135,9 +136,15 @@ interface TargetCellProps {
   active: boolean;
   swatchColor: string;
   onClick: () => void;
+  /**
+   * Book review queue design ("A count stays visible"): the undecided-count
+   * badge, shown only when provided and above 0. Only the region target
+   * cell passes this today.
+   */
+  badge?: number;
 }
 
-function TargetCell({ target, active, swatchColor, onClick }: TargetCellProps) {
+function TargetCell({ target, active, swatchColor, onClick, badge }: TargetCellProps) {
   const testid = `rail-target-${target}`;
   return (
     <button
@@ -166,6 +173,15 @@ function TargetCell({ target, active, swatchColor, onClick }: TargetCellProps) {
         aria-hidden="true"
       />
       <span>{TARGET_LABELS[target]}</span>
+      {badge !== undefined && badge > 0 && (
+        <span
+          data-testid="rail-region-undecided-badge"
+          aria-label={`${String(badge)} undecided proposal${badge === 1 ? "" : "s"}`}
+          className="ml-auto shrink-0 min-w-4 h-4 px-1 flex items-center justify-center rounded-full bg-accent text-[9px] font-semibold text-accent-ink tabular-nums"
+        >
+          {badge}
+        </span>
+      )}
     </button>
   );
 }
@@ -206,9 +222,20 @@ function LayerToggleRow({ testId, label, color, visible, onToggle }: LayerToggle
 
 // ─── Rail ────────────────────────────────────────────────────────────────────
 
-export function Rail() {
+export interface RailProps {
+  /** Current route's project id, or undefined outside a project route. */
+  projectId?: string;
+}
+
+export function Rail({ projectId }: RailProps) {
   // Wire hotkeys (registers document-level keydown listener).
   useRailHotkeys();
+
+  // Book review queue design ("A count stays visible"): limit=0 so this
+  // carries only total_undecided and the page summary — the same query
+  // useRegionReviewHotkeys' bracket keys read, cached under one key.
+  const reviewQueueQ = useReviewQueue(projectId);
+  const totalUndecided = reviewQueueQ.data?.total_undecided ?? 0;
 
   // Subscribe to rail store via useSyncExternalStore for React 18+.
   const state = useSyncExternalStore(railStore.subscribe, railStore.getState, railStore.getState);
@@ -314,6 +341,7 @@ export function Rail() {
           onClick={() => {
             handleSetTarget("region");
           }}
+          badge={totalUndecided}
         />
       </div>
 
