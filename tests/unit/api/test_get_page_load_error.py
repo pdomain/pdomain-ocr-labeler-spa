@@ -64,17 +64,24 @@ def projects_root(tmp_path: Path) -> Path:
 
 @dataclass
 class _EmptyStubPage:
-    """A ``Page`` stand-in with zero lines — OCR ran and found no text."""
+    """A ``Page`` stand-in with zero lines — OCR ran and found no text.
 
-    lines_: list[Any] = field(default_factory=list)
-    paragraphs_: list[Any] = field(default_factory=list)
+    ``lines``/``paragraphs`` are typed ``list[object]``, not ``list[Any]``:
+    this stub only ever holds an empty list (nothing appends a real line or
+    paragraph to it — its whole purpose is to duck-type ``.lines`` as empty
+    for ``page_to_line_matches``'s ``is_page`` check), so there is no real
+    element type to narrow to and ``object`` costs nothing here.
+    """
+
+    lines_: list[object] = field(default_factory=list)
+    paragraphs_: list[object] = field(default_factory=list)
 
     @property
-    def lines(self) -> list[Any]:
+    def lines(self) -> list[object]:
         return self.lines_
 
     @property
-    def paragraphs(self) -> list[Any]:
+    def paragraphs(self) -> list[object]:
         return self.paragraphs_
 
 
