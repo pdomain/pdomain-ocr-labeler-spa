@@ -110,7 +110,18 @@ class PageKindProposalLog:
         replaces the machine's outright and nothing at this level needs to tell
         an acceptance from a change.
         """
-        latest: PageKindProposal | None = None
+        return self.latest_by_page().get(page_index)
+
+    def latest_by_page(self) -> dict[int, PageKindProposal]:
+        """Every page's most recent proposal, across every run, from one read.
+
+        A caller that needs every page's proposal (e.g. the book-wide
+        page-kinds route) should call this once rather than
+        ``latest_proposal_for_page`` per page — each ``latest_proposal_for_page``
+        call re-reads and re-parses the whole journal, so a per-page loop over
+        it costs one full-file parse per page instead of one for the whole loop.
+        """
+        latest: dict[int, PageKindProposal] = {}
         for line_number, entry in self._read():
             if entry.get("kind") != "proposal":
                 continue
@@ -119,6 +130,5 @@ class PageKindProposalLog:
             except (KeyError, ValueError, TypeError):
                 log.warning("page-kind-proposals.jsonl: skipping wrong-shaped line %d", line_number)
                 continue
-            if proposal.page_index == page_index:
-                latest = proposal
+            latest[proposal.page_index] = proposal
         return latest

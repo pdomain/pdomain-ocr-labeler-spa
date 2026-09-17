@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
+import pytest
 from pdomain_book_contracts.annotation import PageKind
 
 from pdomain_ocr_labeler_spa.core.page_kind.models import PageKindProposal, PageKindProposalRun
@@ -91,6 +93,36 @@ def test_a_malformed_line_is_skipped_rather_than_failing_the_read(tmp_path: Path
         handle.write("{not json\n")
 
     assert log.latest_proposal_for_page(0) is not None
+
+
+def test_latest_by_page_reads_the_journal_once_and_keeps_every_pages_latest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pdomain_ocr_labeler_spa.core.page_kind.proposal_log import PageKindProposalLog
+
+    log = PageKindProposalLog(tmp_path)
+    log.append_run(_run("r1"))
+    log.append_proposals([_proposal("p1", run_id="r1", page_index=0)])
+    log.append_run(_run("r2"))
+    log.append_proposals(
+        [_proposal("p2", run_id="r2", page_index=0), _proposal("p3", run_id="r2", page_index=1)]
+    )
+
+    read_calls = 0
+    original_read = PageKindProposalLog._read
+
+    def _counting_read(self: PageKindProposalLog) -> list[Any]:
+        nonlocal read_calls
+        read_calls += 1
+        return original_read(self)
+
+    monkeypatch.setattr(PageKindProposalLog, "_read", _counting_read)
+    by_page = log.latest_by_page()
+
+    assert read_calls == 1
+    assert set(by_page) == {0, 1}
+    assert by_page[0].proposal_id == "p2"
+    assert by_page[1].proposal_id == "p3"
 
 
 def test_a_line_with_no_record_key_is_skipped_rather_than_raising(tmp_path: Path) -> None:

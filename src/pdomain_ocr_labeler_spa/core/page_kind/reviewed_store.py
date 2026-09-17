@@ -16,19 +16,34 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
+
+from pdomain_book_contracts.annotation import PageKind
 
 log = logging.getLogger(__name__)
+
+ReviewMethod = Literal["single", "bulk", "history"]
 
 
 @dataclass(frozen=True)
 class PageKindReviewedMarker:
-    """One record of a person looking at one page's kind."""
+    """One record of a person looking at one page's kind.
+
+    ``kind`` and ``method`` are optional — a marker written before
+    pdomain-ocr-synth's 2026-09-17-page-kind-review-design.md has neither.
+    ``method`` distinguishes the page route (``single``), the book-wide bulk
+    route (``bulk``), and an undo/redo that changed the page's kind
+    (``history``). A ``history`` marker whose ``kind`` is ``None`` withdraws
+    the review — see ``PageKindReviewedStore.is_reviewed`` — because the undo
+    took the page back to before anyone confirmed it.
+    """
 
     page_index: int
     reviewed_at: str
     actor: str
     note: str | None
+    kind: PageKind | None = None
+    method: ReviewMethod | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Render this marker as a JSON-serializable mapping."""
@@ -37,17 +52,50 @@ class PageKindReviewedMarker:
             "reviewed_at": self.reviewed_at,
             "actor": self.actor,
             "note": self.note,
+            "kind": self.kind.value if self.kind is not None else None,
+            "method": self.method,
         }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> PageKindReviewedMarker:
-        """Restore a marker from the mapping produced by :meth:`to_dict`."""
+        """Restore a marker from the mapping produced by :meth:`to_dict`.
+
+        Old markers carry neither ``kind`` nor ``method`` and still parse —
+        both default to ``None``. An unrecognised ``method`` value (should
+        never happen from this store's own writes) also falls back to
+        ``None`` rather than raising, matching this journal's general
+        skip-the-bad-line discipline.
+        """
+        kind_raw = d.get("kind")
+        method_raw = d.get("method")
+        method: ReviewMethod | None
+        if method_raw == "single":
+            method = "single"
+        elif method_raw == "bulk":
+            method = "bulk"
+        elif method_raw == "history":
+            method = "history"
+        else:
+            method = None
         return cls(
             page_index=int(d["page_index"]),
             reviewed_at=str(d["reviewed_at"]),
             actor=str(d["actor"]) if d.get("actor") is not None else "default",
             note=str(d["note"]) if d.get("note") is not None else None,
+            kind=PageKind(str(kind_raw)) if kind_raw is not None else None,
+            method=method,
         )
+
+
+def _is_active_review(marker: PageKindReviewedMarker | None) -> bool:
+    """Whether ``marker`` counts as a live review, not a withdrawn one.
+
+    A ``history`` marker with no ``kind`` withdraws the review — see
+    ``PageKindReviewedMarker``.
+    """
+    if marker is None:
+        return False
+    return not (marker.method == "history" and marker.kind is None)
 
 
 class PageKindReviewedStore:
@@ -64,11 +112,29 @@ class PageKindReviewedStore:
         return self._path
 
     def mark_reviewed(
-        self, page_index: int, reviewed_at: str, *, actor: str = "default", note: str | None = None
+        self,
+        page_index: int,
+        reviewed_at: str,
+        *,
+        actor: str = "default",
+        note: str | None = None,
+        kind: PageKind | None = None,
+        method: ReviewMethod | None = None,
     ) -> None:
-        """Record that a person looked at this page's kind. Never rewrites a prior mark."""
+        """Record that a person looked at this page's kind. Never rewrites a prior mark.
+
+        ``kind`` and ``method`` are optional so existing callers that only
+        care about "has anyone looked" keep working unchanged. A caller that
+        also wants the book route to answer without loading the page, or that
+        is recording an undo/redo, passes both.
+        """
         marker = PageKindReviewedMarker(
-            page_index=page_index, reviewed_at=reviewed_at, actor=actor, note=note
+            page_index=page_index,
+            reviewed_at=reviewed_at,
+            actor=actor,
+            note=note,
+            kind=kind,
+            method=method,
         )
         self._path.parent.mkdir(parents=True, exist_ok=True)
         payload = (json.dumps(marker.to_dict(), sort_keys=True) + "\n").encode("utf-8")
@@ -111,12 +177,26 @@ class PageKindReviewedStore:
                 latest = marker
         return latest
 
+    def latest_by_page(self) -> dict[int, PageKindReviewedMarker]:
+        """Every page's most recent review marker, from one read.
+
+        A caller that needs every page's marker (e.g. the book-wide
+        page-kinds route) should call this once rather than
+        ``latest_for_page`` per page — each ``latest_for_page`` call re-reads
+        and re-parses the whole journal, so a per-page loop over it costs one
+        full-file parse per page instead of one for the whole loop.
+        """
+        latest: dict[int, PageKindReviewedMarker] = {}
+        for marker in self._read():
+            latest[marker.page_index] = marker
+        return latest
+
     def is_reviewed(self, page_index: int) -> bool:
-        """Whether any review marker exists for this page."""
-        return self.latest_for_page(page_index) is not None
+        """Whether this page carries a live (non-withdrawn) review marker."""
+        return _is_active_review(self.latest_for_page(page_index))
 
     def reviewed_page_indices(self) -> frozenset[int]:
-        """Every page index carrying at least one review marker, from one read.
+        """Every page index carrying a live review marker, from one read.
 
         A caller checking many pages (e.g. a book-scoped job walking every
         loaded page) should call this once rather than ``is_reviewed`` per
@@ -124,4 +204,4 @@ class PageKindReviewedStore:
         journal, so a per-page loop over it costs one full-file parse per
         page instead of one for the whole loop.
         """
-        return frozenset(marker.page_index for marker in self._read())
+        return frozenset(idx for idx, marker in self.latest_by_page().items() if _is_active_review(marker))
