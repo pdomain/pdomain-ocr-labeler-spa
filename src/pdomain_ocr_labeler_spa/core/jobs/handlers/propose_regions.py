@@ -277,7 +277,10 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
             job.job_id,
             current=0,
             total=0,
-            message="No page has a proposed or confirmed page kind; nothing to propose regions for",
+            message=(
+                "No page has a proposed or confirmed page kind; nothing to propose regions for. "
+                "Run Propose page kinds first."
+            ),
         )
         return
 
@@ -401,7 +404,9 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
         message=f"Proposing regions for {total} page(s)",
     )
     proposal_count = 0
+    detected_page_indices: set[int] = set()
     lease_failed_indices: list[int] = []
+    no_measurement_indices: list[int] = []
     detector_failed_indices: list[int] = []
     for i, idx in enumerate(eligible_indices, start=1):
         pstate = project_state.page_states[idx]
@@ -445,6 +450,7 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
                     # geometry to page 3.
                     measured_at = measured_positions.get(idx)
                     if measured_at is None:
+                        no_measurement_indices.append(idx)
                         log.warning(
                             "propose_regions: page=%d has no book measurement (its "
                             "lease failed during the measurement pass); skipping the "
@@ -494,6 +500,7 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
                 ]
                 proposal_log.append_proposals(proposals)
                 proposal_count += len(proposals)
+                detected_page_indices.add(idx)
         await runner.update_progress(
             job.job_id, current=measure_total + i, total=combined_total, message=f"page {idx}"
         )
@@ -505,6 +512,15 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
             project.project_id,
             len(lease_failed_indices),
             lease_failed_indices,
+        )
+
+    if no_measurement_indices:
+        log.warning(
+            "propose_regions: run=%s project=%s skipped %d page(s) with no book measurement: %s",
+            run_id,
+            project.project_id,
+            len(no_measurement_indices),
+            no_measurement_indices,
         )
 
     if detector_failed_indices:
@@ -522,6 +538,52 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
         project.project_id,
         total,
         proposal_count,
+    )
+
+    # The runner's completion step copies this call's ``message`` verbatim onto
+    # the terminal SSE frame (core/jobs/runner.py, ~334-345) — this is the only
+    # message a person who started the run ever sees. A run that skipped every
+    # page for a missing page kind otherwise ends in a silent success toast
+    # over an unchanged page, with the reason left in a server log nobody but
+    # an operator reads.
+    #
+    # ``pages_detected`` counts pages that actually received a proposal (its
+    # detector call returned at least one region), not every eligible page the
+    # loop above visited. An eligible page whose detector ran and legitimately
+    # found nothing is not itself surprising or actionable; folding it into
+    # this count would make "Proposed 3 region(s) on 40 page(s)" read as
+    # roughly one region per page when the truth is 3 regions on 2 pages and
+    # 38 pages of denser-than-expected but genuine silence. Pairing
+    # ``proposal_count`` with the page count that actually produced those
+    # proposals keeps the sentence's two halves aligned.
+    #
+    # The skip clause below names only pages skipped for having no page kind
+    # — the one failure mode a person can fix by clicking "Propose page
+    # kinds". Failed leases, missing measurements and a raising detector are
+    # this run's own bookkeeping rather than something the reader's next click
+    # fixes, so they are named in a separate clause, only when non-zero, so a
+    # smaller-than-expected result still points at a cause instead of reading
+    # as an unexplained gap.
+    summary_parts = [f"Proposed {proposal_count} region(s) on {len(detected_page_indices)} page(s)."]
+    if skipped_indices:
+        summary_parts.append(
+            f"Skipped {len(skipped_indices)} page(s) with no page kind; run Propose page kinds first."
+        )
+    unprocessed_parts: list[str] = []
+    if lease_failed_indices:
+        unprocessed_parts.append(f"{len(lease_failed_indices)} page(s) had a failed lease")
+    if no_measurement_indices:
+        unprocessed_parts.append(f"{len(no_measurement_indices)} page(s) had no measurement")
+    if detector_failed_indices:
+        unprocessed_parts.append(f"{len(detector_failed_indices)} page(s) where the detector failed")
+    if unprocessed_parts:
+        summary_parts.append("; ".join(unprocessed_parts) + ".")
+
+    await runner.update_progress(
+        job.job_id,
+        current=combined_total,
+        total=combined_total,
+        message=" ".join(summary_parts),
     )
 
 
