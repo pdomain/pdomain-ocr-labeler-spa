@@ -874,6 +874,7 @@ def test_an_ordinary_project_detector_sees_the_plain_on_disk_image_path(toolbar_
     from datetime import UTC, datetime
 
     from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectorInput
 
     client, project_state, _page = toolbar_loaded
     project = project_state.loaded_project
@@ -882,9 +883,8 @@ def test_an_ordinary_project_detector_sees_the_plain_on_disk_image_path(toolbar_
 
     recorded: list[Path] = []
 
-    def _detector(page: Any) -> list[Any]:
-        del page
-        recorded.append(project_state.labeling_image_path(0))
+    def _detector(detector_input: DetectorInput) -> list[Any]:
+        recorded.append(project_state.labeling_image_path(detector_input.page_index))
         return []
 
     _run_propose_regions_job(client, detector=_detector)
@@ -897,11 +897,12 @@ def test_a_book_labeling_project_detector_sees_the_sealed_descriptor(
 ) -> None:
     """The defect this fix closes: a real detector reading the page image on a
     book-labeling project must see the verified sealed descriptor, never the
-    raw manifest path — the same requirement ``propose_page_kinds`` now meets.
+    raw manifest path.
     """
     from datetime import UTC, datetime
 
     from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectorInput
 
     client = _load_book_client(tmp_path, monkeypatch, page_count=1)
     _seed_page(client, 0)
@@ -912,9 +913,8 @@ def test_a_book_labeling_project_detector_sees_the_sealed_descriptor(
 
     recorded: list[Path] = []
 
-    def _detector(page: Any) -> list[Any]:
-        del page
-        recorded.append(project_state.labeling_image_path(0))
+    def _detector(detector_input: DetectorInput) -> list[Any]:
+        recorded.append(project_state.labeling_image_path(detector_input.page_index))
         return []
 
     _run_propose_regions_job(client, detector=_detector)
@@ -933,6 +933,7 @@ def test_the_book_lease_is_closed_even_when_the_detector_raises(
     from datetime import UTC, datetime
 
     from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectorInput
 
     client = _load_book_client(tmp_path, monkeypatch, page_count=1)
     _seed_page(client, 0)
@@ -943,9 +944,8 @@ def test_the_book_lease_is_closed_even_when_the_detector_raises(
 
     captured: list[Path] = []
 
-    def _detector(page: Any) -> list[Any]:
-        del page
-        captured.append(project_state.labeling_image_path(0))
+    def _detector(detector_input: DetectorInput) -> list[Any]:
+        captured.append(project_state.labeling_image_path(detector_input.page_index))
         raise RuntimeError("boom")
 
     # The detector is a swap-in callable, so the handler logs its failure and
@@ -980,8 +980,8 @@ def test_a_detector_that_raises_skips_its_page_and_does_not_kill_the_run(
     assert project is not None
     PageKindReviewedStore(project.project_root).mark_reviewed(0, datetime.now(UTC).isoformat())
 
-    def _exploding_detector(page: Any) -> list[Any]:
-        del page
+    def _exploding_detector(detector_input: Any) -> list[Any]:
+        del detector_input
         raise ValueError("page mixes normalized and pixel word boxes")
 
     runner.context["region_detector"] = _exploding_detector

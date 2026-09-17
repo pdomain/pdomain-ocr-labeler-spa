@@ -84,6 +84,7 @@ from .core.persistence.page_store import LabelerPageStore
 from .core.persistence.pidfile import check_and_write_pidfile, release_pidfile
 from .core.persistence.session_state import load_session_state
 from .core.project_state import ProjectState
+from .core.regions.furniture import furniture_region_detector
 from .core.source_root_state import SourceRootCarrier
 from .core.startup_discovery import resolve_initial_project
 from .middleware.local_trust import LocalTrustMiddleware
@@ -493,6 +494,11 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     )
     runner.context["ocr_config_carrier"] = ocr_carrier
     runner.context["settings"] = settings
+    # The region proposal engine. Slice 4's furniture detector is the default
+    # rather than ``null_region_detector``, because a seam nothing wires is a
+    # seam that never runs. A test overrides this key the same way the
+    # page-kind measure function is overridden.
+    runner.context["region_detector"] = furniture_region_detector
 
     # Spec §2 step 10: install error handlers AFTER middleware (CORS +
     # RequestId) so a 500 still passes back through both on the way
