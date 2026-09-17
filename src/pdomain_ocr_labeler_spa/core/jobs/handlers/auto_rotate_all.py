@@ -298,6 +298,7 @@ async def handle_auto_rotate_all(runner: JobRunner, job: Job) -> None:
                     outcome,
                     page_kind_sent=page_kind,
                     page_store=store,
+                    expected_project_id=project_id,
                 )
 
                 if store is not None:

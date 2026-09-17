@@ -211,6 +211,7 @@ async def handle_load_page(runner: JobRunner, job: Job) -> None:
         outcome,
         page_kind_sent=page_kind,
         page_store=runner.context.get("page_store"),
+        expected_project_id=project_id,
     )
 
     # Stage 3 — terminal "done" message, so the SSE terminal frame reads as

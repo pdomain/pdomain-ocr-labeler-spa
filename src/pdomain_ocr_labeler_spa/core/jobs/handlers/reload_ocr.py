@@ -275,6 +275,7 @@ def _finalize_reocr_outcome(
     *,
     page_kind_sent: PageKind | None,
     page_store: Any | None,
+    expected_project_id: str,
 ) -> None:
     """Recheck the confirmed kind for a race, then swap in the OCR outcome.
 
@@ -297,7 +298,30 @@ def _finalize_reocr_outcome(
     ``page_kind_sent`` is duck-typed against the fresh payload the same way
     ``_prior_confirmed_page_kind`` reads it: a payload without a settable
     ``page_kind`` (a test double's plain ``dict``) is left alone.
+
+    ``expected_project_id`` guards against a second race: every caller
+    (``reload_ocr``, ``rotate_page``, ``auto_rotate_all``, ``load_page``)
+    runs OCR on a worker thread with no project lock held, so a concurrent
+    ``POST .../projects/load`` (or an unload) can swap
+    ``ProjectState.loaded_project`` to a different book — or to none —
+    before this outcome comes back. The write below is keyed by
+    ``page_index`` alone, so writing it unconditionally would land this
+    outcome in whatever project happens to be loaded *now*, not the one the
+    caller captured at submission time. Mirrors the pin re-check
+    ``propose_regions`` already does in its own lazy-load loop
+    (``_project_still_pinned`` in ``core/jobs/handlers/propose_regions.py``),
+    applied here at the one shared write site instead of once per caller.
     """
+    loaded = project_state.loaded_project
+    if loaded is None or loaded.project_id != expected_project_id:
+        log.warning(
+            "_finalize_reocr_outcome: expected project=%s but project=%s is loaded — "
+            "dropping OCR outcome for page=%d",
+            expected_project_id,
+            loaded.project_id if loaded is not None else None,
+            page_index,
+        )
+        return
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
         current_kind = _prior_confirmed_page_kind(project_state, page_index)
@@ -438,6 +462,7 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
         outcome,
         page_kind_sent=page_kind,
         page_store=runner.context.get("page_store"),
+        expected_project_id=project_id,
     )
 
     # Stage 4 — 1.0 / "Done".
