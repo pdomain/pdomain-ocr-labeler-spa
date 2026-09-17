@@ -86,8 +86,15 @@ As of 2026-09-17:
   undecided rule as the page view. In the SPA, `]` and `[` jump to the next or previous page with
   undecided proposals, the rail's region target shows the book's count as a badge, and emptying a
   page says how many remain in the book. `tests/e2e/test_review_queue_navigation.py` drives it.
-- **Not built yet:** drawing a region, resizing a box, editing word membership in the UI, and
-  reviewing page kinds.
+- **A person reviews page kinds.** `PagePayload` carries the latest `page_kind_proposal`. The page
+  toolbar shows the page's kind, confirmed or proposed with its confidence, and confirms or changes
+  it. "Review page kinds" opens a book-wide list with filters and checkboxes, backed by
+  `GET .../page-kinds` and `POST .../page-kinds/confirm`, which the SPA calls 25 pages at a time.
+  Reviewed markers record the kind and whether it was confirmed alone, in bulk, or by undo or redo.
+  A confirmed kind survives re-OCR, rotation and auto-rotate-all. Verified on 32 real OCR'd pages
+  in `/workspaces/pdomain/.m15f-evidence/real-book-page-kind-review/`.
+- **Not built yet:** drawing a region, resizing a box, editing word membership in the UI, and a
+  keyboard path for page kinds.
 
 Page lifecycle types now have one import owner. Production and test callers
 import `PageRecord` and `RotationSource` from `pdomain_ops.pages`; the temporary
