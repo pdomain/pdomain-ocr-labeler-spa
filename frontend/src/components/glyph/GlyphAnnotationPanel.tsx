@@ -1,4 +1,9 @@
-// GlyphAnnotationPanel.tsx — Typography annotation section for a word.
+// GlyphAnnotationPanel.tsx — glyph annotation (ligatures/long-s/swash)
+// review section for a word. Mounted by WordDetail inside its "Glyphs"
+// accordion item — not "Typography"; that label belongs to the separate
+// TypographySection item (grapheme/taxonomy span review). This component
+// renders no heading of its own so the accordion trigger is the only
+// place the section is named (reviewer finding 3, 2026-09-18).
 // Spec: specs/20-glyph-annotations.md §5.1
 // Issue #269
 //
@@ -44,8 +49,8 @@ export interface GlyphAnnotationPanelProps {
 const LIGATURE_KINDS = ["ct", "st", "fi", "fl", "ff", "ffi", "ffl"] as const;
 
 /**
- * Panel section for viewing and editing glyph annotations for a single word.
- * Panel content for word-level typography editing.
+ * Panel section for viewing and editing glyph annotations (ligatures,
+ * long-s positions, swash) for a single word.
  */
 export function GlyphAnnotationPanel({
   lineIndex,
@@ -146,7 +151,14 @@ export function GlyphAnnotationPanel({
       data-testid={`glyph-panel-${lineIndex}-${wordIndex}`}
       className="flex flex-col gap-2 p-2 text-xs border border-border-1 rounded-sm"
     >
-      <div className="font-semibold text-ink-2">Typography</div>
+      {/* No internal heading here — WordDetail mounts this inside an
+          accordion item whose own trigger already names the section
+          ("Glyphs"). None of the sibling sections (StructureSection,
+          ErasePixelsSection, CharFixerSection, …) repeat their accordion
+          trigger's label as an internal heading either; a "Typography"
+          heading here (reviewer finding 3, 2026-09-18) would both
+          duplicate the trigger and use the wrong name — "Typography" is
+          the separate TypographySection item's label. */}
 
       {/* Ligatures section */}
       <div>
