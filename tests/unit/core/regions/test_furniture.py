@@ -881,3 +881,114 @@ def test_the_unfitted_fallback_never_peels() -> None:
 
     assert len(detected) == 1
     assert detected[0].role is RegionRole.PAGE_HEADER
+
+
+# ---------------------------------------------------------------------------
+# Fix 4 — an OCR digit lookalike (``IO`` for ``10``) still reads as a folio.
+# projectID657550412c8dc page 25, recorded in
+# .m15f-evidence/real-book-region-run/README.md's 2026-09-17 hardening run:
+# real DocTR output on a real book, not a synthetic example.
+# ---------------------------------------------------------------------------
+
+
+def test_a_folio_ocrd_with_digit_lookalikes_is_a_page_number() -> None:
+    """``IO`` for ``10`` — the exact real-book example that motivated this fix."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import furniture_region_detector
+
+    words = [
+        _word("PREFACE", 100, 105, 260, 125),
+        _word("IO", 860, 105, 900, 125),
+    ]
+    detected = furniture_region_detector(_input(words))
+    assert [d.role for d in detected] == [RegionRole.PAGE_HEADER, RegionRole.PAGE_NUMBER]
+
+
+def test_a_book_fitted_detector_peels_a_lookalike_folio_off_a_long_head() -> None:
+    """The peel must also recognize a digit-lookalike edge token, not just plain digits."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import FurnitureDetector
+
+    target_words = _peel_book_pages_with_folio("IO")
+    book = [_input(target_words)] + [_input(words) for words in _peel_book_other_pages()]
+
+    per_page_detect = FurnitureDetector().fit(book)
+    detected = per_page_detect(book[0])
+
+    assert len(detected) == 2
+    head, folio = detected
+    assert head.role is RegionRole.PAGE_HEADER
+    assert head.box == (100, 105, 310, 125)
+    assert folio.role is RegionRole.PAGE_NUMBER
+    assert folio.box == (364, 105, 390, 125)
+
+
+def test_a_roman_numeral_edge_token_composed_of_lookalikes_is_never_peeled() -> None:
+    """``II`` is both a real roman numeral and a full lookalike match for ``11`` — it must stay a head word.
+
+    ``I`` doubles as a roman-numeral letter and a lookalike for ``1``, so this
+    is the one case where the two readings collide. The roman reading wins:
+    the peel excludes any token spelled entirely in roman-numeral letters
+    before it ever tries the lookalike substitution.
+    """
+    from pdomain_ocr_labeler_spa.core.regions.furniture import FurnitureDetector
+
+    target_words = _peel_book_pages_with_folio("II")
+    book = [_input(target_words)] + [_input(words) for words in _peel_book_other_pages()]
+
+    per_page_detect = FurnitureDetector().fit(book)
+    detected = per_page_detect(book[0])
+
+    assert len(detected) == 1
+    assert detected[0].role is RegionRole.PAGE_HEADER
+    assert detected[0].box == (100, 105, 390, 125)
+
+
+@pytest.mark.parametrize("real_word", ["SO", "Io"])
+def test_a_real_word_of_lookalike_letters_is_never_a_folio(real_word: str) -> None:
+    """``SO`` and ``Io`` sit exactly where a folio sits but must not become one.
+
+    ``SO`` stays safe because ``S`` is never substituted (see
+    ``_FOLIO_LOOKALIKE_SUBSTITUTIONS`` — no observed evidence, and ``S`` is
+    one of the commonest letters in short English words). ``Io`` stays safe
+    because the substitution is case-sensitive: only uppercase ``O`` reads as
+    a lookalike, and this ``o`` is lowercase.
+    """
+    from pdomain_ocr_labeler_spa.core.regions.furniture import furniture_region_detector
+
+    words = [
+        _word("PREFACE", 100, 105, 260, 125),
+        _word(real_word, 860, 105, 900, 125),
+    ]
+    detected = furniture_region_detector(_input(words))
+    assert [d.role for d in detected] == [RegionRole.PAGE_HEADER, RegionRole.PAGE_HEADER]
+
+
+def test_a_long_lookalike_token_is_never_a_folio() -> None:
+    """A run of lookalike letters past the folio length cap reads as a head, not a folio."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import furniture_region_detector
+
+    words = [
+        _word("PREFACE", 100, 105, 260, 125),
+        _word("OOOOO", 860, 105, 900, 125),
+    ]
+    detected = furniture_region_detector(_input(words))
+    assert [d.role for d in detected] == [RegionRole.PAGE_HEADER, RegionRole.PAGE_HEADER]
+
+
+def test_recognizing_a_lookalike_folio_does_not_rewrite_the_bands_text() -> None:
+    """Recognition changes only the proposed role — the OCR word's own text is read, never written."""
+    from pdomain_ocr_labeler_spa.core.regions.furniture import furniture_region_detector
+
+    words = [
+        _word("PREFACE", 100, 105, 260, 125),
+        _word("IO", 860, 105, 900, 125),
+    ]
+    detector_input = _input(words)
+    detected = furniture_region_detector(detector_input)
+
+    assert [d.role for d in detected] == [RegionRole.PAGE_HEADER, RegionRole.PAGE_NUMBER]
+    # DetectedRegion carries a box and a role, never text — the underlying
+    # word's OCR and ground-truth text are exactly what was passed in.
+    page_words = [w for line in detector_input.page.items for w in line.items]
+    folio_word = next(w for w in page_words if w.text == "IO")
+    assert folio_word.text == "IO"
+    assert folio_word.ground_truth_text == "IO"

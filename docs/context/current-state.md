@@ -72,9 +72,13 @@ As of 2026-09-17:
   Both proposal jobs read page images through a verified per-page lease. A region run loads any page
   with stored OCR that nobody has opened, never running OCR itself, so it works right after a
   restart. A run ends with a summary message saying how many proposals it made and why any pages
-  were skipped. The folio half of a furniture band is peeled off by a digits-only pattern
-  (`_FOLIO_PATTERN` in `core/regions/furniture.py`), so an OCR misread that turns a digit into a
-  lookalike letter, `IO` for `10`, is not recognized as a folio.
+  were skipped. The folio half of a furniture band is peeled off by a digits-only pattern; a short
+  edge token OCR'd with a digit lookalike (`IO` for `10`) is recognized as a folio too, through a
+  case-sensitive `I`/`l`/`|`→`1`, `O`→`0` substitution checked only as a fallback, only up to four
+  characters, and never for anything spelled entirely in roman-numeral letters
+  (`_is_folio_via_lookalikes` in `core/regions/furniture.py`). Recognition changes only which role a
+  proposal gets; the OCR'd band text itself is never rewritten, and no folio value is parsed to an
+  integer anywhere in this codebase.
 - **A person reviews proposals in the SPA.** Key `5` selects the region rail target. A canvas click
   selects the smallest region or proposal under it, and `RegionDetail` accepts, accepts as another
   role, or rejects it, or changes the role of or deletes a confirmed region. From the keyboard, `n`
@@ -196,8 +200,6 @@ Spec: [`../../specs/20-glyph-annotations.md`](../../specs/20-glyph-annotations.m
   proposal on a re-run but is not carried; and a rejected proposal is never
   matched against at all, so a re-run can resurface something a person
   already declined.
-- **Folio detection can miss an OCR lookalike**, such as `IO` for `10`: the
-  peel in `core/regions/furniture.py` only recognizes a digits-only pattern.
 - **Whether the OCR engine should warm up at server start is still open**,
   carried from the 2026-09-17 page-load-progress decision in `decisions.md`.
 - **No release since `v0.2.0`, tagged 2026-06-06** — 634 commits ahead of it
