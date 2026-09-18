@@ -534,4 +534,23 @@ describe("App: S6.3(a) OCR config trigger on root route", () => {
       expect(screen.getByTestId("ocr-config-modal")).toBeInTheDocument();
     });
   });
+
+  // Same class of bug as BUG-KBD-1, noted as a related gap in
+  // docs/plans/2026-07-21-open-findings-fixes.md: Mod+O was advertised but
+  // never registered. Fires a real keydown, asserts the dialog, not the store.
+  it("pressing Mod+O (Ctrl+O) opens the source-folder-dialog", async () => {
+    dialogStore.reset();
+    withNoSession();
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByTestId("header-bar")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("source-folder-dialog")).toBeNull();
+
+    fireEvent.keyDown(document, { key: "o", code: "KeyO", ctrlKey: true, bubbles: true });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("source-folder-dialog")).toBeInTheDocument();
+    });
+  });
 });

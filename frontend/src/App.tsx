@@ -208,6 +208,17 @@ function AppInner() {
     dialogStore.open("ocrConfig");
   });
 
+  // Mod+O opens the Source Folder dialog from any route (hotkeyMap.ts "Open
+  // Source Folder dialog"; docs/plans/2026-07-21-open-findings-fixes.md notes
+  // it as the same class of bug as Mod+,). `SourceFolderDialog` is likewise
+  // mounted unconditionally below (its only live trigger buttons today are
+  // route-specific: the root project-list "Open Folder" button and the
+  // project-route breadcrumb icon), so this hotkey lives at the same global
+  // level as Mod+, above rather than duplicated per route.
+  useHotkey("mod+o", () => {
+    dialogStore.open("sourceFolder");
+  });
+
   // Dialog open-state slices — re-render only when these change.
   const ocrConfigOpen = useDialogStore((s) => s.ocrConfig.open);
   const exportOpen = useDialogStore((s) => s.export.open);

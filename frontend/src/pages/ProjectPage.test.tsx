@@ -702,6 +702,133 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     });
   });
 
+  // ── BUG-KBD-1 sibling: Mod+Shift+R wired in ProjectPage ────────────────────
+  // docs/plans/2026-07-21-open-findings-fixes.md: advertised in hotkeyMap.ts,
+  // registered nowhere. Gated the same way as the "Reload OCR (Edited)"
+  // overflow-menu button (PageActionsCompact.tsx): a no-op with no edited
+  // image to reload.
+
+  describe("BUG-KBD-1 sibling: Ctrl+Shift+R (Reload OCR Edited)", () => {
+    it("fires POST /reload-ocr with use_edited_image:true when the page has an edited image", async () => {
+      const reloadCalls: unknown[] = [];
+      server.use(
+        http.get("/api/projects/:pid/pages/:idx", () =>
+          HttpResponse.json({
+            ...pageFixture(),
+            page_record: {
+              ...pageFixture().page_record,
+              extensions: { labeler: { has_edited_image: true } },
+            },
+          }),
+        ),
+        http.post("/api/projects/:pid/pages/:idx/reload-ocr", async ({ request }) => {
+          reloadCalls.push(await request.json());
+          return HttpResponse.json({});
+        }),
+      );
+      renderProjectPage();
+      await screen.findByTestId("project-page");
+      // Wait for the page data (with extensions.labeler) to settle before
+      // firing — same reasoning as the Ctrl+S test above.
+      await screen.findByTestId("reload-ocr-button");
+
+      fireEvent.keyDown(document, {
+        key: "R",
+        code: "KeyR",
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
+      });
+      expect(reloadCalls.length).toBe(0);
+
+      fireEvent.click(screen.getByTestId("confirm-dialog-confirm"));
+      await waitFor(() => {
+        expect(reloadCalls.length).toBeGreaterThanOrEqual(1);
+      });
+      expect(reloadCalls[0]).toEqual({ use_edited_image: true });
+    });
+
+    it("is a no-op when the page has no edited image (matches the button's own gate)", async () => {
+      const reloadCalls: unknown[] = [];
+      server.use(
+        // Default pageFixture() has no page_record.extensions.labeler.
+        http.get("/api/projects/:pid/pages/:idx", () => HttpResponse.json(pageFixture())),
+        http.post("/api/projects/:pid/pages/:idx/reload-ocr", async ({ request }) => {
+          reloadCalls.push(await request.json());
+          return HttpResponse.json({});
+        }),
+      );
+      renderProjectPage();
+      await screen.findByTestId("project-page");
+
+      fireEvent.keyDown(document, {
+        key: "R",
+        code: "KeyR",
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+      });
+
+      // No confirm dialog, no mutation — same as clicking a disabled button.
+      expect(screen.queryByTestId("confirm-dialog")).toBeNull();
+      expect(reloadCalls.length).toBe(0);
+    });
+
+    it("does not collide with Ctrl+R: plain reload fires use_edited_image:false", async () => {
+      const reloadCalls: unknown[] = [];
+      server.use(
+        http.get("/api/projects/:pid/pages/:idx", () =>
+          HttpResponse.json({
+            ...pageFixture(),
+            page_record: {
+              ...pageFixture().page_record,
+              extensions: { labeler: { has_edited_image: true } },
+            },
+          }),
+        ),
+        http.post("/api/projects/:pid/pages/:idx/reload-ocr", async ({ request }) => {
+          reloadCalls.push(await request.json());
+          return HttpResponse.json({});
+        }),
+      );
+      renderProjectPage();
+      await screen.findByTestId("project-page");
+
+      fireEvent.keyDown(document, { key: "r", code: "KeyR", ctrlKey: true, bubbles: true });
+      await waitFor(() => {
+        expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByTestId("confirm-dialog-confirm"));
+      await waitFor(() => {
+        expect(reloadCalls.length).toBeGreaterThanOrEqual(1);
+      });
+      expect(reloadCalls[0]).toEqual({ use_edited_image: false });
+    });
+  });
+
+  // ── BUG-KBD-5: Mod+J wired in ProjectPage ──────────────────────────────────
+  // docs/plans/2026-07-21-open-findings-fixes.md: advertised in hotkeyMap.ts,
+  // registered nowhere. Same forwardRef + focus pattern as Mod+K/QuickSearch.
+
+  describe("BUG-KBD-5: Ctrl+J focuses the page-number input", () => {
+    it("focuses and selects nav-page-input", async () => {
+      renderProjectPage();
+      await screen.findByTestId("project-page");
+      const input = screen.getByTestId("nav-page-input");
+      expect(input).not.toHaveFocus();
+
+      fireEvent.keyDown(document, { key: "j", code: "KeyJ", ctrlKey: true, bubbles: true });
+
+      await waitFor(() => {
+        expect(input).toHaveFocus();
+      });
+    });
+  });
+
   // ── BUG-KBD-3 / P1-MATCH-NAV: useMatchesHotkeys wired in ProjectPage ───────
   // docs/issues/2026-07-21-match-nav-selection-desync.md — J/K must take the
   // same `focusWorklistLine` path as a Worklist row click, so the worklist

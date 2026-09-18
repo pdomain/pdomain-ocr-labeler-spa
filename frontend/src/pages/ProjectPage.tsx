@@ -104,7 +104,9 @@ import { focusWorklistLine } from "../stores/worklist-focus";
 import { pageNoUrl } from "../lib/routes";
 
 import { PageActionsCompact } from "../components/PageActionsCompact";
-import ProjectNavigationControls from "../components/ProjectNavigationControls";
+import ProjectNavigationControls, {
+  type ProjectNavigationControlsHandle,
+} from "../components/ProjectNavigationControls";
 import { Drawer } from "../components/shell/Drawer";
 import { WorkspaceToolbar } from "../components/shell/WorkspaceToolbar";
 import { WorkspaceMetrics, type PageMetrics } from "../components/shell/WorkspaceMetrics";
@@ -515,6 +517,11 @@ export default function ProjectPage() {
     quickSearchRef.current?.focusInput();
   });
 
+  // BUG-KBD-5 (docs/plans/2026-07-21-open-findings-fixes.md): Mod+J focuses
+  // the page-number input, same forwardRef pattern as Mod+K/QuickSearch above.
+  // Wired via useGlobalHotkeys below (onJumpToPage).
+  const navControlsRef = useRef<ProjectNavigationControlsHandle>(null);
+
   // ── Global hotkeys (BUG-KBD-2) ─────────────────────────────────────────
   // Wired here at the page level so Mod+S, Mod+ArrowLeft/Right, etc. are
   // active whenever the project page is mounted. Page-navigation handlers
@@ -546,9 +553,11 @@ export default function ProjectPage() {
     onSavePage: handleSavePage,
     onSaveProject: handleSaveProject,
     onReloadOcr: handleReloadOcr,
+    onReloadOcrEdited: handleReloadOcrEdited,
     onLoadPage: handleLoadPage,
     onRematchGt: handleRematchGt,
     onExport: handleExport,
+    onJumpToPage: () => navControlsRef.current?.focusPageInput(),
     onUndo: handleUndo,
     onRedo: handleRedo,
     onPrevPage: () => {
@@ -756,6 +765,33 @@ export default function ProjectPage() {
         reloadOcr.mutate(undefined, {
           onSuccess: (data) => {
             trackJob(data as { job_id?: string | null } | undefined | null);
+          },
+          onSettled: () => {
+            invalidatePage();
+          },
+        });
+      },
+    });
+  }
+  // BUG-KBD-1 sibling (docs/plans/2026-07-21-open-findings-fixes.md): Mod+Shift+R
+  // wires to this via useGlobalHotkeys, same "hotkey works globally, button
+  // lives in PageActionsCompact" reasoning as Mod+R above. `hasEditedImage`
+  // mirrors PageActionsCompact.tsx's own gate on the "Reload OCR (Edited)"
+  // overflow-menu item (`disabled={disabled || !hasEditedImage}`) — firing
+  // this with no edited image to reload would re-run plain OCR under a
+  // misleading "(edited)" confirm, so the hotkey is a no-op instead.
+  const labelerExt = pagePayload?.page_record?.extensions?.["labeler"] as
+    { has_edited_image?: boolean } | undefined;
+  const hasEditedImage = labelerExt?.has_edited_image === true;
+  function handleReloadOcrEdited() {
+    if (!hasEditedImage) return;
+    dialogStore.openConfirm({
+      title: "Reload OCR (edited image)?",
+      body: reloadOcrConfirmBody,
+      onConfirm: () => {
+        reloadOcrEdited.mutate(undefined, {
+          onSuccess: (data) => {
+            trackJob(data);
           },
           onSettled: () => {
             invalidatePage();
@@ -1063,7 +1099,11 @@ export default function ProjectPage() {
     <WorkspaceToolbar
       leftSlot={
         projectId ? (
-          <ProjectNavigationControls projectId={projectId} pageNo={String(idx0 + 1)} />
+          <ProjectNavigationControls
+            ref={navControlsRef}
+            projectId={projectId}
+            pageNo={String(idx0 + 1)}
+          />
         ) : undefined
       }
       centerSlot={

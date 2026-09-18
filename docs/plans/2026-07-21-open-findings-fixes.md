@@ -3,7 +3,7 @@ kind: plan
 status: active
 owner: maintainers
 created: 2026-07-21
-last_verified: 2026-07-21
+last_verified: 2026-09-18
 priority: now
 repo: pdomain/pdomain-ocr-labeler-spa
 source: docs/context/open-findings.md
@@ -54,12 +54,79 @@ deterministic so WordDetail section coverage cannot silently skip.
 
 | ID | Title | Status | Evidence | Planned work |
 |---|---|---|---|---|
-| BUG-KBD-1 | `Mod+,` advertised, not registered | **Still open** | `hotkeyMap.ts:30`; no `useHotkey("mod+,")` in `useGlobalHotkeys.ts` | Register → `dialogStore.open("ocrConfig")` |
+| BUG-KBD-1 | `Mod+,` advertised, not registered | **Fixed 2026-09-18** | `hotkeyMap.ts:30`; no `useHotkey("mod+,")` in `useGlobalHotkeys.ts` | Registered as `useHotkey("mod+comma", ...)` in `App.tsx`'s `AppInner` → `dialogStore.open("ocrConfig")` — see [Resolution](#resolution-2026-09-18) below for why the combo and the location both differ from the original plan. |
 | BUG-KBD-4 | ConfirmDialog Escape/Enter | **Already fixed** | `ConfirmDialog.tsx` uses pdomain-ui Radix `AlertDialog`; Escape → `onOpenChange(false)` → `onCancel` | None (optional test hardening only) |
-| BUG-KBD-5 | `Mod+J` advertised, not registered | **Still open** | `hotkeyMap.ts:39`; no `mod+j` registration; `nav-page-input` exists | Focus page input via ref (QuickSearch pattern) |
+| BUG-KBD-5 | `Mod+J` advertised, not registered | **Fixed 2026-09-18** | `hotkeyMap.ts:39`; no `mod+j` registration; `nav-page-input` exists | Registered `onJumpToPage` in `useGlobalHotkeys.ts`; `ProjectNavigationControls.tsx` converted to `forwardRef` exposing `focusPageInput()`, exactly as planned below. |
 | BUG-SMOKE-3 | `data_root` not XDG-compatible | **Still open** (spec-vs-impl) | Spec `01-data-models.md:730` vs `settings.py:65` (`~/pdomain-ocr-labeler-spa`) | Align default to XDG path; no auto-migration of legacy `pd-ocr-labeler` |
 | BUG-RELOAD-1 | Zero-area unmatched-GT / empty OCR | **Partially fixed** | Zero boxes created `page_to_line_matches.py:532`; overlay skips `word_index === null` (`PageImageCanvas.tsx:429`); structural layers filter area (`:236`); empty OCR still toasts “OCR complete” (`reload_ocr.py:321-324`) | Pin zero-area contract with tests + defensive filter; warn on zero-word OCR |
 | BUG-HIER-1 | Hierarchy E2E empty / fixed sleeps | **Still open** | `test_ui_coverage.py:71-151` soft-returns False → six tests `pytest.skip` | Explicit waits; fail if exercise fixture yields no hierarchy |
+
+---
+
+## Resolution (2026-09-18)
+
+BUG-KBD-1 and BUG-KBD-5 shipped in the same pass that also fixed the `?`
+hotkey (react-hotkeys-hook 4→5 bump regression, commits 655dbd9/f9ce5e0) and
+opportunistically fixed two more advertised-but-dead global hotkeys found
+during that audit. Both this plan's two findings and the two opportunistic
+ones are the same root cause: `hotkeyMap.ts` advertises a combo with nothing
+behind it.
+
+**Combo spelling changed for BUG-KBD-1.** react-hotkeys-hook 5 matches
+`KeyboardEvent.code`, not the character a key produces. `mod+,` (the literal
+comma character) never matches a real keypress — the physical key's code is
+`Comma`. `hotkeyMap.ts` and the registration both now spell it
+`"mod+comma"`, matching how `[`/`]` were already registered as
+`bracketleft`/`bracketright`. This wasn't visible when this plan was written;
+it only surfaces once you fire a real keydown at the registered combo, which
+none of this plan's original test snippets did (they call
+`fireEvent.keyDown(document, { key: ",", ctrlKey: true })` with no `code`).
+
+**Registration location changed for BUG-KBD-1.** Step 3's option A/B choice
+(mount near the root OCR trigger, or call `useGlobalHotkeys` from AppShell)
+resolved to a third, simpler option: a single `useHotkey("mod+comma", ...)`
+call directly in `App.tsx`'s `AppInner`, next to where `OCRConfigModal` is
+already mounted unconditionally (open/close both live in `dialogStore`, no
+per-route plumbing needed). `useGlobalHotkeys.ts` / `ProjectPage.tsx` were
+not touched for this one — avoids the double-registration risk Step 3 called
+out.
+
+**BUG-KBD-5 shipped as planned** — `ProjectNavigationControls.tsx` is now
+`forwardRef` + `useImperativeHandle` exposing `focusPageInput()` (focuses and
+selects `nav-page-input`), wired through `useGlobalHotkeys`'s new
+`onJumpToPage` to a ref held in `ProjectPage.tsx`, same shape as `Mod+K` /
+`QuickSearchHandle`.
+
+**Opportunistic fixes (found during the same audit, not originally tracked
+here):**
+
+- `Mod+O` (Open Source Folder) — the "Related gaps" entry below. Registered
+  the same way as `Mod+,`: `useHotkey("mod+o", ...)` in `App.tsx`'s
+  `AppInner`, since `SourceFolderDialog` is likewise mounted unconditionally
+  there and has no single always-present trigger button to hang the fix off
+  of.
+- `Mod+Shift+R` (Reload OCR, edited image) — not previously tracked in this
+  plan or `docs/context/open-findings.md`. Registered in `useGlobalHotkeys.ts`
+  (`onReloadOcrEdited`), wired in `ProjectPage.tsx` to a new
+  `handleReloadOcrEdited` that mirrors `handleReloadOcr` but is gated on
+  `page_record.extensions.labeler.has_edited_image`, the same flag
+  `PageActionsCompact.tsx`'s "Reload OCR (Edited)" button already gates on —
+  firing it with no edited image to reload would silently re-run plain OCR
+  under a misleading "(edited)" confirm dialog. Verified no collision with
+  `Mod+R`: react-hotkeys-hook 5 requires an exact `shiftKey` match against
+  the combo, so Ctrl+R never fires the edited handler and Ctrl+Shift+R never
+  fires the plain one.
+
+All four are covered by tests that fire a real `keydown` (`key` + `code`) and
+assert the resulting UI state (dialog open, mutation body, input focus) —
+never the store or handler directly — in `App.test.tsx`,
+`useGlobalHotkeys.test.tsx`, and `ProjectPage.test.tsx`.
+
+**What's still open in this plan:** BUG-SMOKE-3 (XDG `data_root`),
+BUG-RELOAD-1 (zero-area / empty-OCR), and BUG-HIER-1 (hierarchy E2E waits)
+are untouched by this pass — out of scope for a hotkey fix. Do not mark
+Task 6 (close the loop on `open-findings.md`) done until those three ship
+too.
 
 ---
 
@@ -113,6 +180,14 @@ ConfirmDialog unless a browser regression is filed with a repro.
 ---
 
 ## Task 1 — BUG-KBD-1: Register `Mod+,` → OCR Config
+
+**Status: fixed 2026-09-18.** Shipped via the "prefer registering where other
+global dialogs open" option this task already named, not the
+`useGlobalHotkeys.ts`/`ProjectPage.tsx` file list below — and the combo is
+`"mod+comma"`, not `"mod+,"` (react-hotkeys-hook 5 matches
+`KeyboardEvent.code`; the literal comma character has none). See
+[Resolution](#resolution-2026-09-18) for the full explanation. The steps
+below are kept for record; do not re-run them.
 
 **Files:**
 
@@ -196,6 +271,12 @@ fix(hotkeys): register Mod+, for OCR Config (BUG-KBD-1)
 ---
 
 ## Task 2 — BUG-KBD-5: Register `Mod+J` → focus page input
+
+**Status: fixed 2026-09-18**, following the plan below as written. See
+[Resolution](#resolution-2026-09-18). Real-keypress test coverage landed in
+`ProjectPage.test.tsx` (Ctrl+J focuses `nav-page-input`) rather than a new
+`ProjectNavigationControls.test.tsx` case, since the ref itself has no
+observable behavior to unit-test in isolation from a parent wiring it up.
 
 **Files:**
 
@@ -618,7 +699,8 @@ docs(context): mark open findings fixed after residual bug plan
 
 | Gap | Note |
 |---|---|
-| `Mod+O` advertised (`hotkeyMap.ts:31`) but not registered in `useGlobalHotkeys` | Same class of bug as KBD-1; fix opportunistically with KBD-1 if cheap, else separate issue |
+| `Mod+O` advertised (`hotkeyMap.ts:31`) but not registered in `useGlobalHotkeys` | **Fixed 2026-09-18**, same pass as BUG-KBD-1/5 — see [Resolution](#resolution-2026-09-18). Registered in `App.tsx`, not `useGlobalHotkeys.ts` (not project-scoped). |
+| `Mod+Shift+R` advertised (`hotkeyMap.ts:25`) but not registered anywhere | **Fixed 2026-09-18** — found during the same audit, not previously tracked in this plan or `open-findings.md`. See [Resolution](#resolution-2026-09-18). |
 | ConfirmDialog Escape unit test missing | Product fixed; optional hardening |
 | Legacy `pd-ocr-labeler` data auto-import | Explicitly rejected for SMOKE-3 |
 | Broad E2E `time.sleep` cleanup outside hierarchy helper | Only hierarchy soft-skip is BUG-HIER-1 |
@@ -629,9 +711,9 @@ docs(context): mark open findings fixed after residual bug plan
 
 | Finding | Residual status | Effort |
 |---|---|---|
-| BUG-KBD-1 | Still open | **S** (~0.5–1 h) |
+| BUG-KBD-1 | Fixed 2026-09-18 | **S** (~0.5–1 h) |
 | BUG-KBD-4 | Already fixed | **None** |
-| BUG-KBD-5 | Still open | **S** (~1–1.5 h, includes ref plumbing) |
+| BUG-KBD-5 | Fixed 2026-09-18 | **S** (~1–1.5 h, includes ref plumbing) |
 | BUG-SMOKE-3 | Still open | **S–M** (~1–2 h; OS path matrix tests) |
 | BUG-RELOAD-1 | Partial | **M** (~2–3 h; FE filter + BE empty-OCR toast) |
 | BUG-HIER-1 | Still open | **S–M** (~1–2 h; E2E flakiness buffer) |
@@ -649,4 +731,8 @@ Suggested order: **KBD-1 → KBD-5 → SMOKE-3 → RELOAD-1 → HIER-1 → docs*
 - [ ] `make ci AI=1`
 - [ ] Manual: `Mod+,` opens OCR Config; `Mod+J` focuses page input; Escape
       dismisses ConfirmDialog (smoke in browser if available)
+- [x] `Mod+,` / `Mod+J` / `Mod+O` / `Mod+Shift+R` covered by real-keypress
+      Vitest tests (not manual-only) as of 2026-09-18 — see
+      [Resolution](#resolution-2026-09-18). Manual smoke still worth doing
+      before the next release, since none of this ran in a real browser.
 )

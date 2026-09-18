@@ -94,9 +94,11 @@ describe("useGlobalHotkeys (#236)", () => {
     const handlers: GlobalHotkeyHandlers = {
       onSavePage: vi.fn(),
       onSaveProject: vi.fn(),
+      onReloadOcrEdited: vi.fn(),
       onLoadPage: vi.fn(),
       onRematchGt: vi.fn(),
       onExport: vi.fn(),
+      onJumpToPage: vi.fn(),
       onPrevPage: vi.fn(),
       onNextPage: vi.fn(),
       onFirstPage: vi.fn(),
@@ -105,6 +107,51 @@ describe("useGlobalHotkeys (#236)", () => {
     };
     render(<TestComponent {...handlers} />);
     expect(screen.getByTestId("container")).toBeInTheDocument();
+  });
+});
+
+// ─── BUG-KBD-1 sibling / BUG-KBD-5: Mod+Shift+R, Mod+J ────────────────────────
+// docs/plans/2026-07-21-open-findings-fixes.md — advertised in hotkeyMap.ts,
+// registered nowhere. Fires a real keydown (not the callback directly).
+
+describe("useGlobalHotkeys: Mod+Shift+R / Mod+J", () => {
+  it("Ctrl+Shift+R fires onReloadOcrEdited", () => {
+    const onReloadOcrEdited = vi.fn();
+    render(<TestComponent onReloadOcrEdited={onReloadOcrEdited} />);
+    pressKey("R", true, true);
+    expect(onReloadOcrEdited).toHaveBeenCalledOnce();
+  });
+
+  it("Ctrl+J fires onJumpToPage", () => {
+    const onJumpToPage = vi.fn();
+    render(<TestComponent onJumpToPage={onJumpToPage} />);
+    pressKey("j", true, false);
+    expect(onJumpToPage).toHaveBeenCalledOnce();
+  });
+
+  it("does not fire onReloadOcrEdited when disabled=true", () => {
+    const onReloadOcrEdited = vi.fn();
+    render(<TestComponent onReloadOcrEdited={onReloadOcrEdited} disabled={true} />);
+    pressKey("R", true, true);
+    expect(onReloadOcrEdited).not.toHaveBeenCalled();
+  });
+
+  it("Ctrl+Shift+R does not also fire onReloadOcr (no collision with Mod+R)", () => {
+    const onReloadOcr = vi.fn();
+    const onReloadOcrEdited = vi.fn();
+    render(<TestComponent onReloadOcr={onReloadOcr} onReloadOcrEdited={onReloadOcrEdited} />);
+    pressKey("R", true, true);
+    expect(onReloadOcrEdited).toHaveBeenCalledOnce();
+    expect(onReloadOcr).not.toHaveBeenCalled();
+  });
+
+  it("Ctrl+R (no shift) does not also fire onReloadOcrEdited (no collision with Mod+Shift+R)", () => {
+    const onReloadOcr = vi.fn();
+    const onReloadOcrEdited = vi.fn();
+    render(<TestComponent onReloadOcr={onReloadOcr} onReloadOcrEdited={onReloadOcrEdited} />);
+    pressKey("r", true, false);
+    expect(onReloadOcr).toHaveBeenCalledOnce();
+    expect(onReloadOcrEdited).not.toHaveBeenCalled();
   });
 });
 
