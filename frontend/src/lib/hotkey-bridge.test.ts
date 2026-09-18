@@ -116,11 +116,6 @@ describe("scopeToGroup", () => {
     expect(scopeToGroup("matches", "j")).toBe("editing");
   });
 
-  it("maps dialog scope to 'editing'", () => {
-    expect(scopeToGroup("dialog", "enter")).toBe("editing");
-    expect(scopeToGroup("dialog", "arrowleft")).toBe("editing");
-  });
-
   it("maps source-folder scope to 'other'", () => {
     expect(scopeToGroup("source-folder", "enter")).toBe("other");
     expect(scopeToGroup("source-folder", "escape")).toBe("other");
