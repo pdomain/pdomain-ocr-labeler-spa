@@ -525,46 +525,58 @@ git commit -m "feat(m11): mount GlyphAnnotationPanel in WordDetail"
 
 ## Task 6 — Wire WordCell chips → word edit / Typography
 
-**Skipped in the 2026-09-18 pass** (not attempted — see report). This
-task's plan text calls for wiring glyph-chip clicks to `onEditWord(line,
-word)`, a callback `docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`
-documents as already dead: `ProjectPage` mounts `WordMatchView` without
-passing `onEditWord` at all, so any chip wired to it today would be a
-silent no-op, not a working "open the panel" click. That issue is still
-open with three undecided questions (retire the driver-contract §2.11
-dialog docs, wire the pencil to select-and-open-right-panel or remove it,
-and give word merge a home) — Task 6 needs question 2 resolved (or
-resolved consistently for chips specifically) before it can wire glyph
-chips to anything real. Once decided, Task 6 becomes: select the word
-(`selectWord(line, wordIndex)` from `stores/selection-store`, the same
-store `WordDetail` already reads) and open the right panel's new "Glyphs"
-accordion item (Task 5) — not a standalone dialog — on chip click.
+**Done 2026-09-18.** The blocker this task's earlier text names — no
+`onEditWord` handler wired anywhere — was resolved the same day: the word
+edit dialog `docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`
+raised is retired (see `docs/context/decisions.md`'s "Retired: the word
+edit dialog the driver contract documented" entry), and `ProjectPage` now
+has `handleEditWord` (`selectWord(idx0, lineIndex, wordIndex)` +
+`useUiPrefs.setState({ rightPanelOpen: true })`), wired to the pencil
+button via `WordMatchView`'s existing `onEditWord` prop.
+
+Each glyph chip now shares `WordCell`'s own `handleGlyphChipClick`, which
+calls `e.stopPropagation()` then `onEditWord?.(l, w)` — the exact same
+target the pencil button hits, for the exact same
+already-a-bubbling-line-click-would-overwrite-it reason. `GlyphChip`'s
+`onClick` prop now takes the native `MouseEvent` so callers can
+`stopPropagation` before it bubbles to `LineCard`'s own click handler.
+
+Did not steer the "Glyphs" accordion item open. `WordDetail`'s
+`openAccordionItems` is local `useState` with no prop for external control;
+the one existing external-ish trigger (`glyphAutoOpen`, which opens
+"Glyphs" when a word has an unresolved prediction) fires on a different
+condition (`glyph_predictions != null && glyph_annotations == null`) than
+"a chip was clicked," and a confirmed-mark chip — the only kind that can
+render today, since no predictor exists — never matches it. Making a chip
+click open the item would need a new prop threaded WordCell → WordMatchView
+→ ProjectPage → WordDetail (or an ephemeral field on a store) carrying "open
+Glyphs for this selection," a one-off channel that doesn't exist elsewhere
+and that the driving task explicitly said not to build for this alone.
 
 **Files:**
-- Modify: `frontend/src/components/WordCell.tsx`
-- Modify: `frontend/src/components/WordCell.test.tsx`
-- Possibly: parent that supplies `onEditWord` (`WordMatchView` / `ProjectPage`)
+- Modified: `frontend/src/components/WordCell.tsx`
+- Modified: `frontend/src/components/WordCell.test.tsx`
+- Modified: `frontend/src/components/glyph/GlyphChip.tsx` (`onClick` now
+  takes the native click event)
+- Modified: `tests/e2e/test_glyph_panel.py` (browser coverage)
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
-Clicking a glyph chip calls `onEditWord(line, word)` (or a new optional
-`onOpenGlyphPanel` prop that defaults to edit).
+Added to `WordCell.test.tsx`: clicking a confirmed/`long_s`/predicted chip
+calls `onEditWord(lineIndex, wordIndex)`; clicking a chip inside a clickable
+wrapper does not also fire the wrapper's click handler; clicking with no
+`onEditWord` does not throw.
 
-- [ ] **Step 2: Replace placeholder handlers**
+- [x] **Step 2: Replace placeholder handlers**
 
-Remove `/* future: open panel */`. Prefer reusing `onEditWord` so right panel
-opens with the word selected and Typography accordion expanded (pass a store
-flag or query param only if needed; simplest is: select word + set a small
-`selectionStore` or local UI flag `expandTypography`).
+Removed `/* future: open panel */` from all four chip sites; all four now
+pass the same `handleGlyphChipClick`, so a future predictor's chips need no
+new wiring. Did not add a Typography-expand flag — see the accordion
+decision above.
 
-If popover-on-chip from spec §5.1 is still desired later, keep WordDetail as
-source of truth for editing; popover can wrap the same panel component.
+- [x] **Step 3: Commit**
 
-- [ ] **Step 3: Commit**
-
-```bash
-git commit -m "feat(m11): open word editor from glyph chips"
-```
+Committed on `fix/glyph-chip-click`.
 
 ---
 
@@ -754,6 +766,9 @@ bullet is narrowed, not cleared — it is still true today: `WordCell.tsx`
 glyph chip clicks are still `/* future: open panel */` stubs. That is
 Task 6, which this pass did not implement (see below).
 
+Update (2026-09-18, Task 6): the chip-click bullet is now cleared too —
+`WordCell.tsx`'s chips select the word and open the right panel.
+
 - [x] **Step 3:** Current-state / AGENTS: replace "frontend not shipped" with
   accurate residual (or "shipped" if Tasks 1–9 complete).
 
@@ -793,12 +808,12 @@ flagged as blocking:
 
 - **Task 5, Step 3** (ligature kind enum parity) — unchecked, explicitly
   deferred.
-- **Task 6** (wire glyph chip clicks to open the panel) — unchecked,
-  explicitly skipped. `WordCell.tsx`'s glyph chip `onClick` handlers are
-  still `/* future: open panel */` placeholders today. The word-edit-dialog
-  question Task 6 was blocked on was resolved on 2026-09-18 (see
-  `docs/context/decisions.md`), which unblocks this task, but nobody has
-  since implemented the chip → select-word-and-open-panel wiring.
+- **Task 6** (wire glyph chip clicks to open the panel) — **done
+  2026-09-18**, on branch `fix/glyph-chip-click`. `WordCell.tsx`'s glyph
+  chips now select the word and open the right panel, matching the pencil
+  button's `onEditWord`. See Task 6 above for what was and was not done
+  (the "Glyphs" accordion item is not auto-steered open — no clean external
+  hook exists for that today).
 - **Task 8** (verify `glyphs_reviewed` metric and the `glyph_review_required`
   save warning) — unchecked; not verified in any pass so far.
 - **Task 9, Step 2** (`tests/e2e/test_bulk_glyph_mark.py`) — no such file

@@ -268,6 +268,94 @@ describe("WordCell", () => {
     expect(screen.queryByTestId("word-glyph-chip-row-0-0")).toBeNull();
   });
 
+  // Chip click → select word + open right panel (2026-09-18 fix). The
+  // pencil edit button already does `onEditWord?.(l, w)`; the chip should
+  // do the same thing, since it is specifically about the word's glyph
+  // marks. See ProjectPage's handleEditWord for what the callback does
+  // (selectWord + rightPanelOpen).
+  describe("glyph chip click", () => {
+    function makeWordWithMark(overrides: Partial<WordMatch> = {}): WordMatch {
+      return makeWordMatch({
+        line_index: 4,
+        word_index: 2,
+        glyph_annotations: {
+          ligatures: [{ kind: "ct", char_span: [1, 3] }],
+          long_s_positions: [],
+          swash: false,
+          source: "human",
+        },
+        ...overrides,
+      });
+    }
+
+    it("clicking a confirmed glyph chip calls onEditWord with the word's lineIndex/wordIndex", () => {
+      const onEditWord = vi.fn();
+      const word = makeWordWithMark();
+      render(<WordCell word={word} onEditWord={onEditWord} />);
+      fireEvent.click(screen.getByTestId("word-glyph-chip-4-2-ct"));
+      expect(onEditWord).toHaveBeenCalledOnce();
+      expect(onEditWord).toHaveBeenCalledWith(4, 2);
+    });
+
+    it("clicking a glyph chip does not also trigger an ancestor's click handler", () => {
+      // Mirrors LineCard's card-level onClick — mounting WordCell inside a
+      // clickable wrapper stands in for that without pulling in LineCard.
+      const onEditWord = vi.fn();
+      const onAncestorClick = vi.fn();
+      const word = makeWordWithMark();
+      render(
+        // jsx-a11y rules don't apply to *.test.tsx (see eslint.config.ts) — no
+        // suppression needed for this test-only stand-in.
+        <div onClick={onAncestorClick}>
+          <WordCell word={word} onEditWord={onEditWord} />
+        </div>,
+      );
+      fireEvent.click(screen.getByTestId("word-glyph-chip-4-2-ct"));
+      expect(onEditWord).toHaveBeenCalledOnce();
+      expect(onAncestorClick).not.toHaveBeenCalled();
+    });
+
+    it("clicking a long_s chip calls onEditWord with the word's lineIndex/wordIndex", () => {
+      const onEditWord = vi.fn();
+      const word = makeWordWithMark({
+        glyph_annotations: {
+          ligatures: [],
+          long_s_positions: [0],
+          swash: false,
+          source: "human",
+        },
+      });
+      render(<WordCell word={word} onEditWord={onEditWord} />);
+      fireEvent.click(screen.getByTestId("word-glyph-chip-4-2-long_s"));
+      expect(onEditWord).toHaveBeenCalledOnce();
+      expect(onEditWord).toHaveBeenCalledWith(4, 2);
+    });
+
+    it("clicking a predicted glyph chip calls onEditWord (predictor seam, no predictor exists today)", () => {
+      const onEditWord = vi.fn();
+      const word = makeWordWithMark({
+        glyph_annotations: null,
+        glyph_predictions: {
+          ligatures: [{ kind: "st", char_span: null }],
+          long_s_positions: [],
+          swash: false,
+          source: "predicted",
+        },
+      });
+      render(<WordCell word={word} onEditWord={onEditWord} />);
+      fireEvent.click(screen.getByTestId("word-glyph-chip-4-2-predicted-st"));
+      expect(onEditWord).toHaveBeenCalledOnce();
+      expect(onEditWord).toHaveBeenCalledWith(4, 2);
+    });
+
+    it("clicking a glyph chip does nothing when onEditWord is not provided", () => {
+      const word = makeWordWithMark();
+      render(<WordCell word={word} />);
+      const chip = screen.getByTestId("word-glyph-chip-4-2-ct");
+      expect(() => fireEvent.click(chip)).not.toThrow();
+    });
+  });
+
   // STB-1: word-validate-button wires to onValidate
   describe("STB-1: word-validate-button onClick", () => {
     it("calls onValidate(lineIdx, wordIdx, !is_validated) when clicked (unvalidated→validate)", () => {

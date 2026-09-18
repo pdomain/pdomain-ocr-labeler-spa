@@ -100,9 +100,9 @@ Summary:
   refreshes. No predictor exists and none will be built (decided
   2026-09-18) — the accept-prediction button never fires. See
   `docs/context/decisions.md` (2026-09-18 entries) and
-  `docs/plans/2026-07-21-glyph-annotations-completion.md`. Residual polish:
-  glyph chips still don't open the panel on click, and there is no bulk-mark
-  browser e2e.
+  `docs/plans/2026-07-21-glyph-annotations-completion.md`. Glyph chips now
+  select the word and open the panel on click, same as the pencil button.
+  Residual polish: there is no bulk-mark browser e2e.
 - Export list + CLI store-first — corresponding `docs/issues/2026-07-21-export-*`
   / `cli-export-*` issues.
 - Job SSE FE↔BE shape, canvas erase, image-drift, cancel — Wave 3 issues.

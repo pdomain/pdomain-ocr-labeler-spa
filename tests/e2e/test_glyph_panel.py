@@ -319,3 +319,86 @@ def test_mark_reviewed_no_marks_reaches_the_api(
         "swash": False,
         "source": "human",
     }
+
+
+def _click_glyph_chip(page: Page, base_url: str, testid: str) -> None:
+    """Navigate to the project page, open the Matches tab, and click a glyph chip.
+
+    The word-match list ("Matches" tab) is `TextTabs`' default active tab,
+    but `test_driver_contract.py`'s per-word tests click `text-tab-matches`
+    explicitly rather than relying on that default (it once collapsed to
+    zero height with real word content — see that file's
+    `_wait_word_match_view_visible`) — this does the same, defensively.
+    """
+    page.goto(f"{base_url}/projects/{_PROJECT_ID}/pages/pageno/1", timeout=20_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=20_000)
+    wait_for_project_ready(page)
+
+    page.click('[data-testid="text-tab-matches"]')
+    page.wait_for_selector('[data-testid="word-match-view"]', timeout=10_000)
+
+    chip = page.locator(f'[data-testid="{testid}"]')
+    chip.wait_for(state="visible", timeout=10_000)
+    chip.click()
+
+
+@pytest.mark.e2e
+def test_glyph_chip_click_selects_word_and_opens_panel(
+    glyph_panel_server: GlyphPanelServer,
+    page: Page,
+) -> None:
+    """Clicking a real glyph chip selects that word and opens its panel.
+
+    Covers the M11 Task 6 fix (2026-09-18): `WordCell`'s glyph chips were
+    `/* future: open panel */` no-ops; they now call the same
+    select-word-and-open-right-panel path the pencil edit button
+    (`onEditWord`) does. Seeds a confirmed "ct" ligature directly through
+    the glyph-annotations route (not through the panel — B-GLYPH-002
+    already covers that path) so a real, non-predicted chip renders in the
+    word-match list, without this test also re-proving the mark-setting
+    flow.
+
+    The click itself is a pure client-side selection change (`selectWord` +
+    `rightPanelOpen`) with no network request, so this waits on the
+    resulting DOM (the right panel's word header, then the Glyphs
+    accordion content) rather than a fixed sleep — following
+    `test_keyboard_only.py`'s response-waiting approach of asserting on the
+    real signal an action produces instead of a guessed delay.
+    """
+    base_url = glyph_panel_server.base_url
+
+    ann = {
+        "ligatures": [{"kind": "ct", "char_span": None}],
+        "long_s_positions": [],
+        "swash": False,
+        "source": "human",
+    }
+    resp = httpx.post(
+        f"{base_url}/api/projects/{_PROJECT_ID}/pages/0/words/0/0/glyph-annotations",
+        json={"annotations": ann},
+        timeout=10.0,
+    )
+    assert resp.status_code == 200, f"seed glyph-annotations failed: {resp.status_code} {resp.text}"
+
+    try:
+        _click_glyph_chip(page, base_url, "word-glyph-chip-0-0-ct")
+
+        # Lands on *that word's* panel: the header shows its 1-based
+        # line/word id (this fixture has exactly one word, at line 0 /
+        # word 0), and the Glyphs accordion — keyed to the same word — opens.
+        header_id = page.locator('[data-testid="word-header-id"]')
+        expect(header_id).to_be_visible(timeout=10_000)
+        expect(header_id).to_have_text("Line 1 · Word 1")
+
+        _open_glyphs_accordion(page)
+    finally:
+        # glyph_panel_server is module-scoped and shared with
+        # test_mark_reviewed_no_marks_reaches_the_api, whose own "before"
+        # assertion depends on glyph_annotations starting at None — leave
+        # the fixture as this test found it regardless of pass/fail.
+        reset = httpx.post(
+            f"{base_url}/api/projects/{_PROJECT_ID}/pages/0/words/0/0/glyph-annotations",
+            json={"annotations": None},
+            timeout=10.0,
+        )
+        assert reset.status_code == 200, f"reset glyph-annotations failed: {reset.status_code} {reset.text}"

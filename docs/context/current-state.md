@@ -157,9 +157,9 @@ Standing overnight stream index:
   recognition evaluation, keyed by crop id
   (`core/jobs/handlers/glyph_sidecar.py`). No glyph predictor exists and
   none will be built here (decided 2026-09-18) — the accept-prediction
-  button never fires; the seam stays, rendering nothing. Two small gaps
-  remain: a glyph chip click still does not open the review panel (only
-  selecting the word does), and there is no browser-level bulk-mark e2e.
+  button never fires; the seam stays, rendering nothing. A glyph chip click
+  now selects the word and opens the review panel, same as the pencil
+  button. One small gap remains: there is no browser-level bulk-mark e2e.
   See `decisions.md`'s 2026-09-18 entries and
   [`../plans/2026-07-21-glyph-annotations-completion.md`](../plans/2026-07-21-glyph-annotations-completion.md).
   Spec: [`../../specs/20-glyph-annotations.md`](../../specs/20-glyph-annotations.md) §9.
