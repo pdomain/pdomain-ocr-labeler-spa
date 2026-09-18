@@ -191,6 +191,43 @@ describe("launchSuiteApp", () => {
     const outcome = await launchSuiteApp("pdomain-ocr-trainer-spa");
     expect(outcome.kind).toBe("error");
   });
+
+  it("does not trust a malformed 'opened' body (spawned/pid wrong types)", async () => {
+    server.use(
+      http.post("/api/suite/launch", () =>
+        HttpResponse.json({
+          kind: "opened",
+          url: "http://localhost:8090",
+          spawned: "yes",
+          pid: "not-a-number",
+        }),
+      ),
+    );
+
+    const outcome = await launchSuiteApp("pdomain-ocr-trainer-spa");
+    expect(outcome.kind).not.toBe("opened");
+  });
+
+  it("accepts an 'opened' body with pid explicitly null", async () => {
+    server.use(
+      http.post("/api/suite/launch", () =>
+        HttpResponse.json({
+          kind: "opened",
+          url: "http://localhost:8090",
+          spawned: false,
+          pid: null,
+        }),
+      ),
+    );
+
+    const outcome = await launchSuiteApp("pdomain-ocr-trainer-spa");
+    expect(outcome).toEqual({
+      kind: "opened",
+      url: "http://localhost:8090",
+      spawned: false,
+      pid: null,
+    });
+  });
 });
 
 describe("toShellLaunchResult / describeLaunchFailure", () => {

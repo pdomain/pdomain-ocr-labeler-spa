@@ -159,7 +159,13 @@ function isOpenedLaunchBody(
 ): value is { kind: "opened"; url: string; spawned?: boolean; pid?: number | null } {
   if (typeof value !== "object" || value === null) return false;
   const r = value as Record<string, unknown>;
-  return r["kind"] === "opened" && typeof r["url"] === "string";
+  if (r["kind"] !== "opened" || typeof r["url"] !== "string") return false;
+  // `spawned`/`pid` are optional (defaulted below), but when present their
+  // type is checked too — a malformed 200 body must not be trusted just
+  // because `kind`/`url` look right.
+  if ("spawned" in r && typeof r["spawned"] !== "boolean") return false;
+  if ("pid" in r && r["pid"] !== null && typeof r["pid"] !== "number") return false;
+  return true;
 }
 
 /** Best-effort extraction of a FastAPI `{"detail": "..."}` error body. */
