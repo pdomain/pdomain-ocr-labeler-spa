@@ -96,7 +96,7 @@ If Night 1 has leftover time, start **Item 4** jobs inventory only (do not half-
 
 #### Tasks
 
-- [ ] **9.1** Record durable decision: labeler does **not** need reversible archive; delete remains permanent with confirm; archive filter chip is either removed or clearly disabled until a future status field exists.
+- [x] **9.1** Recorded 2026-09-18; see the tombstone in `docs/context/decisions.md`. Decision: labeler does **not** need reversible archive; delete remains permanent with confirm; archive filter chip is either removed or clearly disabled until a future status field exists.
   - Files: `docs/context/intent-map.md` (Deferred/Rejected), optionally `docs/context/decisions.md` or a short ADR under `docs/decisions/`, fix stale note in `docs/specs/behavior/unclear-items.md` (Delete is no longer inert).
 - [ ] **9.2** Align root UI copy with the decision.
   - Files: `frontend/src/pages/RootPage.tsx` (archived filter chip: remove or `disabled` + empty-state copy), `frontend/src/pages/RootPage.test.tsx`.

@@ -1037,3 +1037,23 @@ bulk-mark apply specifically (Task 3, the STUB this entry fixes).
   "Typography", because a separate typography review feature already owns that
   label. Two adjacent items named Glyphs and Typography is the state; whether
   that reads well to a person reviewing a word is worth a look.
+
+### [2026-09-18] Decided: the labeler has no archive, and delete stays permanent
+
+- Question: what "archived" means for a project, the last thing standing between
+  the project list and a working status filter.
+- Decision: there is no archive. Delete remains permanent, behind its
+  confirmation. No archive API, no archived status, no archived filter.
+- Why: `docs/plans/2026-07-21-pgdp-alignment-remaining.md` item 9 already reached
+  this conclusion and says plainly "do not build archive API"; it was never
+  recorded anywhere durable, so the question kept coming back. A reversible
+  archive is a stage tool from the PGDP submit workflow, and this product labels
+  pages rather than managing a submission pipeline.
+- Already done: the Active, Complete and Archived chips were removed on
+  2026-09-18 in `3200aa7`, so nothing in the product advertises a status it
+  cannot offer.
+- What this unblocks: nothing further is owed for archive. Project progress is a
+  separate question and now has a cheap answer that did not exist when it was
+  deferred: the per-page counts journal added in `f175297` carries validated and
+  total words per page, so a project's progress is one small file read rather
+  than a parse of every page.
