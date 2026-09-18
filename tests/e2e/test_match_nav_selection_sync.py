@@ -331,3 +331,55 @@ def test_j_k_keep_worklist_breadcrumb_and_right_panel_in_sync(
     # K back → line 0 again, proving both directions stay in sync.
     page.keyboard.press("k")
     _assert_line_focused(page, lm0)
+
+
+def test_line_card_click_selects_line_for_matches_hotkeys(
+    match_nav_server: MatchNavServer,
+    page: Page,
+) -> None:
+    """Clicking a line card selects it, so the matches-scope V hotkey can act on it.
+
+    Regression test for the LineCard click-selection defect found 2026-09-18
+    while fixing ``test_keyboard_only.py::test_validate_and_save_keyboard_only``:
+    ``LineCard``'s outer element had no click handler at all, so clicking a
+    card did nothing — and because the card renders each word's editable GT
+    ``<input>`` inline, a click aimed at the card commonly landed inside one
+    of those inputs instead, which (a) left V/U/D silently inert
+    (``enableOnFormTags`` is ``False`` for the matches scope) and (b) typed a
+    stray character into the ground truth.
+
+    This clicks a non-interactive part of line 0's card — its first word's
+    OCR text label, not a button and not the GT input — with a real mouse
+    click, then presses V and waits for the validate request itself. That is
+    the loop the old ``test_validate_and_save_keyboard_only`` appeared to
+    cover via a card click but did not: it silently landed in a GT input and
+    passed anyway (see that test's current docstring).
+    """
+    lm0, _lm1 = _line_matches(match_nav_server.base_url)
+    assert lm0["is_fully_validated"] is False, "fixture line 0 must start unvalidated"
+
+    _goto_project_page(page, match_nav_server.project_url)
+    page.wait_for_selector('[data-testid^="line-card-"]', timeout=10_000, state="attached")
+
+    validate_button = page.locator('[data-testid="line-validate-button-0"]')
+    expect(validate_button).to_have_text("Validate")
+
+    # Click a non-interactive part of line 0's card — the first word's OCR
+    # text label — to prove selection works from an ordinary click on the
+    # card, not just from happening to land on a specific control.
+    page.locator('[data-testid="ocr-text-label-0-0"]').click()
+
+    # The click must select line 0 exactly as J does (both call
+    # focusWorklistLine) — worklist row, breadcrumb, and right panel agree.
+    _assert_line_focused(page, lm0)
+
+    # V validates the now-selected line. Wait for the real response, not a
+    # timer — proof this click → hotkey loop reaches the backend, not just
+    # a store update that happens to look right.
+    with page.expect_response(lambda r: r.url.endswith("/words/validate-batch")) as validate_resp_info:
+        page.keyboard.press("v")
+    validate_resp = validate_resp_info.value
+    assert validate_resp.status == 200, (
+        f"Validate request failed: {validate_resp.status} {validate_resp.text()}"
+    )
+    expect(validate_button).to_have_text("Unvalidate", timeout=5_000)
