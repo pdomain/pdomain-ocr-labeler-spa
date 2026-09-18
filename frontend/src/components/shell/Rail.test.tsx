@@ -294,77 +294,18 @@ describe("Rail — target + mode selectors (Slice 10 / P1.d,e,f)", () => {
   });
 });
 
-// ─── Region undecided badge (book review queue design) ─────────────────────
-// Design: docs/specs/2026-09-17-book-review-queue-design.md "A count stays
-// visible" — the region target cell shows the book's undecided count as a
-// small badge above 0, and hides it at 0.
-
-describe("Rail — region undecided badge (book review queue)", () => {
-  beforeEach(() => {
-    localStorage.clear();
-    railStore.reset();
-    useUiPrefs.setState({
-      layerVisibility: { block: true, paragraph: true, line: true, word: true },
-    });
-  });
-
-  it("shows the undecided count badge when above 0, with an accessible label", async () => {
-    server.use(
-      http.get("/api/projects/:pid/regions/review-queue", () =>
-        HttpResponse.json({ total_undecided: 12, pages: [], items: [] }),
-      ),
-    );
-    renderRail("proj-1");
-
-    const badge = await screen.findByTestId("rail-region-undecided-badge");
-    expect(badge).toHaveTextContent("12");
-    expect(badge).toHaveAttribute("aria-label", "12 undecided proposals");
-  });
-
-  it("uses singular wording for a count of exactly 1", async () => {
-    server.use(
-      http.get("/api/projects/:pid/regions/review-queue", () =>
-        HttpResponse.json({ total_undecided: 1, pages: [], items: [] }),
-      ),
-    );
-    renderRail("proj-1");
-
-    const badge = await screen.findByTestId("rail-region-undecided-badge");
-    expect(badge).toHaveAttribute("aria-label", "1 undecided proposal");
-  });
-
-  it("hides the badge when the count is 0", async () => {
-    server.use(
-      http.get("/api/projects/:pid/regions/review-queue", () =>
-        HttpResponse.json({ total_undecided: 0, pages: [], items: [] }),
-      ),
-    );
-    renderRail("proj-1");
-
-    // Give the query a tick to resolve before asserting absence, so this
-    // isn't just "hasn't rendered yet".
-    await waitFor(() => expect(screen.getByTestId("rail-target-region")).toBeInTheDocument());
-    expect(screen.queryByTestId("rail-region-undecided-badge")).not.toBeInTheDocument();
-  });
-
-  it("hides the badge without a projectId (the query stays disabled)", () => {
-    renderRail(undefined);
-    expect(screen.queryByTestId("rail-region-undecided-badge")).not.toBeInTheDocument();
-  });
-});
-
 // ─── "What to review next" kind badge (one-answer-to-what-to-review-next) ──
 // Spec: pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-
 // review-next.md "How the SPA uses the new route" — "The rail badge stops
 // being a region count. It becomes the outstanding count for the first kind
 // that has work, and names that kind."
 //
-// This is a new, additional indicator (rail-queue-next) alongside the
-// pre-existing region-only badge above — see this file's own history and
-// tests/e2e/test_review_queue_navigation.py, which still asserts
-// rail-region-undecided-badge reads the region kind's own count regardless
-// of which kind is "next" book-wide; that assertion is a fixed contract this
-// change must not disturb.
+// This is now the ONE rail badge — rail-region-undecided-badge, the region
+// target cell's own undecided-count badge, was removed (see this file's
+// history). tests/e2e/test_review_queue_navigation.py's regression coverage
+// confirms every page's kind in its fixture so region — not page_kind — is
+// genuinely the book's first kind with work, matching this badge's rule
+// exactly rather than special-casing region.
 
 function kindsResponse(kinds: Partial<Record<string, unknown>>[]) {
   return HttpResponse.json({ kinds });

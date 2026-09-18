@@ -25,7 +25,6 @@ import { Square, Keyboard, LayoutList } from "@/icons/local-shims";
 import { railStore, type RailTarget, type RailMode } from "../../stores/rail-store";
 import { useRailHotkeys } from "../../hooks/useRailHotkeys";
 import { useLayerColors } from "../../hooks/useLayerColors";
-import { useReviewQueue } from "../../hooks/useReviewQueue";
 import {
   useBookReviewQueue,
   firstActionableKind,
@@ -141,15 +140,9 @@ interface TargetCellProps {
   active: boolean;
   swatchColor: string;
   onClick: () => void;
-  /**
-   * Book review queue design ("A count stays visible"): the undecided-count
-   * badge, shown only when provided and above 0. Only the region target
-   * cell passes this today.
-   */
-  badge?: number;
 }
 
-function TargetCell({ target, active, swatchColor, onClick, badge }: TargetCellProps) {
+function TargetCell({ target, active, swatchColor, onClick }: TargetCellProps) {
   const testid = `rail-target-${target}`;
   return (
     <button
@@ -178,15 +171,6 @@ function TargetCell({ target, active, swatchColor, onClick, badge }: TargetCellP
         aria-hidden="true"
       />
       <span>{TARGET_LABELS[target]}</span>
-      {badge !== undefined && badge > 0 && (
-        <span
-          data-testid="rail-region-undecided-badge"
-          aria-label={`${String(badge)} undecided proposal${badge === 1 ? "" : "s"}`}
-          className="ml-auto shrink-0 min-w-4 h-4 px-1 flex items-center justify-center rounded-full bg-accent text-[9px] font-semibold text-accent-ink tabular-nums"
-        >
-          {badge}
-        </span>
-      )}
     </button>
   );
 }
@@ -197,12 +181,11 @@ function TargetCell({ target, active, swatchColor, onClick, badge }: TargetCellP
 // being a region count. It becomes the outstanding count for the first kind
 // that has work, and names that kind."
 //
-// This is additional to (not a replacement for) the region target cell's
-// own undecided-count badge above: that one is a fixed contract
-// tests/e2e/test_review_queue_navigation.py depends on (the region kind's
-// own count, always, regardless of which kind is "next" book-wide), so it
-// keeps reading straight off the region-only route exactly as before. This
-// element is the book-wide, cross-kind answer the design calls for.
+// This is the ONE rail badge (replacing the region target cell's old
+// undecided-count badge, which named no kind and so silently stopped being
+// honest the moment any other kind of work existed) — the book-wide,
+// cross-kind answer the design calls for, named and counted regardless of
+// where a person's rail target happens to be aimed.
 
 interface QueueNextBadgeProps {
   kind: string;
@@ -275,12 +258,6 @@ export interface RailProps {
 export function Rail({ projectId }: RailProps) {
   // Wire hotkeys (registers document-level keydown listener).
   useRailHotkeys();
-
-  // Book review queue design ("A count stays visible"): limit=0 so this
-  // carries only total_undecided and the page summary — the same query
-  // useRegionReviewHotkeys' bracket keys read, cached under one key.
-  const reviewQueueQ = useReviewQueue(projectId);
-  const totalUndecided = reviewQueueQ.data?.total_undecided ?? 0;
 
   // One-answer-to-what-to-review-next: the book-wide "next kind" badge.
   const bookQueueQ = useBookReviewQueue(projectId);
@@ -390,7 +367,6 @@ export function Rail({ projectId }: RailProps) {
           onClick={() => {
             handleSetTarget("region");
           }}
-          badge={totalUndecided}
         />
       </div>
 
