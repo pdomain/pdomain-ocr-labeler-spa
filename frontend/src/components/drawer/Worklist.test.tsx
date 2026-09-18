@@ -371,7 +371,7 @@ describe("WorklistRow bridge", () => {
     worklistStore.setActiveFilter("all");
     render(<Worklist lineMatches={lineMatches} projectId="proj-1" pageIndex={0} />);
     await user.click(screen.getByTestId("worklist-row-3"));
-    expect(selectLine).toHaveBeenCalledWith(3);
+    expect(selectLine).toHaveBeenCalledWith(0, 3);
   });
 
   it("checkbox click calls worklistStore.toggle with line_index", async () => {

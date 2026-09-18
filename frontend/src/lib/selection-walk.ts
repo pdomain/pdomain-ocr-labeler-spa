@@ -28,6 +28,19 @@ type LineMatch = components["schemas"]["LineMatch"];
 export type SelectionLevel = "none" | "block" | "para" | "line" | "word" | "region";
 
 export interface SelectionPath {
+  /**
+   * Page index (0-based) this path was selected on. Stamped by every
+   * block/para/line/word select action (P2-SELECTION-PAGE). A region or
+   * proposal selection (`regionId`/`proposalId`) does not carry this field —
+   * that level clears on page change through its own, separate mechanism
+   * (ProjectPage's region-selection-scoping effect).
+   *
+   * Absent (`undefined`) means either no selection, or a region/proposal
+   * selection. Consumers that resolve a path against the loaded page treat
+   * a defined `pageIndex` that disagrees with the loaded page as no
+   * selection at all — see `resolveSelectionForPage` in `selection-store.ts`.
+   */
+  pageIndex?: number;
   blockId?: string;
   paraId?: number | null;
   lineId?: number;

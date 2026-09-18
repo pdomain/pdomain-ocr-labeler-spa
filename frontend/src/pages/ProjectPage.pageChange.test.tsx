@@ -1,12 +1,21 @@
-// ProjectPage.pageChange.test.tsx — whole-branch review defect 2: a region
-// selection outlives the page it belongs to.
+// ProjectPage.pageChange.test.tsx — whole-branch review defect 2 (region), and
+// P2-SELECTION-PAGE (block/para/line/word).
 //
-// Selecting a proposal or a confirmed region, then navigating to another
-// page, must clear that region-level selection — otherwise a hotkey fires
-// against the new page's URL carrying the old page's id. Word, line,
-// paragraph and block selections are explicitly NOT touched by this fix
-// (predates it; see the region review guards report), so one of them is
-// pinned here to prove this change did not widen.
+// Region: selecting a proposal or a confirmed region, then navigating to
+// another page, must clear that region-level selection — otherwise a hotkey
+// fires against the new page's URL carrying the old page's id. That fix
+// clears the region selection outright on any page change; it is unaffected
+// by P2-SELECTION-PAGE below and is tested first, unchanged.
+//
+// P2-SELECTION-PAGE: a block/para/line/word selection carries the page index
+// it was made on (`selectionStore`'s `SelectionPath.pageIndex`). Navigating
+// away does NOT clear it — the raw store still holds it — but it no longer
+// resolves against a page other than the one it was made on: the right
+// panel and breadcrumb show no selection, and a keyboard action (Alt-arrows)
+// on it is a no-op. Returning to the original page resolves it again,
+// unaffected by the trip. This intentionally supersedes this file's old pin
+// that a line selection was untouched by ANY page-change behavior — it now
+// is, just not by clearing.
 //
 // Unlike ProjectPage.test.tsx, this file does NOT mock react-router-dom's
 // useNavigate — real navigation is what exercises the pageIndex change this
@@ -26,6 +35,8 @@ import {
   clearSelection,
   selectionStore,
   selectLine,
+  selectWord,
+  selectPara,
   selectProposal,
   selectRegion,
 } from "../stores/selection-store";
@@ -178,8 +189,19 @@ function pageFixture(idx: number) {
         overall_match_status: "exact",
         is_fully_validated: true,
         validated_word_count: 0,
-        total_word_count: 0,
-        word_matches: [],
+        total_word_count: 1,
+        word_matches: [
+          {
+            line_index: 3,
+            word_index: 0,
+            ocr_text: "w",
+            ground_truth_text: "w",
+            match_status: "exact",
+            normalized_match: false,
+            is_validated: false,
+            bbox: { x: 0, y: 0, width: 1, height: 1 },
+          },
+        ],
       },
     ],
     line_filter: "all",
@@ -237,20 +259,138 @@ describe("ProjectPage — region selection is scoped to its page (defect 2)", ()
     expect(selectionStore.getState().level).toBe("none");
   });
 
-  it("does NOT clear a line selection when the page index changes (pin: this fix stays region-only)", async () => {
+  it("does NOT clear a line selection when the page index changes (P2-SELECTION-PAGE: it resolves as empty instead — see the describe block below)", async () => {
     renderProjectPage();
     await screen.findByTestId("project-page");
-    selectLine(3);
+    selectLine(0, 3);
     expect(selectionStore.getState().level).toBe("line");
-    expect(selectionStore.getState().path).toEqual({ lineId: 3 });
+    expect(selectionStore.getState().path).toEqual({ pageIndex: 0, lineId: 3 });
 
     const nextButton = await screen.findByTestId("nav-next-button");
     await waitFor(() => expect(nextButton).not.toBeDisabled());
     fireEvent.click(nextButton);
 
     await waitFor(() => expect(screen.getByTestId("nav-page-input")).toHaveValue(2));
+    // The raw store is untouched by the page change — this fix does not clear
+    // it, unlike the region-level fix above.
     expect(selectionStore.getState().level).toBe("line");
-    expect(selectionStore.getState().path).toEqual({ lineId: 3 });
+    expect(selectionStore.getState().path).toEqual({ pageIndex: 0, lineId: 3 });
+  });
+});
+
+// ─── P2-SELECTION-PAGE: block/para/line/word selections carry their page ──
+// A selection made on one page must not resolve against a different page
+// once loaded — the right panel and breadcrumb must show no selection, and
+// a keyboard action on it must do nothing. Returning to the original page
+// restores it. `pageFixture` above returns the SAME line/word/paragraph
+// indices for every page index, so an unfixed resolver would show identical,
+// wrong content on page 2 — exactly the silent defect the issue describes.
+
+describe("ProjectPage — a block/para/line/word selection is scoped to its page (P2-SELECTION-PAGE)", () => {
+  beforeEach(() => {
+    dialogStore.reset();
+    clearSelection();
+    reviewSelectionIntentStore.setState({ intent: null });
+    useUiPrefs.setState({ drawerOpen: true, rightPanelOpen: true });
+    server.use(
+      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid/pages/:idx", ({ params }) => {
+        const idx = Number(params["idx"]);
+        return HttpResponse.json(pageFixture(idx));
+      }),
+    );
+  });
+
+  async function goToPageTwo() {
+    const nextButton = await screen.findByTestId("nav-next-button");
+    await waitFor(() => expect(nextButton).not.toBeDisabled());
+    fireEvent.click(nextButton);
+    await waitFor(() => expect(screen.getByTestId("nav-page-input")).toHaveValue(2));
+  }
+
+  async function goBackToPageOne() {
+    const prevButton = await screen.findByTestId("nav-prev-button");
+    await waitFor(() => expect(prevButton).not.toBeDisabled());
+    fireEvent.click(prevButton);
+    await waitFor(() => expect(screen.getByTestId("nav-page-input")).toHaveValue(1));
+  }
+
+  it("a line selection made on one page is not resolved on another, and returning restores it", async () => {
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    selectLine(0, 3);
+    expect(await screen.findByTestId("line-detail-structure-box")).toBeInTheDocument();
+
+    await goToPageTwo();
+
+    // Still there underneath, just not resolved against page 2's (identical)
+    // line 3 — the right panel shows no selection instead.
+    expect(selectionStore.getState().path).toEqual({ pageIndex: 0, lineId: 3 });
+    expect(screen.queryByTestId("line-detail")).not.toBeInTheDocument();
+    expect(screen.getByTestId("right-panel-body")).toHaveAttribute("data-level", "none");
+    expect(screen.queryByTestId("breadcrumb-chip-line")).not.toBeInTheDocument();
+
+    // A keyboard action on it does nothing while it belongs to another page.
+    fireEvent.keyDown(document, { key: "ArrowUp", altKey: true });
+    expect(selectionStore.getState().path).toEqual({ pageIndex: 0, lineId: 3 });
+
+    await goBackToPageOne();
+
+    expect(await screen.findByTestId("line-detail-structure-box")).toBeInTheDocument();
+  });
+
+  it("a word selection made on one page is not resolved on another, and returning restores it", async () => {
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    selectWord(0, 3, 0);
+    expect(await screen.findByTestId("word-detail")).toBeInTheDocument();
+    expect(screen.queryByTestId("right-panel-word-empty")).not.toBeInTheDocument();
+
+    await goToPageTwo();
+
+    expect(selectionStore.getState().path).toEqual({
+      pageIndex: 0,
+      lineId: 3,
+      wordId: [3, 0],
+    });
+    expect(screen.getByTestId("right-panel-body")).toHaveAttribute("data-level", "none");
+    expect(screen.queryByTestId("breadcrumb-chip-word")).not.toBeInTheDocument();
+
+    // A keyboard action (word-level sibling walk) does nothing off-page.
+    fireEvent.keyDown(document, { key: "ArrowLeft", altKey: true });
+    expect(selectionStore.getState().path).toEqual({
+      pageIndex: 0,
+      lineId: 3,
+      wordId: [3, 0],
+    });
+
+    await goBackToPageOne();
+
+    expect(await screen.findByTestId("word-detail")).toBeInTheDocument();
+    expect(screen.queryByTestId("right-panel-word-empty")).not.toBeInTheDocument();
+  });
+
+  it("a paragraph selection made on one page is not resolved on another, and returning restores it", async () => {
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    selectPara(0, 0);
+    expect(await screen.findByTestId("paragraph-detail")).toBeInTheDocument();
+    expect(screen.queryByTestId("right-panel-para-empty")).not.toBeInTheDocument();
+
+    await goToPageTwo();
+
+    expect(selectionStore.getState().path).toEqual({ pageIndex: 0, paraId: 0 });
+    expect(screen.getByTestId("right-panel-body")).toHaveAttribute("data-level", "none");
+    expect(screen.queryByTestId("breadcrumb-chip-para")).not.toBeInTheDocument();
+
+    // A keyboard action (walk up a level) does nothing off-page.
+    fireEvent.keyDown(document, { key: "ArrowUp", altKey: true });
+    expect(selectionStore.getState().path).toEqual({ pageIndex: 0, paraId: 0 });
+
+    await goBackToPageOne();
+
+    expect(await screen.findByTestId("paragraph-detail")).toBeInTheDocument();
+    expect(screen.queryByTestId("right-panel-para-empty")).not.toBeInTheDocument();
   });
 });
 

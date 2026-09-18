@@ -1037,7 +1037,7 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       // A person mid-word-edit on the canvas presses J. A row click would
       // clobber that selection too (it always calls selectLine); J/K must
       // not special-case this into leaving the word selection in place.
-      selectWord(0, 0);
+      selectWord(0, 0, 0);
       expect(selectionStore.getState().level).toBe("word");
 
       renderProjectPage();
@@ -1255,7 +1255,7 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       await screen.findByTestId("toolbar-line-validate");
 
       // Select line 0 so the line/validate cell becomes enabled.
-      selectLine(0);
+      selectLine(0, 0);
       await waitFor(() => {
         // The cell should now be enabled (not disabled).
         const cell = screen.getByTestId("toolbar-line-validate");
@@ -1290,7 +1290,7 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       await screen.findByTestId("project-page");
 
       // Select line 0 so the dispatch has a non-empty selected_lines
-      selectLine(0);
+      selectLine(0, 0);
 
       fireEvent.keyDown(document, { key: "r", code: "KeyR", bubbles: true });
 
@@ -1314,7 +1314,7 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       renderProjectPage();
       await screen.findByTestId("project-page");
 
-      selectLine(0);
+      selectLine(0, 0);
 
       fireEvent.keyDown(document, { key: "R", code: "KeyR", shiftKey: true, bubbles: true });
 

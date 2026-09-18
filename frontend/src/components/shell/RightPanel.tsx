@@ -16,11 +16,10 @@
 // (ProjectPage) provides word content via `wordSlot` so the panel stays free
 // of API/data coupling.
 
-import { useSyncExternalStore } from "react";
 import { PanelRightClose } from "@/icons/local-shims";
 import { cn } from "@/lib/utils";
 import { Breadcrumb } from "./Breadcrumb";
-import { selectionStore, type SelectionLevel } from "../../stores/selection-store";
+import { useSelectionForPage, type SelectionLevel } from "../../stores/selection-store";
 import { LineDetail } from "../right-panel/LineDetail";
 import { BlockDetail } from "../right-panel/BlockDetail";
 import { ParagraphDetail } from "../right-panel/ParagraphDetail";
@@ -30,17 +29,6 @@ import { RegionDetail } from "../right-panel/RegionDetail";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
-
-// ─── Subscriber bridge ───────────────────────────────────────────────────────
-
-function subscribeSelection(cb: () => void): () => void {
-  return selectionStore.subscribe(() => {
-    cb();
-  });
-}
-function getSelectionSnapshot() {
-  return selectionStore.getState();
-}
 
 // ─── Placeholder body per level ──────────────────────────────────────────────
 
@@ -82,11 +70,7 @@ export function RightPanel({
   textTabsSlot,
   onCollapse,
 }: RightPanelProps) {
-  const state = useSyncExternalStore(
-    subscribeSelection,
-    getSelectionSnapshot,
-    getSelectionSnapshot,
-  );
+  const state = useSelectionForPage(pageIndex);
   const { level } = state;
 
   return (

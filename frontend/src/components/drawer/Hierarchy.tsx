@@ -464,19 +464,26 @@ export function Hierarchy({ page }: HierarchyProps) {
     });
   }, []);
 
-  const handleSelect = useCallback((id: string, node: TreeNode) => {
-    setSelectedId(id);
-    // Update selection-store using canonical helpers so level+path are set atomically.
-    if (node.kind === "block") {
-      selectBlock(String(node.blockIndex));
-    } else if (node.kind === "line") {
-      selectLine(node.lineIndex);
-    } else if (node.kind === "word") {
-      selectWord(node.lineIndex, node.wordIndex);
-    } else if (node.kind === "para" && node.paraIndex !== null) {
-      selectPara(node.paraIndex);
-    }
-  }, []);
+  const handleSelect = useCallback(
+    (id: string, node: TreeNode) => {
+      setSelectedId(id);
+      // A node is only clickable once `page` is loaded (the tree is built
+      // from it), so `page.page_index` is always defined here.
+      const pageIndex = page?.page_index;
+      if (pageIndex === undefined) return;
+      // Update selection-store using canonical helpers so level+path are set atomically.
+      if (node.kind === "block") {
+        selectBlock(pageIndex, String(node.blockIndex));
+      } else if (node.kind === "line") {
+        selectLine(pageIndex, node.lineIndex);
+      } else if (node.kind === "word") {
+        selectWord(pageIndex, node.lineIndex, node.wordIndex);
+      } else if (node.kind === "para" && node.paraIndex !== null) {
+        selectPara(pageIndex, node.paraIndex);
+      }
+    },
+    [page],
+  );
 
   // Keyboard navigation — Up/Down through flat visible list.
   // Left/Right (collapse/expand) are handled per-node in NodeRow.onKeyDown.

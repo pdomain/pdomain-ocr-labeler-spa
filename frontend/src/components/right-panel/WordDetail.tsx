@@ -28,7 +28,7 @@
 //   word-detail             — outer container
 //   word-detail-accordion   — accordion root
 
-import { useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 import { Accordion } from "../ui/accordion";
 import { BBoxSection } from "./sections/BBoxSection";
 import { bboxHint } from "./sections/bboxUtils";
@@ -42,7 +42,7 @@ import { WordHeader } from "./WordHeader";
 import { WordImagePreview } from "./WordImagePreview";
 import { OcrGtCompareRow } from "./OcrGtCompareRow";
 import { ComponentPalette } from "./ComponentPalette";
-import { selectionStore, walkSibling } from "../../stores/selection-store";
+import { walkSibling, useSelectionForPage } from "../../stores/selection-store";
 import { WordFooter } from "./WordFooter";
 import { useRefineAvailable } from "../../hooks/useRefineAvailable";
 import {
@@ -60,17 +60,6 @@ import type { components } from "../../api/types";
 type PagePayload = components["schemas"]["PagePayload"];
 type WordMatch = components["schemas"]["WordMatch"];
 type GlyphAnnotationsModel = components["schemas"]["GlyphAnnotationsModel"];
-
-// ─── store subscription ───────────────────────────────────────────────────
-
-function subscribeSelection(cb: () => void): () => void {
-  return selectionStore.subscribe(() => {
-    cb();
-  });
-}
-function getSelectionSnapshot() {
-  return selectionStore.getState();
-}
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 
@@ -146,11 +135,7 @@ export function WordDetail({ page, projectId, pageIndex, bboxRefine }: WordDetai
     acceptGlyphPrediction.isPending ||
     glyphAnnotationSharedPending;
 
-  const state = useSyncExternalStore(
-    subscribeSelection,
-    getSelectionSnapshot,
-    getSelectionSnapshot,
-  );
+  const state = useSelectionForPage(pageIndex);
 
   // Controlled accordion open-state (M11 Task 5): the "Glyphs" item starts
   // collapsed like every other item, but auto-opens once per word when that

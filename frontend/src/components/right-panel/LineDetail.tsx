@@ -22,12 +22,12 @@
 //   line-detail-validate-all   — validate-all footer button (P5.e)
 //   line-detail-bulk-bar       — bulk action bar (P5.f)
 
-import { useSyncExternalStore, useState } from "react";
+import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { LineCard } from "../LineCard";
 import { StatusPip } from "@pdomain/pdomain-ui/primitives";
 import { LineWordsCard } from "./LineWordsCard";
-import { selectionStore, selectWord } from "../../stores/selection-store";
+import { selectWord, useSelectionForPage } from "../../stores/selection-store";
 import { useUiPrefs } from "../../stores/ui-prefs";
 import {
   useMergeLines,
@@ -57,17 +57,6 @@ function statusPip(status: MatchStatus): "exact" | "fuzzy" | "mismatch" {
   return "mismatch";
 }
 
-// ─── store bridge ─────────────────────────────────────────────────────────
-
-function subscribeSelection(cb: () => void): () => void {
-  return selectionStore.subscribe(() => {
-    cb();
-  });
-}
-function getSelectionSnapshot() {
-  return selectionStore.getState();
-}
-
 // ─── LineDetail ───────────────────────────────────────────────────────────
 
 export interface LineDetailProps {
@@ -77,11 +66,7 @@ export interface LineDetailProps {
 }
 
 export function LineDetail({ page, projectId, pageIndex }: LineDetailProps) {
-  const state = useSyncExternalStore(
-    subscribeSelection,
-    getSelectionSnapshot,
-    getSelectionSnapshot,
-  );
+  const state = useSelectionForPage(pageIndex);
 
   const { level, path } = state;
 
@@ -303,7 +288,7 @@ function LineDetailInner({ line, projectId, pageIndex }: LineDetailInnerProps) {
                 deleteLine.mutate({ lineIndex: li });
               }}
               onEditWord={(li, wi) => {
-                selectWord(li, wi);
+                selectWord(pageIndex, li, wi);
               }}
               onValidateWord={(li, wi, validated) => {
                 // P1.6 (B-21): per-word validate toggle — same mutation the

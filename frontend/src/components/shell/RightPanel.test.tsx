@@ -102,7 +102,7 @@ describe("RightPanel (Slice 14)", () => {
   });
 
   it("renders with breadcrumb and collapse button", () => {
-    render(<RightPanel page={makePage()} />);
+    render(<RightPanel page={makePage()} pageIndex={0} />);
     expect(screen.getByTestId("right-panel")).toBeInTheDocument();
     expect(screen.getByTestId("right-panel-header")).toBeInTheDocument();
     expect(screen.getByTestId("breadcrumb")).toBeInTheDocument();
@@ -110,37 +110,38 @@ describe("RightPanel (Slice 14)", () => {
   });
 
   it("body shows 'no selection' placeholder when level=none", () => {
-    render(<RightPanel page={makePage()} />);
+    render(<RightPanel page={makePage()} pageIndex={0} />);
     const body = screen.getByTestId("right-panel-body");
     expect(body).toHaveAttribute("data-level", "none");
     expect(body).toHaveTextContent(/select/i);
   });
 
   it("body data-level updates when selection changes (block)", () => {
-    selectBlock("b1");
-    render(<RightPanel page={makePage()} />);
+    selectBlock(0, "b1");
+    render(<RightPanel page={makePage()} pageIndex={0} />);
     expect(screen.getByTestId("right-panel-body")).toHaveAttribute("data-level", "block");
   });
 
   it("body data-level=para has correct data-level attribute", () => {
-    selectPara(0);
-    render(<RightPanel page={makePage()} />);
+    selectPara(0, 0);
+    render(<RightPanel page={makePage()} pageIndex={0} />);
     const body = screen.getByTestId("right-panel-body");
     expect(body).toHaveAttribute("data-level", "para");
   });
 
   it("body data-level=line has correct data-level attribute", () => {
-    selectLine(0);
-    render(<RightPanel page={makePage()} />);
+    selectLine(0, 0);
+    render(<RightPanel page={makePage()} pageIndex={0} />);
     const body = screen.getByTestId("right-panel-body");
     expect(body).toHaveAttribute("data-level", "line");
   });
 
   it("body data-level=word renders the word slot when provided", () => {
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     render(
       <RightPanel
         page={makePage()}
+        pageIndex={0}
         wordSlot={<div data-testid="word-detail-stub">stub-content</div>}
       />,
     );
@@ -150,15 +151,15 @@ describe("RightPanel (Slice 14)", () => {
   });
 
   it("body data-level=word has correct data-level attribute", () => {
-    selectWord(0, 0);
-    render(<RightPanel page={makePage()} />);
+    selectWord(0, 0, 0);
+    render(<RightPanel page={makePage()} pageIndex={0} />);
     const body = screen.getByTestId("right-panel-body");
     expect(body).toHaveAttribute("data-level", "word");
   });
 
   it("body data-level=region has correct data-level attribute", () => {
     selectRegion("r1");
-    render(<RightPanel page={makePage()} />);
+    render(<RightPanel page={makePage()} pageIndex={0} />);
     const body = screen.getByTestId("right-panel-body");
     expect(body).toHaveAttribute("data-level", "region");
   });
@@ -166,7 +167,7 @@ describe("RightPanel (Slice 14)", () => {
   it("collapse button calls onCollapse when clicked", async () => {
     const onCollapse = vi.fn();
     const user = userEvent.setup();
-    render(<RightPanel page={makePage()} onCollapse={onCollapse} />);
+    render(<RightPanel page={makePage()} pageIndex={0} onCollapse={onCollapse} />);
     await user.click(screen.getByTestId("right-panel-collapse"));
     expect(onCollapse).toHaveBeenCalledTimes(1);
   });
@@ -185,21 +186,21 @@ describe("STB-5: RightPanel never shows placeholder for implemented levels", () 
   });
 
   it("level=line does NOT show the placeholder (renders LineDetail)", () => {
-    selectLine(0);
+    selectLine(0, 0);
     renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
     expect(screen.queryByTestId("right-panel-placeholder")).toBeNull();
     expect(screen.getByTestId("line-detail")).toBeInTheDocument();
   });
 
   it("level=block does NOT show the placeholder (renders BlockDetail)", () => {
-    selectBlock("b1");
+    selectBlock(0, "b1");
     renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
     expect(screen.queryByTestId("right-panel-placeholder")).toBeNull();
     expect(screen.getByTestId("block-detail")).toBeInTheDocument();
   });
 
   it("level=para does NOT show the placeholder (renders ParagraphDetail)", () => {
-    selectPara(0);
+    selectPara(0, 0);
     renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
     expect(screen.queryByTestId("right-panel-placeholder")).toBeNull();
     expect(screen.getByTestId("paragraph-detail")).toBeInTheDocument();
@@ -216,7 +217,7 @@ describe("STB-5: RightPanel never shows placeholder for implemented levels", () 
   });
 
   it("level=word with wordSlot does NOT show the placeholder", () => {
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     renderWithQuery(
       <RightPanel
         page={makePage()}
@@ -238,7 +239,7 @@ describe("ML-A: RightPanel multi-line routing", () => {
   });
 
   it("2 lines selected → multi-line-detail renders, line-detail absent", () => {
-    applyLineSelection([0, 1], "replace");
+    applyLineSelection(0, [0, 1], "replace");
     renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
     expect(screen.getByTestId("multi-line-detail")).toBeInTheDocument();
     expect(screen.queryByTestId("line-detail")).toBeNull();
@@ -246,7 +247,7 @@ describe("ML-A: RightPanel multi-line routing", () => {
   });
 
   it("1 line selected → LineDetail renders (single-line unchanged)", () => {
-    selectLine(0);
+    selectLine(0, 0);
     renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
     expect(screen.queryByTestId("multi-line-detail")).toBeNull();
     expect(screen.getByTestId("line-detail")).toBeInTheDocument();
@@ -254,7 +255,7 @@ describe("ML-A: RightPanel multi-line routing", () => {
 
   it("multi-word (selectedWords.length > 1) still wins over multi-line", () => {
     // Set up: selectedWords.length > 1 wins over selectedLines.length > 1
-    applyLineSelection([0, 1], "replace");
+    applyLineSelection(0, [0, 1], "replace");
     // Manually inject selectedWords to trigger multi-word branch
     selectionStore.setState({
       ...selectionStore.getState(),

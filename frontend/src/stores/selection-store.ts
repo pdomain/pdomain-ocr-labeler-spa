@@ -18,10 +18,19 @@
 //    Always reflects the deepest concrete leaf of the current selection.
 //
 // The two layers are kept in sync by the select*() / walk*() actions:
-// selecting a line via `selectLine(7)` sets `selectedLines=[7]`,
-// `path={lineId:7}`, `level="line"`. Legacy call sites that mutate the
-// arrays directly via setState are still supported, but won't update
-// level/path automatically — call the action helpers for the new layer.
+// selecting a line via `selectLine(pageIndex, 7)` sets `selectedLines=[7]`,
+// `path={pageIndex, lineId:7}`, `level="line"`. Legacy call sites that
+// mutate the arrays directly via setState are still supported, but won't
+// update level/path automatically — call the action helpers for the new
+// layer.
+//
+// P2-SELECTION-PAGE: a block/para/line/word `path` carries the page index it
+// was made on. A consumer resolving a selection against a specific loaded
+// page must go through `resolveSelectionForPage` / `useSelectionForPage`
+// (bottom of this file) rather than reading `getState()` directly, so a
+// selection from another page reads as no selection. A region/proposal path
+// (`regionId`/`proposalId`) never carries `pageIndex` — that level clears on
+// page change through ProjectPage's own, separate mechanism instead.
 //
 // Phase 2.5 (cross-cut-design §7.5): migrated from hand-rolled reactive
 // store to Zustand's vanilla `createStore`.
@@ -36,6 +45,7 @@
 //   labeler-only store permanently.
 
 import { createStore } from "zustand/vanilla";
+import { useMemo, useSyncExternalStore } from "react";
 import type { BBox } from "../lib/coords";
 import {
   nextSibling,
@@ -95,43 +105,48 @@ export function setDragRect(rect: BBox | null): void {
  * Select a block by opaque id. (No block layer exists in PagePayload yet;
  * the path is recorded for breadcrumb display, but `walkSibling` is a
  * no-op at block level.)
+ *
+ * `pageIndex` (0-based) is the page this selection belongs to — stamped
+ * onto the path so a later page change can tell this selection apart from
+ * one made on the page now loaded (P2-SELECTION-PAGE).
  */
-export function selectBlock(blockId: string): void {
+export function selectBlock(pageIndex: number, blockId: string): void {
   selectionStore.setState((s) => ({
     ...s,
     selectedParagraphs: [],
     selectedLines: [],
     selectedWords: [],
     level: "block",
-    path: { blockId },
+    path: { pageIndex, blockId },
   }));
 }
 
-/** Select a paragraph by paragraph_index (null bucket allowed). */
-export function selectPara(paraId: number | null): void {
+/** Select a paragraph by paragraph_index (null bucket allowed). See `selectBlock` for `pageIndex`. */
+export function selectPara(pageIndex: number, paraId: number | null): void {
   selectionStore.setState((s) => ({
     ...s,
     selectedParagraphs: paraId === null ? [] : [paraId],
     selectedLines: [],
     selectedWords: [],
     level: "para",
-    path: { paraId },
+    path: { pageIndex, paraId },
   }));
 }
 
-/** Select a line by line_index. */
-export function selectLine(lineId: number): void {
+/** Select a line by line_index. See `selectBlock` for `pageIndex`. */
+export function selectLine(pageIndex: number, lineId: number): void {
   selectionStore.setState((s) => ({
     ...s,
     selectedParagraphs: [],
     selectedLines: [lineId],
     selectedWords: [],
     level: "line",
-    path: { lineId },
+    path: { pageIndex, lineId },
   }));
 }
 
 export function applyLineSelection(
+  pageIndex: number,
   lineIds: readonly number[],
   mode: "replace" | "toggle" | "remove",
 ): void {
@@ -169,12 +184,13 @@ export function applyLineSelection(
       selectedLines: next,
       selectedWords: [],
       level: "line",
-      path: { lineId: firstLineId },
+      path: { pageIndex, lineId: firstLineId },
     };
   });
 }
 
 export function applyParagraphSelection(
+  pageIndex: number,
   paragraphIds: readonly number[],
   mode: "replace" | "toggle" | "remove",
 ): void {
@@ -212,20 +228,20 @@ export function applyParagraphSelection(
       selectedLines: [],
       selectedWords: [],
       level: "para",
-      path: { paraId: firstParaId },
+      path: { pageIndex, paraId: firstParaId },
     };
   });
 }
 
-/** Select a single word by (line_index, word_index). */
-export function selectWord(lineIdx: number, wordIdx: number): void {
+/** Select a single word by (line_index, word_index). See `selectBlock` for `pageIndex`. */
+export function selectWord(pageIndex: number, lineIdx: number, wordIdx: number): void {
   selectionStore.setState((s) => ({
     ...s,
     selectedParagraphs: [],
     selectedLines: [],
     selectedWords: [[lineIdx, wordIdx]],
     level: "word",
-    path: { lineId: lineIdx, wordId: [lineIdx, wordIdx] },
+    path: { pageIndex, lineId: lineIdx, wordId: [lineIdx, wordIdx] },
   }));
 }
 
@@ -258,42 +274,71 @@ export function selectProposal(proposalId: string): void {
 
 // ─── Navigation actions (Slice 15) ───────────────────────────────────────────
 
-function applyPath(prev: SelectionState, path: SelectionPath): SelectionState {
-  const lvl = pathLevel(path);
+/**
+ * Stamp `page.page_index` onto `path`, unless `path` carries no selection —
+ * an empty path stays `{}` so `toEqual({})`-style comparisons and
+ * `pathLevel` both keep reading it as "none".
+ */
+function withPageIndex(path: SelectionPath, page: PagePayload): SelectionPath {
+  // A path that has collapsed to "none" (e.g. walkUp from the shallowest
+  // level) may still carry a leftover `pageIndex` from the path it was
+  // derived from — normalize to a clean `{}` so callers comparing against
+  // "no selection" don't have to know about that leftover key.
+  if (pathLevel(path) === "none") return {};
+  return { ...path, pageIndex: page.page_index };
+}
+
+function applyPath(prev: SelectionState, path: SelectionPath, page: PagePayload): SelectionState {
+  const stamped = withPageIndex(path, page);
+  const lvl = pathLevel(stamped);
   // Sync the legacy arrays to the new path so existing consumers stay
   // coherent. Only one layer is filled per call.
   const next: SelectionState = {
     ...INITIAL_STATE,
     dragRect: prev.dragRect, // preserve in-flight drag
     level: lvl,
-    path,
+    path: stamped,
   };
-  if (path.wordId !== undefined) {
-    next.selectedWords = [path.wordId];
-  } else if (path.lineId !== undefined) {
-    next.selectedLines = [path.lineId];
-  } else if (path.paraId !== undefined && path.paraId !== null) {
-    next.selectedParagraphs = [path.paraId];
+  if (stamped.wordId !== undefined) {
+    next.selectedWords = [stamped.wordId];
+  } else if (stamped.lineId !== undefined) {
+    next.selectedLines = [stamped.lineId];
+  } else if (stamped.paraId !== undefined && stamped.paraId !== null) {
+    next.selectedParagraphs = [stamped.paraId];
   }
   return next;
 }
 
 /**
+ * A selection whose `path.pageIndex` disagrees with `page.page_index`
+ * belongs to a page other than the one loaded — nothing on this page to
+ * walk from (P2-SELECTION-PAGE).
+ */
+function belongsToOtherPage(path: SelectionPath, page: PagePayload): boolean {
+  return path.pageIndex !== undefined && path.pageIndex !== page.page_index;
+}
+
+/**
  * Walk to the next/previous sibling at the deepest level of the current path.
  *
- * No-op when there is no current selection or no siblings at that level.
+ * No-op when there is no current selection, no siblings at that level, or
+ * the selection belongs to a page other than `page` — a stale-page
+ * selection is nothing to act on, and this leaves it untouched so it is
+ * still there if the person pages back to it.
  */
 export function walkSibling(direction: WalkDirection, page: PagePayload): void {
   selectionStore.setState((s) => {
     if (s.level === "none") return s;
+    if (belongsToOtherPage(s.path, page)) return s;
     const nextPath = nextSibling(s.path, page, direction);
-    return applyPath(s, nextPath);
+    return applyPath(s, nextPath, page);
   });
 }
 
 export function promoteCompleteWordLines(page: PagePayload): void {
   selectionStore.setState((s) => {
     if (s.selectedWords.length === 0) return s;
+    if (belongsToOtherPage(s.path, page)) return s;
 
     const selectedByLine = new Map<number, Set<number>>();
     for (const [lineIdx, wordIdx] of s.selectedWords) {
@@ -332,7 +377,7 @@ export function promoteCompleteWordLines(page: PagePayload): void {
         selectedLines: nextLines,
         selectedWords: remainingWords,
         level: "word",
-        path: { lineId: last[0], wordId: last },
+        path: { pageIndex: page.page_index, lineId: last[0], wordId: last },
       };
     }
 
@@ -341,7 +386,7 @@ export function promoteCompleteWordLines(page: PagePayload): void {
       selectedLines: nextLines,
       selectedWords: [],
       level: "line",
-      path: { lineId: firstLineId },
+      path: { pageIndex: page.page_index, lineId: firstLineId },
     };
   });
 }
@@ -350,11 +395,18 @@ export function promoteCompleteWordLines(page: PagePayload): void {
  * Walk up (Alt+Up) or down (Alt+Down) one level in the hierarchy.
  *   "up"   → drop the deepest level.
  *   "down" → descend into the first child of the current level.
+ *
+ * No-op when the current selection belongs to a page other than `page` —
+ * same reasoning as `walkSibling` above. This only guards a genuine
+ * stale-page selection; walking down from no selection at all (fresh
+ * `path.pageIndex === undefined`) still starts a new selection on `page`,
+ * unaffected.
  */
 export function walkLevel(direction: "up" | "down", page: PagePayload): void {
   selectionStore.setState((s) => {
+    if (belongsToOtherPage(s.path, page)) return s;
     const nextPath = direction === "up" ? walkUp(s.path, page) : walkDown(s.path, page);
-    return applyPath(s, nextPath);
+    return applyPath(s, nextPath, page);
   });
 }
 
@@ -370,8 +422,11 @@ export function walkLevel(direction: "up" | "down", page: PagePayload): void {
  *
  * level is always "word" while words are selected; drops to "none" when the
  * set becomes empty.
+ *
+ * `pageIndex` (0-based) is the page this word belongs to — see `selectBlock`.
  */
 export function toggleWord(
+  pageIndex: number,
   lineIdx: number,
   wordIdx: number,
   mode: "replace" | "toggle" | "remove",
@@ -394,7 +449,8 @@ export function toggleWord(
 
     const newLevel: SelectionLevel = next.length > 0 ? "word" : "none";
     // path: keep the most-recently-touched word, or clear if empty.
-    const newPath: SelectionPath = next.length > 0 ? { lineId: lineIdx, wordId: tuple } : {};
+    const newPath: SelectionPath =
+      next.length > 0 ? { pageIndex, lineId: lineIdx, wordId: tuple } : {};
 
     return {
       ...s,
@@ -405,6 +461,60 @@ export function toggleWord(
       path: newPath,
     };
   });
+}
+
+// ─── Page-scoped resolution (P2-SELECTION-PAGE) ──────────────────────────────
+//
+// A block/para/line/word selection carries the page index it was made on
+// (`path.pageIndex`, stamped by the select*/apply*/toggleWord/walk* actions
+// above). Every consumer that resolves a selection against a specific loaded
+// page — the right panel's line/word/paragraph/block views, the canvas
+// highlight, and the breadcrumb — must read through `resolveSelectionForPage`
+// (or the `useSelectionForPage` hook) rather than `selectionStore.getState()`
+// directly, so a selection from another page reads as no selection instead
+// of resolving against whichever page happens to be loaded.
+//
+// A region or proposal selection (`path.regionId`/`path.proposalId`) never
+// carries `pageIndex` and so is never affected here — it clears on page
+// change through ProjectPage's separate, pre-existing region-selection-
+// scoping effect (whole-branch review defect 2).
+
+/**
+ * Resolve `state` against `pageIndex` (the page currently loaded, 0-based).
+ *
+ * Returns `state` unchanged when its path carries no `pageIndex` (no
+ * selection, or a region/proposal selection) or when `path.pageIndex`
+ * matches `pageIndex`. Otherwise returns a selection-cleared view — level
+ * "none", empty path and legacy arrays — without touching the underlying
+ * store, so the selection is exactly as it was if the person pages back to
+ * where they made it.
+ */
+export function resolveSelectionForPage(
+  state: SelectionState,
+  pageIndex: number | undefined,
+): SelectionState {
+  if (state.path.pageIndex === undefined) return state;
+  if (state.path.pageIndex === pageIndex) return state;
+  return { ...INITIAL_STATE, dragRect: state.dragRect };
+}
+
+/**
+ * React hook: the selection state as it applies to `pageIndex` (the page
+ * currently loaded, 0-based, or `undefined` while no page has loaded yet).
+ *
+ * Subscribes to the raw store (referentially stable until the store itself
+ * changes) and derives the page-scoped view in `useMemo`, so the returned
+ * object is referentially stable across renders where neither the store nor
+ * `pageIndex` changed — required for `useSyncExternalStore`-style
+ * consumers built on top of this to avoid re-render loops.
+ */
+export function useSelectionForPage(pageIndex: number | undefined): SelectionState {
+  const raw = useSyncExternalStore(
+    selectionStore.subscribe,
+    selectionStore.getState,
+    selectionStore.getState,
+  );
+  return useMemo(() => resolveSelectionForPage(raw, pageIndex), [raw, pageIndex]);
 }
 
 // Re-export shared types so consumers can import them from one place.

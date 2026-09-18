@@ -94,7 +94,7 @@ import {
   applyParagraphSelection,
   promoteCompleteWordLines,
   selectProposal,
-  type SelectionState,
+  useSelectionForPage,
 } from "../stores/selection-store";
 import {
   reviewSelectionIntentStore,
@@ -188,17 +188,6 @@ function subscribeRightPanelOpen(cb: () => void): () => void {
 }
 function getRightPanelOpenSnapshot(): boolean {
   return useUiPrefs.getState().rightPanelOpen;
-}
-
-// ─── selection-store subscriber ─────────────────────────────────────────────
-
-function subscribeSelection(cb: () => void): () => void {
-  return selectionStore.subscribe(() => {
-    cb();
-  });
-}
-function getSelectionSnapshot(): SelectionState {
-  return selectionStore.getState();
 }
 
 // ─── viewport add-word mode subscriber (B2) ─────────────────────────────────
@@ -303,16 +292,15 @@ export default function ProjectPage() {
     getRightPanelOpenSnapshot,
     getRightPanelOpenSnapshot,
   );
-  const selection = useSyncExternalStore(
-    subscribeSelection,
-    getSelectionSnapshot,
-    getSelectionSnapshot,
-  );
-  const selectionLevel = useSyncExternalStore(
-    selectionStore.subscribe,
-    () => selectionStore.getState().level,
-    () => "none" as const,
-  );
+  // P2-SELECTION-PAGE: resolved against `idx0` (the loaded page) — a
+  // block/para/line/word selection made on another page must not feed
+  // ToolbarActionGrid batch actions or the style/component-apply buttons
+  // below (`selectedWordTargets`) against the CURRENTLY loaded page's data.
+  // Before this fix those read `selectionStore.getState()` directly, so a
+  // toolbar action taken after paging away from where the selection was
+  // made could silently mutate the wrong page's lines/words.
+  const selection = useSelectionForPage(idx0);
+  const selectionLevel = selection.level;
   // B2: add-word mode mirrors viewportStore (single source of truth).
   const addWordActive = useSyncExternalStore(
     subscribeViewportMode,
@@ -597,7 +585,7 @@ export default function ProjectPage() {
       const { selectedLineIndex } = worklistStore.getState();
       const nextIdx = (selectedLineIndex ?? -1) + delta;
       const clampedIdx = Math.max(0, Math.min(lines.length - 1, nextIdx));
-      focusWorklistLine(clampedIdx);
+      focusWorklistLine(idx0, clampedIdx);
     },
     onValidate: () => {
       const { selectedLineIndex } = worklistStore.getState();
@@ -947,13 +935,13 @@ export default function ProjectPage() {
     }
 
     if (boxSelection.lines.length > 0) {
-      applyLineSelection(boxSelection.lines, modifier);
+      applyLineSelection(pagePayload.page_index, boxSelection.lines, modifier);
       useUiPrefs.setState({ rightPanelOpen: true });
       return;
     }
 
     if (boxSelection.paragraphs.length > 0) {
-      applyParagraphSelection(boxSelection.paragraphs, modifier);
+      applyParagraphSelection(pagePayload.page_index, boxSelection.paragraphs, modifier);
       useUiPrefs.setState({ rightPanelOpen: true });
       return;
     }
@@ -965,13 +953,13 @@ export default function ProjectPage() {
       const [first, ...rest] = boxSelection.words;
       if (!first) return;
       const [firstLine, firstWord] = first;
-      toggleWord(firstLine, firstWord, "replace");
+      toggleWord(pagePayload.page_index, firstLine, firstWord, "replace");
       for (const [lineIdx, wordIdx] of rest) {
-        toggleWord(lineIdx, wordIdx, "toggle");
+        toggleWord(pagePayload.page_index, lineIdx, wordIdx, "toggle");
       }
     } else {
       for (const [lineIdx, wordIdx] of boxSelection.words) {
-        toggleWord(lineIdx, wordIdx, modifier);
+        toggleWord(pagePayload.page_index, lineIdx, wordIdx, modifier);
       }
     }
     promoteCompleteWordLines(pagePayload);

@@ -101,7 +101,7 @@ describe("ParagraphDetail (Lane D / D1)", () => {
   });
 
   it("renders all paragraph-scope action buttons when a paragraph is selected", () => {
-    selectPara(0);
+    selectPara(0, 0);
     renderWithQuery(<ParagraphDetail page={makePage()} projectId="p1" pageIndex={0} />);
     for (const id of [
       "para-merge",
@@ -125,7 +125,7 @@ describe("ParagraphDetail (Lane D / D1)", () => {
         return HttpResponse.json(makePage());
       }),
     );
-    selectPara(0);
+    selectPara(0, 0);
     renderWithQuery(<ParagraphDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("para-merge"));
     await waitFor(() => expect(hit).toBeDefined());
@@ -141,7 +141,7 @@ describe("ParagraphDetail (Lane D / D1)", () => {
         return HttpResponse.json(makePage());
       }),
     );
-    selectPara(0);
+    selectPara(0, 0);
     renderWithQuery(<ParagraphDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("para-delete"));
     await waitFor(() => expect(hit).toBe(true));
@@ -159,7 +159,7 @@ describe("ParagraphDetail (Lane D / D1)", () => {
         },
       ),
     );
-    selectPara(0);
+    selectPara(0, 0);
     renderWithQuery(<ParagraphDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("para-split-after-line"));
     await waitFor(() => expect(hit).toBeDefined());
@@ -175,7 +175,7 @@ describe("ParagraphDetail (Lane D / D1)", () => {
         return HttpResponse.json(makePage());
       }),
     );
-    selectPara(0);
+    selectPara(0, 0);
     renderWithQuery(<ParagraphDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("para-copy-gt-to-ocr"));
     await waitFor(() => expect(hit).toBe(true));
@@ -190,7 +190,7 @@ describe("ParagraphDetail (Lane D / D1)", () => {
         return HttpResponse.json(makePage());
       }),
     );
-    selectPara(0);
+    selectPara(0, 0);
     renderWithQuery(<ParagraphDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("para-copy-ocr-to-gt"));
     await waitFor(() => expect(hit).toBe(true));
@@ -205,7 +205,7 @@ describe("ParagraphDetail (Lane D / D1)", () => {
         return HttpResponse.json({ validated_count: 1 });
       }),
     );
-    selectPara(0);
+    selectPara(0, 0);
     renderWithQuery(<ParagraphDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("para-validate"));
     await waitFor(() => expect(body).toBeDefined());
@@ -223,7 +223,7 @@ describe("ParagraphDetail (Lane D / D1)", () => {
         return HttpResponse.json({ validated_count: 0 });
       }),
     );
-    selectPara(0);
+    selectPara(0, 0);
     renderWithQuery(<ParagraphDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("para-unvalidate"));
     await waitFor(() => expect(body).toBeDefined());

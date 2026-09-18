@@ -88,7 +88,7 @@ describe("MultiLineDetail — ML-2: routing", () => {
   });
 
   it("renders multi-line-detail when 2 lines are selected", () => {
-    applyLineSelection([0, 1], "replace");
+    applyLineSelection(0, [0, 1], "replace");
     wrap(<MultiLineDetail page={makePage()} projectId="p1" pageIndex={0} selectedLines={[0, 1]} />);
     expect(screen.getByTestId("multi-line-detail")).toBeInTheDocument();
   });
@@ -322,7 +322,7 @@ describe("MultiLineDetail — ML-7: bulk bar fires all-line mutations", () => {
 describe("MultiLineDetail — ML-8: selection survives ops", () => {
   beforeEach(() => {
     clearSelection();
-    applyLineSelection([0, 1], "replace");
+    applyLineSelection(0, [0, 1], "replace");
   });
 
   it("selected lines still selected after validate (not deleted)", () => {
