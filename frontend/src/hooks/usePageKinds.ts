@@ -15,14 +15,21 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateBookReviewQueue } from "./useBookReviewQueue";
+// `PageKind` is already declared and exported from usePageMutations.ts
+// (the alias every other `PageKind`-typed consumer — PageActionsCompact.tsx,
+// PageKindsDialog.tsx — imports); reuse it here rather than redeclaring a
+// second, unimported copy of the same generated schema alias.
+import type { PageKind } from "./usePageMutations";
 import type { components } from "../api/types";
 import { toast } from "../lib/toast";
 
-export type PageKind = components["schemas"]["PageKind"];
 export type PageKindsListResponse = components["schemas"]["PageKindsListResponse"];
 export type PageKindsListItem = components["schemas"]["PageKindsListItem"];
 export type ConfirmPageKindsBulkResponse = components["schemas"]["ConfirmPageKindsBulkResponse"];
-export type ConfirmPageKindsResultItem = components["schemas"]["ConfirmPageKindsResultItem"];
+// Not exported: nothing outside this file needs the per-item result shape —
+// callers of `useBulkConfirmPageKinds` consume its `BulkConfirmPageKindsSummary`
+// (below), not `ConfirmPageKindsResultItem[]` directly.
+type ConfirmPageKindsResultItem = components["schemas"]["ConfirmPageKindsResultItem"];
 
 /** The SPA sends at most this many pages per bulk-confirm request. */
 const BULK_BATCH_SIZE = 25;
@@ -67,8 +74,15 @@ async function apiPost<T>(url: string, body: unknown): Promise<T> {
 
 // ─── usePageKinds ───────────────────────────────────────────────────────────
 
-/** The `["page-kinds", projectId]` cache key `usePageKinds` registers under. */
-export function pageKindsKey(projectId: string | undefined): readonly unknown[] {
+/**
+ * The `["page-kinds", projectId]` cache key `usePageKinds` registers under.
+ * Not exported: unlike `reviewQueueKey`/`bookReviewQueueKey`, nothing reads
+ * this key outside a render (e.g. via `getQueryData`) today, and every
+ * invalidation call site in this codebase hand-rolls the two-element prefix
+ * array directly (see `useRegionMutations.ts`, `PageActionsCompact.tsx`) —
+ * so there is no current external caller for this builder.
+ */
+function pageKindsKey(projectId: string | undefined): readonly unknown[] {
   return ["page-kinds", projectId];
 }
 

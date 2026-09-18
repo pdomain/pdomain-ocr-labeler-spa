@@ -32,7 +32,11 @@ import { ChevronLeft, ChevronRight } from "@pdomain/pdomain-ui/icons";
 import { useProject } from "../hooks/useProject";
 import { pageNoUrl } from "../lib/routes";
 
-export interface ProjectNavigationControlsProps {
+// Not exported: only used below as this component's own forwardRef generic
+// param. `ProjectNavigationControlsHandle` (below) is the one type callers
+// actually need — for typing a `useRef` to this component (see
+// ProjectPage.tsx) — so only it is exported.
+interface ProjectNavigationControlsProps {
   projectId: string;
   pageNo: string;
 }
