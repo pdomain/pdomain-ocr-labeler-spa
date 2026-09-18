@@ -1183,3 +1183,65 @@ bulk-mark apply specifically (Task 3, the STUB this entry fixes).
   something nobody checked.
 - What this unblocks: the manual glyph path stops being a dead end. A person's
   marks reach recognition eval without any classifier existing.
+
+### [2026-09-18] Retired: a selection jumped to another item on page change
+
+- Report:
+  `docs/issues/2026-09-17-a-word-or-line-selection-jumps-to-another-item-on-page-change.md`
+- Decision: `SelectionPath` carries the page index it was selected on, and a
+  selection whose page disagrees with the loaded page resolves as empty. Option
+  2 of the issue.
+- Why this over clearing on page change: the store is untouched, so paging back
+  restores what was selected. Clearing would have thrown the selection away.
+- Found while wiring it, beyond the issue's list: the toolbar's batch dispatch
+  and the style and component apply buttons read the raw store, so an action
+  taken after paging away could batch-mutate the new page's lines under the old
+  page's selection. Those now resolve through the same guard.
+- Regions were left alone. They already clear outright on page change through
+  their own effect and were never promised the return-and-find-it behaviour.
+  Unifying them onto this mechanism is a follow-up, not a defect.
+- Shipped in `0da64f9` and `5e31506`.
+
+### [2026-09-18] Retired: the word edit dialog the driver contract documented
+
+- Report:
+  `docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`,
+  rewritten rather than deleted, because part of it survives.
+- Decision: retire the dialog. Driver contract section 2.11 records it as
+  retired, the contract test asserting its testids is deleted rather than
+  weakened, and the 18 dialog-scope hotkey entries go along with the scope
+  itself.
+- The pencil now does what its own docstring said it should: select the word
+  and open the right panel. `WordDetail` already covers the ground the dialog
+  was meant to.
+- What survives, narrower: word merge has no home. `ToolbarActionGrid`'s word
+  scope map has no merge key, so `toolbar-word-merge` is a permanent stub cell.
+  The issue now covers only that, and needs a ruling on both the surface and
+  the merge semantics.
+- Shipped in `f06d5eb`, `b681caa`, `0b30628`, `8d83d21`.
+
+### [2026-09-18] Retired: the typography count had no answer on a real book
+
+- Report: `docs/issues/2026-09-18-typography-numerator-needs-a-per-page-rollup.md`
+- Decision: write a per-page rollup where a correction is accepted, and drop
+  the 512 KiB availability ceiling entirely.
+- Why it was needed: the route read the whole book's corrections journal and
+  parsed every row into a pydantic model, about 80 microseconds a row. Measured
+  143 ms at 10% coverage and 1,521 ms at full coverage. The ceiling was honest
+  but meant a book with real correction history could never get a count.
+- Keyed by `logical_page_id`, not `page_index`. Typography corrections are
+  addressed by the project's or the bundle's own page identity, so keying by
+  the labeler's page ordinal would have mis-keyed every bundle project's rows.
+- The count is recomputed from that one page's corrections at write time rather
+  than carried as a delta, so a revision that drops a word below the
+  completeness bar lowers the next row. One page's rows is cheap; the whole
+  book's is the thing being avoided.
+- A page with corrections but no rollup row is excluded from the totals and
+  counted in `pages_not_counted`, the same treatment the word kind gives a page
+  it has never saved. A book corrected before this existed therefore reads as
+  incomplete rather than as a confident zero.
+- Staleness is still not checked, unchanged from before, so typography's
+  outstanding count remains a floor and `is_lower_bound` stays true.
+- `core.typography_review.reviewed_word_keys` is deleted; it had no other
+  caller once the route stopped reading the raw journal.
+- Shipped in `f6f180a`.

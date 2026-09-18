@@ -121,18 +121,6 @@ tombstone. See [`../context/decisions.md`](../context/decisions.md).
 | --- | --- | --- |
 | [`2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`](2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md) | P2-WORD-EDIT | Low |
 
-## Review queue (2026-09-18)
-
-| Issue | ID | Sev |
-| --- | --- | --- |
-| [`2026-09-18-typography-numerator-needs-a-per-page-rollup.md`](2026-09-18-typography-numerator-needs-a-per-page-rollup.md) | P2-TYPOGRAPHY-ROLLUP | Medium |
-
-## Selection (2026-09-17)
-
-| Issue | ID | Sev |
-| --- | --- | --- |
-| [`2026-09-17-a-word-or-line-selection-jumps-to-another-item-on-page-change.md`](2026-09-17-a-word-or-line-selection-jumps-to-another-item-on-page-change.md) | P2-SELECTION-PAGE | Low |
-
 Resolved reports are deleted, so this index tracks open work only. Past
 resolutions live in the `docs/context/decisions.md` tombstones and in git
 history.
