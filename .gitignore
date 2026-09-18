@@ -41,6 +41,9 @@ frontend/node_modules/
 frontend/dist/
 frontend/openapi.json
 frontend/coverage/
+# vitest.browser.config.ts (real-Chromium project) writes failure
+# screenshots here on every failing run.
+frontend/.vitest/
 # Root-level cache dirs from accidental wrong-cwd npm/vite/vitest invocations.
 # The real frontend tree lives in frontend/; these patterns guard against stray
 # `npm install` or `vitest` runs from the repo root re-creating them here.

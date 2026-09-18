@@ -14,10 +14,19 @@
 // top -202px at 1280x720 — see docs/plans / the hotkey-help-dialog fix).
 //
 // This can't be caught by measuring layout in jsdom (jsdom does not run
-// layout), but the redundant classes themselves are a reliable static
-// signal: no app-level dialog should re-declare positioning that ".dialog"
-// already owns. Any DialogContent/AlertDialogContent found with these
-// classes has reintroduced the double-transform bug.
+// layout), but the redundant classes themselves are a reliable, cheap
+// static signal: no app-level dialog should re-declare positioning that
+// ".dialog" already owns. Any DialogContent/AlertDialogContent found with
+// these classes has reintroduced the double-transform bug.
+//
+// This is the cheap check, not the only one: it catches exactly this class
+// list, so the same off-screen-dialog effect produced a different way (a
+// different Tailwind spelling, an inline style, a new CSS rule entirely)
+// would slip past it. HotkeyHelpModal.browser.test.tsx is the real guard —
+// it renders in an actual Chromium (vitest.browser.config.ts) and asserts
+// the computed box is inside the viewport, regardless of what caused a
+// regression. Run both; this one is near-free, the other one needs a
+// browser (`pnpm run test:browser`).
 const OFFENDING_POSITIONING_CLASSES = [
   "fixed",
   "top-1/2",

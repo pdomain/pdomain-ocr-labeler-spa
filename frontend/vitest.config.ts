@@ -9,7 +9,7 @@
 // box, which is sufficient for unit + Testing-Library tests.
 import path from "path";
 
-import { defineConfig } from "vitest/config";
+import { defaultExclude, defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
@@ -34,6 +34,11 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     css: false,
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // *.browser.test.tsx belongs to vitest.browser.config.ts's real-Chromium
+    // project (see its header comment) — would otherwise also match the glob
+    // above and run twice, once uselessly under jsdom. Keep vitest's own
+    // defaultExclude (node_modules, dist, config files, …) on top of that.
+    exclude: [...defaultExclude, "**/*.browser.test.tsx"],
     // Type-check tests against the test-only tsconfig (B-08): production
     // build (`tsc -b` via tsconfig.app.json) excludes test files so test
     // typings + vitest globals stay out of the prod surface.
