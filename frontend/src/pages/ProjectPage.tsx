@@ -56,6 +56,7 @@ import { useBboxRefineTracking } from "../hooks/useBboxRefineTracking";
 import {
   useReloadOcr,
   useReloadOcrEdited,
+  useReloadOcrEditedPending,
   useSavePage,
   useSaveProject,
   useLoadPage,
@@ -359,6 +360,9 @@ export default function ProjectPage() {
   const pid = projectId ?? "";
   const reloadOcr = useReloadOcr(pid, idx0);
   const reloadOcrEdited = useReloadOcrEdited(pid, idx0);
+  // Shared across this instance and PageActionsCompact's own
+  // useReloadOcrEdited instance — see the hook's docstring.
+  const reloadOcrEditedPending = useReloadOcrEditedPending(pid, idx0);
   const savePage = useSavePage(pid, idx0);
   const saveProject = useSaveProject(pid);
   const loadPage = useLoadPage(pid, idx0);
@@ -538,7 +542,7 @@ export default function ProjectPage() {
   // way as every other in-flight mutation.
   const isAnyMutationPending =
     reloadOcr.isPending ||
-    reloadOcrEdited.isPending ||
+    reloadOcrEditedPending ||
     savePage.isPending ||
     saveProject.isPending ||
     loadPage.isPending ||
@@ -692,7 +696,7 @@ export default function ProjectPage() {
   // other is a visibility choice about how much of the shell a wait covers.
   const isMutating =
     reloadOcr.isPending ||
-    reloadOcrEdited.isPending ||
+    reloadOcrEditedPending ||
     savePage.isPending ||
     saveProject.isPending ||
     loadPage.isPending ||

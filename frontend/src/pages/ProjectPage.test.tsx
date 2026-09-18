@@ -24,6 +24,7 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -807,6 +808,72 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
         expect(reloadCalls.length).toBeGreaterThanOrEqual(1);
       });
       expect(reloadCalls[0]).toEqual({ use_edited_image: false });
+    });
+  });
+
+  // ── Shared pending signal: Reload OCR Edited (cross-instance double-fire) ──
+  // ProjectPage.tsx and PageActionsCompact.tsx each hold their own
+  // `useReloadOcrEdited(...)` mutation instance — the button lives in one,
+  // the Mod+Shift+R hotkey gate lives in the other. Without a shared
+  // `mutationKey`, clicking the button doesn't stop the hotkey from firing a
+  // second re-OCR while the first is still running, and re-OCR resets the
+  // page's undo history, so a "harmless" double-fire is real data loss.
+
+  describe("Reload OCR Edited: one pending signal shared across instances", () => {
+    it("Ctrl+Shift+R is a no-op while the button's own request is in flight", async () => {
+      const reloadCalls: unknown[] = [];
+      server.use(
+        http.get("/api/projects/:pid/pages/:idx", () =>
+          HttpResponse.json({
+            ...pageFixture(),
+            page_record: {
+              ...pageFixture().page_record,
+              extensions: { labeler: { has_edited_image: true } },
+            },
+          }),
+        ),
+        http.post("/api/projects/:pid/pages/:idx/reload-ocr", async ({ request }) => {
+          reloadCalls.push(await request.json());
+          // Never resolves — the request stays "in flight" for the test.
+          return new Promise(() => {
+            // intentionally never settles
+          });
+        }),
+      );
+      const user = userEvent.setup();
+      renderProjectPage();
+      await screen.findByTestId("project-page");
+      await screen.findByTestId("reload-ocr-button");
+
+      // Fire the button's own request (PageActionsCompact's mutation instance).
+      await user.click(screen.getByTestId("page-actions-compact-overflow"));
+      await user.click(await screen.findByTestId("reload-ocr-edited-button"));
+      await waitFor(() => {
+        expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByTestId("confirm-dialog-confirm"));
+      await waitFor(() => {
+        expect(reloadCalls.length).toBe(1);
+      });
+      await waitFor(() => {
+        expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
+      });
+
+      // Now press the hotkey — ProjectPage's own mutation instance. With a
+      // shared pending signal this must be a full no-op: the global hotkey
+      // gate (isAnyMutationPending) sees the button's in-flight request, so
+      // it doesn't even re-open the confirm dialog, let alone fire a second
+      // POST.
+      fireEvent.keyDown(document, {
+        key: "R",
+        code: "KeyR",
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+      });
+
+      expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
+      expect(reloadCalls.length).toBe(1);
     });
   });
 

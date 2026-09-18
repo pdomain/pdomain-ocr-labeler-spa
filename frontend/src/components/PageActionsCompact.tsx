@@ -24,6 +24,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useReloadOcr,
   useReloadOcrEdited,
+  useReloadOcrEditedPending,
   useSavePage,
   useSaveProject,
   useLoadPage,
@@ -533,6 +534,9 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
 
   const reloadOcr = useReloadOcr(projectId, pageIndex);
   const reloadOcrEdited = useReloadOcrEdited(projectId, pageIndex);
+  // Shared across this instance and ProjectPage's own useReloadOcrEdited
+  // instance (the Mod+Shift+R hotkey gate) — see the hook's docstring.
+  const reloadOcrEditedPending = useReloadOcrEditedPending(projectId, pageIndex);
   const savePage = useSavePage(projectId, pageIndex);
   const saveProject = useSaveProject(projectId);
   const loadPage = useLoadPage(projectId, pageIndex);
@@ -547,7 +551,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
 
   const isBusy =
     reloadOcr.isPending ||
-    reloadOcrEdited.isPending ||
+    reloadOcrEditedPending ||
     savePage.isPending ||
     saveProject.isPending ||
     loadPage.isPending ||
