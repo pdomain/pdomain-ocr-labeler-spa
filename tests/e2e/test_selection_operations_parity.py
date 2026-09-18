@@ -44,6 +44,7 @@ from pdomain_ocr_labeler_spa.adapters.ocr.local_doctr import (
 from pdomain_ocr_labeler_spa.bootstrap import build_app
 from pdomain_ocr_labeler_spa.core.persistence.page_store import LabelerPageStore
 from pdomain_ocr_labeler_spa.settings import Settings
+from tests.e2e.test_export_manifest_and_trainer import _complete_typography_review
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -696,7 +697,7 @@ def test_grid1_toolbar_action_grid_visible_and_collapse_works(
 
 @pytest.mark.e2e
 def test_grid3_stb1_per_word_validate_mutates_state_end_to_end(
-    sel_server: SelServer,
+    mut_server: SelServer,
     page: Page,
 ) -> None:
     """GRID-3 + STB-1 END-TO-END: per-word validate produces a visible + persisted
@@ -718,12 +719,27 @@ def test_grid3_stb1_per_word_validate_mutates_state_end_to_end(
     <LineCard> does not pass onValidateWord, so the word-validate-button from
     the LineDetail surface is a no-op. The word-footer-validate in WordDetail
     (tested here) IS fully wired. See STB-1 in LineDetail.tsx line ~277.
+
+    6a04cbe disabled word-footer-validate for an unvalidated word until the
+    page's text-and-typography review is complete, so this drives that
+    review to completion first (a 4-word fixture — cheap) via the same
+    _complete_typography_review helper the export tests use. That helper
+    validates every word as part of completing the review, so by the time
+    we click, word (0,0) is already validated — the click below exercises
+    the unvalidate direction, which the mutation chain (POST → store →
+    invalidate → re-render) is exactly as real for. Runs on its own
+    mut_server (not the shared sel_server): validating the whole page is a
+    structural mutation that would break test_bulk_line_words_validate_
+    selected_end_to_end's "word (1,0) starts unvalidated" precondition on
+    the shared fixture.
     """
-    lm0, _ = _verify_fixture_two_blocks(sel_server.base_url)
+    lm0, _ = _verify_fixture_two_blocks(mut_server.base_url)
     w0 = lm0["word_matches"][0]
     li0, wi0 = w0["line_index"], w0["word_index"]
 
-    _goto_project_page(page, sel_server.project_url)
+    _complete_typography_review(mut_server.base_url, _PROJECT_ID, page_index=0)
+
+    _goto_project_page(page, mut_server.project_url)
     _select_first_word_via_hierarchy(page)
 
     # WordDetail footer must be visible.
@@ -774,7 +790,7 @@ def test_grid3_stb1_per_word_validate_mutates_state_end_to_end(
     )
 
     # API-level confirmation: server reflects the new state.
-    r = httpx.get(f"{sel_server.base_url}/api/projects/{_PROJECT_ID}/pages/0", timeout=10)
+    r = httpx.get(f"{mut_server.base_url}/api/projects/{_PROJECT_ID}/pages/0", timeout=10)
     assert r.status_code == 200
     payload = r.json()
     lm = next((lm for lm in payload.get("line_matches", []) if lm["line_index"] == li0), None)
