@@ -11,7 +11,7 @@
 
 import { useSyncExternalStore } from "react";
 import { ChevronLeft, ChevronRight, CheckCircle } from "@pdomain/pdomain-ui/icons";
-import { List, GitBranch, FileText } from "@/icons/local-shims";
+import { List, GitBranch, FileText, History } from "@/icons/local-shims";
 import { cn } from "@/lib/utils";
 import { useUiPrefs, type DrawerTab } from "../../stores/ui-prefs";
 import { Worklist } from "../drawer/Worklist";
@@ -20,6 +20,7 @@ import { Hierarchy } from "../drawer/Hierarchy";
 import type { HierarchyProps } from "../drawer/Hierarchy";
 import { PlaintextGtOcrView } from "../PlaintextGtOcrView";
 import { ReviewQueuePanel } from "../drawer/ReviewQueuePanel";
+import { HistoryPanel } from "../drawer/HistoryPanel";
 
 // ─── Selectors (use useUiPrefs.subscribe directly — store already exposes it) ─
 
@@ -72,6 +73,13 @@ const TABS: TabConfig[] = [
     label: "Queue",
     testid: "drawer-tab-queue",
     icon: <CheckCircle size={13} />,
+  },
+  {
+    // U-M7: read-only per-page version list (undo/redo/jump visibility).
+    id: "history",
+    label: "History",
+    testid: "drawer-tab-history",
+    icon: <History size={13} />,
   },
 ];
 
@@ -225,8 +233,11 @@ export function Drawer({
             ) : activeTab === "text" ? (
               /* S2.2: Visible full-page GT/OCR read-only text view */
               <PlaintextGtOcrView pageTextGt={pageTextGt} pageTextOcr={pageTextOcr} />
-            ) : (
+            ) : activeTab === "queue" ? (
               <ReviewQueuePanel projectId={projectId} pageIndex={pageIndex} />
+            ) : (
+              /* U-M7: read-only per-page version list */
+              <HistoryPanel projectId={projectId} pageIndex={pageIndex} />
             )}
           </div>
         </div>

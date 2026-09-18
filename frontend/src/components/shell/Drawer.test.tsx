@@ -36,6 +36,11 @@ describe("Drawer (Slice 11)", () => {
     expect(screen.getByTestId("drawer-tab-hierarchy")).toBeInTheDocument();
   });
 
+  it("renders the History tab trigger (U-M7)", () => {
+    render(<Drawer />);
+    expect(screen.getByTestId("drawer-tab-history")).toBeInTheDocument();
+  });
+
   it("worklist tab is active by default", () => {
     render(<Drawer />);
     expect(screen.getByTestId("drawer-tab-worklist")).toHaveAttribute("data-active", "true");

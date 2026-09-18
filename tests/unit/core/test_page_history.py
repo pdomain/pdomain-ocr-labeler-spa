@@ -17,12 +17,15 @@ derivation (the cursor model)":
 
 from __future__ import annotations
 
-from pdomain_ops.pages import ProvenanceGraph, ProvenanceNode
+from datetime import UTC, datetime
+
+from pdomain_ops.pages import PageChangeEntry, ProvenanceGraph, ProvenanceNode
 
 from pdomain_ocr_labeler_spa.core.page_history import (
     DEFAULT_UNDO_DEPTH,
     HistoryState,
     build_history_marker_node,
+    build_version_list,
     derive_history,
 )
 
@@ -232,3 +235,103 @@ def test_marker_node_from_builder_is_not_a_version() -> None:
     assert state.chain == ("root", "edit-0")
     assert state.cursor == 0
     assert state.redo_available is True
+
+
+# ── jump_target (U-M7 "Jump-to-version semantics") ───────────────────────────
+
+
+def test_jump_target_accepts_any_chain_member() -> None:
+    state = derive_history(_graph_with_edits(3), depth=DEFAULT_UNDO_DEPTH)  # chain: root, edit-0..2
+    assert state.jump_target("root") == "root"
+    assert state.jump_target("edit-1") == "edit-1"
+
+
+def test_jump_target_rejects_nodes_outside_the_active_chain() -> None:
+    """A truncated (undone-past) version is data but not jump-reachable."""
+    graph = _fresh_ocr_graph()
+    graph.add_node(_version_node("A"))
+    graph.add_node(_version_node("B"))
+    graph.add_node(_marker_node("undo-1", op="undo", restores="A", undoes="B", blob="blob-A"))
+    graph.add_node(_version_node("C"))
+    state = derive_history(graph, depth=DEFAULT_UNDO_DEPTH)  # chain: root, A, C — B truncated
+    assert state.chain == ("root", "A", "C")
+    assert state.jump_target("B") is None
+    assert state.jump_target("nonexistent") is None
+
+
+# ── build_version_list (U-M7 history panel) ──────────────────────────────────
+
+
+def _labeler_node_with_changelog(
+    node_id: str, *, change_type: str, timestamp: datetime | None = None
+) -> tuple[ProvenanceNode, PageChangeEntry]:
+    """A real edit version node plus the changelog entry naming its op."""
+    node = ProvenanceNode(
+        id=node_id,
+        source="labeler",
+        tool="labeler-spa",
+        timestamp=timestamp or datetime(2026, 9, 18, 12, 0, tzinfo=UTC),
+        blob_refs=[f"blob-{node_id}"],
+    )
+    entry = PageChangeEntry(provenance_node_id=node_id, changes=[{"type": change_type}])
+    return node, entry
+
+
+def test_build_version_list_labels_root_ocr_with_no_timestamp() -> None:
+    """The OCR root never gets a timestamp (adapters/ocr/local_doctr.py never sets one)."""
+    versions = build_version_list(_fresh_ocr_graph(), changelog=[], depth=DEFAULT_UNDO_DEPTH)
+    assert len(versions) == 1
+    assert versions[0].node_id == "root"
+    assert versions[0].label == "OCR"
+    assert versions[0].timestamp is None
+    assert versions[0].is_current is True
+
+
+def test_build_version_list_derives_labels_from_changelog() -> None:
+    graph = _fresh_ocr_graph()
+    node, entry = _labeler_node_with_changelog("edit-0", change_type="word_validated")
+    graph.add_node(node)
+    versions = build_version_list(graph, changelog=[entry], depth=DEFAULT_UNDO_DEPTH)
+    assert [v.node_id for v in versions] == ["root", "edit-0"]
+    assert versions[1].label == "Word validated"
+    assert versions[1].timestamp is not None
+    assert versions[1].is_current is True
+    assert versions[0].is_current is False
+
+
+def test_build_version_list_falls_back_when_changelog_entry_missing() -> None:
+    """No fabricated label when the changelog entry is absent or empty."""
+    graph = _fresh_ocr_graph()
+    graph.add_node(_version_node("edit-0"))  # no matching changelog entry passed below
+    versions = build_version_list(graph, changelog=[], depth=DEFAULT_UNDO_DEPTH)
+    assert versions[-1].label == "Edit"
+
+
+def test_build_version_list_marks_current_after_undo_and_skips_marker_rows() -> None:
+    """U-14: one row per version (plus the OCR root) — undo/redo markers add no row."""
+    graph = _fresh_ocr_graph()
+    node_a, entry_a = _labeler_node_with_changelog("A", change_type="word_gt")
+    node_b, entry_b = _labeler_node_with_changelog("B", change_type="word_validated")
+    graph.add_node(node_a)
+    graph.add_node(node_b)
+    graph.add_node(_marker_node("undo-1", op="undo", restores="A", undoes="B", blob="blob-A"))
+
+    versions = build_version_list(graph, changelog=[entry_a, entry_b], depth=DEFAULT_UNDO_DEPTH)
+    assert [v.node_id for v in versions] == ["root", "A", "B"], "undo must not add its own row"
+    current = [v.node_id for v in versions if v.is_current]
+    assert current == ["A"], "the undo marker must move is_current back to A, not add a new row"
+
+
+def test_build_version_list_respects_truncation() -> None:
+    """A version truncated by a real edit after undo (U-5) drops off the list too."""
+    graph = _fresh_ocr_graph()
+    node_a, entry_a = _labeler_node_with_changelog("A", change_type="word_gt")
+    node_b, entry_b = _labeler_node_with_changelog("B", change_type="word_validated")
+    node_c, entry_c = _labeler_node_with_changelog("C", change_type="word_rebox")
+    graph.add_node(node_a)
+    graph.add_node(node_b)
+    graph.add_node(_marker_node("undo-1", op="undo", restores="A", undoes="B", blob="blob-A"))
+    graph.add_node(node_c)
+
+    versions = build_version_list(graph, changelog=[entry_a, entry_b, entry_c], depth=DEFAULT_UNDO_DEPTH)
+    assert [v.node_id for v in versions] == ["root", "A", "C"], "B must be gone once C truncates it"

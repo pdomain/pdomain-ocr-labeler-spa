@@ -845,6 +845,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/jump": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Jump Page
+         * @description ``POST .../jump`` — restore an arbitrary version on the active chain (U-15).
+         *
+         *     Same mechanism as undo/redo (spec §"Jump-to-version semantics"): appends
+         *     a ``history_op`` marker with ``op="jump"``, so it is exactly as
+         *     append-only and auditable as undo/redo — never a rewrite of history.
+         *     409 ``jump_unavailable`` when ``body.node_id`` is not on the active
+         *     chain (truncated by a prior real edit, or never existed).
+         */
+        post: operations["jump_page_api_projects__project_id__pages__page_index__jump_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/history/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get History Versions
+         * @description ``GET .../history/versions`` — read-only version list for the history panel (U-14).
+         *
+         *     Never mutates anything: reads the same provenance graph undo/redo/jump
+         *     read, under the same per-page lock (consistency with any concurrent
+         *     mutation), and returns ``[]`` whenever there is nothing to show (no
+         *     project/page mismatch aside — that still 404s) rather than a 409, since
+         *     an empty list is a normal, valid answer for a GET.
+         */
+        get: operations["get_history_versions_api_projects__project_id__pages__page_index__history_versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs": {
         parameters: {
             query?: never;
@@ -3975,6 +4027,24 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * HistoryVersionInfo
+         * @description One row of the U-M7 history panel — spec §"API surface".
+         *
+         *     Read-only wire shape for ``GET .../history/versions``; mirrors
+         *     ``core.page_history.VersionEntry`` field-for-field. ``timestamp`` is
+         *     ``None`` only for the OCR-ingest root row — see ``VersionEntry``.
+         */
+        HistoryVersionInfo: {
+            /** Node Id */
+            node_id: string;
+            /** Label */
+            label: string;
+            /** Timestamp */
+            timestamp: string | null;
+            /** Is Current */
+            is_current: boolean;
+        };
+        /**
          * ImageDrift
          * @description Marks that this page's on-disk source image changed since it was
          *     OCR'd — issue 2026-07-21-image-drift-banner-hard-off.
@@ -4158,6 +4228,14 @@ export interface components {
          * @enum {string}
          */
         JobType: "reload_ocr" | "save_project" | "export" | "rotate_page" | "auto_rotate_all" | "refine_bboxes" | "propose_page_kinds" | "propose_regions" | "load_page";
+        /**
+         * JumpRequest
+         * @description Body of ``POST .../jump`` — spec §"Jump-to-version semantics".
+         */
+        JumpRequest: {
+            /** Node Id */
+            node_id: string;
+        };
         /**
          * LabelSource
          * @description Evidence sources that can assign a canonical label.
@@ -7278,6 +7356,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    jump_page_api_projects__project_id__pages__page_index__jump_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JumpRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_history_versions_api_projects__project_id__pages__page_index__history_versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryVersionInfo"][];
                 };
             };
             /** @description Validation Error */
