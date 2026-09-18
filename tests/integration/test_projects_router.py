@@ -364,6 +364,138 @@ def test_get_projects_page_count_for_labeling_bundle_project(
 
 
 # ──────────────────────────────────────────────────────────────────────
+# GET /api/projects — progress (progress-P2-ROOT-followup)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _append_word_review_counts(
+    root: Path, *, page_index: int, total_words: int, validated_words: int
+) -> None:
+    from pdomain_ocr_labeler_spa.core.review_counts import PageWordCounts, WordReviewCountsJournal
+
+    WordReviewCountsJournal(root).append(
+        PageWordCounts(
+            page_index=page_index,
+            content_hash=f"h{page_index}",
+            total_words=total_words,
+            validated_words=validated_words,
+        )
+    )
+
+
+def test_get_projects_progress_null_when_no_journal(
+    client_with_root: TestClient, projects_root: Path
+) -> None:
+    """A project with no page-review journal reports ``progress: null`` —
+    unknown, not a confidently wrong 0%."""
+    (projects_root / "alpha" / "001.png").write_bytes(b"")
+
+    body = client_with_root.get("/api/projects").json()
+    alpha_entry = next(p for p in body["projects"] if p["project_id"] == "alpha")
+    assert alpha_entry["progress"] is None
+
+
+def test_get_projects_progress_reflects_journal_full_coverage(
+    client_with_root: TestClient, projects_root: Path
+) -> None:
+    """Every page counted and validated → ``progress.complete: true``."""
+    (projects_root / "alpha" / "001.png").write_bytes(b"")
+    _append_word_review_counts(projects_root / "alpha", page_index=0, total_words=4, validated_words=4)
+
+    body = client_with_root.get("/api/projects").json()
+    alpha_entry = next(p for p in body["projects"] if p["project_id"] == "alpha")
+    assert alpha_entry["progress"] == {
+        "validated_words": 4,
+        "total_words": 4,
+        "pages_counted": 1,
+        "pages_not_counted": 0,
+        "is_lower_bound": False,
+        "complete": True,
+    }
+
+
+def test_get_projects_progress_partial_coverage_is_a_lower_bound_and_not_complete(
+    client_with_root: TestClient, projects_root: Path
+) -> None:
+    """Only some pages counted: the fraction is surfaced, marked as a
+    lower bound, and never reported as complete."""
+    for i in range(3):
+        (projects_root / "alpha" / f"{i:03d}.png").write_bytes(b"")
+    _append_word_review_counts(projects_root / "alpha", page_index=0, total_words=4, validated_words=4)
+
+    body = client_with_root.get("/api/projects").json()
+    alpha_entry = next(p for p in body["projects"] if p["project_id"] == "alpha")
+    progress = alpha_entry["progress"]
+    assert progress is not None
+    assert progress["pages_counted"] == 1
+    assert progress["pages_not_counted"] == 2
+    assert progress["is_lower_bound"] is True
+    assert progress["complete"] is False
+
+
+def test_get_projects_progress_null_for_book_labeling_manifest_shape(
+    client_with_root: TestClient, projects_root: Path
+) -> None:
+    """A book-labeling-manifest.json project never writes to the
+    word-review-counts journal (it validates through
+    ``ImportedTextValidationLog`` instead) — ``progress`` stays ``null``
+    even if a journal file happens to exist."""
+    _write_book_manifest_project(projects_root / "manifest-book", page_count=5)
+    _append_word_review_counts(
+        projects_root / "manifest-book", page_index=0, total_words=4, validated_words=4
+    )
+
+    body = client_with_root.get("/api/projects").json()
+    entry = next(p for p in body["projects"] if p["project_id"] == "manifest-book")
+    assert entry["page_count"] == 5
+    assert entry["progress"] is None
+
+
+def test_get_projects_progress_null_when_page_count_unreadable(
+    client_with_root: TestClient, projects_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No page-count denominator → no progress either, even with a
+    populated journal."""
+    (projects_root / "alpha" / "001.png").write_bytes(b"")
+    _append_word_review_counts(projects_root / "alpha", page_index=0, total_words=4, validated_words=4)
+    resolved_alpha = (projects_root / "alpha").resolve()
+    original_iterdir = Path.iterdir
+
+    def _flaky_iterdir(self: Path) -> Iterator[Path]:
+        if self == resolved_alpha:
+            raise PermissionError(f"denied: {self}")
+        return original_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", _flaky_iterdir)
+
+    body = client_with_root.get("/api/projects").json()
+    alpha_entry = next(p for p in body["projects"] if p["project_id"] == "alpha")
+    assert alpha_entry["page_count"] is None
+    assert alpha_entry["progress"] is None
+
+
+def test_post_source_root_echoes_progress(client_with_root: TestClient, projects_root: Path) -> None:
+    """``POST /api/projects/source-root`` returns the same ``progress``
+    shape as ``GET /api/projects`` — both funnel through the same
+    ``ProjectKey`` serialization."""
+    (projects_root / "alpha" / "001.png").write_bytes(b"")
+    _append_word_review_counts(projects_root / "alpha", page_index=0, total_words=4, validated_words=4)
+
+    resp = client_with_root.post("/api/projects/source-root", json={"path": str(projects_root)})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    alpha_entry = next(p for p in body["projects"] if p["project_id"] == "alpha")
+    assert alpha_entry["progress"] == {
+        "validated_words": 4,
+        "total_words": 4,
+        "pages_counted": 1,
+        "pages_not_counted": 0,
+        "is_lower_bound": False,
+        "complete": True,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────
 # POST /api/projects/load
 # ──────────────────────────────────────────────────────────────────────
 

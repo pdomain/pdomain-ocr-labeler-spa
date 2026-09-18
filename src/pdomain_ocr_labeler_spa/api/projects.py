@@ -86,6 +86,7 @@ from ..core.persistence.session_state import (
     load_session_state,
     save_session_state,
 )
+from ..core.project_enumeration import ProjectProgress as CoreProjectProgress
 from ..core.project_enumeration import enumerate_projects
 from ..core.project_state import ProjectState
 from ..core.source_root_state import SourceRootCarrier
@@ -110,6 +111,34 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 # ──────────────────────────────────────────────────────────────────────
 
 
+class ProjectProgress(BaseModel):
+    """Wire mirror of ``core.project_enumeration.ProjectProgress`` — see
+    there for what each field means and exactly which cases make a
+    project's ``ProjectKey.progress`` ``None`` instead of one of these.
+    """
+
+    validated_words: int
+    total_words: int
+    pages_counted: int
+    pages_not_counted: int
+    is_lower_bound: bool
+    complete: bool
+
+
+def _project_progress_to_wire(progress: CoreProjectProgress | None) -> ProjectProgress | None:
+    """Map the core dataclass to its wire mirror, preserving ``None``."""
+    if progress is None:
+        return None
+    return ProjectProgress(
+        validated_words=progress.validated_words,
+        total_words=progress.total_words,
+        pages_counted=progress.pages_counted,
+        pages_not_counted=progress.pages_not_counted,
+        is_lower_bound=progress.is_lower_bound,
+        complete=progress.complete,
+    )
+
+
 class ProjectKey(BaseModel):
     """One discoverable project. Spec §2 lines 212-216.
 
@@ -122,17 +151,21 @@ class ProjectKey(BaseModel):
     ``core.project_enumeration.EnumeratedProject.page_count`` and
     ``docs/context/decisions.md`` (P2-ROOT) for the measured cost.
 
-    Per-project labeling *progress* (validated/reviewed page count) is
-    deliberately NOT part of this response: computing it requires
-    replaying each page's event-store aggregate, which does not scale
-    to "every project, every list request" — see the same decision
-    entry for the measurement that ruled it out.
+    ``progress`` is per-project word-validation progress, read from
+    ``core.review_counts.WordReviewCountsJournal`` — one small per-project
+    file read, cheap in the same way ``page_count`` is. ``None`` whenever
+    there is no honest number to report (unsupported project shape,
+    unknown ``page_count``, unreadable journal, or a journal with no rows
+    yet); see ``core.project_enumeration.ProjectProgress`` for the full
+    list, and ``docs/context/decisions.md`` (progress-P2-ROOT-followup)
+    for the measured cost of reading it at list scale.
     """
 
     project_id: str
     project_root: Path
     label: str
     page_count: int | None = None
+    progress: ProjectProgress | None = None
 
 
 class ListProjectsResponse(BaseModel):
@@ -318,6 +351,7 @@ def _build_list_response(
             project_root=p.project_root,
             label=p.label,
             page_count=p.page_count,
+            progress=_project_progress_to_wire(p.progress),
         )
         for p in enumerated
     ]
@@ -777,21 +811,16 @@ def set_source_root(
     # Update in-process carrier so next GET/discover sees the new root.
     src_carrier.set(resolved)
 
-    # Re-scan under the new root and return the list.
+    # Re-scan under the new root and return the list. Serializes via
+    # ``ProjectKey.model_dump`` (rather than a hand-built field list) so a
+    # future field addition to ``ProjectKey`` can't silently go missing
+    # from this response the way a manual list would risk.
     response = _build_list_response(resolved, carrier, config_source="yaml")
     return JSONResponse(
         status_code=200,
         content={
             "projects_root": str(response.projects_root),
-            "projects": [
-                {
-                    "project_id": p.project_id,
-                    "project_root": str(p.project_root),
-                    "label": p.label,
-                    "page_count": p.page_count,
-                }
-                for p in response.projects
-            ],
+            "projects": [p.model_dump(mode="json") for p in response.projects],
         },
     )
 

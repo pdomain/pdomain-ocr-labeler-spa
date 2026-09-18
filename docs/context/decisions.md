@@ -942,6 +942,90 @@ a source root's total file/page count grows much larger, or if
 `GET /api/projects` starts being called often enough (e.g. polling) for
 per-call cost to matter.
 
+## 2026-09-18 — Project-list progress: shipped, once the counts journal made it cheap (progress-P2-ROOT-followup)
+
+### Context
+
+The P2-ROOT entry above deferred progress because the only source at the
+time was a live per-page event-store walk — ~200ms for a 20-project, 50-
+page-each fixture, scaling with total pages across every project on every
+`GET /api/projects` call. Two things changed since: `core/review_counts.py`
+landed a `WordReviewCountsJournal` — one small per-project JSONL file,
+written where a page is already saved, read back with `latest_by_page()` —
+and archive semantics were decided closed ("the labeler has no archive",
+same day, below), which is what let the Active/Complete filter chips come
+back without an Archived third.
+
+### Decision
+
+1. `EnumeratedProject` (`core/project_enumeration.py`) and `ProjectKey`
+   (`api/projects.py`) both gain `progress: ProjectProgress | None`,
+   following `page_count`'s precedent for failure exactly: a project whose
+   journal can't be read degrades that one entry's `progress` to `None`,
+   never the whole list.
+2. `progress` is `None` — not a `ProjectProgress` with zeros — whenever
+   there is no honest number: a `book-labeling-manifest.json` or
+   `labeling-bundle.json` project (neither ever writes to this journal;
+   they validate through `ImportedTextValidationLog` instead of
+   `save_page_content_to_store` — `api.review_queue`'s `_word_entry` drew
+   the same line first), an unknown `page_count` (no denominator), an
+   unreadable journal, or a journal with no rows yet. That last case is the
+   ruling this entry is built around: a project that has never had a page
+   saved since the journal existed is unknown, not 0% — it is modeled the
+   same as an unavailable page count, and the root card says "Progress not
+   tracked" rather than showing a bar at 0.
+3. Partial coverage is never silently collapsed into a percentage over the
+   counted subset. `ProjectProgress` carries `pages_counted`,
+   `pages_not_counted`, and `is_lower_bound` — the same shape
+   `api/review_queue.py`'s `ReviewQueueKindEntry` already uses for the same
+   problem — and the card renders "N% of M tracked pages · K not yet
+   tracked" instead of a bare percentage whenever `pages_not_counted > 0`.
+4. **Complete** means every page counted (`pages_not_counted == 0`) AND
+   every counted word validated AND at least one word counted — never
+   `True` over a subset. A project complete over 40 of its 300 pages is not
+   complete; it is `pages_not_counted: 260, complete: false`.
+5. The Active / Complete filter chips (removed by P2-ROOT above) come back.
+   No Archived chip — that is not a gap, it is "the labeler has no archive"
+   (below) made permanent. "Active" is the complement of "Complete", not of
+   "has some progress" — a project with unknown progress counts as Active,
+   because unknown progress is not proof of completion either.
+
+### Cost, measured before committing to this design
+
+Reading one project's journal costs about the same order of magnitude as
+the `page_count` scan it sits next to: ~2.6ms/project for 20 projects of
+300 pages each in the journal's steady state (one row per page, ~51ms
+total), ~2.3ms/project at 200 projects (~454ms total). A journal sitting
+right at its own pre-compaction ceiling (`WordReviewCountsJournal` compacts
+past 10 rows per page) costs substantially more — ~37ms/project for the
+same 20-project fixture (~738ms total) — because every extra row is parsed
+and discarded on every read until the next append triggers compaction.
+End to end, through the real `GET /api/projects` route (`TestClient`, not
+just the journal read in isolation): ~58ms/call for 20 projects × 300 pages
+with `page_count` alone, ~143ms/call with `progress` added — call it
++85ms, or about +4ms/project, at a fixture size an order of magnitude
+above anything this repo's dev fixtures have needed so far. Acceptable at
+today's scale; revisit together with `page_count`'s own cost caveat if
+either the per-call cost or the compaction ceiling becomes a problem in
+practice, e.g. if `GET /api/projects` starts being polled.
+
+### Tests
+
+`tests/unit/core/test_project_enumeration.py` — no journal (unknown, not
+zero), full coverage complete, full coverage not-yet-complete, partial
+coverage (lower bound, never complete), `pages_not_counted` clamped at 0
+rather than going negative, page-count-unknown forces progress unknown too,
+journal-read failure degrades one entry, both non-journal shapes stay
+`None` even with a stray journal file present, and the dataclass is frozen.
+`tests/integration/test_projects_router.py` — the same cases through
+`GET /api/projects` and through `POST /api/projects/source-root` (which
+was serializing `ProjectKey` by hand; switched to `model_dump` so a future
+field addition can't go missing from that route the way `progress` would
+have had to be added twice otherwise). Frontend: `RootPage.test.tsx` covers
+all four card states ("not tracked", validated percentage, "Complete", and
+the partial lower-bound caption) and the Active/Complete/no-Archived filter
+behavior, including that "Active" includes unknown-progress projects.
+
 ## 2026-09-18 — Glyph annotations reuse the char-sidecar durability path (Wave 2 T3)
 
 ### Context

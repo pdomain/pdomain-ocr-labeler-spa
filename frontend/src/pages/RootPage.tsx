@@ -2,8 +2,12 @@
 // Issue #84 (EmptyProjectState) + Issue #274 (RootPage + session-state fetch) + Slice 27.
 // Issue #327 (auto-resume after server restart: POST /api/projects/load before navigate).
 // P5.h redesign: project cards with thumbnail + page count + search + hero band.
-// P2-ROOT: real page_count metadata on cards; the Active/Complete/Archived
-// filter chips (P5.h Gap 60) were removed — see docs/context/decisions.md.
+// P2-ROOT: real page_count metadata on cards. The Active/Complete/Archived
+// filter chips (P5.h Gap 60) were removed on 2026-09-18 because none of the
+// three had a real data source, then Active/Complete came back once
+// per-project progress did (progress-P2-ROOT-followup) — see
+// docs/context/decisions.md. There is no archive (same decision doc,
+// "the labeler has no archive"), so Archived stays gone for good.
 // Spec: docs/specs/2026-05-12-root-page-design.md + 2026-05-15-hifi-redesign-plan.md Slice 27 + P5.h
 // Gaps closed: 59 (project cards redesign), 60 (search field + hero band)
 //
@@ -28,6 +32,33 @@ import { dialogStore, useDialogStore } from "../stores/dialog-store";
 type SessionStateResponse = components["schemas"]["SessionStateResponse"];
 type ListProjectsResponse = components["schemas"]["ListProjectsResponse"];
 type ProjectKey = components["schemas"]["ProjectKey"];
+type ProjectProgress = components["schemas"]["ProjectProgress"];
+
+/** Status filter for the project grid — Active / Complete only (no Archived;
+ * the labeler has no archive — see docs/context/decisions.md). */
+type ProjectFilter = "all" | "active" | "complete";
+
+const FILTER_LABELS: Record<ProjectFilter, string> = {
+  all: "All",
+  active: "Active",
+  complete: "Complete",
+};
+
+/** A project counts as "complete" for the filter/badge only when its own
+ * `progress.complete` says so — never inferred from a missing or partial
+ * `progress` (see `ProjectProgress` on the backend for what `complete`
+ * requires: every page counted, every counted word validated). */
+function isProjectComplete(project: ProjectKey): boolean {
+  return project.progress?.complete === true;
+}
+
+/** `validated_words / total_words` as a whole-number percent, or `null`
+ * when there is nothing to divide (no counted words) — callers must treat
+ * `null` as "cannot render a percentage", not as 0%. */
+function progressPercent(progress: ProjectProgress): number | null {
+  if (progress.total_words <= 0) return null;
+  return Math.round((progress.validated_words / progress.total_words) * 100);
+}
 
 const API_BASE = typeof window !== "undefined" ? window.location.origin : "http://localhost:8000";
 
@@ -125,14 +156,19 @@ function HeroBand() {
 
 // ─── Project card ─────────────────────────────────────────────────────────────
 
-/** Project card with thumbnail + page count + action menu.
+/** Project card with thumbnail + page count + progress + action menu.
  *
- * P2-ROOT: no validation-progress UI here. Computing per-project
- * reviewed-page counts requires replaying each page's event-store
- * aggregate, which does not scale to "every project, every list
- * request" — see ``docs/context/decisions.md`` (P2-ROOT). Only
- * ``page_count`` (a cheap directory scan) is real metadata; there is
- * no progress fraction to render a bar for.
+ * `project.progress` is `null` whenever the backend has no honest number to
+ * report (unsupported project shape, unreadable journal, or a journal with
+ * no rows yet — a project that has never had a page saved since the counts
+ * journal existed is unknown, not 0%). The card renders that as "Progress
+ * not tracked", never a bare 0% — see
+ * `core.project_enumeration.ProjectProgress` on the backend.
+ *
+ * When `progress` is present but `is_lower_bound` is true, the percentage
+ * covers only the pages the journal has counted — the card says so
+ * explicitly rather than presenting a partial-coverage fraction as the
+ * project's real progress.
  */
 function ProjectCard({ project }: { project: ProjectKey }) {
   const navigate = useNavigate();
@@ -183,6 +219,14 @@ function ProjectCard({ project }: { project: ProjectKey }) {
   // that as "unavailable" rather than a bare dash.
   const pageCount = project.page_count ?? null;
 
+  // progress-P2-ROOT-followup: progress is null whenever the backend has
+  // no honest number (see the ProjectCard doc comment). percent is null
+  // both when progress itself is null and when progress is present but
+  // has nothing counted to divide by (see progressPercent) — both render
+  // the same "not tracked" copy.
+  const progress = project.progress ?? null;
+  const percent = progress !== null ? progressPercent(progress) : null;
+
   const isLoadError = openMutation.isError;
 
   return (
@@ -225,6 +269,37 @@ function ProjectCard({ project }: { project: ProjectKey }) {
           {pageCount !== null
             ? `${pageCount} page${pageCount === 1 ? "" : "s"}`
             : "Page count unavailable"}
+        </div>
+
+        {/* Progress */}
+        <div
+          data-testid={`project-card-progress-${project.project_id}`}
+          className="flex flex-col gap-1"
+        >
+          {progress === null || percent === null ? (
+            <span className="text-[11px] text-ink-4">Progress not tracked</span>
+          ) : (
+            <>
+              <div className="h-1.5 w-full rounded-full bg-bg-sunk overflow-hidden">
+                <div
+                  className={[
+                    "h-full rounded-full",
+                    progress.complete ? "bg-emerald-500" : "bg-accent",
+                  ].join(" ")}
+                  style={{ width: `${String(percent)}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-ink-3">
+                {progress.complete
+                  ? "Complete"
+                  : progress.is_lower_bound
+                    ? `${String(percent)}% of ${String(progress.pages_counted)} tracked page${
+                        progress.pages_counted === 1 ? "" : "s"
+                      } · ${String(progress.pages_not_counted)} not yet tracked`
+                    : `${String(percent)}% validated`}
+              </span>
+            </>
+          )}
         </div>
 
         {/* Source path */}
@@ -295,19 +370,23 @@ function ProjectCard({ project }: { project: ProjectKey }) {
 
 // ─── ProjectListView ──────────────────────────────────────────────────────────
 
-/** Project list view — hero band + search + card grid.
+/** Project list view — hero band + search + filter chips + card grid.
  *
- * P2-ROOT: the former Active / Complete / Archived filter chips are
- * REMOVED, not wired up as no-ops. None of the three has a real,
- * cheap data source: "archived" has no defined semantics anywhere in
- * this codebase (a separate, undecided product question — PGDP item
- * 9), and "complete" needs review-progress data that this iteration
- * deliberately does not compute (see ``docs/context/decisions.md``
- * P2-ROOT). Re-add filtering once that data exists — the same
- * needs-spec precedent already used for the per-card "Archive" stub.
+ * P2-ROOT removed the former Active / Complete / Archived chips because
+ * none had a real data source. progress-P2-ROOT-followup brings back
+ * Active and Complete now that `ProjectKey.progress` exists — see
+ * `isProjectComplete`. There is no Archived chip: the labeler has no
+ * archive at all (docs/context/decisions.md, "the labeler has no
+ * archive"), not just an undefined one, so there is nothing for that
+ * chip to filter on, permanently.
+ *
+ * "Active" is deliberately the complement of "Complete" — it includes
+ * projects with unknown progress, not just partially-validated ones,
+ * because unknown progress is not proof of completion either.
  */
 function ProjectListView({ projects }: { projects: ProjectKey[] }) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ProjectFilter>("all");
   // P4.2: confirm dialog for destructive card actions (delete). Same
   // dialogStore-driven pattern as ProjectPage — the store holds
   // title/body/onConfirm; this view renders the single dialog instance.
@@ -317,17 +396,29 @@ function ProjectListView({ projects }: { projects: ProjectKey[] }) {
     dialogStore.open("sourceFolder");
   };
 
-  // Filter by search query (case-insensitive match on label + project_id).
   const filteredProjects = useMemo(() => {
-    if (!searchQuery.trim()) return projects;
-    const q = searchQuery.toLowerCase();
-    return projects.filter(
-      (p) =>
-        (p.label || "").toLowerCase().includes(q) ||
-        p.project_id.toLowerCase().includes(q) ||
-        p.project_root.toLowerCase().includes(q),
-    );
-  }, [projects, searchQuery]);
+    let list = projects;
+
+    // Text search (case-insensitive match on label + project_id + path).
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        (p) =>
+          (p.label || "").toLowerCase().includes(q) ||
+          p.project_id.toLowerCase().includes(q) ||
+          p.project_root.toLowerCase().includes(q),
+      );
+    }
+
+    // Status filter.
+    if (statusFilter === "complete") {
+      list = list.filter((p) => isProjectComplete(p));
+    } else if (statusFilter === "active") {
+      list = list.filter((p) => !isProjectComplete(p));
+    }
+
+    return list;
+  }, [projects, searchQuery, statusFilter]);
 
   return (
     <div className="flex flex-col h-full bg-bg-page">
@@ -356,6 +447,34 @@ function ProjectListView({ projects }: { projects: ProjectKey[] }) {
             aria-label="Search projects"
             className="w-full pl-8 pr-3 py-1.5 text-[12px] bg-bg-sunk border border-border-2 rounded-sm focus:outline-hidden focus:border-accent text-ink-1 placeholder:text-ink-4 transition-colors"
           />
+        </div>
+
+        {/* Filter chips — Active / Complete only, see the ProjectListView doc comment. */}
+        <div
+          data-testid="root-filter-chips"
+          className="flex items-center gap-1 flex-wrap"
+          role="group"
+          aria-label="Filter projects"
+        >
+          {(Object.keys(FILTER_LABELS) as ProjectFilter[]).map((f) => (
+            <button
+              key={f}
+              type="button"
+              data-testid={`root-filter-chip-${f}`}
+              data-active={statusFilter === f ? "true" : undefined}
+              onClick={() => {
+                setStatusFilter(f);
+              }}
+              className={[
+                "text-[11px] px-2.5 py-1 rounded-full border transition-colors",
+                statusFilter === f
+                  ? "border-accent bg-accent/10 text-ink-1 font-medium"
+                  : "border-border-2 bg-bg-raised text-ink-3 hover:border-border-1 hover:text-ink-2",
+              ].join(" ")}
+            >
+              {FILTER_LABELS[f]}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -390,6 +509,13 @@ function ProjectListView({ projects }: { projects: ProjectKey[] }) {
               className="text-center py-16 text-ink-3 text-[13px]"
             >
               No projects match &ldquo;{searchQuery}&rdquo;
+            </div>
+          ) : statusFilter !== "all" ? (
+            <div
+              data-testid="root-empty-filter"
+              className="text-center py-16 text-ink-3 text-[13px]"
+            >
+              No {FILTER_LABELS[statusFilter].toLowerCase()} projects
             </div>
           ) : (
             <div
