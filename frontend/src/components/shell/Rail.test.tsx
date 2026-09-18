@@ -440,3 +440,104 @@ describe("Rail — 'what to review next' kind badge", () => {
     expect(badge).toHaveAttribute("title", expect.not.stringContaining("at least"));
   });
 });
+
+// ─── Explicit-pick override indicator (reviewer finding, medium) ───────────
+// The badge always names the auto-picked kind; the Queue drawer's kind
+// selector can pick a different one for `]`/`[` to follow
+// (useRegionReviewHotkeys.ts). Nothing said so once the drawer was closed —
+// a person could see "Page kind" on the rail, press `]`, and land on a word
+// page with no explanation.
+
+describe("Rail — explicit-pick override indicator", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    railStore.reset();
+    useUiPrefs.setState({
+      layerVisibility: { block: true, paragraph: true, line: true, word: true },
+      drawerOpen: false,
+      drawerTab: "worklist",
+      reviewQueueKind: null,
+    });
+  });
+
+  it("shows nothing with no explicit pick", async () => {
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([kindEntry({ kind: "page_kind", outstanding: 40, total: 80 })]),
+      ),
+    );
+    renderRail("proj-1");
+
+    await screen.findByTestId("rail-queue-next");
+    expect(screen.queryByTestId("rail-queue-override")).not.toBeInTheDocument();
+  });
+
+  it("shows nothing when the explicit pick matches the auto-picked kind", async () => {
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([kindEntry({ kind: "page_kind", outstanding: 40, total: 80 })]),
+      ),
+    );
+    useUiPrefs.setState({ reviewQueueKind: "page_kind" });
+    renderRail("proj-1");
+
+    await screen.findByTestId("rail-queue-next");
+    expect(screen.queryByTestId("rail-queue-override")).not.toBeInTheDocument();
+  });
+
+  it("names what the keys follow when it differs from the badge's auto pick", async () => {
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([
+          kindEntry({ kind: "page_kind", outstanding: 40, total: 80 }),
+          kindEntry({ kind: "word", outstanding: 9, total: 100 }),
+        ]),
+      ),
+    );
+    useUiPrefs.setState({ reviewQueueKind: "word" });
+    renderRail("proj-1");
+
+    const badge = await screen.findByTestId("rail-queue-next");
+    expect(badge).toHaveTextContent("Page kind");
+    const override = await screen.findByTestId("rail-queue-override");
+    expect(override).toHaveTextContent("Word");
+  });
+
+  it("clicking the override clears the explicit pick", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([
+          kindEntry({ kind: "page_kind", outstanding: 40, total: 80 }),
+          kindEntry({ kind: "word", outstanding: 9, total: 100 }),
+        ]),
+      ),
+    );
+    useUiPrefs.setState({ reviewQueueKind: "word" });
+    renderRail("proj-1");
+
+    await user.click(await screen.findByTestId("rail-queue-override"));
+
+    expect(useUiPrefs.getState().reviewQueueKind).toBeNull();
+    await waitFor(() =>
+      expect(screen.queryByTestId("rail-queue-override")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("still names the override when nothing is auto-actionable", async () => {
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([
+          kindEntry({ kind: "page_kind", outstanding: 0, total: 80 }),
+          kindEntry({ kind: "word", outstanding: 9, total: 100 }),
+        ]),
+      ),
+    );
+    useUiPrefs.setState({ reviewQueueKind: "word" });
+    renderRail("proj-1");
+
+    const override = await screen.findByTestId("rail-queue-override");
+    expect(override).toHaveTextContent("Word");
+    expect(screen.queryByTestId("rail-queue-next")).not.toBeInTheDocument();
+  });
+});

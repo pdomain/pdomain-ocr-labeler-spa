@@ -29,6 +29,7 @@ import {
   useBookReviewQueue,
   firstActionableKind,
   REVIEW_QUEUE_KIND_LABELS,
+  type ReviewQueueKindName,
 } from "../../hooks/useBookReviewQueue";
 import { LAYER_COLORS } from "../BBoxOverlay";
 import { dialogStore } from "../../stores/dialog-store";
@@ -225,6 +226,41 @@ function QueueNextBadge({ kind, label, count, isLowerBound, onClick }: QueueNext
   );
 }
 
+// ─── Explicit-pick override indicator ──────────────────────────────────────
+// Reviewer finding (medium): the badge above always names the auto-picked
+// kind (firstActionableKind), but `]`/`[` follow an explicit Queue-drawer
+// pick when one exists (useRegionReviewHotkeys.ts) — a person could see
+// "Page kind" on the rail, press `]`, and land on a word page with no
+// explanation once the drawer was closed. This stays visible for exactly as
+// long as the override is actually in effect (the explicit pick differs
+// from the auto pick, including "nothing is auto-actionable"), and clicking
+// it clears the pick — falling back to the auto default makes the
+// difference legible without forcing a trip back into the Queue drawer.
+
+interface QueueOverrideIndicatorProps {
+  label: string;
+  onClear: () => void;
+}
+
+function QueueOverrideIndicator({ label, onClear }: QueueOverrideIndicatorProps) {
+  return (
+    <button
+      type="button"
+      data-testid="rail-queue-override"
+      title={`[ and ] follow ${label}, not the badge above — click to follow the badge again`}
+      aria-label={`Bracket keys follow ${label.toLowerCase()}, not the kind named above`}
+      onClick={onClear}
+      className={cn(
+        "mx-1 mb-1 flex items-center gap-1 px-2 py-1 rounded-sm select-none",
+        "bg-bg-raised text-ink-2 border border-border-2 hover:bg-bg-sunk transition-colors",
+      )}
+    >
+      <span className="text-[8px] uppercase tracking-wide text-ink-3 shrink-0">Keys:</span>
+      <span className="text-[9px] font-semibold truncate">{label}</span>
+    </button>
+  );
+}
+
 // ─── Layer visibility toggle ─────────────────────────────────────────────────
 
 interface LayerToggleRowProps {
@@ -273,6 +309,20 @@ export function Rail({ projectId }: RailProps) {
   // One-answer-to-what-to-review-next: the book-wide "next kind" badge.
   const bookQueueQ = useBookReviewQueue(projectId);
   const nextKind = firstActionableKind(bookQueueQ.data?.kinds ?? []);
+
+  // Explicit-pick override indicator: `]`/`[` follow this instead of
+  // `nextKind` above whenever it is set and differs (useRegionReviewHotkeys.ts
+  // resolves the same way). `null` covers "nothing auto-actionable" so the
+  // comparison stays correct even when `nextKind` itself is undefined.
+  const explicitReviewQueueKind = useSyncExternalStore(
+    useUiPrefs.subscribe,
+    () => useUiPrefs.getState().reviewQueueKind,
+    () => useUiPrefs.getState().reviewQueueKind,
+  );
+  const overrideKind: ReviewQueueKindName | null =
+    explicitReviewQueueKind !== null && explicitReviewQueueKind !== (nextKind?.kind ?? null)
+      ? explicitReviewQueueKind
+      : null;
 
   // Subscribe to rail store via useSyncExternalStore for React 18+.
   const state = useSyncExternalStore(railStore.subscribe, railStore.getState, railStore.getState);
@@ -394,6 +444,16 @@ export function Rail({ projectId }: RailProps) {
               drawerTab: "queue",
               reviewQueueKind: nextKind.kind,
             });
+          }}
+        />
+      )}
+
+      {/* Explicit Queue-drawer pick, when it overrides the auto default */}
+      {overrideKind !== null && (
+        <QueueOverrideIndicator
+          label={REVIEW_QUEUE_KIND_LABELS[overrideKind]}
+          onClear={() => {
+            useUiPrefs.setState({ reviewQueueKind: null });
           }}
         />
       )}
