@@ -366,6 +366,51 @@ def test_word_newest_row_wins_when_a_page_is_saved_twice(loaded_client: TestClie
     assert word["pages_not_counted"] == 0
 
 
+def test_word_zero_words_are_not_counted_as_done_without_a_confirmed_blank_kind(
+    loaded_client: TestClient,
+) -> None:
+    """BUG-RELOAD-1: reload OCR can legitimately return zero words for a page.
+
+    Until a person confirms that page's kind as blank, the zero must not
+    read as satisfied review work — it is indistinguishable, from the count
+    alone, from OCR failing to find text a person can plainly see.
+    """
+    project_root = _project_root(loaded_client)
+    _seed_word_counts(project_root, page_index=0, total_words=0, validated_words=0)
+    for idx in range(1, _TOTAL_PAGES):
+        _seed_word_counts(project_root, page_index=idx, total_words=1, validated_words=1)
+
+    resp = loaded_client.get(_REVIEW_QUEUE)
+    word = _kind(resp.json(), "word")
+
+    assert word["total"] == _TOTAL_PAGES - 1
+    assert word["outstanding"] == 0
+    assert word["pages_not_counted"] == 1
+    assert word["is_lower_bound"] is True
+    assert word["first_page_index"] == 0
+
+
+def test_word_zero_words_count_as_done_once_the_page_kind_is_confirmed_blank(
+    loaded_client: TestClient,
+) -> None:
+    project_root = _project_root(loaded_client)
+    PageKindReviewedStore(project_root).mark_reviewed(
+        0, "2026-09-08T10:00:00+00:00", kind=PageKind.BLANK, method="single"
+    )
+    _seed_word_counts(project_root, page_index=0, total_words=0, validated_words=0)
+    for idx in range(1, _TOTAL_PAGES):
+        _seed_word_counts(project_root, page_index=idx, total_words=1, validated_words=1)
+
+    resp = loaded_client.get(_REVIEW_QUEUE)
+    word = _kind(resp.json(), "word")
+
+    assert word["total"] == _TOTAL_PAGES - 1
+    assert word["outstanding"] == 0
+    assert word["pages_not_counted"] == 0
+    assert word["is_lower_bound"] is False
+    assert word["first_page_index"] is None
+
+
 # ── typography ───────────────────────────────────────────────────────────────
 
 

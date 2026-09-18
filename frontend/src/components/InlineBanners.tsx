@@ -3,11 +3,16 @@
 // Spec: docs/specs/2026-05-12-notifications-design.md §inline banners
 // Issue #233
 //
-// Three distinct banners:
+// Four distinct banners:
 //   - OcrFailedBanner: shown when pageRecord.ocr_failed === true
 //   - ProjectNotFoundBanner: shown when routing to a missing project_id
 //   - ImageDriftBanner: shown when PagePayload.image_drift is set (the page's
 //     source image changed on disk since it was OCR'd)
+//   - EmptyOcrBanner: shown when OCR completed for this page and found zero
+//     words (BUG-RELOAD-1, docs/context/open-findings.md) — the SPA cannot
+//     tell that apart from a genuinely blank page without a person's
+//     confirmation, so it surfaces the ambiguity rather than rendering a
+//     silent, apparently-finished page.
 //
 // These are NOT toasts — they are rendered inline in the page content area.
 // Uses pdomain-ui Banner primitive (tone mapping: error→danger, warning→warning, info→info).
@@ -89,6 +94,32 @@ export function ImageDriftBanner({ imageDrift, message }: ImageDriftBannerProps)
     <Banner tone="warning" data-testid="banner-image-drift" role="alert">
       Image on disk has changed. Reload OCR from the toolbar to continue editing.
       {message ? ` (${message})` : ""}
+    </Banner>
+  );
+}
+
+interface EmptyOcrBannerProps {
+  /** True when OCR ran for this page and found zero words. */
+  emptyOcr?: boolean;
+}
+
+/**
+ * Inline banner shown when OCR completed for this page and found no text at
+ * all — the same zero-word result a genuinely blank page produces
+ * (BUG-RELOAD-1, `docs/context/open-findings.md`). Nothing recorded at OCR
+ * time distinguishes "this page is blank" from "OCR failed to find text a
+ * person can plainly see", so rather than guess, the SPA surfaces the
+ * ambiguity: look at the page image, then either confirm its kind as Blank
+ * or reload OCR. Never shown once a person has confirmed the page's kind as
+ * Blank (`PagePayload.page_kind === "blank"`) — see the caller.
+ * Spec: "OCR found no text on this page" sticky warning.
+ */
+export function EmptyOcrBanner({ emptyOcr }: EmptyOcrBannerProps) {
+  if (!emptyOcr) return null;
+  return (
+    <Banner tone="warning" data-testid="banner-empty-ocr" role="alert">
+      OCR found no text on this page. If the page is genuinely blank, confirm its kind as Blank;
+      otherwise, reload OCR from the toolbar.
     </Banner>
   );
 }

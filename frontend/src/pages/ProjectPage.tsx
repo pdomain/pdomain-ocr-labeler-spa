@@ -121,7 +121,7 @@ import { BulkWordActions } from "../components/BulkWordActions";
 import { BusyOverlay, ProjectLoadingOverlay } from "../components/BusyOverlay";
 import { PageLoadStatus } from "../components/PageLoadStatus";
 import PageImageCanvas from "../components/PageImageCanvas";
-import { OcrFailedBanner, ImageDriftBanner } from "../components/InlineBanners";
+import { OcrFailedBanner, ImageDriftBanner, EmptyOcrBanner } from "../components/InlineBanners";
 import { TextTabs } from "../components/TextTabs";
 import { WordMatchView } from "../components/WordMatchView";
 import { PlaintextEditor } from "../components/PlaintextEditor";
@@ -411,6 +411,20 @@ export default function ProjectPage() {
       glyphs_reviewed: words.filter((w) => w.glyph_annotations != null).length,
     };
   }, [pagePayload]);
+
+  // BUG-RELOAD-1 (docs/context/open-findings.md): OCR can legitimately
+  // return zero words for a page, and nothing recorded at OCR time
+  // distinguishes that from OCR failing to find text a person can plainly
+  // see. Gated on a successfully loaded page (no loader error, no pending
+  // load-page job — either of those already has its own banner / status
+  // surface) so this never fires while the page is still loading, and on
+  // the page's kind not already being confirmed Blank by a person.
+  const emptyOcr =
+    pagePayload != null &&
+    pagePayload.page_load_error == null &&
+    pageLoadJobId == null &&
+    lines.length === 0 &&
+    pagePayload.page_kind !== "blank";
 
   // ── Breadcrumb / hierarchy hotkeys (Alt+arrows) ────────────────────────
   // Registered at the page level so they work anywhere on the project page.
@@ -1144,6 +1158,7 @@ export default function ProjectPage() {
           imageDrift={pagePayload?.image_drift != null}
           message={pagePayload?.image_drift?.message ?? null}
         />
+        <EmptyOcrBanner emptyOcr={emptyOcr} />
       </div>
 
       {/*
