@@ -44,9 +44,11 @@ from pdomain_ocr_labeler_spa.core.review_counts import PageWordCounts, WordRevie
 from pdomain_ocr_labeler_spa.core.typography_review import (
     ImportedTextBinding,
     ImportedTextValidationLog,
-    TypographyJournalEnvelope,
     stable_page_id,
-    stable_word_id,
+)
+from pdomain_ocr_labeler_spa.core.typography_review_counts import (
+    PageTypographyCounts,
+    TypographyReviewCountsJournal,
 )
 from pdomain_ocr_labeler_spa.settings import Settings
 from tests.unit.core.persistence.test_book_labeling_session import _write_book
@@ -149,98 +151,37 @@ def _seed_word_counts(
     )
 
 
-def _required_typography_labels() -> list[str]:
-    from pdomain_ocr_labeler_spa.api.typography import TYPOGRAPHY_TAXONOMY
-
-    return [label.value for label in TYPOGRAPHY_TAXONOMY.labels if label.required_for_completion]
-
-
-def _seed_typography_correction(
-    project_root: Path, *, page_index: int, word_text: str, correction_id: str, reviewed: bool
+def _seed_typography_counts(
+    project_root: Path, *, page_index: int, total_words: int, typography_reviewed_words: int
 ) -> None:
-    """Write one envelope keyed by ``stable_page_id`` — an ordinary project's key."""
-    _seed_typography_correction_for_page_id(
+    """Append one rollup row keyed by ``stable_page_id`` — an ordinary project's key.
+
+    Mirrors ``_seed_word_counts``: the review-queue route reads
+    ``TypographyReviewCountsJournal`` directly, the same way it reads
+    ``WordReviewCountsJournal`` for the ``word`` kind, so seeding this
+    rollup row is what stands in for a real
+    ``append_typography_correction`` call in these fast, route-focused
+    tests.
+    """
+    _seed_typography_counts_for_page_id(
         project_root,
         logical_page_id=stable_page_id(project_id=_PROJECT_ID, page_index=page_index),
-        word_text=word_text,
-        correction_id=correction_id,
-        reviewed=reviewed,
+        total_words=total_words,
+        typography_reviewed_words=typography_reviewed_words,
     )
 
 
-def _seed_typography_correction_for_page_id(
-    project_root: Path, *, logical_page_id: str, word_text: str, correction_id: str, reviewed: bool
+def _seed_typography_counts_for_page_id(
+    project_root: Path, *, logical_page_id: str, total_words: int, typography_reviewed_words: int
 ) -> None:
-    """Write one envelope straight to the journal file, under an explicit key.
-
-    Bypasses ``TypographyCorrectionLog.append``'s CAS validation against a
-    "current" binding — this route's reader (``TypographyCorrectionLog.
-    records()``) never validates on read, so a directly-written, internally
-    consistent envelope is exactly what it will see. ``logical_page_id`` is
-    explicit rather than derived, so this seeds correctly for both an
-    ordinary project's ``stable_page_id`` and a labeling-bundle project's
-    own ``page_id``.
-    """
-    from pdomain_book_tools.typography import GRAPHEME_SEGMENTATION_VERSION
-
-    from pdomain_ocr_labeler_spa.api.typography import TYPOGRAPHY_TAXONOMY
-
-    text_sha256 = hashlib.sha256(b"word").hexdigest()
-    word_id = stable_word_id(
-        project_id=_PROJECT_ID,
-        page_id=logical_page_id,
-        reading_order=0,
-        text=word_text,
+    """Append one rollup row under an explicit key — a labeling-bundle project's own ``page_id``."""
+    TypographyReviewCountsJournal(project_root).append(
+        PageTypographyCounts(
+            logical_page_id=logical_page_id,
+            total_words=total_words,
+            typography_reviewed_words=typography_reviewed_words,
+        )
     )
-    label_states = dict.fromkeys(_required_typography_labels(), "negative") if reviewed else {}
-    replacement = {
-        "word_id": word_id,
-        "text": "word",
-        "text_sha256": text_sha256,
-        "page_content_sha256": "e" * 64,
-        "image_artifact_sha256": "f" * 64,
-        "grapheme_map_version": GRAPHEME_SEGMENTATION_VERSION,
-        "taxonomy_version": TYPOGRAPHY_TAXONOMY.version,
-        "taxonomy_hash": TYPOGRAPHY_TAXONOMY.taxonomy_hash,
-        "label_states": label_states,
-        "spans": [],
-        "source_evidence_ids": ["seed"],
-        "whole_word_labels": [],
-        "word_revision": 1,
-        "review_state": "reviewed" if reviewed else "unreviewed",
-    }
-    correction = {
-        "correction_id": correction_id,
-        "word_id": word_id,
-        "revision": 1,
-        "supersedes_id": None,
-        "base_page_sha256": "a" * 64,
-        "base_image_sha256": "b" * 64,
-        "base_text_sha256": "c" * 64,
-        "base_word_revision": 0,
-        "replacement_text_sha256": text_sha256,
-        "replacement_page_sha256": "e" * 64,
-        "replacement_image_sha256": "f" * 64,
-        "replacement_page_head_sha256": "1" * 64,
-        "replacement_word_revision": 1,
-        "taxonomy_version": TYPOGRAPHY_TAXONOMY.version,
-        "taxonomy_hash": TYPOGRAPHY_TAXONOMY.taxonomy_hash,
-        "grapheme_map_version": GRAPHEME_SEGMENTATION_VERSION,
-        "page_head_sha256": "1" * 64,
-        "labeler_id": "reviewer@example.test",
-        "decision": "approved_edit",
-        "replacement": replacement,
-    }
-    envelope = TypographyJournalEnvelope.model_validate(
-        {
-            "logical_page_id": logical_page_id,
-            "correction": correction,
-        }
-    )
-    path = project_root / ".pd-pages" / "typography-corrections.jsonl"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(envelope.model_dump(mode="json"), sort_keys=True) + "\n")
 
 
 # ── Shape and ordering ───────────────────────────────────────────────────────
@@ -456,15 +397,14 @@ def test_typography_is_blocked_by_word_while_any_page_is_uncounted(loaded_client
     assert typography["blocked_by"] == "word"
 
 
-def test_typography_unblocks_and_counts_outstanding_from_the_journal(loaded_client: TestClient) -> None:
+def test_typography_unblocks_and_counts_outstanding_from_the_rollup(loaded_client: TestClient) -> None:
     project_root = _project_root(loaded_client)
     for idx in range(_TOTAL_PAGES):
         _seed_word_counts(project_root, page_index=idx, total_words=1, validated_words=1)
-
-    # Page 0's one word is typography-reviewed; the other three pages' words are not.
-    _seed_typography_correction(
-        project_root, page_index=0, word_text="word-on-page-0", correction_id="c-page0", reviewed=True
-    )
+        # Page 0's one word is typography-reviewed; the other three pages' are not.
+        _seed_typography_counts(
+            project_root, page_index=idx, total_words=1, typography_reviewed_words=1 if idx == 0 else 0
+        )
 
     resp = loaded_client.get(_REVIEW_QUEUE)
     typography = _kind(resp.json(), "typography")
@@ -473,6 +413,7 @@ def test_typography_unblocks_and_counts_outstanding_from_the_journal(loaded_clie
     assert typography["total"] == _TOTAL_PAGES
     assert typography["outstanding"] == _TOTAL_PAGES - 1
     assert typography["first_page_index"] == 1
+    assert typography["pages_not_counted"] == 0
     assert typography["is_lower_bound"] is True
 
 
@@ -480,9 +421,7 @@ def test_typography_incomplete_replacement_is_not_counted_when_unblocked(loaded_
     project_root = _project_root(loaded_client)
     for idx in range(_TOTAL_PAGES):
         _seed_word_counts(project_root, page_index=idx, total_words=1, validated_words=1)
-    _seed_typography_correction(
-        project_root, page_index=0, word_text="word-on-page-0", correction_id="c-page0", reviewed=False
-    )
+        _seed_typography_counts(project_root, page_index=idx, total_words=1, typography_reviewed_words=0)
 
     resp = loaded_client.get(_REVIEW_QUEUE)
     typography = _kind(resp.json(), "typography")
@@ -491,37 +430,85 @@ def test_typography_incomplete_replacement_is_not_counted_when_unblocked(loaded_
     assert typography["outstanding"] == _TOTAL_PAGES
 
 
-def test_typography_reports_unavailable_above_the_corrections_journal_size_threshold(
+def test_typography_reads_a_small_rollup_regardless_of_the_corrections_journal_size(
     loaded_client: TestClient,
 ) -> None:
-    """pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-review-
-    next.md: measured cost is ~80 microseconds a row, so a large corrections
-    journal cannot be read within a request. Above the threshold the route
-    reports ``available: false`` with a reason, the same honesty ``glyph``
-    already has, rather than computing a count that takes over a second.
-
-    The size check is a single ``stat()``, so the planted bytes need not be
-    valid JSON — the route must never attempt to read/parse a journal this
-    large in the first place.
+    """docs/issues/2026-09-18-typography-numerator-needs-a-per-page-rollup.md:
+    before the rollup, this entry answered its count by reading and parsing
+    the whole ``typography-corrections.jsonl``, at about 80 microseconds a
+    row, and refused to compute a count at all above 512 KiB. The rollup
+    removes that ceiling — a corrections journal far past the old limit
+    coexists here with a small, accurate rollup, and the route reports a
+    real count from the rollup alone. The planted bytes need not be valid
+    JSON: the route must never open this file to answer ``typography``.
     """
-    from pdomain_ocr_labeler_spa.api import review_queue
-
     project_root = _project_root(loaded_client)
     for idx in range(_TOTAL_PAGES):
         _seed_word_counts(project_root, page_index=idx, total_words=1, validated_words=1)
+        _seed_typography_counts(
+            project_root, page_index=idx, total_words=1, typography_reviewed_words=1 if idx == 0 else 0
+        )
     path = project_root / ".pd-pages" / "typography-corrections.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(b"x" * (review_queue._TYPOGRAPHY_CORRECTIONS_MAX_BYTES + 1))
+    path.write_bytes(b"x" * (512 * 1024 + 4096))  # past the old 512 KiB availability ceiling
 
     resp = loaded_client.get(_REVIEW_QUEUE)
     typography = _kind(resp.json(), "typography")
 
-    assert typography["available"] is False
+    assert typography["available"] is True
     assert typography["blocked_by"] is None
+    assert typography["total"] == _TOTAL_PAGES
+    assert typography["outstanding"] == _TOTAL_PAGES - 1
+    assert typography["first_page_index"] == 1
+
+
+def test_typography_reports_pages_not_counted_for_pages_with_no_rollup_row(loaded_client: TestClient) -> None:
+    """A page can be fully word-validated yet have no typography rollup row
+    of its own — either untouched, or corrected before this rollup existed.
+    The two are indistinguishable from a rollup-only read, so neither is
+    reported as a confidently wrong zero: the page is excluded from
+    ``total``/``outstanding`` and surfaced through ``pages_not_counted``,
+    mirroring how ``word`` already treats a page it has never saved.
+    """
+    project_root = _project_root(loaded_client)
+    for idx in range(_TOTAL_PAGES):
+        _seed_word_counts(project_root, page_index=idx, total_words=2, validated_words=2)
+    _seed_typography_counts(project_root, page_index=0, total_words=2, typography_reviewed_words=2)
+    # Pages 1..3 are fully word-validated but have no typography rollup row.
+
+    resp = loaded_client.get(_REVIEW_QUEUE)
+    typography = _kind(resp.json(), "typography")
+
+    assert typography["available"] is True
+    assert typography["blocked_by"] is None
+    assert typography["total"] == 2
     assert typography["outstanding"] == 0
-    assert typography["total"] == 0
-    assert typography["first_page_index"] is None
-    assert typography["unavailable_reason"]
+    assert typography["pages_not_counted"] == 3
+    assert typography["is_lower_bound"] is True
+
+
+def test_typography_reviewed_count_drops_when_the_newest_rollup_row_is_lower(
+    loaded_client: TestClient,
+) -> None:
+    """A revision that un-reviews a previously-reviewed word must lower the
+    page's rolled-up count — the newest row always wins, never a running
+    delta (docs/issues/2026-09-18-typography-numerator-needs-a-per-page-
+    rollup.md "What it would cost to build").
+    """
+    project_root = _project_root(loaded_client)
+    for idx in range(_TOTAL_PAGES):
+        _seed_word_counts(project_root, page_index=idx, total_words=1, validated_words=1)
+        _seed_typography_counts(project_root, page_index=idx, total_words=1, typography_reviewed_words=0)
+    _seed_typography_counts(project_root, page_index=0, total_words=1, typography_reviewed_words=1)
+
+    resp = loaded_client.get(_REVIEW_QUEUE)
+    assert _kind(resp.json(), "typography")["outstanding"] == _TOTAL_PAGES - 1
+
+    # A later revision on page 0 fails the completeness bar and un-reviews it.
+    _seed_typography_counts(project_root, page_index=0, total_words=1, typography_reviewed_words=0)
+
+    resp = loaded_client.get(_REVIEW_QUEUE)
+    assert _kind(resp.json(), "typography")["outstanding"] == _TOTAL_PAGES
 
 
 # ── one read per journal ─────────────────────────────────────────────────────
@@ -530,8 +517,6 @@ def test_typography_reports_unavailable_above_the_corrections_journal_size_thres
 def test_review_queue_reads_each_journal_once_per_request(
     loaded_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from pdomain_ocr_labeler_spa.core.typography_review import TypographyCorrectionLog
-
     project_root = _project_root(loaded_client)
     PageKindReviewedStore(project_root).mark_reviewed(
         0, "2026-09-08T10:00:00+00:00", kind=PageKind.BODY, method="single"
@@ -541,9 +526,7 @@ def test_review_queue_reads_each_journal_once_per_request(
     _accept_proposal(project_root, proposal_id="p1", region_id="region-1")
     for idx in range(_TOTAL_PAGES):
         _seed_word_counts(project_root, page_index=idx, total_words=2, validated_words=2)
-    _seed_typography_correction(
-        project_root, page_index=0, word_text="w0-text", correction_id="c0", reviewed=True
-    )
+    _seed_typography_counts(project_root, page_index=0, total_words=2, typography_reviewed_words=2)
 
     counts: dict[str, int] = {}
 
@@ -562,7 +545,7 @@ def test_review_queue_reads_each_journal_once_per_request(
     _counted(RegionProposalLog, "_read", "region_proposals")
     _counted(RegionDecisionLog, "decisions", "region_decisions")
     _counted(WordReviewCountsJournal, "_read_locked", "word_counts")
-    _counted(TypographyCorrectionLog, "records", "typography_corrections")
+    _counted(TypographyReviewCountsJournal, "_read_locked", "typography_review_counts")
 
     resp = loaded_client.get(_REVIEW_QUEUE)
 
@@ -573,7 +556,7 @@ def test_review_queue_reads_each_journal_once_per_request(
         "region_proposals": 1,
         "region_decisions": 1,
         "word_counts": 1,
-        "typography_corrections": 1,
+        "typography_review_counts": 1,
     }
 
 
@@ -770,15 +753,11 @@ def test_typography_for_a_single_bundle_project_uses_the_bundles_page_id(tmp_pat
         for word in bundle.words:
             _validate_bundle_word(bundle_root, bundle, word, validated=True)
 
-        # Seed one typography correction keyed by the bundle's OWN page_id —
-        # not stable_page_id(project_id, 0), which nothing writes for a
-        # bundle project.
-        _seed_typography_correction_for_page_id(
-            bundle_root,
-            logical_page_id=bundle.page_id,
-            word_text="alpha",
-            correction_id="c-alpha",
-            reviewed=True,
+        # Seed a rollup row keyed by the bundle's OWN page_id — not
+        # stable_page_id(project_id, 0), which nothing writes for a bundle
+        # project.
+        _seed_typography_counts_for_page_id(
+            bundle_root, logical_page_id=bundle.page_id, total_words=3, typography_reviewed_words=1
         )
 
         resp = client.get("/api/projects/bundle-project/review-queue")
