@@ -16,6 +16,12 @@ Output layout::
 style label otherwise (e.g. ``"italics"``).  Multiple style filters
 produce multiple subfolders in one run.
 
+When recognition export runs, ``recognition/glyph_features.json`` sits next
+to ``recognition/labels.json`` — the glyph-feature sidecar
+``pdomain-ocr-training`` reads to slice CER/WER by ligature/long-s/swash
+presence.  Only written when at least one exported word carries reviewed
+glyph annotations; see ``glyph_sidecar.py``.
+
 Cancel support: the handler checks ``runner.is_cancelled(job_id)`` (the
 shared cancel-check helper on ``JobRunner``) between page iterations.  On
 cancellation it ``shutil.rmtree``s the partial output dir and reports a
@@ -71,6 +77,8 @@ from ...notifications import NotificationKind, NotificationQueue
 from ...project_state import ProjectState
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from ..runner import Job, JobRunner
 
 log = logging.getLogger(__name__)
@@ -553,6 +561,13 @@ def _export_page(
             word_filter=wf_callable,
             label_formatter=label_formatter,
         )
+        _write_page_glyph_sidecar(
+            page,
+            output_dir=output_dir,
+            prefix=prefix,
+            word_filter=wf_callable,
+            has_label_formatter=label_formatter is not None,
+        )
 
 
 def _classification_label_formatter(word: Any) -> dict[str, Any]:
@@ -579,6 +594,50 @@ def _classification_label_formatter(word: Any) -> dict[str, Any]:
             comp: (comp in word_comps) for comp in ("superscript", "subscript", "footnote marker", "drop cap")
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Glyph-feature sidecar (issue #8/#9 join — see glyph_sidecar.py)
+# ---------------------------------------------------------------------------
+
+
+def _write_page_glyph_sidecar(
+    page: Any,
+    *,
+    output_dir: Path,
+    prefix: str,
+    word_filter: Callable[[Any], bool] | None,
+    has_label_formatter: bool,
+) -> None:
+    """Write this page's contribution to the recognition glyph-feature sidecar.
+
+    Runs immediately after ``generate_doctr_recognition_training_set`` so it
+    sees the same GT-first ``word.bounding_box`` state that call used
+    (``_prepare_page_gt_first`` already ran earlier in ``_export_page``) —
+    the crop ids computed here must match the keys that call just wrote to
+    ``recognition/labels.json``. See ``glyph_sidecar.py`` for the crop-id
+    formula and the reviewed-vs-never-reviewed distinction.
+    """
+    from .glyph_sidecar import build_glyph_feature_entries, write_glyph_feature_sidecar
+
+    if page.cv2_numpy_page_image is None:
+        return
+    img_height, img_width = page.cv2_numpy_page_image.shape[:2]
+
+    entries = build_glyph_feature_entries(
+        page,
+        prefix=prefix,
+        img_width=img_width,
+        img_height=img_height,
+        word_filter=word_filter,
+        has_label_formatter=has_label_formatter,
+    )
+    write_glyph_feature_sidecar(
+        output_dir / "recognition",
+        prefix=prefix,
+        page_index=page.page_index,
+        new_entries=entries,
+    )
 
 
 # ---------------------------------------------------------------------------
