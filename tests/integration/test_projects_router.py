@@ -258,6 +258,57 @@ def test_get_projects_selected_omitted_if_loaded_outside_root(tmp_path: Path, pr
 
 
 # ──────────────────────────────────────────────────────────────────────
+# GET /api/projects — page_count (P2-ROOT)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_get_projects_page_count_reflects_known_content(
+    client_with_root: TestClient, projects_root: Path
+) -> None:
+    """A project with real image files on disk reports its true count."""
+    (projects_root / "alpha" / "001.png").write_bytes(b"")
+    (projects_root / "alpha" / "002.png").write_bytes(b"")
+    (projects_root / "alpha" / "notes.txt").write_bytes(b"")  # not an image
+
+    body = client_with_root.get("/api/projects").json()
+    alpha_entry = next(p for p in body["projects"] if p["project_id"] == "alpha")
+    assert alpha_entry["page_count"] == 2
+
+
+def test_get_projects_page_count_zero_for_empty_project(client_with_root: TestClient) -> None:
+    """An empty project directory reports ``page_count: 0`` — a known zero."""
+    body = client_with_root.get("/api/projects").json()
+    beta_entry = next(p for p in body["projects"] if p["project_id"] == "Beta")
+    assert beta_entry["page_count"] == 0
+
+
+def test_get_projects_page_count_null_for_unreadable_project(
+    client_with_root: TestClient, projects_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A project directory that can't be read degrades to
+    ``page_count: null`` — the rest of the list still returns 200 rather
+    than the whole request failing on one bad entry.
+    """
+    resolved_alpha = (projects_root / "alpha").resolve()
+    original_iterdir = Path.iterdir
+
+    def _flaky_iterdir(self: Path) -> Iterator[Path]:
+        if self == resolved_alpha:
+            raise PermissionError(f"denied: {self}")
+        return original_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", _flaky_iterdir)
+
+    resp = client_with_root.get("/api/projects")
+    assert resp.status_code == 200
+    body = resp.json()
+    ids = {p["project_id"] for p in body["projects"]}
+    assert ids == {"alpha", "Beta", "gamma"}  # the whole list still comes back
+    alpha_entry = next(p for p in body["projects"] if p["project_id"] == "alpha")
+    assert alpha_entry["page_count"] is None
+
+
+# ──────────────────────────────────────────────────────────────────────
 # POST /api/projects/load
 # ──────────────────────────────────────────────────────────────────────
 

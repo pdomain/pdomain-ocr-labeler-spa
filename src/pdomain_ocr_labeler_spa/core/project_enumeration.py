@@ -43,14 +43,19 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Image extensions counted for ``page_count``. Mirrors the set pinned in
+# ``core/persistence/ground_truth.py`` and ``core/persistence/project_envelope.py``
+# (each module keeps its own copy per the existing per-module convention here —
+# see those modules' docstrings).
+_IMAGE_EXTS = (".png", ".jpg", ".jpeg")
+
 
 @dataclass(frozen=True)
 class EnumeratedProject:
     """Frozen handle to one project found by ``enumerate_projects``.
 
-    Three fields, mirroring the wire-side ``ProjectKey`` (spec §2
-    lines 212-216) but pre-Pydantic so the core layer doesn't depend
-    on the wire schema:
+    Mirrors the wire-side ``ProjectKey`` (spec §2 lines 212-216) but
+    pre-Pydantic so the core layer doesn't depend on the wire schema:
 
     - ``project_id``: the directory basename. Used as a stable URL
       slug — the future ``/projects/{project_id}`` route keys on this.
@@ -65,11 +70,26 @@ class EnumeratedProject:
     - ``label``: human-readable display name. Defaults to
       ``project_id``; gets a dedup suffix on basename collisions
       (spec §2 line 215).
+    - ``page_count``: number of ``.png``/``.jpg``/``.jpeg`` files
+      directly under ``project_root``, or ``None`` when the directory
+      couldn't be read (permission error, removed mid-scan, etc.) —
+      P2-ROOT (``docs/issues/2026-07-21-project-list-metadata-filters-noop.md``).
+
+      Cost: one extra ``iterdir()`` per project, same cost class as
+      the top-level enumeration scan already performed by this
+      module. Measured on this repo's dev fixtures at ~1ms for 20
+      projects of 50 files each (filesystem-only; no event-store
+      access) — see ``docs/context/decisions.md`` P2-ROOT entry for
+      the full measurement, including why per-project *review
+      progress* is deliberately NOT computed here (a live per-page
+      event-store walk measured ~200ms for the same 20-project
+      fixture and scales with total page count across every project).
     """
 
     project_id: str
     project_root: Path
     label: str
+    page_count: int | None
 
 
 def enumerate_projects(source_projects_root: Path | None) -> list[EnumeratedProject]:
@@ -151,6 +171,7 @@ def enumerate_projects(source_projects_root: Path | None) -> list[EnumeratedProj
                 project_id=project_id,
                 project_root=project_root,
                 label=project_id,
+                page_count=_count_pages(project_root),
             )
         )
 
@@ -171,6 +192,7 @@ def enumerate_projects(source_projects_root: Path | None) -> list[EnumeratedProj
                     project_id=p.project_id,
                     project_root=p.project_root,
                     label=f"{p.label} ({seen[key]})",
+                    page_count=p.page_count,
                 )
             )
         else:
@@ -182,6 +204,22 @@ def enumerate_projects(source_projects_root: Path | None) -> list[EnumeratedProj
         len(deduped),
     )
     return deduped
+
+
+def _count_pages(project_root: Path) -> int | None:
+    """Count image files directly under ``project_root``, or ``None`` on error.
+
+    Cheap: one ``iterdir()`` plus a suffix check per file, the same cost
+    class as the enumeration scan above. Any ``OSError`` (permission
+    denied, directory removed between the caller's ``is_dir()`` check and
+    this call, etc.) degrades to ``None`` — "unknown" — rather than
+    raising, so one unreadable project never fails the whole list.
+    """
+    try:
+        return sum(1 for f in project_root.iterdir() if f.is_file() and f.suffix.lower() in _IMAGE_EXTS)
+    except OSError:
+        logger.debug("enumerate_projects: page_count unavailable for %s", project_root, exc_info=True)
+        return None
 
 
 __all__ = [

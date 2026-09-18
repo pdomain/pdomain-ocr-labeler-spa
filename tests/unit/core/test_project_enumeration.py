@@ -56,8 +56,12 @@ beyond logging at DEBUG.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 from pdomain_ocr_labeler_spa.core.project_enumeration import (
     EnumeratedProject,
@@ -247,3 +251,59 @@ def test_enumerated_project_root_is_resolved(tmp_path: Path) -> None:
     (tmp_path / "P").mkdir()
     out = enumerate_projects(Path(str(tmp_path) + "/."))
     assert out[0].project_root == (tmp_path / "P").resolve()
+
+
+# ── page_count (P2-ROOT) ───────────────────────────────────────────────────
+#
+# Page count is cheap: one extra ``iterdir()`` per project directory, same
+# cost class as the top-level scan already performed here (measured
+# ~20ms for 20 projects x 50 pages of filesystem-only counting — see
+# docs/context/decisions.md P2-ROOT entry). Reviewed/validated-page
+# progress is NOT computed here — see the same decision entry for the
+# measured cost of a live event-store walk.
+
+
+def test_enumerate_page_count_counts_image_files(tmp_path: Path) -> None:
+    """``page_count`` counts ``.png``/``.jpg``/``.jpeg`` files, ignoring
+    non-image files — same extension set as ``_scan_image_paths``."""
+    proj = tmp_path / "Book"
+    proj.mkdir()
+    (proj / "001.png").write_bytes(b"")
+    (proj / "002.JPG").write_bytes(b"")
+    (proj / "notes.txt").write_bytes(b"")
+    (proj / "pages.json").write_text("{}")
+    out = enumerate_projects(tmp_path)
+    assert out[0].page_count == 2
+
+
+def test_enumerate_page_count_zero_for_empty_project(tmp_path: Path) -> None:
+    """An empty project directory has ``page_count == 0`` — a known,
+    real zero, distinct from ``None`` (unknown)."""
+    (tmp_path / "Empty").mkdir()
+    out = enumerate_projects(tmp_path)
+    assert out[0].page_count == 0
+
+
+def test_enumerate_page_count_none_when_directory_unreadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A project directory that cannot be read (permission race, mid-scan
+    removal, etc.) degrades that one entry's ``page_count`` to ``None``
+    rather than failing the whole enumeration."""
+    proj = tmp_path / "Locked"
+    proj.mkdir()
+    (proj / "001.png").write_bytes(b"")
+    resolved_proj = proj.resolve()
+
+    original_iterdir = Path.iterdir
+
+    def _flaky_iterdir(self: Path) -> Generator[Path]:
+        if self == resolved_proj:
+            raise PermissionError(f"denied: {self}")
+        return original_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", _flaky_iterdir)
+
+    out = enumerate_projects(tmp_path)
+    assert len(out) == 1
+    assert out[0].page_count is None
