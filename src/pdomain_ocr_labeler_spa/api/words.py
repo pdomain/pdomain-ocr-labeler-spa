@@ -56,7 +56,7 @@ Pd-book-tools method mapping (spec §9 names → actual pdomain-book-tools API):
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -88,6 +88,9 @@ from .pages import (
     _save_to_store_best_effort,
     _store_persist_failed_response,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 log = logging.getLogger(__name__)
 
@@ -734,6 +737,15 @@ def delete_words_batch(
     Thin scope-resolver over ``Page.delete_words(word_keys)``. Atomic: one
     structural mutation + one event per request. Matches the
     ``word-delete`` toolbarMapping entry.
+
+    Deleting a word shifts every later word in its line down one index, so
+    ``_reindex_word_sidecar_maps_after_batch_removal`` walks the same
+    per-line, highest-index-first order ``Page.delete_words`` uses to keep
+    ``PageState.char_bboxes_map`` / ``glyph_annotations_map`` /
+    ``glyph_predictions_map`` — keyed ``"{line_index}_{word_index}"`` —
+    attached to the words they actually belong to (see
+    ``_merge_words_core``, which reindexes for the same reason after a
+    word merge removes a word).
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -751,6 +763,7 @@ def delete_words_batch(
         ok = bool(page.delete_words(word_keys))
         if not ok:
             return _mutation_failed(f"delete_words rejected keys={word_keys}")
+        _reindex_word_sidecar_maps_after_batch_removal(pstate, word_keys=word_keys)
         from .lines_paragraphs import _finalize_structural_edit
 
         _finalize_structural_edit(
@@ -1180,12 +1193,17 @@ def _word_merge_refused(*, kind: _MergeRefusalKind, line_index: int, word_index:
 def _reindex_word_sidecar_map(
     mapping: dict[str, object], *, line_index: int, removed_word_index: int
 ) -> None:
-    """Shift keys for words after ``removed_word_index`` in ``line_index`` down by one.
+    """Drop ``removed_word_index``'s own entry and shift later words down by one.
 
-    Called after a word is removed from a line (merge). ``mapping`` is
-    keyed ``"{line_index}_{word_index}"`` — every later word in the same
-    line now sits one index lower, so its sidecar entry must move with it
-    or it silently attaches to the wrong word on the next read.
+    Called after a word is removed from a line (merge, delete). ``mapping``
+    is keyed ``"{line_index}_{word_index}"`` — every later word in the same
+    line now sits one index lower, so its sidecar entry must move with it or
+    it silently attaches to the wrong word on the next read. The removed
+    word's own entry is dropped outright rather than left at its old index:
+    that index now names a different word, so leaving the entry in place
+    would misattach it. (Merge's caller never has an entry to drop here —
+    it refuses the merge first if either word carries one — so this is a
+    no-op for merge and the fix delete needs.)
     """
     prefix = f"{line_index}_"
     updated: dict[str, object] = {}
@@ -1194,6 +1212,8 @@ def _reindex_word_sidecar_map(
             suffix = key[len(prefix) :]
             if suffix.isdigit():
                 word_index = int(suffix)
+                if word_index == removed_word_index:
+                    continue
                 if word_index > removed_word_index:
                     updated[f"{line_index}_{word_index - 1}"] = value
                     continue
@@ -1214,6 +1234,28 @@ def _reindex_word_sidecar_maps_after_removal(
     _reindex_word_sidecar_map(
         pstate.glyph_predictions_map, line_index=line_index, removed_word_index=removed_word_index
     )
+
+
+def _reindex_word_sidecar_maps_after_batch_removal(
+    pstate: PageState, *, word_keys: Sequence[tuple[int, int]]
+) -> None:
+    """Reindex sidecar maps after ``Page.delete_words(word_keys)`` removes several words.
+
+    ``Page.delete_words`` dedupes ``word_keys``, groups them by line, and
+    within each line removes highest word_index first (so an earlier removal
+    in the same call never shifts an index a later removal still needs) —
+    see ``pdomain_book_tools.ocr.page.Page.delete_words``. The reindex must
+    walk the same order per line, or a multi-word delete in one line computes
+    the wrong final indices.
+    """
+    by_line: dict[int, list[int]] = {}
+    for line_index, word_index in set(word_keys):
+        by_line.setdefault(line_index, []).append(word_index)
+    for line_index, word_indices in by_line.items():
+        for word_index in sorted(word_indices, reverse=True):
+            _reindex_word_sidecar_maps_after_removal(
+                pstate, line_index=line_index, removed_word_index=word_index
+            )
 
 
 def _merge_words_core(
