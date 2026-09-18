@@ -817,3 +817,80 @@ from here, so the workflow the report is about no longer exists. If scheduled
 dependency refreshes return, the report's warning is worth re-reading in git
 history first: a dated branch per run with nothing reconciling a failed week's
 leftovers is what produced four stuck pull requests in `pdomain-ui`.
+
+## 2026-09-18 — Project-list metadata: page count yes, progress no (P2-ROOT)
+
+### Context
+
+`docs/issues/2026-07-21-project-list-metadata-filters-noop.md` (P2-ROOT):
+`ProjectKey` carried only `project_id` / `project_root` / `label`, so root-page
+cards showed permanent `"— pages"` / `"—%"` placeholders and the Active /
+Complete / Archived filter chips were wired but inert (no status field to
+filter on). The issue asked for two things to be measured before building
+anything: what a project's page count and validation progress cost to compute
+without opening it, and what "archived" means here.
+
+**Page count** — cheap. It is one extra `iterdir()` per project directory,
+counting `.png`/`.jpg`/`.jpeg` files — the same cost class project enumeration
+already pays. Measured on this repo's dev fixtures: 20 projects × 50 files,
+filesystem-only, ~22ms total.
+
+**Review progress** — expensive, measured rather than assumed. "How many pages
+are validated/reviewed" only exists in the per-project `.pd-pages/` event
+store (`core.persistence.page_store.LabelerPageStore`, an
+`eventsourcing.sqlite`-backed `PagesApplication`); there is no lighter-weight
+summary field maintained anywhere. A `ProjectAggregate.get_project()` read is
+cheap (~1ms even at 200 pages), but it only returns the page-id list — nothing
+about which pages were edited. Determining "reviewed" requires reading each
+page's `PageAggregate` and checking its changelog. Measured on the same
+fixture shape: opening a fresh `LabelerPageStore` and walking every page for
+one 200-page project cost ~35ms; 20 projects × 50 pages, all cold, cost ~206ms
+total (vs. ~22ms for page-count-only on the same fixture) — and that cost
+scales with total pages across every project in the list, on every
+`GET /api/projects` call. `write_project_json` (which would let a cached
+`Project.saved_pages` value stand in for this) is fully implemented but is
+never called anywhere in this codebase today — wiring a save-time cache is a
+distinct, larger change to `core/jobs/handlers/save_project.py`'s behavior,
+not a drive-by addition to a list-metadata fix.
+
+**"Archived"** — undefined. `grep -rni archiv` over `src/` turns up nothing
+that defines project-archive semantics; the per-card "Archive" menu stub was
+already removed in an earlier change with the same rationale ("no archive
+endpoint or project-status field in the API; re-add it once the semantics are
+specced (needs-spec, parity C14)", `frontend/src/pages/RootPage.tsx`). PGDP
+item 9 tracks the semantics decision and is explicitly out of scope here.
+
+### Decision
+
+1. Ship `ProjectKey.page_count: int | None` (`core.project_enumeration.
+   EnumeratedProject.page_count` underneath), computed by directory scan. A
+   directory that can't be read (permission error, removed mid-scan) degrades
+   that one entry to `None` rather than failing the whole list —
+   `core.project_enumeration._count_pages` catches `OSError` per project.
+2. Do **not** ship progress this iteration. No field, no computed value, no
+   fake percentage. The root cards drop the progress bar entirely instead of
+   leaving it permanently at a placeholder 0%.
+3. Remove the Active / Complete / Archived filter chips rather than wire them
+   to page-count-only data that can't honestly represent any of the three:
+   "archived" has no definition anywhere in this codebase, and "complete"
+   needs the progress data item 2 deliberately does not compute. Only the
+   text-search filter (label / project_id / project_root) survives, and it
+   already worked correctly before this change.
+
+### Consequences
+
+- `GET /api/projects` and `POST /api/projects/source-root` responses gain
+  `page_count` (nullable); `frontend/src/api/types.ts` regenerated via
+  `make openapi-export`.
+- Root-page cards show a real page count (`"N pages"` / `"1 page"`) or "Page
+  count unavailable" for the unreadable case — never a placeholder dash.
+- The filter-chip row (`root-filter-chips` and its four `root-filter-chip-*`
+  testids) no longer renders. Re-adding Complete/Archived filtering needs
+  either PGDP item 9 (archive semantics) or a follow-up progress-cost decision
+  (cached `saved_pages`, a cheaper progress proxy, or an explicit "OK to be
+  slow" call) — not a repeat of this measurement.
+- `docs/issues/2026-07-21-project-list-metadata-filters-noop.md` stays open:
+  its "Defects to fix" items 1–3 are addressed (page count exists, cards show
+  it, dishonest chips are gone); item 4 (status field for Active/Complete/
+  Archived filtering) is intentionally still open pending the archive-semantics
+  decision this entry does not make.
