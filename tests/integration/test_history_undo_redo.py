@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import io
 import json
+import threading
 from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -430,10 +431,17 @@ def test_undo_holds_the_page_lock_across_the_save(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A store whose ``save_page`` tries a non-blocking acquire of this same
-    page's lock proves the route already holds it — the acquire must fail.
-    Without the fix, ``_execute_history_op`` only took the lock for the final
-    in-memory swap, so a confirm could read ``prior_kind`` or land between the
-    save and the marker write.
+    page's lock **from another thread** proves the route already holds it —
+    that acquire must fail. Without the fix, ``_execute_history_op`` only took
+    the lock for the final in-memory swap, so a confirm could read
+    ``prior_kind`` or land between the save and the marker write.
+
+    The probe runs on its own thread deliberately. The page lock became an
+    ``RLock`` on 2026-09-18, because ``_page_payload`` now takes it too and
+    several mutation routes refresh their payload while still holding it. A
+    same-thread ``acquire(blocking=False)`` therefore succeeds by design and
+    proves nothing about exclusion; only another thread can show the lock is
+    actually held.
     """
     _get_history(client)  # prime: loads the page into memory
     r = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "the"})
@@ -446,11 +454,16 @@ def test_undo_holds_the_page_lock_across_the_save(
     acquired_during_save: list[bool] = []
     original_save_page = page_store.save_page
 
-    def _spying_save_page(agg: object) -> object:
+    def _probe_from_other_thread() -> None:
         acquired = page_lock.acquire(blocking=False)
         acquired_during_save.append(acquired)
         if acquired:
             page_lock.release()
+
+    def _spying_save_page(agg: object) -> object:
+        probe = threading.Thread(target=_probe_from_other_thread)
+        probe.start()
+        probe.join(timeout=5)
         return original_save_page(agg)
 
     monkeypatch.setattr(page_store, "save_page", _spying_save_page)

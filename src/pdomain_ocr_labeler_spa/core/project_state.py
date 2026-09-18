@@ -236,7 +236,7 @@ class ProjectState:
         # threading.Lock (not asyncio.Lock): route handlers are sync
         # (threadpool workers), and threading.Lock is safe to take from
         # both sync and async contexts via FastAPI's threadpool dispatch.
-        self._page_locks: dict[int, threading.Lock] = {}
+        self._page_locks: dict[int, threading.RLock] = {}
         # In-flight ``load_page`` job id per page index, for the currently
         # loaded project only — docs/issues/2026-08-08-page-load-progress-
         # unbuilt.md follow-up (duplicate jobs on concurrent cold fetches).
@@ -495,7 +495,7 @@ class ProjectState:
         if session is not None:
             session.close()
 
-    def get_page_lock(self, page_index: int) -> threading.Lock:
+    def get_page_lock(self, page_index: int) -> threading.RLock:
         """Return (creating if needed) the per-page mutation lock.
 
         Spec 23 §13 calls for per-page locking so concurrent mutations
@@ -504,8 +504,17 @@ class ProjectState:
 
         The spec text says ``asyncio.Lock``, but the route handlers in
         this codebase are sync (threadpool workers via FastAPI), so we
-        use ``threading.Lock`` for symmetry with the rest of the project
+        use a ``threading`` lock for symmetry with the rest of the project
         carrier locking discipline.
+
+        **Re-entrant, and it has to be.** Since 2026-09-18 the payload
+        builder ``api/pages.py::_page_payload`` takes this same lock, because
+        reading ``Page.items`` sorts the page's shared list and two concurrent
+        readers can stomp it empty. Several mutation routes refresh their
+        payload while still holding the lock, so a plain ``Lock`` deadlocks
+        the handler against itself on the same thread. ``RLock`` keeps the
+        cross-thread exclusion the read fix needs and allows the nesting the
+        write paths already do.
 
         Lazy: the lock is created on first access, not at
         ``set_loaded_project`` time. Bounded by ``total_pages`` over the
@@ -517,7 +526,7 @@ class ProjectState:
         with self._lock:
             lock = self._page_locks.get(page_index)
             if lock is None:
-                lock = threading.Lock()
+                lock = threading.RLock()
                 self._page_locks[page_index] = lock
             return lock
 
