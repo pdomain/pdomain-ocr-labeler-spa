@@ -126,7 +126,12 @@ from ...page_state import ensure_page_model
 from ...project_state import PageState, ProjectState
 from ...regions.block_adapter import compute_page_facet_digests, confirmed_regions_from_page
 from ...regions.decision_log import RegionDecisionLog
-from ...regions.detector import BookFittedDetector, DetectorInput, null_region_detector
+from ...regions.detector import (
+    BookFittedDetector,
+    DetectorInput,
+    detector_depends_on_facets,
+    null_region_detector,
+)
 from ...regions.models import Disposition, ProposalRun, RegionDecision, RegionProposal
 from ...regions.proposal_log import RegionProposalLog
 from ._labeling_page_lease import leased_labeling_page
@@ -147,13 +152,6 @@ if TYPE_CHECKING:
     from ..runner import Job, JobRunner
 
 log = logging.getLogger(__name__)
-
-#: A geometry detector reads word boxes, line/paragraph structure, and the
-#: page image — never OCR/ground-truth text — so a text-only edit never
-#: invalidates its proposals (spec §"A proposal goes stale per facet, not per
-#: page"). Slice 4's real detector may narrow this; this scaffolding detector
-#: proposes nothing, so a conservative default is safe here.
-_GEOMETRY_FACETS = frozenset({"word_boxes", "line_structure", "page_image"})
 
 #: Minimum box intersection-over-union for a new proposal to carry a person's
 #: earlier confirmation forward (spec §"Decisions must carry across runs
@@ -819,7 +817,7 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
         model_version=str(job.payload.get("model_version", "0.0.0")),
         created_at=datetime.now(UTC).isoformat(),
         page_facet_digests=page_facet_digests,
-        depends_on=_GEOMETRY_FACETS,
+        depends_on=detector_depends_on_facets(raw_detector),
         page_kind_decision_ref=kind_runs[-1].run_id if kind_runs else None,
         page_kind_was_confirmed=all(_is_kind_confirmed(idx) for idx in eligible_indices),
     )
