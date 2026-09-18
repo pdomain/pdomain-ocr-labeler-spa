@@ -48,6 +48,7 @@ import time
 
 import pytest
 from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from tests.e2e.exercise_real_project import (
     ExerciseServer,
@@ -66,6 +67,24 @@ def _click_first_worklist_row(page: Page) -> None:
     first_row.wait_for(state="visible", timeout=10_000)
     first_row.click()
     time.sleep(0.4)
+
+
+def _wait_for_hierarchy_nodes(page: Page, selector: str, *, timeout: int = 5_000) -> int:
+    """Wait for at least one node matching ``selector`` to attach, then return its count.
+
+    BUG-HIER-1: the previous version of ``_select_first_word_via_hierarchy`` slept
+    a fixed 300ms after expanding a tree node and then read ``locator.count()``
+    immediately — a race that can read 0 before the fetched hierarchy finishes
+    rendering, misreporting a populated tree as empty and failing the six
+    WordDetail section tests below that depend on it. Waiting on attachment
+    removes that race while still returning 0 rather than raising when the node
+    kind genuinely never renders (e.g. no block-level nodes on this page).
+    """
+    try:
+        page.wait_for_selector(selector, state="attached", timeout=timeout)
+    except PlaywrightTimeoutError:
+        return 0
+    return page.locator(selector).count()
 
 
 def _select_first_word_via_hierarchy(page: Page) -> bool:
@@ -94,60 +113,56 @@ def _select_first_word_via_hierarchy(page: Page) -> bool:
     # Wait for hierarchy container to be visible before looking for nodes.
     try:
         page.wait_for_selector('[data-testid="hierarchy"]', state="visible", timeout=5_000)
-    except Exception:
+    except PlaywrightTimeoutError:
         return False
-    time.sleep(0.3)
 
     # FO-7 / CU-4.3: when block_index is populated on the page, the tree renders
-    # block nodes at the top level (not para nodes).  Expand the first block node
-    # so its para children become visible before we proceed.
+    # block nodes at the top level; otherwise para nodes render at the top level
+    # directly. Wait for whichever kind actually appears instead of guessing how
+    # long the fetch + render takes.
+    top_level_selector = '[data-testid^="hierarchy-node-block-"], [data-testid^="hierarchy-node-para-"]'
+    if _wait_for_hierarchy_nodes(page, top_level_selector) == 0:
+        return False
+
+    # Expand the first block node (if any) so its para children become visible.
     block_nodes = page.locator('[data-testid^="hierarchy-node-block-"]')
     if block_nodes.count() > 0:
         first_block = block_nodes.first
         first_block.wait_for(state="visible", timeout=5_000)
         first_block.click()
-        time.sleep(0.2)
         first_block.press("ArrowRight")  # expand block → reveals para children
-        time.sleep(0.3)
-
-    # Hierarchy nodes: para nodes at top level (no block layer) or under block.
-    para_nodes = page.locator('[data-testid^="hierarchy-node-para-"]')
-    if para_nodes.count() == 0:
-        return False
+        if _wait_for_hierarchy_nodes(page, '[data-testid^="hierarchy-node-para-"]') == 0:
+            return False
 
     # Step 1: click first para to focus it, then ArrowRight to expand it.
+    para_nodes = page.locator('[data-testid^="hierarchy-node-para-"]')
     first_para = para_nodes.first
     first_para.wait_for(state="visible", timeout=5_000)
     first_para.click()
-    time.sleep(0.2)
     first_para.press("ArrowRight")  # expand para → reveals line children
-    time.sleep(0.3)
-
-    # Step 2: line nodes should now be visible. Click first line, then expand.
-    line_nodes = page.locator('[data-testid^="hierarchy-node-line-"]')
-    if line_nodes.count() == 0:
+    if _wait_for_hierarchy_nodes(page, '[data-testid^="hierarchy-node-line-"]') == 0:
         return False
+
+    # Step 2: line nodes are now attached. Click first line, then expand.
+    line_nodes = page.locator('[data-testid^="hierarchy-node-line-"]')
     first_line = line_nodes.first
     first_line.wait_for(state="visible", timeout=5_000)
     first_line.click()
-    time.sleep(0.2)
     first_line.press("ArrowRight")  # expand line → reveals word children
-    time.sleep(0.3)
-
-    # Step 3: word nodes should now be visible. Click first word.
-    word_nodes = page.locator('[data-testid^="hierarchy-node-word-"]')
-    if word_nodes.count() == 0:
+    if _wait_for_hierarchy_nodes(page, '[data-testid^="hierarchy-node-word-"]') == 0:
         return False
+
+    # Step 3: word nodes are now attached. Click first word.
+    word_nodes = page.locator('[data-testid^="hierarchy-node-word-"]')
     first_word = word_nodes.first
     first_word.wait_for(state="visible", timeout=5_000)
     first_word.click()
-    time.sleep(0.5)
 
     # Wait for WordDetail to switch to word-selection render (shows accordion).
     try:
         page.wait_for_selector('[data-testid="word-detail-accordion"]', state="attached", timeout=5_000)
         return True
-    except Exception:
+    except PlaywrightTimeoutError:
         return False
 
 
