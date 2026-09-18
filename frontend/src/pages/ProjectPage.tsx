@@ -52,6 +52,7 @@ import { useProject } from "../hooks/useProject";
 import { usePage } from "../hooks/usePage";
 import { useJobProgress } from "../hooks/useJobProgress";
 import { useJobCompletionInvalidation } from "../hooks/useJobCompletionInvalidation";
+import { useBboxRefineTracking } from "../hooks/useBboxRefineTracking";
 import {
   useReloadOcr,
   useReloadOcrEdited,
@@ -269,6 +270,20 @@ export default function ProjectPage() {
   // `BusyOverlay`'s full-viewport treatment.
   const pageLoadJobId = pageQ.data?.page_load_job_id ?? null;
   const pageLoadJob = useJobProgress(pageLoadJobId);
+
+  // ── BBoxSection's refine_bboxes job tracker (review finding 3) ──────────
+  // Owned here, not inside WordDetail/BBoxSection: BBoxSection's own
+  // Accordion.Content unmounts when the "Bounding Box" item collapses, and
+  // WordDetail itself unmounts whenever the selection drops back to "none"
+  // (deselecting the word) — either would drop the terminal SSE event if
+  // the tracker lived there. ProjectPage is the only component in this
+  // subtree that stays mounted for the whole project-page session, matching
+  // how it already owns `activeJobId` above for every other job type here.
+  // A dedicated slot (not reusing `activeJobId`): bbox refine is scoped to
+  // a dynamic word rather than a fixed action type, and `activeJobId` is
+  // already a single shared slot several unrelated toolbar actions use —
+  // reusing it here would let one steal the slot from the other mid-run.
+  const bboxRefine = useBboxRefineTracking(projectId, idx0);
 
   // ── Store subscribers ──────────────────────────────────────────────────
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefsSnapshot, getUiPrefsSnapshot);
@@ -1188,7 +1203,12 @@ export default function ProjectPage() {
   );
   const wordDetailSlot =
     pagePayload && projectId ? (
-      <WordDetail page={pagePayload} projectId={projectId} pageIndex={idx0} />
+      <WordDetail
+        page={pagePayload}
+        projectId={projectId}
+        pageIndex={idx0}
+        bboxRefine={bboxRefine}
+      />
     ) : undefined;
   const rightSlot = rightPanelOpen ? (
     <RightPanel

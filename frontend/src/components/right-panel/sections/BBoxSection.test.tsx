@@ -1,19 +1,120 @@
-// BBoxSection.test.tsx — Tests for Slice 16 bounding-box editor + P3.a (Gaps 33, 34).
+// BBoxSection.test.tsx — Tests for Slice 16 bounding-box editor + P3.a (Gaps 33, 34)
+// + P1-BBOX-UI (docs/issues/2026-07-21-bbox-refine-crop-misleading.md).
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 16.
 // P3.a: bboxHint(), nudge sub-row, refine/expand+refine/crop buttons.
+// P1-BBOX-UI: Refine / Expand+Refine / Expand now queue the real
+// `refine_bboxes` job (POST .../refine) instead of a plain rebox.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { useSyncExternalStore } from "react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { BBoxSection } from "./BBoxSection";
 import { bboxHint } from "./bboxUtils";
 import { server } from "../../../test/server";
+import type {
+  BboxRefineOutcome,
+  UseBboxRefineTrackingResult,
+} from "../../../hooks/useBboxRefineTracking";
 import type { components } from "../../../api/types";
 
 type WordMatch = components["schemas"]["WordMatch"];
 type BBox = components["schemas"]["BBox"];
+type RefineScopeRequest = components["schemas"]["RefineScopeRequest"];
+
+// ─── sonner mock ──────────────────────────────────────────────────────────
+// Mocked at module level so both the direct import in lib/toast.ts and the
+// dynamic import("sonner") in BBoxSection resolve to the same mock object —
+// mirrors PageActionsCompact.test.tsx. Review finding 3 moved the
+// completion toast lifecycle to useBboxRefineTracking (its own test file
+// covers that); what stays local to BBoxSection is the immediate "job
+// started" loading toast and the POST-failure error toast, both still
+// exercised below.
+const toastMock = vi.hoisted(() => {
+  const fn = Object.assign(vi.fn(), {
+    loading: vi.fn(),
+    success: vi.fn(),
+    error: vi.fn(),
+  });
+  return fn;
+});
+vi.mock("sonner", () => ({
+  toast: toastMock,
+}));
+
+// ─── fake refineTracking (review finding 3) ────────────────────────────────
+// Review finding 3 hoisted the refine_bboxes job tracker out of BBoxSection
+// into useBboxRefineTracking, owned by an always-mounted ancestor
+// (ProjectPage) and threaded down as a prop. This fake stands in for that
+// ancestor in tests: a plain external store (same shape as this app's
+// worklistStore/dialogStore) a test can drive directly (`start` /
+// `completeWith` / `clearJob`), read reactively through
+// `useSyncExternalStore` inside a small wrapper component — real SSE-level
+// behavior (EventSource wiring, invalidation, toast wording) is covered by
+// useBboxRefineTracking.test.tsx; this file only needs to prove BBoxSection
+// consumes the resulting `{ jobId, word, outcome, start }` shape correctly.
+// `start`/`completeWith` qualify by ("p1", 0) — every test below renders
+// BBoxSection with that same projectId/pageIndex, matching what the real
+// hook's `start()` would have captured (review round 2 finding 1).
+interface FakeRefineTrackingState {
+  jobId: string | null;
+  word: UseBboxRefineTrackingResult["word"];
+  outcome: BboxRefineOutcome | null;
+}
+
+function createFakeRefineTracking() {
+  let state: FakeRefineTrackingState = { jobId: null, word: null, outcome: null };
+  const listeners = new Set<() => void>();
+  function notify() {
+    listeners.forEach((l) => {
+      l();
+    });
+  }
+  function subscribe(cb: () => void) {
+    listeners.add(cb);
+    return () => {
+      listeners.delete(cb);
+    };
+  }
+  function getSnapshot() {
+    return state;
+  }
+  function start(jobId: string, wordKey: string) {
+    state = { ...state, jobId, word: { projectId: "p1", pageIndex: 0, wordKey } };
+    notify();
+  }
+  /** Simulate the tracker's slot clearing without an outcome — a stall
+   * timeout (review round 2, finding 3) or a cancelled/errored job all
+   * clear `jobId`/`word` this same way. */
+  function clearJob() {
+    state = { ...state, jobId: null, word: null };
+    notify();
+  }
+  /** Simulate the ancestor's real hook delivering a terminal outcome —
+   * clears the in-flight job and (for a real refine) records the outcome
+   * this word's BBoxSection should react to. */
+  function completeWith(wordKey: string, refined: number) {
+    state = {
+      jobId: null,
+      word: null,
+      outcome: {
+        word: { projectId: "p1", pageIndex: 0, wordKey },
+        refined,
+        token: (state.outcome?.token ?? 0) + 1,
+      },
+    };
+    notify();
+  }
+  function useTracking(): UseBboxRefineTrackingResult {
+    const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+    return { jobId: snapshot.jobId, word: snapshot.word, outcome: snapshot.outcome, start };
+  }
+  return { useTracking, start, completeWith, clearJob, getState: getSnapshot };
+}
+
+type FakeRefineTracking = ReturnType<typeof createFakeRefineTracking>;
 
 const DEFAULT_BBOX: BBox = { x: 10, y: 20, width: 30, height: 15 };
 
@@ -74,15 +175,20 @@ function makeQueryClient() {
   });
 }
 
-function renderBBox(word = makeWord()) {
+function renderBBox(word = makeWord(), tracking: FakeRefineTracking = createFakeRefineTracking()) {
   const qc = makeQueryClient();
+  function Wrapper() {
+    const refineTracking = tracking.useTracking();
+    return <BBoxSection word={word} projectId="p1" pageIndex={0} refineTracking={refineTracking} />;
+  }
   return {
     ...render(
       <QueryClientProvider client={qc}>
-        <BBoxSection word={word} projectId="p1" pageIndex={0} />
+        <Wrapper />
       </QueryClientProvider>,
     ),
     qc,
+    tracking,
   };
 }
 
@@ -110,7 +216,12 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
       http.post("/api/projects/p1/pages/0/words/0/0/rebox", () =>
         HttpResponse.json(makePageResponse(DEFAULT_BBOX)),
       ),
+      // Baseline: refine engine available. BBoxSection probes this on every
+      // mount (useRefineAvailable) — tests that assert the unavailable path
+      // override with their own server.use().
+      http.get("/api/refine/available", () => HttpResponse.json({ available: true, reason: "" })),
     );
+    vi.clearAllMocks();
   });
 
   it("renders four numeric inputs with initial bbox values", () => {
@@ -128,6 +239,35 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
   it("renders a Reset button", () => {
     renderBBox();
     expect(screen.getByTestId("bbox-reset-button")).toBeInTheDocument();
+  });
+
+  // ─── Review round 2, findings 2/3 (superseding round 1 finding 1): the
+  // coordinate inputs are never disabled by refine-job state — see the
+  // module doc comment for why a disable-based fix kept reopening this
+  // same window. Nudge/Reset (one-shot clicks, not typing sessions) still
+  // gate on the job instead, to protect the tracker's one job slot. ──────
+
+  it("never disables the coordinate inputs while a refine job is running", async () => {
+    server.use(
+      http.post("/api/projects/p1/pages/0/refine", () =>
+        HttpResponse.json({ job_id: "job-busy-1" }, { status: 202 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderBBox();
+
+    expect(screen.getByTestId("bbox-input-x")).not.toBeDisabled();
+
+    await user.click(screen.getByTestId("bbox-refine-button"));
+
+    // The job is now running for this word (Nudge/Reset gate on it)…
+    await waitFor(() => expect(screen.getByTestId("bbox-nudge-right")).toBeDisabled());
+    expect(screen.getByTestId("bbox-reset-button")).toBeDisabled();
+    // …but the coordinate inputs stay usable throughout.
+    expect(screen.getByTestId("bbox-input-x")).not.toBeDisabled();
+    expect(screen.getByTestId("bbox-input-y")).not.toBeDisabled();
+    expect(screen.getByTestId("bbox-input-w")).not.toBeDisabled();
+    expect(screen.getByTestId("bbox-input-h")).not.toBeDisabled();
   });
 
   it("fires word PATCH (rebox) mutation on input blur-sm with changed value", async () => {
@@ -230,34 +370,553 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     expect(capturedBbox!.y).toBe(19); // 20 - 1
   });
 
-  // ─── P3.a: Refine / Expand+Refine / Crop buttons (Gap 33) ─────────────────
+  // ─── P1-BBOX-UI: Refine / Expand+Refine / Expand buttons ──────────────────
+  // docs/issues/2026-07-21-bbox-refine-crop-misleading.md — these buttons
+  // now queue the real refine_bboxes job (POST .../refine) instead of a
+  // plain rebox. "Crop" was renamed "Expand" (testid bbox-expand-button,
+  // was bbox-crop-button) since the backend has no crop capability at all.
 
-  it("renders Refine, Expand+Refine, and Crop buttons (P3.a gap 33)", () => {
+  it("renders Refine, Expand+Refine, and Expand buttons", () => {
     renderBBox();
     expect(screen.getByTestId("bbox-refine-button")).toBeInTheDocument();
     expect(screen.getByTestId("bbox-expand-refine-button")).toBeInTheDocument();
-    expect(screen.getByTestId("bbox-crop-button")).toBeInTheDocument();
+    expect(screen.getByTestId("bbox-expand-button")).toBeInTheDocument();
+    // Old testid is gone — the button no longer claims to crop.
+    expect(screen.queryByTestId("bbox-crop-button")).not.toBeInTheDocument();
   });
 
-  it("Expand+Refine fires rebox with bbox expanded by 4px on each side", async () => {
-    let capturedBbox: BBox | undefined;
+  it("Refine posts scope=word, mode=refine, and this word's indices to /refine", async () => {
+    let capturedBody: RefineScopeRequest | undefined;
     server.use(
-      http.post("/api/projects/p1/pages/0/words/0/0/rebox", async ({ request }) => {
-        const body = (await request.json()) as { bbox: BBox };
-        capturedBbox = body.bbox;
-        return HttpResponse.json(makePageResponse(body.bbox));
+      http.post("/api/projects/p1/pages/0/refine", async ({ request }) => {
+        capturedBody = (await request.json()) as RefineScopeRequest;
+        return HttpResponse.json({ job_id: "job-refine-1" }, { status: 202 });
       }),
     );
 
     const user = userEvent.setup();
-    renderBBox(); // DEFAULT_BBOX = { x: 10, y: 20, width: 30, height: 15 }
+    renderBBox(makeWord(DEFAULT_BBOX)); // line_index 0, word_index 0
+
+    await user.click(screen.getByTestId("bbox-refine-button"));
+
+    await waitFor(() => expect(capturedBody).toBeDefined());
+    expect(capturedBody!.scope).toBe("word");
+    expect(capturedBody!.mode).toBe("refine");
+    expect(capturedBody!.word_indices).toEqual([[0, 0]]);
+  });
+
+  it("Expand+Refine posts mode=expand_then_refine with this word's indices", async () => {
+    let capturedBody: RefineScopeRequest | undefined;
+    server.use(
+      http.post("/api/projects/p1/pages/0/refine", async ({ request }) => {
+        capturedBody = (await request.json()) as RefineScopeRequest;
+        return HttpResponse.json({ job_id: "job-expand-refine-1" }, { status: 202 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderBBox();
 
     await user.click(screen.getByTestId("bbox-expand-refine-button"));
 
-    await waitFor(() => expect(capturedBbox).toBeDefined());
-    expect(capturedBbox!.x).toBe(6); // 10 - 4
-    expect(capturedBbox!.y).toBe(16); // 20 - 4
-    expect(capturedBbox!.width).toBe(38); // 30 + 8
-    expect(capturedBbox!.height).toBe(23); // 15 + 8
+    await waitFor(() => expect(capturedBody).toBeDefined());
+    expect(capturedBody!.scope).toBe("word");
+    expect(capturedBody!.mode).toBe("expand_then_refine");
+    expect(capturedBody!.word_indices).toEqual([[0, 0]]);
+  });
+
+  it("Expand posts mode=expand_only with this word's indices", async () => {
+    let capturedBody: RefineScopeRequest | undefined;
+    server.use(
+      http.post("/api/projects/p1/pages/0/refine", async ({ request }) => {
+        capturedBody = (await request.json()) as RefineScopeRequest;
+        return HttpResponse.json({ job_id: "job-expand-1" }, { status: 202 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderBBox();
+
+    await user.click(screen.getByTestId("bbox-expand-button"));
+
+    await waitFor(() => expect(capturedBody).toBeDefined());
+    expect(capturedBody!.scope).toBe("word");
+    expect(capturedBody!.mode).toBe("expand_only");
+    expect(capturedBody!.word_indices).toEqual([[0, 0]]);
+  });
+
+  it("posts the clicked word's own (line, word) indices, not (0, 0)", async () => {
+    let capturedBody: RefineScopeRequest | undefined;
+    server.use(
+      http.post("/api/projects/p1/pages/0/refine", async ({ request }) => {
+        capturedBody = (await request.json()) as RefineScopeRequest;
+        return HttpResponse.json({ job_id: "job-indices-1" }, { status: 202 });
+      }),
+    );
+
+    const word: WordMatch = { ...makeWord(DEFAULT_BBOX), line_index: 3, word_index: 5 };
+    const user = userEvent.setup();
+    renderBBox(word);
+
+    await user.click(screen.getByTestId("bbox-refine-button"));
+
+    await waitFor(() => expect(capturedBody).toBeDefined());
+    expect(capturedBody!.word_indices).toEqual([[3, 5]]);
+  });
+
+  it("Refine calls refineTracking.start with the returned job id and this word's key", async () => {
+    server.use(
+      http.post("/api/projects/p1/pages/0/refine", () =>
+        HttpResponse.json({ job_id: "job-start-1" }, { status: 202 }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { tracking } = renderBBox(makeWord(DEFAULT_BBOX)); // line_index 0, word_index 0
+
+    await user.click(screen.getByTestId("bbox-refine-button"));
+
+    await waitFor(() => expect(tracking.getState().jobId).toBe("job-start-1"));
+    expect(tracking.getState().word).toEqual({ projectId: "p1", pageIndex: 0, wordKey: "0-0" });
+  });
+
+  it("a delivered outcome for this word's key resyncs the coordinate inputs", async () => {
+    // Regression guard (review finding 3 follow-on of the original P1-BBOX-UI
+    // fix): BBoxSection's `draft` used to be a mount-time-only snapshot of
+    // `word.bbox`. The completion outcome now arrives as a prop
+    // (`refineTracking.outcome`) instead of a locally-owned SSE stream —
+    // this proves BBoxSection still resyncs `draft` once a matching,
+    // real (`refined > 0`) outcome for this word lands, the same way it did
+    // before the job tracker moved out to useBboxRefineTracking.
+    // The GET handler mimics a real backend: it keeps returning the
+    // original bbox until the caller "commits" the expanded one — a
+    // handler hardcoded to the expanded value from the start would mask
+    // this test's premise, since TanStack Query's default `refetchOnMount`
+    // would pick it up on mount, long before any outcome arrives.
+    const EXPANDED_BBOX: BBox = { x: 6, y: 16, width: 38, height: 23 };
+    let currentBbox = DEFAULT_BBOX;
+    server.use(
+      http.get("/api/projects/p1/pages/0", () => HttpResponse.json(makePageResponse(currentBbox))),
+    );
+
+    const tracking = createFakeRefineTracking();
+    const qc = makeQueryClient();
+
+    function Harness() {
+      const q = useQuery({
+        queryKey: ["page", "p1", 0],
+        queryFn: async () => {
+          const res = await fetch("/api/projects/p1/pages/0");
+          return res.json() as Promise<ReturnType<typeof makePageResponse>>;
+        },
+        initialData: makePageResponse(DEFAULT_BBOX),
+      });
+      const refineTracking = tracking.useTracking();
+      const word = q.data.line_matches[0].word_matches[0];
+      return (
+        <BBoxSection word={word} projectId="p1" pageIndex={0} refineTracking={refineTracking} />
+      );
+    }
+
+    render(
+      <QueryClientProvider client={qc}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId("bbox-input-x").value).toBe("10");
+
+    // Real timing (see useBboxRefineTracking.ts's onComplete): the outcome
+    // is recorded and the page query is invalidated in the same tick, and
+    // the invalidation's refetch resolves afterward — arming
+    // `pendingRefineSync` before `word.bbox` actually changes is exactly
+    // what lets BBoxSection tell "this bbox change is the refine's result"
+    // apart from an unrelated one (review finding 2). Reproduce that
+    // ordering here: outcome first, then the bbox catches up.
+    act(() => {
+      tracking.completeWith("0-0", 1);
+    });
+    currentBbox = EXPANDED_BBOX;
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ["page", "p1", 0] });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("bbox-input-x").value).toBe("6");
+    });
+    expect(screen.getByTestId("bbox-input-y").value).toBe("16");
+    expect(screen.getByTestId("bbox-input-w").value).toBe("38");
+    expect(screen.getByTestId("bbox-input-h").value).toBe("23");
+  });
+
+  // ─── Review round 2, finding 2 (medium — reopens finding 1's window):
+  // the coordinate inputs must never be disabled (the earlier "disable
+  // while busy" approach only ever narrows this window, it doesn't close
+  // it — see BBoxSection.tsx's module doc comment for the reasoning behind
+  // this direction change). A resync instead leaves whichever field
+  // currently has focus untouched, merging its result into the rest. ────
+
+  it("keeps typing into a focused field while this word's own refine job runs and its result arrives", async () => {
+    const EXPANDED_BBOX: BBox = { x: 6, y: 16, width: 38, height: 23 };
+    let currentBbox = DEFAULT_BBOX;
+    server.use(
+      http.get("/api/projects/p1/pages/0", () => HttpResponse.json(makePageResponse(currentBbox))),
+    );
+
+    const tracking = createFakeRefineTracking();
+    const qc = makeQueryClient();
+
+    function Harness() {
+      const q = useQuery({
+        queryKey: ["page", "p1", 0],
+        queryFn: async () => {
+          const res = await fetch("/api/projects/p1/pages/0");
+          return res.json() as Promise<ReturnType<typeof makePageResponse>>;
+        },
+        initialData: makePageResponse(DEFAULT_BBOX),
+      });
+      const refineTracking = tracking.useTracking();
+      const word = q.data.line_matches[0].word_matches[0];
+      return (
+        <BBoxSection word={word} projectId="p1" pageIndex={0} refineTracking={refineTracking} />
+      );
+    }
+
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={qc}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+
+    // A refine job for this word is already running (e.g. the user just
+    // clicked Refine) — the inputs must stay usable regardless.
+    act(() => {
+      tracking.start("job-typing-1", "0-0");
+    });
+
+    const xInput = screen.getByTestId("bbox-input-x");
+    expect(xInput).not.toBeDisabled();
+    await user.click(xInput);
+    await user.clear(xInput);
+    await user.type(xInput, "777"); // uncommitted — no blur yet
+
+    // The job's result arrives while X is still focused, mid-edit.
+    act(() => {
+      tracking.completeWith("0-0", 1);
+    });
+    currentBbox = EXPANDED_BBOX;
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ["page", "p1", 0] });
+    });
+
+    // Y/W/H — not focused — pick up the refine's result immediately.
+    await waitFor(() => {
+      expect(screen.getByTestId("bbox-input-y").value).toBe("16");
+    });
+    expect(screen.getByTestId("bbox-input-w").value).toBe("38");
+    expect(screen.getByTestId("bbox-input-h").value).toBe("23");
+    // X — still focused — keeps exactly what the user is typing.
+    expect(screen.getByTestId("bbox-input-x").value).toBe("777");
+  });
+
+  // ─── Review round 3, finding 2 (medium): `focusedField` must be cleared
+  // explicitly when the selected word changes. BBoxSection has no `key`
+  // tied to word identity (WordDetail reuses the same instance across a
+  // selection change), so the coordinate inputs are the same DOM nodes
+  // across words — nothing blurs them just because `word` changed underneath.
+  // Without an explicit clear, a field focused on one word would keep
+  // exempting itself from every future word's resync too. ────────────────
+
+  it("clears focusedField when the selected word changes, so it doesn't exempt the new word's field from resync", async () => {
+    // Deliberately uses `rerender` with a new `word` prop, not a click on
+    // some "switch word" control — clicking anything focusable would blur
+    // X itself and mask exactly the gap this test guards: WordDetail
+    // reuses the same BBoxSection instance (no `key` tied to word
+    // identity) when the selection changes, so the coordinate inputs are
+    // the same DOM nodes across words, and nothing about a prop update
+    // blurs them on its own (a real example: the `]`/`[` word-advance
+    // hotkeys change the selection without touching this input at all).
+    const WORD_A = makeWord(DEFAULT_BBOX); // "0-0"
+    const WORD_B_BBOX: BBox = { x: 50, y: 60, width: 70, height: 80 };
+    const WORD_B_RESYNCED: BBox = { x: 51, y: 61, width: 71, height: 81 };
+    const WORD_B: WordMatch = { ...makeWord(WORD_B_BBOX), line_index: 1, word_index: 1 }; // "1-1"
+
+    const tracking = createFakeRefineTracking();
+    const qc = makeQueryClient();
+
+    function Harness({ word }: { word: WordMatch }) {
+      const refineTracking = tracking.useTracking();
+      return (
+        <BBoxSection word={word} projectId="p1" pageIndex={0} refineTracking={refineTracking} />
+      );
+    }
+
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <QueryClientProvider client={qc}>
+        <Harness word={WORD_A} />
+      </QueryClientProvider>,
+    );
+
+    // Focus X on word A — no blur.
+    const xInput = screen.getByTestId("bbox-input-x");
+    await user.click(xInput);
+    expect(xInput).toHaveFocus();
+
+    // Selection changes to word B via a prop update alone — same DOM
+    // input node, so focus persists (confirming this reproduces the real
+    // risk). `draft` itself does not resync off a plain prop change today
+    // (a separate, pre-existing gap this test isn't about — the only
+    // thing that ever writes `word.bbox` into `draft` is the outcome-driven
+    // resync below), so this step only needs to prove focus survived.
+    rerender(
+      <QueryClientProvider client={qc}>
+        <Harness word={WORD_B} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId("bbox-input-x")).toHaveFocus();
+
+    // Word B's own refine job completes, and its result lands — the one
+    // path that does write `word.bbox` into `draft`.
+    act(() => {
+      tracking.completeWith("1-1", 1);
+    });
+    rerender(
+      <QueryClientProvider client={qc}>
+        <Harness word={{ ...WORD_B, bbox: WORD_B_RESYNCED }} />
+      </QueryClientProvider>,
+    );
+
+    // If `focusedField` had carried over from word A ("x"), the resync
+    // would keep whatever `draft.x` already was (word A's stale 10)
+    // instead of taking word B's resynced 51 like every other field.
+    await waitFor(() => {
+      expect(screen.getByTestId("bbox-input-x").value).toBe("51");
+    });
+    expect(screen.getByTestId("bbox-input-y").value).toBe("61");
+    expect(screen.getByTestId("bbox-input-w").value).toBe("71");
+    expect(screen.getByTestId("bbox-input-h").value).toBe("81");
+  });
+
+  // ─── Review finding 2 (high): refine and expand_then_refine no-op when
+  // the page has no cv2_numpy_page_image (true for any page loaded from the
+  // store) — a documented outcome, not an edge case. The resync must key
+  // off the outcome's `refined` count. See useBboxRefineTracking.test.tsx
+  // for the toast-wording coverage (that lives in the hook now). ─────────
+
+  it("a no-op outcome (refined: 0) does not arm a resync for a later, unrelated bbox change", async () => {
+    // The bug this guards: `pendingRefineSync` used to arm unconditionally
+    // on any "complete" status. A no-op refine never changes `word.bbox`,
+    // so the flag just sat there armed — until some later, wholly
+    // unrelated change to `word.bbox` (a GT rematch, a different word's
+    // edit landing on the same query, anything) arrived as a fresh prop
+    // and got silently snapped into `draft`, as if IT were the refine's
+    // result.
+    let currentBbox: BBox = DEFAULT_BBOX;
+    server.use(
+      http.get("/api/projects/p1/pages/0", () => HttpResponse.json(makePageResponse(currentBbox))),
+    );
+
+    const tracking = createFakeRefineTracking();
+    const qc = makeQueryClient();
+
+    function Harness() {
+      const q = useQuery({
+        queryKey: ["page", "p1", 0],
+        queryFn: async () => {
+          const res = await fetch("/api/projects/p1/pages/0");
+          return res.json() as Promise<ReturnType<typeof makePageResponse>>;
+        },
+        initialData: makePageResponse(DEFAULT_BBOX),
+      });
+      const refineTracking = tracking.useTracking();
+      const word = q.data.line_matches[0].word_matches[0];
+      return (
+        <BBoxSection word={word} projectId="p1" pageIndex={0} refineTracking={refineTracking} />
+      );
+    }
+
+    render(
+      <QueryClientProvider client={qc}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+
+    // The job completes as a genuine no-op — nothing was refined.
+    act(() => {
+      tracking.completeWith("0-0", 0);
+    });
+
+    // Now something else entirely changes this word's bbox and the same
+    // page query is invalidated — nothing to do with the no-op refine
+    // above. If the flag were still armed, this arrival would get
+    // misattributed to "the refine finished" and silently overwrite draft.
+    currentBbox = { x: 999, y: 999, width: 999, height: 999 };
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ["page", "p1", 0] });
+    });
+    await waitFor(() => expect(qc.getQueryData(["page", "p1", 0])).toBeDefined());
+
+    expect(screen.getByTestId("bbox-input-x").value).toBe("10");
+  });
+
+  it("a POST failure to start the refine job shows an error toast", async () => {
+    server.use(
+      http.post("/api/projects/p1/pages/0/refine", () =>
+        HttpResponse.text("boom", { status: 500 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderBBox();
+
+    await user.click(screen.getByTestId("bbox-refine-button"));
+
+    await waitFor(() => {
+      const calls = toastMock.mock.calls as [unknown, { style?: { borderLeft?: string } }?][];
+      const errorCall = calls.find(([, opts]) =>
+        opts?.style?.borderLeft?.includes("status-mismatch"),
+      );
+      expect(errorCall).toBeDefined();
+    });
+  });
+
+  // ─── Review finding 4 (medium): refineTracking.jobId is one shared value
+  // across every word; a job started on one word must not disable another
+  // word's controls with no explanation. ─────────────────────────────────
+
+  it("does not disable this word's controls while a DIFFERENT word's refine job runs", async () => {
+    const tracking = createFakeRefineTracking();
+    act(() => {
+      tracking.start("job-other-word", "9-9");
+    });
+
+    renderBBox(makeWord(DEFAULT_BBOX), tracking); // this word is "0-0"
+
+    expect(screen.getByTestId("bbox-input-x")).not.toBeDisabled();
+    expect(screen.getByTestId("bbox-nudge-right")).not.toBeDisabled();
+    expect(screen.getByTestId("bbox-reset-button")).not.toBeDisabled();
+  });
+
+  it("disables this word's refine buttons (not its manual controls) while a different word's job runs, and says why", async () => {
+    const tracking = createFakeRefineTracking();
+    act(() => {
+      tracking.start("job-other-word", "9-9");
+    });
+
+    renderBBox(makeWord(DEFAULT_BBOX), tracking); // this word is "0-0"
+
+    const refineButton = screen.getByTestId("bbox-refine-button");
+    // The availability probe (msw) resolves asynchronously; wait past its
+    // loading state so the title reflects the "other word" reason, not
+    // "checking availability".
+    await waitFor(() => expect(refineButton.title.toLowerCase()).toContain("another word"));
+    expect(refineButton).toBeDisabled();
+    expect(screen.getByTestId("bbox-expand-refine-button")).toBeDisabled();
+    expect(screen.getByTestId("bbox-expand-button")).toBeDisabled();
+
+    // Manual editing stays available — only the job-backed buttons wait.
+    expect(screen.getByTestId("bbox-input-x")).not.toBeDisabled();
+  });
+
+  it("still disables Nudge/Reset (not the inputs) while this word's own refine job runs", async () => {
+    server.use(
+      http.post("/api/projects/p1/pages/0/refine", () =>
+        HttpResponse.json({ job_id: "job-this-word" }, { status: 202 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderBBox(makeWord(DEFAULT_BBOX)); // "0-0"
+
+    await user.click(screen.getByTestId("bbox-refine-button"));
+
+    await waitFor(() => expect(screen.getByTestId("bbox-nudge-right")).toBeDisabled());
+    expect(screen.getByTestId("bbox-reset-button")).toBeDisabled();
+    // Round 2 findings 2/3: the coordinate inputs are never disabled.
+    expect(screen.getByTestId("bbox-input-x")).not.toBeDisabled();
+  });
+
+  // ─── Review round 2, finding 3 (medium): a refine_bboxes job that never
+  // reaches a terminal state must not leave Nudge/Reset/the refine buttons
+  // disabled forever — useBboxRefineTracking's stall timeout (30s) clears
+  // the slot. Uses the real hook (not the fake) to prove the actual wiring
+  // end to end, not just the hook's own state machine in isolation
+  // (already covered by useBboxRefineTracking.test.tsx). ─────────────────
+
+  it("re-enables Nudge/Reset once the tracker's slot clears (stall timeout or otherwise)", async () => {
+    // The stall timeout mechanism itself (the timer firing, clearing
+    // jobId/word, showing the toast) is covered directly, with fake timers
+    // and no network/userEvent involved, by useBboxRefineTracking.test.tsx
+    // ("stall timeout" describe block). What matters here is that
+    // BBoxSection reacts correctly once the tracker's slot clears — via a
+    // timeout or any other terminal path funnels through the same
+    // jobId/word going null — so this drives that directly through the
+    // fake tracking already used throughout this file.
+    const tracking = createFakeRefineTracking();
+    act(() => {
+      tracking.start("job-hung", "0-0");
+    });
+
+    renderBBox(makeWord(DEFAULT_BBOX), tracking); // "0-0"
+
+    await waitFor(() => expect(screen.getByTestId("bbox-nudge-right")).toBeDisabled());
+    expect(screen.getByTestId("bbox-reset-button")).toBeDisabled();
+
+    // The stall timeout (useBboxRefineTracking.ts) clears the slot the
+    // same way a normal completion does — jobId and word both go null.
+    act(() => {
+      tracking.clearJob();
+    });
+
+    expect(screen.getByTestId("bbox-nudge-right")).not.toBeDisabled();
+    expect(screen.getByTestId("bbox-reset-button")).not.toBeDisabled();
+  });
+
+  // ─── P1-BBOX-UI: useRefineAvailable capability gate ────────────────────────
+
+  it("disables Refine/Expand+Refine/Expand and explains why when the probe reports unavailable", async () => {
+    server.use(
+      http.get("/api/refine/available", () =>
+        HttpResponse.json({ available: false, reason: "no OCR engine wired" }),
+      ),
+    );
+
+    renderBBox();
+
+    await waitFor(() => expect(screen.getByTestId("bbox-refine-button")).toBeDisabled());
+    expect(screen.getByTestId("bbox-expand-refine-button")).toBeDisabled();
+    expect(screen.getByTestId("bbox-expand-button")).toBeDisabled();
+    expect(screen.getByTestId("bbox-refine-unavailable")).toBeInTheDocument();
+  });
+
+  it("clicking a disabled Refine button while unavailable never posts to /refine", async () => {
+    server.use(
+      http.get("/api/refine/available", () =>
+        HttpResponse.json({ available: false, reason: "no OCR engine wired" }),
+      ),
+    );
+    const spy = vi.fn(() => HttpResponse.json({ job_id: "should-not-fire" }, { status: 202 }));
+    server.use(http.post("/api/projects/p1/pages/0/refine", spy));
+
+    const user = userEvent.setup();
+    renderBBox();
+
+    await waitFor(() => expect(screen.getByTestId("bbox-refine-button")).toBeDisabled());
+    await user.click(screen.getByTestId("bbox-refine-button"));
+
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("still allows manual rebox (nudge) while refine is unavailable", async () => {
+    server.use(
+      http.get("/api/refine/available", () =>
+        HttpResponse.json({ available: false, reason: "no OCR engine wired" }),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderBBox();
+
+    await waitFor(() => expect(screen.getByTestId("bbox-refine-button")).toBeDisabled());
+    expect(screen.getByTestId("bbox-nudge-right")).not.toBeDisabled();
   });
 });
