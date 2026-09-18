@@ -1616,3 +1616,45 @@ family and not touched.
   always the same record. Fixed in `typography_page_review` and the export
   bundle.
 - Shipped in `cc41211`.
+
+### [2026-09-18] Poetry is proposed by a rule, not a model
+
+- The labeling track's roadmap deferred finding poetry to a vision-language
+  model, because geometry supposedly could not separate poetry from blockquote.
+  Measured the same day over five aligned books against PGDP's own formatting
+  markup, that premise did not hold. See
+  `pdomain-ocr-synth/docs/research/2026-09-18-ragged-right-finds-poetry-blockquote-has-no-geometric-signature.md`.
+- What ships: `core/regions/poetry.py`, a detector using right-edge raggedness
+  and a rule checking whether each line starts with a capital. Both are computed
+  per paragraph. Text decides when a block's own OCR is usable, raggedness when
+  it is not, chosen per block by that block's own text quality rather than by a
+  corpus-wide switch.
+- Thresholds come from the measurement and are named constants a person can
+  tune. One does not: the OCR-usability share that picks between the two rules
+  is this module's own glue, and the measurement never measured such a cutoff.
+  It says so in the code.
+- Confidence is the measured pooled precision of whichever rule decided, 0.954
+  for text and 0.875 for geometry, and is documented as pooled rather than
+  calibrated. The corpus figure leans on one book that is a poetry anthology;
+  per-book precision across the other four ranges from 12.5 to 88.9 percent.
+  That is honest about what the number is worth, which the existing furniture
+  detector's uncalibrated confidences are not.
+- One real divergence from the measurement, stated in the module docstring: the
+  measurement segments blocks itself from ink-band row projections, and the
+  detector reads the page's already-computed paragraph structure instead. The
+  raggedness and indent formulas are the measurement's own. Only the
+  segmentation differs, in favour of structure this codebase already maintains
+  and already hashes as a facet. The measured precision may not carry over
+  exactly.
+- Blockquote is not attempted, and should not be until it has ground truth. Its
+  best rule reached 2.3 percent precision over 44 heterogeneous spans.
+- A provenance bug fell out of it: the proposal run handler hardcoded
+  `depends_on` to a geometry-only facet set whatever the detector was, which is
+  wrong for any detector that reads OCR text. A detector now declares its own
+  facets and the handler reads them.
+- Indent is recorded in the evidence dict and never gates the decision, because
+  the measurement found it adds noise rather than signal: verse lines fall short
+  of the measure and so read as indented on both sides.
+- What this unblocks: the first `region-decisions.jsonl` this system has ever
+  had. Nothing has ever reviewed a region proposal, so there is no data on where
+  role detection fails. Every future role claim needs that.
