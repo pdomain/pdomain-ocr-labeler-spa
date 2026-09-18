@@ -3640,11 +3640,6 @@ export interface components {
          *
          *     ``page_index``: required when ``scope == "current"``; ignored for
          *     ``all_validated``.  Spec §2 line 419.
-         *
-         *     ``normalize_recognition_labels``: when ``True``, recognition ``labels.json``
-         *     strings are normalised (long-s → ASCII, ligatures → ASCII) before write.
-         *     Image bytes are unchanged.  Requires ``pdomain_book_tools.text.normalize``;
-         *     silently ignored when the module is absent.  Spec: §18-text-normalization.
          */
         ExportRequest: {
             scope: components["schemas"]["ExportScope"];
@@ -3672,11 +3667,6 @@ export interface components {
              * @default false
              */
             recognition_only: boolean;
-            /**
-             * Normalize Recognition Labels
-             * @default false
-             */
-            normalize_recognition_labels: boolean;
         };
         /**
          * ExportResponse
