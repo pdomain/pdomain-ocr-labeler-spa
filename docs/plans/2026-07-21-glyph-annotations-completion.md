@@ -619,13 +619,27 @@ git commit -m "fix(m11): invalidate page query after bulk glyph apply"
 
 **Files:** likely no code; verify + small polish only
 
-- [ ] **Step 1: Verify metrics**
+- [x] **Step 1: Verify metrics**
 
 With Task 1 fixed, `glyphs_reviewed` in `ProjectPage` becomes truthful.
 
 Confirm `WorkspaceMetrics` shows `N/M glyphs` when total > 0.
 
-- [ ] **Step 2: Verify save warning**
+Update (2026-09-18, residual pass): verified true and left unchanged.
+`ProjectPage.tsx` computes `glyphs_reviewed: words.filter((w) =>
+w.glyph_annotations != null).length` — exactly the tri-state the payload
+now carries after Task 1 (null = not reviewed; `{}` or populated = reviewed,
+both count). No production code populates `Word.glyph_annotations` outside
+the sidecar map path `page_to_line_matches.py` stamps from, so there is no
+second source that could disagree with it. Added
+`ProjectPage.test.tsx`'s "glyphs_reviewed metric fed from
+word_matches.glyph_annotations" describe block (2 tests: a mixed
+reviewed-with-marks / reviewed-empty / unreviewed fixture renders "2/3
+glyphs"; a wordless page renders no metrics strip at all) — this exact
+computation had no test before this pass, only `WorkspaceMetrics.tsx`'s own
+rendering-from-a-given-`PageMetrics`-object tests did.
+
+- [x] **Step 2: Verify save warning**
 
 With `glyph_review_required: true` in app config fixture, save emits toast
 via existing `data.warnings` handling in `PageActionsCompact` /
@@ -633,10 +647,28 @@ via existing `data.warnings` handling in `PageActionsCompact` /
 
 Add a focused backend unit/integration assertion if missing.
 
+Update (2026-09-18, residual pass): verified true and left unchanged.
+`api/pages.py::save_page` counts `reviewed_words =
+len(pstate.glyph_annotations_map)` against `total_words =
+len(_page_for_count.words)` — the same sidecar map Task 1's payload inject
+reads, so the count agrees with what a client can see. No test exercised
+either the fire or the silence case before this pass (`rg
+glyph_review_incomplete tests` was empty). Added three integration tests to
+`tests/integration/test_glyph_routes.py`: the warning fires with the exact
+"N of M" count when a word is unreviewed and the gate is on; it is silent
+when every word has been reviewed (with marks or empty) and the gate is on;
+and it is silent by default (gate off) even with zero words reviewed. All
+three passed against the existing code with no fix needed — this gap was a
+missing-test gap, not the defect gap the plan flagged as possible.
+
 - [ ] **Step 3: Optional UX**
 
 If config is false, keep metric muted (current styling is already secondary
 ink). No extra work required unless product wants an explicit “optional” label.
+
+Not attempted in the 2026-09-18 residual pass — genuinely optional per this
+step's own text, and out of that pass's scope (verify Steps 1–2, not design
+new UX).
 
 ---
 
@@ -680,16 +712,29 @@ could do. Covered at the vitest level instead:
 `WordDetail.test.tsx`'s "accepts a prediction, posting to the
 accept-prediction route" test (Task 5).
 
-- [ ] **Step 2: `test_bulk_glyph_mark.py`**
-
-Not attempted in this pass — out of the explicit scope given (Task 9 was
-scoped to the select-word/mark-reviewed flow only).
+- [x] **Step 2: `test_bulk_glyph_mark.py`**
 
 1. Open bulk dialog.
 2. Recipe CT; Preview → assert `bulk-glyph-preview-count` text.
 3. Apply → dialog closes → green/blue badges appear for affected words.
 
-- [ ] **Step 3: Run**
+Update (2026-09-18, residual pass): added `tests/e2e/test_bulk_glyph_mark.py`,
+following `test_glyph_panel.py`'s self-contained fixture-server pattern with
+a two-word fixture ("victor" contains "ct", "plain" does not). Drives the
+dialog for real: opens it from `bulk-glyph-mark-button`, clicks Preview
+(`bulk-glyph-dry-run-button`) and asserts the exact `bulk-glyph-preview-count`
+text ("1 word will be modified"), re-checks via an independent GET that the
+dry-run did not mutate anything, clicks Apply (`bulk-glyph-apply-button`),
+waits for the dialog to close, then makes a second independent GET (not a
+screen assertion — the gap this task named) confirming `glyph_annotations`
+landed on the server for "victor" with the exact ct ligature span and stayed
+`null` for "plain", proving the recipe's own selectivity ran end to end
+rather than every word being stamped blindly. Did not additionally assert
+on-screen badges (the plan's step 3 "green/blue badges appear") — the task
+that drove this pass asked specifically for server-side proof, which the GET
+already gives more precisely than a badge color would.
+
+- [x] **Step 3: Run**
 
 ```bash
 make e2e AI=1
@@ -697,11 +742,22 @@ make e2e AI=1
 uv run pytest tests/e2e/test_glyph_panel.py tests/e2e/test_bulk_glyph_mark.py tests/e2e/test_driver_contract.py -q
 ```
 
-- [ ] **Step 4: Commit**
+Update (2026-09-18): ran the two glyph e2e files together (not
+`test_driver_contract.py` — unaffected by this pass, no new always-on
+testids):
+`PLAYWRIGHT_BROWSERS_PATH=/cache/shared-ai/ms-playwright uv run --group e2e
+pytest tests/e2e/test_bulk_glyph_mark.py tests/e2e/test_glyph_panel.py -n 0
+-p no:cacheprovider --no-cov`. 3 passed in ~5s.
+
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "test(m11): e2e glyph panel and bulk mark flows"
 ```
+
+Committed on `test/glyph-residuals` as part of this residual-closure pass
+(not the original message text above — see the branch's actual commit for
+what it covers).
 
 ---
 
@@ -727,8 +783,23 @@ Only after Tasks 1–9 green:
 - [ ] **Per-mark accept vs wholesale:** UI currently accepts whole prediction
   object; match backend wholesale accept API (already wholesale). Keep
   per-kind testids but implement as wholesale or document limitation.
-- [ ] **Reject semantics:** reject currently stamps empty human annotations;
-  ensure that matches product intent (reviewed-with-no-marks vs ignore).
+- [x] **Reject semantics — ruled 2026-09-18: reviewed-with-no-marks is
+  correct.** A person who rejects a prediction has looked at the word and
+  judged it carries no such mark — exactly what reviewed-with-no-marks
+  means; treating reject as "ignore" would leave the word unreviewed and
+  put it back in the queue, asking the same question forever. Checked
+  `GlyphAnnotationPanel.tsx`'s reject handler against that ruling: it
+  already calls `onSetAnnotations(annotations ?? {ligatures: [],
+  long_s_positions: [], swash: false, source: "human"})` — the same empty
+  human-annotations shape "Mark reviewed" produces — so no code change was
+  needed, only the ruling and a test. Added
+  `WordDetail.test.tsx`'s "rejects a prediction, posting empty human
+  annotations to the glyph-annotations route" test, mocked at the same
+  level `WordDetail.test.tsx`'s accept test uses and for the same reason:
+  no predictor exists anywhere in this codebase and none will be built
+  (Task 10's predictions-attach item, above), so no fixture — browser or
+  otherwise — can plant a prediction for a person to reject; the component
+  level is the highest level at which the click can honestly run.
 
 ---
 
@@ -829,6 +900,26 @@ test_glyph_routes.py` and `BulkGlyphMarkDialog.test.tsx`, the first two by
 not "Tasks 1–11 complete," and this document's `status` frontmatter is left
 as `draft` rather than marked done, so a future reader does not have to
 rediscover this by re-reading every checkbox again.
+
+**Update (2026-09-18, residual-closure pass on `test/glyph-residuals`):**
+three of this note's four open items are now closed, each with new tests
+proving it rather than just a checkbox flip:
+
+- **Task 8** — `glyphs_reviewed` and the `glyph_review_incomplete` warning
+  were both verified truthful against the current code (no defect found in
+  either); each now has tests that did not exist before
+  (`ProjectPage.test.tsx`, `tests/integration/test_glyph_routes.py`).
+- **Task 9, Step 2** — `tests/e2e/test_bulk_glyph_mark.py` now exists and
+  passes; bulk apply is proven in a real browser against the real server,
+  not only at backend-integration and frontend-unit level.
+- **Task 10, reject semantics** — ruled reviewed-with-no-marks is correct
+  (see Task 10 above); the existing code already matched the ruling, and it
+  now has a test (`WordDetail.test.tsx`).
+
+Still open, unchanged by this pass: **Task 5, Step 3** (ligature kind enum
+parity) and Task 10's canvas-overlay and per-mark-accept items — none of
+these were in scope for this pass and none block the usable-path claim
+above.
 
 ---
 

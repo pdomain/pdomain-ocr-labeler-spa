@@ -76,14 +76,16 @@ last_verified: 2026-09-18
 - **Bad-state / error:** No predictions returns a recoverable backend error.
 - **Tier(s):** A
 - **Regression:** no
-- **Test:** accept only —
-  `frontend/src/components/right-panel/WordDetail.test.tsx`'s "accepts a
-  prediction, posting to the accept-prediction route" test and
-  `frontend/src/hooks/useWordMutations.test.tsx`'s `useAcceptGlyphPrediction`
-  suite. No test drives the reject button
-  (`glyph-panel-reject-prediction-{kind}`): predictions never populate in the
-  e2e suite (`IGlyphPredictor` has no live adapter — see §9), and no unit test
-  clicks it either.
+- **Test:** `frontend/src/components/right-panel/WordDetail.test.tsx`'s
+  "accepts a prediction, posting to the accept-prediction route" and
+  "rejects a prediction, posting empty human annotations to the
+  glyph-annotations route" tests, plus `frontend/src/hooks/
+  useWordMutations.test.tsx`'s `useAcceptGlyphPrediction` suite (reject reuses
+  the pre-existing `useSetGlyphAnnotations` hook that suite already covers).
+  Both accept and reject are mocked at this level, not driven in the browser:
+  predictions never populate in the e2e suite (`IGlyphPredictor` has no live
+  adapter and none will be built — see §9), so no fixture can plant a
+  prediction for a browser-driven click to accept or reject.
 
 ### B-GLYPH-004 - Bulk glyph mark dialog previews and applies recipes
 
@@ -102,10 +104,14 @@ last_verified: 2026-09-18
 - **Regression:** no
 - **Test:** `frontend/src/components/glyph/BulkGlyphMarkDialog.test.tsx`
   (rendering, Cancel, and that a successful apply invalidates the page query
-  while a failed apply or a dry-run does not) and, on the backend,
+  while a failed apply or a dry-run does not); on the backend,
   `tests/integration/test_glyph_routes.py`'s
   `test_glyph_bulk_mark_dry_run_returns_preview_without_mutating` and
-  `test_glyph_bulk_mark_apply_stamps_words_and_bumps_generation`.
+  `test_glyph_bulk_mark_apply_stamps_words_and_bumps_generation`; and, in the
+  browser, `tests/e2e/test_bulk_glyph_mark.py`'s
+  `test_bulk_mark_dialog_apply_reaches_the_api` (M11 plan Task 9 Step 2) —
+  opens the real dialog, previews, applies, and confirms via an independent
+  GET that only the recipe-matching word was stamped on the server.
 
 ### B-GLYPH-005 - Glyph side-channel preserves null, empty, and populated states
 
@@ -137,11 +143,12 @@ last_verified: 2026-09-18
 was draft behavior even though Q-A5–Q-A7 were resolved.
 
 **2026-09-18 update:** the components exist, are mounted in `WordDetail`, and the behaviors above
-are backed by real tests — see each record's **Test** field. Two things are not claimed as shipped:
-the `glyph-panel-reject-prediction-{kind}` button has no test coverage (B-GLYPH-003), and no
-predictor exists to populate `glyph_predictions` at all — the labeler will not build one (decided
-2026-09-18, `docs/context/decisions.md`), so the accept/reject prediction UI is a seam that renders
-nothing for any real user today.
+are backed by real tests — see each record's **Test** field, including the reject button
+(`glyph-panel-reject-prediction-{kind}`, B-GLYPH-003), added the same day this note was last
+revised. One thing is not claimed as shipped: no predictor exists to populate `glyph_predictions`
+at all — the labeler will not build one (decided 2026-09-18, `docs/context/decisions.md`), so the
+accept/reject prediction UI is a seam that renders nothing for any real user today, and both are
+tested mocked rather than in the browser for that reason.
 
 **Stage:** migration-time current-state review on 2026-07-13; docs close-out verification on
 2026-09-18.

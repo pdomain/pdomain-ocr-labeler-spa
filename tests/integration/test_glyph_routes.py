@@ -21,6 +21,7 @@ Issue: ``docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md``.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -86,6 +87,15 @@ class _StubPage:
     def paragraphs(self) -> list[Any]:
         return []
 
+    @property
+    def words(self) -> list[_StubWord]:
+        """Flat list of words across all lines — mirrors ``Page.words``.
+
+        Needed by ``save_page``'s glyph-review-gate word count
+        (``_resolve_page_object_for_pages(pstate).words``).
+        """
+        return [w for line in self.lines_ for w in line.words]
+
 
 def _make_settings(tmp_path: Path, **overrides: object) -> Settings:
     base: dict[str, object] = {
@@ -125,6 +135,42 @@ def _seed_stub_page_state(client: TestClient, *, page: _StubPage) -> PageState:
 def seeded_client(tmp_path: Path, projects_root: Path) -> Iterator[TestClient]:
     """TestClient with book1 loaded and page 0 seeded: line0 = ['victor', 'plain']."""
     settings = _make_settings(tmp_path, source_projects_root=projects_root)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        resp = c.post("/api/projects/load", json={"project_root": str(projects_root / "book1")})
+        assert resp.status_code == 200, resp.text
+        page = _StubPage(
+            lines_=[
+                _StubLine(
+                    words=[
+                        _StubWord(text="victor", ground_truth_text="victor"),
+                        _StubWord(text="plain", ground_truth_text="plain"),
+                    ]
+                )
+            ]
+        )
+        _seed_stub_page_state(c, page=page)
+        yield c
+
+
+@contextmanager
+def _seeded_client_with_gate(
+    tmp_path: Path, projects_root: Path, *, glyph_review_required: bool
+) -> Iterator[TestClient]:
+    """Same fixture as ``seeded_client``, but with an explicit ``config.yaml``.
+
+    ``AppConfig`` (and ``glyph_review_required``) is read once at
+    ``build_app`` time (``bootstrap.build_app`` → ``load_config``), so the
+    gate has to be written to disk *before* the app is built — a
+    ``dependency_overrides`` swap after the fact would not exercise the real
+    ``get_app_config`` wiring the route depends on.
+    """
+    config_root = tmp_path / "config"
+    config_root.mkdir(parents=True, exist_ok=True)
+    (config_root / "config.yaml").write_text(
+        f"glyph_review_required: {glyph_review_required}\n", encoding="utf-8"
+    )
+    settings = _make_settings(tmp_path, source_projects_root=projects_root, config_root=config_root)
     app = build_app(settings)
     with TestClient(app) as c:
         resp = c.post("/api/projects/load", json={"project_root": str(projects_root / "book1")})
@@ -496,3 +542,64 @@ def test_glyph_bulk_mark_apply_persists_across_fresh_store_reload(tmp_path: Path
     entry = sidecars.glyph_annotations_map.get("0_0")
     assert entry is not None, "bulk-mark apply did not persist to the content blob"
     assert entry["ligatures"][0]["kind"] == "ct"
+
+
+# ── glyph_review_incomplete save warning (plan Task 8) ──────────────────────
+#
+# ``AppConfig.glyph_review_required`` gates a save-time advisory warning
+# (never a block — spec §4, issue #270). ``seeded_client`` always seeds a
+# page with exactly two words (line0 = ['victor', 'plain']), so "N of 2
+# word(s) have not been glyph-reviewed" is an exact, not approximate, count.
+
+
+def test_glyph_review_incomplete_warning_fires_when_a_word_is_unreviewed(
+    tmp_path: Path, projects_root: Path
+) -> None:
+    """Gate on, one of two words marked, save reports the other as unreviewed."""
+    with _seeded_client_with_gate(tmp_path, projects_root, glyph_review_required=True) as client:
+        marked = client.post(
+            "/api/projects/book1/pages/0/words/0/0/glyph-annotations",
+            json=_CT_MARK,
+        )
+        assert marked.status_code == 200, marked.text
+
+        resp = client.post("/api/projects/book1/pages/0/save", json={})
+        assert resp.status_code == 200, resp.text
+        warnings = resp.json()["warnings"]
+        assert warnings == ["glyph_review_incomplete: 1 of 2 word(s) have not been glyph-reviewed"]
+
+
+def test_glyph_review_incomplete_warning_silent_when_all_words_reviewed(
+    tmp_path: Path, projects_root: Path
+) -> None:
+    """Gate on, both words reviewed (one with marks, one empty) — no warning."""
+    with _seeded_client_with_gate(tmp_path, projects_root, glyph_review_required=True) as client:
+        marked = client.post(
+            "/api/projects/book1/pages/0/words/0/0/glyph-annotations",
+            json=_CT_MARK,
+        )
+        assert marked.status_code == 200, marked.text
+        reviewed_empty = client.post(
+            "/api/projects/book1/pages/0/words/0/1/glyph-annotations",
+            json={
+                "annotations": {
+                    "ligatures": [],
+                    "long_s_positions": [],
+                    "swash": False,
+                    "source": "human",
+                }
+            },
+        )
+        assert reviewed_empty.status_code == 200, reviewed_empty.text
+
+        resp = client.post("/api/projects/book1/pages/0/save", json={})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["warnings"] == []
+
+
+def test_glyph_review_warning_absent_when_gate_disabled(tmp_path: Path, projects_root: Path) -> None:
+    """Gate off (default): saving with zero words reviewed emits no warning."""
+    with _seeded_client_with_gate(tmp_path, projects_root, glyph_review_required=False) as client:
+        resp = client.post("/api/projects/book1/pages/0/save", json={})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["warnings"] == []

@@ -1424,4 +1424,82 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       });
     });
   });
+
+  // ── glyphs_reviewed metric (M11 plan Task 8) ──────────────────────────────
+  // pageMetrics.glyphs_reviewed counts words with glyph_annotations !== null
+  // (tri-state: null = not reviewed, {} or populated = reviewed) — see
+  // WorkspaceMetrics.tsx's PageMetrics doc comment.
+
+  describe("glyphs_reviewed metric fed from word_matches.glyph_annotations", () => {
+    function glyphWordMatch(wordIndex: number, glyphAnnotations: unknown) {
+      return {
+        line_index: 0,
+        word_index: wordIndex,
+        bbox: { x: 10, y: 10, width: 100, height: 20 },
+        ocr_text: "word",
+        gt_text: "word",
+        match_status: "exact",
+        is_validated: false,
+        glyph_annotations: glyphAnnotations,
+      };
+    }
+
+    function glyphPageFixture() {
+      return {
+        ...pageFixture(),
+        line_matches: [
+          {
+            line_index: 0,
+            paragraph_index: 0,
+            ocr_line_text: "word word word",
+            ground_truth_line_text: "word word word",
+            overall_match_status: "exact",
+            exact_count: 3,
+            fuzzy_count: 0,
+            mismatch_count: 0,
+            unmatched_gt_count: 0,
+            unmatched_ocr_count: 0,
+            validated_word_count: 0,
+            total_word_count: 3,
+            is_fully_validated: false,
+            word_matches: [
+              // Reviewed with marks.
+              glyphWordMatch(0, {
+                ligatures: [{ kind: "ct", char_span: [0, 2] }],
+                long_s_positions: [],
+                swash: false,
+                source: "human",
+              }),
+              // Reviewed, nothing to mark — still counts (non-null, empty).
+              glyphWordMatch(1, {
+                ligatures: [],
+                long_s_positions: [],
+                swash: false,
+                source: "human",
+              }),
+              // Not reviewed.
+              glyphWordMatch(2, null),
+            ],
+          },
+        ],
+      };
+    }
+
+    it("counts reviewed-with-marks and reviewed-empty, not the untouched word", async () => {
+      server.use(
+        http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+        http.get("/api/projects/:pid/pages/:idx", () => HttpResponse.json(glyphPageFixture())),
+      );
+      renderProjectPage();
+      await waitFor(() => {
+        expect(screen.getByTestId("header-metrics-strip")).toHaveTextContent("2/3 glyphs");
+      });
+    });
+
+    it("renders no metrics strip at all when the page has no words", async () => {
+      renderProjectPage();
+      await screen.findByTestId("project-page");
+      expect(screen.queryByTestId("header-metrics-strip")).toBeNull();
+    });
+  });
 });
