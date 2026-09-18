@@ -31,11 +31,21 @@ SEED_TIMEOUT = 60.0
 OVERLAY_TIMEOUT = 90_000
 
 
-def wait_for_app_ready(base_url: str, timeout: float = 10.0) -> None:
+def wait_for_app_ready(base_url: str, timeout: float = 90.0) -> None:
     """Assert the server is healthy before the test starts.
 
     Raises ``RuntimeError`` on timeout; used by tests that need to
     make API calls before Playwright opens a page.
+
+    90s (not the original 10s) — the same cold-model-load budget as
+    ``OVERLAY_TIMEOUT``. Whichever test happens to run first against a
+    freshly booted ``live_server`` can land behind another test's
+    first-ever OCR call (model download + load can take up to ~90s), which
+    ties up the single server process and can leave even ``/healthz``
+    unresponsive past a short budget — see ``test_a11y_live_regions_present``
+    for a test that flaked under the old 10s budget for exactly this
+    reason. The loop below still returns the moment the server responds,
+    so a warm server pays nothing extra.
     """
     import time
 
