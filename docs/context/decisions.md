@@ -1726,3 +1726,32 @@ family and not touched.
   its head word even though it fully lookalike-converts to `11`, a token past
   the length cap, and a check that the underlying word's OCR/ground-truth text
   is untouched by recognition.
+
+### [2026-09-18] Fixed: a job that finished fast hung its event stream forever
+
+- Found by chasing a single intermittent failure of
+  `test_reload_ocr_pipeline_completes_and_returns_200` rather than accepting it
+  as flaky. That instinct paid off for the third time today.
+- The defect: `job_events` fetched the job once, yielded an SSE snapshot from
+  that reference, then re-read **the same stale status** to decide whether to
+  subscribe. `JobEventBroker` drops any event published while nobody is
+  listening. So a job that reached a terminal state between the fetch and the
+  subscribe had its terminal event published, dropped, and its channel closed;
+  the stream then subscribed to an already-closed channel and hung. The event
+  was lost, not delayed.
+- Who this hurt: anybody whose job finished quickly. The faster the machine,
+  the likelier it was.
+- The fix: `subscribe` is split into `listen`, `drain` and `unlisten`, and the
+  handler registers its queue **before** re-reading the status. It then either
+  sees the terminal status directly or is already listening when the terminal
+  event arrives, and can no longer do both wrongly.
+- Not new, and not caused by the same day's per-page lock change.
+  `tests/integration/test_reload_ocr_job.py`'s docstring has said the stream is
+  race-prone since the handler shipped in May, and that file works around it by
+  wrapping the broker. `test_ocr_pipeline_integration.py` uses the real
+  endpoint and was exposed to it. **A test that documents a workaround for a
+  product race is a bug report nobody filed.**
+- How it was proved: fifteen parallel suite runs never reproduced it, because
+  it is a scheduling-order race rather than a load problem. A scripted
+  interleave that completes the job between the snapshot and the subscribe
+  reproduced it deterministically, hung before the fix and passed after.
