@@ -19,13 +19,20 @@ from __future__ import annotations
 import json
 import struct
 import time
+import uuid
 import zlib
 from pathlib import Path
 
 import httpx
 import pytest
+from pdomain_book_tools.ocr.page import Page as BookPage
 from playwright.sync_api import Page, expect
 
+from pdomain_ocr_labeler_spa.adapters.ocr.local_doctr import (
+    _ingest_ocr_result,
+    _register_page_in_project,
+)
+from pdomain_ocr_labeler_spa.core.persistence.page_store import LabelerPageStore
 from tests.e2e.conftest import LiveServer
 from tests.e2e.helpers import SEED_TIMEOUT, wait_for_app_ready
 
@@ -52,56 +59,161 @@ def _minimal_png(width: int = 64, height: int = 32) -> bytes:
     return sig + ihdr + idat + iend
 
 
-def _seed_validated_page(data_root: Path, project_id: str) -> None:
-    """Write a validated legacy envelope + PNG image at page index 0.
+def _seed_store_page(source_root: Path, project_id: str, *, text: str = "test") -> None:
+    """Create a fresh project under ``source_root`` with one real OCR word.
 
-    The page payload must be a REAL pdomain-book-tools page dict (the
-    ``items`` Block tree) — ``Page.from_dict`` ignores flat ``words``/
-    ``lines`` keys, which would leave ``page.words`` empty and the page
-    permanently below the all-words-validated export gate.
+    Seeds a ``LabelerPageStore`` at page index 0 the same way
+    ``conftest.py``'s ``_seed_tiny_fixture_page0_words`` and
+    ``exercise_real_project.py``'s ``exercise_server`` fixture do, so the
+    export handler's store-first page resolution
+    (``resolve_export_page_refs``) sees the same content the typography
+    review API reviews — a legacy ``labeled-projects`` JSON envelope would
+    be a second, disconnected page that the review API never touches.
     """
-    project_dir = data_root / "labeled-projects" / project_id
+    project_dir = source_root / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
 
-    img_path = project_dir / f"{project_id}_000.png"
-    img_path.write_bytes(_minimal_png())
+    image_bytes = _minimal_png()
+    (project_dir / "000.png").write_bytes(image_bytes)
 
     def _bb(x0: int, y0: int, x1: int, y1: int) -> dict:
-        return {
-            "top_left": {"x": x0, "y": y0},
-            "bottom_right": {"x": x1, "y": y1},
-            "is_normalized": False,
-        }
+        return {"top_left": {"x": x0, "y": y0}, "bottom_right": {"x": x1, "y": y1}}
 
     word = {
         "type": "Word",
-        "text": "test",
-        "ground_truth_text": "test",
-        "word_labels": ["validated"],
+        "text": text,
+        "ground_truth_text": text,
+        "word_labels": [],
         "bounding_box": _bb(2, 2, 30, 20),
     }
     line = {"type": "Block", "child_type": "WORDS", "items": [word], "bounding_box": _bb(2, 2, 30, 20)}
     para = {"type": "Block", "child_type": "BLOCKS", "items": [line], "bounding_box": _bb(2, 2, 30, 20)}
-    envelope = {
-        "schema": {"name": "pd_ocr_labeler.user_page", "version": "2.1"},
-        "payload": {
-            "page": {
-                "width": 64,
-                "height": 32,
-                "page_index": 0,
-                "bounding_box": _bb(0, 0, 64, 32),
-                "items": [para],
-            }
-        },
+    page_dict = {
+        "type": "Page",
+        "page_index": 0,
+        "width": 64,
+        "height": 32,
+        "items": [para],
     }
-    json_path = project_dir / f"{project_id}_000.json"
-    json_path.write_text(json.dumps(envelope), encoding="utf-8")
+    book_page = BookPage.from_dict(page_dict)
+
+    store = LabelerPageStore(project_dir)
+    try:
+        _ingest_ocr_result(page=book_page, image_bytes=image_bytes, page_index=0, store=store)
+        _register_page_in_project(
+            store=store,
+            project_id=project_id,
+            page_id=book_page.page_id,
+            page_index=0,
+        )
+    finally:
+        store.close()
+
+
+def _complete_typography_review(base_url: str, project_id: str, page_index: int) -> None:
+    """Validate every word on a page and drive its typography review to completion.
+
+    6a04cbe made ``review.complete`` (text-validated + typography-reviewed,
+    every active word) a precondition for export. This drives the same
+    round trip the WordFooter "Validate" button and TypographySection's
+    "Reviewed regular" button perform, via the real HTTP API rather than
+    browser clicks — for a loaded (non book-labeling-bundle) project,
+    ``typography_page_review`` counts a word's text as reviewed once it
+    carries the ``validated`` word label, so no separate text-validation
+    call is needed here.
+    """
+    # GET first: the seeded event store hydrates the in-memory PageState
+    # lazily on page fetch; mutating before that returns 400 page_not_loaded.
+    warm_resp = httpx.get(f"{base_url}/api/projects/{project_id}/pages/{page_index}", timeout=SEED_TIMEOUT)
+    assert warm_resp.status_code == 200, f"GET page failed: {warm_resp.status_code} {warm_resp.text}"
+
+    validate_resp = httpx.post(
+        f"{base_url}/api/projects/{project_id}/pages/{page_index}/words/validate-batch",
+        json={"scope": "page", "validated": True},
+        timeout=SEED_TIMEOUT,
+    )
+    assert validate_resp.status_code == 200, (
+        f"validate-batch failed: {validate_resp.status_code} {validate_resp.text}"
+    )
+
+    page_resp = httpx.get(f"{base_url}/api/projects/{project_id}/pages/{page_index}", timeout=SEED_TIMEOUT)
+    assert page_resp.status_code == 200, f"GET page failed: {page_resp.status_code} {page_resp.text}"
+    word_ids = [
+        wm["word_id"]
+        for lm in page_resp.json().get("line_matches", [])
+        for wm in lm.get("word_matches", [])
+        if wm.get("word_id")
+    ]
+    assert word_ids, f"page {page_index} has no words with a word_id — nothing to review"
+
+    typography_base = f"{base_url}/api/projects/{project_id}/pages/{page_index}/typography/words"
+    for word_id in word_ids:
+        head_resp = httpx.get(f"{typography_base}/{word_id}/head", timeout=SEED_TIMEOUT)
+        assert head_resp.status_code == 200, (
+            f"typography head failed for {word_id}: {head_resp.status_code} {head_resp.text}"
+        )
+        head = head_resp.json()
+        taxonomy = head["taxonomy"]
+        replacement = {
+            "word_id": head["word_id"],
+            "text": head["text"],
+            "text_sha256": head["text_sha256"],
+            "page_content_sha256": head["page_sha256"],
+            "image_artifact_sha256": head["image_sha256"],
+            "grapheme_map_version": head["grapheme_map_version"],
+            "taxonomy_version": taxonomy["version"],
+            "taxonomy_hash": taxonomy["taxonomy_hash"],
+            "label_states": {label["value"]: "negative" for label in taxonomy["labels"]},
+            "spans": [],
+            "source_evidence_ids": ["e2e-fixture-seed"],
+            "warnings": [],
+            "whole_word_labels": None,
+            "word_revision": head["word_revision"] + 1,
+            "review_state": "reviewed_regular",
+            "metadata": None,
+        }
+        submission = {
+            "expected_head": head["head_token"],
+            "correction_id": str(uuid.uuid4()),
+            "taxonomy_version": taxonomy["version"],
+            "taxonomy_hash": taxonomy["taxonomy_hash"],
+            "grapheme_map_version": head["grapheme_map_version"],
+            "labeler_id": "local",
+            "decision": "reviewed_regular",
+            "replacement": replacement,
+            "replacement_text_sha256": head["text_sha256"],
+            "replacement_page_sha256": head["page_sha256"],
+            "replacement_image_sha256": head["image_sha256"],
+            "replacement_page_head_sha256": head["page_head_sha256"],
+            "replacement_word_revision": head["word_revision"] + 1,
+            "replacement_artifacts": [],
+            "replacement_artifact_payloads": [],
+            "model_runs": [],
+            "coordinate_transforms": [],
+        }
+        correction_resp = httpx.post(
+            f"{typography_base}/{word_id}/corrections", json=submission, timeout=SEED_TIMEOUT
+        )
+        assert correction_resp.status_code == 200, (
+            f"typography correction failed for {word_id}: "
+            f"{correction_resp.status_code} {correction_resp.text}"
+        )
+
+    review_resp = httpx.get(
+        f"{base_url}/api/projects/{project_id}/pages/{page_index}/typography/review",
+        timeout=SEED_TIMEOUT,
+    )
+    assert review_resp.status_code == 200, (
+        f"typography review GET failed: {review_resp.status_code} {review_resp.text}"
+    )
+    review = review_resp.json()
+    assert review.get("complete") is True, f"typography review did not complete: {review}"
 
 
 def _load_tiny_fixture(base_url: str, source_root_path: str) -> None:
-    """POST /api/source-root then POST /api/projects/load for tiny-fixture."""
+    """POST /api/projects/source-root then POST /api/projects/load for tiny-fixture."""
     httpx.post(
-        f"{base_url}/api/source-root",
+        f"{base_url}/api/projects/source-root",
         json={"path": source_root_path},
         timeout=SEED_TIMEOUT,
     )
@@ -126,7 +238,19 @@ def test_export_manifest_created_on_server(live_server: LiveServer) -> None:
 
     data_root = Path(str(live_server.settings.data_root))
     project_id = "e2e-manifest-proj"
-    _seed_validated_page(data_root, project_id)
+    _seed_store_page(live_server.source_root, project_id)
+
+    # 6a04cbe gates export on a loaded project ("Project must be loaded
+    # before reviewed pages can be exported") — load it before exporting.
+    load_resp = httpx.post(
+        f"{live_server.base_url}/api/projects/load",
+        json={"project_root": str(live_server.source_root / project_id)},
+        timeout=10,
+    )
+    assert load_resp.status_code == 200, f"load_project failed: {load_resp.status_code} {load_resp.text}"
+
+    # 6a04cbe also gates export on text-and-typography review completion.
+    _complete_typography_review(live_server.base_url, project_id, page_index=0)
 
     resp = httpx.post(
         f"{live_server.base_url}/api/projects/{project_id}/export",
@@ -172,11 +296,11 @@ def test_export_manifest_created_on_server(live_server: LiveServer) -> None:
     )
     # P1.2 guard (sweep C35): the export must actually export pages — a
     # "successful" 0-page export is the silent-failure mode this slice fixed.
-    # This run exercises the legacy labeled-projects fallback lane (C56).
+    # This run exercises the store-first page resolution lane (C56).
     page_count = data["projects"][project_id].get("page_count", 0)
     assert page_count >= 1, (
         f"export reported success but exported {page_count} pages — "
-        "the legacy labeled-projects fallback lane regressed (C35/C56)"
+        "store-first page resolution regressed (C35/C56)"
     )
 
 
@@ -185,13 +309,17 @@ def test_export_current_page_from_event_store_nonzero(exercise_server) -> None:
     in the event store (the exercise-fixture seed — no labeled-projects file)
     must export real recognition crops + labels to disk.
 
-    Uses ``scope=current`` so the run does not depend on validation flags
-    (P1.1 is fixing validation persistence in parallel); the point here is
-    that the export handler resolves the page from the store head at all.
+    ``scope=current`` used to bypass validation flags entirely; 6a04cbe made
+    text-and-typography review a precondition for export on every scope, so
+    this now validates and reviews the page first. The point of the test is
+    unchanged: the export handler resolves the page from the store head, not
+    a ``labeled-projects`` legacy file (there is none for this project).
     """
     base_url = exercise_server.base_url
     data_root = Path(str(exercise_server.settings.data_root))
     project_id = "exercise-fixture"
+
+    _complete_typography_review(base_url, project_id, page_index=0)
 
     resp = httpx.post(
         f"{base_url}/api/projects/{project_id}/export",
@@ -282,11 +410,15 @@ def test_export_dialog_opens_and_runs(page: Page, live_server: LiveServer) -> No
 
     Verifies the full browser flow:
     1. Load the tiny-fixture project (registered in source_root by conftest).
-    2. Navigate to page 1.
-    3. Open the export dialog via the window.__DIALOG_STORE_OPEN JS bridge
+    2. Validate and typography-review page 0's words via the API (6a04cbe:
+       the export button stays disabled until review is complete — a real
+       reviewer would click through WordFooter/TypographySection to get
+       there; driving it via API keeps the test focused on the export click).
+    3. Navigate to page 1.
+    4. Open the export dialog via the window.__DIALOG_STORE_OPEN JS bridge
        (avoids any interaction with the project-loading overlay).
-    4. Click the Export run button inside the dialog.
-    5. Wait for the export-results element to appear (job started / completed).
+    5. Click the Export run button inside the dialog.
+    6. Wait for the export-results element to appear (job started / completed).
 
     Note: the project-loading overlay may stay up during cold OCR on the first
     page visit.  We bypass it by using the JS bridge to open the dialog —
@@ -295,14 +427,11 @@ def test_export_dialog_opens_and_runs(page: Page, live_server: LiveServer) -> No
     """
     wait_for_app_ready(live_server.base_url)
 
-    # Seed validated page data for tiny-fixture so the export job has content.
-    # The tiny-fixture PNG images exist in source_root; we seed an envelope in
-    # data_root so the export handler can find validated words.
-    data_root = Path(str(live_server.settings.data_root))
-    _seed_validated_page(data_root, "tiny-fixture")
-
-    # Load the tiny-fixture project so the route resolves.
+    # Load the tiny-fixture project so the route resolves. Page 0 ("pageno/1")
+    # ships pre-seeded with real word content (conftest.py's
+    # _seed_tiny_fixture_page0_words) — no extra fixture seeding needed here.
     _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+    _complete_typography_review(live_server.base_url, "tiny-fixture", page_index=0)
 
     # Navigate directly to page 1 of tiny-fixture.
     page.goto(

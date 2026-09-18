@@ -10,6 +10,9 @@
 //
 // Behavior:
 //   - Receives `projectId` + `pageNo` as props (passed from App.tsx AppShell).
+//   - forwardRef + useImperativeHandle expose focusPageInput() for the Mod+J
+//     global hotkey (BUG-KBD-5, docs/plans/2026-07-21-open-findings-fixes.md),
+//     same pattern as QuickSearch's focusInput() for Mod+K.
 //   - Reads `total_pages` from `useProject(projectId).data.image_paths.length`
 //     (`ProjectResponse` includes a `total_pages` field but `image_paths.length`
 //     is used intentionally for parity with the legacy labeler page-count logic).
@@ -23,7 +26,7 @@
 //     behavior in `pd-ocr-labeler/pd_ocr_labeler/views/projects/pages/page_view.py`).
 //   - Total label: `/ ${total_pages}` (testid: nav-page-total-label).
 
-import { useState } from "react";
+import { useRef, useState, useImperativeHandle, forwardRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "@pdomain/pdomain-ui/icons";
 import { useProject } from "../hooks/useProject";
@@ -34,12 +37,27 @@ export interface ProjectNavigationControlsProps {
   pageNo: string;
 }
 
-export default function ProjectNavigationControls({
-  projectId,
-  pageNo,
-}: ProjectNavigationControlsProps) {
+/** Imperative handle exposed via forwardRef so parent can call focusPageInput(). */
+export interface ProjectNavigationControlsHandle {
+  focusPageInput(): void;
+}
+
+const ProjectNavigationControls = forwardRef<
+  ProjectNavigationControlsHandle,
+  ProjectNavigationControlsProps
+>(function ProjectNavigationControls({ projectId, pageNo }, ref) {
   const navigate = useNavigate();
   const { data } = useProject(projectId);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // BUG-KBD-5: expose focusPageInput() so the parent's Mod+J handler can
+  // focus and select this input, ready for the user to type a page number.
+  useImperativeHandle(ref, () => ({
+    focusPageInput() {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    },
+  }));
 
   const currentPageNo = parsePositiveInt(pageNo) ?? 1;
   // data is the flat Project returned by GET /api/projects/{id}.
@@ -110,6 +128,7 @@ export default function ProjectNavigationControls({
 
       {/* Page number input — shows current page; Enter navigates */}
       <input
+        ref={inputRef}
         type="number"
         min={1}
         max={totalPages || undefined}
@@ -158,7 +177,9 @@ export default function ProjectNavigationControls({
       </button>
     </div>
   );
-}
+});
+
+export default ProjectNavigationControls;
 
 /**
  * Parse `value` as a positive integer (>= 1). Returns null for non-numeric,

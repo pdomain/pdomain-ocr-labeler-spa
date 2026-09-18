@@ -10,7 +10,7 @@
 // Save Project: 202+job_id at the project level.
 // Save Page, Load Page, Rematch GT: synchronous, return PagePayload or SavePageResponse.
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { components } from "../api/types";
 
 export type ReloadOCRResponse = components["schemas"]["ReloadOCRResponse"];
@@ -96,12 +96,36 @@ export function useReloadOcr(projectId: string, pageIndex: number) {
 
 // ─── useReloadOcrEdited (#215) ────────────────────────────────────────────
 
+/** The `mutationKey` `useReloadOcrEdited` registers under (see its docstring). */
+function reloadOcrEditedMutationKey(projectId: string, pageIndex: number): readonly unknown[] {
+  return ["reload-ocr-edited", projectId, pageIndex];
+}
+
+/**
+ * True while a Reload OCR (Edited) request for this page is in flight,
+ * regardless of which component instance started it.
+ *
+ * `ProjectPage.tsx` (Mod+Shift+R hotkey gate) and `PageActionsCompact.tsx`
+ * (the "Reload OCR (Edited)" button) each hold their own
+ * `useReloadOcrEdited(...)` instance. Without a shared `mutationKey`,
+ * clicking the button doesn't stop the hotkey's own `isPending` — which only
+ * ever sees mutations *it* started — from staying false, so the hotkey
+ * re-opens the confirm dialog and can fire a second re-OCR while the first
+ * is still running. Re-OCR resets the page's undo history, so that's real
+ * data loss, not a harmless double click. Same pattern as
+ * useRegionMutations.ts's `useRegionDecisionPending`.
+ */
+export function useReloadOcrEditedPending(projectId: string, pageIndex: number): boolean {
+  return useIsMutating({ mutationKey: reloadOcrEditedMutationKey(projectId, pageIndex) }) > 0;
+}
+
 /**
  * Trigger OCR reload for a page using the edited image (use_edited_image: true).
  * Returns 202 + job_id; same job-tracking pattern as useReloadOcr.
  */
 export function useReloadOcrEdited(projectId: string, pageIndex: number) {
   return useMutation<ReloadOCRResponse>({
+    mutationKey: reloadOcrEditedMutationKey(projectId, pageIndex),
     mutationFn: () =>
       apiPost<ReloadOCRResponse>(`${pageBase(projectId, pageIndex)}/reload-ocr`, {
         use_edited_image: true,

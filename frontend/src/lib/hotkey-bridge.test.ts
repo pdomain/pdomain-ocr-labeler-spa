@@ -27,6 +27,14 @@ describe("comboToKeyCap", () => {
     expect(comboToKeyCap("?")).toEqual(["?"]);
   });
 
+  it("converts 'shift+?' (the ? key, useKey character form) to ['?']", () => {
+    expect(comboToKeyCap("shift+?")).toEqual(["?"]);
+  });
+
+  it("converts 'mod+,' to ['Ctrl', ',']", () => {
+    expect(comboToKeyCap("mod+,")).toEqual(["Ctrl", ","]);
+  });
+
   it("converts 'escape' to ['Esc']", () => {
     expect(comboToKeyCap("escape")).toEqual(["Esc"]);
   });
@@ -84,7 +92,7 @@ describe("scopeToGroup", () => {
   });
 
   it("maps global modal-opener combos to 'view'", () => {
-    expect(scopeToGroup("global", "?")).toBe("view");
+    expect(scopeToGroup("global", "shift+?")).toBe("view");
     expect(scopeToGroup("global", "mod+,")).toBe("view");
     expect(scopeToGroup("global", "mod+o")).toBe("view");
     expect(scopeToGroup("global", "escape")).toBe("view");

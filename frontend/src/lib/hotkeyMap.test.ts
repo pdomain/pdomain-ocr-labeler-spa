@@ -63,8 +63,16 @@ describe("hotkeyMap", () => {
     expect(entry).toBeDefined();
   });
 
-  it("includes the ? (help) global hotkey", () => {
-    const entry = HOTKEY_MAP.find((e) => e.scope === "global" && e.combo === "?");
+  it("includes the ? (help) global hotkey, registered by character (useKey)", () => {
+    // "shift+?", matched by KeyboardEvent.key via useKey: true — not a
+    // physical code — so it works on every keyboard layout, not just US
+    // (see hotkeyMap.ts header comment).
+    const entry = HOTKEY_MAP.find((e) => e.scope === "global" && e.combo === "shift+?");
+    expect(entry).toBeDefined();
+  });
+
+  it("includes the Mod+, (OCR Config) global hotkey, registered by character (useKey)", () => {
+    const entry = HOTKEY_MAP.find((e) => e.scope === "global" && e.combo === "mod+,");
     expect(entry).toBeDefined();
   });
 

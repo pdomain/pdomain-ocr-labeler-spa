@@ -24,6 +24,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useReloadOcr,
   useReloadOcrEdited,
+  useReloadOcrEditedPending,
   useSavePage,
   useSaveProject,
   useLoadPage,
@@ -44,6 +45,7 @@ import { useCancelJob, type UseCancelJobResult } from "../hooks/useCancelJob";
 import { dialogStore } from "../stores/dialog-store";
 import { toast } from "../lib/toast";
 import { PAGE_KINDS } from "../lib/pageKinds";
+import { getLabelerExtension } from "../lib/labelerExtension";
 import { BulkGlyphMarkDialog } from "./glyph/BulkGlyphMarkDialog";
 
 export interface PageActionsCompactProps {
@@ -316,10 +318,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   // be gated on the real edited-image signal (labeler extension flag set by the
   // erase-pixels path / Lane A4) and the source badge can show provenance.
   const pageQ = usePage(projectId || undefined, projectId ? pageIndex : undefined);
-  const labelerExt = (pageQ.data?.page_record?.extensions?.["labeler"] ?? null) as {
-    has_edited_image?: boolean;
-  } | null;
-  const hasEditedImage = labelerExt?.has_edited_image === true;
+  const hasEditedImage = getLabelerExtension(pageQ.data?.page_record).has_edited_image === true;
 
   // P2 / C28: durable rotation metadata for the rotation badge.
   const rotationDegrees = pageQ.data?.page_record?.rotation_degrees ?? 0;
@@ -533,6 +532,9 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
 
   const reloadOcr = useReloadOcr(projectId, pageIndex);
   const reloadOcrEdited = useReloadOcrEdited(projectId, pageIndex);
+  // Shared across this instance and ProjectPage's own useReloadOcrEdited
+  // instance (the Mod+Shift+R hotkey gate) — see the hook's docstring.
+  const reloadOcrEditedPending = useReloadOcrEditedPending(projectId, pageIndex);
   const savePage = useSavePage(projectId, pageIndex);
   const saveProject = useSaveProject(projectId);
   const loadPage = useLoadPage(projectId, pageIndex);
@@ -547,7 +549,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
 
   const isBusy =
     reloadOcr.isPending ||
-    reloadOcrEdited.isPending ||
+    reloadOcrEditedPending ||
     savePage.isPending ||
     saveProject.isPending ||
     loadPage.isPending ||
@@ -831,11 +833,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
 
   // D-050: page metadata for name label and source badge.
   const pageName = pageQ.data?.page_record?.image_path?.split("/").pop() ?? null;
-  const pageSource =
-    (
-      pageQ.data?.page_record?.extensions?.["labeler"] as
-        { page_source?: string } | null | undefined
-    )?.page_source ?? null;
+  const pageSource = getLabelerExtension(pageQ.data?.page_record).page_source ?? null;
   const provenanceSummary = pageQ.data?.page_record?.provenance_summary ?? null;
 
   return (

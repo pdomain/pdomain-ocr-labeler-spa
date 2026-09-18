@@ -698,7 +698,12 @@ def test_hotkey_help_close_button(exercise_server: ExerciseServer, page: Page) -
     _wait_for_line_cards(page)
 
     # Open via keyboard shortcut (most reliable regardless of rail visibility).
-    page.keyboard.press("?")
+    # Playwright's press("?") synthesizes code=Slash but shiftKey=False (it
+    # produces "?" directly rather than replaying an actual Shift+/ chord),
+    # while the frontend registers this hotkey as "shift+slash" — a real
+    # physical-code match that requires shiftKey=True. "Shift+Slash" replays
+    # the actual chord a hardware keyboard sends.
+    page.keyboard.press("Shift+Slash")
     page.wait_for_selector('[data-testid="hotkey-help-dialog"]', timeout=5_000)
 
     close_btn = page.locator('[data-testid="hotkey-help-close"]').first
@@ -959,13 +964,19 @@ def test_rebox_section_in_dom(exercise_server: ExerciseServer, page: Page) -> No
 
 
 # ---------------------------------------------------------------------------
-# STYLE-1  style-palette and component-palette in DOM
+# STYLE-1  component-palette in DOM
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.e2e
-def test_style_and_component_palette_in_dom(exercise_server: ExerciseServer, page: Page) -> None:
-    """STYLE-1: style-palette and component-palette are in DOM after word selection."""
+def test_component_palette_in_dom(exercise_server: ExerciseServer, page: Page) -> None:
+    """STYLE-1: component-palette is in DOM after word selection.
+
+    ``style-palette`` was retired by 6a04cbe (canonical grapheme review
+    editor); text style now lives in the typography-section workflow, not a
+    standalone chip palette. This test keeps the still-live component-palette
+    assertion.
+    """
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
@@ -977,8 +988,7 @@ def test_style_and_component_palette_in_dom(exercise_server: ExerciseServer, pag
         "2026-07-21-e2e-non-blocking-soft-skips.md)"
     )
 
-    page.wait_for_selector('[data-testid="style-palette"]', state="attached", timeout=10_000)
-    assert page.locator('[data-testid="style-palette"]').count() > 0, "style-palette must be in DOM"
+    page.wait_for_selector('[data-testid="component-palette"]', state="attached", timeout=10_000)
     assert page.locator('[data-testid="component-palette"]').count() > 0, "component-palette must be in DOM"
 
 

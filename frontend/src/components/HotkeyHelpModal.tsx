@@ -91,10 +91,27 @@ export function HotkeyHelpModal() {
   const groups = useHotkeyGroups();
   const close = () => dialogStore.close("hotkeyHelp");
 
-  // ? key opens help outside inputs (enableOnFormTags: false is default)
-  useHotkey("?", () => {
-    dialogStore.open("hotkeyHelp");
-  });
+  // ? key opens help outside inputs (enableOnFormTags: false is default).
+  //
+  // Registered by *character* (`useKey: true`, matching `KeyboardEvent.key`)
+  // rather than by physical code. A code-based "shift+slash" (the first fix
+  // here) only matches the US-layout position of "?" — on a German or
+  // French keyboard a different physical key produces "?", so a code-based
+  // binding is dead there while the key that actually types "?" does
+  // nothing. `useKey: true` matches what the user typed, not where their
+  // fingers were, so it works on every layout. This is the deliberate
+  // exception to the physical-code convention used elsewhere in this file
+  // and in hotkeyMap.ts (bracketleft/bracketright, mod+o, …) — those are
+  // navigation keys where physical position IS the point (see
+  // useRegionReviewHotkeys.ts); "?" is a character the user is asking for,
+  // not a position.
+  useHotkey(
+    "shift+?",
+    () => {
+      dialogStore.open("hotkeyHelp");
+    },
+    { useKey: true },
+  );
   // NOTE: No manual Esc useHotkey — Radix Dialog handles Escape natively.
 
   return (
@@ -105,11 +122,19 @@ export function HotkeyHelpModal() {
       }}
     >
       {/* DialogContent auto-composes DialogPortal + DialogOverlay (pdomain-ui convention).
-          Tailwind overrides supply the labeler's visual chrome since primitives.css
-          has no definition for .dialog in this app. */}
+          primitives.css DOES define ".dialog" (positioning + chrome); the
+          Tailwind classes below only add labeler-specific sizing/color on top
+          of it — they must not re-supply positioning (see note below). */}
       <DialogContent
         data-testid="hotkey-help-dialog"
-        className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 max-w-2xl w-full mx-4 max-h-[80vh] bg-bg-surface rounded-lg border border-border-2 shadow-lg focus:outline-hidden flex flex-col p-0"
+        // pdomain-ui's shared ".dialog" class (primitives.css) already supplies
+        // `position: fixed; top/left: 50%; transform: translate(-50%, -50%)` for
+        // centering. Do NOT repeat `fixed`/`top-1/2`/`left-1/2`/`-translate-*`
+        // here — Tailwind's translate utilities set the CSS `translate`
+        // longhand, which composes *in addition to* (not instead of) the
+        // `.dialog` class's `transform` shorthand, doubling the offset and
+        // pushing the dialog off-screen (see HotkeyHelpModal.test.tsx).
+        className="max-w-2xl w-full mx-4 max-h-[80vh] bg-bg-surface rounded-lg border border-border-2 shadow-lg focus:outline-hidden flex flex-col p-0"
       >
         {/* Header */}
         <DialogHeader className="flex flex-row items-center justify-between px-4 py-3 border-b border-border-1">

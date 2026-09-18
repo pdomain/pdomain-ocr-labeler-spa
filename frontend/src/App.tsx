@@ -56,6 +56,7 @@ import { useProject } from "./hooks/useProject";
 // relying on lazy-loading to keep canvas out of jsdom.
 const PerfTestPage = lazy(() => import("./pages/PerfTestPage"));
 import { useNotificationStream } from "./hooks/useNotificationStream";
+import { useHotkey } from "./hooks/useHotkey";
 import { OCRConfigModal } from "./components/OCRConfigModal";
 import { ExportDialog } from "./components/ExportDialog";
 import { HotkeyHelpModal } from "./components/HotkeyHelpModal";
@@ -195,6 +196,45 @@ function useRouteProjectContext(): { projectId: string | null; pageIndex: number
 /** Inner component so hooks (useNotificationStream) run inside providers. */
 function AppInner() {
   useNotificationStream();
+
+  // Mod+, opens OCR Config from any route (hotkeyMap.ts "OCR Config", BUG-KBD-1
+  // in docs/plans/2026-07-21-open-findings-fixes.md). Registered here rather
+  // than per-route so the shortcut works before a project is loaded, the same
+  // way `OCRConfigModal` below is mounted unconditionally and HotkeyHelpModal
+  // keeps its own "?" listener mounted for the whole app.
+  //
+  // Registered by *character* (`useKey: true`, matches `KeyboardEvent.key`)
+  // rather than by physical code. A code-based "mod+comma" only matches the
+  // US-layout position of ",", which is dead on any layout where a
+  // different physical key produces the comma. `useKey: true` fires for
+  // whatever key produces "," on the user's actual layout — see
+  // HotkeyHelpModal.tsx's "?" hotkey for the same reasoning, and
+  // useRegionReviewHotkeys.ts's bracket keys for the contrasting case where
+  // physical position (not character) is the point.
+  //
+  // `delimiter` overridden: react-hotkeys-hook's default delimiter (also
+  // ",") splits a combo *string* into multiple independent hotkeys — with
+  // the default, "mod+," parses as two combos, "mod+" and "" (empty), and
+  // never matches anything. Since our combo's key genuinely is a comma
+  // character, the list-delimiter has to move out of the way instead.
+  useHotkey(
+    "mod+,",
+    () => {
+      dialogStore.open("ocrConfig");
+    },
+    { useKey: true, delimiter: "|" },
+  );
+
+  // Mod+O opens the Source Folder dialog from any route (hotkeyMap.ts "Open
+  // Source Folder dialog"; docs/plans/2026-07-21-open-findings-fixes.md notes
+  // it as the same class of bug as Mod+,). `SourceFolderDialog` is likewise
+  // mounted unconditionally below (its only live trigger buttons today are
+  // route-specific: the root project-list "Open Folder" button and the
+  // project-route breadcrumb icon), so this hotkey lives at the same global
+  // level as Mod+, above rather than duplicated per route.
+  useHotkey("mod+o", () => {
+    dialogStore.open("sourceFolder");
+  });
 
   // Dialog open-state slices — re-render only when these change.
   const ocrConfigOpen = useDialogStore((s) => s.ocrConfig.open);

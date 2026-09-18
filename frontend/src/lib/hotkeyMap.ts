@@ -5,8 +5,27 @@
 // Single source of truth for both registration (useHotkey) and the ? help modal.
 // Scopes: global | viewport | matches | dialog | source-folder | gt-input
 //
-// Combo syntax: "mod+s", "mod+shift+r", "?" etc.
+// Combo syntax: "mod+s", "mod+shift+r", "mod+,", "shift+?" etc.
 // "mod" maps to Ctrl on Windows/Linux and Cmd on Mac (react-hotkeys-hook convention).
+//
+// Punctuation keys are registered one of two ways, deliberately (issue #235
+// 5-to-6 follow-up; see docs/context/decisions.md):
+//
+//   - By physical `KeyboardEvent.code`, when the key's *position* is the
+//     point — react-hotkeys-hook 5's default matching. `[`/`]` are
+//     "bracketleft"/"bracketright": they're a prev/next pair chosen because
+//     they sit next to each other on the keyboard, the same way arrow keys
+//     are a position pair. See useRegionReviewHotkeys.ts.
+//   - By the character the key *produces* (`useKey: true`, matches
+//     `KeyboardEvent.key`), when the user is asking for that character
+//     specifically, and the physical key that produces it moves between
+//     layouts. `mod+,` and `shift+?` are registered this way (App.tsx,
+//     HotkeyHelpModal.tsx) — a code-based binding for either only matches
+//     the US-layout position, so it's dead on a German or French keyboard
+//     while the key that actually types the character does nothing.
+//
+// hotkey-bridge.ts converts combo strings to their display glyphs for the
+// help modal; it doesn't need to know which matching mode a combo uses.
 
 export type Scope =
   "global" | "viewport" | "matches" | "dialog" | "source-folder" | "gt-input" | "region-review";
@@ -30,7 +49,7 @@ export const HOTKEY_MAP: HotkeyEntry[] = [
   { combo: "mod+e", scope: "global", description: "Export…" },
   { combo: "mod+,", scope: "global", description: "OCR Config" },
   { combo: "mod+o", scope: "global", description: "Open Source Folder dialog" },
-  { combo: "?", scope: "global", description: "Show hotkey help" },
+  { combo: "shift+?", scope: "global", description: "Show hotkey help" },
   { combo: "escape", scope: "global", description: "Close modal / cancel" },
   // Navigation
   { combo: "mod+arrowleft", scope: "global", description: "Previous page" },

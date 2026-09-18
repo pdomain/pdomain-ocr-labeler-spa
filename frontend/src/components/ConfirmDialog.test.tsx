@@ -11,6 +11,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { expectNoDuplicateDialogPositioning } from "../test/dialogPositioning";
 
 describe("ConfirmDialog (#236)", () => {
   it("renders when open=true", () => {
@@ -60,5 +61,13 @@ describe("ConfirmDialog (#236)", () => {
     expect(screen.getByText("Warning")).toBeInTheDocument();
     expect(screen.getByTestId("confirm-dialog-confirm")).toHaveTextContent("Yes, proceed");
     expect(screen.getByTestId("confirm-dialog-cancel")).toHaveTextContent("Go back");
+  });
+
+  // Regression (2026-09-18): see HotkeyHelpModal.test.tsx — same double
+  // -transform bug affects any dialog whose className re-adds
+  // `-translate-x-1/2 -translate-y-1/2` on top of pdomain-ui's ".dialog" class.
+  it("does not duplicate the centering transform pdomain-ui's .dialog class already applies", () => {
+    render(<ConfirmDialog open={true} message="msg" onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    expectNoDuplicateDialogPositioning(screen.getByTestId("confirm-dialog"));
   });
 });

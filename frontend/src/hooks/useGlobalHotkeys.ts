@@ -6,17 +6,25 @@
 //   Mod+S         → onSavePage (non-destructive)
 //   Mod+Shift+S   → onSaveProject (non-destructive)
 //   Mod+R         → onReloadOcr (destructive — confirm required by caller)
+//   Mod+Shift+R   → onReloadOcrEdited (destructive — confirm required by
+//                   caller; caller should also match the "Reload OCR
+//                   (Edited)" button's own hasEditedImage gate — see
+//                   PageActionsCompact.tsx — since firing it with no edited
+//                   image to reload makes no sense. BUG-KBD-1's sibling in
+//                   docs/plans/2026-07-21-open-findings-fixes.md.)
 //   Mod+L         → onLoadPage ("Reload" — confirm required by caller)
 //   Mod+G         → onRematchGt (destructive — confirm required by caller)
 //   Mod+E         → onExport
+//   Mod+J         → onJumpToPage (BUG-KBD-5 — focus the page-number input)
 //   Mod+ArrowLeft → onPrevPage
 //   Mod+ArrowRight → onNextPage
 //   Mod+Home      → onFirstPage
 //   Mod+End       → onLastPage
 //
 // The hook itself does NOT show the confirm dialog — callers should wrap
-// onReloadOcr / onLoadPage / onRematchGt with a confirm-dialog state setter
-// so the UX reads: hotkey fires → dialog opens → user confirms → mutation fires.
+// onReloadOcr / onReloadOcrEdited / onLoadPage / onRematchGt with a
+// confirm-dialog state setter so the UX reads: hotkey fires → dialog opens →
+// user confirms → mutation fires.
 
 import { useHotkey } from "./useHotkey";
 
@@ -28,12 +36,18 @@ export interface GlobalHotkeyHandlers {
   /** Fired by Mod+R (Reload OCR). Destructive — caller must show confirm first.
    *  U-6: re-OCR resets the page's undo history. */
   onReloadOcr?: () => void;
+  /** Fired by Mod+Shift+R (Reload OCR, edited image). Destructive — caller
+   *  must show confirm first, and — like the "Reload OCR (Edited)" button —
+   *  must no-op when the page has no edited image to reload. */
+  onReloadOcrEdited?: () => void;
   /** Fired by Mod+L (Reload page). Caller shows the confirm first (U-7 copy). */
   onLoadPage?: () => void;
   /** Fired by Mod+G (Rematch GT). Destructive — caller should show confirm first. */
   onRematchGt?: () => void;
   /** Fired by Mod+E (Export dialog). */
   onExport?: () => void;
+  /** Fired by Mod+J (Jump to page). Caller focuses the page-number input. */
+  onJumpToPage?: () => void;
   /** Fired by Mod+Z (page undo — event-store undo spec U-1). Suppressed
    *  inside form fields by the useHotkey default (enableOnFormTags: false)
    *  so native text-field undo wins (U-10). */
@@ -62,9 +76,11 @@ export function useGlobalHotkeys({
   onSavePage,
   onSaveProject,
   onReloadOcr,
+  onReloadOcrEdited,
   onLoadPage,
   onRematchGt,
   onExport,
+  onJumpToPage,
   onUndo,
   onRedo,
   onPrevPage,
@@ -78,9 +94,15 @@ export function useGlobalHotkeys({
   useHotkey("mod+s", () => onSavePage?.(), { enabled });
   useHotkey("mod+shift+s", () => onSaveProject?.(), { enabled });
   useHotkey("mod+r", () => onReloadOcr?.(), { enabled });
+  // Distinct from "mod+r": react-hotkeys-hook 5 requires an exact modifier
+  // match (KeyboardEvent.shiftKey against the combo's own "shift" flag), so
+  // Ctrl+R never fires this and Ctrl+Shift+R never fires the plain reload —
+  // no shadowing between the two, registration order doesn't matter.
+  useHotkey("mod+shift+r", () => onReloadOcrEdited?.(), { enabled });
   useHotkey("mod+l", () => onLoadPage?.(), { enabled });
   useHotkey("mod+g", () => onRematchGt?.(), { enabled });
   useHotkey("mod+e", () => onExport?.(), { enabled });
+  useHotkey("mod+j", () => onJumpToPage?.(), { enabled });
   // U-10: enableOnFormTags stays false (useHotkey default) so Mod+Z inside a
   // text input/textarea performs the NATIVE text undo, never the page undo.
   // mod+shift+z is registered first so the plain mod+z handler can't shadow it.

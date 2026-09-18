@@ -8,12 +8,13 @@
 //   - The close button works.
 //   - data-testid="hotkey-help-dialog" is present when open.
 
-import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HotkeyHelpModal } from "./HotkeyHelpModal";
 import { dialogStore } from "../stores/dialog-store";
 import { getPopulatedGroups } from "../lib/hotkey-registry";
+import { expectNoDuplicateDialogPositioning } from "../test/dialogPositioning";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,72 @@ describe("HotkeyHelpModal: dialog rendering", () => {
   it("heading reads 'Keyboard Shortcuts'", () => {
     renderModal();
     expect(screen.getByRole("heading", { name: /keyboard shortcuts/i })).toBeInTheDocument();
+  });
+
+  // Regression (2026-09-18): the dialog rendered off-screen (top: -216px at
+  // 1280x720) because its className duplicated the centering transform that
+  // pdomain-ui's shared ".dialog" class already applies — Tailwind's
+  // `-translate-x-1/2 -translate-y-1/2` compiles to the CSS `translate`
+  // longhand, which composes with (rather than replaces) `.dialog`'s
+  // `transform: translate(-50%, -50%)`, doubling the offset. jsdom cannot
+  // compute the resulting off-screen layout, but the duplicated classes
+  // that cause it are a reliable static signal.
+  it("does not duplicate the centering transform pdomain-ui's .dialog class already applies", () => {
+    renderModal();
+    expectNoDuplicateDialogPositioning(screen.getByTestId("hotkey-help-dialog"));
+  });
+});
+
+// ─── ? keypress (regression: react-hotkeys-hook 4→5 bump, 655dbd9/f9ce5e0) ────
+//
+// react-hotkeys-hook 5 matches combos against the physical `KeyboardEvent.code`,
+// not `.key` — jsdom does not derive `.code` from `.key`, so the test fires a
+// real keydown with both set, exactly as a browser would for a US-layout `?`
+// keypress (Shift held, Slash key). Prior tests here only called
+// `dialogStore.open("hotkeyHelp")` directly, which is why the v5 regression
+// (the modal registered "?" — a string with no `code` — instead of
+// "shift+slash") went unnoticed: nothing exercised the actual keypress.
+
+describe("HotkeyHelpModal: ? keypress opens the modal (real keypress, not the store)", () => {
+  beforeEach(() => {
+    dialogStore.reset();
+  });
+
+  afterEach(() => {
+    dialogStore.reset();
+  });
+
+  it("pressing Shift+/ (?) opens the dialog", async () => {
+    render(<HotkeyHelpModal />);
+    expect(screen.queryByTestId("hotkey-help-dialog")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "?", code: "Slash", shiftKey: true, bubbles: true });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("hotkey-help-dialog")).toBeInTheDocument();
+    });
+  });
+
+  // Non-US layout regression: code-based matching binds to the physical key
+  // *position* (e.g. US Slash), so on a German or French keyboard — where a
+  // different physical key produces "?" — a code-based "shift+slash"
+  // registration never fires. `code` here is deliberately something other
+  // than "Slash" while `key` is still "?", exactly what a real non-US "?"
+  // keypress reports: key and code disagree with the US assumption.
+  it("opens on a non-US layout where the '?' key has a different code (key/code disagree)", async () => {
+    render(<HotkeyHelpModal />);
+    expect(screen.queryByTestId("hotkey-help-dialog")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(document, {
+      key: "?",
+      code: "Digit7", // e.g. German QWERTZ: Shift+7 produces "?"
+      shiftKey: true,
+      bubbles: true,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("hotkey-help-dialog")).toBeInTheDocument();
+    });
   });
 });
 

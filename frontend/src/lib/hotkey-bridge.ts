@@ -44,16 +44,34 @@ const TOKEN_DISPLAY: Record<string, string> = {
 };
 
 /**
+ * Full-combo display overrides for combos whose per-token split doesn't
+ * read naturally. `shift+?` is registered by character (`useKey: true` —
+ * see hotkeyMap.ts) so the produced character reads correctly on every
+ * keyboard layout, but split naively by "+" it would show as two pills,
+ * "Shift" and "?" — misleading, since the shift is inherent to producing
+ * the character, not a separate accelerator modifier held on top of some
+ * other key. `mod+,` doesn't need an entry here: "," is already a single
+ * printable character, so the default per-token split already renders it
+ * correctly as [Ctrl, ","].
+ */
+const COMBO_DISPLAY_OVERRIDES: Record<string, string[]> = {
+  "shift+?": ["?"],
+};
+
+/**
  * Convert a react-hotkeys-hook combo string to an array of display tokens
  * suitable for a single KeyCap (i.e. one KeyCap component showing N pills).
  *
  * Examples:
  *   "mod+s"       → ["Ctrl", "S"]
  *   "shift+enter" → ["Shift", "Enter"]
- *   "?"           → ["?"]
+ *   "shift+?"     → ["?"]   (see COMBO_DISPLAY_OVERRIDES)
+ *   "mod+,"       → ["Ctrl", ","]
  *   "j"           → ["J"]
  */
 export function comboToKeyCap(combo: string): string[] {
+  const override = COMBO_DISPLAY_OVERRIDES[combo.toLowerCase()];
+  if (override) return override;
   return combo.split("+").map((token) => {
     const lower = token.toLowerCase();
     if (TOKEN_DISPLAY[lower]) return TOKEN_DISPLAY[lower];
@@ -76,7 +94,7 @@ const GLOBAL_NAV_COMBOS = new Set([
 ]);
 
 // Global combos that open modals/views map to "view" group.
-const GLOBAL_VIEW_COMBOS = new Set(["?", "mod+,", "mod+o", "escape"]);
+const GLOBAL_VIEW_COMBOS = new Set(["shift+?", "mod+,", "mod+o", "escape"]);
 
 /**
  * Map a (scope, combo) pair to a HotkeyGroup.
