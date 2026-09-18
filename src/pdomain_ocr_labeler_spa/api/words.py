@@ -807,6 +807,16 @@ def add_word(
     pdomain-book-tools picks the closest line by bbox centroid (see
     ``Page.add_word_to_page`` at
     ``pdomain_book_tools/ocr/page.py:2132``).
+
+    ``Page.add_word_to_page`` appends the new word to its target line via
+    ``Block.add_item``, which then re-sorts the line by x position — so a
+    word added between two existing words shifts every later word's index
+    by one, same as line/paragraph merge and word split. The new word has
+    no sidecar entries of its own to place, and every existing word keeps
+    its identity (add never replaces a ``Word`` object), so this reuses
+    ``lines_paragraphs``' identity-snapshot reindex with no refusal needed
+    — see ``_word_structural_edit_refusal_kind``'s docstring for the split
+    case that does need one.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -817,13 +827,22 @@ def add_word(
     if pstate is None or page is None:
         return _page_not_loaded(page_index)
 
+    from .lines_paragraphs import (
+        _finalize_structural_edit,
+        _reindex_sidecar_maps_after_structural_edit,
+        _snapshot_word_positions,
+    )
+
     x1, y1, x2, y2 = _bbox_to_coords(body.bbox)
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
+        before = _snapshot_word_positions(page)
         ok = page.add_word_to_page(x1, y1, x2, y2, body.text)
         if not ok:
             return _mutation_failed(f"add_word_to_page rejected bbox=({x1}, {y1}, {x2}, {y2})")
-        from .lines_paragraphs import _finalize_structural_edit
+        _reindex_sidecar_maps_after_structural_edit(
+            pstate, before=before, after=_snapshot_word_positions(page)
+        )
 
         _finalize_structural_edit(
             page=page,
