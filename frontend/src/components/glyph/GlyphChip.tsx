@@ -6,6 +6,8 @@
 //   word-glyph-chip-{line}-{word}-{kind}          — confirmed chip
 //   word-glyph-chip-{line}-{word}-predicted-{kind} — predicted-only chip
 
+import type React from "react";
+
 export interface GlyphChipProps {
   lineIndex: number;
   wordIndex: number;
@@ -13,7 +15,12 @@ export interface GlyphChipProps {
   kind: string;
   /** True when this is a prediction that has not been confirmed */
   predicted: boolean;
-  onClick: () => void;
+  /**
+   * Receives the native click event so callers (e.g. WordCell) can call
+   * `stopPropagation()` before the click bubbles to an ancestor's own
+   * click handler (the line card's click-to-select).
+   */
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 /**

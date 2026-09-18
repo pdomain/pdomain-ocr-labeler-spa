@@ -61,10 +61,10 @@ implementation decisions before they can be treated as locked behavior.
   (`frontend/src/hooks/useWordMutations.ts`). The real user path is
   select a word on the canvas, open Glyphs, then mark. See
   `docs/specs/behavior/component-glyph-annotations.md`.
-- Word glyph **chip** click handlers (`WordCell.tsx`, under the GT input)
-  are still placeholders (`/* future: open panel */`) — clicking a chip
-  does nothing. This is narrower than the item above: the panel itself has
-  a real, tested entry path; only the chip shortcut into it is unwired.
+- **Resolved 2026-09-18:** word glyph **chip** click handlers (`WordCell.tsx`,
+  under the GT input) now select the word and open the right panel, the same
+  target the pencil (`onEditWord`) button hits — see
+  `docs/context/decisions.md`'s word-edit-dialog retirement entry.
 - BBox Refine/Crop and Rebox Snap currently collapse to simpler/manual rebox
   behavior. Decide whether to document current stubs or require real endpoints.
 - Erase lasso is sent as an axis-aligned rectangle, not a polygon fill.

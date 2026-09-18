@@ -26,6 +26,7 @@
 // Legacy (kept for backward compat):
 //   gt-input-{word_id}               — GT text input (legacy form)
 
+import type React from "react";
 import { useState, useEffect, useRef } from "react";
 import type { components } from "../api/types";
 import { GlyphChip } from "./glyph/GlyphChip";
@@ -134,6 +135,19 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
         : null;
 
   const showChipRow = hasAnnotations || hasPredictions;
+
+  // Glyph chip click — selects this word and opens the right panel, the
+  // same target `onEditWord` (the pencil button) hits; see ProjectPage's
+  // handleEditWord. Shared by every chip below, confirmed and predicted
+  // alike, so a future predictor needs no new wiring here.
+  // stopPropagation for the same reason the pencil button needs it:
+  // LineCard's card-level click selects the *line* (onSelectLine), and
+  // without this, that bubbled line-level selection would immediately
+  // overwrite the more specific word-level selection this click just made.
+  function handleGlyphChipClick(e: React.MouseEvent<HTMLButtonElement>) {
+    e.stopPropagation();
+    onEditWord?.(l, w);
+  }
 
   return (
     <div
@@ -290,9 +304,7 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
               wordIndex={w}
               kind={lig.kind}
               predicted={false}
-              onClick={() => {
-                /* future: open panel */
-              }}
+              onClick={handleGlyphChipClick}
             />
           ))}
           {(word.glyph_annotations?.long_s_positions ?? []).map((pos) => (
@@ -302,9 +314,7 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
               wordIndex={w}
               kind="long_s"
               predicted={false}
-              onClick={() => {
-                /* future: open panel */
-              }}
+              onClick={handleGlyphChipClick}
             />
           ))}
           {word.glyph_annotations?.swash && (
@@ -313,9 +323,7 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
               wordIndex={w}
               kind="swash"
               predicted={false}
-              onClick={() => {
-                /* future: open panel */
-              }}
+              onClick={handleGlyphChipClick}
             />
           )}
           {(word.glyph_predictions?.ligatures ?? [])
@@ -330,9 +338,7 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
                 wordIndex={w}
                 kind={pred.kind}
                 predicted={true}
-                onClick={() => {
-                  /* future: open panel */
-                }}
+                onClick={handleGlyphChipClick}
               />
             ))}
         </div>

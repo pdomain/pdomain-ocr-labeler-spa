@@ -28,15 +28,20 @@ last_verified: 2026-09-18
 - **Trigger:** Page payload includes glyph annotations or predictions.
 - **Preconditions:** Word row/cell renders.
 - **Observable output:** Badge is absent/amber/blue/green as appropriate and
-  confirmed/predicted chips render beside the word.
-- **Backend / side-effects:** Render only.
+  confirmed/predicted chips render beside the word. Clicking a chip selects
+  that word and opens the right panel (same target as the pencil edit
+  button), without also triggering the line card's own click-to-select.
+- **Backend / side-effects:** Render only; the click is a pure selection
+  change (no request).
 - **Bad-state / error:** Null annotations or predictions hide badge/chips
   without crashing.
 - **Tier(s):** A
 - **Regression:** no
 - **Test:** `frontend/src/components/WordCell.test.tsx` (badge absent/amber/
-  blue/green cases) and `frontend/src/components/glyph/GlyphChip.test.tsx`
-  (confirmed vs. predicted chip rendering).
+  blue/green cases, and the "glyph chip click" describe block for
+  select-word-and-open-panel plus no-bubble-to-ancestor), and
+  `frontend/src/components/glyph/GlyphChip.test.tsx` (confirmed vs.
+  predicted chip rendering); browser-level in `tests/e2e/test_glyph_panel.py`.
 
 ### B-GLYPH-002 - Manual glyph review edits word-level annotations
 
