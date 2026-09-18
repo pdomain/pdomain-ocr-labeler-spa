@@ -1009,6 +1009,16 @@ def split_word(
     ``Page.split_word(li, wi, split_fraction)`` in pdomain-book-tools
     (``pdomain_book_tools/ocr/page.py:1756``). pdomain-book-tools only supports
     horizontal split today; ``direction='vertical'`` returns 400.
+
+    Refuses (400 ``word_split_would_orphan_annotations``) when the target
+    word carries a char-bbox sidecar entry, a glyph annotation, or a
+    typography correction — ``Page.split_word`` replaces the word with two
+    brand-new ``Word`` objects, so there is no sound way to carry that
+    per-word state onto either half (see the block comment above
+    ``_WordEditRefusalKind``). Every later word in the line still shifts
+    down by one index when the split adds a word; their sidecar entries are
+    reindexed via an identity snapshot taken before/after the mutation,
+    same mechanism ``lines_paragraphs.py`` uses for line/paragraph merges.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -1020,22 +1030,46 @@ def split_word(
             f"split_word direction={direction!r} not supported; only horizontal split is exposed"
         )
 
+    project = project_state.loaded_project
     pstate = project_state.get_page_state(page_index)
     page = _resolve_page_object(pstate)
-    if pstate is None or page is None:
+    if project is None or pstate is None or page is None:
         return _page_not_loaded(page_index)
+
+    from .lines_paragraphs import (
+        _finalize_structural_edit,
+        _reindex_sidecar_maps_after_structural_edit,
+        _snapshot_word_positions,
+    )
 
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
         word = _resolve_word(page, line_index, word_index)
         if word is None:
             return _word_not_found(line_index, word_index)
+
+        kind = _word_structural_edit_refusal_kind(
+            project=project,
+            project_state=project_state,
+            pstate=pstate,
+            page=page,
+            page_index=page_index,
+            line_index=line_index,
+            word_index=word_index,
+            word=word,
+        )
+        if kind is not None:
+            return _word_split_refused(kind=kind, line_index=line_index, word_index=word_index)
+
+        before = _snapshot_word_positions(page)
         ok = page.split_word(line_index, word_index, body.x_fraction)
         if not ok:
             return _mutation_failed(
                 f"split_word rejected line={line_index} word={word_index} fraction={body.x_fraction}"
             )
-        from .lines_paragraphs import _finalize_structural_edit
+        _reindex_sidecar_maps_after_structural_edit(
+            pstate, before=before, after=_snapshot_word_positions(page)
+        )
 
         _finalize_structural_edit(
             page=page,
@@ -1063,7 +1097,7 @@ def split_word(
     )
 
 
-# ── Word merge — shared core (words/{li}/{wi}/merge + words/merge) ─────
+# ── Word merge / split — shared refusal core ────────────────────────────
 #
 # Two routes reach the same merge: the older per-word `direction` shape
 # (`merge_words`, used by StructureSection's "Merge with prev/next") and
@@ -1081,8 +1115,24 @@ def split_word(
 # calls under the hood) concatenates OCR + GT text with no separator and
 # unions the two bounding boxes; that is exactly ruling 2's contract, so
 # it is called directly instead.
+#
+# `split_word` (above) shares the same refusal-kind check via
+# `_word_structural_edit_refusal_kind`: `Page.split_word` replaces the
+# target word with two brand-new `Word` objects, so neither this module's
+# index-offset reindex (merge, delete) nor `lines_paragraphs.py`'s
+# identity-snapshot reindex (line/paragraph merge) can describe what the
+# *split word's own* sidecar entry should become — an identity snapshot
+# would just find the original object gone and silently drop it. Splitting
+# a word that carries a sidecar entry is refused outright, exactly like
+# merge, rather than guessing how to divide it. Every *other* word in the
+# line still shifts by one index when the split adds a word, so split
+# reuses `lines_paragraphs._snapshot_word_positions` /
+# `_reindex_sidecar_maps_after_structural_edit` to carry their sidecar
+# entries forward — the identity-snapshot approach the line-merge fix
+# already uses, and it works here because those words' objects are
+# untouched by the split.
 
-_MergeRefusalKind = Literal["char_bbox", "glyph_annotation", "typography_correction"]
+_WordEditRefusalKind = Literal["char_bbox", "glyph_annotation", "typography_correction"]
 
 
 def _resolve_logical_page_id(project: Project, page_index: int, project_state: ProjectState) -> str:
@@ -1168,6 +1218,41 @@ def _word_merge_has_typography_correction(
     return log.head(logical_page_id, word_id) is not None
 
 
+def _word_structural_edit_refusal_kind(
+    *,
+    project: Project,
+    project_state: ProjectState,
+    pstate: PageState,
+    page: Any,
+    page_index: int,
+    line_index: int,
+    word_index: int,
+    word: Any,
+) -> _WordEditRefusalKind | None:
+    """Return which sidecar/annotation kind blocks a structural edit on ``word``, else None.
+
+    Shared by word merge (checked for both the keep and remove word) and
+    word split (checked for the word being split) — same three checks in
+    the same order: positional sidecar maps, the book-tools
+    ``glyph_annotations`` attribute, then a typography correction lookup.
+    """
+    kind: _WordEditRefusalKind | None = _word_merge_annotation_kind(
+        pstate=pstate, line_index=line_index, word_index=word_index, word=word
+    )
+    if kind is None:
+        logical_page_id = _resolve_logical_page_id(project, page_index, project_state)
+        if _word_merge_has_typography_correction(
+            project=project,
+            logical_page_id=logical_page_id,
+            page=page,
+            line_index=line_index,
+            word_index=word_index,
+            word=word,
+        ):
+            kind = "typography_correction"
+    return kind
+
+
 def _word_merge_invalid_selection(message: str) -> JSONResponse:
     return JSONResponse(
         status_code=400,
@@ -1175,7 +1260,7 @@ def _word_merge_invalid_selection(message: str) -> JSONResponse:
     )
 
 
-def _word_merge_refused(*, kind: _MergeRefusalKind, line_index: int, word_index: int) -> JSONResponse:
+def _word_merge_refused(*, kind: _WordEditRefusalKind, line_index: int, word_index: int) -> JSONResponse:
     readable = kind.replace("_", " ")
     return JSONResponse(
         status_code=400,
@@ -1184,6 +1269,21 @@ def _word_merge_refused(*, kind: _MergeRefusalKind, line_index: int, word_index:
             message=(
                 f"Cannot merge: word at line {line_index}, word {word_index} carries {readable} "
                 "that would be lost. Merge is refused rather than orphaning it."
+            ),
+            details={"line_index": line_index, "word_index": word_index, "kind": kind},
+        ).model_dump(),
+    )
+
+
+def _word_split_refused(*, kind: _WordEditRefusalKind, line_index: int, word_index: int) -> JSONResponse:
+    readable = kind.replace("_", " ")
+    return JSONResponse(
+        status_code=400,
+        content=ApiError(
+            error="word_split_would_orphan_annotations",
+            message=(
+                f"Cannot split: word at line {line_index}, word {word_index} carries {readable} "
+                "that would be lost. Split is refused rather than orphaning it."
             ),
             details={"line_index": line_index, "word_index": word_index, "kind": kind},
         ).model_dump(),
@@ -1273,7 +1373,7 @@ def _merge_words_core(
 
     Returns a 400 ``JSONResponse`` when either word carries typography
     corrections, glyph annotations, or char bboxes (see module docstring
-    above ``_MergeRefusalKind``). On success mutates ``page``/``pstate``
+    above ``_WordEditRefusalKind``). On success mutates ``page``/``pstate``
     in place (merged text/bbox on the surviving word, sidecar-map
     reindex) and returns None; the caller still owns
     ``_finalize_structural_edit`` (rematch + persist — the single choke
@@ -1284,20 +1384,17 @@ def _merge_words_core(
     keep_word = words[keep_index]
     remove_word = words[remove_index]
 
-    logical_page_id = _resolve_logical_page_id(project, page_index, project_state)
     for word_index, word in ((keep_index, keep_word), (remove_index, remove_word)):
-        kind: _MergeRefusalKind | None = _word_merge_annotation_kind(
-            pstate=pstate, line_index=line_index, word_index=word_index, word=word
-        )
-        if kind is None and _word_merge_has_typography_correction(
+        kind = _word_structural_edit_refusal_kind(
             project=project,
-            logical_page_id=logical_page_id,
+            project_state=project_state,
+            pstate=pstate,
             page=page,
+            page_index=page_index,
             line_index=line_index,
             word_index=word_index,
             word=word,
-        ):
-            kind = "typography_correction"
+        )
         if kind is not None:
             return _word_merge_refused(kind=kind, line_index=line_index, word_index=word_index)
 
