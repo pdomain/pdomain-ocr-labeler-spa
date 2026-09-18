@@ -26,6 +26,7 @@ from __future__ import annotations
 import httpx
 import pytest
 from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from tests.e2e.conftest import LiveServer
 from tests.e2e.helpers import SEED_TIMEOUT, wait_for_page_loaded
@@ -144,13 +145,14 @@ def test_validate_and_save_keyboard_only(live_server: LiveServer, page: Page) ->
       Mod+S — save page (global scope)
 
     Note: The ``V`` (validate) hotkey requires a focused line card in the
-    matches scope. The tiny-fixture pages may not have parsed line cards on
-    first open (OCR output depends on runtime). This test verifies that:
+    matches scope. tiny-fixture page 1 is deterministically seeded with one
+    line of word content (see conftest.py's ``_seed_tiny_fixture_page0_words``,
+    P0-CI-SOFT), so a line card is always present here — this is not an
+    OCR-availability guess. This test verifies that:
 
     1. The project page loads and renders its shell.
-    2. Ctrl+S triggers a save-page request without raising a console error.
-
-    If a line card IS present, it also focuses the first one and presses V.
+    2. V focuses/validates the first line card.
+    3. Ctrl+S triggers a save-page request without raising a console error.
     """
     _goto_page1(live_server, page)
 
@@ -161,18 +163,36 @@ def test_validate_and_save_keyboard_only(live_server: LiveServer, page: Page) ->
     # Ensure project-page shell is healthy before keyboard ops.
     page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
 
-    # Optionally exercise V (validate) if a line card is rendered.
+    # Exercise V (validate) on the first line card.
     try:
-        page.wait_for_selector('[data-testid^="line-card-"]', timeout=5_000, state="attached")
-        line_cards = page.locator('[data-testid^="line-card-"]')
-        # Focus the first line card so the matches-scope hotkeys are active.
-        line_cards.first.click()
-        page.keyboard.press("v")
-        # After pressing V the card state may update — just wait a moment
-        # for any async update to settle before saving.
-        page.wait_for_timeout(300)
-    except Exception:
-        pytest.skip("No line cards rendered — OCR not available in tiny-fixture")
+        page.wait_for_selector('[data-testid^="line-card-"]', timeout=10_000, state="attached")
+    except PlaywrightTimeoutError as exc:
+        # word-match-view (the Matches-tab scroll container LineCard renders
+        # into) collapses to computed height 0 with real word content — its
+        # className="flex-1 overflow-auto" only sizes it under a flex parent,
+        # but TextTabs.tsx wraps `children` in a plain block div, and
+        # style={{contain: "strict"}} then blocks the content-derived
+        # fallback height. With a 0-height scroll container the
+        # @tanstack/react-virtual virtualizer mounts zero items, so no
+        # line-card-* ever attaches. Only surfaces with real word content
+        # (tiny-fixture always had zero words before). Reported to
+        # maintainers as a real product gap (P0-CI-SOFT follow-up) rather
+        # than papered over here.
+        raise AssertionError(
+            "No line-card-* attached to the DOM after loading tiny-fixture page 1 "
+            "with real word content. Suspected cause: word-match-view collapses to "
+            "zero height (CSS flex/contain mismatch in WordMatchView.tsx / "
+            "TextTabs.tsx), so the virtualizer renders no rows. This is a suspected "
+            "product bug, not a stale test expectation; see the P0-CI-SOFT "
+            "follow-up report before changing this assertion."
+        ) from exc
+    line_cards = page.locator('[data-testid^="line-card-"]')
+    # Focus the first line card so the matches-scope hotkeys are active.
+    line_cards.first.click()
+    page.keyboard.press("v")
+    # After pressing V the card state may update — just wait a moment
+    # for any async update to settle before saving.
+    page.wait_for_timeout(300)
 
     # Save the page with Ctrl+S (Mod+S global hotkey).
     page.keyboard.press("Control+s")

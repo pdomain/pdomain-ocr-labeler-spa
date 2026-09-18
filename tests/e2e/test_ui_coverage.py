@@ -603,8 +603,11 @@ def test_word_detail_after_selection(exercise_server: ExerciseServer, page: Page
     """
     _goto_project_page(page, exercise_server.base_url, 1)
     count = _wait_for_line_cards(page)
-    if count == 0:
-        pytest.skip("No worklist rows — page has no OCR line matches in this environment")
+    assert count > 0, (
+        "exercise-fixture page 1 has 0 worklist rows — event-store seeding "
+        "invariant violated (BUG-HIER-1: content presence is deterministic "
+        "on exercise-fixture, see docs/issues/2026-07-21-e2e-non-blocking-soft-skips.md)"
+    )
 
     _click_first_worklist_row(page)
 
@@ -632,8 +635,11 @@ def test_word_detail_sections_in_dom(exercise_server: ExerciseServer, page: Page
     """
     _goto_project_page(page, exercise_server.base_url, 1)
     count = _wait_for_line_cards(page)
-    if count == 0:
-        pytest.skip("No worklist rows — page has no OCR line matches in this environment")
+    assert count > 0, (
+        "exercise-fixture page 1 has 0 worklist rows — event-store seeding "
+        "invariant violated (BUG-HIER-1: content presence is deterministic "
+        "on exercise-fixture, see docs/issues/2026-07-21-e2e-non-blocking-soft-skips.md)"
+    )
 
     # Set word scope in rail before clicking so right panel shows word detail.
     rail_word = page.locator('[data-testid="rail-target-word"]').first
@@ -871,8 +877,12 @@ def test_char_fixer_section_in_dom(exercise_server: ExerciseServer, page: Page) 
 
     # Select a word so WordDetail renders its accordion.
     selected = _select_first_word_via_hierarchy(page)
-    if not selected:
-        pytest.skip("No word-cell found in DOM — page data may not have words")
+    assert selected, (
+        "exercise-fixture page 1 has no selectable word node in the Hierarchy "
+        "tree — event-store seeding invariant violated (BUG-HIER-1: content "
+        "presence is deterministic on exercise-fixture, see docs/issues/"
+        "2026-07-21-e2e-non-blocking-soft-skips.md)"
+    )
 
     # Open the "Char Fixer" accordion item so its content enters the DOM.
     _open_accordion_item(page, "Char Fixer")
@@ -900,8 +910,12 @@ def test_bbox_section_in_dom(exercise_server: ExerciseServer, page: Page) -> Non
     _wait_for_line_cards(page)
 
     selected = _select_first_word_via_hierarchy(page)
-    if not selected:
-        pytest.skip("No word-cell found in DOM — page data may not have words")
+    assert selected, (
+        "exercise-fixture page 1 has no selectable word node in the Hierarchy "
+        "tree — event-store seeding invariant violated (BUG-HIER-1: content "
+        "presence is deterministic on exercise-fixture, see docs/issues/"
+        "2026-07-21-e2e-non-blocking-soft-skips.md)"
+    )
 
     # Open the "Bounding Box" accordion item so its content enters the DOM.
     _open_accordion_item(page, "Bounding Box")
@@ -928,8 +942,12 @@ def test_rebox_section_in_dom(exercise_server: ExerciseServer, page: Page) -> No
     _wait_for_line_cards(page)
 
     selected = _select_first_word_via_hierarchy(page)
-    if not selected:
-        pytest.skip("No word-cell found in DOM — page data may not have words")
+    assert selected, (
+        "exercise-fixture page 1 has no selectable word node in the Hierarchy "
+        "tree — event-store seeding invariant violated (BUG-HIER-1: content "
+        "presence is deterministic on exercise-fixture, see docs/issues/"
+        "2026-07-21-e2e-non-blocking-soft-skips.md)"
+    )
 
     # Open the "Rebox" accordion item so its content enters the DOM.
     _open_accordion_item(page, "Rebox")
@@ -952,8 +970,12 @@ def test_style_and_component_palette_in_dom(exercise_server: ExerciseServer, pag
     _wait_for_line_cards(page)
 
     selected = _select_first_word_via_hierarchy(page)
-    if not selected:
-        pytest.skip("No word-cell found in DOM — page data may not have words")
+    assert selected, (
+        "exercise-fixture page 1 has no selectable word node in the Hierarchy "
+        "tree — event-store seeding invariant violated (BUG-HIER-1: content "
+        "presence is deterministic on exercise-fixture, see docs/issues/"
+        "2026-07-21-e2e-non-blocking-soft-skips.md)"
+    )
 
     page.wait_for_selector('[data-testid="style-palette"]', state="attached", timeout=10_000)
     assert page.locator('[data-testid="style-palette"]').count() > 0, "style-palette must be in DOM"
@@ -999,8 +1021,12 @@ def test_erase_pixels_section_in_dom(exercise_server: ExerciseServer, page: Page
     _wait_for_line_cards(page)
 
     selected = _select_first_word_via_hierarchy(page)
-    if not selected:
-        pytest.skip("No word-cell found in DOM — page data may not have words")
+    assert selected, (
+        "exercise-fixture page 1 has no selectable word node in the Hierarchy "
+        "tree — event-store seeding invariant violated (BUG-HIER-1: content "
+        "presence is deterministic on exercise-fixture, see docs/issues/"
+        "2026-07-21-e2e-non-blocking-soft-skips.md)"
+    )
 
     # Open the "Erase Pixels" accordion item so its content enters the DOM.
     _open_accordion_item(page, "Erase Pixels")
@@ -1035,8 +1061,11 @@ def test_line_detail_sections_in_dom(exercise_server: ExerciseServer, page: Page
     """
     _goto_project_page(page, exercise_server.base_url, 1)
     count = _wait_for_line_cards(page)
-    if count == 0:
-        pytest.skip("No worklist rows — page has no OCR line matches in this environment")
+    assert count > 0, (
+        "exercise-fixture page 1 has 0 worklist rows — event-store seeding "
+        "invariant violated (BUG-HIER-1: content presence is deterministic "
+        "on exercise-fixture, see docs/issues/2026-07-21-e2e-non-blocking-soft-skips.md)"
+    )
 
     # Set line scope in rail.
     rail_line = page.locator('[data-testid="rail-target-line"]').first
