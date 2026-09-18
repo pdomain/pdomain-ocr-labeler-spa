@@ -92,14 +92,26 @@ export function HotkeyHelpModal() {
   const close = () => dialogStore.close("hotkeyHelp");
 
   // ? key opens help outside inputs (enableOnFormTags: false is default).
-  // Registered as "shift+slash" — the physical key that produces "?" on a
-  // US layout — because react-hotkeys-hook 5 matches combos against
-  // KeyboardEvent.code, not the produced character. The literal "?" string
-  // has no code and never matches (same convention as hotkeyMap.ts's
-  // bracketleft/bracketright and mod+comma entries).
-  useHotkey("shift+slash", () => {
-    dialogStore.open("hotkeyHelp");
-  });
+  //
+  // Registered by *character* (`useKey: true`, matching `KeyboardEvent.key`)
+  // rather than by physical code. A code-based "shift+slash" (the first fix
+  // here) only matches the US-layout position of "?" — on a German or
+  // French keyboard a different physical key produces "?", so a code-based
+  // binding is dead there while the key that actually types "?" does
+  // nothing. `useKey: true` matches what the user typed, not where their
+  // fingers were, so it works on every layout. This is the deliberate
+  // exception to the physical-code convention used elsewhere in this file
+  // and in hotkeyMap.ts (bracketleft/bracketright, mod+o, …) — those are
+  // navigation keys where physical position IS the point (see
+  // useRegionReviewHotkeys.ts); "?" is a character the user is asking for,
+  // not a position.
+  useHotkey(
+    "shift+?",
+    () => {
+      dialogStore.open("hotkeyHelp");
+    },
+    { useKey: true },
+  );
   // NOTE: No manual Esc useHotkey — Radix Dialog handles Escape natively.
 
   return (

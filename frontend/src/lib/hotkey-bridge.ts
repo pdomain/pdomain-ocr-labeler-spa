@@ -41,19 +41,21 @@ const TOKEN_DISPLAY: Record<string, string> = {
   space: "Space",
   bracketleft: "[",
   bracketright: "]",
-  comma: ",",
 };
 
 /**
- * Full-combo display overrides for combos where a shifted symbol key is
- * registered by its physical code (react-hotkeys-hook 5 convention — see
- * hotkeyMap.ts) but should read as the single produced character, not as
- * "Shift" plus the bare key name. `?` is Shift+/ on a US layout; showing
- * "Shift" separately would be misleading since the shift is inherent to
- * producing the character, not an accelerator modifier on top of "/".
+ * Full-combo display overrides for combos whose per-token split doesn't
+ * read naturally. `shift+?` is registered by character (`useKey: true` —
+ * see hotkeyMap.ts) so the produced character reads correctly on every
+ * keyboard layout, but split naively by "+" it would show as two pills,
+ * "Shift" and "?" — misleading, since the shift is inherent to producing
+ * the character, not a separate accelerator modifier held on top of some
+ * other key. `mod+,` doesn't need an entry here: "," is already a single
+ * printable character, so the default per-token split already renders it
+ * correctly as [Ctrl, ","].
  */
 const COMBO_DISPLAY_OVERRIDES: Record<string, string[]> = {
-  "shift+slash": ["?"],
+  "shift+?": ["?"],
 };
 
 /**
@@ -63,8 +65,8 @@ const COMBO_DISPLAY_OVERRIDES: Record<string, string[]> = {
  * Examples:
  *   "mod+s"       → ["Ctrl", "S"]
  *   "shift+enter" → ["Shift", "Enter"]
- *   "shift+slash" → ["?"]   (see COMBO_DISPLAY_OVERRIDES)
- *   "mod+comma"   → ["Ctrl", ","]
+ *   "shift+?"     → ["?"]   (see COMBO_DISPLAY_OVERRIDES)
+ *   "mod+,"       → ["Ctrl", ","]
  *   "j"           → ["J"]
  */
 export function comboToKeyCap(combo: string): string[] {
@@ -92,7 +94,7 @@ const GLOBAL_NAV_COMBOS = new Set([
 ]);
 
 // Global combos that open modals/views map to "view" group.
-const GLOBAL_VIEW_COMBOS = new Set(["shift+slash", "mod+comma", "mod+o", "escape"]);
+const GLOBAL_VIEW_COMBOS = new Set(["shift+?", "mod+,", "mod+o", "escape"]);
 
 /**
  * Map a (scope, combo) pair to a HotkeyGroup.

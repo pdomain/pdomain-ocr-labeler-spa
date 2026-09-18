@@ -37,6 +37,15 @@
 // paragraphs-layer toggle in the viewport scope, which is why brackets were
 // chosen instead (docs/specs/2026-09-17-book-review-queue-design.md).
 //
+// This is deliberately physical-code-based, unlike `mod+,` / `shift+?`
+// (App.tsx, HotkeyHelpModal.tsx), which are registered by character
+// (`useKey: true`) instead. Here the pair of adjacent physical keys IS the
+// affordance — "the key to the left" / "the key to the right" of home
+// position, the same idea as arrow keys — so binding to position is
+// correct, not an oversight; layout portability isn't the goal. `,` and `?`
+// are the opposite case: the user wants that specific character, wherever
+// their layout puts it.
+//
 // Auto-advance: before firing accept or reject, the proposal that follows
 // the current one in `orderedUndecidedProposals(page.regions)` is computed
 // from the page payload the caller already holds — the mutation's success

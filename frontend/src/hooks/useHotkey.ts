@@ -13,7 +13,10 @@
 import { useHotkeys, type Options } from "react-hotkeys-hook";
 import { dialogStore } from "../stores/dialog-store";
 
-export type HotkeyOptions = Pick<Options, "enableOnFormTags" | "enabled" | "scopes"> & {
+export type HotkeyOptions = Pick<
+  Options,
+  "enableOnFormTags" | "enabled" | "scopes" | "useKey" | "delimiter"
+> & {
   /**
    * When true, the dialog gate is bypassed and the handler fires even when
    * a dialog is open. Use for hotkeys that are intentionally active inside

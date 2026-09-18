@@ -499,9 +499,10 @@ describe("App: S6.3(a) OCR config trigger on root route", () => {
 
   // BUG-KBD-1 (docs/plans/2026-07-21-open-findings-fixes.md): Mod+, was
   // advertised in hotkeyMap.ts but never registered. Fires a real keydown
-  // (not dialogStore.open directly) — react-hotkeys-hook 5 matches by
-  // KeyboardEvent.code, so `code: "Comma"` must be set explicitly; jsdom does
-  // not derive it from `key`.
+  // (not dialogStore.open directly). Registered with `useKey: true`
+  // (matches `KeyboardEvent.key`, not `.code`) so it fires on whatever
+  // physical key produces "," on the user's layout — see the non-US-layout
+  // test below and the comment at the registration site in App.tsx.
   it("pressing Mod+, (Ctrl+Comma) opens the ocr-config-modal", async () => {
     // The previous test in this file opens the dialog via click; dialogStore
     // is a module-level singleton with no global test-suite reset.
@@ -529,6 +530,47 @@ describe("App: S6.3(a) OCR config trigger on root route", () => {
     expect(screen.queryByTestId("ocr-config-modal")).toBeNull();
 
     fireEvent.keyDown(document, { key: ",", code: "Comma", ctrlKey: true, bubbles: true });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("ocr-config-modal")).toBeInTheDocument();
+    });
+  });
+
+  // Non-US layout regression: a code-based "mod+comma" registration binds to
+  // the physical key at the US Comma position. On a layout where "," lives
+  // on a different physical key (different `code`), that binding is dead.
+  // `code` here is deliberately not "Comma" while `key` is still ",",
+  // exactly what a real non-US "," keypress reports.
+  it("opens the ocr-config-modal on a non-US layout where ',' has a different code", async () => {
+    dialogStore.reset();
+    withNoSession();
+    server.use(
+      http.get("/api/ocr-config", () =>
+        HttpResponse.json({
+          auto_rotate_available: false,
+          auto_rotate_on_load: true,
+          auto_rotate_method: "auto",
+          detection_options: [],
+          recognition_options: [],
+          selected_detection: "stock",
+          selected_recognition: "stock",
+          hf_pinned_revision: null,
+        }),
+      ),
+      http.get("/api/normalize/available", () => HttpResponse.json({ available: false })),
+    );
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByTestId("header-bar")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("ocr-config-modal")).toBeNull();
+
+    fireEvent.keyDown(document, {
+      key: ",",
+      code: "KeyM", // e.g. German QWERTZ: "," lives where US has "M"
+      ctrlKey: true,
+      bubbles: true,
+    });
 
     await waitFor(() => {
       expect(screen.getByTestId("ocr-config-modal")).toBeInTheDocument();

@@ -102,6 +102,28 @@ describe("HotkeyHelpModal: ? keypress opens the modal (real keypress, not the st
       expect(screen.getByTestId("hotkey-help-dialog")).toBeInTheDocument();
     });
   });
+
+  // Non-US layout regression: code-based matching binds to the physical key
+  // *position* (e.g. US Slash), so on a German or French keyboard — where a
+  // different physical key produces "?" — a code-based "shift+slash"
+  // registration never fires. `code` here is deliberately something other
+  // than "Slash" while `key` is still "?", exactly what a real non-US "?"
+  // keypress reports: key and code disagree with the US assumption.
+  it("opens on a non-US layout where the '?' key has a different code (key/code disagree)", async () => {
+    render(<HotkeyHelpModal />);
+    expect(screen.queryByTestId("hotkey-help-dialog")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(document, {
+      key: "?",
+      code: "Digit7", // e.g. German QWERTZ: Shift+7 produces "?"
+      shiftKey: true,
+      bubbles: true,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("hotkey-help-dialog")).toBeInTheDocument();
+    });
+  });
 });
 
 // ─── groups ──────────────────────────────────────────────────────────────────
