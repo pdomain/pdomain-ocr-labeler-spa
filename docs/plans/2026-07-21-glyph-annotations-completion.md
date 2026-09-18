@@ -435,6 +435,16 @@ git commit -m "feat(m11): add glyph annotation mutation hooks"
 
 ## Task 5 — Mount `GlyphAnnotationPanel` in `WordDetail` (TDD)
 
+> **Known limitation (2026-09-18, record — not a defect of this task):**
+> the accept button cannot fire for a real user today. `glyph_predictions_map`
+> is never populated by any production code path — `IGlyphPredictor` is
+> unwired (Task 10's "Predictions attach", still open). The mark-reviewed
+> path (set/clear annotations) works end to end, browser-tested included;
+> accept-prediction is wired and unit-tested (mocked predictions) but is
+> scaffolding until a real predictor exists and something calls it during
+> payload build. Do not read "Task 5 done" as "accept is usable" — it isn't,
+> yet.
+
 **Files:**
 - Modify: `frontend/src/components/right-panel/WordDetail.tsx`
 - Modify: `frontend/src/components/right-panel/WordDetail.test.tsx`
@@ -688,6 +698,10 @@ Only after Tasks 1–9 green:
 
 - [ ] **Predictions attach:** call `NoneGlyphPredictor` (or configured adapter)
   in `_page_payload` to fill `glyph_predictions_map` / WordMatch fields.
+  Until this lands, the FE accept-prediction path (Task 5) is scaffolding
+  only — no production code ever writes `glyph_predictions_map`, so the
+  accept button cannot fire for a real user (see the callout at the top of
+  Task 5).
 - [ ] **Canvas overlay:** `predictions-overlay-toggle` + ghost outlines §5.6
   (`--predictions-ghost-color`).
 - [ ] **Per-mark accept vs wholesale:** UI currently accepts whole prediction
