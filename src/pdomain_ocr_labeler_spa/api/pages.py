@@ -739,19 +739,6 @@ def _build_page_loader_from_context(
     )
 
 
-def _write_cached_envelope_best_effort(
-    *,
-    page: Any,
-    project_state: ProjectState,
-    page_index: int,
-    settings: Settings,
-) -> None:
-    """STUB: cached-envelope lane retired (M5b). No-op until M9 wires LabelerPageStore."""
-    # The UserPageEnvelope + LaneResolver path is deleted (greenfield event-store adoption).
-    # M9 replaces this call with a LabelerPageStore.save_page() via save_page_to_store.
-    pass  # pragma: no cover
-
-
 # ── Adjacent-page prefetch — GAP-2 ───────────────────────────────────
 
 
@@ -2790,12 +2777,18 @@ def glyph_bulk_mark(
                 pstate.glyph_annotations_map[sidecar_key] = ann_dict
             if result.annotations:
                 pstate.generation += 1
-                _write_cached_envelope_best_effort(
-                    page=page,
-                    project_state=project_state,
-                    page_index=page_index,
-                    settings=settings,
-                )
+                if not _save_to_store_best_effort(
+                    pstate=pstate,
+                    store=page_store,
+                    changes=[
+                        {
+                            "type": "glyph_bulk_mark",
+                            "recipe": body.recipe,
+                            "affected_word_ids": [f"{li}_{wi}" for (li, wi) in result.affected_word_ids],
+                        }
+                    ],
+                ):
+                    return _store_persist_failed_response(page_id=pstate.page_id)
         page_payload_out = _page_payload(
             project_id=project_id,
             page_index=page_index,

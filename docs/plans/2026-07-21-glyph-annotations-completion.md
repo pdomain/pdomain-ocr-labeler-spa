@@ -314,19 +314,44 @@ git commit -m "test(m11): integration coverage for glyph routes"
 - Still keep `source` SPA field on the map or extension because book-tools
   type may omit `source`.
 
-- [ ] **Step 1: Write failing reload test**
+- [x] **Step 1: Write failing reload test**
 
 Set annotations → save page → clear in-memory page state / reload from store →
 GET page → word still has annotations (None/empty/populated tri-state cases).
 
-- [ ] **Step 2: Implement persist + hydrate**
+Added 4 `@pytest.mark.integration` tests to
+`tests/integration/test_glyph_routes.py` (the same file as Task 2, split by
+a "Durable persistence" section): populated (with an untouched sibling word
+proving the absent case), empty-reviewed, cleared-back-to-absent, and
+bulk-mark apply. All 4 failed before Step 2's fix — the single-word ones on
+the pre-existing `assert reloaded is not None` guard (bulk-mark never wrote
+a content blob at all; single-word routes already did, so those 3 actually
+passed against master before Task 1/2 — see Step 2 for what was and wasn't
+already fixed), and the bulk-mark one on the same STUB gap.
+
+- [x] **Step 2: Implement persist + hydrate**
 
 - On `set_glyph_annotations` / `accept_glyph_prediction` / bulk apply: write map
   **and** call the same store-best-effort path used by other word mutations
   (do not leave `pass  # STUB: cached-lane retired` without store write).
 - On load: restore map before `_page_payload`.
 
-- [ ] **Step 3: Document decision**
+Update (2026-09-18): most of this step was already done on `master` before
+this pass. `core/labeler_sidecars.py` (Wave 0.1) already carries
+`glyph_annotations_map` alongside `char_bboxes_map` in the content-blob
+`labeler_sidecars` section, and `set_glyph_annotations` /
+`accept_glyph_prediction` (`api/words.py`) already call
+`_save_to_store_best_effort` — the single-word reload tests passed without
+any code change. The **one** remaining gap: `glyph_bulk_mark`
+(`api/pages.py`) still called `_write_cached_envelope_best_effort`, the
+retired no-op STUB the plan's evidence section quotes. Fixed by calling
+`_save_to_store_best_effort` there too (mirroring the single-word routes,
+including the 503 `store_persist_failed` contract on write failure), and
+removed the now-dead `_write_cached_envelope_best_effort` from `api/pages.py`
+(its only caller). No load-path change was needed — rehydration already
+restores both maps together via `apply_sidecars_to_page_state`.
+
+- [x] **Step 3: Document decision**
 
 If strategy differs from retired v2.2 `UserPageEnvelope` text in
 `specs/20-glyph-annotations.md` §4, add a short note in
@@ -334,7 +359,12 @@ If strategy differs from retired v2.2 `UserPageEnvelope` text in
 event-store persistence. Do not unilaterally rewrite the whole §4 without
 reviewer OK; minimal delta is fine.
 
-- [ ] **Step 4: Commit**
+Added "2026-09-18 — Glyph annotations reuse the char-sidecar durability path
+(Wave 2 T3)" to `docs/context/decisions.md`, and a short residual-note
+blockquote at the top of `specs/20-glyph-annotations.md` §4 pointing at it.
+§4's body text is untouched.
+
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "feat(m11): persist glyph annotations across save/reload"

@@ -141,6 +141,16 @@ staleness.
 
 ## 4. Envelope schema delta — v2.1 → **v2.2**
 
+> **Residual note (2026-09-18):** the `UserPageEnvelope` lane this section
+> describes was retired by the M5b event-store adoption before Wave 2 T3
+> implemented durable glyph persistence. Durability actually works via the
+> content-blob `labeler_sidecars` carrier shared with char bboxes, keyed by
+> `"{line_index}_{word_index}"`, not the `word_id`-keyed v2.2 schema bump
+> below. See `docs/context/decisions.md` — "2026-09-18 — Glyph annotations
+> reuse the char-sidecar durability path (Wave 2 T3)". The tri-state
+> semantics (§4.1 "Absence ≠ empty GlyphAnnotations()") and the "predictions
+> are never persisted" rule (§4.2) still hold; only the carrier changed.
+
 **Bump rationale.** v2.1 has been wire-shared with the legacy labeler.
 The legacy labeler does not know about `glyph_annotations`. Bumping to
 v2.2 lets us add the field cleanly while §4 of
