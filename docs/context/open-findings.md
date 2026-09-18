@@ -19,12 +19,11 @@ last_verified: 2026-07-13
 
 ## Keyboard findings
 
-### BUG-KBD-1 — `Mod+,` is advertised but not registered
+### ~~BUG-KBD-1~~ — `Mod+,` is advertised but not registered (retired 2026-09-18)
 
-`HOTKEY_MAP` advertises OCR Config on `mod+,`, but current searches find no
-matching `useHotkey` registration. The modal is clickable, so this is a
-keyboard-only accessibility gap. Register the shortcut against the existing
-OCR-config dialog store and add focused coverage.
+Registered. `App.tsx` binds `mod+,` to the OCR-config dialog, with a comment
+recording that the default delimiter parses that combo as two, which is why it
+is registered the way it is.
 
 ### BUG-KBD-4 — ConfirmDialog keyboard behavior needs browser verification
 
@@ -32,11 +31,9 @@ OCR-config dialog store and add focused coverage.
 bindings. Verify the destructive-action flow in a browser; add scoped bindings
 if native focused-button behavior does not cover both keys.
 
-### BUG-KBD-5 — `Mod+J` is advertised but not registered
+### ~~BUG-KBD-5~~ — `Mod+J` is advertised but not registered (retired 2026-09-18)
 
-`HOTKEY_MAP` advertises jump-to-page on `mod+j`, but current searches find no
-matching registration. Wire it to the existing page-number control and test the
-full keyboard path.
+Registered. `useGlobalHotkeys.ts` binds `mod+j` to the jump-to-page handler.
 
 ## Persistence and page findings
 
