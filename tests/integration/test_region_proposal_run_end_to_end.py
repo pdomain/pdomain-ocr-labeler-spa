@@ -10,12 +10,18 @@ from __future__ import annotations
 from typing import Any
 
 
-def test_the_default_detector_is_the_furniture_detector(toolbar_loaded: Any) -> None:
+def test_the_default_detector_composes_furniture_and_poetry(toolbar_loaded: Any) -> None:
+    from pdomain_ocr_labeler_spa.core.regions.detector import CompositeDetector
     from pdomain_ocr_labeler_spa.core.regions.furniture import FurnitureDetector
+    from pdomain_ocr_labeler_spa.core.regions.poetry import PoetryDetector
 
     client, _project_state, _page = toolbar_loaded
     runner = client.app.state.job_runner
-    assert isinstance(runner.context["region_detector"], FurnitureDetector)
+    detector = runner.context["region_detector"]
+    assert isinstance(detector, CompositeDetector)
+    kinds = [type(d) for d in detector.detectors]
+    assert FurnitureDetector in kinds
+    assert PoetryDetector in kinds
 
 
 def test_a_confirmed_page_kind_lets_a_region_run_reach_that_page(toolbar_loaded: Any) -> None:
