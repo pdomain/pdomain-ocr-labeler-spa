@@ -52,11 +52,15 @@ NiceGUI app's directory (`~/.local/share/pd-ocr-labeler/`) is never
 auto-discovered; `PDLABELER_DATA_ROOT` / `--data-root` still override
 everything. See `docs/context/decisions.md`.
 
-### BUG-RELOAD-1 — Zero-area unmatched-GT boxes need explicit handling
+### ~~BUG-RELOAD-1~~ — Zero-area boxes and empty OCR pages (retired 2026-09-18)
 
-Reload OCR may legitimately create unmatched-GT placeholders with zero-area
-boxes. Confirm `BBoxOverlay` suppresses them and that a page with genuinely no
-OCR text produces a clear failure state instead of a misleading complete page.
+Both halves answered. Zero-area boxes were already handled one layer below
+where this looked: an unmatched ground-truth placeholder carries no word index
+and is dropped before it can become an overlay item.
+
+The second half was a real defect and is fixed. A page where OCR ran and found
+nothing looked exactly like a finished page, and the review queue agreed with
+it, reporting zero outstanding. See the 2026-09-18 entry in `decisions.md`.
 
 ### ~~BUG-HIER-1~~ — Hierarchy coverage path can render no nodes (retired 2026-09-18)
 

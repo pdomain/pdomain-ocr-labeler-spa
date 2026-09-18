@@ -1863,3 +1863,28 @@ family and not touched.
 - Worth noting for the next reader of a finding this old: two of its three
   claims were already answered by work nobody linked back to it. Check a
   finding against the code before building to it.
+
+### [2026-09-18] Fixed: a page where OCR found nothing looked finished
+
+- From BUG-RELOAD-1. Three empty-page cases exist and only two were handled:
+  OCR not yet run shows the load job's progress, a loader failure shows its
+  banner, and OCR running and finding zero words looked exactly like a page
+  somebody had completed.
+- The review queue agreed with it, which is the worse half. Outstanding is
+  total minus validated, so a zero-word page reported zero outstanding and was
+  skipped as a candidate for the next page to work on. A page nobody can vouch
+  for was counted as done.
+- **No pixel heuristic was invented.** Guessing blankness from the image was
+  ruled out in the task, and the product already has the signal it needs: a
+  person confirming the page kind as blank. A zero-word page whose kind is not
+  confirmed blank is excluded from the totals and stays a candidate for the
+  next page to review, the same treatment a never-counted page already gets. It
+  reuses a read the route already makes, so it costs nothing.
+- A banner asks the person to look at the page and then either confirm blank or
+  reload OCR. It does not decide for them, because the product cannot tell a
+  blank scan from a failed recognition and should not pretend to.
+- The zero-area half was already handled, one layer below where the finding
+  looked. `RectOverlayLayer` does draw whatever it is given, but an unmatched
+  ground-truth placeholder carries no word index and is filtered out before it
+  can become an overlay item, and the grouping layers filter on positive width
+  and height as well.
