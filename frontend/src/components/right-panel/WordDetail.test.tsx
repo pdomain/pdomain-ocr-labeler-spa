@@ -368,6 +368,53 @@ describe("WordDetail — GlyphAnnotationPanel mount (M11 Task 5)", () => {
     await waitFor(() => expect(called).toBe(true));
   });
 
+  // Reject semantics ruling (2026-09-18, decisions.md): a rejected prediction
+  // stamps reviewed-with-no-marks, the same "looked at it, nothing to mark"
+  // state the "Mark reviewed" button produces — not a no-op that leaves the
+  // word unreviewed. Tested at this level, mocked, for the same reason
+  // accept is: no predictor exists anywhere in this codebase (decided
+  // 2026-09-18, not to build one), so a browser test has no way to plant a
+  // prediction on a word for a person to reject — this is the highest level
+  // at which the click can honestly run.
+  it("rejects a prediction, posting empty human annotations to the glyph-annotations route", async () => {
+    let body: unknown;
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/0/0/glyph-annotations", async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json(makePageWithGlyph({}));
+      }),
+    );
+
+    selectWord(0, 0, 0);
+    const user = userEvent.setup();
+    renderWithQuery(
+      <WordDetail
+        page={makePageWithGlyph({
+          predictions: {
+            ligatures: [{ kind: "ct", char_span: [0, 2] }],
+            long_s_positions: [],
+            swash: false,
+            source: "predicted",
+          },
+        })}
+        projectId="p1"
+        pageIndex={0}
+        bboxRefine={NOOP_BBOX_REFINE}
+      />,
+    );
+
+    // Predictions with no confirmed annotations auto-open the Glyphs item —
+    // no manual click needed to reveal the reject button.
+    const rejectButton = await screen.findByTestId("glyph-panel-reject-prediction-ct");
+    await user.click(rejectButton);
+
+    await waitFor(() =>
+      expect(body).toEqual({
+        annotations: { ligatures: [], long_s_positions: [], swash: false, source: "human" },
+      }),
+    );
+  });
+
   it("collapses the Glyphs item by default when there are no pending predictions", () => {
     selectWord(0, 0, 0);
     renderWithQuery(
