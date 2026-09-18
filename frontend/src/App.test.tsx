@@ -486,7 +486,6 @@ describe("App: S6.3(a) OCR config trigger on root route", () => {
           hf_pinned_revision: null,
         }),
       ),
-      http.get("/api/normalize/available", () => HttpResponse.json({ available: false })),
     );
     render(<App />);
     await waitFor(() => {
@@ -527,7 +526,6 @@ describe("App: S6.3(a) OCR config trigger on root route", () => {
           hf_pinned_revision: null,
         }),
       ),
-      http.get("/api/normalize/available", () => HttpResponse.json({ available: false })),
     );
     render(<App />);
     await waitFor(() => {
@@ -563,7 +561,6 @@ describe("App: S6.3(a) OCR config trigger on root route", () => {
           hf_pinned_revision: null,
         }),
       ),
-      http.get("/api/normalize/available", () => HttpResponse.json({ available: false })),
     );
     render(<App />);
     await waitFor(() => {

@@ -55,7 +55,6 @@ from .api.label_vocabulary import install_label_vocabulary_router
 from .api.lines_paragraphs import install_lines_paragraphs_router
 from .api.middleware.error_handler import install_error_handlers
 from .api.middleware.request_id import RequestIdMiddleware
-from .api.normalize import install_normalize_router
 from .api.notifications import install_notifications_router
 from .api.ocr_config import _resolve_local_models_root, install_ocr_config_router
 from .api.page_kinds import install_page_kinds_router
@@ -563,10 +562,6 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # GET /api/session-state — returns last-loaded project path for RootPage
     # redirect-on-mount logic. Issue #274.
     install_session_state_router(app)
-
-    # GET /api/normalize/available — probe for pdomain_book_tools.text.normalize.
-    # Used by OCRConfigModal to gate normalize UI toggles. Issue #261.
-    install_normalize_router(app)
 
     # GET /api/label-vocabulary — canonical text-style + word-component vocab
     # sourced from pdomain_book_tools so the frontend can never drift.

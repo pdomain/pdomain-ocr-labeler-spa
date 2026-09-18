@@ -2849,34 +2849,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/normalize/available": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Normalize Available
-         * @description ``GET /api/normalize/available`` — probe for normalize module.
-         *
-         *     Returns ``{"available": true}`` when the installed ``pdomain_book_tools``
-         *     exposes ``pdomain_book_tools.text.normalize.normalize_string``.
-         *     Returns ``{"available": false}`` when the module is absent (older pin).
-         *
-         *     Used by ``<OCRConfigModal />`` to decide whether to render the
-         *     text-normalization toggles as enabled or greyed-out with a tooltip.
-         *     Issue #261 acceptance: route registered, returns 200 JSON payload.
-         */
-        get: operations["normalize_available_api_normalize_available_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/label-vocabulary": {
         parameters: {
             query?: never;
@@ -4444,14 +4416,6 @@ export interface components {
          */
         ModelRunPurpose: "ocr" | "page_region";
         /**
-         * NormalizeAvailableResponse
-         * @description Response for ``GET /api/normalize/available`` — spec §Toggle UI.
-         */
-        NormalizeAvailableResponse: {
-            /** Available */
-            available: boolean;
-        };
-        /**
          * NudgeBboxRequest
          * @description Spec §2 lines 316-321.
          */
@@ -4677,10 +4641,10 @@ export interface components {
          * @description Full per-page payload — spec §5.3 / §1 ``PagePayload``.
          *
          *     ``page_text_ocr`` and ``page_text_gt`` are pre-built plaintext strings
-         *     assembled from the page's OCR / GT words.  When
-         *     ``normalize_plaintext_tabs=True`` in ``AppConfig`` these are normalised
-         *     (long-s → ASCII etc.) before serialisation.  The envelope itself is never
-         *     modified.
+         *     assembled from the page's OCR / GT words, joined verbatim with no
+         *     normalization applied. Text normalization is not offered — see
+         *     ``docs/architecture/18-text-normalization.md``. The envelope itself is
+         *     never modified.
          */
         PagePayload: {
             /** Project Id */
@@ -9700,26 +9664,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionStateResponse"];
-                };
-            };
-        };
-    };
-    normalize_available_api_normalize_available_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NormalizeAvailableResponse"];
                 };
             };
         };

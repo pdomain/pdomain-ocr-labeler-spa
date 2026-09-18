@@ -296,14 +296,14 @@ map deviation was removed with the clean-break backend.
 
 **Files:**
 
-- `src/pdomain_ocr_labeler_spa/core/text_normalize.py:21` —
-  `pdomain_book_tools.text.normalize`.
 - `src/pdomain_ocr_labeler_spa/core/persistence/config_yaml.py:92, :128` —
   `import yaml`.
 
-**Justification.** `pdomain_book_tools` is not installed in the basedpyright dev
-venv (stubs absent during type-checking only; works at runtime). `yaml`
-(`PyYAML`) is an optional dependency; its stubs are absent in the dev venv.
+**Justification.** `yaml` (`PyYAML`) is an optional dependency; its stubs are
+absent in the dev venv. The former `core/text_normalize.py` entry
+(`pdomain_book_tools.text.normalize`) was removed 2026-09-18
+(P2-NORMALIZE-DEAD) — that module was deleted with the dead
+text-normalization capability.
 
 ---
 
@@ -313,15 +313,14 @@ venv (stubs absent during type-checking only; works at runtime). `yaml`
 
 **Files:**
 
-- `src/pdomain_ocr_labeler_spa/core/text_normalize.py:27` —
-  `_AVAILABLE = False` reassigned in a `try/except` block.
 - `src/pdomain_ocr_labeler_spa/api/ocr_config.py:89` —
   `_AUTO_ROTATE_AVAILABLE = False` reassigned in a `try/except` block.
 
 **Justification.** Module-level booleans are initialised as `False` then
 reassigned to `True` if the optional import succeeds. This is the standard
 optional-feature probe pattern; the name looks like a constant but is
-intentionally reassigned once.
+intentionally reassigned once. The former `core/text_normalize.py` entry
+was removed 2026-09-18 (P2-NORMALIZE-DEAD) along with the module.
 
 ---
 
@@ -329,14 +328,11 @@ intentionally reassigned once.
 
 **Suppression form:** `# type: ignore[assignment]` inline.
 
-**Files:**
-
-- `src/pdomain_ocr_labeler_spa/core/text_normalize.py:28` —
-  `_pd_normalize = None` assigned to a callable-typed module-level name.
-
-**Justification.** `_pd_normalize` is `None` initially and replaced by the
-real function if the optional import succeeds. The `None` sentinel type
-widens the declared type; the assignment suppression covers the initialisation.
+**Files:** none currently. The former
+`src/pdomain_ocr_labeler_spa/core/text_normalize.py:28` entry
+(`_pd_normalize = None` assigned to a callable-typed module-level name) was
+removed 2026-09-18 (P2-NORMALIZE-DEAD) along with the module. Kept as a
+category in case the same optional-import pattern recurs.
 
 ---
 
@@ -361,7 +357,6 @@ the annotation structure; the suppression covers the union-member access.
 
 **Files:**
 
-- `src/pdomain_ocr_labeler_spa/api/normalize.py:45` — `install_normalize_router(app)`
 - `src/pdomain_ocr_labeler_spa/api/export.py:138` — `install_export_router(app)`
 - `src/pdomain_ocr_labeler_spa/api/projects.py:793` — `install_projects_router(app)`
 - `src/pdomain_ocr_labeler_spa/api/jobs.py:149` — `install_jobs_router(app)`
