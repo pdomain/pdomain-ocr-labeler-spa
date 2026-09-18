@@ -14,6 +14,7 @@ import userEvent from "@testing-library/user-event";
 import { HotkeyHelpModal } from "./HotkeyHelpModal";
 import { dialogStore } from "../stores/dialog-store";
 import { getPopulatedGroups } from "../lib/hotkey-registry";
+import { expectNoDuplicateDialogPositioning } from "../test/dialogPositioning";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,19 @@ describe("HotkeyHelpModal: dialog rendering", () => {
   it("heading reads 'Keyboard Shortcuts'", () => {
     renderModal();
     expect(screen.getByRole("heading", { name: /keyboard shortcuts/i })).toBeInTheDocument();
+  });
+
+  // Regression (2026-09-18): the dialog rendered off-screen (top: -216px at
+  // 1280x720) because its className duplicated the centering transform that
+  // pdomain-ui's shared ".dialog" class already applies — Tailwind's
+  // `-translate-x-1/2 -translate-y-1/2` compiles to the CSS `translate`
+  // longhand, which composes with (rather than replaces) `.dialog`'s
+  // `transform: translate(-50%, -50%)`, doubling the offset. jsdom cannot
+  // compute the resulting off-screen layout, but the duplicated classes
+  // that cause it are a reliable static signal.
+  it("does not duplicate the centering transform pdomain-ui's .dialog class already applies", () => {
+    renderModal();
+    expectNoDuplicateDialogPositioning(screen.getByTestId("hotkey-help-dialog"));
   });
 });
 

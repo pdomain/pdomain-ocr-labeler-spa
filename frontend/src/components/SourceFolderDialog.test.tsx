@@ -22,6 +22,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import { server } from "../test/server";
 import { SourceFolderDialog } from "./SourceFolderDialog";
+import { expectNoDuplicateDialogPositioning } from "../test/dialogPositioning";
 
 // --- helpers -----------------------------------------------------------------
 
@@ -45,6 +46,14 @@ describe("SourceFolderDialog: render gating", () => {
   it("renders the dialog when open=true", () => {
     renderDialog(true);
     expect(screen.getByTestId("source-folder-dialog")).toBeInTheDocument();
+  });
+
+  // Regression (2026-09-18): see HotkeyHelpModal.test.tsx — same double
+  // -transform bug affects any dialog whose className re-adds
+  // `-translate-x-1/2 -translate-y-1/2` on top of pdomain-ui's ".dialog" class.
+  it("does not duplicate the centering transform pdomain-ui's .dialog class already applies", () => {
+    renderDialog(true);
+    expectNoDuplicateDialogPositioning(screen.getByTestId("source-folder-dialog"));
   });
 });
 

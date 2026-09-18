@@ -215,7 +215,12 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
           Tailwind overrides supply the labeler's visual chrome. */}
       <DialogContent
         data-testid="source-folder-dialog"
-        className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 max-w-md w-full mx-4 bg-bg-surface rounded-lg border border-border-2 p-5 space-y-4 shadow-lg focus:outline-hidden"
+        // pdomain-ui's shared ".dialog" class (primitives.css) already supplies
+        // `position: fixed; top/left: 50%; transform: translate(-50%, -50%)` for
+        // centering. Do NOT repeat `fixed`/`top-1/2`/`left-1/2`/`-translate-*`
+        // here — see the note in HotkeyHelpModal.tsx for why that doubles the
+        // offset and renders the dialog off-screen.
+        className="max-w-md w-full mx-4 bg-bg-surface rounded-lg border border-border-2 p-5 space-y-4 shadow-lg focus:outline-hidden"
       >
         <DialogHeader>
           <DialogTitle className="text-base font-semibold text-ink-1">
