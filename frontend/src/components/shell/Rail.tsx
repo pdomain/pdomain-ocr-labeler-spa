@@ -191,16 +191,27 @@ interface QueueNextBadgeProps {
   kind: string;
   label: string;
   count: number;
+  /**
+   * Reviewer finding (high): a lower-bound count (typography always sets
+   * it; word does once `pages_not_counted` is above zero) is a floor, not
+   * an exact figure — the Queue drawer already marks this
+   * (`formatOutstandingCount`, `kindPillLabel`); the badge, the
+   * always-visible surface, must say the same thing rather than presenting
+   * a floor as if it were exact.
+   */
+  isLowerBound: boolean;
   onClick: () => void;
 }
 
-function QueueNextBadge({ kind, label, count, onClick }: QueueNextBadgeProps) {
+function QueueNextBadge({ kind, label, count, isLowerBound, onClick }: QueueNextBadgeProps) {
+  const countText = `${isLowerBound ? "≥" : ""}${String(count)}`;
+  const countWords = `${isLowerBound ? "at least " : ""}${String(count)}`;
   return (
     <button
       type="button"
       data-testid="rail-queue-next"
-      title={`Next to review: ${label} (${String(count)})`}
-      aria-label={`Next to review: ${String(count)} ${label.toLowerCase()}`}
+      title={`Next to review: ${label} (${countWords})`}
+      aria-label={`Next to review: ${countWords} ${label.toLowerCase()}`}
       onClick={onClick}
       className={cn(
         "mx-1 my-1 flex items-center justify-between gap-1 px-2 py-1 rounded-sm select-none",
@@ -209,7 +220,7 @@ function QueueNextBadge({ kind, label, count, onClick }: QueueNextBadgeProps) {
       data-kind={kind}
     >
       <span className="text-[9px] font-semibold uppercase tracking-wide truncate">{label}</span>
-      <span className="text-[10px] font-mono tabular-nums shrink-0">{count}</span>
+      <span className="text-[10px] font-mono tabular-nums shrink-0">{countText}</span>
     </button>
   );
 }
@@ -376,6 +387,7 @@ export function Rail({ projectId }: RailProps) {
           kind={nextKind.kind}
           label={REVIEW_QUEUE_KIND_LABELS[nextKind.kind]}
           count={nextKind.outstanding}
+          isLowerBound={nextKind.is_lower_bound}
           onClick={() => {
             useUiPrefs.setState({
               drawerOpen: true,

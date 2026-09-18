@@ -400,4 +400,43 @@ describe("Rail — 'what to review next' kind badge", () => {
     expect(useUiPrefs.getState().drawerTab).toBe("queue");
     expect(useUiPrefs.getState().reviewQueueKind).toBe("page_kind");
   });
+
+  // Reviewer finding (high): the badge is the always-visible surface, and it
+  // rendered a lower-bound count as a bare number — the same honesty gap the
+  // Queue drawer already closes for `is_lower_bound` kinds (e.g. typography,
+  // which always sets it, or word once pages_not_counted is above zero).
+  it("marks a lower-bound count as a floor, in the text, title, and label", async () => {
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([
+          kindEntry({
+            kind: "typography",
+            outstanding: 18463,
+            total: 18463,
+            is_lower_bound: true,
+          }),
+        ]),
+      ),
+    );
+    renderRail("proj-1");
+
+    const badge = await screen.findByTestId("rail-queue-next");
+    expect(badge).toHaveTextContent("≥18463");
+    expect(badge).toHaveAttribute("title", expect.stringContaining("at least 18463"));
+    expect(badge).toHaveAttribute("aria-label", expect.stringContaining("at least 18463"));
+  });
+
+  it("does not mark an exact count as a lower bound", async () => {
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([kindEntry({ kind: "page_kind", outstanding: 40, total: 80 })]),
+      ),
+    );
+    renderRail("proj-1");
+
+    const badge = await screen.findByTestId("rail-queue-next");
+    expect(badge).toHaveTextContent("40");
+    expect(badge).not.toHaveTextContent("≥40");
+    expect(badge).toHaveAttribute("title", expect.not.stringContaining("at least"));
+  });
 });
