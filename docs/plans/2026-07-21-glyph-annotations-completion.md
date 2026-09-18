@@ -161,11 +161,18 @@ found were already closed on `master` by the time this backend pass started
 (commits `eb11eb9`, `89bbe6d`) — see Task 1 below. Frontend mount (Steps
 2/5/6) remains unmounted; out of scope for this backend-only pass.
 
-- [ ] **Step 2: Record mount decision**
+- [x] **Step 2: Record mount decision**
 
 Primary host is `WordDetail` Typography accordion (collapsed by default;
 auto-expand when `glyph_predictions != null && glyph_annotations == null`).
 Do not resurrect `WordEditDialog`.
+
+Update (2026-09-18, Task 5): implemented as described, with one
+deviation — the new accordion item is labeled **"Glyphs"**, not
+"Typography". `WordDetail` already has a `value="typography"` item for a
+separate, already-shipped feature (`TypographySection`, grapheme/taxonomy
+span review — `docs/specs/2026-08-21-typography-review-and-training-export-design.md`,
+written after this plan). `WordEditDialog` was not resurrected.
 
 ---
 
@@ -388,7 +395,7 @@ git commit -m "feat(m11): persist glyph annotations across save/reload"
 - Modify: `frontend/src/hooks/useWordMutations.ts`
 - Modify: `frontend/src/hooks/useWordMutations.test.tsx`
 
-- [ ] **Step 1: Write failing hook tests**
+- [x] **Step 1: Write failing hook tests**
 
 Mock fetch:
 
@@ -396,19 +403,29 @@ Mock fetch:
 - `POST .../words/{li}/{wi}/accept-prediction` body `{}` or empty
 - On success: invalidate `["page", projectId, pageIndex]`
 
-- [ ] **Step 2: Implement hooks**
+Update (2026-09-18): also added `useGlyphAnnotationPending` (shared
+`mutationKey` + `useIsMutating`, mirroring `useRegionMutations.ts`'s
+`useRegionDecisionPending` and `usePageMutations.ts`'s
+`useReloadOcrEditedPending`) — not in the plan's original list, added per
+this pass's explicit instruction to follow the shared pending-signal
+pattern so two components mounting these hooks independently can't fire a
+duplicate request.
+
+- [x] **Step 2: Implement hooks**
 
 Follow existing `apiPost` + `wordBase` pattern in `useWordMutations.ts`.
 Types come from `frontend/src/api/types.ts`
 (`SetGlyphAnnotationsRequest` / OpenAPI operation names already present).
 
-- [ ] **Step 3: Run**
+- [x] **Step 3: Run**
 
 ```bash
 cd frontend && pnpm exec vitest run src/hooks/useWordMutations.test.tsx
 ```
 
-- [ ] **Step 4: Commit**
+16 passed.
+
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "feat(m11): add glyph annotation mutation hooks"
@@ -418,11 +435,21 @@ git commit -m "feat(m11): add glyph annotation mutation hooks"
 
 ## Task 5 — Mount `GlyphAnnotationPanel` in `WordDetail` (TDD)
 
+> **Known limitation (2026-09-18, record — not a defect of this task):**
+> the accept button cannot fire for a real user today. `glyph_predictions_map`
+> is never populated by any production code path — `IGlyphPredictor` is
+> unwired (Task 10's "Predictions attach", still open). The mark-reviewed
+> path (set/clear annotations) works end to end, browser-tested included;
+> accept-prediction is wired and unit-tested (mocked predictions) but is
+> scaffolding until a real predictor exists and something calls it during
+> payload build. Do not read "Task 5 done" as "accept is usable" — it isn't,
+> yet.
+
 **Files:**
 - Modify: `frontend/src/components/right-panel/WordDetail.tsx`
 - Modify: `frontend/src/components/right-panel/WordDetail.test.tsx`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 1. Selecting a word renders `glyph-panel-{li}-{wi}`.
 2. Clicking `glyph-panel-mark-reviewed-empty` calls set-annotations mutation
@@ -430,11 +457,27 @@ git commit -m "feat(m11): add glyph annotation mutation hooks"
 3. With predictions present, accept button invokes accept mutation.
 4. Typography accordion default collapsed; auto-open when predictions pending.
 
-- [ ] **Step 2: Implement mount**
+Update (2026-09-18): also added two edge-case tests — "collapses by default
+with no pending predictions" and "does not auto-open once the word already
+has confirmed (even empty) annotations" — beyond the plan's 4, to pin down
+the tri-state boundary the auto-open condition depends on.
+
+- [x] **Step 2: Implement mount**
 
 Place a **Typography** accordion item after Style/Component palettes and
 before/near Structure (spec originally said between tag chips and preview;
 WordDetail layout maps cleanly to an accordion item under the palettes).
+
+Update (2026-09-18): mounted as an accordion item named **"Glyphs"**, not
+"Typography" — `WordDetail` already has a `value="typography"` item hosting
+`TypographySection`, a distinct grapheme/taxonomy-span review feature from
+`docs/specs/2026-08-21-typography-review-and-training-export-design.md`
+(shipped after this plan's spec was written). Reusing "Typography" here
+would put two differently-behaved triggers with the same label in one
+accordion. Positioned as item 4 (after Erase Pixels, before Structure),
+matching "near Structure". The whole accordion became controlled
+(`value`/`onValueChange`) so the Glyphs item can auto-open once per
+newly-selected word without disturbing the other items' open state.
 
 Wire:
 
@@ -464,16 +507,37 @@ Align `LIGATURE_KINDS` with backend bulk/spec strings used on wire:
 forms already used by bulk_mark `"ct"`). Drop non-spec `ff` unless backend
 accepts it.
 
-- [ ] **Step 4: Run vitest + commit**
+Not done in this pass — out of the explicit scope given (mount + its
+4-test TDD list only); left for a follow-up since it touches
+`GlyphAnnotationPanel.tsx` and its existing unit tests, not `WordDetail`.
+
+- [x] **Step 4: Run vitest + commit**
 
 ```bash
 cd frontend && pnpm exec vitest run src/components/right-panel/WordDetail.test.tsx src/components/glyph
 git commit -m "feat(m11): mount GlyphAnnotationPanel in WordDetail"
 ```
 
+35 passed.
+
 ---
 
 ## Task 6 — Wire WordCell chips → word edit / Typography
+
+**Skipped in the 2026-09-18 pass** (not attempted — see report). This
+task's plan text calls for wiring glyph-chip clicks to `onEditWord(line,
+word)`, a callback `docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`
+documents as already dead: `ProjectPage` mounts `WordMatchView` without
+passing `onEditWord` at all, so any chip wired to it today would be a
+silent no-op, not a working "open the panel" click. That issue is still
+open with three undecided questions (retire the driver-contract §2.11
+dialog docs, wire the pencil to select-and-open-right-panel or remove it,
+and give word merge a home) — Task 6 needs question 2 resolved (or
+resolved consistently for chips specifically) before it can wire glyph
+chips to anything real. Once decided, Task 6 becomes: select the word
+(`selectWord(line, wordIndex)` from `stores/selection-store`, the same
+store `WordDetail` already reads) and open the right panel's new "Glyphs"
+accordion item (Task 5) — not a standalone dialog — on chip click.
 
 **Files:**
 - Modify: `frontend/src/components/WordCell.tsx`
@@ -509,19 +573,28 @@ git commit -m "feat(m11): open word editor from glyph chips"
 - Modify: `frontend/src/components/glyph/BulkGlyphMarkDialog.tsx`
 - Modify: `frontend/src/components/glyph/BulkGlyphMarkDialog.test.tsx`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 On successful apply, `queryClient.invalidateQueries({ queryKey: ["page", projectId, pageIndex] })`
 is called (spy). Optional: accept `onApplied?: () => void` for parent override.
 
-- [ ] **Step 2: Implement**
+Update (2026-09-18): added the spy test plus two guards — apply failure
+does not invalidate, and dry-run preview does not invalidate — so the
+invalidation is scoped to a real, successful apply only. Did not add
+`onApplied?:` — not needed; the dialog already calls its own `onClose`,
+and no caller needed a separate override hook.
+
+- [x] **Step 2: Implement**
 
 Use `useQueryClient` inside the dialog (pattern used by hooks). Prefer shared
 `apiPost` helper if easy; raw `fetch` is acceptable if invalidation is fixed.
 
 Keep dry-run path returning preview count (`bulk-glyph-preview-count`).
 
-- [ ] **Step 3: Commit**
+Kept the existing raw-`fetch`-based `callBulkMark` unchanged; only added
+`useQueryClient` + one `invalidateQueries` call in `handleApply`.
+
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "fix(m11): invalidate page query after bulk glyph apply"
@@ -572,7 +645,32 @@ Flow (adapt fixture project with known GT containing `ct`):
 5. Save page (if required by auto-save policy) → reload page.
 6. Re-open word → chip/badge still present (depends on Task 3).
 
+Update (2026-09-18, partial): added `tests/e2e/test_glyph_panel.py`
+covering steps 1–3 plus a reduced step 4 — select a word, open the
+"Glyphs" accordion item, click "Mark reviewed (no marks)" (rather than
+the char-span/kind-CT ligature flow), and assert via an independent GET
+that `glyph_annotations` landed on the server. Left unchecked because it
+does not cover the full flow above: no char-span ligature mark, and no
+save/reload persistence re-check (Task 3's persistence path is already
+covered by backend integration tests in `tests/integration/
+test_glyph_routes.py`, not re-proven here at the browser level). This
+pass's instructions scoped Task 9 to exactly the reduced flow implemented
+— see the char-span/predictions gap below.
+
+Accept-a-prediction is not covered by any browser test and is not
+plausible to add today: `glyph_predictions_map` is never populated by any
+production code path (`IGlyphPredictor` is unwired — Task 10, deferred),
+so a fixture seeded the way every e2e in this suite seeds pages
+(`_ingest_ocr_result`, no real OCR/classifier) has no way to plant
+predictions on a word without reaching past what a browser-driven user
+could do. Covered at the vitest level instead:
+`WordDetail.test.tsx`'s "accepts a prediction, posting to the
+accept-prediction route" test (Task 5).
+
 - [ ] **Step 2: `test_bulk_glyph_mark.py`**
+
+Not attempted in this pass — out of the explicit scope given (Task 9 was
+scoped to the select-word/mark-reviewed flow only).
 
 1. Open bulk dialog.
 2. Recipe CT; Preview → assert `bulk-glyph-preview-count` text.
@@ -600,6 +698,10 @@ Only after Tasks 1–9 green:
 
 - [ ] **Predictions attach:** call `NoneGlyphPredictor` (or configured adapter)
   in `_page_payload` to fill `glyph_predictions_map` / WordMatch fields.
+  Until this lands, the FE accept-prediction path (Task 5) is scaffolding
+  only — no production code ever writes `glyph_predictions_map`, so the
+  accept button cannot fire for a real user (see the callout at the top of
+  Task 5).
 - [ ] **Canvas overlay:** `predictions-overlay-toggle` + ghost outlines §5.6
   (`--predictions-ghost-color`).
 - [ ] **Per-mark accept vs wholesale:** UI currently accepts whole prediction

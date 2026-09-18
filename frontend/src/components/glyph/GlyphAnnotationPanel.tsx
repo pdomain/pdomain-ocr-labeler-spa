@@ -1,4 +1,9 @@
-// GlyphAnnotationPanel.tsx — Typography annotation section for a word.
+// GlyphAnnotationPanel.tsx — glyph annotation (ligatures/long-s/swash)
+// review section for a word. Mounted by WordDetail inside its "Glyphs"
+// accordion item — not "Typography"; that label belongs to the separate
+// TypographySection item (grapheme/taxonomy span review). This component
+// renders no heading of its own so the accordion trigger is the only
+// place the section is named (reviewer finding 3, 2026-09-18).
 // Spec: specs/20-glyph-annotations.md §5.1
 // Issue #269
 //
@@ -28,13 +33,24 @@ export interface GlyphAnnotationPanelProps {
   predictions: GlyphAnnotationsModel | null;
   onSetAnnotations: (ann: GlyphAnnotationsModel | null) => void;
   onAcceptPrediction?: (() => void) | undefined;
+  /**
+   * Disables every action that ends in an `onSetAnnotations` /
+   * `onAcceptPrediction` call, while a write for this word is in flight.
+   * The caller (`WordDetail`) computes this from
+   * `useGlyphAnnotationPending` plus the two mutations' own `isPending`,
+   * the same `x.isPending || decisionPending` pattern `RegionDetail` uses
+   * for `useRegionDecisionPending` — a shared `mutationKey` alone only
+   * lets something *observe* an in-flight write; it does not stop a
+   * second `.mutate()` from a double-click.
+   */
+  disabled?: boolean;
 }
 
 const LIGATURE_KINDS = ["ct", "st", "fi", "fl", "ff", "ffi", "ffl"] as const;
 
 /**
- * Panel section for viewing and editing glyph annotations for a single word.
- * Panel content for word-level typography editing.
+ * Panel section for viewing and editing glyph annotations (ligatures,
+ * long-s positions, swash) for a single word.
  */
 export function GlyphAnnotationPanel({
   lineIndex,
@@ -44,6 +60,7 @@ export function GlyphAnnotationPanel({
   predictions,
   onSetAnnotations,
   onAcceptPrediction,
+  disabled = false,
 }: GlyphAnnotationPanelProps) {
   const [newKind, setNewKind] = useState<string>("ct");
   const [selectedSpan, setSelectedSpan] = useState<[number, number] | null>(null);
@@ -134,7 +151,14 @@ export function GlyphAnnotationPanel({
       data-testid={`glyph-panel-${lineIndex}-${wordIndex}`}
       className="flex flex-col gap-2 p-2 text-xs border border-border-1 rounded-sm"
     >
-      <div className="font-semibold text-ink-2">Typography</div>
+      {/* No internal heading here — WordDetail mounts this inside an
+          accordion item whose own trigger already names the section
+          ("Glyphs"). None of the sibling sections (StructureSection,
+          ErasePixelsSection, CharFixerSection, …) repeat their accordion
+          trigger's label as an internal heading either; a "Typography"
+          heading here (reviewer finding 3, 2026-09-18) would both
+          duplicate the trigger and use the wrong name — "Typography" is
+          the separate TypographySection item's label. */}
 
       {/* Ligatures section */}
       <div>
@@ -143,7 +167,8 @@ export function GlyphAnnotationPanel({
           <button
             data-testid="glyph-panel-add-ligature"
             onClick={handleAddLigature}
-            className="px-1 py-0 text-[10px] border border-border-1 rounded-sm hover:bg-surface-2"
+            disabled={disabled}
+            className="px-1 py-0 text-[10px] border border-border-1 rounded-sm hover:bg-surface-2 disabled:opacity-40"
             type="button"
           >
             + Add
@@ -200,7 +225,8 @@ export function GlyphAnnotationPanel({
               </span>
               <button
                 onClick={() => handleRemoveLigature(idx)}
-                className="text-[10px] text-red-500 hover:text-red-700 ml-auto"
+                disabled={disabled}
+                className="text-[10px] text-red-500 hover:text-red-700 ml-auto disabled:opacity-40"
                 type="button"
                 aria-label={`Remove ${lig.kind} ligature`}
               >
@@ -217,7 +243,8 @@ export function GlyphAnnotationPanel({
             <button
               data-testid={`glyph-panel-accept-prediction-${pred.kind}`}
               onClick={() => onAcceptPrediction?.()}
-              className="text-[10px] text-green-600 hover:text-green-800 ml-auto"
+              disabled={disabled}
+              className="text-[10px] text-green-600 hover:text-green-800 ml-auto disabled:opacity-40"
               type="button"
             >
               ✓ accept
@@ -234,7 +261,8 @@ export function GlyphAnnotationPanel({
                   },
                 )
               }
-              className="text-[10px] text-red-500 hover:text-red-700"
+              disabled={disabled}
+              className="text-[10px] text-red-500 hover:text-red-700 disabled:opacity-40"
               type="button"
             >
               × reject
@@ -253,8 +281,9 @@ export function GlyphAnnotationPanel({
                 key={i}
                 data-testid={`glyph-panel-long-s-cell-${i}`}
                 onClick={() => handleToggleLongS(i)}
+                disabled={disabled}
                 className={[
-                  "w-5 h-5 text-[10px] font-mono border rounded-sm cursor-pointer",
+                  "w-5 h-5 text-[10px] font-mono border rounded-sm cursor-pointer disabled:opacity-40",
                   (annotations?.long_s_positions ?? []).includes(i)
                     ? "bg-accent text-white border-accent"
                     : "border-border-1 hover:bg-surface-2",
@@ -276,7 +305,8 @@ export function GlyphAnnotationPanel({
           type="checkbox"
           checked={annotations?.swash ?? false}
           onChange={(e) => handleSwashChange(e.target.checked)}
-          className="cursor-pointer"
+          disabled={disabled}
+          className="cursor-pointer disabled:opacity-40"
         />
         <span>Swash</span>
       </label>
@@ -287,7 +317,8 @@ export function GlyphAnnotationPanel({
           <button
             data-testid="glyph-panel-mark-reviewed-empty"
             onClick={handleMarkReviewed}
-            className="text-[10px] px-2 py-0.5 border border-border-1 rounded-sm hover:bg-surface-2"
+            disabled={disabled}
+            className="text-[10px] px-2 py-0.5 border border-border-1 rounded-sm hover:bg-surface-2 disabled:opacity-40"
             type="button"
           >
             Mark reviewed (no marks)
@@ -297,7 +328,8 @@ export function GlyphAnnotationPanel({
           <button
             data-testid="glyph-panel-reset"
             onClick={handleReset}
-            className="text-[10px] px-2 py-0.5 border border-red-300 text-red-600 rounded-sm hover:bg-red-50 ml-auto"
+            disabled={disabled}
+            className="text-[10px] px-2 py-0.5 border border-red-300 text-red-600 rounded-sm hover:bg-red-50 ml-auto disabled:opacity-40"
             type="button"
           >
             Reset

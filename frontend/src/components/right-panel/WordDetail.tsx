@@ -1,14 +1,25 @@
 // WordDetail.tsx — Word detail editor (right panel, level="word").
 // Spec: docs/specs/2026-05-15-hifi-redesign-plan.md Slice 16 (scaffold),
 //       17 (Rebox/Erase), 18 (Structure).
+//       specs/20-glyph-annotations.md §5.1/§5.4 (Glyphs, M11 Task 5).
 //
-// Renders an Accordion with 6 items:
+// Renders an Accordion with 7 items:
 //   1. Bounding Box  — wired (BBoxSection)
 //   2. Rebox         — wired (ReboxSection, tag="accent")   [Slice 17]
 //   3. Erase Pixels  — wired (ErasePixelsSection, tag="mismatch") [Slice 17]
-//   4. Structure     — wired (StructureSection)              [Slice 18]
-//   5. Typography    — canonical grapheme review
-//   6. Char Fixer    — wired (CharFixerSection)                [Slice 20]
+//   4. Glyphs        — wired (GlyphAnnotationPanel)          [M11 Task 5]
+//   5. Structure     — wired (StructureSection)              [Slice 18]
+//   6. Typography    — canonical grapheme/taxonomy review (a separate
+//                      feature from Glyphs — see docs/specs/
+//                      2026-08-21-typography-review-and-training-export-design.md)
+//   7. Char Fixer    — wired (CharFixerSection)                [Slice 20]
+//
+// The "Glyphs" item is not named "Typography" even though
+// specs/20-glyph-annotations.md §5.1 calls its host section "Typography" —
+// that label is already taken by the Slice-19-era TypographySection above,
+// which ships a distinct taxonomy/span review pipeline. Reusing the name
+// here would put two differently-behaved "Typography" triggers in the same
+// accordion.
 //
 // The component receives the selected word via the selection-store path and
 // the page payload from the parent (ProjectPage / RightPanel).
@@ -17,7 +28,7 @@
 //   word-detail             — outer container
 //   word-detail-accordion   — accordion root
 
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Accordion } from "../ui/accordion";
 import { BBoxSection } from "./sections/BBoxSection";
 import { bboxHint } from "./sections/bboxUtils";
@@ -26,6 +37,7 @@ import { ErasePixelsSection } from "./sections/ErasePixelsSection";
 import { StructureSection } from "./sections/StructureSection";
 import { TypographySection } from "./sections/TypographySection";
 import { CharFixerSection } from "./sections/CharFixerSection";
+import { GlyphAnnotationPanel } from "../glyph/GlyphAnnotationPanel";
 import { WordHeader } from "./WordHeader";
 import { WordImagePreview } from "./WordImagePreview";
 import { OcrGtCompareRow } from "./OcrGtCompareRow";
@@ -37,6 +49,9 @@ import {
   useUpdateWordGroundTruth,
   useApplyComponent,
   useErasePixels,
+  useSetGlyphAnnotations,
+  useAcceptGlyphPrediction,
+  useGlyphAnnotationPending,
 } from "../../hooks/useWordMutations";
 import { findWordByIndex, getWordOrder } from "../../lib/word-order";
 import type { UseBboxRefineTrackingResult } from "../../hooks/useBboxRefineTracking";
@@ -44,6 +59,7 @@ import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
 type WordMatch = components["schemas"]["WordMatch"];
+type GlyphAnnotationsModel = components["schemas"]["GlyphAnnotationsModel"];
 
 // ─── store subscription ───────────────────────────────────────────────────
 
@@ -67,6 +83,26 @@ function charFixerHint(ocrText: string | undefined): string {
   const n = Array.from(ocrText ?? "").length;
   if (n === 0) return "edit · fix · unicode";
   return `${String(n)} range${n === 1 ? "" : "s"}`;
+}
+
+/**
+ * Summarize glyph annotation/prediction state for the "Glyphs" trigger's
+ * hint text — the tri-state described in specs/20-glyph-annotations.md §3.
+ */
+function glyphAccordionHint(
+  annotations: GlyphAnnotationsModel | null,
+  predictions: GlyphAnnotationsModel | null,
+): string {
+  if (annotations === null) {
+    return predictions !== null ? "prediction pending" : "not reviewed";
+  }
+  const markCount =
+    (annotations.ligatures?.length ?? 0) +
+    (annotations.long_s_positions?.length ?? 0) +
+    (annotations.swash ? 1 : 0);
+  return markCount === 0
+    ? "reviewed · none"
+    : `reviewed · ${String(markCount)} mark${markCount === 1 ? "" : "s"}`;
 }
 
 export function resolveWord(
@@ -96,11 +132,45 @@ export function WordDetail({ page, projectId, pageIndex, bboxRefine }: WordDetai
   const updateGt = useUpdateWordGroundTruth(projectId, pageIndex);
   const applyComponent = useApplyComponent(projectId, pageIndex);
   const erasePixels = useErasePixels(projectId, pageIndex);
+  const setGlyphAnnotations = useSetGlyphAnnotations(projectId, pageIndex);
+  const acceptGlyphPrediction = useAcceptGlyphPrediction(projectId, pageIndex);
+  // Reviewer finding 1 (2026-09-18): a shared mutationKey alone only lets
+  // something *observe* an in-flight glyph write — it does not stop a
+  // second `.mutate()` from a double-click. Consume the shared pending
+  // signal (same `x.isPending || sharedPending` pattern RegionDetail uses
+  // for useRegionDecisionPending) and disable the panel's actions while
+  // either mutation, from any instance, is in flight.
+  const glyphAnnotationSharedPending = useGlyphAnnotationPending(projectId, pageIndex);
+  const glyphPanelDisabled =
+    setGlyphAnnotations.isPending ||
+    acceptGlyphPrediction.isPending ||
+    glyphAnnotationSharedPending;
 
   const state = useSyncExternalStore(
     subscribeSelection,
     getSelectionSnapshot,
     getSelectionSnapshot,
+  );
+
+  // Controlled accordion open-state (M11 Task 5): the "Glyphs" item starts
+  // collapsed like every other item, but auto-opens once per word when that
+  // word has predictions still awaiting review (glyph_predictions != null
+  // && glyph_annotations == null — spec §5.4).
+  //
+  // `autoOpenEvaluatedWordKeys` records *every* word key this mount has
+  // already decided the auto-open question for, not just the most recently
+  // visited one (reviewer finding 2, 2026-09-18): a single "last word key"
+  // remembers only the current word, so leaving a word after dismissing its
+  // auto-opened Glyphs item and later revisiting it looked identical to a
+  // fresh first visit — the item reopened even though the user had already
+  // dismissed it. Recording every evaluated key makes a dismissal permanent
+  // for the life of this mount, regardless of how many other words get
+  // visited in between. Same "reseed state on identity change during
+  // render" idiom TypographySection uses just below for its own word-scoped
+  // state, generalized from a single remembered key to a set of them.
+  const [openAccordionItems, setOpenAccordionItems] = useState<string[]>([]);
+  const [autoOpenEvaluatedWordKeys, setAutoOpenEvaluatedWordKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
   );
 
   const { level, path } = state;
@@ -131,6 +201,21 @@ export function WordDetail({ page, projectId, pageIndex, bboxRefine }: WordDetai
   const pageImageUrl = page.image_url ?? undefined;
   const sourceWidth = page.encoded_dims?.src_width;
   const sourceHeight = page.encoded_dims?.src_height;
+
+  const glyphAnnotations = word.glyph_annotations ?? null;
+  const glyphPredictions = word.glyph_predictions ?? null;
+  const glyphAutoOpen = glyphPredictions !== null && glyphAnnotations === null;
+  const wordKey = `${String(lineIdx)}-${String(wordIdx)}`;
+  if (!autoOpenEvaluatedWordKeys.has(wordKey)) {
+    setAutoOpenEvaluatedWordKeys((prev) => {
+      const next = new Set(prev);
+      next.add(wordKey);
+      return next;
+    });
+    if (glyphAutoOpen) {
+      setOpenAccordionItems((prev) => (prev.includes("glyph") ? prev : [...prev, "glyph"]));
+    }
+  }
 
   return (
     <div data-testid="word-detail" className="flex flex-col gap-1">
@@ -192,6 +277,8 @@ export function WordDetail({ page, projectId, pageIndex, bboxRefine }: WordDetai
       <Accordion
         data-testid="word-detail-accordion"
         type="multiple"
+        value={openAccordionItems}
+        onValueChange={setOpenAccordionItems}
         className="flex flex-col gap-1"
         style={{ paddingBottom: "52px" }}
       >
@@ -249,7 +336,37 @@ export function WordDetail({ page, projectId, pageIndex, bboxRefine }: WordDetai
           </Accordion.Content>
         </Accordion.Item>
 
-        {/* 4 — Structure (Slice 18) */}
+        {/* 4 — Glyphs (M11 Task 5 — spec §5.1/§5.4) */}
+        <Accordion.Item value="glyph" {...(glyphAutoOpen ? { tag: "accent" as const } : {})}>
+          <Accordion.Trigger
+            hint={glyphAccordionHint(glyphAnnotations, glyphPredictions)}
+            keycap="G"
+          >
+            Glyphs
+          </Accordion.Trigger>
+          <Accordion.Content>
+            <GlyphAnnotationPanel
+              lineIndex={lineIdx}
+              wordIndex={wordIdx}
+              gtText={word.ground_truth_text}
+              annotations={glyphAnnotations}
+              predictions={glyphPredictions}
+              onSetAnnotations={(ann) => {
+                setGlyphAnnotations.mutate({
+                  lineIndex: lineIdx,
+                  wordIndex: wordIdx,
+                  annotations: ann,
+                });
+              }}
+              onAcceptPrediction={() => {
+                acceptGlyphPrediction.mutate({ lineIndex: lineIdx, wordIndex: wordIdx });
+              }}
+              disabled={glyphPanelDisabled}
+            />
+          </Accordion.Content>
+        </Accordion.Item>
+
+        {/* 5 — Structure (Slice 18) */}
         <Accordion.Item value="structure">
           <Accordion.Trigger hint="neighbors · merge · split" keycap="S">
             Structure
@@ -259,7 +376,7 @@ export function WordDetail({ page, projectId, pageIndex, bboxRefine }: WordDetai
           </Accordion.Content>
         </Accordion.Item>
 
-        {/* 5 — Canonical typography review */}
+        {/* 6 — Canonical typography review */}
         <Accordion.Item value="typography">
           <Accordion.Trigger hint="grapheme spans · review" keycap="T">
             Typography
@@ -273,7 +390,7 @@ export function WordDetail({ page, projectId, pageIndex, bboxRefine }: WordDetai
           </Accordion.Content>
         </Accordion.Item>
 
-        {/* 6 — Char Fixer (Slice 20 / P4.b: dynamic "N ranges" hint per spec) */}
+        {/* 7 — Char Fixer (Slice 20 / P4.b: dynamic "N ranges" hint per spec) */}
         <Accordion.Item value="char-fixer">
           <Accordion.Trigger hint={charFixerHint(word.ocr_text)} keycap="F">
             Char Fixer

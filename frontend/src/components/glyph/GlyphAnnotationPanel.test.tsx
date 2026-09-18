@@ -40,6 +40,26 @@ describe("GlyphAnnotationPanel", () => {
     expect(screen.getByTestId("glyph-panel-0-2")).toBeTruthy();
   });
 
+  // Reviewer finding 3 (2026-09-18): WordDetail mounts this panel inside an
+  // accordion item named "Glyphs", not "Typography" (that label is taken by
+  // the separate TypographySection item) — so the panel must not render its
+  // own "Typography" heading, or the rename achieves nothing and a person
+  // opening Glyphs still sees a Typography heading.
+  it("does not render its own 'Typography' heading — the accordion trigger names the section", () => {
+    render(
+      <GlyphAnnotationPanel
+        lineIndex={0}
+        wordIndex={2}
+        gtText="action"
+        annotations={emptyAnnotations}
+        predictions={null}
+        onSetAnnotations={vi.fn()}
+        onAcceptPrediction={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("Typography")).not.toBeInTheDocument();
+  });
+
   it("shows 'Mark reviewed (no marks)' button when annotations have no marks", () => {
     render(
       <GlyphAnnotationPanel

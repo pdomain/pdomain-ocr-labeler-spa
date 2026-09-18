@@ -116,6 +116,39 @@ function makePageWithLogicalWordIndex(wordIndex: number): PagePayload {
   return page;
 }
 
+/** M11 Task 5: a page whose single word carries glyph annotations/predictions. */
+function makePageWithGlyph(glyph: {
+  annotations?: components["schemas"]["GlyphAnnotationsModel"] | null;
+  predictions?: components["schemas"]["GlyphAnnotationsModel"] | null;
+}): PagePayload {
+  const page = makePage();
+  const word = page.line_matches![0]!.word_matches[0]!;
+  word.glyph_annotations = glyph.annotations ?? null;
+  word.glyph_predictions = glyph.predictions ?? null;
+  return page;
+}
+
+/** Two words on one line, second word carrying glyph predictions pending review. */
+function makeTwoWordPageWithGlyph(
+  predictions: components["schemas"]["GlyphAnnotationsModel"],
+): PagePayload {
+  const page = makePage();
+  const firstWord = page.line_matches![0]!.word_matches[0]!;
+  firstWord.glyph_annotations = null;
+  firstWord.glyph_predictions = null;
+  const secondWord: components["schemas"]["WordMatch"] = {
+    ...firstWord,
+    word_index: 1,
+    ocr_text: "world",
+    ground_truth_text: "world",
+    bbox: { x: 60, y: 20, width: 30, height: 15 },
+    glyph_annotations: null,
+    glyph_predictions: predictions,
+  };
+  page.line_matches![0]!.word_matches.push(secondWord);
+  return page;
+}
+
 function renderWithQuery(ui: React.ReactElement) {
   const qc = makeQueryClient();
   return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
@@ -133,13 +166,13 @@ describe("WordDetail (Slice 16)", () => {
     expect(screen.getByTestId("word-detail")).toHaveTextContent(/no word selected/i);
   });
 
-  it("renders 6 accordion items when word is selected", () => {
+  it("renders 7 accordion items when word is selected", () => {
     selectWord(0, 0);
     renderWithQuery(
       <WordDetail page={makePage()} projectId="p1" pageIndex={0} bboxRefine={NOOP_BBOX_REFINE} />,
     );
     expect(screen.getByTestId("word-detail")).toBeInTheDocument();
-    // 6 accordion triggers
+    // 7 accordion triggers
     const triggers = screen.getAllByRole("button");
     const triggerLabels = triggers.map((t) => t.textContent ?? "");
     expect(triggerLabels).toEqual(
@@ -147,6 +180,7 @@ describe("WordDetail (Slice 16)", () => {
         expect.stringContaining("Bounding Box"),
         expect.stringContaining("Rebox"),
         expect.stringContaining("Erase Pixels"),
+        expect.stringContaining("Glyphs"),
         expect.stringContaining("Structure"),
         expect.stringContaining("Typography"),
         expect.stringContaining("Char Fixer"),
@@ -193,6 +227,237 @@ describe("WordDetail (Slice 16)", () => {
     expect(screen.getByTestId("word-detail")).not.toHaveTextContent(/word not found/i);
     expect(screen.getByTestId("word-header-prev")).toBeDisabled();
     expect(screen.getByTestId("word-header-next")).toBeDisabled();
+  });
+});
+
+// ─── GlyphAnnotationPanel mount (M11 Task 5) ────────────────────────────────
+//
+// Spec: specs/20-glyph-annotations.md §5.1/§5.4. Issue
+// docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md — the panel
+// existed as an isolated component with no production mount point. The
+// "Glyphs" accordion item hosts it here (not "Typography" — that label is
+// already taken by TypographySection's grapheme/taxonomy review, a separate
+// feature from docs/specs/2026-08-21-typography-review-and-training-export-design.md).
+
+describe("WordDetail — GlyphAnnotationPanel mount (M11 Task 5)", () => {
+  beforeEach(() => {
+    clearSelection();
+  });
+
+  it("selecting a word and opening the Glyphs accordion item renders the glyph panel", async () => {
+    selectWord(0, 0);
+    const user = userEvent.setup();
+    renderWithQuery(
+      <WordDetail
+        page={makePageWithGlyph({})}
+        projectId="p1"
+        pageIndex={0}
+        bboxRefine={NOOP_BBOX_REFINE}
+      />,
+    );
+
+    expect(screen.queryByTestId("glyph-panel-0-0")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /glyphs/i }));
+
+    expect(await screen.findByTestId("glyph-panel-0-0")).toBeInTheDocument();
+  });
+
+  it("marking reviewed with no marks posts an empty annotations body", async () => {
+    let body: unknown;
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/0/0/glyph-annotations", async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json(makePageWithGlyph({}));
+      }),
+    );
+
+    selectWord(0, 0);
+    const user = userEvent.setup();
+    renderWithQuery(
+      <WordDetail
+        page={makePageWithGlyph({})}
+        projectId="p1"
+        pageIndex={0}
+        bboxRefine={NOOP_BBOX_REFINE}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /glyphs/i }));
+    await user.click(await screen.findByTestId("glyph-panel-mark-reviewed-empty"));
+
+    await waitFor(() =>
+      expect(body).toEqual({
+        annotations: { ligatures: [], long_s_positions: [], swash: false, source: "human" },
+      }),
+    );
+  });
+
+  it("double-clicking Mark reviewed while the write is in flight posts once", async () => {
+    let postCount = 0;
+    let resolvePost!: () => void;
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/0/0/glyph-annotations", async ({ request }) => {
+        postCount += 1;
+        await request.json();
+        return new Promise<Response>((resolve) => {
+          resolvePost = () => resolve(HttpResponse.json(makePageWithGlyph({})));
+        });
+      }),
+    );
+
+    selectWord(0, 0);
+    const user = userEvent.setup();
+    renderWithQuery(
+      <WordDetail
+        page={makePageWithGlyph({})}
+        projectId="p1"
+        pageIndex={0}
+        bboxRefine={NOOP_BBOX_REFINE}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /glyphs/i }));
+    const markReviewedButton = await screen.findByTestId("glyph-panel-mark-reviewed-empty");
+
+    await user.click(markReviewedButton);
+    await waitFor(() => expect(markReviewedButton).toBeDisabled());
+
+    // A second click while the first write is still in flight must not
+    // fire a second POST. userEvent respects the native `disabled`
+    // attribute the same way a real double-click would.
+    await user.click(markReviewedButton);
+
+    resolvePost();
+    await waitFor(() => expect(postCount).toBe(1));
+  });
+
+  it("accepts a prediction, posting to the accept-prediction route", async () => {
+    let called = false;
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/0/0/accept-prediction", async ({ request }) => {
+        called = true;
+        await request.json();
+        return HttpResponse.json(makePageWithGlyph({}));
+      }),
+    );
+
+    selectWord(0, 0);
+    const user = userEvent.setup();
+    renderWithQuery(
+      <WordDetail
+        page={makePageWithGlyph({
+          predictions: {
+            ligatures: [{ kind: "ct", char_span: [0, 2] }],
+            long_s_positions: [],
+            swash: false,
+            source: "predicted",
+          },
+        })}
+        projectId="p1"
+        pageIndex={0}
+        bboxRefine={NOOP_BBOX_REFINE}
+      />,
+    );
+
+    // Predictions with no confirmed annotations auto-open the Glyphs item —
+    // no manual click needed to reveal the accept button.
+    const acceptButton = await screen.findByTestId("glyph-panel-accept-prediction-ct");
+    await user.click(acceptButton);
+
+    await waitFor(() => expect(called).toBe(true));
+  });
+
+  it("collapses the Glyphs item by default when there are no pending predictions", () => {
+    selectWord(0, 0);
+    renderWithQuery(
+      <WordDetail
+        page={makePageWithGlyph({})}
+        projectId="p1"
+        pageIndex={0}
+        bboxRefine={NOOP_BBOX_REFINE}
+      />,
+    );
+
+    expect(screen.queryByTestId("glyph-panel-0-0")).not.toBeInTheDocument();
+  });
+
+  it("auto-opens the Glyphs item when predictions are pending review (annotations still null)", async () => {
+    selectWord(0, 0);
+    renderWithQuery(
+      <WordDetail
+        page={makePageWithGlyph({
+          predictions: {
+            ligatures: [{ kind: "ct", char_span: [0, 2] }],
+            long_s_positions: [],
+            swash: false,
+            source: "predicted",
+          },
+        })}
+        projectId="p1"
+        pageIndex={0}
+        bboxRefine={NOOP_BBOX_REFINE}
+      />,
+    );
+
+    expect(await screen.findByTestId("glyph-panel-0-0")).toBeInTheDocument();
+  });
+
+  it("does not auto-open once the word already has confirmed (even empty) annotations", () => {
+    selectWord(0, 0);
+    renderWithQuery(
+      <WordDetail
+        page={makePageWithGlyph({
+          annotations: { ligatures: [], long_s_positions: [], swash: false, source: "human" },
+          predictions: {
+            ligatures: [{ kind: "ct", char_span: [0, 2] }],
+            long_s_positions: [],
+            swash: false,
+            source: "predicted",
+          },
+        })}
+        projectId="p1"
+        pageIndex={0}
+        bboxRefine={NOOP_BBOX_REFINE}
+      />,
+    );
+
+    expect(screen.queryByTestId("glyph-panel-0-0")).not.toBeInTheDocument();
+  });
+
+  it("does not reopen the Glyphs item after the user dismisses it and revisits the word", async () => {
+    const predictions: components["schemas"]["GlyphAnnotationsModel"] = {
+      ligatures: [{ kind: "ct", char_span: [0, 2] }],
+      long_s_positions: [],
+      swash: false,
+      source: "predicted",
+    };
+    const page = makeTwoWordPageWithGlyph(predictions);
+
+    selectWord(0, 1); // the word with pending predictions
+    const user = userEvent.setup();
+    renderWithQuery(
+      <WordDetail page={page} projectId="p1" pageIndex={0} bboxRefine={NOOP_BBOX_REFINE} />,
+    );
+
+    // Auto-opens on first visit — predictions pending, no annotations yet.
+    expect(await screen.findByTestId("glyph-panel-0-1")).toBeInTheDocument();
+
+    // Dismiss it manually.
+    await user.click(screen.getByRole("button", { name: /glyphs/i }));
+    await waitFor(() => expect(screen.queryByTestId("glyph-panel-0-1")).not.toBeInTheDocument());
+
+    // Visit the other word in the line, then come back.
+    await user.click(screen.getByTestId("word-header-prev"));
+    await waitFor(() => expect(screen.getByTestId("word-header-id")).toHaveTextContent("Word 1"));
+
+    await user.click(screen.getByTestId("word-header-next"));
+    await waitFor(() => expect(screen.getByTestId("word-header-id")).toHaveTextContent("Word 2"));
+
+    // Nothing changed server-side (predictions are still pending) — but the
+    // user already dismissed the auto-open once, so revisiting must not
+    // reopen it a second time.
+    expect(screen.queryByTestId("glyph-panel-0-1")).not.toBeInTheDocument();
   });
 });
 
