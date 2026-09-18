@@ -20,20 +20,20 @@
 //            is "region" and a proposal is selected.
 //   delete — delete the selected confirmed region, behind the existing
 //            confirm dialog. Fires whenever a confirmed region is selected.
-//   ]/[    — follow whichever kind the Queue drawer's selector has
-//            EXPLICITLY picked (ui-prefs `reviewQueueKind`), never the
-//            auto-picked "next kind" the Rail badge/Queue panel default to
-//            — see `resolvedReviewQueueKind`'s comment below for why an
-//            implicit auto-follow would be a surprising regression for the
-//            region-review loop. No explicit pick: unchanged pre-existing
-//            behavior — go to the next/previous page (by page_index) with
-//            an undecided region proposal and select its first/last, gated
-//            on the rail's region target, exactly as before this kind
-//            selector existed. An explicit non-region pick: jump to that
-//            kind's one known `first_page_index`, active regardless of rail
-//            target (there is no rail-target equivalent for those kinds) —
-//            see `nonRegionKindMessage`'s docstring for what that can and
-//            cannot do with only one page index to go on.
+//   ]/[    — follow the resolved review-queue kind: whichever kind the
+//            Queue drawer's selector has explicitly picked, or —
+//            unpicked — `firstActionableKind` (the same book-wide default
+//            the Rail badge and Queue panel use). See
+//            `resolvedReviewQueueKind`'s comment below for the reasoning.
+//            Kind resolves to "region": go to the next/previous page (by
+//            page_index) with an undecided region proposal and select its
+//            first/last, gated on the rail's region target, exactly as
+//            before this kind selector existed. Kind resolves to anything
+//            else: jump to that kind's one known `first_page_index`,
+//            active regardless of rail target (there is no rail-target
+//            equivalent for those kinds) — see `nonRegionKindMessage`'s
+//            docstring for what that can and cannot do with only one page
+//            index to go on.
 //
 
 // n and p are free precisely because j/k, the obvious choice, are already
@@ -99,6 +99,7 @@ import { useHotkey } from "./useHotkey";
 import { useReviewQueue, reviewQueueKey, type RegionReviewQueueResponse } from "./useReviewQueue";
 import {
   useBookReviewQueue,
+  firstActionableKind,
   REVIEW_QUEUE_KIND_LABELS,
   type ReviewQueueKindEntry,
   type ReviewQueueKindName,
@@ -269,26 +270,48 @@ export function useRegionReviewHotkeys({
   const railTarget = useSyncExternalStore(subscribeRailTarget, getRailTarget, getRailTarget);
   const path = useSyncExternalStore(subscribeSelectionPath, getSelectionPath, getSelectionPath);
 
-  // One-answer-to-what-to-review-next: `[`/`]` follow whichever kind the
-  // Queue drawer's selector has explicitly picked (design: "`[`/`]` keep
-  // working on the selected kind"). Deliberately NOT `firstActionableKind`'s
-  // auto-pick here, unlike the Rail badge and Queue panel's own default:
-  // that default tracks whatever page_kind/word/typography work exists
-  // book-wide, which is true of nearly every real book (page-kind review is
-  // rarely complete), so auto-following it would silently steer the
-  // long-standing region-review bracket-key loop — gated on the rail's
-  // region target since before this design existed — away from region the
-  // moment any other kind had outstanding work, surprising every existing
-  // region-review workflow. A person must choose a kind in the Queue drawer
-  // before the keys follow it; absent that choice, brackets keep their
-  // original, rail-target-gated region behavior below.
+  // One-answer-to-what-to-review-next: `[`/`]` follow the resolved
+  // review-queue kind (design: "`[`/`]` keep working on the selected
+  // kind"), using the SAME rule the Rail badge and Queue panel default to
+  // — an explicit Queue-drawer pick when there is one, else
+  // `firstActionableKind`, falling back to "region" only once nothing else
+  // qualifies.
+  //
+  // This does mean `]`/`[` can jump to a page-kind (or word, or
+  // typography) page instead of stepping through region pages, the moment
+  // any such kind has outstanding, unblocked work — true of most books
+  // before their page kinds are confirmed. That is intentional, not a
+  // regression: `firstActionableKind` names the thing a person genuinely
+  // should do next, and a book whose page kinds are unreviewed genuinely
+  // has page-kind work ahead of region work in the order this route
+  // defines. One selection — shown on the Rail badge, defaulted in the
+  // Queue drawer, and followed by these keys — is a simpler, more honest
+  // mental model than a keyboard shortcut that quietly disagrees with what
+  // the UI is telling a person to do next.
+  //
+  // The cost is real and worth naming: `n`/`p`/`enter`/`x`/`delete` below
+  // stay region-only (nothing else has a keyboard accept/reject flow yet),
+  // so once a book's first actionable kind is something other than
+  // region, `]`/`[` and those other keys are no longer working the same
+  // loop. That split exists already, in miniature, the moment a person
+  // explicitly picks a non-region kind in the Queue drawer — extending it
+  // to the auto-picked default is a difference of degree, not of kind.
+  //
+  // When the Rail badge's auto-picked kind and a person's explicit Queue
+  // pick disagree (they chose to work on something else on purpose), the
+  // badge keeps naming the book-wide next kind — an honest, passive
+  // reading — while these keys follow the explicit pick, not the badge:
+  // a deliberate choice to work on region while page-kind work remains
+  // outstanding is respected, not silently overridden.
   const explicitReviewQueueKind = useSyncExternalStore(
     useUiPrefs.subscribe,
     getReviewQueueKind,
     getReviewQueueKind,
   );
   const bookQueueQ = useBookReviewQueue(projectId);
-  const resolvedReviewQueueKind: ReviewQueueKindName = explicitReviewQueueKind ?? "region";
+  const autoReviewQueueKind = firstActionableKind(bookQueueQ.data?.kinds ?? [])?.kind;
+  const resolvedReviewQueueKind: ReviewQueueKindName =
+    explicitReviewQueueKind ?? autoReviewQueueKind ?? "region";
 
   const acceptProposal = useAcceptProposal(projectId, pageIndex);
   const rejectProposal = useRejectProposal(projectId, pageIndex);

@@ -221,7 +221,7 @@ def test_rail_badge_selector_and_bracket_keys_follow_the_next_kind(
     page: Page,
 ) -> None:
     """The book's next kind (page_kind), honest blocked state (region), and
-    `[`/`]` following the selected kind, all in one pass.
+    `[`/`]` following the selected — or auto-picked — kind, all in one pass.
 
     1. Load page 3 (index 2). The rail's "next kind" badge names page_kind
        with a count of 3 — the first kind with outstanding, unblocked work.
@@ -232,15 +232,18 @@ def test_rail_badge_selector_and_bracket_keys_follow_the_next_kind(
        for (page_kind) — a blocked kind must not look finished.
     4. Switch back to page_kind and click "Start at page 1": the SPA
        navigates there.
-    5. Navigate (in-app, so the Queue drawer's explicit kind selection
-       survives — the SPA never unmounts) back to page 3 and press `]`: it
-       still lands on page 1, honoring the selected kind rather than
-       requiring the rail's region target, which `]` was never aimed at in
-       this test. Bracket-key following is opt-in: only once a person has
-       explicitly picked a kind in the Queue drawer, exactly what step 3-4
-       did. A fresh page load with no explicit pick falls back to the
-       original, rail-target-gated region behavior instead — unaffected by
-       this test, and covered by test_review_queue_navigation.py.
+    5. A fresh page load (no explicit Queue-drawer pick survives it) back on
+       page 3, then `]`: it still lands on page 1. `]`/`[` auto-follow
+       `firstActionableKind` — the same book-wide default the rail badge and
+       Queue panel use — with no Queue-drawer pick required, per
+       pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-
+       review-next.md "How the SPA uses the new route".
+    6. An explicit pick overrides the auto default: aiming the rail at
+       region and picking "Region" in the Queue drawer makes `[` follow
+       region — landing on page 1 (region's only page with an undecided
+       proposal) — even though the rail badge still names page_kind as the
+       book-wide next kind. A deliberate choice to work on a different kind
+       is respected, not silently overridden by the badge's own reading.
     """
     base_url = review_queue_kinds_server.base_url
 
@@ -274,13 +277,41 @@ def test_rail_badge_selector_and_bracket_keys_follow_the_next_kind(
     page.locator('[data-testid="review-queue-kind-start"]').click()
     expect(page).to_have_url(re.compile(r"/pages/pageno/1$"), timeout=10_000)
 
-    # Step 5. In-app navigation (the real Next-page button, not page.goto)
-    # keeps the SPA mounted, so the explicit reviewQueueKind: "page_kind"
-    # pick from steps 3-4 survives the trip back to page 3.
-    next_button = page.locator('[data-testid="nav-next-button"]:not([data-testid-stub])')
-    next_button.click()
-    expect(page).to_have_url(re.compile(r"/pages/pageno/2$"), timeout=10_000)
-    next_button.click()
-    expect(page).to_have_url(re.compile(r"/pages/pageno/3$"), timeout=10_000)
+    # Step 5. A full page load — not in-app navigation — clears any
+    # Queue-drawer pick, so `]` here exercises the auto-picked default, not
+    # an explicit choice.
+    page.goto(f"{base_url}/projects/{_PROJECT_ID}/pages/pageno/3", timeout=20_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=20_000)
+    wait_for_project_ready(page)
+    expect(page.locator('[data-testid="rail-queue-next"]')).to_be_visible(timeout=10_000)
     page.keyboard.press("BracketRight")
     expect(page).to_have_url(re.compile(r"/pages/pageno/1$"), timeout=10_000)
+
+    # Step 6. Explicitly pick region — aiming the rail at it too, since a
+    # region-resolved kind still requires the rail's region target, exactly
+    # as it did before this kind selector existed.
+    _open_queue_tab(page)
+    page.locator('[data-testid="review-queue-kind-select-region"]').click()
+    expect(page.locator('[data-testid="review-queue-kind-select-region"]')).to_have_attribute(
+        "aria-pressed", "true", timeout=10_000
+    )
+    viewport = page.locator('[data-testid="image-viewport"]').first
+    viewport.wait_for(state="visible", timeout=10_000)
+    stage_canvas = viewport.locator("canvas").first
+    stage_canvas.wait_for(state="visible", timeout=10_000)
+    canvas_box = stage_canvas.bounding_box()
+    assert canvas_box is not None
+    page.mouse.click(canvas_box["x"] + 10, canvas_box["y"] + canvas_box["height"] - 10)
+    page.keyboard.press("5")
+    expect(page.locator('[data-testid="rail-target-region"]')).to_have_attribute(
+        "data-active", "true", timeout=5_000
+    )
+
+    # Still on page 1 (index 0) — no page before it has region work, so `[`
+    # cannot go further back; landing here (rather than page_kind's page 1
+    # again, which the badge still names) confirms the explicit region pick
+    # is what fired, not the auto default.
+    page.keyboard.press("BracketLeft")
+    no_prev_toast = page.locator("[data-sonner-toast]", has_text="No pages with undecided proposals before")
+    expect(no_prev_toast).to_be_visible(timeout=5_000)
+    expect(page).to_have_url(re.compile(r"/pages/pageno/1$"))

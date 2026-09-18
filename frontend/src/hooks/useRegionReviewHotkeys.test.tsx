@@ -912,4 +912,32 @@ describe("useRegionReviewHotkeys: '['/']' follow the selected kind", () => {
 
     expect(navigate).not.toHaveBeenCalled();
   });
+
+  it("auto-follows firstActionableKind with no explicit pick, unconditionally of rail target", async () => {
+    // No reviewQueueKind set — this is the auto-picked default, the same
+    // rule the Rail badge and Queue panel use, not an explicit choice.
+    railStore.getState().setTarget("word");
+    mockKindsQueue([kindEntry({ kind: "page_kind", outstanding: 5, first_page_index: 2 })]);
+    const { navigate, qc } = renderHotkeys(PAGE, { pageIndex: 0 });
+    await waitFor(() => expect(qc.getQueryData(["review-queue-kinds", PROJECT_ID])).toBeDefined());
+
+    pressKey("]");
+
+    expect(navigate).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/pages/pageno/3`);
+  });
+
+  it("an explicit pick overrides the auto-picked default", async () => {
+    useUiPrefs.setState({ reviewQueueKind: "word" });
+    mockKindsQueue([
+      kindEntry({ kind: "page_kind", outstanding: 5, first_page_index: 2 }),
+      kindEntry({ kind: "word", outstanding: 9, first_page_index: 7 }),
+    ]);
+    const { navigate, qc } = renderHotkeys(PAGE, { pageIndex: 0 });
+    await waitFor(() => expect(qc.getQueryData(["review-queue-kinds", PROJECT_ID])).toBeDefined());
+
+    pressKey("]");
+
+    // Follows the explicit "word" pick, not page_kind (the auto default).
+    expect(navigate).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/pages/pageno/8`);
+  });
 });
