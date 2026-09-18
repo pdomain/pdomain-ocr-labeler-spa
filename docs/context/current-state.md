@@ -211,8 +211,9 @@ Spec: [`../../specs/20-glyph-annotations.md`](../../specs/20-glyph-annotations.m
   decision never reached the log still carries, reconstructed from the block's
   `source_proposal_id`. A hand-drawn region stays deliberately uncarried; see
   `core/jobs/handlers/propose_regions.py::_origin_reference_for_region`.
-  **Open:** nothing in the SPA shows or undoes a carried rejection.
-  `PagePayload.proposals` carries the provenance and no surface renders it.
+  A collapsed panel in the right panel counts carried rejections and brings one
+  back; un-rejecting appends a `reopened` decision rather than rewriting the
+  original, so the journal stays evidence.
 - ~~Whether the OCR engine should warm up at server start~~ — decided
   2026-09-18: no. The predictor stays lazy; see `decisions.md`.
 - **Released `v0.3.0` on 2026-09-18**, 561 commits after `v0.2.0`, with the pip

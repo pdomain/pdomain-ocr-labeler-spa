@@ -1787,3 +1787,30 @@ family and not touched.
   tracks only its latest progress fraction, so a late subscriber can never
   recover the intermediate progress events those tests assert on. The docstring
   now says that rather than the stale reason.
+
+### [2026-09-18] A carried rejection can now be seen and undone
+
+- The carry-forward fix earlier the same day left this open and said so: a
+  rejected proposal is dropped from the page view and the review queue whether
+  a person rejected it directly or it was carried, so a mistaken rejection was
+  unrecoverable and the suppression was invisible.
+- What ships: a collapsed panel counting the proposals carried from an earlier
+  decision, opening to a list with a bring-back button. It counts only
+  rejections that name the proposal they were carried from. A direct rejection
+  is left alone, because it already had a person's attention.
+- Un-rejecting appends rather than rewrites, following the page-kind withdrawal
+  marker's existing precedent: a new `reopened` decision naming no region. The
+  original rejection is never touched, so the journal stays evidence of what
+  actually happened. The resolver already treated a non-rejected decision with
+  no region as undecided, so a reopened proposal comes back with no resolver
+  change.
+- **The placement moved because the browser test proved the obvious one wrong.**
+  Nesting the panel in the region detail looked right and made it unreachable
+  in exactly the case it exists for: the region level is only entered by
+  clicking something, and a page whose only remaining work is a carried
+  rejection has nothing to click. It mounts unconditionally instead. That is
+  the second time today driving the real loop in a browser contradicted a
+  design that read fine on paper.
+- The count is a filter over the proposal list the page response already
+  returns, refetched by the existing invalidation, so it is server truth rather
+  than a separate aggregate that could drift.
