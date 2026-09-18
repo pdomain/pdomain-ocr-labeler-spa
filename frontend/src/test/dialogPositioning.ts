@@ -19,14 +19,15 @@
 // ".dialog" already owns. Any DialogContent/AlertDialogContent found with
 // these classes has reintroduced the double-transform bug.
 //
-// This is the cheap check, not the only one: it catches exactly this class
-// list, so the same off-screen-dialog effect produced a different way (a
-// different Tailwind spelling, an inline style, a new CSS rule entirely)
-// would slip past it. HotkeyHelpModal.browser.test.tsx is the real guard —
-// it renders in an actual Chromium (vitest.browser.config.ts) and asserts
-// the computed box is inside the viewport, regardless of what caused a
-// regression. Run both; this one is near-free, the other one needs a
-// browser (`pnpm run test:browser`).
+// This is the cheap check, not the only one. The real guard already exists:
+// tests/e2e/test_ui_coverage.py::test_hotkey_help_close_button clicks the
+// dialog's real close button in a real Chromium. It failed for exactly this
+// incident — an off-screen dialog fails Playwright's click actionability
+// checks (the element has to be genuinely reachable, not just present in
+// the DOM) — and passes again now the CSS is fixed. That's a black-box
+// assertion of "can a user actually interact with this dialog", so it
+// catches the same off-screen effect however a future regression spells
+// the CSS, not just this exact class list.
 const OFFENDING_POSITIONING_CLASSES = [
   "fixed",
   "top-1/2",
