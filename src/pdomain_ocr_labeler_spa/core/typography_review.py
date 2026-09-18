@@ -8,6 +8,7 @@ import json
 import os
 import stat
 from contextlib import suppress
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, final
@@ -120,6 +121,22 @@ class ImportedTextValidationHead(BaseModel):
     head_token: str = Field(min_length=64, max_length=64)
 
 
+@dataclass(frozen=True)
+class ImportedTextDecision:
+    """One ``kind: decision`` row from ``ImportedTextValidationLog``, as read in bulk.
+
+    Lighter than ``ImportedTextValidationHead``: no CAS token, since a bulk
+    book-wide read (``ImportedTextValidationLog.decisions``) is for counting,
+    never for appending against.
+    """
+
+    page_key: tuple[str, str, str, str]
+    word_id: str
+    occurrence_id: str
+    revision: int
+    validated: bool
+
+
 @final
 class ImportedTextValidationLog:
     """Separate append-only journal for explicit imported-bundle text review."""
@@ -213,6 +230,57 @@ class ImportedTextValidationLog:
         finally:
             os.close(descriptor)
             os.close(parent)
+
+    def decisions(self) -> list[ImportedTextDecision]:
+        """Every ``kind: decision`` row in the journal, in the order written, from one read.
+
+        Read-only (``create=False``) and shared-locked, unlike ``head``/
+        ``append``: a bulk book-wide count must never create the journal as
+        a side effect of a ``GET``, and it never appends against what it
+        reads, so a shared lock is enough. A row whose binding fails to
+        parse is skipped rather than failing the whole read, the same
+        discipline ``TypographyCorrectionLog.records`` uses.
+        """
+        try:
+            parent, descriptor = self._open(create=False)
+        except FileNotFoundError:
+            return []
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_SH)
+            rows, _needs_newline = self._read(descriptor, recover=False, parent=parent)
+        finally:
+            os.close(descriptor)
+            os.close(parent)
+
+        result: list[ImportedTextDecision] = []
+        for row in rows:
+            if row.get("kind") != "decision":
+                continue
+            binding_raw = row.get("binding")
+            occurrence_id = row.get("occurrence_id")
+            revision = row.get("revision")
+            validated = row.get("validated")
+            if (
+                not isinstance(binding_raw, dict)
+                or not isinstance(occurrence_id, str)
+                or not isinstance(revision, int)
+                or not isinstance(validated, bool)
+            ):
+                continue
+            try:
+                binding = ImportedTextBinding.model_validate(binding_raw)
+            except ValueError:
+                continue
+            result.append(
+                ImportedTextDecision(
+                    page_key=self._page_key(binding),
+                    word_id=binding.word_id,
+                    occurrence_id=occurrence_id,
+                    revision=revision,
+                    validated=validated,
+                )
+            )
+        return result
 
     def _open(self, *, create: bool) -> tuple[int, int]:
         parent = self._files._open_journal_directory(create=create)
@@ -960,6 +1028,7 @@ class TypographyCorrectionLog:
 
 __all__ = [
     "ImportedTextBinding",
+    "ImportedTextDecision",
     "ImportedTextValidationHead",
     "ImportedTextValidationLog",
     "StaleImportedTextValidationError",

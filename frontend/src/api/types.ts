@@ -2626,14 +2626,16 @@ export interface paths {
          *     kinds being proposed, not reviewed; glyphs sit outside the chain. See
          *     ``ReviewQueueKindEntry`` for what each field means and
          *     ``_region_entry``/``_typography_entry`` for the exact ``blocked_by``
-         *     gates.
+         *     gates, and ``_word_entry`` for the three project shapes it counts
+         *     (ordinary, single-page labeling-bundle, multi-page labeling-bundle book).
          *
-         *     Reads each of the five journals it needs exactly once: the page-kind
+         *     Reads each of the journals it needs exactly once: the page-kind
          *     proposal and reviewed journals (via ``page_kinds_rows``), the region
-         *     proposal and decision journals, and the word-review-counts journal
-         *     (shared by the ``word`` and ``typography`` entries) — plus the
-         *     typography-corrections journal for the ``typography`` entry's
-         *     numerator. It opens no page.
+         *     proposal and decision journals, and — depending on project shape — the
+         *     word-review-counts journal or ``ImportedTextValidationLog`` (shared by
+         *     the ``word`` and ``typography`` entries), plus the typography-
+         *     corrections journal for the ``typography`` entry's numerator. It opens
+         *     no page.
          */
         get: operations["get_review_queue"];
         put?: never;

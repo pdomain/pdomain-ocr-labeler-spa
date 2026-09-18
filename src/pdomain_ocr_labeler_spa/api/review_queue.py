@@ -23,11 +23,24 @@ empty. Above that threshold the ``typography`` entry reports
 ``available: false`` with a reason, checked by one ``stat()`` rather than a
 read — the same honesty the ``glyph`` entry already has for a different
 cause.
+
+A project loaded from a labeling bundle never calls
+``save_page_content_to_store`` at all — text validation is a CAS append to
+``ImportedTextValidationLog`` instead, and typography corrections are keyed
+by the bundle's own ``page_id``, not ``stable_page_id``. ``_word_entry``
+handles two such shapes: a single-page bundle project counts from the real
+thing (the bundle is already resident, and its validation journal is cheap
+at one page's scale), while a multi-page labeling-bundle book reports
+``word`` (and therefore ``typography``, which cannot be answered without it)
+as ``available: false`` — its book manifest gives page identity without I/O,
+but never a page's word total, which only its own materialized bundle
+carries. See ``_word_entry``'s docstring for the full three-way split.
 """
 
 from __future__ import annotations
 
 from contextlib import suppress
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends
@@ -38,15 +51,23 @@ from ..core.project_state import ProjectState
 from ..core.regions.decision_log import RegionDecisionLog
 from ..core.regions.proposal_log import RegionProposalLog
 from ..core.regions.resolver import is_undecided
-from ..core.review_counts import PageWordCounts, WordReviewCountsJournal
-from ..core.typography_review import TypographyCorrectionLog, reviewed_word_keys, stable_page_id
+from ..core.review_counts import WordReviewCountsJournal
+from ..core.typography_review import (
+    ImportedTextValidationLog,
+    TypographyCorrectionLog,
+    reviewed_word_keys,
+    stable_page_id,
+)
 from .dependencies import get_project_state
 from .middleware.error_handler import ApiError
 from .page_kinds import PageKindsListItem, page_kinds_rows
 from .typography import TYPOGRAPHY_TAXONOMY
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from fastapi import FastAPI
+    from pdomain_book_tools.typography import LabelingBundle
 
     from ..core.models import Project
 
@@ -80,6 +101,44 @@ _TYPOGRAPHY_TOO_LARGE_REASON_TEMPLATE = (
     "limit for a single request's read (see docs/issues/2026-09-18-typography-"
     "numerator-needs-a-per-page-rollup.md)"
 )
+
+_BOOK_LABELING_SESSION_WORD_UNAVAILABLE_REASON = (
+    "project is a multi-page labeling-bundle book: each page's word total "
+    "lives only in that page's own bundle, and the book manifest this route "
+    "can read without I/O does not carry it, so answering it would mean "
+    "opening every page"
+)
+
+
+def _no_logical_page_id(page_index: int) -> str:
+    """Placeholder ``logical_page_id`` for a ``_WordCountSource`` with nothing to look up."""
+    del page_index
+    return ""
+
+
+@dataclass(frozen=True)
+class _WordCountSource:
+    """What the ``typography`` entry needs from whichever ``word``-counting path ran.
+
+    Three project shapes feed the ``word`` kind, and each keys typography
+    corrections differently — see ``_word_entry``:
+
+    - An ordinary project: pages keyed by ``stable_page_id``, counts from
+      ``WordReviewCountsJournal``.
+    - A single-page labeling-bundle project: one page, keyed by the bundle's
+      own ``page_id`` (what ``TypographyCorrectionLog`` records for it also
+      use — see ``api/typography.py``'s ``_logical_page_id``), counted from
+      the resident bundle plus ``ImportedTextValidationLog``.
+    - A multi-page labeling-bundle book: unavailable (see ``_word_entry``),
+      so this is empty and ``logical_page_id`` is never called.
+
+    ``total_words_by_page`` is empty exactly when the ``word`` kind could not
+    count any page — the ``typography`` entry treats that the same as being
+    blocked by ``word``, never as "zero work".
+    """
+
+    total_words_by_page: dict[int, int] = field(default_factory=dict)
+    logical_page_id: Callable[[int], str] = _no_logical_page_id
 
 
 class ReviewQueueKindEntry(BaseModel):
@@ -178,17 +237,50 @@ def _region_entry(project: Project, page_kind_rows: list[PageKindsListItem]) -> 
     )
 
 
-def _word_entry(project: Project) -> tuple[ReviewQueueKindEntry, dict[int, PageWordCounts]]:
-    """The ``word`` entry, plus the per-page counts the ``typography`` entry reuses.
+def _word_entry(
+    project: Project, project_state: ProjectState
+) -> tuple[ReviewQueueKindEntry, _WordCountSource]:
+    """The ``word`` entry, plus what the ``typography`` entry needs to key its lookups.
 
-    ``total``/``outstanding`` are sums over pages the counts journal has a
-    row for — a page with no row is unseen, not zero work, which is exactly
-    what ``pages_not_counted`` says. ``first_page_index`` treats an unseen
-    page the same as one with outstanding work: nothing can validate a word
-    on a page without first going through ``save_page_content_to_store``,
-    which is also what writes a page's row, so a page with no row has never
-    had a word validated on it either.
+    Three project shapes, in the order checked:
+
+    1. **A multi-page labeling-bundle book** (``project_state.
+       has_book_labeling_session``). Text validation goes through
+       ``ImportedTextValidationLog``, keyed by each page's own bundle
+       ``page_id`` — never ``save_page_content_to_store``, so
+       ``WordReviewCountsJournal`` never gets a row for these pages either.
+       Reading that journal is cheap, but a page's *total* word count lives
+       only in that page's own materialized bundle — the book manifest this
+       route can read without I/O carries page identity, not word counts —
+       so answering the denominator would mean opening every page. Reports
+       ``available: false`` rather than a false zero.
+    2. **A single-page labeling-bundle project** (``project_state.
+       labeling_bundle is not None``). Same validation path, but the one
+       page's bundle is already resident (loaded once at project-load time,
+       kept for the project's life — not read per request), so its word
+       list costs nothing extra to read, and
+       ``ImportedTextValidationLog.decisions()`` is a plain-dict JSONL read
+       — cheap at the scale of one page's words, the same class of cost as
+       the region and page-kind journals. Counted from the real thing.
+    3. **An ordinary project.** Unchanged: ``WordReviewCountsJournal``, keyed
+       by ``stable_page_id``.
     """
+    if project_state.has_book_labeling_session:
+        entry = ReviewQueueKindEntry(
+            kind="word",
+            outstanding=0,
+            total=0,
+            available=False,
+            blocked_by=None,
+            first_page_index=None,
+            unavailable_reason=_BOOK_LABELING_SESSION_WORD_UNAVAILABLE_REASON,
+        )
+        return entry, _WordCountSource()
+
+    bundle = project_state.labeling_bundle
+    if bundle is not None:
+        return _word_entry_from_bundle(project, bundle)
+
     counts_by_page = WordReviewCountsJournal(project.project_root).latest_by_page()
     total = sum(counts.total_words for counts in counts_by_page.values())
     validated = sum(counts.validated_words for counts in counts_by_page.values())
@@ -211,17 +303,61 @@ def _word_entry(project: Project) -> tuple[ReviewQueueKindEntry, dict[int, PageW
         pages_not_counted=pages_not_counted,
         is_lower_bound=pages_not_counted > 0,
     )
-    return entry, counts_by_page
+    project_id = project.project_id
+    source = _WordCountSource(
+        total_words_by_page={page_index: counts.total_words for page_index, counts in counts_by_page.items()},
+        logical_page_id=lambda page_index, _project_id=project_id: stable_page_id(
+            project_id=_project_id, page_index=page_index
+        ),
+    )
+    return entry, source
 
 
-def _typography_unavailable_entry(*, journal_size: int) -> ReviewQueueKindEntry:
-    """The ``typography`` entry when its journal is too large to read within a request.
+def _word_entry_from_bundle(
+    project: Project, bundle: LabelingBundle
+) -> tuple[ReviewQueueKindEntry, _WordCountSource]:
+    """The ``word`` entry for a single-page labeling-bundle project, counted from the real thing.
 
-    The same honesty ``glyph`` already has: ``available: false`` with a
-    reason naming the real cause, rather than a count that would cost over a
-    second on a book with real correction history — see
-    ``_TYPOGRAPHY_CORRECTIONS_MAX_BYTES``.
+    ``save_page_content_to_store`` is never called for a bundle project —
+    text validation is a CAS append to ``ImportedTextValidationLog``, keyed
+    by the bundle's own word ids, never ``(line, word)`` indices in a page
+    blob. The total comes from ``bundle.words`` (already resident, one page,
+    no I/O); the validated count comes from the latest decision per word id
+    across the whole journal (a project only ever has one bundle, so there
+    is exactly one page key to match, but the filter is kept for
+    correctness rather than assumed).
     """
+    log = ImportedTextValidationLog(project.project_root, corpus_root=project.project_root.parent)
+    validated_by_word: dict[str, bool] = {}
+    for decision in log.decisions():
+        if decision.page_key[1] != bundle.page_id:
+            continue
+        validated_by_word[decision.word_id] = decision.validated
+
+    total = len(bundle.words)
+    validated = sum(1 for word in bundle.words if validated_by_word.get(word.word_id, False))
+    outstanding = total - validated
+
+    entry = ReviewQueueKindEntry(
+        kind="word",
+        outstanding=outstanding,
+        total=total,
+        available=True,
+        blocked_by=None,
+        first_page_index=0 if outstanding > 0 else None,
+        pages_not_counted=0,
+        is_lower_bound=False,
+    )
+    page_id = bundle.page_id
+    source = _WordCountSource(
+        total_words_by_page={0: total},
+        logical_page_id=lambda _page_index, _page_id=page_id: _page_id,
+    )
+    return entry, source
+
+
+def _typography_unavailable_entry(*, reason: str) -> ReviewQueueKindEntry:
+    """The ``typography`` entry when it cannot be answered — same honesty ``glyph`` has."""
     return ReviewQueueKindEntry(
         kind="typography",
         outstanding=0,
@@ -229,45 +365,58 @@ def _typography_unavailable_entry(*, journal_size: int) -> ReviewQueueKindEntry:
         available=False,
         blocked_by=None,
         first_page_index=None,
-        unavailable_reason=_TYPOGRAPHY_TOO_LARGE_REASON_TEMPLATE.format(
-            size=journal_size, threshold=_TYPOGRAPHY_CORRECTIONS_MAX_BYTES
-        ),
+        unavailable_reason=reason,
     )
 
 
 def _typography_entry(
     project: Project,
-    counts_by_page: dict[int, PageWordCounts],
+    word_source: _WordCountSource,
     *,
     word_entry: ReviewQueueKindEntry,
 ) -> ReviewQueueKindEntry:
     """The ``typography`` entry: a journal-only numerator over the word total.
 
-    Reports unavailable, without reading the journal at all, once it is
+    Unavailable whenever ``word`` is: there is no page to navigate to or
+    count against without knowing whether its words are done. Otherwise
+    reports unavailable, without reading the journal at all, once it is
     bigger than ``_TYPOGRAPHY_CORRECTIONS_MAX_BYTES`` — checked with one
     ``stat()``, never a read or a parse. See that constant's docstring for
     the measurement behind the threshold.
 
     ``blocked_by`` is ``"word"`` whenever any word is still outstanding, or
-    the counts journal has not seen every page yet — a page it has not
-    counted has never had a word validated on it either (see the ``word``
-    entry's docstring), so it cannot be presumed done. While blocked,
-    ``first_page_index`` mirrors the ``word`` entry's: there is nothing
-    typography-specific to navigate to until words clear. Once unblocked,
-    it is the first page (among pages the counts journal has a row for)
-    whose typography-reviewed count is below its word total.
+    the ``word`` kind has not counted every page yet — a page it has not
+    counted has never had a word validated on it either, so it cannot be
+    presumed done. While blocked, ``first_page_index`` mirrors the ``word``
+    entry's: there is nothing typography-specific to navigate to until
+    words clear. Once unblocked, it is the first page (among pages
+    ``word_source`` has a total for) whose typography-reviewed count is
+    below its word total — keyed by ``word_source.logical_page_id``, which
+    is ``stable_page_id`` for an ordinary project and the loaded bundle's
+    own ``page_id`` for a single-page labeling-bundle project, matching
+    whichever key ``TypographyCorrectionLog`` records were written under
+    for that project shape (see ``api/typography.py``'s ``_logical_page_id``).
     """
+    if not word_entry.available:
+        return _typography_unavailable_entry(
+            reason=word_entry.unavailable_reason or "the word kind is unavailable for this project"
+        )
+
     log = TypographyCorrectionLog(project.project_root, corpus_root=project.project_root.parent)
     journal_size = 0
     with suppress(FileNotFoundError):
         journal_size = log.path.stat().st_size
     if journal_size > _TYPOGRAPHY_CORRECTIONS_MAX_BYTES:
-        return _typography_unavailable_entry(journal_size=journal_size)
+        return _typography_unavailable_entry(
+            reason=_TYPOGRAPHY_TOO_LARGE_REASON_TEMPLATE.format(
+                size=journal_size, threshold=_TYPOGRAPHY_CORRECTIONS_MAX_BYTES
+            )
+        )
 
     required_labels = {label.value for label in TYPOGRAPHY_TAXONOMY.labels if label.required_for_completion}
     reviewed_keys = reviewed_word_keys(log.records(), required_labels=required_labels)
 
-    total = sum(counts.total_words for counts in counts_by_page.values())
+    total = sum(word_source.total_words_by_page.values())
     words_pending = word_entry.outstanding > 0 or word_entry.pages_not_counted > 0
     blocked_by: _ReviewQueueKindName | None = "word" if words_pending else None
 
@@ -278,9 +427,12 @@ def _typography_entry(
         for logical_page_id, _word_id in reviewed_keys:
             reviewed_per_logical_page[logical_page_id] = reviewed_per_logical_page.get(logical_page_id, 0) + 1
         first_page_index = None
-        for page_index in sorted(counts_by_page):
-            logical_page_id = stable_page_id(project_id=project.project_id, page_index=page_index)
-            if reviewed_per_logical_page.get(logical_page_id, 0) < counts_by_page[page_index].total_words:
+        for page_index in sorted(word_source.total_words_by_page):
+            logical_page_id = word_source.logical_page_id(page_index)
+            if (
+                reviewed_per_logical_page.get(logical_page_id, 0)
+                < word_source.total_words_by_page[page_index]
+            ):
                 first_page_index = page_index
                 break
 
@@ -328,14 +480,16 @@ def get_review_queue(
     kinds being proposed, not reviewed; glyphs sit outside the chain. See
     ``ReviewQueueKindEntry`` for what each field means and
     ``_region_entry``/``_typography_entry`` for the exact ``blocked_by``
-    gates.
+    gates, and ``_word_entry`` for the three project shapes it counts
+    (ordinary, single-page labeling-bundle, multi-page labeling-bundle book).
 
-    Reads each of the five journals it needs exactly once: the page-kind
+    Reads each of the journals it needs exactly once: the page-kind
     proposal and reviewed journals (via ``page_kinds_rows``), the region
-    proposal and decision journals, and the word-review-counts journal
-    (shared by the ``word`` and ``typography`` entries) — plus the
-    typography-corrections journal for the ``typography`` entry's
-    numerator. It opens no page.
+    proposal and decision journals, and — depending on project shape — the
+    word-review-counts journal or ``ImportedTextValidationLog`` (shared by
+    the ``word`` and ``typography`` entries), plus the typography-
+    corrections journal for the ``typography`` entry's numerator. It opens
+    no page.
     """
     project = project_state.loaded_project
     if project is None or project.project_id != project_id:
@@ -343,8 +497,8 @@ def get_review_queue(
 
     page_kind_entry, page_kind_rows_ = _page_kind_entry(project, project_state)
     region_entry = _region_entry(project, page_kind_rows_)
-    word_entry, counts_by_page = _word_entry(project)
-    typography_entry = _typography_entry(project, counts_by_page, word_entry=word_entry)
+    word_entry, word_source = _word_entry(project, project_state)
+    typography_entry = _typography_entry(project, word_source, word_entry=word_entry)
     glyph_entry = _glyph_entry()
 
     response = ReviewQueueResponse(

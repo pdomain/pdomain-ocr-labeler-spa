@@ -13,6 +13,7 @@ own aggregation logic.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterator
 from pathlib import Path
@@ -21,6 +22,17 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from pdomain_book_contracts.annotation import PageKind, RegionRole
+from pdomain_book_tools.typography import (
+    GRAPHEME_SEGMENTATION_VERSION,
+    REVIEW_CONTRACT_VERSION,
+    ArtifactReference,
+    Evidence,
+    LabelingBundle,
+    LabelState,
+    TypographyTaxonomy,
+    TypographyTaxonomyLabel,
+    WordTypography,
+)
 
 from pdomain_ocr_labeler_spa.bootstrap import build_app
 from pdomain_ocr_labeler_spa.core.page_kind.proposal_log import PageKindProposalLog
@@ -30,11 +42,14 @@ from pdomain_ocr_labeler_spa.core.regions.models import Disposition, RegionDecis
 from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
 from pdomain_ocr_labeler_spa.core.review_counts import PageWordCounts, WordReviewCountsJournal
 from pdomain_ocr_labeler_spa.core.typography_review import (
+    ImportedTextBinding,
+    ImportedTextValidationLog,
     TypographyJournalEnvelope,
     stable_page_id,
     stable_word_id,
 )
 from pdomain_ocr_labeler_spa.settings import Settings
+from tests.unit.core.persistence.test_book_labeling_session import _write_book
 
 _TOTAL_PAGES = 4
 _PROJECT_ID = "book1"
@@ -143,15 +158,29 @@ def _required_typography_labels() -> list[str]:
 def _seed_typography_correction(
     project_root: Path, *, page_index: int, word_text: str, correction_id: str, reviewed: bool
 ) -> None:
-    """Write one envelope straight to the journal file.
+    """Write one envelope keyed by ``stable_page_id`` — an ordinary project's key."""
+    _seed_typography_correction_for_page_id(
+        project_root,
+        logical_page_id=stable_page_id(project_id=_PROJECT_ID, page_index=page_index),
+        word_text=word_text,
+        correction_id=correction_id,
+        reviewed=reviewed,
+    )
+
+
+def _seed_typography_correction_for_page_id(
+    project_root: Path, *, logical_page_id: str, word_text: str, correction_id: str, reviewed: bool
+) -> None:
+    """Write one envelope straight to the journal file, under an explicit key.
 
     Bypasses ``TypographyCorrectionLog.append``'s CAS validation against a
     "current" binding — this route's reader (``TypographyCorrectionLog.
     records()``) never validates on read, so a directly-written, internally
-    consistent envelope is exactly what it will see.
+    consistent envelope is exactly what it will see. ``logical_page_id`` is
+    explicit rather than derived, so this seeds correctly for both an
+    ordinary project's ``stable_page_id`` and a labeling-bundle project's
+    own ``page_id``.
     """
-    import hashlib
-
     from pdomain_book_tools.typography import GRAPHEME_SEGMENTATION_VERSION
 
     from pdomain_ocr_labeler_spa.api.typography import TYPOGRAPHY_TAXONOMY
@@ -159,7 +188,7 @@ def _seed_typography_correction(
     text_sha256 = hashlib.sha256(b"word").hexdigest()
     word_id = stable_word_id(
         project_id=_PROJECT_ID,
-        page_id=stable_page_id(project_id=_PROJECT_ID, page_index=page_index),
+        page_id=logical_page_id,
         reading_order=0,
         text=word_text,
     )
@@ -204,7 +233,7 @@ def _seed_typography_correction(
     }
     envelope = TypographyJournalEnvelope.model_validate(
         {
-            "logical_page_id": stable_page_id(project_id=_PROJECT_ID, page_index=page_index),
+            "logical_page_id": logical_page_id,
             "correction": correction,
         }
     )
@@ -546,3 +575,249 @@ def test_review_queue_reads_each_journal_once_per_request(
         "word_counts": 1,
         "typography_corrections": 1,
     }
+
+
+# ── Labeling-bundle project shapes ───────────────────────────────────────────
+#
+# A project loaded from a labeling bundle validates word text through
+# ``ImportedTextValidationLog``, never ``save_page_content_to_store`` — see
+# ``api/review_queue.py``'s ``_word_entry``. Two shapes:
+#
+# - A single-page ``labeling-bundle.json`` project: the bundle is resident,
+#   its word list and validation journal are counted from directly.
+# - A multi-page ``book-labeling-manifest.json`` project (a "book labeling
+#   session"): each page's word total lives only in that page's own
+#   materialized bundle, unreachable without opening it, so ``word`` (and
+#   therefore ``typography``) reports unavailable.
+
+
+def _make_bundle_settings(tmp_path: Path, **overrides: object) -> Settings:
+    base: dict[str, object] = {
+        "host": "127.0.0.1",
+        "port": 8080,
+        "config_root": tmp_path / "config",
+        "data_root": tmp_path / "data",
+        "cache_root": tmp_path / "cache",
+        "mode": "api_only",
+    }
+    base.update(overrides)
+    return Settings(**base)  # type: ignore[arg-type]
+
+
+def _write_bundle_project(root: Path, *, word_texts: list[str]) -> LabelingBundle:
+    """A single-page ``labeling-bundle.json`` project with the given words.
+
+    Mirrors ``tests/integration/test_projects_router.py``'s
+    ``_write_labeling_bundle_project``, parameterized on word count so the
+    ``word`` entry has more than one word to be partly outstanding on.
+    """
+    root.mkdir()
+    artifacts = root / "artifacts"
+    artifacts.mkdir()
+    image_payload = b"image-payload"
+    (artifacts / "images").mkdir()
+    (artifacts / "images" / "001.png").write_bytes(image_payload)
+    image_sha = hashlib.sha256(image_payload).hexdigest()
+    page_payload = b"page-record"
+    (artifacts / "page-record.json").write_bytes(page_payload)
+    page_sha = hashlib.sha256(page_payload).hexdigest()
+    page_id = "pgdp:bundle-project:001.png"
+    page_head_payload = (
+        json.dumps(
+            {
+                "configuration_hash": "c" * 64,
+                "image_sha256": image_sha,
+                "page_id": page_id,
+                "page_sha256": page_sha,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode()
+    taxonomy = TypographyTaxonomy(
+        version="labeler-v1",
+        labels=(
+            TypographyTaxonomyLabel(
+                value="italic", display_name="Italic", required_for_completion=True, trainable=True
+            ),
+        ),
+    )
+    words = tuple(
+        WordTypography(
+            word_id=f"7ca20136-634e-5282-a071-{index:012d}",
+            text=text,
+            text_sha256=hashlib.sha256(text.encode()).hexdigest(),
+            page_content_sha256=page_sha,
+            image_artifact_sha256=image_sha,
+            grapheme_map_version=GRAPHEME_SEGMENTATION_VERSION,
+            taxonomy_version=taxonomy.version,
+            taxonomy_hash=taxonomy.taxonomy_hash,
+            label_states={"italic": LabelState.UNKNOWN},
+            source_evidence_ids=("source-evidence",),
+        )
+        for index, text in enumerate(word_texts)
+    )
+    bundle = LabelingBundle(
+        schema_version=REVIEW_CONTRACT_VERSION,
+        configuration_hash="c" * 64,
+        taxonomy=taxonomy,
+        page_id=page_id,
+        page_sha256=page_sha,
+        image_sha256=image_sha,
+        text_sha256=hashlib.sha256(" ".join(word_texts).encode()).hexdigest(),
+        page_head_sha256=hashlib.sha256(page_head_payload).hexdigest(),
+        artifacts=(
+            ArtifactReference(
+                artifact_id="image", relative_path="images/001.png", sha256=image_sha, media_type="image/png"
+            ),
+            ArtifactReference(
+                artifact_id="page-record",
+                relative_path="page-record.json",
+                sha256=page_sha,
+                media_type="application/json",
+            ),
+        ),
+        evidence=(
+            Evidence(
+                evidence_id="source-evidence",
+                artifact_id="image",
+                artifact_sha256=image_sha,
+                byte_start=0,
+                byte_end=1,
+            ),
+        ),
+        words=words,
+    )
+    (root / "labeling-bundle.json").write_text(bundle.model_dump_json(indent=2))
+    return bundle
+
+
+def _load_bundle_project(tmp_path: Path, bundle_root: Path) -> TestClient:
+    settings = _make_bundle_settings(tmp_path, source_projects_root=bundle_root.parent)
+    app = build_app(settings)
+    client = TestClient(app)
+    client.__enter__()
+    resp = client.post("/api/projects/load", json={"project_root": str(bundle_root)})
+    assert resp.status_code == 200, resp.text
+    return client
+
+
+def _validate_bundle_word(
+    project_root: Path, bundle: LabelingBundle, word: WordTypography, *, validated: bool
+) -> None:
+    assert bundle.bundle_id is not None
+    binding = ImportedTextBinding(
+        bundle_id=bundle.bundle_id,
+        page_id=bundle.page_id,
+        page_sha256=bundle.page_sha256,
+        page_head_sha256=bundle.page_head_sha256,
+        word_id=word.word_id,
+        text=word.text,
+        text_sha256=word.text_sha256,
+    )
+    log = ImportedTextValidationLog(project_root, corpus_root=project_root.parent)
+    head = log.head(binding)
+    log.append(binding, validated=validated, expected_head=head.head_token)
+
+
+def test_word_counts_a_single_bundle_project_from_the_real_thing(tmp_path: Path) -> None:
+    (tmp_path / "projects").mkdir()
+    bundle_root = tmp_path / "projects" / "bundle-project"
+    bundle = _write_bundle_project(bundle_root, word_texts=["alpha", "beta", "gamma"])
+    client = _load_bundle_project(tmp_path, bundle_root)
+    try:
+        _validate_bundle_word(bundle_root, bundle, bundle.words[0], validated=True)
+        _validate_bundle_word(bundle_root, bundle, bundle.words[1], validated=True)
+
+        resp = client.get("/api/projects/bundle-project/review-queue")
+        word = _kind(resp.json(), "word")
+
+        assert word["available"] is True
+        assert word["total"] == 3
+        assert word["outstanding"] == 1
+        assert word["pages_not_counted"] == 0
+        assert word["is_lower_bound"] is False
+        assert word["first_page_index"] == 0
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_word_reports_fully_validated_for_a_single_bundle_project(tmp_path: Path) -> None:
+    (tmp_path / "projects").mkdir()
+    bundle_root = tmp_path / "projects" / "bundle-project"
+    bundle = _write_bundle_project(bundle_root, word_texts=["alpha", "beta"])
+    client = _load_bundle_project(tmp_path, bundle_root)
+    try:
+        for word in bundle.words:
+            _validate_bundle_word(bundle_root, bundle, word, validated=True)
+
+        resp = client.get("/api/projects/bundle-project/review-queue")
+        word = _kind(resp.json(), "word")
+
+        assert word["outstanding"] == 0
+        assert word["first_page_index"] is None
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_typography_for_a_single_bundle_project_uses_the_bundles_page_id(tmp_path: Path) -> None:
+    (tmp_path / "projects").mkdir()
+    bundle_root = tmp_path / "projects" / "bundle-project"
+    bundle = _write_bundle_project(bundle_root, word_texts=["alpha", "beta", "gamma"])
+    client = _load_bundle_project(tmp_path, bundle_root)
+    try:
+        for word in bundle.words:
+            _validate_bundle_word(bundle_root, bundle, word, validated=True)
+
+        # Seed one typography correction keyed by the bundle's OWN page_id —
+        # not stable_page_id(project_id, 0), which nothing writes for a
+        # bundle project.
+        _seed_typography_correction_for_page_id(
+            bundle_root,
+            logical_page_id=bundle.page_id,
+            word_text="alpha",
+            correction_id="c-alpha",
+            reviewed=True,
+        )
+
+        resp = client.get("/api/projects/bundle-project/review-queue")
+        body = resp.json()
+        word = _kind(body, "word")
+        typography = _kind(body, "typography")
+
+        assert word["outstanding"] == 0
+        assert typography["available"] is True
+        assert typography["blocked_by"] is None
+        assert typography["total"] == 3
+        assert typography["outstanding"] == 2
+        assert typography["first_page_index"] == 0
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_word_and_typography_are_unavailable_for_a_multi_page_labeling_bundle_book(tmp_path: Path) -> None:
+    (tmp_path / "projects").mkdir()
+    book_root = tmp_path / "projects" / "book-project"
+    manifest = _write_book(book_root, page_count=3)
+    client = _load_bundle_project(tmp_path, book_root)
+    try:
+        # ``_write_book``'s book_id is "book:pgdp:project" — the loader takes
+        # the last colon-separated part as the project_id, not the directory
+        # name (see ``api/projects.py``'s ``_build_project_from_book_labeling_
+        # manifest``).
+        project_id = manifest.book_id.split(":")[-1]
+        resp = client.get(f"/api/projects/{project_id}/review-queue")
+        body = resp.json()
+        word = _kind(body, "word")
+        typography = _kind(body, "typography")
+
+        assert word["available"] is False
+        assert word["outstanding"] == 0
+        assert word["total"] == 0
+        assert word["unavailable_reason"]
+
+        assert typography["available"] is False
+        assert typography["unavailable_reason"]
+    finally:
+        client.__exit__(None, None, None)
