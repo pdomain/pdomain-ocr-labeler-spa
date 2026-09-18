@@ -38,7 +38,7 @@ from ..core.models import BBox
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import ProjectState
-from ..core.regions.block_adapter import find_region_block
+from ..core.regions.block_adapter import HAND_DRAWN_SENTINEL, find_region_block
 from ..core.regions.coordinates import pixel_box_to_bounding_box
 from ..core.regions.decision_log import RegionDecisionLog
 from ..core.regions.models import Disposition, RegionDecision, RegionProposal
@@ -76,7 +76,11 @@ router = APIRouter(prefix="/api/projects", tags=["regions"])
 
 _REGION_ID_KEY = "region_id"
 _SOURCE_PROPOSAL_ID_KEY = "source_proposal_id"
-_HAND_DRAWN_SENTINEL = "hand-drawn"
+#: Re-exported locally so every existing reference below (``_HAND_DRAWN_SENTINEL``)
+#: keeps working unchanged — the value itself now lives in
+#: ``core.regions.block_adapter`` (the single source of truth; see its own
+#: docstring for why a core module owns it rather than this one).
+_HAND_DRAWN_SENTINEL = HAND_DRAWN_SENTINEL
 
 
 # ── Request models ─────────────────────────────────────────────────────
@@ -122,6 +126,11 @@ class AcceptRegionProposalRequest(BaseModel):
 
 
 class RegionProposalListItem(BaseModel):
+    """Mirrors ``RegionProposalView`` (``PagePayload.proposals``) field for field —
+    see that model's docstring for what ``carried_from_run_id``/
+    ``carried_from_proposal_id`` mean.
+    """
+
     proposal_id: str
     run_id: str
     role: RegionRole
@@ -131,6 +140,8 @@ class RegionProposalListItem(BaseModel):
     # upstream, which is equally open-ended, so no single TypedDict fits.
     evidence: dict[str, Any]
     disposition: str | None = None
+    carried_from_run_id: str | None = None
+    carried_from_proposal_id: str | None = None
 
 
 class ListRegionProposalsResponse(BaseModel):
@@ -957,6 +968,8 @@ def list_region_proposals(
                 confidence=p.confidence,
                 evidence=p.evidence,
                 disposition=decision.disposition.value if decision is not None else None,
+                carried_from_run_id=decision.carried_from_run_id if decision is not None else None,
+                carried_from_proposal_id=decision.carried_from_proposal_id if decision is not None else None,
             )
         )
     response = ListRegionProposalsResponse(proposals=items)

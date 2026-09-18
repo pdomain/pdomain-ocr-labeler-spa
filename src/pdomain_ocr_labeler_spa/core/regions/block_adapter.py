@@ -31,6 +31,14 @@ from pdomain_ocr_labeler_spa.core.regions.models import ResolvedRegion
 _REGION_ID_KEY = "region_id"
 _SOURCE_PROPOSAL_ID_KEY = "source_proposal_id"
 
+#: The ``source_proposal_id`` value a hand-drawn region carries — a person drew it
+#: unprompted, so there is no real proposal behind it. Lives here, not in
+#: ``api/regions.py`` (the only writer), so a *reader* of a region's origin — the
+#: carry-forward job handler among them, which cannot import from ``api`` at all
+#: (a layering rule the tests enforce) — has one place to check "is this a real
+#: proposal id" without duplicating the sentinel string.
+HAND_DRAWN_SENTINEL = "hand-drawn"
+
 
 def _walk_blocks(items: Sequence[Word | Block]) -> Iterator[Block]:
     """Yield every ``Block`` reachable from ``items``, at any nesting depth."""
@@ -170,4 +178,9 @@ def compute_page_facet_digests(page: Page, *, image_digest: str | None) -> dict[
     return digests
 
 
-__all__ = ["compute_page_facet_digests", "confirmed_regions_from_page", "find_region_block"]
+__all__ = [
+    "HAND_DRAWN_SENTINEL",
+    "compute_page_facet_digests",
+    "confirmed_regions_from_page",
+    "find_region_block",
+]

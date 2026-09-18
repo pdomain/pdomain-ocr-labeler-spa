@@ -5119,7 +5119,12 @@ export interface components {
                 number
             ][];
         };
-        /** RegionProposalListItem */
+        /**
+         * RegionProposalListItem
+         * @description Mirrors ``RegionProposalView`` (``PagePayload.proposals``) field for field —
+         *     see that model's docstring for what ``carried_from_run_id``/
+         *     ``carried_from_proposal_id`` mean.
+         */
         RegionProposalListItem: {
             /** Proposal Id */
             proposal_id: string;
@@ -5135,6 +5140,10 @@ export interface components {
             };
             /** Disposition */
             disposition?: string | null;
+            /** Carried From Run Id */
+            carried_from_run_id?: string | null;
+            /** Carried From Proposal Id */
+            carried_from_proposal_id?: string | null;
         };
         /**
          * RegionProposalView
@@ -5143,6 +5152,13 @@ export interface components {
          *     ``disposition`` and ``decided_region_id`` are ``None`` until a person accepts or
          *     rejects the proposal; that is what distinguishes "nobody has looked yet" from
          *     "looked at and refused" once a decision is recorded.
+         *
+         *     ``carried_from_run_id``/``carried_from_proposal_id`` are set only when this
+         *     proposal's decision was not a person's own: a re-run matched it against an
+         *     earlier proposal's confirmed region or recorded rejection and reused that
+         *     decision rather than asking again. Both are ``None`` for a decision a person
+         *     made directly on this exact proposal, carried or not — the one signal a
+         *     caller has for telling a carried decision from a fresh one.
          */
         RegionProposalView: {
             /** Proposal Id */
@@ -5163,6 +5179,10 @@ export interface components {
             disposition?: string | null;
             /** Decided Region Id */
             decided_region_id?: string | null;
+            /** Carried From Run Id */
+            carried_from_run_id?: string | null;
+            /** Carried From Proposal Id */
+            carried_from_proposal_id?: string | null;
         };
         /**
          * RegionReviewQueueItem

@@ -1250,6 +1250,8 @@ def _resolve_regions_and_proposals(
                 evidence=p.evidence,
                 disposition=decision.disposition.value if decision is not None else None,
                 decided_region_id=decision.region_id if decision is not None else None,
+                carried_from_run_id=decision.carried_from_run_id if decision is not None else None,
+                carried_from_proposal_id=decision.carried_from_proposal_id if decision is not None else None,
             )
         )
     return regions, proposals
