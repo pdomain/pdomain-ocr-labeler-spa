@@ -106,7 +106,6 @@ export function BulkActions({ projectId, pageIndex }: BulkActionsProps) {
         style_filters: [],
         include_classification: false,
         detection_only: false,
-        normalize_recognition_labels: false,
       };
       const res = await apiPost<{ job_id: string }>(
         `/api/projects/${encodeURIComponent(projectId)}/export`,

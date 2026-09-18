@@ -261,7 +261,7 @@ Each row is a governed issue under `docs/issues/`. Prefer implementing by issue
 | 0 | `2026-07-21-mutation-store-silent-200.md` — **resolved 2026-08-08**, deleted; see tombstone | P1-MUTATION-200, 0.5 |
 | 1 | `2026-07-21-export-list-api-empty.md` — **resolved 2026-08-08**, deleted; see tombstone | P0-EXPORT-LIST, 1.0–1.1 |
 | 1 | `2026-07-21-cli-export-not-store-first.md` — **resolved 2026-08-08**, deleted; see tombstone | P0-CLI-STORE, 1.2–1.5 |
-| 1 | [`docs/issues/2026-07-21-export-normalize-flag-dead.md`](../issues/2026-07-21-export-normalize-flag-dead.md) | P1-NORMALIZE, 1.4 |
+| 1 | removed 2026-09-18 in `c68661d`; see the tombstone in `docs/context/decisions.md` | P1-NORMALIZE, 1.4 |
 | 2 | [`docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md`](../issues/2026-07-21-glyph-m11-usable-path-incomplete.md) | P0-GLYPH-*, Wave 2 / T1–T11 |
 | 3a | done 2026-09-17 in `8275e8f`; see the tombstone in `docs/context/decisions.md` | P1-JOB-SSE, P1-JOB-TYPE |
 | 3b | done 2026-09-17 in `fe396c3`; see the tombstone in `docs/context/decisions.md` | P1-CANVAS-ERASE |

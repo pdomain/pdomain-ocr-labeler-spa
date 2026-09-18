@@ -160,6 +160,18 @@ def test_export_with_style_filters(client: TestClient) -> None:
     assert resp.status_code == 202
 
 
+def test_export_ignores_removed_normalize_recognition_labels_field(client: TestClient) -> None:
+    """A client still sending the removed ``normalize_recognition_labels`` field
+    (P1-NORMALIZE) gets a normal 202 — Pydantic's default ``extra="ignore"``
+    drops the unknown field rather than rejecting the request.
+    """
+    resp = client.post(
+        "/api/projects/test-project/export",
+        json={"scope": "all_validated", "normalize_recognition_labels": True},
+    )
+    assert resp.status_code == 202
+
+
 def test_export_invalid_scope_returns_422(client: TestClient) -> None:
     """An invalid scope value returns 400 (validation error)."""
     resp = client.post(

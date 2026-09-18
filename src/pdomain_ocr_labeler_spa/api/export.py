@@ -66,11 +66,6 @@ class ExportRequest(BaseModel):
 
     ``page_index``: required when ``scope == "current"``; ignored for
     ``all_validated``.  Spec §2 line 419.
-
-    ``normalize_recognition_labels``: when ``True``, recognition ``labels.json``
-    strings are normalised (long-s → ASCII, ligatures → ASCII) before write.
-    Image bytes are unchanged.  Requires ``pdomain_book_tools.text.normalize``;
-    silently ignored when the module is absent.  Spec: §18-text-normalization.
     """
 
     scope: ExportScope
@@ -80,7 +75,6 @@ class ExportRequest(BaseModel):
     include_classification: bool = False
     detection_only: bool = False
     recognition_only: bool = False
-    normalize_recognition_labels: bool = False
 
     @field_validator("style_filters", mode="before")
     @classmethod
@@ -326,7 +320,6 @@ def start_export(
             "include_classification": body.include_classification,
             "detection_only": body.detection_only,
             "recognition_only": body.recognition_only,
-            "normalize_recognition_labels": body.normalize_recognition_labels,
         },
     )
     return JSONResponse(

@@ -134,12 +134,17 @@ before sending. The Matches view (per-word) is unaffected.
 
 ### 5.2 DocTR export
 
-Already covered by [`10-export.md`](10-export.md). The export request
-gains a `normalize_recognition_labels: bool = false` flag. When true,
-the recognition `labels.json` strings are normalized before write.
-
-The cached training images themselves are unchanged (image bytes are
-the OCR target). Only the *label* strings change.
+**Not offered.** `ExportRequest` previously carried a
+`normalize_recognition_labels: bool = false` flag, but no long-s/ligature
+ASCII normalizer exists in `pdomain_book_tools`, `pdomain-pgdp-measure`,
+or this repo — `pdomain_book_tools.text.normalize` referenced above has
+never shipped. The flag reached no code path that normalized anything, so
+it was removed (P1-NORMALIZE,
+removed 2026-09-18 in `c68661d`; see the tombstone in
+`../context/decisions.md`)
+rather than left as a dead, honest-looking no-op. DocTR export writes
+recognition `labels.json` strings exactly as stored; there is no
+normalization toggle on export today.
 
 ---
 

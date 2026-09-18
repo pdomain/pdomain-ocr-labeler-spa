@@ -239,7 +239,6 @@ export function ExportDialog({
       include_classification: outputMode === "classification",
       detection_only: outputMode === "detection",
       recognition_only: outputMode === "recognition",
-      normalize_recognition_labels: false,
     };
 
     try {
