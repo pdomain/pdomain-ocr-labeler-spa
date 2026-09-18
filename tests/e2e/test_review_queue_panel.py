@@ -12,8 +12,21 @@ Seeds a two-page project: page 0 carries a high-confidence proposal, page 1
 carries a lower-confidence one — so confidence order puts page 1's proposal
 first, ahead of page 0's, the reverse of reading order.
 
+This fixture never confirms either page's kind, so `page_kind` — not
+`region` — is the book's first kind with outstanding, unblocked work
+(pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-review-
+next.md "How the SPA uses the new route"), and the Queue tab now opens on
+`page_kind`'s summary by default. This test is about the region list's
+confidence ordering specifically, not page-kind state, so it selects the
+region kind explicitly via the kind selector rather than making the fixture
+page-kind-complete — the region list itself is unconditional once selected
+(design item 5), so this is the minimal change that keeps the test's actual
+subject unchanged.
+
 Plan: docs/plans/2026-09-17-region-review-surface.md — Task 5.
 Spec: docs/specs/2026-09-17-book-review-queue-design.md.
+Spec: pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-
+  review-next.md.
 """
 
 from __future__ import annotations
@@ -217,7 +230,10 @@ def test_confidence_order_click_navigates_and_selects(
     """Confidence order lists the lower-confidence item first; clicking it jumps to its page.
 
     1. Open page 0 (its own proposal is the higher-confidence one).
-    2. Open the Drawer's Queue tab.
+    2. Open the Drawer's Queue tab and select the region kind — the fixture
+       never confirms either page's kind, so page_kind, not region, is the
+       tab's default (see module docstring); this test is about the region
+       list specifically.
     3. Switch to confidence order — page 1's lower-confidence proposal now
        sorts first, ahead of page 0's.
     4. Click page 1's item: the page navigates to page 2 (pageno/2), and
@@ -230,9 +246,13 @@ def test_confidence_order_click_navigates_and_selects(
     page.wait_for_selector('[data-testid="project-page"]', timeout=20_000)
     wait_for_project_ready(page)
 
-    # Step 2: open the Queue tab.
+    # Step 2: open the Queue tab and select the region kind.
     page.click('[data-testid="drawer-tab-queue"]')
     page.wait_for_selector('[data-testid="review-queue-panel"]', timeout=10_000)
+    page.click('[data-testid="review-queue-kind-select-region"]')
+    expect(page.locator('[data-testid="review-queue-kind-select-region"]')).to_have_attribute(
+        "aria-pressed", "true", timeout=10_000
+    )
 
     page1_item = page.locator(f'[data-testid="review-queue-item-1-{_PAGE1_PROPOSAL_ID}"]')
     page1_item.wait_for(state="visible", timeout=10_000)

@@ -12,6 +12,7 @@
 //   POST /api/projects/{pid}/pages/{idx}/lines/{li}/set-gt      → PagePayload  (Task 3)
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateBookReviewQueue } from "./useBookReviewQueue";
 import type { components } from "../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -67,6 +68,10 @@ export function useValidateLine(projectId: string, pageIndex: number) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      // One-answer-to-what-to-review-next: validating a line changes the
+      // word kind's own outstanding count — the Rail badge and Queue panel
+      // must see it.
+      invalidateBookReviewQueue(qc, projectId);
     },
   });
 }
@@ -239,6 +244,7 @@ export function useValidatePage(projectId: string, pageIndex: number) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      invalidateBookReviewQueue(qc, projectId);
     },
   });
 }
@@ -388,6 +394,7 @@ export function useValidateParagraph(projectId: string, pageIndex: number) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      invalidateBookReviewQueue(qc, projectId);
     },
   });
 }
@@ -415,6 +422,7 @@ export function useValidateWords(projectId: string, pageIndex: number) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      invalidateBookReviewQueue(qc, projectId);
     },
   });
 }

@@ -14,6 +14,9 @@ import React from "react";
 import { server } from "../test/server";
 import {
   useValidateLine,
+  useValidatePage,
+  useValidateParagraph,
+  useValidateWords,
   useCopyLineGt,
   useDeleteLine,
   useUpdateWordGt,
@@ -443,5 +446,76 @@ describe("identity-changing batch mutations", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["typography-review", "proj1", 4],
     });
+  });
+});
+
+// ─── Reviewer finding (high): validate-batch mutations never invalidated
+// the per-kind review queue, though they are exactly the actions that
+// change the word kind's outstanding count for an ordinary project (the
+// staleness bug fixed for region/page-kind mutations, still open here). ──
+
+describe("validate-batch mutations invalidate the per-kind review queue", () => {
+  it("useValidateLine", async () => {
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/words/validate-batch", () => HttpResponse.json({})),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useValidateLine("proj1", 4), { wrapper: makeWrapper(qc) });
+
+    await act(() => result.current.mutateAsync({ lineIndex: 0, validated: true }));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["review-queue-kinds", "proj1"] });
+  });
+
+  it("useValidatePage", async () => {
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/words/validate-batch", () => HttpResponse.json({})),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useValidatePage("proj1", 4), { wrapper: makeWrapper(qc) });
+
+    await act(() => result.current.mutateAsync({ validated: true }));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["review-queue-kinds", "proj1"] });
+  });
+
+  it("useValidateParagraph", async () => {
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/words/validate-batch", () => HttpResponse.json({})),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useValidateParagraph("proj1", 4), {
+      wrapper: makeWrapper(qc),
+    });
+
+    await act(() => result.current.mutateAsync({ paragraphIndex: 0, validated: true }));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["review-queue-kinds", "proj1"] });
+  });
+
+  it("useValidateWords (word range)", async () => {
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/words/validate-batch", () => HttpResponse.json({})),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useValidateWords("proj1", 4), {
+      wrapper: makeWrapper(qc),
+    });
+
+    await act(() =>
+      result.current.mutateAsync({
+        wordPairs: [
+          [0, 0],
+          [0, 1],
+        ],
+        validated: true,
+      }),
+    );
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["review-queue-kinds", "proj1"] });
   });
 });

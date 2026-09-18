@@ -294,61 +294,250 @@ describe("Rail — target + mode selectors (Slice 10 / P1.d,e,f)", () => {
   });
 });
 
-// ─── Region undecided badge (book review queue design) ─────────────────────
-// Design: docs/specs/2026-09-17-book-review-queue-design.md "A count stays
-// visible" — the region target cell shows the book's undecided count as a
-// small badge above 0, and hides it at 0.
+// ─── "What to review next" kind badge (one-answer-to-what-to-review-next) ──
+// Spec: pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-
+// review-next.md "How the SPA uses the new route" — "The rail badge stops
+// being a region count. It becomes the outstanding count for the first kind
+// that has work, and names that kind."
+//
+// This is now the ONE rail badge — rail-region-undecided-badge, the region
+// target cell's own undecided-count badge, was removed (see this file's
+// history). tests/e2e/test_review_queue_navigation.py's regression coverage
+// confirms every page's kind in its fixture so region — not page_kind — is
+// genuinely the book's first kind with work, matching this badge's rule
+// exactly rather than special-casing region.
 
-describe("Rail — region undecided badge (book review queue)", () => {
+function kindsResponse(kinds: Partial<Record<string, unknown>>[]) {
+  return HttpResponse.json({ kinds });
+}
+
+function kindEntry(overrides: Record<string, unknown> = {}) {
+  return {
+    kind: "page_kind",
+    outstanding: 0,
+    total: 0,
+    available: true,
+    blocked_by: null,
+    first_page_index: null,
+    pages_not_counted: 0,
+    is_lower_bound: false,
+    ...overrides,
+  };
+}
+
+describe("Rail — 'what to review next' kind badge", () => {
   beforeEach(() => {
     localStorage.clear();
     railStore.reset();
     useUiPrefs.setState({
       layerVisibility: { block: true, paragraph: true, line: true, word: true },
+      drawerOpen: false,
+      drawerTab: "worklist",
+      reviewQueueKind: null,
     });
   });
 
-  it("shows the undecided count badge when above 0, with an accessible label", async () => {
+  it("names the first kind with outstanding, unblocked work and its count", async () => {
     server.use(
-      http.get("/api/projects/:pid/regions/review-queue", () =>
-        HttpResponse.json({ total_undecided: 12, pages: [], items: [] }),
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([
+          kindEntry({ kind: "page_kind", outstanding: 40, total: 80 }),
+          kindEntry({ kind: "region", outstanding: 12, total: 29 }),
+        ]),
       ),
     );
     renderRail("proj-1");
 
-    const badge = await screen.findByTestId("rail-region-undecided-badge");
-    expect(badge).toHaveTextContent("12");
-    expect(badge).toHaveAttribute("aria-label", "12 undecided proposals");
+    const badge = await screen.findByTestId("rail-queue-next");
+    expect(badge).toHaveTextContent("Page kind");
+    expect(badge).toHaveTextContent("40");
   });
 
-  it("uses singular wording for a count of exactly 1", async () => {
+  it("skips a kind with outstanding work that is blocked", async () => {
     server.use(
-      http.get("/api/projects/:pid/regions/review-queue", () =>
-        HttpResponse.json({ total_undecided: 1, pages: [], items: [] }),
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([
+          kindEntry({ kind: "page_kind", outstanding: 0, total: 80 }),
+          kindEntry({ kind: "region", outstanding: 12, total: 29, blocked_by: "page_kind" }),
+          kindEntry({ kind: "word", outstanding: 5, total: 100 }),
+        ]),
       ),
     );
     renderRail("proj-1");
 
-    const badge = await screen.findByTestId("rail-region-undecided-badge");
-    expect(badge).toHaveAttribute("aria-label", "1 undecided proposal");
+    const badge = await screen.findByTestId("rail-queue-next");
+    expect(badge).toHaveTextContent("Word");
+    expect(badge).toHaveTextContent("5");
   });
 
-  it("hides the badge when the count is 0", async () => {
+  it("hides the badge when no kind has outstanding, unblocked work", async () => {
     server.use(
-      http.get("/api/projects/:pid/regions/review-queue", () =>
-        HttpResponse.json({ total_undecided: 0, pages: [], items: [] }),
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([
+          kindEntry({ kind: "page_kind", outstanding: 0 }),
+          kindEntry({ kind: "region", outstanding: 3, blocked_by: "page_kind" }),
+        ]),
       ),
     );
     renderRail("proj-1");
 
-    // Give the query a tick to resolve before asserting absence, so this
-    // isn't just "hasn't rendered yet".
     await waitFor(() => expect(screen.getByTestId("rail-target-region")).toBeInTheDocument());
-    expect(screen.queryByTestId("rail-region-undecided-badge")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("rail-queue-next")).not.toBeInTheDocument();
   });
 
-  it("hides the badge without a projectId (the query stays disabled)", () => {
-    renderRail(undefined);
-    expect(screen.queryByTestId("rail-region-undecided-badge")).not.toBeInTheDocument();
+  it("clicking it opens the Queue drawer tab pinned to that kind", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([kindEntry({ kind: "page_kind", outstanding: 7, total: 10 })]),
+      ),
+    );
+    renderRail("proj-1");
+
+    await user.click(await screen.findByTestId("rail-queue-next"));
+
+    expect(useUiPrefs.getState().drawerOpen).toBe(true);
+    expect(useUiPrefs.getState().drawerTab).toBe("queue");
+    expect(useUiPrefs.getState().reviewQueueKind).toBe("page_kind");
+  });
+
+  // Reviewer finding (high): the badge is the always-visible surface, and it
+  // rendered a lower-bound count as a bare number — the same honesty gap the
+  // Queue drawer already closes for `is_lower_bound` kinds (e.g. typography,
+  // which always sets it, or word once pages_not_counted is above zero).
+  it("marks a lower-bound count as a floor, in the text, title, and label", async () => {
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([
+          kindEntry({
+            kind: "typography",
+            outstanding: 18463,
+            total: 18463,
+            is_lower_bound: true,
+          }),
+        ]),
+      ),
+    );
+    renderRail("proj-1");
+
+    const badge = await screen.findByTestId("rail-queue-next");
+    expect(badge).toHaveTextContent("≥18463");
+    expect(badge).toHaveAttribute("title", expect.stringContaining("at least 18463"));
+    expect(badge).toHaveAttribute("aria-label", expect.stringContaining("at least 18463"));
+  });
+
+  it("does not mark an exact count as a lower bound", async () => {
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([kindEntry({ kind: "page_kind", outstanding: 40, total: 80 })]),
+      ),
+    );
+    renderRail("proj-1");
+
+    const badge = await screen.findByTestId("rail-queue-next");
+    expect(badge).toHaveTextContent("40");
+    expect(badge).not.toHaveTextContent("≥40");
+    expect(badge).toHaveAttribute("title", expect.not.stringContaining("at least"));
+  });
+});
+
+// ─── Explicit-pick override indicator (reviewer finding, medium) ───────────
+// The badge always names the auto-picked kind; the Queue drawer's kind
+// selector can pick a different one for `]`/`[` to follow
+// (useRegionReviewHotkeys.ts). Nothing said so once the drawer was closed —
+// a person could see "Page kind" on the rail, press `]`, and land on a word
+// page with no explanation.
+
+describe("Rail — explicit-pick override indicator", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    railStore.reset();
+    useUiPrefs.setState({
+      layerVisibility: { block: true, paragraph: true, line: true, word: true },
+      drawerOpen: false,
+      drawerTab: "worklist",
+      reviewQueueKind: null,
+    });
+  });
+
+  it("shows nothing with no explicit pick", async () => {
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([kindEntry({ kind: "page_kind", outstanding: 40, total: 80 })]),
+      ),
+    );
+    renderRail("proj-1");
+
+    await screen.findByTestId("rail-queue-next");
+    expect(screen.queryByTestId("rail-queue-override")).not.toBeInTheDocument();
+  });
+
+  it("shows nothing when the explicit pick matches the auto-picked kind", async () => {
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([kindEntry({ kind: "page_kind", outstanding: 40, total: 80 })]),
+      ),
+    );
+    useUiPrefs.setState({ reviewQueueKind: "page_kind" });
+    renderRail("proj-1");
+
+    await screen.findByTestId("rail-queue-next");
+    expect(screen.queryByTestId("rail-queue-override")).not.toBeInTheDocument();
+  });
+
+  it("names what the keys follow when it differs from the badge's auto pick", async () => {
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([
+          kindEntry({ kind: "page_kind", outstanding: 40, total: 80 }),
+          kindEntry({ kind: "word", outstanding: 9, total: 100 }),
+        ]),
+      ),
+    );
+    useUiPrefs.setState({ reviewQueueKind: "word" });
+    renderRail("proj-1");
+
+    const badge = await screen.findByTestId("rail-queue-next");
+    expect(badge).toHaveTextContent("Page kind");
+    const override = await screen.findByTestId("rail-queue-override");
+    expect(override).toHaveTextContent("Word");
+  });
+
+  it("clicking the override clears the explicit pick", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([
+          kindEntry({ kind: "page_kind", outstanding: 40, total: 80 }),
+          kindEntry({ kind: "word", outstanding: 9, total: 100 }),
+        ]),
+      ),
+    );
+    useUiPrefs.setState({ reviewQueueKind: "word" });
+    renderRail("proj-1");
+
+    await user.click(await screen.findByTestId("rail-queue-override"));
+
+    expect(useUiPrefs.getState().reviewQueueKind).toBeNull();
+    await waitFor(() =>
+      expect(screen.queryByTestId("rail-queue-override")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("still names the override when nothing is auto-actionable", async () => {
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([
+          kindEntry({ kind: "page_kind", outstanding: 0, total: 80 }),
+          kindEntry({ kind: "word", outstanding: 9, total: 100 }),
+        ]),
+      ),
+    );
+    useUiPrefs.setState({ reviewQueueKind: "word" });
+    renderRail("proj-1");
+
+    const override = await screen.findByTestId("rail-queue-override");
+    expect(override).toHaveTextContent("Word");
+    expect(screen.queryByTestId("rail-queue-next")).not.toBeInTheDocument();
   });
 });

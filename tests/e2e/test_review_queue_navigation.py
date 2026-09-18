@@ -5,20 +5,33 @@ Slice 8's cross-page review queue in one pass: with the rail aimed at
 region proposals — skipping pages with none — and select the first (or
 last) proposal on arrival. A decision that empties a page's proposals
 reports how many are left in the book; running out of pages to jump to
-reports that instead of navigating. The rail's region target carries a
-badge with the book's undecided count throughout. Each step is checked
-against the live API, not only the DOM, following the pattern in
-`test_region_review_loop.py`.
+reports that instead of navigating. The rail's one review-queue badge
+(`rail-queue-next`) names the book's first kind with outstanding, unblocked
+work and its count throughout. Each step is checked against the live API,
+not only the DOM, following the pattern in `test_region_review_loop.py`.
 
 Seeds a three-page project: page 0 and page 2 each carry one undecided
 proposal (distinct roles, so `RegionDetail`'s role text identifies which one
-is selected); page 1 carries none, so it must be skipped by both keys.
+is selected); page 1 carries none, so it must be skipped by both keys. Every
+page's kind is confirmed too (pdomain-ocr-synth's docs/specs/2026-09-18-
+one-answer-to-what-to-review-next.md "How the SPA uses the new route"):
+`region` is blocked_by page_kind whenever no page anywhere carries kind
+state, and the rail badge and `]`/`[` both follow `firstActionableKind` (the
+first kind, in list order, with outstanding work and no `blocked_by`) — so
+without this, `page_kind` (outstanding on every unconfirmed page) would be
+the book's first kind with work, not `region`, and this file's actual
+subject — region bracket-key stepping — would never run. Confirming every
+page's kind makes `region` genuinely first, the state a book in active
+region review is actually in.
+
 Follows the self-contained fixture-server pattern in
 `test_region_review_loop.py`, duplicated here rather than imported per that
 file's own established convention.
 
 Plan: docs/plans/2026-09-17-region-review-surface.md — Task 5.
 Spec: docs/specs/2026-09-17-book-review-queue-design.md.
+Spec: pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-
+  review-next.md.
 """
 
 from __future__ import annotations
@@ -37,12 +50,13 @@ from pathlib import Path
 import httpx
 import pytest
 import uvicorn
-from pdomain_book_contracts.annotation import RegionRole
+from pdomain_book_contracts.annotation import PageKind, RegionRole
 from pdomain_book_tools.ocr.page import Page as BookPage
 from playwright.sync_api import Page, expect
 
 from pdomain_ocr_labeler_spa.adapters.ocr.local_doctr import _ingest_ocr_result, _register_page_in_project
 from pdomain_ocr_labeler_spa.bootstrap import build_app
+from pdomain_ocr_labeler_spa.core.page_kind.reviewed_store import PageKindReviewedStore
 from pdomain_ocr_labeler_spa.core.persistence.page_store import LabelerPageStore
 from pdomain_ocr_labeler_spa.core.regions.models import ProposalRun, RegionProposal
 from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
@@ -163,6 +177,16 @@ def review_queue_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Re
             _ingest_ocr_result(page=book_page, image_bytes=image_bytes, page_index=page_index, store=store)
             _register_page_in_project(
                 store=store, project_id=_PROJECT_ID, page_id=book_page.page_id, page_index=page_index
+            )
+
+        # Every page's kind confirmed — see the module docstring for why:
+        # without this, page_kind (not region) would be the book's first
+        # kind with outstanding work, and this file's bracket-key/badge
+        # coverage would be exercising page_kind instead of region.
+        reviewed_store = PageKindReviewedStore(dest)
+        for page_index in range(_PAGE_COUNT):
+            reviewed_store.mark_reviewed(
+                page_index, "2026-09-18T09:00:00+00:00", kind=PageKind.BODY, method="single"
             )
 
         proposal_log = RegionProposalLog(dest)
@@ -288,7 +312,9 @@ def test_bracket_keys_navigate_pages_with_undecided_proposals(
     """`]`/`[` skip the empty middle page; the badge and end-of-page toast track the book.
 
     1. Open page 0, press 5 to aim the rail at the region target, and check
-       the rail badge reads the book's total of 2 undecided proposals.
+       the rail badge names "Region" (the book's first kind with
+       outstanding, unblocked work, every page's kind being confirmed) with
+       a count of 2 undecided proposals.
     2. Press `]`: it lands on page 2 (skipping empty page 1) with that
        page's proposal selected.
     3. Press Enter to accept it: the API settles at one confirmed region and
@@ -305,10 +331,13 @@ def test_bracket_keys_navigate_pages_with_undecided_proposals(
     page.wait_for_selector('[data-testid="project-page"]', timeout=20_000)
     wait_for_project_ready(page)
 
-    # Step 1.
+    # Step 1. One badge now (pdomain-ocr-synth's docs/specs/2026-09-18-one-
+    # answer-to-what-to-review-next.md): it names the kind, not only the
+    # count, so both are asserted rather than an exact text match.
     _aim_rail_at_region(page)
-    badge = page.locator('[data-testid="rail-region-undecided-badge"]')
-    expect(badge).to_have_text("2", timeout=10_000)
+    badge = page.locator('[data-testid="rail-queue-next"]')
+    expect(badge).to_contain_text("Region", timeout=10_000)
+    expect(badge).to_contain_text("2", timeout=10_000)
     role_locator = page.locator('[data-testid="region-detail-role"]')
 
     # Step 2: `]` jumps over the empty page 1 straight to page 2, selecting
@@ -337,7 +366,8 @@ def test_bracket_keys_navigate_pages_with_undecided_proposals(
         has_text=f"{_NO_PROPOSALS_ON_PAGE_MESSAGE}. 1 left in the book; press ] for the next.",
     )
     expect(end_of_page_toast).to_be_visible(timeout=5_000)
-    expect(badge).to_have_text("1", timeout=10_000)
+    expect(badge).to_contain_text("Region", timeout=10_000)
+    expect(badge).to_contain_text("1", timeout=10_000)
 
     # Step 4: `]` again — no later page has undecided work, so a toast says
     # so and the page does not move.

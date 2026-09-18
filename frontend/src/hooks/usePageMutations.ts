@@ -11,6 +11,7 @@
 // Save Page, Load Page, Rematch GT: synchronous, return PagePayload or SavePageResponse.
 
 import { useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateBookReviewQueue } from "./useBookReviewQueue";
 import type { components } from "../api/types";
 
 export type ReloadOCRResponse = components["schemas"]["ReloadOCRResponse"];
@@ -304,6 +305,11 @@ export function useConfirmPageKind(projectId: string, pageIndex: number) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
       void qc.invalidateQueries({ queryKey: ["page-kinds", projectId] });
+      // One-answer-to-what-to-review-next: confirming a page's kind changes
+      // the page_kind kind's own outstanding count directly, and can
+      // unblock region (blocked_by page_kind clears once any page carries
+      // kind state) — the Rail badge and Queue panel must see both.
+      invalidateBookReviewQueue(qc, projectId);
     },
   });
 }

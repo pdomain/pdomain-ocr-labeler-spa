@@ -14,6 +14,7 @@
 // still changed pages ("A book-wide list reviews many pages at once").
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateBookReviewQueue } from "./useBookReviewQueue";
 import type { components } from "../api/types";
 import { toast } from "../lib/toast";
 
@@ -171,6 +172,10 @@ export function useBulkConfirmPageKinds(projectId: string) {
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["page-kinds", projectId] });
       void qc.invalidateQueries({ queryKey: ["page", projectId] });
+      // One-answer-to-what-to-review-next: same reasoning as
+      // useConfirmPageKind (usePageMutations.ts) — a bulk confirm changes
+      // page_kind's own count and can unblock region.
+      invalidateBookReviewQueue(qc, projectId);
     },
   });
 }

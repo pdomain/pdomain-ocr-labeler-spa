@@ -38,6 +38,7 @@ import {
   type PageKind,
 } from "../hooks/usePageMutations";
 import { useProposePageKinds, useProposeRegions } from "../hooks/useProposalRuns";
+import { invalidateBookReviewQueue } from "../hooks/useBookReviewQueue";
 import { usePage } from "../hooks/usePage";
 import { useJobProgress } from "../hooks/useJobProgress";
 import { useJobCompletionInvalidation } from "../hooks/useJobCompletionInvalidation";
@@ -462,6 +463,12 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       // is invalidated here too — cheap at limit=0, and correct even though
       // this run alone never changes `total_undecided`.
       void qc.invalidateQueries({ queryKey: ["review-queue", projectId] });
+      // One-answer-to-what-to-review-next: a page-kinds run proposes kinds
+      // but does not confirm them, so it never changes the page_kind kind's
+      // own outstanding count — it can still change region's blocked_by
+      // (a proposed kind alone unblocks region work), which the Rail badge
+      // and Queue panel must see.
+      invalidateBookReviewQueue(qc, projectId);
       // Page-kind review design ("A proposal run and page history both
       // refresh the list"): the book-wide Review page kinds dialog must see
       // this run's fresh proposals too.
@@ -504,6 +511,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
       // badge and bracket-key navigation must see the fresh count and page
       // summary once this invalidation's refetch lands.
       void qc.invalidateQueries({ queryKey: ["review-queue", projectId] });
+      invalidateBookReviewQueue(qc, projectId);
       const msg = event.progress.message || "Region proposals complete";
       if (msg.toLowerCase().includes("propose page kinds first")) {
         toast.warn(msg, { id: jobId });
@@ -521,6 +529,7 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
     onCancelled: (jobId, event) => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
       void qc.invalidateQueries({ queryKey: ["review-queue", projectId] });
+      invalidateBookReviewQueue(qc, projectId);
       const msg = event.progress.message || "Region proposals cancelled";
       toast.warn(msg, { id: jobId });
     },

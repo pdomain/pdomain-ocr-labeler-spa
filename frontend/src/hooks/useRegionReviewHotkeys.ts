@@ -3,6 +3,9 @@
 //   "Review runs from the keyboard, and advances by itself".
 // Spec: docs/specs/2026-09-17-book-review-queue-design.md
 //   "Two keys move between pages that have work".
+// Spec: pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-
+//   review-next.md "How the SPA uses the new route" — "`[`/`]` keep working
+//   on the selected kind."
 // Plan: docs/plans/2026-09-17-region-review-surface.md — Task 5.
 //
 // Keys, all registered through useHotkey so they respect its form-field and
@@ -17,11 +20,22 @@
 //            is "region" and a proposal is selected.
 //   delete — delete the selected confirmed region, behind the existing
 //            confirm dialog. Fires whenever a confirmed region is selected.
-//   ]      — go to the next page (by page_index) with an undecided proposal
-//            and select its first. Only fires when the rail target is
-//            "region". No such page: a toast says so and nothing navigates.
-//   [      — the same, backwards: the previous such page, selecting its last.
+//   ]/[    — follow the resolved review-queue kind: whichever kind the
+//            Queue drawer's selector has explicitly picked, or —
+//            unpicked — `firstActionableKind` (the same book-wide default
+//            the Rail badge and Queue panel use). See
+//            `resolvedReviewQueueKind`'s comment below for the reasoning.
+//            Kind resolves to "region": go to the next/previous page (by
+//            page_index) with an undecided region proposal and select its
+//            first/last, gated on the rail's region target, exactly as
+//            before this kind selector existed. Kind resolves to anything
+//            else: jump to that kind's one known `first_page_index`,
+//            active regardless of rail target (there is no rail-target
+//            equivalent for those kinds) — see `nonRegionKindMessage`'s
+//            docstring for what that can and cannot do with only one page
+//            index to go on.
 //
+
 // n and p are free precisely because j/k, the obvious choice, are already
 // bound at document scope: useRailHotkeys (1-4, v, r, a, e) and
 // useMatchesHotkeys, registered unconditionally in ProjectPage (j, k, v, u,
@@ -83,9 +97,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { NavigateFunction } from "react-router-dom";
 import { useHotkey } from "./useHotkey";
 import { useReviewQueue, reviewQueueKey, type RegionReviewQueueResponse } from "./useReviewQueue";
+import {
+  useBookReviewQueue,
+  firstActionableKind,
+  blockedByMessage,
+  REVIEW_QUEUE_KIND_LABELS,
+  type ReviewQueueKindEntry,
+  type ReviewQueueKindName,
+} from "./useBookReviewQueue";
 import { railStore } from "../stores/rail-store";
 import { selectionStore, selectProposal, clearSelection } from "../stores/selection-store";
 import { setReviewSelectionIntent } from "../stores/review-selection-intent-store";
+import { useUiPrefs } from "../stores/ui-prefs";
 import type { SelectionPath } from "../lib/selection-walk";
 import { orderedUndecidedProposals } from "../lib/region-hit-test";
 import { pageNoUrl } from "../lib/routes";
@@ -107,6 +130,49 @@ const NO_NEXT_PAGE_MESSAGE = "No more pages with undecided proposals after this 
 const NO_PREV_PAGE_MESSAGE = "No pages with undecided proposals before this page.";
 const QUEUE_LOADING_MESSAGE = "Review queue is still loading.";
 
+/**
+ * `[`/`]` for a non-region kind (pdomain-ocr-synth's docs/specs/2026-09-18-
+ * one-answer-to-what-to-review-next.md "How the SPA uses the new route").
+ *
+ * The per-kind route carries only `first_page_index` — a single earliest
+ * page, never an ordered list of every page with work the way the
+ * region-only route's `pages` summary is. So there is no "next" or
+ * "previous" page to compute for these kinds, only "the one known page,
+ * once". Both keys collapse to the same action here, deliberately: jump to
+ * `first_page_index` if not already there, and say so, honestly, once there
+ * is nowhere further the data can send a person.
+ *
+ * Reviewer finding (low): a blocked entry can still carry a
+ * `first_page_index` (typography mirrors word's while blocked, for
+ * example), and the keys used to navigate there with no mention of the
+ * block — the Queue drawer's banner for the same entry
+ * (ReviewQueuePanel.tsx) says what it is waiting for; the keys must say
+ * the same thing, via `blockedByMessage`, not stay silent.
+ */
+function nonRegionKindMessage(
+  kind: Exclude<ReviewQueueKindName, "region">,
+  entry: ReviewQueueKindEntry | undefined,
+  pageIndex: number,
+): { message: string } | { navigateToPageIndex: number; blockedNote?: string } {
+  const label = REVIEW_QUEUE_KIND_LABELS[kind];
+  if (!entry?.available) {
+    const reason = entry?.unavailable_reason;
+    return { message: reason ? `${label} is unavailable: ${reason}.` : `${label} is unavailable.` };
+  }
+  const firstPageIndex = entry.first_page_index;
+  if (firstPageIndex === null) {
+    return { message: `${label} has no known starting page yet.` };
+  }
+  if (firstPageIndex === pageIndex) {
+    return {
+      message: `${label}'s only known page is this one — there is no further page to jump to.`,
+    };
+  }
+  return entry.blocked_by !== null
+    ? { navigateToPageIndex: firstPageIndex, blockedNote: blockedByMessage(entry.blocked_by) }
+    : { navigateToPageIndex: firstPageIndex };
+}
+
 export interface UseRegionReviewHotkeysArgs {
   page: PagePayload | undefined;
   projectId: string;
@@ -127,6 +193,10 @@ function subscribeRailTarget(cb: () => void): () => void {
 }
 function getRailTarget(): string {
   return railStore.getState().target;
+}
+
+function getReviewQueueKind(): ReviewQueueKindName | null {
+  return useUiPrefs.getState().reviewQueueKind;
 }
 
 /** The first or last id in `ordered`, or null when it is empty. */
@@ -209,6 +279,49 @@ export function useRegionReviewHotkeys({
 }: UseRegionReviewHotkeysArgs): void {
   const railTarget = useSyncExternalStore(subscribeRailTarget, getRailTarget, getRailTarget);
   const path = useSyncExternalStore(subscribeSelectionPath, getSelectionPath, getSelectionPath);
+
+  // One-answer-to-what-to-review-next: `[`/`]` follow the resolved
+  // review-queue kind (design: "`[`/`]` keep working on the selected
+  // kind"), using the SAME rule the Rail badge and Queue panel default to
+  // — an explicit Queue-drawer pick when there is one, else
+  // `firstActionableKind`, falling back to "region" only once nothing else
+  // qualifies.
+  //
+  // This does mean `]`/`[` can jump to a page-kind (or word, or
+  // typography) page instead of stepping through region pages, the moment
+  // any such kind has outstanding, unblocked work — true of most books
+  // before their page kinds are confirmed. That is intentional, not a
+  // regression: `firstActionableKind` names the thing a person genuinely
+  // should do next, and a book whose page kinds are unreviewed genuinely
+  // has page-kind work ahead of region work in the order this route
+  // defines. One selection — shown on the Rail badge, defaulted in the
+  // Queue drawer, and followed by these keys — is a simpler, more honest
+  // mental model than a keyboard shortcut that quietly disagrees with what
+  // the UI is telling a person to do next.
+  //
+  // The cost is real and worth naming: `n`/`p`/`enter`/`x`/`delete` below
+  // stay region-only (nothing else has a keyboard accept/reject flow yet),
+  // so once a book's first actionable kind is something other than
+  // region, `]`/`[` and those other keys are no longer working the same
+  // loop. That split exists already, in miniature, the moment a person
+  // explicitly picks a non-region kind in the Queue drawer — extending it
+  // to the auto-picked default is a difference of degree, not of kind.
+  //
+  // When the Rail badge's auto-picked kind and a person's explicit Queue
+  // pick disagree (they chose to work on something else on purpose), the
+  // badge keeps naming the book-wide next kind — an honest, passive
+  // reading — while these keys follow the explicit pick, not the badge:
+  // a deliberate choice to work on region while page-kind work remains
+  // outstanding is respected, not silently overridden.
+  const explicitReviewQueueKind = useSyncExternalStore(
+    useUiPrefs.subscribe,
+    getReviewQueueKind,
+    getReviewQueueKind,
+  );
+  const bookQueueQ = useBookReviewQueue(projectId);
+  const autoReviewQueueKind = firstActionableKind(bookQueueQ.data?.kinds ?? [])?.kind;
+  const resolvedReviewQueueKind: ReviewQueueKindName =
+    explicitReviewQueueKind ?? autoReviewQueueKind ?? "region";
 
   const acceptProposal = useAcceptProposal(projectId, pageIndex);
   const rejectProposal = useRejectProposal(projectId, pageIndex);
@@ -370,6 +483,29 @@ export function useRegionReviewHotkeys({
     void navigate(pageNoUrl(projectId, prev.page_index + 1));
   }
 
+  /**
+   * `[`/`]` for whichever non-region kind is selected — see
+   * `nonRegionKindMessage`'s docstring for why both keys do the same thing.
+   * No selection intent is recorded: unlike a region proposal, there is
+   * nothing on the destination page for a non-region kind to select yet.
+   */
+  function goToKindPage(kind: Exclude<ReviewQueueKindName, "region">): void {
+    if (bookQueueQ.data === undefined) {
+      toast.info(QUEUE_LOADING_MESSAGE);
+      return;
+    }
+    const entry = bookQueueQ.data.kinds.find((k) => k.kind === kind);
+    const result = nonRegionKindMessage(kind, entry, pageIndex);
+    if ("message" in result) {
+      toast.info(result.message);
+      return;
+    }
+    if (result.blockedNote !== undefined) {
+      toast.info(result.blockedNote);
+    }
+    void navigate(pageNoUrl(projectId, result.navigateToPageIndex + 1));
+  }
+
   function deleteSelected(regionId: string): void {
     dialogStore.openConfirm({
       title: "Delete region",
@@ -436,19 +572,28 @@ export function useRegionReviewHotkeys({
     { enabled: selectedRegionId !== undefined },
   );
 
-  useHotkey(
-    "bracketright",
-    () => {
+  // `[`/`]` follow `resolvedReviewQueueKind` (design: "`[`/`]` keep working
+  // on the selected kind"). The "region" case is unconditionally active
+  // here — the rail-target gate that used to sit in `useHotkey`'s `enabled`
+  // option is now checked inside the callback instead, so the gate applies
+  // to exactly the same case it always did (kind resolves to "region") and
+  // never blocks a non-region kind that has nothing to do with the rail's
+  // region target.
+  useHotkey("bracketright", () => {
+    if (resolvedReviewQueueKind === "region") {
+      if (!regionTargetActive) return;
       goToNextPageWithWork();
-    },
-    { enabled: regionTargetActive },
-  );
+      return;
+    }
+    goToKindPage(resolvedReviewQueueKind);
+  });
 
-  useHotkey(
-    "bracketleft",
-    () => {
+  useHotkey("bracketleft", () => {
+    if (resolvedReviewQueueKind === "region") {
+      if (!regionTargetActive) return;
       goToPrevPageWithWork();
-    },
-    { enabled: regionTargetActive },
-  );
+      return;
+    }
+    goToKindPage(resolvedReviewQueueKind);
+  });
 }

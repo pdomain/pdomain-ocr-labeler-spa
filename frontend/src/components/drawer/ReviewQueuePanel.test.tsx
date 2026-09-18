@@ -88,7 +88,7 @@ function mockReviewQueue(
 }
 
 beforeEach(() => {
-  useUiPrefs.setState({ reviewQueueOrder: "reading" });
+  useUiPrefs.setState({ reviewQueueOrder: "reading", reviewQueueKind: null });
   clearSelection();
   clearReviewSelectionIntent();
 });
@@ -292,6 +292,163 @@ describe("ReviewQueuePanel — a book with more proposals than the list holds", 
 
     await screen.findByTestId("review-queue-item-0-p1");
     expect(screen.queryByTestId("review-queue-truncated")).toBeNull();
+  });
+});
+
+// ─── Kind selector (one-answer-to-what-to-review-next) ─────────────────────
+// Spec: pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-
+// review-next.md "How the SPA uses the new route" — "The Queue drawer tab
+// grows a kind selector, defaulting to that same kind [the rail badge's]."
+
+function kindEntry(overrides: Record<string, unknown> = {}) {
+  return {
+    kind: "page_kind",
+    outstanding: 0,
+    total: 0,
+    available: true,
+    blocked_by: null,
+    first_page_index: null,
+    pages_not_counted: 0,
+    is_lower_bound: false,
+    ...overrides,
+  };
+}
+
+function mockKindsQueue(kinds: Record<string, unknown>[]) {
+  server.use(
+    http.get(`/api/projects/${PROJECT_ID}/review-queue`, () => HttpResponse.json({ kinds })),
+  );
+}
+
+describe("ReviewQueuePanel — kind selector defaulting and switching", () => {
+  it("defaults to the first kind with outstanding, unblocked work", async () => {
+    mockKindsQueue([
+      kindEntry({ kind: "page_kind", outstanding: 40, total: 80 }),
+      kindEntry({ kind: "region", outstanding: 12, total: 29 }),
+    ]);
+    mockReviewQueue([]);
+    renderPanel();
+
+    const pageKindButton = await screen.findByTestId("review-queue-kind-select-page_kind");
+    expect(pageKindButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("review-queue-kind-select-region")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(await screen.findByTestId("review-queue-kind-count")).toHaveTextContent("40 of 80");
+  });
+
+  it("switching the selector shows the picked kind's own count and starting page", async () => {
+    const user = userEvent.setup();
+    mockKindsQueue([
+      kindEntry({ kind: "page_kind", outstanding: 40, total: 80 }),
+      kindEntry({ kind: "word", outstanding: 9, total: 100, first_page_index: 4 }),
+    ]);
+    mockReviewQueue([]);
+    renderPanel();
+
+    await screen.findByTestId("review-queue-kind-select-page_kind");
+    await user.click(screen.getByTestId("review-queue-kind-select-word"));
+
+    expect(screen.getByTestId("review-queue-kind-select-word")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(await screen.findByTestId("review-queue-kind-count")).toHaveTextContent("9 of 100");
+    expect(screen.getByTestId("review-queue-kind-start")).toHaveTextContent("5");
+    expect(useUiPrefs.getState().reviewQueueKind).toBe("word");
+  });
+
+  it("keeps showing the region item list unchanged when region is selected", async () => {
+    mockKindsQueue([kindEntry({ kind: "region", outstanding: 1, total: 1 })]);
+    mockReviewQueue([item({ proposal_id: "p1" })]);
+    renderPanel();
+
+    await screen.findByTestId("review-queue-list");
+    expect(screen.queryByTestId("review-queue-kind-summary")).not.toBeInTheDocument();
+  });
+
+  it("shows what a blocked kind is waiting for, instead of looking finished", async () => {
+    mockKindsQueue([
+      kindEntry({ kind: "page_kind", outstanding: 0, total: 10 }),
+      kindEntry({ kind: "region", outstanding: 5, total: 5, blocked_by: "page_kind" }),
+    ]);
+    mockReviewQueue([]);
+    renderPanel();
+
+    const user = userEvent.setup();
+    await screen.findByTestId("review-queue-kind-select-region");
+    await user.click(screen.getByTestId("review-queue-kind-select-region"));
+
+    const blocked = await screen.findByTestId("review-queue-kind-blocked");
+    expect(blocked).toHaveTextContent(/page kind/i);
+  });
+
+  it("shows an unavailable kind's reason, not a zero", async () => {
+    const user = userEvent.setup();
+    mockKindsQueue([
+      kindEntry({ kind: "page_kind", outstanding: 3, total: 10 }),
+      kindEntry({
+        kind: "glyph",
+        outstanding: 0,
+        total: 0,
+        available: false,
+        unavailable_reason: "no glyph predictor is wired",
+      }),
+    ]);
+    mockReviewQueue([]);
+    renderPanel();
+
+    await screen.findByTestId("review-queue-kind-select-glyph");
+    await user.click(screen.getByTestId("review-queue-kind-select-glyph"));
+
+    const reason = await screen.findByTestId("review-queue-kind-unavailable");
+    expect(reason).toHaveTextContent("no glyph predictor is wired");
+    expect(screen.queryByTestId("review-queue-kind-count")).not.toBeInTheDocument();
+  });
+
+  it("reads a lower-bound count as 'at least', never as a completion figure", async () => {
+    const user = userEvent.setup();
+    mockKindsQueue([
+      kindEntry({ kind: "page_kind", outstanding: 3, total: 10 }),
+      kindEntry({
+        kind: "typography",
+        outstanding: 18463,
+        total: 18463,
+        is_lower_bound: true,
+      }),
+    ]);
+    mockReviewQueue([]);
+    renderPanel();
+
+    await screen.findByTestId("review-queue-kind-select-typography");
+    await user.click(screen.getByTestId("review-queue-kind-select-typography"));
+
+    const count = await screen.findByTestId("review-queue-kind-count");
+    expect(count).toHaveTextContent(/at least/i);
+    expect(count).toHaveTextContent("18463");
+  });
+
+  it("says how many pages could not be counted for a word lower bound", async () => {
+    const user = userEvent.setup();
+    mockKindsQueue([
+      kindEntry({ kind: "page_kind", outstanding: 3, total: 10 }),
+      kindEntry({
+        kind: "word",
+        outstanding: 3,
+        total: 5,
+        pages_not_counted: 6,
+        is_lower_bound: true,
+      }),
+    ]);
+    mockReviewQueue([]);
+    renderPanel();
+
+    await screen.findByTestId("review-queue-kind-select-word");
+    await user.click(screen.getByTestId("review-queue-kind-select-word"));
+
+    const notCounted = await screen.findByTestId("review-queue-kind-pages-not-counted");
+    expect(notCounted).toHaveTextContent("6");
   });
 });
 

@@ -25,7 +25,12 @@ import { Square, Keyboard, LayoutList } from "@/icons/local-shims";
 import { railStore, type RailTarget, type RailMode } from "../../stores/rail-store";
 import { useRailHotkeys } from "../../hooks/useRailHotkeys";
 import { useLayerColors } from "../../hooks/useLayerColors";
-import { useReviewQueue } from "../../hooks/useReviewQueue";
+import {
+  useBookReviewQueue,
+  firstActionableKind,
+  REVIEW_QUEUE_KIND_LABELS,
+  type ReviewQueueKindName,
+} from "../../hooks/useBookReviewQueue";
 import { LAYER_COLORS } from "../BBoxOverlay";
 import { dialogStore } from "../../stores/dialog-store";
 import { useUiPrefs, type LayerVisibility } from "../../stores/ui-prefs";
@@ -136,15 +141,9 @@ interface TargetCellProps {
   active: boolean;
   swatchColor: string;
   onClick: () => void;
-  /**
-   * Book review queue design ("A count stays visible"): the undecided-count
-   * badge, shown only when provided and above 0. Only the region target
-   * cell passes this today.
-   */
-  badge?: number;
 }
 
-function TargetCell({ target, active, swatchColor, onClick, badge }: TargetCellProps) {
+function TargetCell({ target, active, swatchColor, onClick }: TargetCellProps) {
   const testid = `rail-target-${target}`;
   return (
     <button
@@ -173,15 +172,91 @@ function TargetCell({ target, active, swatchColor, onClick, badge }: TargetCellP
         aria-hidden="true"
       />
       <span>{TARGET_LABELS[target]}</span>
-      {badge !== undefined && badge > 0 && (
-        <span
-          data-testid="rail-region-undecided-badge"
-          aria-label={`${String(badge)} undecided proposal${badge === 1 ? "" : "s"}`}
-          className="ml-auto shrink-0 min-w-4 h-4 px-1 flex items-center justify-center rounded-full bg-accent text-[9px] font-semibold text-accent-ink tabular-nums"
-        >
-          {badge}
-        </span>
+    </button>
+  );
+}
+
+// ─── "What to review next" kind badge ─────────────────────────────────────
+// Spec: pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-
+// review-next.md "How the SPA uses the new route" — "The rail badge stops
+// being a region count. It becomes the outstanding count for the first kind
+// that has work, and names that kind."
+//
+// This is the ONE rail badge (replacing the region target cell's old
+// undecided-count badge, which named no kind and so silently stopped being
+// honest the moment any other kind of work existed) — the book-wide,
+// cross-kind answer the design calls for, named and counted regardless of
+// where a person's rail target happens to be aimed.
+
+interface QueueNextBadgeProps {
+  kind: string;
+  label: string;
+  count: number;
+  /**
+   * Reviewer finding (high): a lower-bound count (typography always sets
+   * it; word does once `pages_not_counted` is above zero) is a floor, not
+   * an exact figure — the Queue drawer already marks this
+   * (`formatOutstandingCount`, `kindPillLabel`); the badge, the
+   * always-visible surface, must say the same thing rather than presenting
+   * a floor as if it were exact.
+   */
+  isLowerBound: boolean;
+  onClick: () => void;
+}
+
+function QueueNextBadge({ kind, label, count, isLowerBound, onClick }: QueueNextBadgeProps) {
+  const countText = `${isLowerBound ? "≥" : ""}${String(count)}`;
+  const countWords = `${isLowerBound ? "at least " : ""}${String(count)}`;
+  return (
+    <button
+      type="button"
+      data-testid="rail-queue-next"
+      title={`Next to review: ${label} (${countWords})`}
+      aria-label={`Next to review: ${countWords} ${label.toLowerCase()}`}
+      onClick={onClick}
+      className={cn(
+        "mx-1 my-1 flex items-center justify-between gap-1 px-2 py-1 rounded-sm select-none",
+        "bg-accent/15 text-ink-1 border border-accent/40 hover:bg-accent/25 transition-colors",
       )}
+      data-kind={kind}
+    >
+      <span className="text-[9px] font-semibold uppercase tracking-wide truncate">{label}</span>
+      <span className="text-[10px] font-mono tabular-nums shrink-0">{countText}</span>
+    </button>
+  );
+}
+
+// ─── Explicit-pick override indicator ──────────────────────────────────────
+// Reviewer finding (medium): the badge above always names the auto-picked
+// kind (firstActionableKind), but `]`/`[` follow an explicit Queue-drawer
+// pick when one exists (useRegionReviewHotkeys.ts) — a person could see
+// "Page kind" on the rail, press `]`, and land on a word page with no
+// explanation once the drawer was closed. This stays visible for exactly as
+// long as the override is actually in effect (the explicit pick differs
+// from the auto pick, including "nothing is auto-actionable"), and clicking
+// it clears the pick — falling back to the auto default makes the
+// difference legible without forcing a trip back into the Queue drawer.
+
+interface QueueOverrideIndicatorProps {
+  label: string;
+  onClear: () => void;
+}
+
+function QueueOverrideIndicator({ label, onClear }: QueueOverrideIndicatorProps) {
+  return (
+    <button
+      type="button"
+      data-testid="rail-queue-override"
+      title={`[ and ] follow ${label}, not the badge above — click to follow the badge again`}
+      aria-label={`Bracket keys follow ${label.toLowerCase()}, not the kind named above`}
+      onClick={onClear}
+      className={cn(
+        "mx-1 mb-1 flex items-center gap-1 px-2 py-1 rounded-sm select-none",
+        "bg-bg-raised text-ink-2 border border-border-2 hover:bg-bg-sunk transition-colors",
+      )}
+    >
+      <span className="text-[8px] uppercase tracking-wide text-ink-3 shrink-0">Keys:</span>
+      <span className="text-[9px] font-semibold truncate">{label}</span>
     </button>
   );
 }
@@ -231,11 +306,23 @@ export function Rail({ projectId }: RailProps) {
   // Wire hotkeys (registers document-level keydown listener).
   useRailHotkeys();
 
-  // Book review queue design ("A count stays visible"): limit=0 so this
-  // carries only total_undecided and the page summary — the same query
-  // useRegionReviewHotkeys' bracket keys read, cached under one key.
-  const reviewQueueQ = useReviewQueue(projectId);
-  const totalUndecided = reviewQueueQ.data?.total_undecided ?? 0;
+  // One-answer-to-what-to-review-next: the book-wide "next kind" badge.
+  const bookQueueQ = useBookReviewQueue(projectId);
+  const nextKind = firstActionableKind(bookQueueQ.data?.kinds ?? []);
+
+  // Explicit-pick override indicator: `]`/`[` follow this instead of
+  // `nextKind` above whenever it is set and differs (useRegionReviewHotkeys.ts
+  // resolves the same way). `null` covers "nothing auto-actionable" so the
+  // comparison stays correct even when `nextKind` itself is undefined.
+  const explicitReviewQueueKind = useSyncExternalStore(
+    useUiPrefs.subscribe,
+    () => useUiPrefs.getState().reviewQueueKind,
+    () => useUiPrefs.getState().reviewQueueKind,
+  );
+  const overrideKind: ReviewQueueKindName | null =
+    explicitReviewQueueKind !== null && explicitReviewQueueKind !== (nextKind?.kind ?? null)
+      ? explicitReviewQueueKind
+      : null;
 
   // Subscribe to rail store via useSyncExternalStore for React 18+.
   const state = useSyncExternalStore(railStore.subscribe, railStore.getState, railStore.getState);
@@ -341,9 +428,35 @@ export function Rail({ projectId }: RailProps) {
           onClick={() => {
             handleSetTarget("region");
           }}
-          badge={totalUndecided}
         />
       </div>
+
+      {/* "What to review next" — book-wide, cross-kind badge */}
+      {nextKind !== undefined && (
+        <QueueNextBadge
+          kind={nextKind.kind}
+          label={REVIEW_QUEUE_KIND_LABELS[nextKind.kind]}
+          count={nextKind.outstanding}
+          isLowerBound={nextKind.is_lower_bound}
+          onClick={() => {
+            useUiPrefs.setState({
+              drawerOpen: true,
+              drawerTab: "queue",
+              reviewQueueKind: nextKind.kind,
+            });
+          }}
+        />
+      )}
+
+      {/* Explicit Queue-drawer pick, when it overrides the auto default */}
+      {overrideKind !== null && (
+        <QueueOverrideIndicator
+          label={REVIEW_QUEUE_KIND_LABELS[overrideKind]}
+          onClear={() => {
+            useUiPrefs.setState({ reviewQueueKind: null });
+          }}
+        />
+      )}
 
       {/* LAYERS visibility section */}
       <SectionLabel label="LAYERS" />
