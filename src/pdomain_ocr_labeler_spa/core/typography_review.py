@@ -10,21 +10,33 @@ import stat
 from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import ClassVar, final
+from typing import TYPE_CHECKING, ClassVar, final
 from uuid import UUID, uuid4, uuid5
 
 from pdomain_book_tools.typography import (
     CoordinateTransform,
+    CorrectionDecision,
+    LabelState,
     ModelRun,
     PageGeometry,
     ReplacementArtifact,
+    ReviewState,
     TypographyCorrection,
     WordGeometry,
     make_word_id,
 )
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+if TYPE_CHECKING:
+    from collections.abc import Collection, Sequence
+
 _PAGE_ID_NAMESPACE = UUID("87638c97-711a-536d-80d2-6963f85ef543")
+
+_TYPOGRAPHY_REVIEWED_DECISIONS = frozenset(
+    {CorrectionDecision.ACCEPT, CorrectionDecision.APPROVED_EDIT, CorrectionDecision.REVIEWED_REGULAR}
+)
+_TYPOGRAPHY_REVIEWED_STATES = frozenset({ReviewState.REVIEWED, ReviewState.REVIEWED_REGULAR})
+_TYPOGRAPHY_SET_LABEL_STATES = frozenset({LabelState.POSITIVE, LabelState.NEGATIVE})
 
 
 class TypographyBinding(BaseModel):
@@ -335,6 +347,49 @@ def stable_page_id(*, project_id: str, page_index: int) -> str:
     if page_index < 0:
         raise ValueError("page_index must be nonnegative")
     return str(uuid5(_PAGE_ID_NAMESPACE, f"{project_id}\0{page_index}"))
+
+
+def reviewed_word_keys(
+    records: Sequence[TypographyJournalEnvelope],
+    *,
+    required_labels: Collection[str],
+) -> frozenset[tuple[str, str]]:
+    """Every ``(logical_page_id, word_id)`` whose latest correction is typography-reviewed.
+
+    Journal-only, from one whole-book read of ``TypographyCorrectionLog.
+    records()`` (no ``logical_page_id`` filter) — never opens a page. Mirrors
+    the typography-reviewed half of ``api/typography.py``'s
+    ``typography_page_review``/``get_typography_worklist`` acceptance test:
+    the latest correction's decision is accepted, it carries a replacement,
+    that replacement's review state is fully reviewed, and every taxonomy
+    label required for completion is set on it.
+
+    Deliberately omits the staleness check those two page-scoped functions
+    also perform — that needs the live page's current hashes, which this
+    book-wide count does not load. Per pdomain-ocr-synth's docs/specs/2026-
+    09-18-one-answer-to-what-to-review-next.md "What this does not build":
+    "Skipping it has a direction, and it is the unsafe one" — a correction
+    that has gone stale counts as reviewed here, so the result is a floor,
+    never an overcount. The caller must label it a lower bound.
+    """
+    latest: dict[tuple[str, str], TypographyCorrection] = {}
+    for record in records:
+        latest[record.logical_page_id, record.correction.word_id] = record.correction
+
+    reviewed: set[tuple[str, str]] = set()
+    for key, correction in latest.items():
+        replacement = correction.replacement
+        if (
+            correction.decision in _TYPOGRAPHY_REVIEWED_DECISIONS
+            and replacement is not None
+            and replacement.review_state in _TYPOGRAPHY_REVIEWED_STATES
+            and all(
+                replacement.label_states.get(label) in _TYPOGRAPHY_SET_LABEL_STATES
+                for label in required_labels
+            )
+        ):
+            reviewed.add(key)
+    return frozenset(reviewed)
 
 
 @final
@@ -912,6 +967,7 @@ __all__ = [
     "TypographyBinding",
     "TypographyCorrectionLog",
     "TypographyJournalEnvelope",
+    "reviewed_word_keys",
     "stable_page_id",
     "stable_word_id",
 ]

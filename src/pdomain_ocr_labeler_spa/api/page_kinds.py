@@ -48,6 +48,8 @@ if TYPE_CHECKING:
 
     from fastapi import FastAPI
 
+    from ..core.models import Project
+
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/projects", tags=["page-kinds"])
@@ -205,16 +207,8 @@ def _confirm_one_bulk_page(
 # ── Routes ───────────────────────────────────────────────────────────────
 
 
-@router.get(
-    "/{project_id}/page-kinds",
-    response_model=PageKindsListResponse,
-    operation_id="list_page_kinds",
-)
-def list_page_kinds(
-    project_id: str,
-    project_state: ProjectState = Depends(get_project_state),
-) -> JSONResponse:
-    """Every page's proposed and confirmed kind, in page order.
+def page_kinds_rows(project: Project, project_state: ProjectState) -> tuple[list[PageKindsListItem], int]:
+    """Every page's proposed and confirmed kind, plus the book's reviewed count.
 
     Reads the proposal journal once (``PageKindProposalLog.latest_by_page``)
     and the reviewed journal once (``PageKindReviewedStore.latest_by_page``)
@@ -222,11 +216,12 @@ def list_page_kinds(
     comes from the live page when it is loaded; otherwise from the latest
     reviewed marker, which is ``None`` for a marker written before the
     marker carried a kind (reported as "reviewed, kind not recorded").
-    """
-    project = project_state.loaded_project
-    if project is None or project.project_id != project_id:
-        return _page_kinds_project_not_found(project_id)
 
+    Shared by ``list_page_kinds`` and ``api/review_queue.py``'s book-wide
+    review queue (pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-
+    what-to-review-next.md "Reuse the existing counting paths"), so the two
+    routes can never disagree about which pages still need a kind confirmed.
+    """
     proposals_by_page = PageKindProposalLog(project.project_root).latest_by_page()
     markers_by_page = PageKindReviewedStore(project.project_root).latest_by_page()
 
@@ -256,6 +251,28 @@ def list_page_kinds(
                 run_id=proposal.run_id if proposal is not None else None,
             )
         )
+    return rows, reviewed_count
+
+
+@router.get(
+    "/{project_id}/page-kinds",
+    response_model=PageKindsListResponse,
+    operation_id="list_page_kinds",
+)
+def list_page_kinds(
+    project_id: str,
+    project_state: ProjectState = Depends(get_project_state),
+) -> JSONResponse:
+    """Every page's proposed and confirmed kind, in page order.
+
+    See ``page_kinds_rows`` for how the rows are built — this route just
+    wraps them in the book-level response shape.
+    """
+    project = project_state.loaded_project
+    if project is None or project.project_id != project_id:
+        return _page_kinds_project_not_found(project_id)
+
+    rows, reviewed_count = page_kinds_rows(project, project_state)
 
     response = PageKindsListResponse(
         total_pages=project.total_pages,
@@ -356,5 +373,6 @@ __all__ = [
     "confirm_page_kinds_bulk",
     "install_page_kinds_router",
     "list_page_kinds",
+    "page_kinds_rows",
     "router",
 ]

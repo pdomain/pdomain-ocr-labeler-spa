@@ -63,6 +63,7 @@ from .api.pages import install_pages_router
 from .api.projects import install_projects_router
 from .api.refine import install_refine_router
 from .api.regions import install_regions_router
+from .api.review_queue import install_review_queue_router
 from .api.session_state import install_session_state_router
 from .api.static_mounts import install_blob_route, install_spa_fallback
 from .api.typography import install_typography_router
@@ -541,6 +542,7 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     install_page_kinds_router(app)
     install_typography_router(app)
     install_lines_paragraphs_router(app)
+    install_review_queue_router(app)
 
     # Legacy SPA path redirects — spec §4 / issue #185 bullet 3.
     # /project/{id} → /projects/{id} (and /project/{id}/page/{n}
