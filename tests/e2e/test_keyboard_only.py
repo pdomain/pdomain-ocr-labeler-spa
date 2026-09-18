@@ -51,11 +51,38 @@ def _load_tiny_fixture(base_url: str, source_root_path: str) -> None:
     assert resp.status_code == 200, f"load_project failed: {resp.status_code} {resp.text}"
 
 
+def _unvalidate_page(base_url: str, project_id: str, page_index: int) -> None:
+    """Clear the page's validated flags so at least one line card renders.
+
+    ``uiPrefs.matchFilter`` defaults to ``"unvalidated"``, so the Matches view
+    renders nothing at all once every line on a page is fully validated. The
+    tiny fixture is shared across this whole suite and other tests validate its
+    page 0 wholesale — `test_export_manifest_and_trainer.py`'s
+    ``test_export_dialog_opens_and_runs`` does, because the export button stays
+    disabled until review is complete. Run after it, this file's tests found an
+    empty Matches list and blamed a CSS height bug.
+
+    So state the precondition instead of inheriting it: these tests need an
+    unvalidated line, and this makes one.
+    """
+    resp = httpx.post(
+        f"{base_url}/api/projects/{project_id}/pages/{page_index}/words/validate-batch",
+        json={"scope": "page", "validated": False},
+        timeout=SEED_TIMEOUT,
+    )
+    assert resp.status_code == 200, f"unvalidate failed: {resp.status_code} {resp.text}"
+
+
 def _goto_page1(live_server: LiveServer, page: Page) -> None:
     """Load tiny-fixture and navigate to page 1, waiting for full render."""
     _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
     url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
     page.goto(url, timeout=15_000)
+    wait_for_page_loaded(page, live_server.base_url, timeout=15_000)
+    # Only now is the page in memory, so the batch route can reach it. Reload
+    # so the SPA re-fetches rather than rendering its pre-unvalidate cache.
+    _unvalidate_page(live_server.base_url, "tiny-fixture", page_index=0)
+    page.reload(timeout=15_000)
     wait_for_page_loaded(page, live_server.base_url, timeout=15_000)
 
 
