@@ -56,6 +56,7 @@ import { useProject } from "./hooks/useProject";
 // relying on lazy-loading to keep canvas out of jsdom.
 const PerfTestPage = lazy(() => import("./pages/PerfTestPage"));
 import { useNotificationStream } from "./hooks/useNotificationStream";
+import { useHotkey } from "./hooks/useHotkey";
 import { OCRConfigModal } from "./components/OCRConfigModal";
 import { ExportDialog } from "./components/ExportDialog";
 import { HotkeyHelpModal } from "./components/HotkeyHelpModal";
@@ -195,6 +196,17 @@ function useRouteProjectContext(): { projectId: string | null; pageIndex: number
 /** Inner component so hooks (useNotificationStream) run inside providers. */
 function AppInner() {
   useNotificationStream();
+
+  // Mod+, opens OCR Config from any route (hotkeyMap.ts "OCR Config", BUG-KBD-1
+  // in docs/plans/2026-07-21-open-findings-fixes.md). Registered here rather
+  // than per-route so the shortcut works before a project is loaded, the same
+  // way `OCRConfigModal` below is mounted unconditionally and HotkeyHelpModal
+  // keeps its own "?" listener mounted for the whole app. Combo is spelled
+  // "mod+comma" — react-hotkeys-hook 5 matches by KeyboardEvent.code, and the
+  // literal "," has no code (see hotkeyMap.ts).
+  useHotkey("mod+comma", () => {
+    dialogStore.open("ocrConfig");
+  });
 
   // Dialog open-state slices — re-render only when these change.
   const ocrConfigOpen = useDialogStore((s) => s.ocrConfig.open);

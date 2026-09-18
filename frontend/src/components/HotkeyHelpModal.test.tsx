@@ -8,8 +8,8 @@
 //   - The close button works.
 //   - data-testid="hotkey-help-dialog" is present when open.
 
-import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HotkeyHelpModal } from "./HotkeyHelpModal";
 import { dialogStore } from "../stores/dialog-store";
@@ -56,6 +56,37 @@ describe("HotkeyHelpModal: dialog rendering", () => {
   it("heading reads 'Keyboard Shortcuts'", () => {
     renderModal();
     expect(screen.getByRole("heading", { name: /keyboard shortcuts/i })).toBeInTheDocument();
+  });
+});
+
+// ─── ? keypress (regression: react-hotkeys-hook 4→5 bump, 655dbd9/f9ce5e0) ────
+//
+// react-hotkeys-hook 5 matches combos against the physical `KeyboardEvent.code`,
+// not `.key` — jsdom does not derive `.code` from `.key`, so the test fires a
+// real keydown with both set, exactly as a browser would for a US-layout `?`
+// keypress (Shift held, Slash key). Prior tests here only called
+// `dialogStore.open("hotkeyHelp")` directly, which is why the v5 regression
+// (the modal registered "?" — a string with no `code` — instead of
+// "shift+slash") went unnoticed: nothing exercised the actual keypress.
+
+describe("HotkeyHelpModal: ? keypress opens the modal (real keypress, not the store)", () => {
+  beforeEach(() => {
+    dialogStore.reset();
+  });
+
+  afterEach(() => {
+    dialogStore.reset();
+  });
+
+  it("pressing Shift+/ (?) opens the dialog", async () => {
+    render(<HotkeyHelpModal />);
+    expect(screen.queryByTestId("hotkey-help-dialog")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "?", code: "Slash", shiftKey: true, bubbles: true });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("hotkey-help-dialog")).toBeInTheDocument();
+    });
   });
 });
 

@@ -41,6 +41,19 @@ const TOKEN_DISPLAY: Record<string, string> = {
   space: "Space",
   bracketleft: "[",
   bracketright: "]",
+  comma: ",",
+};
+
+/**
+ * Full-combo display overrides for combos where a shifted symbol key is
+ * registered by its physical code (react-hotkeys-hook 5 convention — see
+ * hotkeyMap.ts) but should read as the single produced character, not as
+ * "Shift" plus the bare key name. `?` is Shift+/ on a US layout; showing
+ * "Shift" separately would be misleading since the shift is inherent to
+ * producing the character, not an accelerator modifier on top of "/".
+ */
+const COMBO_DISPLAY_OVERRIDES: Record<string, string[]> = {
+  "shift+slash": ["?"],
 };
 
 /**
@@ -50,10 +63,13 @@ const TOKEN_DISPLAY: Record<string, string> = {
  * Examples:
  *   "mod+s"       → ["Ctrl", "S"]
  *   "shift+enter" → ["Shift", "Enter"]
- *   "?"           → ["?"]
+ *   "shift+slash" → ["?"]   (see COMBO_DISPLAY_OVERRIDES)
+ *   "mod+comma"   → ["Ctrl", ","]
  *   "j"           → ["J"]
  */
 export function comboToKeyCap(combo: string): string[] {
+  const override = COMBO_DISPLAY_OVERRIDES[combo.toLowerCase()];
+  if (override) return override;
   return combo.split("+").map((token) => {
     const lower = token.toLowerCase();
     if (TOKEN_DISPLAY[lower]) return TOKEN_DISPLAY[lower];
@@ -76,7 +92,7 @@ const GLOBAL_NAV_COMBOS = new Set([
 ]);
 
 // Global combos that open modals/views map to "view" group.
-const GLOBAL_VIEW_COMBOS = new Set(["?", "mod+,", "mod+o", "escape"]);
+const GLOBAL_VIEW_COMBOS = new Set(["shift+slash", "mod+comma", "mod+o", "escape"]);
 
 /**
  * Map a (scope, combo) pair to a HotkeyGroup.

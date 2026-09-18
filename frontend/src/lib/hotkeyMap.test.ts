@@ -63,8 +63,15 @@ describe("hotkeyMap", () => {
     expect(entry).toBeDefined();
   });
 
-  it("includes the ? (help) global hotkey", () => {
-    const entry = HOTKEY_MAP.find((e) => e.scope === "global" && e.combo === "?");
+  it("includes the ? (help) global hotkey, registered by physical code", () => {
+    // "shift+slash", not the literal "?" — react-hotkeys-hook 5 matches
+    // KeyboardEvent.code, and "?" has no code (see hotkeyMap.ts header comment).
+    const entry = HOTKEY_MAP.find((e) => e.scope === "global" && e.combo === "shift+slash");
+    expect(entry).toBeDefined();
+  });
+
+  it("includes the Mod+, (OCR Config) global hotkey, registered by physical code", () => {
+    const entry = HOTKEY_MAP.find((e) => e.scope === "global" && e.combo === "mod+comma");
     expect(entry).toBeDefined();
   });
 

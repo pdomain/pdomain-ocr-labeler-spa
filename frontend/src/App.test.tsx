@@ -199,6 +199,7 @@ vi.mock("use-image", () => ({
 }));
 
 import App from "./App";
+import { dialogStore } from "./stores/dialog-store";
 
 beforeEach(() => {
   fetchDeviceMock.mockClear();
@@ -491,6 +492,44 @@ describe("App: S6.3(a) OCR config trigger on root route", () => {
     const trigger = screen.getByTestId("ocr-config-trigger-button");
     fireEvent.click(trigger);
     // Modal must now open
+    await waitFor(() => {
+      expect(screen.getByTestId("ocr-config-modal")).toBeInTheDocument();
+    });
+  });
+
+  // BUG-KBD-1 (docs/plans/2026-07-21-open-findings-fixes.md): Mod+, was
+  // advertised in hotkeyMap.ts but never registered. Fires a real keydown
+  // (not dialogStore.open directly) — react-hotkeys-hook 5 matches by
+  // KeyboardEvent.code, so `code: "Comma"` must be set explicitly; jsdom does
+  // not derive it from `key`.
+  it("pressing Mod+, (Ctrl+Comma) opens the ocr-config-modal", async () => {
+    // The previous test in this file opens the dialog via click; dialogStore
+    // is a module-level singleton with no global test-suite reset.
+    dialogStore.reset();
+    withNoSession();
+    server.use(
+      http.get("/api/ocr-config", () =>
+        HttpResponse.json({
+          auto_rotate_available: false,
+          auto_rotate_on_load: true,
+          auto_rotate_method: "auto",
+          detection_options: [],
+          recognition_options: [],
+          selected_detection: "stock",
+          selected_recognition: "stock",
+          hf_pinned_revision: null,
+        }),
+      ),
+      http.get("/api/normalize/available", () => HttpResponse.json({ available: false })),
+    );
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByTestId("header-bar")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("ocr-config-modal")).toBeNull();
+
+    fireEvent.keyDown(document, { key: ",", code: "Comma", ctrlKey: true, bubbles: true });
+
     await waitFor(() => {
       expect(screen.getByTestId("ocr-config-modal")).toBeInTheDocument();
     });

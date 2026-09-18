@@ -5,8 +5,16 @@
 // Single source of truth for both registration (useHotkey) and the ? help modal.
 // Scopes: global | viewport | matches | dialog | source-folder | gt-input
 //
-// Combo syntax: "mod+s", "mod+shift+r", "?" etc.
+// Combo syntax: "mod+s", "mod+shift+r", "shift+slash" etc.
 // "mod" maps to Ctrl on Windows/Linux and Cmd on Mac (react-hotkeys-hook convention).
+//
+// Punctuation keys are spelled as react-hotkeys-hook 5 matches them: by
+// physical `KeyboardEvent.code`, not by the character the key produces
+// (issue #235 5-to-6 follow-up; see docs/context/decisions.md). So `[`/`]`
+// are "bracketleft"/"bracketright", `,` is "comma", and `?` — produced by
+// Shift+/ on a US layout — is "shift+slash", not the literal "?" string.
+// hotkey-bridge.ts converts these back to their display glyphs for the help
+// modal.
 
 export type Scope =
   "global" | "viewport" | "matches" | "dialog" | "source-folder" | "gt-input" | "region-review";
@@ -28,9 +36,9 @@ export const HOTKEY_MAP: HotkeyEntry[] = [
   { combo: "mod+z", scope: "global", description: "Undo page edit" },
   { combo: "mod+shift+z", scope: "global", description: "Redo page edit" },
   { combo: "mod+e", scope: "global", description: "Export…" },
-  { combo: "mod+,", scope: "global", description: "OCR Config" },
+  { combo: "mod+comma", scope: "global", description: "OCR Config" },
   { combo: "mod+o", scope: "global", description: "Open Source Folder dialog" },
-  { combo: "?", scope: "global", description: "Show hotkey help" },
+  { combo: "shift+slash", scope: "global", description: "Show hotkey help" },
   { combo: "escape", scope: "global", description: "Close modal / cancel" },
   // Navigation
   { combo: "mod+arrowleft", scope: "global", description: "Previous page" },

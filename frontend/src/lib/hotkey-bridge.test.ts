@@ -27,6 +27,14 @@ describe("comboToKeyCap", () => {
     expect(comboToKeyCap("?")).toEqual(["?"]);
   });
 
+  it("converts 'shift+slash' (the ? key, react-hotkeys-hook 5 code form) to ['?']", () => {
+    expect(comboToKeyCap("shift+slash")).toEqual(["?"]);
+  });
+
+  it("converts 'mod+comma' to ['Ctrl', ',']", () => {
+    expect(comboToKeyCap("mod+comma")).toEqual(["Ctrl", ","]);
+  });
+
   it("converts 'escape' to ['Esc']", () => {
     expect(comboToKeyCap("escape")).toEqual(["Esc"]);
   });
@@ -84,8 +92,8 @@ describe("scopeToGroup", () => {
   });
 
   it("maps global modal-opener combos to 'view'", () => {
-    expect(scopeToGroup("global", "?")).toBe("view");
-    expect(scopeToGroup("global", "mod+,")).toBe("view");
+    expect(scopeToGroup("global", "shift+slash")).toBe("view");
+    expect(scopeToGroup("global", "mod+comma")).toBe("view");
     expect(scopeToGroup("global", "mod+o")).toBe("view");
     expect(scopeToGroup("global", "escape")).toBe("view");
   });
