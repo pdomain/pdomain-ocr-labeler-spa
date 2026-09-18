@@ -577,6 +577,21 @@ def _imported_text_response(
     )
 
 
+def _page_line_words(
+    project: Project,
+    page_index: int,
+    state: ProjectState,
+    page_override: object | None = None,
+) -> list[list[object]]:
+    page = _current_page(project, page_index, state, page_override)
+    if page is None:
+        return [list(_source_text(project, page_index, state).split())]
+    lines = getattr(page, "lines", None)
+    if lines is not None:
+        return [list(getattr(line, "words", None) or ()) for line in lines]
+    return [list(_page_words(project, page_index, state, page_override) or ())]
+
+
 def _current_page_content(
     project: Project,
     page_index: int,
@@ -585,31 +600,75 @@ def _current_page_content(
 ) -> object:
     """Build the hash input for this page's ``page_sha256`` staleness fingerprint.
 
-    Deliberately keeps its own ``"word_id"`` sub-field ground-truth-derived
-    (via ``_corrected_word_text``), matching the pre-fix scheme, even though
-    that is no longer this project's real word identity elsewhere (see
-    ``_review_identity_texts``). This value is never returned to a caller —
-    it is only hashed into ``page_sha256`` — and switching it to the
-    OCR-derived identity would change that hash for every already-reviewed
-    word on the page the moment this ships, breaking every existing
-    correction's epoch continuity in ``TypographyCorrectionLog.current_epoch``
-    on first load. ``"corrected_text"`` below already changes this hash on
-    every ground-truth edit, so nothing is lost by leaving this alone.
+    Structural only: ordered line/word boundaries, word count, and each
+    word's OCR — never ground-truth — text. A typography correction is a
+    statement about one word's own graphemes: it must go stale when that
+    word's own content changes (already covered, word-scoped, by
+    ``text_sha256`` — see ``_initial_binding``) or when a structural edit
+    (add/delete/merge/split) shifts reading order — never merely because
+    some *other* word's ground truth was corrected. See
+    ``docs/context/decisions.md``, 2026-09-18, "Typography epoch
+    granularity".
+
+    Deliberately excludes bounding boxes too, for the same reason: a word's
+    position is edited routinely (``nudge_bbox``), just like ground truth,
+    and a shared page-wide fingerprint that included it would reproduce the
+    same over-invalidation bug through a different door. Word position is
+    consequently *not* separately protected at word scope either — the
+    upstream ``pdomain_book_contracts`` review contract hard-validates
+    ``WordTypography.text_sha256`` against a literal ``sha256(text)``, so
+    there is no available per-word hash slot left to carry a bbox
+    fingerprint without a wire-format change to that contract. A word's own
+    bbox nudge therefore no longer invalidates any review, including its
+    own — a known, narrower gap than the one this fixes, surfaced here
+    rather than fixed silently.
+
+    See ``_legacy_page_content`` for the pre-fix (whole-page,
+    ground-truth- and bbox-inclusive) formula this supersedes, and
+    ``_legacy_binding``/``_current_epoch_migration_aware`` for how a
+    correction recorded under that formula keeps resolving.
     """
-    page = _current_page(project, page_index, state, page_override)
-    if page is None:
-        line_words: list[list[object]] = [list(_source_text(project, page_index, state).split())]
-    else:
-        lines = getattr(page, "lines", None)
-        line_words = (
-            [list(getattr(line, "words", None) or ()) for line in lines]
-            if lines is not None
-            else [list(_page_words(project, page_index, state, page_override) or ())]
-        )
     page_id = _logical_page_id(project, page_index, state)
     reading_order = 0
     projected_lines: list[list[dict[str, object]]] = []
-    for line in line_words:
+    for line in _page_line_words(project, page_index, state, page_override):
+        projected_line: list[dict[str, object]] = []
+        for word in line:
+            text = word if isinstance(word, str) else _word_identity_text(word)
+            projected_line.append(
+                {
+                    "word_id": stable_word_id(
+                        project_id=project.project_id,
+                        page_id=page_id,
+                        reading_order=reading_order,
+                        text=text,
+                    ),
+                    "text": text,
+                }
+            )
+            reading_order += 1
+        projected_lines.append(projected_line)
+    return {"lines": projected_lines}
+
+
+def _legacy_page_content(
+    project: Project,
+    page_index: int,
+    state: ProjectState,
+    page_override: object | None = None,
+) -> object:
+    """Build the pre-fix (2026-08-22 through 2026-09-18) whole-page hash input.
+
+    Preserved verbatim from before this fix, unreachable from any new
+    correction: every word's ground-truth text and bounding box, keyed by a
+    ground-truth-derived ``word_id``. Used only by ``_legacy_binding``, to
+    recognize a correction recorded under this formula as still current —
+    see ``_current_epoch_migration_aware``.
+    """
+    page_id = _logical_page_id(project, page_index, state)
+    reading_order = 0
+    projected_lines: list[list[dict[str, object]]] = []
+    for line in _page_line_words(project, page_index, state, page_override):
         projected_line: list[dict[str, object]] = []
         for word in line:
             text = word if isinstance(word, str) else _corrected_word_text(word)
@@ -743,6 +802,108 @@ def _initial_binding(
     )
 
 
+def _legacy_binding(
+    project: Project,
+    page_index: int,
+    word_id: str,
+    state: ProjectState,
+    page_override: object | None = None,
+) -> TypographyBinding | None:
+    """Return the page's pre-fix whole-page binding, or ``None`` for a bundle.
+
+    A bundle-backed project never used the whole-page scheme this bridges
+    (``_initial_binding`` already returns early for one, from the bundle's
+    own ``page_sha256`` — see ``_canonical_word_id_map``'s equivalent early
+    return), so there is nothing to migrate.
+
+    Otherwise mirrors ``_initial_binding`` exactly, except hashed over
+    ``_legacy_page_content`` instead of ``_current_page_content``. Exists
+    only so a correction recorded before this fix shipped — whose
+    ``base_page_sha256``/``page_head_sha256`` were computed under that old
+    formula — is not treated as orphaned the instant this fix ships,
+    provided nothing on the page has changed since it was recorded. See
+    ``_current_epoch_migration_aware``.
+    """
+    if state.labeling_bundle is not None:
+        return None
+    image_sha = hashlib.sha256(state.labeling_image_path(page_index).read_bytes()).hexdigest()
+    text_sha = hashlib.sha256(
+        _word_text(project, page_index, word_id, state, page_override).encode()
+    ).hexdigest()
+    page_sha = _canonical_hash(
+        {
+            "content": _legacy_page_content(project, page_index, state, page_override),
+            "image_sha256": image_sha,
+            "page_index": page_index,
+            "project_id": project.project_id,
+        }
+    )
+    page_head = _canonical_hash(
+        {
+            "logical_page": _logical_page_id(project, page_index, state),
+            "page_sha256": page_sha,
+        }
+    )
+    return TypographyBinding(
+        page_sha256=page_sha,
+        image_sha256=image_sha,
+        text_sha256=text_sha,
+        page_head_sha256=page_head,
+        word_revision=0,
+    )
+
+
+def _current_epoch_migration_aware(
+    records: tuple[TypographyJournalEnvelope, ...] | list[TypographyJournalEnvelope],
+    *,
+    logical_page_id: str,
+    current: TypographyBinding,
+    legacy: TypographyBinding | None,
+) -> tuple[TypographyJournalEnvelope, ...]:
+    """Resolve the current page epoch, accepting either page-hash scheme.
+
+    Tries *current* (this fix's structural-only scheme) first — every
+    correction recorded after this fix uses it exclusively, so this is the
+    only branch a page ever needs once it has been touched again. Falls
+    back to *legacy* (``_legacy_binding``, ``None`` for a bundle-backed
+    project) only when that finds nothing, bridging a correction recorded
+    before this fix shipped.
+
+    A pre-fix correction followed, on the same page, by a post-fix one sits
+    in the *older* (legacy) epoch under this fallback and is not reachable
+    through the new one — the two page-hash formulas hash different content,
+    so a pre-fix root can never chain onto a post-fix record. That pre-fix
+    correction is not silently orphaned by this: ``current_epoch`` still
+    finds it, just as a still-current (if superseded-going-forward) epoch —
+    the same outcome a genuine structural edit would have produced.
+    """
+    epoch = TypographyCorrectionLog.current_epoch(records, logical_page_id=logical_page_id, current=current)
+    if epoch or legacy is None:
+        return epoch
+    return TypographyCorrectionLog.current_epoch(records, logical_page_id=logical_page_id, current=legacy)
+
+
+def _page_root_matches(
+    root: TypographyCorrection,
+    current: TypographyBinding,
+    legacy: TypographyBinding | None,
+) -> bool:
+    """Whether *root* still matches the page's live state, under either
+    page-hash scheme — the non-epoch-walking counterpart of
+    ``_current_epoch_migration_aware``, used by callers that already hold a
+    lineage root and only need to recheck it.
+    """
+
+    def _matches(binding: TypographyBinding) -> bool:
+        return (
+            root.base_page_sha256 == binding.page_sha256
+            and root.base_image_sha256 == binding.image_sha256
+            and root.page_head_sha256 == binding.page_head_sha256
+        )
+
+    return _matches(current) or (legacy is not None and _matches(legacy))
+
+
 def _current_head(
     project: Project,
     page_index: int,
@@ -758,10 +919,12 @@ def _current_head(
     word_id = id_map.get(word_id, word_id)
     logical_page_id = _logical_page_id(project, page_index, state)
     initial = _initial_binding(project, page_index, word_id, state)
-    records = log.current_epoch(
+    legacy = _legacy_binding(project, page_index, word_id, state)
+    records = _current_epoch_migration_aware(
         log.records(logical_page_id),
         logical_page_id=logical_page_id,
         current=initial,
+        legacy=legacy,
     )
     word_head = next(
         (
@@ -771,6 +934,17 @@ def _current_head(
         ),
         None,
     )
+    # ``word_head`` itself stays whatever the epoch found — a later
+    # correction still needs it to continue this word's own revision chain
+    # (``revision``/``supersedes_id``/``word_revision``), even when the text
+    # below has drifted. Only "is this word's own graphemes review still
+    # about its own current text" is affected: a structural page epoch no
+    # longer breaks on a ground-truth edit (see ``_current_page_content``),
+    # so that currency is no longer a side effect of the page epoch check
+    # above and must be checked here explicitly. ``text_sha256`` is
+    # word-scoped, so this only affects *this* word's own
+    # ``typography_reviewed``, never another word's.
+    own_text_is_current = word_head is None or word_head.effective_text_sha256 == initial.text_sha256
     text = _word_text(project, page_index, word_id, state)
     response = TypographyHeadResponse(
         project_id=project.project_id,
@@ -789,7 +963,10 @@ def _current_head(
         imported_text_validation_available=state.labeling_bundle is not None,
         revision=word_head.revision if word_head else 0,
         correction=word_head,
-        typography_reviewed=typography_reviewed(word_head, required_labels=_TYPOGRAPHY_REQUIRED_LABELS),
+        typography_reviewed=(
+            own_text_is_current
+            and typography_reviewed(word_head, required_labels=_TYPOGRAPHY_REQUIRED_LABELS)
+        ),
         head_token="0" * 64,
     )
     return response.model_copy(
@@ -1144,10 +1321,11 @@ def typography_page_review(
     active_word_ids = _active_word_ids(project, page_index, state, page)
     if active_word_ids:
         epoch_word_id = next(iter(active_word_ids))
-        records = TypographyCorrectionLog.current_epoch(
+        records = _current_epoch_migration_aware(
             records,
             logical_page_id=_logical_page_id(project, page_index, state),
             current=_initial_binding(project, page_index, epoch_word_id, state, page),
+            legacy=_legacy_binding(project, page_index, epoch_word_id, state, page),
         )
     else:
         records = ()
@@ -1156,17 +1334,12 @@ def typography_page_review(
     # ``_canonical_word_id_map`` — must still roll up under the same word.
     id_map = _canonical_word_id_map(project, page_index, state, page)
     heads_by_word: dict[str, TypographyCorrection] = {}
-    first_by_word: dict[str, TypographyCorrection] = {}
     for record in records:
         canonical_id = id_map.get(record.correction.word_id, record.correction.word_id)
-        first_by_word.setdefault(canonical_id, record.correction)
         heads_by_word[canonical_id] = record.correction
     text_validated_word_ids = _text_validated_word_ids(project, page_index, state, page)
     heads_by_word = {
         word_id: correction for word_id, correction in heads_by_word.items() if word_id in active_word_ids
-    }
-    first_by_word = {
-        word_id: correction for word_id, correction in first_by_word.items() if word_id in active_word_ids
     }
     total = len(active_word_ids)
     lineage_root = records[0].correction if records else None
@@ -1177,16 +1350,19 @@ def typography_page_review(
     for canonical_id, correction in canonical_heads:
         try:
             current = _initial_binding(project, page_index, canonical_id, state, page)
+            legacy = _legacy_binding(project, page_index, canonical_id, state, page)
         except HTTPException:
             stale = True
         else:
-            first = first_by_word[canonical_id]
+            # Text currency is checked against this word's own *latest* head
+            # (``correction``, already the last row seen for this word), not
+            # its first correction in the epoch — a word re-reviewed after
+            # its own ground-truth edit must read as current, not
+            # permanently stale. See ``_current_head``'s identical check.
             stale = (
                 lineage_root is None
-                or lineage_root.base_page_sha256 != current.page_sha256
-                or lineage_root.base_image_sha256 != current.image_sha256
-                or first.base_text_sha256 != current.text_sha256
-                or lineage_root.page_head_sha256 != current.page_head_sha256
+                or not _page_root_matches(lineage_root, current, legacy)
+                or correction.effective_text_sha256 != current.text_sha256
             )
         valid_text = not stale and canonical_id in text_validated_word_ids
         valid_typography = not stale and typography_reviewed(
@@ -1340,10 +1516,11 @@ def export_typography_correction_bundle(
         active_word_ids = _active_word_ids(project, page_index, state)
         if active_word_ids:
             epoch_word_id = next(iter(active_word_ids))
-            records = log.current_epoch(
+            records = _current_epoch_migration_aware(
                 records,
                 logical_page_id=_logical_page_id(project, page_index, state),
                 current=_initial_binding(project, page_index, epoch_word_id, state),
+                legacy=_legacy_binding(project, page_index, epoch_word_id, state),
             )
         else:
             records = ()
@@ -1368,20 +1545,6 @@ def export_typography_correction_bundle(
                 detail="selected heads must be active and text-validated",
             )
         lineage_root = records[0].correction
-        for word_id in selected_ids:
-            initial = _initial_binding(project, page_index, word_id, state)
-            word_root = next(
-                record.correction
-                for record in records
-                if id_map.get(record.correction.word_id, record.correction.word_id) == word_id
-            )
-            if (
-                lineage_root.base_page_sha256 != initial.page_sha256
-                or lineage_root.base_image_sha256 != initial.image_sha256
-                or lineage_root.page_head_sha256 != initial.page_head_sha256
-                or word_root.base_text_sha256 != initial.text_sha256
-            ):
-                raise HTTPException(status_code=409, detail="selected correction head is stale")
         latest_by_word = {
             word_id: next(
                 record.correction
@@ -1390,6 +1553,18 @@ def export_typography_correction_bundle(
             )
             for word_id in selected_ids
         }
+        for word_id in selected_ids:
+            initial = _initial_binding(project, page_index, word_id, state)
+            legacy = _legacy_binding(project, page_index, word_id, state)
+            # Text currency is checked against this word's *latest* head —
+            # not its first correction in the epoch — so a word re-reviewed
+            # after its own ground-truth edit exports cleanly instead of
+            # reading as permanently stale. See
+            # ``typography_page_review``'s identical fix.
+            if not _page_root_matches(lineage_root, initial, legacy) or (
+                latest_by_word[word_id].effective_text_sha256 != initial.text_sha256
+            ):
+                raise HTTPException(status_code=409, detail="selected correction head is stale")
         accepted = {
             CorrectionDecision.ACCEPT,
             CorrectionDecision.APPROVED_EDIT,
