@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-07-13
+last_verified: 2026-09-18
 ---
 
 # Open findings
@@ -13,9 +13,18 @@ last_verified: 2026-07-13
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-07-13
-- **Read when:** triaging known unresolved product or test defects.
+- **Last verified:** 2026-09-18
+- **Read when:** triaging known unresolved product or test defects, or checking
+  what an older finding turned out to be.
 - **Search terms:** open bugs, keyboard, reload OCR, hierarchy, XDG data root.
+
+**Nothing here is open as of 2026-09-18.** All six findings were closed that
+day. Two were real defects and were fixed: a page where OCR found nothing
+looked finished, and the data root ignored where each platform puts data. Two
+were stale, already answered by work nobody linked back to them. Two were
+verified rather than changed, because the behaviour was already correct and
+nobody had ever checked. Each entry below says which it was, and the reasoning
+lives in `decisions.md` under 2026-09-18.
 
 ## Keyboard findings
 
@@ -43,7 +52,7 @@ Registered. `useGlobalHotkeys.ts` binds `mod+j` to the jump-to-page handler.
 
 ## Persistence and page findings
 
-### BUG-SMOKE-3 — The default data root is not XDG-compatible — Resolved
+### ~~BUG-SMOKE-3~~ — The default data root is not XDG-compatible (retired 2026-09-18)
 
 `Settings.data_root` now defaults to the OS-aware data directory
 (`${XDG_DATA_HOME:-~/.local/share}/pdomain-ocr-labeler-spa` on Linux; the
