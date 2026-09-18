@@ -168,6 +168,17 @@ function PageKindControl({ page, confirmPageKind }: PageKindControlProps) {
     statusLabel = "No page kind";
   }
 
+  // Cap the button's rendered width (truncate + max-w) rather than letting
+  // the "No page kind — run Propose page kinds" hint grow it unbounded:
+  // page-actions-bar's buttons are shrink-0 in a fixed-width toolbar center
+  // slot, so an uncapped label here overflows past the slot's edge — with
+  // real word content, the toolbar's right slot (WorkspaceMetrics) renders a
+  // nonzero-width "N exact" strip that then sits, later in DOM order, on top
+  // of that overflow and steals its clicks (P0-CI-SOFT follow-up).
+  // page-actions-bar's own overflow-hidden (below) is the containment
+  // backstop; this truncation keeps the common "no page kind yet" case from
+  // needing it. The full hint text is still in the DOM (toHaveTextContent
+  // assertions pass) and still reaches the user via `title` on hover.
   return (
     <div data-testid="page-kind-control" className="flex items-center gap-1 shrink-0">
       <button
@@ -179,7 +190,7 @@ function PageKindControl({ page, confirmPageKind }: PageKindControlProps) {
           setOpen((v) => !v);
         }}
         title={proposal ? undefined : "No page kind — run Propose page kinds to get one"}
-        className="px-2 py-0.5 text-[11px] rounded-sm border border-border-2 bg-bg-raised text-ink-2 hover:text-ink-1 hover:border-accent transition-colors"
+        className="px-2 py-0.5 text-[11px] rounded-sm border border-border-2 bg-bg-raised text-ink-2 hover:text-ink-1 hover:border-accent transition-colors max-w-[9rem] truncate"
       >
         {statusLabel}
         {!confirmed && !proposal && (
@@ -819,7 +830,15 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   const provenanceSummary = pageQ.data?.page_record?.provenance_summary ?? null;
 
   return (
-    <div data-testid="page-actions-bar" className="flex">
+    // overflow-hidden: the toolbar's center slot has a fixed width (it sits
+    // between the nav and metrics slots); without this, a button-group wider
+    // than that width silently paints past the slot's edge and on top of
+    // whatever renders in the metrics slot to its right, stealing pointer
+    // events there (P0-CI-SOFT follow-up — page-kind-status-button vs the
+    // WorkspaceMetrics "N exact" strip). Individual buttons are still
+    // shrink-0 (never squished); this only clips the group as a last resort
+    // if it's ever wider than the slot allows.
+    <div data-testid="page-actions-bar" className="flex overflow-hidden">
       <ButtonGroup
         data-testid="page-actions-compact"
         className="flex items-center gap-1 shrink-0"
