@@ -71,6 +71,7 @@ import {
   useCopyLineGt,
   useDeleteLine,
   useMergeLines,
+  useUpdateWordGt,
 } from "../hooks/useLineMutations";
 import { useApplyComponent, useAddWord, useReboxWord } from "../hooks/useWordMutations";
 // Lane D reuses `toggleAddWordMode` / `exitToSelectMode` (viewport-store
@@ -361,11 +362,16 @@ export default function ProjectPage() {
   const undoPage = useUndoPage(pid, idx0);
   const redoPage = useRedoPage(pid, idx0);
 
-  // ── Line mutations for useMatchesHotkeys (BUG-KBD-3) ──────────────────
+  // ── Line mutations for useMatchesHotkeys (BUG-KBD-3) — also drive the
+  // Matches-pane (WordMatchView) per-line buttons below, the same mutations
+  // LineDetail.tsx uses for its embedded LineCard.
   const validateLine = useValidateLine(pid, idx0);
   const copyLineGt = useCopyLineGt(pid, idx0);
   const deleteLine = useDeleteLine(pid, idx0);
   const mergeLines = useMergeLines(pid, idx0);
+  // Per-word GT commit (blur-commit from WordCell inputs) — same mutation
+  // LineDetail's embedded LineCard uses for onCommitGt (P1.6 / B-22).
+  const updateWordGt = useUpdateWordGt(pid, idx0);
 
   // ── Word mutations for the Apply-Style / Component / Add-Word controls (B2) ─
   const applyComponent = useApplyComponent(pid, idx0);
@@ -1227,6 +1233,54 @@ export default function ProjectPage() {
     focusWorklistLine(idx0, lineIndex);
   }
 
+  // ── Matches-pane (WordMatchView) per-line/per-word action handlers ──────
+  // These were declared as optional props on WordMatchView/LineCard and
+  // called with `?.()` but never passed from this mount — every Validate,
+  // Delete, GT→OCR, OCR→GT button and the inline GT input in the Matches
+  // pane silently no-op'd. Wired here against the SAME mutations
+  // LineDetail.tsx already uses for its embedded LineCard, so the two
+  // surfaces stay behaviourally identical.
+  function handleMatchesValidate(lineIndex: number, validated: boolean) {
+    validateLine.mutate({ lineIndex, validated });
+  }
+  function handleMatchesCopyGtToOcr(lineIndex: number) {
+    copyLineGt.mutate({ lineIndex, direction: "gt_to_ocr" });
+  }
+  function handleMatchesCopyOcrToGt(lineIndex: number) {
+    copyLineGt.mutate({ lineIndex, direction: "ocr_to_gt" });
+  }
+  // F-035: destructive — confirm first, same title/body the D-key hotkey
+  // above uses for this same pane (onDelete in useMatchesHotkeys). Unlike
+  // LineDetail's own embedded LineCard (which deletes unconfirmed), a
+  // click in a scrollable list of many lines is far easier to fire by
+  // accident than the single-line right-panel surface, and this pane
+  // already established the confirm-first precedent via the hotkey.
+  function handleMatchesDelete(lineIndex: number) {
+    dialogStore.openConfirm({
+      title: "Delete line?",
+      body: "This will permanently remove the selected line from the page. This action cannot be undone.",
+      onConfirm: () => {
+        deleteLine.mutate({ lineIndex });
+      },
+    });
+  }
+  // P1.6 (B-22): per-word GT commit — identical to LineDetail's embedded
+  // LineCard onCommitGt. `wordId` is accepted (WordCell's call signature)
+  // but unused: the backend route addresses the word by line/word index,
+  // not word_id, matching LineDetail's own handler exactly. WordCell
+  // itself only invokes onCommitGt when the value actually changed at
+  // blur, and passes the raw (untrimmed) text through unconditionally —
+  // including an empty string — exactly as LineDetail's path does, so
+  // there is no Matches-pane-only case to special-case here.
+  function handleMatchesCommitGt(
+    _wordId: string,
+    lineIndex: number,
+    wordIndex: number,
+    text: string,
+  ) {
+    updateWordGt.mutate({ lineIndex, wordIndex, text });
+  }
+
   // Right panel slot — RightPanel routes on selection-store.level.
   // Word-level content is WordDetail (Slice 16).
   // D-051 (2026-06-14): TextTabs + WordMatchView are now mounted visibly in
@@ -1248,6 +1302,11 @@ export default function ProjectPage() {
           filter={uiPrefs.matchFilter}
           onEditWord={handleEditWord}
           onSelectLine={handleSelectLine}
+          onValidate={handleMatchesValidate}
+          onCopyGtToOcr={handleMatchesCopyGtToOcr}
+          onCopyOcrToGt={handleMatchesCopyOcrToGt}
+          onDelete={handleMatchesDelete}
+          onCommitGt={handleMatchesCommitGt}
         />
       </TextTabs>
       <PlaintextEditor source="gt" page={pagePayload} />
