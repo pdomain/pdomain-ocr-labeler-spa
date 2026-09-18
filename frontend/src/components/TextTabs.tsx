@@ -148,7 +148,20 @@ export function TextTabs({
             </button>
           ))}
         </div>
-        <div className="flex-1 overflow-auto">{children}</div>
+        {/*
+         * `children` (WordMatchView) renders directly here, not inside an
+         * extra wrapper div. WordMatchView's own root already carries
+         * className="flex-1 overflow-auto" plus style={{contain: "strict"}}
+         * so @tanstack/react-virtual gets a definite height to measure
+         * against — but `flex-1` only produces that height when its
+         * *immediate* parent is a flex container, which this `#panel-matches`
+         * div (className="flex flex-col flex-1 overflow-hidden") is. A
+         * wrapper wasn't: it collapsed WordMatchView to zero height with
+         * real word content, so the virtualizer mounted no rows (P0-CI-SOFT
+         * follow-up). Matches the Ground Truth / OCR panels below, whose
+         * textareas are direct flex children of their panels too.
+         */}
+        {children}
       </div>
 
       {/* Ground Truth panel */}

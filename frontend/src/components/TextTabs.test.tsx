@@ -42,6 +42,36 @@ describe("TextTabs", () => {
     expect(screen.getByTestId("word-match-view")).toBeInTheDocument();
   });
 
+  it("renders the matches-panel child directly under a flex layout context (P0-CI-SOFT regression)", () => {
+    // WordMatchView's own root carries className="flex-1 overflow-auto" and
+    // style={{contain: "strict"}} so @tanstack/react-virtual gets a definite,
+    // content-independent height to measure against. `flex-1` only produces
+    // that height when the *immediate* parent is itself a flex container
+    // (jsdom does not run a real layout engine, so this can't be asserted by
+    // measuring pixels here — but the structural precondition can).
+    //
+    // Previously TextTabs wrapped `children` in an extra `<div className=
+    // "flex-1 overflow-auto">`, a plain block element with no `display:
+    // flex`. That broke the chain: `flex-1` on word-match-view did nothing,
+    // `contain: strict` then blocked the content-derived fallback height,
+    // and the container measured zero height in the browser — the
+    // virtualizer mounted no rows and the Matches tab showed nothing for a
+    // page with real word content. Fixed by rendering `children` as a
+    // direct child of the already-flex `panel-matches` tabpanel (matching
+    // the Ground Truth / OCR panels' own textarea, which are direct flex
+    // children of their panels).
+    render(
+      <TextTabs>
+        <div data-testid="word-match-view" className="flex-1 overflow-auto" />
+      </TextTabs>,
+    );
+    const view = screen.getByTestId("word-match-view");
+    const parent = view.parentElement;
+    expect(parent).not.toBeNull();
+    const parentClasses = (parent?.className ?? "").split(/\s+/);
+    expect(parentClasses).toContain("flex");
+  });
+
   it("switches to the Ground Truth tab and shows page_text_gt in readOnly textarea", () => {
     const gtText = "Once upon a time\nIn a land far away";
     render(<TextTabs pageTextGt={gtText} />);
