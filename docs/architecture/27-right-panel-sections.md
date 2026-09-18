@@ -193,8 +193,8 @@ when the word changes.
   immediately; blur commits the current draft value to the server.
 - Nudge: "Step" input sets `nudgeStep` (integer px, min 1). L/R/T/B buttons
   call `applyNudge(draft, dir, nudgeStep)` and commit immediately.
-- Refine / Expand+Refine / Expand (P1-BBOX-UI,
-  docs/issues/2026-07-21-bbox-refine-crop-misleading.md): each queues the
+- Refine / Expand+Refine / Expand (P1-BBOX-UI, fixed 2026-09-18 in `cb6214f`;
+  see the tombstone in `docs/context/decisions.md`): each queues the
   real `refine_bboxes` job (`POST .../refine`, `useRefineWordBbox`) scoped
   to this word (`scope: "word"`, `word_indices: [[line_index, word_index]]`),
   mapped onto the three modes `core/jobs/handlers/refine.py` implements —
@@ -427,8 +427,9 @@ cells, not form fields.
 
 ## 9. Open questions
 
-1. ~~**BBoxSection Refine / Crop wiring**~~ — resolved (P1-BBOX-UI,
-   docs/issues/2026-07-21-bbox-refine-crop-misleading.md): Refine and
+1. ~~**BBoxSection Refine / Crop wiring**~~ — resolved (P1-BBOX-UI, fixed
+   2026-09-18 in `cb6214f`; see the tombstone in `docs/context/decisions.md`):
+   Refine and
    Expand+Refine now queue the real `refine_bboxes` job (`POST .../refine`)
    instead of a plain rebox; "Crop" was renamed "Expand" and mapped onto the
    job's `expand_only` mode, since the backend has no image-crop operation
