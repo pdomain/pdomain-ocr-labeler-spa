@@ -35,13 +35,13 @@
 //   block-detail-line-card-*         — line cards
 //   block-detail-line-row-*          — line rows
 
-import { useSyncExternalStore, useState } from "react";
+import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { StatusPip } from "@pdomain/pdomain-ui/primitives";
 import {
-  selectionStore,
   selectLine,
   selectPara,
+  useSelectionForPage,
   type SelectionLevel,
 } from "../../stores/selection-store";
 import { usePatchParagraph } from "../../hooks/useLineMutations";
@@ -594,17 +594,6 @@ function groupByPara(lines: LineMatch[]): Map<number | null, LineMatch[]> {
   return groups;
 }
 
-// ─── Store bridge ─────────────────────────────────────────────────────────────
-
-function subscribeSelection(cb: () => void): () => void {
-  return selectionStore.subscribe(() => {
-    cb();
-  });
-}
-function getSelectionSnapshot() {
-  return selectionStore.getState();
-}
-
 // ─── BlockDetail (outer) ──────────────────────────────────────────────────────
 
 export interface BlockDetailProps {
@@ -615,11 +604,7 @@ export interface BlockDetailProps {
 }
 
 export function BlockDetail({ page, projectId, pageIndex, level }: BlockDetailProps) {
-  const state = useSyncExternalStore(
-    subscribeSelection,
-    getSelectionSnapshot,
-    getSelectionSnapshot,
-  );
+  const state = useSelectionForPage(pageIndex);
 
   const { path } = state;
 
@@ -884,13 +869,18 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
               /* Flat: all lines in a single list, no para grouping */
               <div className="flex flex-col gap-0.5 p-2">
                 {relevantLines.map((line) => (
-                  <LineItemCard key={line.line_index} line={line} />
+                  <LineItemCard key={line.line_index} line={line} pageIndex={pageIndex} />
                 ))}
               </div>
             ) : (
               /* Tree: grouped by paragraph */
               Array.from(paraGroups.entries()).map(([pId, paraLines]) => (
-                <ParaGroup key={pId ?? "null"} paraId={pId} lines={paraLines} />
+                <ParaGroup
+                  key={pId ?? "null"}
+                  paraId={pId}
+                  lines={paraLines}
+                  pageIndex={pageIndex}
+                />
               ))
             )}
           </div>
@@ -913,7 +903,7 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
                     type="button"
                     data-testid={`block-detail-para-scope-${pId ?? "null"}`}
                     onClick={() => {
-                      selectPara(pId);
+                      selectPara(pageIndex, pId);
                     }}
                     className="w-full flex items-center justify-between px-3 py-1.5 text-left bg-bg-raised hover:bg-bg-raised/80 transition-colors"
                   >
@@ -977,16 +967,17 @@ function BlockDetailInner({ page, level, paraId, projectId, pageIndex }: BlockDe
 interface ParaGroupProps {
   paraId: number | null;
   lines: LineMatch[];
+  pageIndex: number;
 }
 
-function ParaGroup({ paraId, lines }: ParaGroupProps) {
+function ParaGroup({ paraId, lines, pageIndex }: ParaGroupProps) {
   return (
     <div className="border-b border-border-1/50">
       <button
         type="button"
         data-testid={`block-detail-para-${paraId ?? "null"}`}
         onClick={() => {
-          selectPara(paraId);
+          selectPara(pageIndex, paraId);
         }}
         className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] text-ink-3 hover:bg-bg-raised/60 hover:text-ink-2 transition-colors"
       >
@@ -998,20 +989,20 @@ function ParaGroup({ paraId, lines }: ParaGroupProps) {
       </button>
       <div className="flex flex-col gap-0.5 pl-4 pr-2 pb-1">
         {lines.map((line) => (
-          <LineItemCard key={line.line_index} line={line} />
+          <LineItemCard key={line.line_index} line={line} pageIndex={pageIndex} />
         ))}
       </div>
     </div>
   );
 }
 
-function LineItemCard({ line }: { line: LineMatch }) {
+function LineItemCard({ line, pageIndex }: { line: LineMatch; pageIndex: number }) {
   return (
     <button
       type="button"
       data-testid={`block-detail-line-card-${line.line_index}`}
       onClick={() => {
-        selectLine(line.line_index);
+        selectLine(pageIndex, line.line_index);
       }}
       className="flex items-center gap-2 bg-bg-raised rounded-sm px-2 py-1 text-left hover:bg-bg-raised/80 transition-colors"
     >

@@ -16,20 +16,11 @@
 //   bulk-word-style-select, bulk-word-style-apply
 //   bulk-word-component-select, bulk-word-component-apply
 
-import { useState, useSyncExternalStore } from "react";
-import { selectionStore } from "../stores/selection-store";
+import { useState } from "react";
+import { useSelectionForPage } from "../stores/selection-store";
 import { useValidatePage, useDeleteWordsBatch } from "../hooks/useLineMutations";
 import { useApplyComponent } from "../hooks/useWordMutations";
 import { useLabelVocabulary } from "../hooks/useLabelVocabulary";
-
-function subscribeSelection(cb: () => void): () => void {
-  return selectionStore.subscribe(() => {
-    cb();
-  });
-}
-function getSelectionSnapshot() {
-  return selectionStore.getState();
-}
 
 export interface BulkWordActionsProps {
   projectId: string;
@@ -37,11 +28,7 @@ export interface BulkWordActionsProps {
 }
 
 export function BulkWordActions({ projectId, pageIndex }: BulkWordActionsProps) {
-  const selection = useSyncExternalStore(
-    subscribeSelection,
-    getSelectionSnapshot,
-    getSelectionSnapshot,
-  );
+  const selection = useSelectionForPage(pageIndex);
   const selectedWords = selection.selectedWords;
 
   const validatePage = useValidatePage(projectId, pageIndex);

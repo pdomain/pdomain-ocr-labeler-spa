@@ -137,8 +137,8 @@ describe("MultiWordDetail (MUL-1, MUL-2, MUL-3 — Slice B)", () => {
   // ─── MUL-1: Both block headers appear ───────────────────────────────────────
 
   it("MUL-1: renders with data-testid=multi-word-detail", () => {
-    toggleWord(0, 0, "replace");
-    toggleWord(2, 0, "toggle");
+    toggleWord(0, 0, 0, "replace");
+    toggleWord(0, 2, 0, "toggle");
     const page = makeTwoBlockPage();
     wrap(
       <MultiWordDetail

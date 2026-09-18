@@ -422,7 +422,7 @@ export function Worklist({ lineMatches = [], projectId, pageIndex }: WorklistPro
               const item = wordItems[idx];
               if (!item) return;
               // STB-4: focusWorklistLine also reveals the right panel when collapsed.
-              focusWorklistLine(item._lineMatch.line_index);
+              focusWorklistLine(pageIndex, item._lineMatch.line_index);
             }}
             aria-label="Line worklist queue"
             className="h-full"

@@ -19,39 +19,39 @@ describe("focusWorklistLine", () => {
   });
 
   it("sets worklistStore.selectedLineIndex", () => {
-    focusWorklistLine(3);
+    focusWorklistLine(0, 3);
     expect(worklistStore.getState().selectedLineIndex).toBe(3);
   });
 
   it("selects the same line in selectionStore (level/path/selectedLines)", () => {
-    focusWorklistLine(3);
+    focusWorklistLine(0, 3);
     const state = selectionStore.getState();
     expect(state.level).toBe("line");
-    expect(state.path).toEqual({ lineId: 3 });
+    expect(state.path).toEqual({ pageIndex: 0, lineId: 3 });
     expect(state.selectedLines).toEqual([3]);
   });
 
   it("opens the right panel when it was collapsed (STB-4)", () => {
     useUiPrefs.setState({ rightPanelOpen: false });
-    focusWorklistLine(3);
+    focusWorklistLine(0, 3);
     expect(useUiPrefs.getState().rightPanelOpen).toBe(true);
   });
 
   it("keeps the right panel open when it was already open", () => {
     useUiPrefs.setState({ rightPanelOpen: true });
-    focusWorklistLine(3);
+    focusWorklistLine(0, 3);
     expect(useUiPrefs.getState().rightPanelOpen).toBe(true);
   });
 
   it("replaces an existing word selection, the same way a row click would", () => {
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     expect(selectionStore.getState().level).toBe("word");
 
-    focusWorklistLine(2);
+    focusWorklistLine(0, 2);
 
     const state = selectionStore.getState();
     expect(state.level).toBe("line");
     expect(state.selectedWords).toEqual([]);
-    expect(state.path).toEqual({ lineId: 2 });
+    expect(state.path).toEqual({ pageIndex: 0, lineId: 2 });
   });
 });

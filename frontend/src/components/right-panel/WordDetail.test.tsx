@@ -167,7 +167,7 @@ describe("WordDetail (Slice 16)", () => {
   });
 
   it("renders 7 accordion items when word is selected", () => {
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     renderWithQuery(
       <WordDetail page={makePage()} projectId="p1" pageIndex={0} bboxRefine={NOOP_BBOX_REFINE} />,
     );
@@ -189,7 +189,7 @@ describe("WordDetail (Slice 16)", () => {
   });
 
   it("shows word identity label in the header (P2.a)", () => {
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     renderWithQuery(
       <WordDetail page={makePage()} projectId="p1" pageIndex={0} bboxRefine={NOOP_BBOX_REFINE} />,
     );
@@ -203,7 +203,7 @@ describe("WordDetail (Slice 16)", () => {
   });
 
   it("passes the page image and word bbox to the word image crop preview", () => {
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     renderWithQuery(
       <WordDetail page={makePage()} projectId="p1" pageIndex={0} bboxRefine={NOOP_BBOX_REFINE} />,
     );
@@ -214,7 +214,7 @@ describe("WordDetail (Slice 16)", () => {
   });
 
   it("disables prev/next pager buttons by word order, not logical word_index value", () => {
-    selectWord(0, 3);
+    selectWord(0, 0, 3);
     renderWithQuery(
       <WordDetail
         page={makePageWithLogicalWordIndex(3)}
@@ -245,7 +245,7 @@ describe("WordDetail — GlyphAnnotationPanel mount (M11 Task 5)", () => {
   });
 
   it("selecting a word and opening the Glyphs accordion item renders the glyph panel", async () => {
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     const user = userEvent.setup();
     renderWithQuery(
       <WordDetail
@@ -272,7 +272,7 @@ describe("WordDetail — GlyphAnnotationPanel mount (M11 Task 5)", () => {
       }),
     );
 
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     const user = userEvent.setup();
     renderWithQuery(
       <WordDetail
@@ -306,7 +306,7 @@ describe("WordDetail — GlyphAnnotationPanel mount (M11 Task 5)", () => {
       }),
     );
 
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     const user = userEvent.setup();
     renderWithQuery(
       <WordDetail
@@ -342,7 +342,7 @@ describe("WordDetail — GlyphAnnotationPanel mount (M11 Task 5)", () => {
       }),
     );
 
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     const user = userEvent.setup();
     renderWithQuery(
       <WordDetail
@@ -369,7 +369,7 @@ describe("WordDetail — GlyphAnnotationPanel mount (M11 Task 5)", () => {
   });
 
   it("collapses the Glyphs item by default when there are no pending predictions", () => {
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     renderWithQuery(
       <WordDetail
         page={makePageWithGlyph({})}
@@ -383,7 +383,7 @@ describe("WordDetail — GlyphAnnotationPanel mount (M11 Task 5)", () => {
   });
 
   it("auto-opens the Glyphs item when predictions are pending review (annotations still null)", async () => {
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     renderWithQuery(
       <WordDetail
         page={makePageWithGlyph({
@@ -404,7 +404,7 @@ describe("WordDetail — GlyphAnnotationPanel mount (M11 Task 5)", () => {
   });
 
   it("does not auto-open once the word already has confirmed (even empty) annotations", () => {
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     renderWithQuery(
       <WordDetail
         page={makePageWithGlyph({
@@ -434,7 +434,7 @@ describe("WordDetail — GlyphAnnotationPanel mount (M11 Task 5)", () => {
     };
     const page = makeTwoWordPageWithGlyph(predictions);
 
-    selectWord(0, 1); // the word with pending predictions
+    selectWord(0, 0, 1); // the word with pending predictions
     const user = userEvent.setup();
     renderWithQuery(
       <WordDetail page={page} projectId="p1" pageIndex={0} bboxRefine={NOOP_BBOX_REFINE} />,
@@ -555,7 +555,7 @@ describe("WordDetail + useBboxRefineTracking: collapses mid-job (review finding 
       ),
     );
 
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     const qc = makeQueryClient();
     const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
     const es = mockEventSource();

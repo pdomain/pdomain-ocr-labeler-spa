@@ -205,7 +205,7 @@ describe("ProjectPage — toolbar grid dispatch (Lane B / B1)", () => {
     await screen.findByTestId("toolbar-line-validate");
 
     // Select line 0 through the real store so the cell becomes enabled.
-    selectLine(0);
+    selectLine(0, 0);
     await waitFor(() => {
       expect(selectionStore.getState().selectedLines).toEqual([0]);
     });

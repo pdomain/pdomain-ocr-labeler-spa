@@ -207,7 +207,7 @@ describe("ProjectPage — style / component / add-word wiring (Lane B / B2)", ()
 
     renderProjectPage();
     await screen.findByTestId("apply-component-select");
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     await waitFor(() => {
       expect(selectionStore.getState().selectedWords).toEqual([[0, 0]]);
     });
@@ -237,7 +237,7 @@ describe("ProjectPage — style / component / add-word wiring (Lane B / B2)", ()
 
     renderProjectPage();
     await screen.findByTestId("clear-component-button");
-    selectWord(0, 0);
+    selectWord(0, 0, 0);
     await waitFor(() => {
       expect(selectionStore.getState().selectedWords).toEqual([[0, 0]]);
     });

@@ -95,7 +95,7 @@ describe("LineDetail (Slice 21)", () => {
   });
 
   it("renders Line and Words tabs when line is selected", () => {
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     expect(screen.getByTestId("line-detail-tab-line")).toBeInTheDocument();
     expect(screen.getByTestId("line-detail-tab-words")).toBeInTheDocument();
@@ -103,7 +103,7 @@ describe("LineDetail (Slice 21)", () => {
 
   it("tab switch shows Words content", async () => {
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-detail-tab-words"));
     // Words tab shows LineWordsCard with testid line-words-card-{index}
@@ -113,7 +113,7 @@ describe("LineDetail (Slice 21)", () => {
 
   it("density toggle switches from Cards to Rows", async () => {
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-detail-tab-words"));
 
@@ -141,7 +141,7 @@ describe("LineDetail P5.e: structure box + GT row + validate-all (Gaps 42, 43)",
   });
 
   it("renders structure box with line number and para context", () => {
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     const box = screen.getByTestId("line-detail-structure-box");
     expect(box).toBeInTheDocument();
@@ -152,7 +152,7 @@ describe("LineDetail P5.e: structure box + GT row + validate-all (Gaps 42, 43)",
   });
 
   it("structure box shows validated count", () => {
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     const box = screen.getByTestId("line-detail-structure-box");
     // validated_word_count=0, total_word_count=2
@@ -160,7 +160,7 @@ describe("LineDetail P5.e: structure box + GT row + validate-all (Gaps 42, 43)",
   });
 
   it("renders GT input pre-filled with ground_truth_line_text", () => {
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     const input = screen.getByTestId("line-detail-gt-input");
     expect(input).toBeInTheDocument();
@@ -169,7 +169,7 @@ describe("LineDetail P5.e: structure box + GT row + validate-all (Gaps 42, 43)",
 
   it("GT input is editable", async () => {
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     const input = screen.getByTestId("line-detail-gt-input");
     await user.clear(input);
@@ -178,13 +178,13 @@ describe("LineDetail P5.e: structure box + GT row + validate-all (Gaps 42, 43)",
   });
 
   it("renders validate-all button", () => {
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     expect(screen.getByTestId("line-detail-validate-all")).toBeInTheDocument();
   });
 
   it("validate-all button is disabled when fully validated", () => {
-    selectLine(3);
+    selectLine(0, 3);
     const page = makePage();
     page.line_matches![0].is_fully_validated = true;
     renderWithQuery(<LineDetail page={page} projectId="p1" pageIndex={0} />);
@@ -192,13 +192,13 @@ describe("LineDetail P5.e: structure box + GT row + validate-all (Gaps 42, 43)",
   });
 
   it("validate-all button is enabled when not fully validated", () => {
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     expect(screen.getByTestId("line-detail-validate-all")).not.toBeDisabled();
   });
 
   it("renders merge-prev and merge-next buttons", () => {
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     expect(screen.getByTestId("line-detail-merge-prev")).toBeInTheDocument();
     expect(screen.getByTestId("line-detail-merge-next")).toBeInTheDocument();
@@ -206,13 +206,13 @@ describe("LineDetail P5.e: structure box + GT row + validate-all (Gaps 42, 43)",
 
   it("merge-prev is disabled when line_index is 0", () => {
     // line_index is 3, not 0 in default page, so merge-prev should be enabled
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     expect(screen.getByTestId("line-detail-merge-prev")).not.toBeDisabled();
   });
 
   it("OCR text preview appears below GT input", () => {
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePageWithDiffGt()} projectId="p1" pageIndex={0} />);
     // The GT row shows "OCR:" followed by ocr_line_text
     const gtSection = screen.getByTestId("line-detail-gt-input").closest("div");
@@ -231,7 +231,7 @@ describe("LineDetail P5.f: word cards with checkboxes + bulk bar (Gaps 44, 45)",
 
   it("renders word cards with checkboxes in Words tab", async () => {
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-detail-tab-words"));
     expect(screen.getByTestId("line-words-card-checkbox-0")).toBeInTheDocument();
@@ -240,7 +240,7 @@ describe("LineDetail P5.f: word cards with checkboxes + bulk bar (Gaps 44, 45)",
 
   it("bulk action bar hidden when no words checked", async () => {
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-detail-tab-words"));
     expect(screen.queryByTestId("line-detail-bulk-bar")).not.toBeInTheDocument();
@@ -248,7 +248,7 @@ describe("LineDetail P5.f: word cards with checkboxes + bulk bar (Gaps 44, 45)",
 
   it("bulk action bar appears when a word is checked", async () => {
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-detail-tab-words"));
     await user.click(screen.getByTestId("line-words-card-checkbox-0"));
@@ -258,7 +258,7 @@ describe("LineDetail P5.f: word cards with checkboxes + bulk bar (Gaps 44, 45)",
 
   it("bulk bar shows count when multiple words checked", async () => {
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-detail-tab-words"));
     await user.click(screen.getByTestId("line-words-card-checkbox-0"));
@@ -268,7 +268,7 @@ describe("LineDetail P5.f: word cards with checkboxes + bulk bar (Gaps 44, 45)",
 
   it("bulk bar has validate and skip buttons", async () => {
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-detail-tab-words"));
     await user.click(screen.getByTestId("line-words-card-checkbox-0"));
@@ -278,7 +278,7 @@ describe("LineDetail P5.f: word cards with checkboxes + bulk bar (Gaps 44, 45)",
 
   it("clear button in bulk bar deselects all words", async () => {
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-detail-tab-words"));
     await user.click(screen.getByTestId("line-words-card-checkbox-0"));
@@ -289,7 +289,7 @@ describe("LineDetail P5.f: word cards with checkboxes + bulk bar (Gaps 44, 45)",
 
   it("Words tab shows word count in group header", async () => {
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-detail-tab-words"));
     // Should say "2 words"
@@ -317,7 +317,7 @@ describe("LineDetail Q5: bulk bar validate/skip calls validate-batch (scope=word
       }),
     );
 
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
 
     // Switch to Words tab and check the first word
@@ -344,7 +344,7 @@ describe("LineDetail Q5: bulk bar validate/skip calls validate-batch (scope=word
       }),
     );
 
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
 
     // Switch to Words tab and check both words
@@ -370,7 +370,7 @@ describe("LineDetail Q5: bulk bar validate/skip calls validate-batch (scope=word
       ),
     );
 
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
 
     await user.click(screen.getByTestId("line-detail-tab-words"));
@@ -393,7 +393,7 @@ describe("LineDetail D2: line-scope copy + split buttons", () => {
   });
 
   it("renders all four line-scope action buttons", () => {
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     for (const id of [
       "line-copy-gt-to-ocr",
@@ -414,7 +414,7 @@ describe("LineDetail D2: line-scope copy + split buttons", () => {
         return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
       }),
     );
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-copy-gt-to-ocr"));
     await waitFor(() => expect(body).toBeDefined());
@@ -430,7 +430,7 @@ describe("LineDetail D2: line-scope copy + split buttons", () => {
         return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
       }),
     );
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-copy-ocr-to-gt"));
     await waitFor(() => expect(body).toBeDefined());
@@ -446,7 +446,7 @@ describe("LineDetail D2: line-scope copy + split buttons", () => {
         return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
       }),
     );
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-split-after-word"));
     await waitFor(() => expect(body).toBeDefined());
@@ -462,7 +462,7 @@ describe("LineDetail D2: line-scope copy + split buttons", () => {
         return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
       }),
     );
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-split-by-words"));
     await waitFor(() => expect(body).toBeDefined());
@@ -490,7 +490,7 @@ describe("LineDetail GTRow: blur-commit and Escape revert (Task 3)", () => {
       }),
     );
 
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     const input = screen.getByTestId("line-detail-gt-input");
 
@@ -511,7 +511,7 @@ describe("LineDetail GTRow: blur-commit and Escape revert (Task 3)", () => {
       }),
     );
 
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     const input = screen.getByTestId("line-detail-gt-input");
 
@@ -534,7 +534,7 @@ describe("LineDetail GTRow: blur-commit and Escape revert (Task 3)", () => {
       }),
     );
 
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     const input = screen.getByTestId("line-detail-gt-input");
 
@@ -570,7 +570,7 @@ describe("STB-3: LineDetail LineCard action buttons perform their mutations", ()
       }),
     );
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-validate-button-3"));
     await waitFor(() => expect(validateCalled).toBe(true));
@@ -590,7 +590,7 @@ describe("STB-3: LineDetail LineCard action buttons perform their mutations", ()
     page.line_matches![0].overall_match_status = "mismatch";
 
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={page} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-gt-to-ocr-button-3"));
     await waitFor(() => expect(copyCalled).toBe(true));
@@ -613,7 +613,7 @@ describe("STB-3: LineDetail LineCard action buttons perform their mutations", ()
     );
     const page = makePage();
     page.line_matches![0]!.word_matches[0]!.text_style_labels = ["italics"];
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={page} projectId="p1" pageIndex={0} />);
     expect(screen.queryByTestId("word-tag-clear-button-3-0-italics")).not.toBeInTheDocument();
     expect(calls).toHaveLength(0);
@@ -634,7 +634,7 @@ describe("STB-3: LineDetail LineCard action buttons perform their mutations", ()
     const page = makePage();
     page.line_matches![0]!.word_matches[1]!.word_components = ["drop cap"];
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={page} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("word-tag-clear-button-3-1-drop cap"));
     await waitFor(() => expect(calls.length).toBe(1));
@@ -659,7 +659,7 @@ describe("STB-3: LineDetail LineCard action buttons perform their mutations", ()
       }),
     );
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("line-delete-button-3"));
     await waitFor(() => expect(body).toEqual({ scope: "line", line_indices: [3] }));
@@ -677,7 +677,7 @@ describe("STB-3: LineDetail LineCard action buttons perform their mutations", ()
       }),
     );
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     await user.click(screen.getByTestId("word-validate-button-3-1"));
     await waitFor(() => expect(calls.length).toBe(1));
@@ -705,7 +705,7 @@ describe("STB-3: LineDetail LineCard action buttons perform their mutations", ()
       }),
     );
     const user = userEvent.setup();
-    selectLine(3);
+    selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
     const input = screen.getByTestId("gt-text-input-3-0");
     await user.clear(input);

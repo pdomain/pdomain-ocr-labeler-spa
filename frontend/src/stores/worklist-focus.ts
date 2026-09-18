@@ -26,9 +26,13 @@ import { useUiPrefs } from "./ui-prefs";
  * Matches the Worklist row-click dual-write exactly — call this instead of
  * writing `worklistStore` and `selectionStore` separately, so keyboard
  * navigation and pointer navigation always stay in sync.
+ *
+ * `pageIndex` (0-based) is the page `lineIndex` belongs to — stamped onto
+ * the selection so a later page change can tell it apart from a line
+ * selected on the page now loaded (P2-SELECTION-PAGE).
  */
-export function focusWorklistLine(lineIndex: number): void {
+export function focusWorklistLine(pageIndex: number, lineIndex: number): void {
   worklistStore.setSelectedLineIndex(lineIndex);
-  selectLine(lineIndex);
+  selectLine(pageIndex, lineIndex);
   useUiPrefs.setState({ rightPanelOpen: true });
 }

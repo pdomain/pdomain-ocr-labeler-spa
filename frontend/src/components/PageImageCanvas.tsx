@@ -83,6 +83,7 @@ import {
   setDragRect,
   clearSelection,
   selectionStore,
+  resolveSelectionForPage,
   selectBlock,
   selectPara,
   selectLine,
@@ -371,8 +372,14 @@ export default function PageImageCanvas({
   // SEL-1: Subscribe to selectionStore for both bulk-action count and highlight overlay.
   // Also carries level/path so the region-selected overlay (Task 2) can find
   // which region or proposal is currently picked.
+  //
+  // P2-SELECTION-PAGE: resolved against `page.page_index` — a block/para/
+  // line/word selection made on another page must not highlight or hit-test
+  // against this page's data. Re-resolved on every `page` change (not just
+  // on store updates) so navigating to a new page immediately drops a
+  // stale highlight even before the store itself changes.
   const [selectionState, setSelectionState] = useState(() => {
-    const s = selectionStore.getState();
+    const s = resolveSelectionForPage(selectionStore.getState(), page?.page_index);
     return {
       selectedWords: s.selectedWords,
       selectedLines: s.selectedLines,
@@ -384,7 +391,8 @@ export default function PageImageCanvas({
   // Derived for backward-compat callers that still use selectedWordCount.
   const selectedWordCount = selectionState.selectedWords.length;
   useEffect(() => {
-    return selectionStore.subscribe((s) => {
+    function applyResolved() {
+      const s = resolveSelectionForPage(selectionStore.getState(), page?.page_index);
       setSelectionState({
         selectedWords: s.selectedWords,
         selectedLines: s.selectedLines,
@@ -392,8 +400,10 @@ export default function PageImageCanvas({
         level: s.level,
         path: s.path,
       });
-    });
-  }, []);
+    }
+    applyResolved();
+    return selectionStore.subscribe(applyResolved);
+  }, [page?.page_index]);
 
   // Subscribe to UI prefs used by the canvas.
   const [matchFilterMode, setMatchFilterModeState] = useState(
@@ -615,8 +625,9 @@ export default function PageImageCanvas({
     clearDrag();
 
     if (isTrivial) {
-      if (mode === "select") {
+      if (mode === "select" && page) {
         const { x: cx, y: cy } = pos;
+        const pageIndex = page.page_index;
 
         // Task 2 (region-review-surface): the region target hit-tests
         // confirmed regions and proposals only, using the explicit-kind
@@ -646,11 +657,11 @@ export default function PageImageCanvas({
         if (!hit) return;
 
         if (railTarget === "block") {
-          selectBlock(hit.id);
+          selectBlock(pageIndex, hit.id);
         } else if (railTarget === "para") {
-          selectPara(Number(hit.id));
+          selectPara(pageIndex, Number(hit.id));
         } else if (railTarget === "line") {
-          selectLine(Number(hit.id));
+          selectLine(pageIndex, Number(hit.id));
         } else {
           // SEL-4/SEL-5: word clicks use modifier-aware toggleWord so
           // Ctrl/Cmd accumulates across blocks and Shift removes.
@@ -663,7 +674,7 @@ export default function PageImageCanvas({
           // click hid WordDetail behind LineDetail for one-word lines
           // (test_click_word_bbox_on_image_opens_word_detail).
           const parts = hit.id.split("-").map(Number);
-          toggleWord(parts[0]!, parts[1]!, modifier);
+          toggleWord(pageIndex, parts[0]!, parts[1]!, modifier);
         }
         useUiPrefs.setState({ rightPanelOpen: true });
       }

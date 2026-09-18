@@ -110,7 +110,7 @@ export function MultiLineDetail({
           deleteLineMut.mutate({ lineIndex: lineId });
         }
         // Remove deleted lines from selection
-        applyLineSelection(sortedLineIds, "remove");
+        applyLineSelection(pageIndex, sortedLineIds, "remove");
       },
     });
   }
@@ -220,7 +220,7 @@ function LineCard({ line, projectId, pageIndex, allInputsRef }: LineCardProps) {
       body: "This will permanently remove the selected line from the page. This action cannot be undone.",
       onConfirm: () => {
         deleteLineMut.mutate({ lineIndex: line.line_index });
-        applyLineSelection([line.line_index], "remove");
+        applyLineSelection(pageIndex, [line.line_index], "remove");
       },
     });
   }

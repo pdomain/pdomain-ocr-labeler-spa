@@ -102,7 +102,7 @@ describe("BlockDetail (Slice 22) — block level", () => {
   });
 
   it("renders Layout, Items, and Para Layout tabs when block is selected", () => {
-    selectBlock("b1");
+    selectBlock(0, "b1");
     renderWithQuery(<BlockDetail page={makePage()} projectId="p1" pageIndex={0} level="block" />);
     expect(screen.getByTestId("block-detail-tab-layout")).toBeInTheDocument();
     expect(screen.getByTestId("block-detail-tab-items")).toBeInTheDocument();
@@ -111,7 +111,7 @@ describe("BlockDetail (Slice 22) — block level", () => {
 
   it("Items tab shows para groups with lines (tree mode default)", async () => {
     const user = userEvent.setup();
-    selectBlock("b1");
+    selectBlock(0, "b1");
     renderWithQuery(<BlockDetail page={makePage()} projectId="p1" pageIndex={0} level="block" />);
     await user.click(screen.getByTestId("block-detail-tab-items"));
     expect(screen.getByTestId("block-detail-items-tree")).toBeInTheDocument();
@@ -122,7 +122,7 @@ describe("BlockDetail (Slice 22) — block level", () => {
 
   it("clicking a line in Items sets selection-store to that line", async () => {
     const user = userEvent.setup();
-    selectBlock("b1");
+    selectBlock(0, "b1");
     renderWithQuery(<BlockDetail page={makePage()} projectId="p1" pageIndex={0} level="block" />);
     await user.click(screen.getByTestId("block-detail-tab-items"));
     await user.click(screen.getByTestId("block-detail-line-card-2"));
@@ -143,7 +143,7 @@ describe("BlockDetail (Slice 22) — para level", () => {
   });
 
   it("shows only items tab (no layout tab, no para-layout tab) in para mode", () => {
-    selectPara(0);
+    selectPara(0, 0);
     renderWithQuery(<BlockDetail page={makePage()} projectId="p1" pageIndex={0} level="para" />);
     expect(screen.queryByTestId("block-detail-tab-layout")).not.toBeInTheDocument();
     expect(screen.queryByTestId("block-detail-tab-para-layout")).not.toBeInTheDocument();
@@ -151,7 +151,7 @@ describe("BlockDetail (Slice 22) — para level", () => {
   });
 
   it("para mode shows only lines for the selected para", () => {
-    selectPara(1);
+    selectPara(0, 1);
     renderWithQuery(<BlockDetail page={makePage()} projectId="p1" pageIndex={0} level="para" />);
     expect(screen.getByTestId("block-detail-line-card-2")).toBeInTheDocument();
     expect(screen.queryByTestId("block-detail-line-card-0")).not.toBeInTheDocument();
@@ -163,7 +163,7 @@ describe("BlockDetail (Slice 22) — para level", () => {
 describe("BlockDetail P5.g — Gap 47: layout-type glyph cards", () => {
   beforeEach(() => {
     clearSelection();
-    selectBlock("b1");
+    selectBlock(0, "b1");
   });
 
   it("renders 'heading' glyph card in Layout tab", () => {
@@ -233,7 +233,7 @@ describe("BlockDetail P5.g — Gap 47: layout-type glyph cards", () => {
 describe("BlockDetail P5.g — Gap 48: model-suggest callout", () => {
   beforeEach(() => {
     clearSelection();
-    selectBlock("b1");
+    selectBlock(0, "b1");
   });
 
   it("shows 'No model suggestion available' when suggestion is null", () => {
@@ -252,7 +252,7 @@ describe("BlockDetail P5.g — Gap 48: model-suggest callout", () => {
 describe("BlockDetail P5.g — Gap 49: preview pane", () => {
   beforeEach(() => {
     clearSelection();
-    selectBlock("b1");
+    selectBlock(0, "b1");
   });
 
   it("renders preview pane in Layout tab", () => {
@@ -271,7 +271,7 @@ describe("BlockDetail P5.g — Gap 49: preview pane", () => {
 describe("BlockDetail P5.g — Gap 50: Items view sub-toggle", () => {
   beforeEach(() => {
     clearSelection();
-    selectBlock("b1");
+    selectBlock(0, "b1");
   });
 
   it("renders Flat and Tree sub-toggle buttons in Items tab", async () => {
@@ -312,7 +312,7 @@ describe("BlockDetail P5.g — Gap 50: Items view sub-toggle", () => {
 describe("BlockDetail P5.g — Gap 51: Para layout tab + scope", () => {
   beforeEach(() => {
     clearSelection();
-    selectBlock("b1");
+    selectBlock(0, "b1");
   });
 
   it("renders Para Layout tab in block mode", () => {
@@ -345,7 +345,7 @@ describe("BlockDetail P5.g — Gap 51: Para layout tab + scope", () => {
 describe("BlockDetail R2 — block-scope Save applies layout to all paragraphs", () => {
   beforeEach(() => {
     clearSelection();
-    selectBlock("b1");
+    selectBlock(0, "b1");
   });
 
   it("clicking Save at block scope calls PATCH for every paragraph index in paraGroups", async () => {
@@ -406,7 +406,7 @@ describe("BlockDetail CU-5.2 — para-scope save fires PATCH with correct body",
 
   it("clicking Save at para scope calls PATCH for the selected paragraph with layout_type", async () => {
     // Render in para mode with paraId=0 selected.
-    selectPara(0);
+    selectPara(0, 0);
     const user = userEvent.setup();
 
     let capturedBody: Record<string, unknown> | null = null;
@@ -442,7 +442,7 @@ describe("BlockDetail CU-5.2 — para-scope save fires PATCH with correct body",
     // In para mode BlockDetail renders items tab only; no layout save button.
     // Switch to block mode at para=0 to get the layout save button.
     clearSelection();
-    selectBlock("b1");
+    selectBlock(0, "b1");
 
     renderWithQuery(<BlockDetail page={makePage()} projectId="p1" pageIndex={0} level="block" />);
 
@@ -465,7 +465,7 @@ describe("BlockDetail CU-5.2 — para-scope save fires PATCH with correct body",
 
   it("para-scope Save (level=block, single para visible) fires one PATCH with correct layout_type", async () => {
     clearSelection();
-    selectBlock("b1");
+    selectBlock(0, "b1");
     const user = userEvent.setup();
 
     const patchCalls: { url: string; body: Record<string, unknown> }[] = [];
@@ -520,7 +520,7 @@ describe("BlockDetail CU-5.2 — para-scope save fires PATCH with correct body",
 
 describe("BlockDetail — Gap 46 regression guard", () => {
   it("renders without errors (block panel slot width governed by --right-w CSS var)", () => {
-    selectBlock("b1");
+    selectBlock(0, "b1");
     const qc = makeQueryClient();
     const { container } = render(
       <QueryClientProvider client={qc}>

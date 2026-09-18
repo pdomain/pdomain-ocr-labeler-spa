@@ -16,8 +16,7 @@
 //   para-copy-gt-to-ocr, para-copy-ocr-to-gt,
 //   para-validate, para-unvalidate
 
-import { useSyncExternalStore } from "react";
-import { selectionStore } from "../../stores/selection-store";
+import { useSelectionForPage } from "../../stores/selection-store";
 import {
   useMergeParagraphs,
   useDeleteParagraph,
@@ -29,15 +28,6 @@ import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
 
-function subscribeSelection(cb: () => void): () => void {
-  return selectionStore.subscribe(() => {
-    cb();
-  });
-}
-function getSelectionSnapshot() {
-  return selectionStore.getState();
-}
-
 export interface ParagraphDetailProps {
   page: PagePayload;
   projectId: string;
@@ -45,11 +35,7 @@ export interface ParagraphDetailProps {
 }
 
 export function ParagraphDetail({ page, projectId, pageIndex }: ParagraphDetailProps) {
-  const state = useSyncExternalStore(
-    subscribeSelection,
-    getSelectionSnapshot,
-    getSelectionSnapshot,
-  );
+  const state = useSelectionForPage(pageIndex);
 
   const { level, path } = state;
   const paraId = path.paraId ?? null;

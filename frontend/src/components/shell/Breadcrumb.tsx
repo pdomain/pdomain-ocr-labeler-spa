@@ -16,15 +16,14 @@
 // Each non-root chip has a small layer-color glyph (B/P/L/W) keyed to its
 // layer token (`text-layer-block`/`-para`/`-line`/`-word`).
 
-import { useSyncExternalStore } from "react";
 import { ChevronRight } from "@pdomain/pdomain-ui/icons";
 import { cn } from "@/lib/utils";
 import {
-  selectionStore,
   selectBlock,
   selectPara,
   selectLine,
   clearSelection,
+  useSelectionForPage,
   type SelectionPath,
   type SelectionLevel,
 } from "../../stores/selection-store";
@@ -60,17 +59,6 @@ const LAYER_ACTIVE_CLASS: Record<"block" | "para" | "line" | "word", string> = {
   line: "bg-layer-line/10 text-layer-line",
   word: "bg-layer-word/10 text-layer-word",
 };
-
-// ─── Subscriber bridge ───────────────────────────────────────────────────────
-
-function subscribeSelection(cb: () => void): () => void {
-  return selectionStore.subscribe(() => {
-    cb();
-  });
-}
-function getSelectionSnapshot() {
-  return selectionStore.getState();
-}
 
 // ─── Chip ────────────────────────────────────────────────────────────────────
 
@@ -150,11 +138,7 @@ export interface BreadcrumbProps {
 }
 
 export function Breadcrumb({ page }: BreadcrumbProps) {
-  const state = useSyncExternalStore(
-    subscribeSelection,
-    getSelectionSnapshot,
-    getSelectionSnapshot,
-  );
+  const state = useSelectionForPage(page?.page_index);
   const { level, path } = state;
   const resolved = resolveAncestors(path, page);
 
@@ -179,9 +163,9 @@ export function Breadcrumb({ page }: BreadcrumbProps) {
 /**
  * Backfill the ancestor levels of `path` from `page` so the chain renders as
  * `Project › Para N › Line N › Word N` even when the selection action only
- * set the leaf level. E.g. `selectWord(0, 1)` produces
- * `{lineId:0, wordId:[0,1]}`; this helper adds `paraId` by looking up the
- * line's `paragraph_index`.
+ * set the leaf level. E.g. `selectWord(pageIndex, 0, 1)` produces
+ * `{pageIndex, lineId:0, wordId:[0,1]}`; this helper adds `paraId` by
+ * looking up the line's `paragraph_index`.
  */
 function resolveAncestors(path: SelectionPath, page?: PagePayload): SelectionPath {
   if (!page) return path;
@@ -201,6 +185,12 @@ function resolveAncestors(path: SelectionPath, page?: PagePayload): SelectionPat
 function renderChips(level: SelectionLevel, path: SelectionPath) {
   const nodes: React.ReactNode[] = [];
 
+  // The ancestor chips only render for a path that has already resolved
+  // against the loaded page (see Breadcrumb's useSelectionForPage call
+  // above), so `path.pageIndex` is always defined here — falling back to 0
+  // only keeps the compiler happy for the case where it somehow is not.
+  const pageIndex = path.pageIndex ?? 0;
+
   if (path.blockId !== undefined) {
     nodes.push(<Sep key="sep-block" />);
     nodes.push(
@@ -211,7 +201,7 @@ function renderChips(level: SelectionLevel, path: SelectionPath) {
         layer="block"
         active={level === "block"}
         onClick={() => {
-          selectBlock(path.blockId!);
+          selectBlock(pageIndex, path.blockId!);
         }}
       />,
     );
@@ -226,7 +216,7 @@ function renderChips(level: SelectionLevel, path: SelectionPath) {
         layer="para"
         active={level === "para"}
         onClick={() => {
-          selectPara(path.paraId!);
+          selectPara(pageIndex, path.paraId!);
         }}
       />,
     );
@@ -241,7 +231,7 @@ function renderChips(level: SelectionLevel, path: SelectionPath) {
         layer="line"
         active={level === "line"}
         onClick={() => {
-          selectLine(path.lineId!);
+          selectLine(pageIndex, path.lineId!);
         }}
       />,
     );

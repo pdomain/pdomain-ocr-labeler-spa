@@ -81,20 +81,20 @@ describe("Breadcrumb (Slice 14)", () => {
   });
 
   it("renders Block chip when level=block", () => {
-    selectBlock("b1");
+    selectBlock(0, "b1");
     render(<Breadcrumb page={makePage()} />);
     expect(screen.getByTestId("breadcrumb-chip-block")).toBeInTheDocument();
   });
 
   it("renders Project › Para 1 when a paragraph is selected", () => {
-    selectPara(0);
+    selectPara(0, 0);
     render(<Breadcrumb page={makePage()} />);
     expect(screen.getByTestId("breadcrumb-chip-root")).toBeInTheDocument();
     expect(screen.getByTestId("breadcrumb-chip-para")).toHaveTextContent("Para 1");
   });
 
   it("renders four chips when a word is selected", () => {
-    selectWord(0, 1);
+    selectWord(0, 0, 1);
     render(<Breadcrumb page={makePage()} />);
     expect(screen.getByTestId("breadcrumb-chip-root")).toBeInTheDocument();
     expect(screen.getByTestId("breadcrumb-chip-para")).toHaveTextContent("Para 1");
@@ -103,7 +103,7 @@ describe("Breadcrumb (Slice 14)", () => {
   });
 
   it("deepest chip uses ink-1 styling; ancestors use ink-3", () => {
-    selectWord(0, 1);
+    selectWord(0, 0, 1);
     render(<Breadcrumb page={makePage()} />);
     expect(screen.getByTestId("breadcrumb-chip-word")).toHaveAttribute("data-active", "true");
     expect(screen.getByTestId("breadcrumb-chip-line")).toHaveAttribute("data-active", "false");
@@ -111,7 +111,7 @@ describe("Breadcrumb (Slice 14)", () => {
 
   it("clicking ancestor line chip changes selection level to line", async () => {
     const user = userEvent.setup();
-    selectWord(0, 1);
+    selectWord(0, 0, 1);
     render(<Breadcrumb page={makePage()} />);
     await user.click(screen.getByTestId("breadcrumb-chip-line"));
     const s = selectionStore.getState();
@@ -122,14 +122,14 @@ describe("Breadcrumb (Slice 14)", () => {
 
   it("clicking the root chip clears selection", async () => {
     const user = userEvent.setup();
-    selectWord(0, 1);
+    selectWord(0, 0, 1);
     render(<Breadcrumb page={makePage()} />);
     await user.click(screen.getByTestId("breadcrumb-chip-root"));
     expect(selectionStore.getState().level).toBe("none");
   });
 
   it("para=null renders as 'Unsorted'", () => {
-    selectPara(null);
+    selectPara(0, null);
     render(<Breadcrumb page={makePage()} />);
     expect(screen.getByTestId("breadcrumb-chip-para")).toHaveTextContent("Unsorted");
   });
@@ -159,28 +159,28 @@ describe("Breadcrumb Gap 55 — terminal chip kind-color fill", () => {
   });
 
   it("word chip (active) has bg-layer-word/10 class", () => {
-    selectWord(0, 1);
+    selectWord(0, 0, 1);
     render(<Breadcrumb page={makePage()} />);
     const chip = screen.getByTestId("breadcrumb-chip-word");
     expect(chip.className).toMatch(/bg-layer-word/);
   });
 
   it("word chip (active) has text-layer-word class", () => {
-    selectWord(0, 1);
+    selectWord(0, 0, 1);
     render(<Breadcrumb page={makePage()} />);
     const chip = screen.getByTestId("breadcrumb-chip-word");
     expect(chip.className).toMatch(/text-layer-word/);
   });
 
   it("line chip (active) has bg-layer-line/10 class", () => {
-    selectLine(0);
+    selectLine(0, 0);
     render(<Breadcrumb page={makePage()} />);
     const chip = screen.getByTestId("breadcrumb-chip-line");
     expect(chip.className).toMatch(/bg-layer-line/);
   });
 
   it("para chip (active) has bg-layer-para/10 class", () => {
-    selectPara(0);
+    selectPara(0, 0);
     render(<Breadcrumb page={makePage()} />);
     const chip = screen.getByTestId("breadcrumb-chip-para");
     expect(chip.className).toMatch(/bg-layer-para/);
@@ -194,7 +194,7 @@ describe("Breadcrumb Gap 55 — terminal chip kind-color fill", () => {
   });
 
   it("ancestor line chip (not active) does not get layer bg fill", () => {
-    selectWord(0, 1);
+    selectWord(0, 0, 1);
     render(<Breadcrumb page={makePage()} />);
     // Line is an ancestor, not the deepest chip.
     const lineChip = screen.getByTestId("breadcrumb-chip-line");
