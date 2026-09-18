@@ -2631,11 +2631,10 @@ export interface paths {
          *
          *     Reads each of the journals it needs exactly once: the page-kind
          *     proposal and reviewed journals (via ``page_kinds_rows``), the region
-         *     proposal and decision journals, and — depending on project shape — the
-         *     word-review-counts journal or ``ImportedTextValidationLog`` (shared by
-         *     the ``word`` and ``typography`` entries), plus the typography-
-         *     corrections journal for the ``typography`` entry's numerator. It opens
-         *     no page.
+         *     proposal and decision journals, then — depending on project shape — the
+         *     word-review-counts journal or ``ImportedTextValidationLog`` for the
+         *     ``word`` entry, and the typography-review-counts rollup for the
+         *     ``typography`` entry's numerator. It opens no page.
          */
         get: operations["get_review_queue"];
         put?: never;
@@ -4827,11 +4826,14 @@ export interface components {
          *     ``core.project_enumeration.EnumeratedProject.page_count`` and
          *     ``docs/context/decisions.md`` (P2-ROOT) for the measured cost.
          *
-         *     Per-project labeling *progress* (validated/reviewed page count) is
-         *     deliberately NOT part of this response: computing it requires
-         *     replaying each page's event-store aggregate, which does not scale
-         *     to "every project, every list request" — see the same decision
-         *     entry for the measurement that ruled it out.
+         *     ``progress`` is per-project word-validation progress, read from
+         *     ``core.review_counts.WordReviewCountsJournal`` — one small per-project
+         *     file read, cheap in the same way ``page_count`` is. ``None`` whenever
+         *     there is no honest number to report (unsupported project shape,
+         *     unknown ``page_count``, unreadable journal, or a journal with no rows
+         *     yet); see ``core.project_enumeration.ProjectProgress`` for the full
+         *     list, and ``docs/context/decisions.md`` (progress-P2-ROOT-followup)
+         *     for the measured cost of reading it at list scale.
          */
         ProjectKey: {
             /** Project Id */
@@ -4845,6 +4847,27 @@ export interface components {
             label: string;
             /** Page Count */
             page_count?: number | null;
+            progress?: components["schemas"]["ProjectProgress"] | null;
+        };
+        /**
+         * ProjectProgress
+         * @description Wire mirror of ``core.project_enumeration.ProjectProgress`` — see
+         *     there for what each field means and exactly which cases make a
+         *     project's ``ProjectKey.progress`` ``None`` instead of one of these.
+         */
+        ProjectProgress: {
+            /** Validated Words */
+            validated_words: number;
+            /** Total Words */
+            total_words: number;
+            /** Pages Counted */
+            pages_counted: number;
+            /** Pages Not Counted */
+            pages_not_counted: number;
+            /** Is Lower Bound */
+            is_lower_bound: boolean;
+            /** Complete */
+            complete: boolean;
         };
         /**
          * ProposePageKindsResponse
@@ -5236,9 +5259,16 @@ export interface components {
          *
          *     ``pages_not_counted`` and ``is_lower_bound`` matter for ``word`` and
          *     ``typography`` only; both default to the "nothing to distrust" value for
-         *     the other kinds. ``is_lower_bound`` is ``True`` for ``typography``
-         *     always (its per-head staleness check is skipped — see
-         *     ``core.typography_review.reviewed_word_keys``) and for ``word`` whenever
+         *     the other kinds. For ``typography``, ``pages_not_counted`` also covers a
+         *     word-counted page with no ``TypographyReviewCountsJournal`` row of its
+         *     own yet — untouched, or corrected before this rollup existed; the two
+         *     are indistinguishable from a rollup-only read, so both are excluded from
+         *     ``total``/``outstanding`` rather than reported as a confidently wrong
+         *     zero (see ``_typography_entry``). ``is_lower_bound`` is ``True`` for
+         *     ``typography`` always, on top of that — its per-head staleness check is
+         *     skipped, and its reviewed count is each word's *latest-ever* correction
+         *     rather than one bound to the page's current epoch (see
+         *     ``core.typography_review_counts``) — and for ``word`` whenever
          *     ``pages_not_counted`` is above zero.
          */
         ReviewQueueKindEntry: {

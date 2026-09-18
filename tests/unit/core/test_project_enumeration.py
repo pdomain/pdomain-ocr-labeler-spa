@@ -67,8 +67,10 @@ if TYPE_CHECKING:
 
 from pdomain_ocr_labeler_spa.core.project_enumeration import (
     EnumeratedProject,
+    ProjectProgress,
     enumerate_projects,
 )
+from pdomain_ocr_labeler_spa.core.review_counts import PageWordCounts, WordReviewCountsJournal
 
 
 def _sha(payload: bytes) -> str:
@@ -442,3 +444,200 @@ def test_enumerate_page_count_book_manifest_takes_priority_over_labeling_bundle(
     (proj / "labeling-bundle.json").write_text("{}")
     out = enumerate_projects(tmp_path)
     assert out[0].page_count == 7
+
+
+# ── progress ─────────────────────────────────────────────────────────────
+#
+# Progress is read from ``core.review_counts.WordReviewCountsJournal`` — see
+# docs/context/decisions.md (progress-P2-ROOT-followup entry) for the
+# measured cost. Only the filesystem-image shape can ever have a row in
+# that journal; see ``ProjectProgress`` for the full list of "no honest
+# number" cases that fold into ``None``.
+
+
+def _fs_project(tmp_path: Path, name: str, *, page_count: int) -> Path:
+    """A plain filesystem-image project with ``page_count`` image files."""
+    proj = tmp_path / name
+    proj.mkdir()
+    for i in range(page_count):
+        (proj / f"{i:03d}.png").write_bytes(b"")
+    return proj
+
+
+def _append_counts(proj: Path, *, page_index: int, total_words: int, validated_words: int) -> None:
+    WordReviewCountsJournal(proj).append(
+        PageWordCounts(
+            page_index=page_index,
+            content_hash=f"h{page_index}",
+            total_words=total_words,
+            validated_words=validated_words,
+        )
+    )
+
+
+def test_enumerate_progress_is_none_when_no_journal_exists(tmp_path: Path) -> None:
+    """No page has been saved since the journal existed — unknown, not a
+    confidently wrong 0%."""
+    _fs_project(tmp_path, "Fresh", page_count=3)
+    out = enumerate_projects(tmp_path)
+    assert out[0].progress is None
+
+
+def test_enumerate_progress_full_coverage_all_validated_is_complete(tmp_path: Path) -> None:
+    """Every page counted, every counted word validated → complete."""
+    proj = _fs_project(tmp_path, "Done", page_count=2)
+    _append_counts(proj, page_index=0, total_words=5, validated_words=5)
+    _append_counts(proj, page_index=1, total_words=3, validated_words=3)
+
+    out = enumerate_projects(tmp_path)
+
+    assert out[0].progress == ProjectProgress(
+        validated_words=8,
+        total_words=8,
+        pages_counted=2,
+        pages_not_counted=0,
+        is_lower_bound=False,
+        complete=True,
+    )
+
+
+def test_enumerate_progress_full_coverage_partially_validated_is_not_complete(
+    tmp_path: Path,
+) -> None:
+    """Every page counted, but not every word validated → not complete."""
+    proj = _fs_project(tmp_path, "InProgress", page_count=2)
+    _append_counts(proj, page_index=0, total_words=5, validated_words=5)
+    _append_counts(proj, page_index=1, total_words=3, validated_words=1)
+
+    out = enumerate_projects(tmp_path)
+
+    progress = out[0].progress
+    assert progress is not None
+    assert progress.pages_not_counted == 0
+    assert progress.is_lower_bound is False
+    assert progress.complete is False
+    assert progress.validated_words == 6
+    assert progress.total_words == 8
+
+
+def test_enumerate_progress_partial_coverage_is_visible_and_never_complete(
+    tmp_path: Path,
+) -> None:
+    """40 of 300 pages counted, all fully validated: the fraction over those
+    40 pages is surfaced, but never reported as the project's progress and
+    never as complete — a project complete over a subset is not complete."""
+    proj = _fs_project(tmp_path, "Partial", page_count=300)
+    for page_index in range(40):
+        _append_counts(proj, page_index=page_index, total_words=4, validated_words=4)
+
+    out = enumerate_projects(tmp_path)
+
+    progress = out[0].progress
+    assert progress is not None
+    assert progress.pages_counted == 40
+    assert progress.pages_not_counted == 260
+    assert progress.is_lower_bound is True
+    assert progress.complete is False
+    assert progress.validated_words == 160
+    assert progress.total_words == 160
+
+
+def test_enumerate_progress_pages_not_counted_never_negative(tmp_path: Path) -> None:
+    """A journal can hold rows for more pages than the project currently
+    has (pages deleted since); ``pages_not_counted`` clamps at 0 rather
+    than going negative."""
+    proj = _fs_project(tmp_path, "Shrunk", page_count=1)
+    _append_counts(proj, page_index=0, total_words=2, validated_words=2)
+    _append_counts(proj, page_index=1, total_words=2, validated_words=2)
+
+    out = enumerate_projects(tmp_path)
+
+    progress = out[0].progress
+    assert progress is not None
+    assert progress.pages_counted == 2
+    assert progress.pages_not_counted == 0
+
+
+def test_enumerate_progress_is_none_when_page_count_is_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No page-count denominator → no progress either, even with a
+    populated journal — there's nothing to judge partial coverage
+    against."""
+    proj = _fs_project(tmp_path, "Locked", page_count=1)
+    _append_counts(proj, page_index=0, total_words=2, validated_words=2)
+    resolved_proj = proj.resolve()
+
+    original_iterdir = Path.iterdir
+
+    def _flaky_iterdir(self: Path) -> Generator[Path]:
+        if self == resolved_proj:
+            raise PermissionError(f"denied: {self}")
+        return original_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", _flaky_iterdir)
+
+    out = enumerate_projects(tmp_path)
+    assert out[0].page_count is None
+    assert out[0].progress is None
+
+
+def test_enumerate_progress_is_none_when_journal_unreadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A journal read failure degrades this one entry's ``progress`` to
+    ``None`` rather than failing the whole list."""
+    proj = _fs_project(tmp_path, "Flaky", page_count=1)
+    _append_counts(proj, page_index=0, total_words=2, validated_words=2)
+
+    def _raise(self: WordReviewCountsJournal) -> dict[int, PageWordCounts]:
+        raise OSError("journal unreadable")
+
+    monkeypatch.setattr(WordReviewCountsJournal, "latest_by_page", _raise)
+
+    out = enumerate_projects(tmp_path)
+    assert len(out) == 1
+    assert out[0].progress is None
+
+
+def test_enumerate_progress_is_none_for_book_labeling_manifest_shape(
+    tmp_path: Path,
+) -> None:
+    """A book-labeling-manifest.json project never writes to
+    ``WordReviewCountsJournal`` (it validates through
+    ``ImportedTextValidationLog`` instead) — even a stray journal file
+    (e.g. left over from a prior shape) must not be trusted for this
+    shape."""
+    proj = tmp_path / "Book"
+    _write_book_manifest(proj, page_count=5)
+    _append_counts(proj, page_index=0, total_words=2, validated_words=2)
+
+    out = enumerate_projects(tmp_path)
+
+    assert out[0].page_count == 5
+    assert out[0].progress is None
+
+
+def test_enumerate_progress_is_none_for_labeling_bundle_shape(tmp_path: Path) -> None:
+    """A labeling-bundle.json (single-page) project also never writes to
+    this journal."""
+    proj = tmp_path / "SinglePage"
+    proj.mkdir()
+    (proj / "labeling-bundle.json").write_text("{}")
+    _append_counts(proj, page_index=0, total_words=2, validated_words=2)
+
+    out = enumerate_projects(tmp_path)
+
+    assert out[0].page_count == 1
+    assert out[0].progress is None
+
+
+def test_enumerated_project_progress_is_frozen(tmp_path: Path) -> None:
+    """``ProjectProgress`` is immutable, same contract as ``EnumeratedProject``."""
+    proj = _fs_project(tmp_path, "Done", page_count=1)
+    _append_counts(proj, page_index=0, total_words=1, validated_words=1)
+    out = enumerate_projects(tmp_path)
+    progress = out[0].progress
+    assert progress is not None
+    with pytest.raises(AttributeError):
+        progress.complete = False  # type: ignore[misc]

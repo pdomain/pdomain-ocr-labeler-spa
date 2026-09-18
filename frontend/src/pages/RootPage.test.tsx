@@ -2,8 +2,10 @@
 // Covers: B-ROOT-001, B-ROOT-002, B-ROOT-003, B-ROOT-004, B-ROOT-005, B-ROOT-006
 // Issue #84 (EmptyProjectState) + Issue #274 (RootPage + session-state fetch).
 // P5.h tests: hero band, search field, project card redesign.
-// P2-ROOT: real page-count metadata on cards; filter chips removed (no honest
-// data source) — see docs/context/decisions.md.
+// P2-ROOT: real page-count metadata on cards.
+// progress-P2-ROOT-followup: real progress metadata on cards; Active/Complete
+// filter chips back (no Archived — the labeler has no archive) — see
+// docs/context/decisions.md.
 // Spec: docs/specs/2026-05-12-root-page-design.md §Contract + P5.h (Gaps 59, 60)
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -451,23 +453,93 @@ describe("RootPage P5.h — Gap 60: search field", () => {
   });
 });
 
-describe("RootPage P2-ROOT — Active / Complete / Archived filter chips removed", () => {
-  // The chips used to render but never filtered (data-active toggled with
-  // no effect on the grid). P2-ROOT removes them rather than wiring up a
-  // fake filter: none of the three has a real, cheap data source — see
-  // docs/context/decisions.md (P2-ROOT) and the RootPage.tsx ProjectListView
-  // docstring for why.
-  it("does not render the former filter-chip group or any of its chips", async () => {
-    setupProjectList([]);
+describe("RootPage progress-P2-ROOT-followup — Active / Complete filter chips", () => {
+  // Active/Complete came back once ProjectKey.progress existed. There is no
+  // Archived chip — the labeler has no archive at all (docs/context/decisions.md,
+  // "the labeler has no archive") — and never will, so its absence is pinned too.
+  const complete: ProjectKey = {
+    project_id: "done",
+    project_root: "/data/done",
+    label: "Done",
+    progress: {
+      validated_words: 4,
+      total_words: 4,
+      pages_counted: 1,
+      pages_not_counted: 0,
+      is_lower_bound: false,
+      complete: true,
+    },
+  };
+  const partial: ProjectKey = {
+    project_id: "partial",
+    project_root: "/data/partial",
+    label: "Partial",
+    progress: {
+      validated_words: 2,
+      total_words: 4,
+      pages_counted: 1,
+      pages_not_counted: 0,
+      is_lower_bound: false,
+      complete: false,
+    },
+  };
+  const unknown: ProjectKey = {
+    project_id: "unknown",
+    project_root: "/data/unknown",
+    label: "Unknown",
+    progress: null,
+  };
+
+  it("renders All / Active / Complete chips, and no Archived chip", async () => {
+    setupProjectList([complete, partial, unknown]);
     renderWithProviders(<RootPage />);
     await waitFor(() => {
-      expect(screen.getByTestId("root-search-bar")).toBeInTheDocument();
+      expect(screen.getByTestId("root-filter-chips")).toBeInTheDocument();
     });
-    expect(screen.queryByTestId("root-filter-chips")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("root-filter-chip-all")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("root-filter-chip-active")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("root-filter-chip-complete")).not.toBeInTheDocument();
+    expect(screen.getByTestId("root-filter-chip-all")).toBeInTheDocument();
+    expect(screen.getByTestId("root-filter-chip-active")).toBeInTheDocument();
+    expect(screen.getByTestId("root-filter-chip-complete")).toBeInTheDocument();
     expect(screen.queryByTestId("root-filter-chip-archived")).not.toBeInTheDocument();
+  });
+
+  it("Complete shows only projects whose progress.complete is true", async () => {
+    setupProjectList([complete, partial, unknown]);
+    renderWithProviders(<RootPage />);
+    const user = userEvent.setup();
+    await waitFor(() => {
+      expect(screen.getByTestId("root-filter-chip-complete")).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId("root-filter-chip-complete"));
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-done")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("project-card-partial")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("project-card-unknown")).not.toBeInTheDocument();
+  });
+
+  it("Active shows partial AND unknown-progress projects, not just partial", async () => {
+    setupProjectList([complete, partial, unknown]);
+    renderWithProviders(<RootPage />);
+    const user = userEvent.setup();
+    await waitFor(() => {
+      expect(screen.getByTestId("root-filter-chip-active")).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId("root-filter-chip-active"));
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-partial")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("project-card-unknown")).toBeInTheDocument();
+    expect(screen.queryByTestId("project-card-done")).not.toBeInTheDocument();
+  });
+
+  it("All shows every project regardless of progress", async () => {
+    setupProjectList([complete, partial, unknown]);
+    renderWithProviders(<RootPage />);
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-done")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("project-card-partial")).toBeInTheDocument();
+    expect(screen.getByTestId("project-card-unknown")).toBeInTheDocument();
   });
 });
 
@@ -613,6 +685,92 @@ describe("RootPage P2-ROOT — project card page count", () => {
         "Page count unavailable",
       );
     });
+  });
+});
+
+// --- progress-P2-ROOT-followup: project card progress ---
+
+describe("RootPage progress-P2-ROOT-followup — project card progress", () => {
+  it("shows 'Progress not tracked' when the API reports progress as null", async () => {
+    setupProjectList([
+      { project_id: "p1", project_root: "/data/p1", label: "Alpha", progress: null },
+    ]);
+    renderWithProviders(<RootPage />);
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-progress-p1")).toHaveTextContent(
+        "Progress not tracked",
+      );
+    });
+  });
+
+  it("shows a validated percentage for full coverage that is not yet complete", async () => {
+    setupProjectList([
+      {
+        project_id: "p1",
+        project_root: "/data/p1",
+        label: "Alpha",
+        progress: {
+          validated_words: 3,
+          total_words: 4,
+          pages_counted: 2,
+          pages_not_counted: 0,
+          is_lower_bound: false,
+          complete: false,
+        },
+      },
+    ]);
+    renderWithProviders(<RootPage />);
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-progress-p1")).toHaveTextContent("75% validated");
+    });
+  });
+
+  it("shows 'Complete' for full coverage where every counted word is validated", async () => {
+    setupProjectList([
+      {
+        project_id: "p1",
+        project_root: "/data/p1",
+        label: "Alpha",
+        progress: {
+          validated_words: 4,
+          total_words: 4,
+          pages_counted: 2,
+          pages_not_counted: 0,
+          is_lower_bound: false,
+          complete: true,
+        },
+      },
+    ]);
+    renderWithProviders(<RootPage />);
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-progress-p1")).toHaveTextContent("Complete");
+    });
+  });
+
+  it("surfaces partial coverage as a lower bound, not as the project's progress", async () => {
+    setupProjectList([
+      {
+        project_id: "p1",
+        project_root: "/data/p1",
+        label: "Alpha",
+        progress: {
+          validated_words: 4,
+          total_words: 4,
+          pages_counted: 40,
+          pages_not_counted: 260,
+          is_lower_bound: true,
+          complete: false,
+        },
+      },
+    ]);
+    renderWithProviders(<RootPage />);
+    await waitFor(() => {
+      const el = screen.getByTestId("project-card-progress-p1");
+      expect(el).toHaveTextContent("100% of 40 tracked pages");
+      expect(el).toHaveTextContent("260 not yet tracked");
+    });
+    // Never claims "Complete" for coverage over a subset.
+    expect(screen.getByTestId("project-card-progress-p1")).not.toHaveTextContent("Complete");
   });
 });
 

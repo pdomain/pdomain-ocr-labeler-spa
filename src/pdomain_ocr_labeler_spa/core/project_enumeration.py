@@ -21,11 +21,18 @@ graph (with GT loading, page envelopes, etc.) lands in M2-proper's
 
 Design notes:
 
-- **Pure**. No filesystem mutation. Reads: one ``iterdir()`` plus one
-  ``stat()`` per entry for the enumeration walk itself, plus — per
+- **Reads-mostly, with one documented exception.** One ``iterdir()`` plus
+  one ``stat()`` per entry for the enumeration walk itself, plus — per
   project, for ``page_count`` (P2-ROOT) — either one more ``iterdir()``
   (filesystem-image shape) or one small JSON file read + parse
-  (``book-labeling-manifest.json`` shape). See ``_count_pages``.
+  (``book-labeling-manifest.json`` shape); see ``_count_pages``. Plus, for
+  ``progress``, one read of ``WordReviewCountsJournal`` per
+  filesystem-image project; see ``_compute_progress``. That journal's
+  reader can rewrite (compact) its own file once it has grown past its own
+  threshold — see ``core.review_counts.WordReviewCountsJournal`` — so this
+  module is no longer purely read-only once ``progress`` is in the
+  response; it inherits that one documented mutating side effect, already
+  accepted for the same journal read by ``api.review_queue``.
 - **Idempotent + stable**. Repeated calls produce the same list (case-
   folded primary sort key, raw-name secondary tiebreak). The frontend
   dropdown keys on order.
@@ -36,7 +43,7 @@ Design notes:
   visible-but-unselectable project here; the future load endpoint
   will error loudly when a user tries to open one. Splitting that
   validation gate into M2-proper keeps this module a pure scan.
-- **Uncached, cost scales with total files, not project count**
+- **Uncached, cost scales with total files/pages, not project count**
   (P2-ROOT). Every ``GET /api/projects`` call re-scans every project
   from scratch; there's no memoization across requests. Because
   ``page_count`` for the filesystem-image shape is an ``iterdir()`` per
@@ -49,6 +56,20 @@ Design notes:
   root's total file count grows much larger, or if ``GET /api/projects``
   starts getting called often enough for per-call cost to matter (e.g.
   polling).
+- **``progress``'s added cost, measured** (docs/context/decisions.md,
+  progress-P2-ROOT-followup entry): reading one compacted
+  ``word-review-counts.jsonl`` (one row per page, the steady state between
+  saves) costs about the same order of magnitude as the ``page_count``
+  scan it sits next to — measured ~2.6ms/project for 20 projects of 300
+  pages each (~51ms total), ~2.3ms/project at 200 projects (~454ms total).
+  A journal sitting right at its own pre-compaction ceiling (up to 10 rows
+  per page before ``WordReviewCountsJournal`` compacts it) costs
+  substantially more per project — measured ~37ms/project for the same
+  20-project fixture at that ceiling (~738ms total) — because every extra
+  row is parsed and discarded on every read until the next append triggers
+  compaction. Acceptable at today's scale; revisit together with
+  ``page_count`` if either the per-call cost or the compaction ceiling
+  becomes a problem in practice.
 """
 
 from __future__ import annotations
@@ -56,11 +77,16 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from pdomain_book_tools.typography import BookLabelingManifest
 from pydantic import ValidationError
 
+from .review_counts import WordReviewCountsJournal
+
 logger = logging.getLogger(__name__)
+
+_ProjectShape = Literal["book_manifest", "labeling_bundle", "filesystem_images"]
 
 # Image extensions counted for ``page_count`` on the plain filesystem-image
 # project shape. Mirrors the set pinned in
@@ -74,6 +100,51 @@ _IMAGE_EXTS = (".png", ".jpg", ".jpeg")
 # labeling-bundle.json, which wins over the plain filesystem-image shape.
 _BOOK_MANIFEST_FILENAME = "book-labeling-manifest.json"
 _LABELING_BUNDLE_FILENAME = "labeling-bundle.json"
+
+
+@dataclass(frozen=True)
+class ProjectProgress:
+    """One project's word-validation progress, from its word-review-counts
+    journal (``core.review_counts.WordReviewCountsJournal``).
+
+    ``EnumeratedProject.progress`` is ``None`` — not an instance of this
+    type with zeros — whenever there is no honest number to report at all:
+
+    - The project's shape never writes to this journal.
+      ``book-labeling-manifest.json`` and ``labeling-bundle.json`` projects
+      validate text through ``ImportedTextValidationLog`` instead of
+      ``save_page_content_to_store``, so the journal never gets a row for
+      them (see ``api.review_queue``'s ``_word_entry``, which draws the same
+      line for the same reason).
+    - ``page_count`` itself is ``None``. Without a total page count there is
+      no denominator to judge partial coverage against.
+    - The journal can't be read (permission error, removed mid-scan) —
+      degrades this one entry, never the whole list, same as ``page_count``.
+    - The journal has no rows at all. A project with no journal has not had
+      a page saved since the journal existed — that is not zero progress,
+      it is unknown, so it is modeled the same as an unavailable page count
+      rather than as 0%.
+
+    When this type IS present, ``pages_counted`` is always greater than
+    zero, and ``validated_words`` / ``total_words`` are summed ONLY over
+    those counted pages — never inferred for ``pages_not_counted`` pages.
+    ``is_lower_bound`` is ``True`` whenever ``pages_not_counted > 0``: the
+    percentage this implies is a lower bound on the whole project's true
+    progress, not the project's real progress, because an uncounted page
+    could be anywhere from untouched to fully validated.
+
+    ``complete`` defines "complete" as every page counted
+    (``pages_not_counted == 0``) AND every counted word validated AND at
+    least one word counted — never ``True`` over a subset. A project
+    complete over 40 of its 300 pages is not complete.
+    """
+
+    validated_words: int
+    total_words: int
+    pages_counted: int
+    pages_not_counted: int
+    is_lower_bound: bool
+    complete: bool
 
 
 @dataclass(frozen=True)
@@ -120,17 +191,22 @@ class EnumeratedProject:
       Cost: measured on this repo's dev fixtures at ~1ms for 20
       filesystem-image projects of 50 files each — see
       ``docs/context/decisions.md`` P2-ROOT entry for the full
-      measurement, including why per-project *review progress* is
-      deliberately NOT computed here (a live per-page event-store walk
-      measured ~200ms for the same 20-project fixture and scales with
-      total page count across every project), and a caveat on how this
-      scan's own cost scales.
+      measurement.
+    - ``progress``: word-validation progress, or ``None`` when there is no
+      honest number to report — see ``ProjectProgress`` for exactly which
+      cases fold into ``None``. Read from
+      ``core.review_counts.WordReviewCountsJournal``, the per-page counts
+      journal that made this affordable where the original P2-ROOT
+      measurement (a live per-page event-store walk, ~200ms for a
+      20-project fixture) ruled it out. See ``docs/context/decisions.md``
+      for the follow-up measurement of this journal-based read.
     """
 
     project_id: str
     project_root: Path
     label: str
     page_count: int | None
+    progress: ProjectProgress | None
 
 
 def enumerate_projects(source_projects_root: Path | None) -> list[EnumeratedProject]:
@@ -207,12 +283,19 @@ def enumerate_projects(source_projects_root: Path | None) -> list[EnumeratedProj
         # ``project_root`` = the resolved absolute path (follows
         # symlinks so consumers get a real on-disk dir).
         project_root = entry.resolve()
+        # Detected once and shared: ``page_count`` needs it to pick a
+        # counting strategy, ``progress`` needs it to know whether
+        # ``WordReviewCountsJournal`` can answer anything at all for this
+        # project (see ``ProjectProgress``).
+        shape = _detect_shape(project_root)
+        page_count = _count_pages(project_root, shape=shape)
         entries.append(
             EnumeratedProject(
                 project_id=project_id,
                 project_root=project_root,
                 label=project_id,
-                page_count=_count_pages(project_root),
+                page_count=page_count,
+                progress=_compute_progress(project_root, shape=shape, page_count=page_count),
             )
         )
 
@@ -234,6 +317,7 @@ def enumerate_projects(source_projects_root: Path | None) -> list[EnumeratedProj
                     project_root=p.project_root,
                     label=f"{p.label} ({seen[key]})",
                     page_count=p.page_count,
+                    progress=p.progress,
                 )
             )
         else:
@@ -247,41 +331,102 @@ def enumerate_projects(source_projects_root: Path | None) -> list[EnumeratedProj
     return deduped
 
 
-def _count_pages(project_root: Path) -> int | None:
+def _detect_shape(project_root: Path) -> _ProjectShape | None:
+    """Which of the three project shapes ``project_root`` is, or ``None`` on
+    I/O failure.
+
+    Mirrors the detection order in ``api.projects.load_project``:
+    ``book-labeling-manifest.json`` wins over ``labeling-bundle.json``,
+    which wins over the plain filesystem-image shape. Shared by
+    ``_count_pages`` (which needs the shape to pick a counting strategy)
+    and ``_compute_progress`` (which needs it to know whether
+    ``WordReviewCountsJournal`` can answer anything for this project at
+    all — see ``ProjectProgress``).
+    """
+    try:
+        if (project_root / _BOOK_MANIFEST_FILENAME).is_file():
+            return "book_manifest"
+        if (project_root / _LABELING_BUNDLE_FILENAME).is_file():
+            return "labeling_bundle"
+    except OSError:
+        logger.debug("enumerate_projects: shape detection failed for %s", project_root, exc_info=True)
+        return None
+    return "filesystem_images"
+
+
+def _count_pages(project_root: Path, *, shape: _ProjectShape | None) -> int | None:
     """Return this project's page count, or ``None`` when it can't be
     determined cheaply.
 
-    Detects the same three project shapes ``api.projects.load_project``
-    detects, in the same order, and reads each one's cheapest real source
-    of truth:
+    Reads each shape's cheapest real source of truth:
 
-    1. ``book-labeling-manifest.json`` present → ``len(manifest.pages)``.
-       Only this one JSON file is read and parsed — NOT
-       ``load_book_labeling_manifest_directory``, which additionally opens
-       one directory per page and hashes every match-graph file (O(pages)
-       filesystem opens that would defeat the point of a cheap list scan).
-    2. ``labeling-bundle.json`` present → always 1 (this shape is a
-       single-page format by construction; no need to open the file).
-    3. Neither present → count of top-level image files (the plain
-       filesystem-image project shape).
+    1. ``book_manifest`` → ``len(manifest.pages)``. Only this one JSON file
+       is read and parsed — NOT ``load_book_labeling_manifest_directory``,
+       which additionally opens one directory per page and hashes every
+       match-graph file (O(pages) filesystem opens that would defeat the
+       point of a cheap list scan).
+    2. ``labeling_bundle`` → always 1 (this shape is a single-page format
+       by construction; no need to open the file).
+    3. ``filesystem_images`` → count of top-level image files.
+    4. ``None`` (shape detection itself failed) → ``None``.
 
     Any failure along the way (unreadable directory, malformed manifest
     JSON) degrades to ``None`` — "unknown" — rather than a wrong number
     (e.g. 0 for a 300-page book whose pages live in per-page
     materialization directories, not as top-level files) or a crash.
     """
-    try:
-        manifest_path = project_root / _BOOK_MANIFEST_FILENAME
-        if manifest_path.is_file():
-            return _count_book_manifest_pages(manifest_path)
-        if (project_root / _LABELING_BUNDLE_FILENAME).is_file():
-            return 1
-    except OSError:
-        logger.debug(
-            "enumerate_projects: page_count shape detection failed for %s", project_root, exc_info=True
-        )
+    if shape is None:
         return None
+    if shape == "book_manifest":
+        return _count_book_manifest_pages(project_root / _BOOK_MANIFEST_FILENAME)
+    if shape == "labeling_bundle":
+        return 1
     return _count_image_files(project_root)
+
+
+def _compute_progress(
+    project_root: Path, *, shape: _ProjectShape | None, page_count: int | None
+) -> ProjectProgress | None:
+    """This project's word-validation progress, or ``None`` — see
+    ``ProjectProgress`` for exactly which cases fold into ``None``.
+
+    Only the ``filesystem_images`` shape ever has rows in
+    ``WordReviewCountsJournal``: a ``book_manifest`` or ``labeling_bundle``
+    project validates text through ``ImportedTextValidationLog`` instead of
+    ``save_page_content_to_store``, so the journal never gets a row for it
+    (``api.review_queue``'s ``_word_entry`` draws the same line for the
+    same reason). Without ``page_count`` there is also no denominator to
+    judge partial coverage against, so an unknown ``page_count`` forces
+    ``None`` here too, even for a ``filesystem_images`` project.
+    """
+    if page_count is None or shape != "filesystem_images":
+        return None
+    try:
+        latest = WordReviewCountsJournal(project_root).latest_by_page()
+    except OSError:
+        logger.debug("enumerate_projects: progress unavailable for %s", project_root, exc_info=True)
+        return None
+
+    pages_counted = len(latest)
+    if pages_counted == 0:
+        # No page has been saved since the journal existed — unknown, not
+        # zero progress (see ``ProjectProgress``).
+        return None
+
+    total_words = sum(counts.total_words for counts in latest.values())
+    validated_words = sum(counts.validated_words for counts in latest.values())
+    # ``max(..., 0)``: a project whose page count shrank since some of
+    # these rows were written (pages deleted) could otherwise go negative.
+    pages_not_counted = max(page_count - pages_counted, 0)
+
+    return ProjectProgress(
+        validated_words=validated_words,
+        total_words=total_words,
+        pages_counted=pages_counted,
+        pages_not_counted=pages_not_counted,
+        is_lower_bound=pages_not_counted > 0,
+        complete=pages_not_counted == 0 and total_words > 0 and validated_words == total_words,
+    )
 
 
 def _count_book_manifest_pages(manifest_path: Path) -> int | None:
@@ -322,5 +467,6 @@ def _count_image_files(project_root: Path) -> int | None:
 
 __all__ = [
     "EnumeratedProject",
+    "ProjectProgress",
     "enumerate_projects",
 ]
