@@ -462,6 +462,39 @@ def test_typography_incomplete_replacement_is_not_counted_when_unblocked(loaded_
     assert typography["outstanding"] == _TOTAL_PAGES
 
 
+def test_typography_reports_unavailable_above_the_corrections_journal_size_threshold(
+    loaded_client: TestClient,
+) -> None:
+    """pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-review-
+    next.md: measured cost is ~80 microseconds a row, so a large corrections
+    journal cannot be read within a request. Above the threshold the route
+    reports ``available: false`` with a reason, the same honesty ``glyph``
+    already has, rather than computing a count that takes over a second.
+
+    The size check is a single ``stat()``, so the planted bytes need not be
+    valid JSON — the route must never attempt to read/parse a journal this
+    large in the first place.
+    """
+    from pdomain_ocr_labeler_spa.api import review_queue
+
+    project_root = _project_root(loaded_client)
+    for idx in range(_TOTAL_PAGES):
+        _seed_word_counts(project_root, page_index=idx, total_words=1, validated_words=1)
+    path = project_root / ".pd-pages" / "typography-corrections.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"x" * (review_queue._TYPOGRAPHY_CORRECTIONS_MAX_BYTES + 1))
+
+    resp = loaded_client.get(_REVIEW_QUEUE)
+    typography = _kind(resp.json(), "typography")
+
+    assert typography["available"] is False
+    assert typography["blocked_by"] is None
+    assert typography["outstanding"] == 0
+    assert typography["total"] == 0
+    assert typography["first_page_index"] is None
+    assert typography["unavailable_reason"]
+
+
 # ── one read per journal ─────────────────────────────────────────────────────
 
 

@@ -123,6 +123,12 @@ tombstone. See [`../context/decisions.md`](../context/decisions.md).
 | [`2026-09-18-the-per-word-validate-button-can-never-validate-a-word.md`](2026-09-18-the-per-word-validate-button-can-never-validate-a-word.md) | P1-VALIDATE-GATE | Medium |
 | [`2026-09-18-text-normalization-waits-on-a-module-that-has-never-existed.md`](2026-09-18-text-normalization-waits-on-a-module-that-has-never-existed.md) | P2-NORMALIZE-DEAD | Low |
 
+## Review queue (2026-09-18)
+
+| Issue | ID | Sev |
+| --- | --- | --- |
+| [`2026-09-18-typography-numerator-needs-a-per-page-rollup.md`](2026-09-18-typography-numerator-needs-a-per-page-rollup.md) | P2-TYPOGRAPHY-ROLLUP | Medium |
+
 ## Selection (2026-09-17)
 
 | Issue | ID | Sev |

@@ -14,10 +14,20 @@ region queue's undecided predicate), and ``reviewed_word_keys`` (the
 typography numerator's journal read). Reads each journal once — six reads
 total for five kinds, since the word and typography kinds share the same
 ``WordReviewCountsJournal`` read — and opens no page.
+
+The typography numerator is the one exception to "cheap": once its journal
+holds real correction history, reading it costs about 80 microseconds a row
+(measured; see ``_TYPOGRAPHY_CORRECTIONS_MAX_BYTES``), not the negligible
+cost the design first projected from a book whose journal happened to be
+empty. Above that threshold the ``typography`` entry reports
+``available: false`` with a reason, checked by one ``stat()`` rather than a
+read — the same honesty the ``glyph`` entry already has for a different
+cause.
 """
 
 from __future__ import annotations
 
+from contextlib import suppress
 from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends
@@ -45,6 +55,31 @@ router = APIRouter(prefix="/api/projects", tags=["review-queue"])
 _ReviewQueueKindName = Literal["page_kind", "region", "word", "typography", "glyph"]
 
 _GLYPH_UNAVAILABLE_REASON = "no glyph predictor is wired"
+
+_TYPOGRAPHY_CORRECTIONS_MAX_BYTES = 512 * 1024
+"""Above this, the typography numerator is not cheap to compute.
+
+pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-review-
+next.md "What each kind costs to count" projected the typography numerator
+as journal-cheap on the strength of the one book measured, whose corrections
+journal was empty. Measured afterwards on a fixture with real correction
+history (labeler-spa `2cfc834`'s follow-up measurement): reading and parsing
+``TypographyCorrectionLog.records()`` costs about 80 microseconds a row,
+because every row is a pydantic ``TypographyJournalEnvelope`` with a nested
+``WordTypography`` replacement, not a flat dict — file size tracks row count
+closely (about 2.3 KB a row for this taxonomy). At 512 KiB (about 224 rows)
+the read costs about 16ms; at 600 KiB about 20ms; at 800 KiB about 27ms. 512
+KiB keeps the read in the low tens of milliseconds with headroom before the
+next size step crosses further into it, and it is a size ``stat()`` answers
+in one syscall — no read, no parse — so the gate itself costs nothing
+per-row to evaluate, unlike a row-count threshold would.
+"""
+
+_TYPOGRAPHY_TOO_LARGE_REASON_TEMPLATE = (
+    "typography-corrections journal is {size} bytes, over the {threshold} byte "
+    "limit for a single request's read (see docs/issues/2026-09-18-typography-"
+    "numerator-needs-a-per-page-rollup.md)"
+)
 
 
 class ReviewQueueKindEntry(BaseModel):
@@ -179,6 +214,27 @@ def _word_entry(project: Project) -> tuple[ReviewQueueKindEntry, dict[int, PageW
     return entry, counts_by_page
 
 
+def _typography_unavailable_entry(*, journal_size: int) -> ReviewQueueKindEntry:
+    """The ``typography`` entry when its journal is too large to read within a request.
+
+    The same honesty ``glyph`` already has: ``available: false`` with a
+    reason naming the real cause, rather than a count that would cost over a
+    second on a book with real correction history — see
+    ``_TYPOGRAPHY_CORRECTIONS_MAX_BYTES``.
+    """
+    return ReviewQueueKindEntry(
+        kind="typography",
+        outstanding=0,
+        total=0,
+        available=False,
+        blocked_by=None,
+        first_page_index=None,
+        unavailable_reason=_TYPOGRAPHY_TOO_LARGE_REASON_TEMPLATE.format(
+            size=journal_size, threshold=_TYPOGRAPHY_CORRECTIONS_MAX_BYTES
+        ),
+    )
+
+
 def _typography_entry(
     project: Project,
     counts_by_page: dict[int, PageWordCounts],
@@ -186,6 +242,11 @@ def _typography_entry(
     word_entry: ReviewQueueKindEntry,
 ) -> ReviewQueueKindEntry:
     """The ``typography`` entry: a journal-only numerator over the word total.
+
+    Reports unavailable, without reading the journal at all, once it is
+    bigger than ``_TYPOGRAPHY_CORRECTIONS_MAX_BYTES`` — checked with one
+    ``stat()``, never a read or a parse. See that constant's docstring for
+    the measurement behind the threshold.
 
     ``blocked_by`` is ``"word"`` whenever any word is still outstanding, or
     the counts journal has not seen every page yet — a page it has not
@@ -197,6 +258,12 @@ def _typography_entry(
     whose typography-reviewed count is below its word total.
     """
     log = TypographyCorrectionLog(project.project_root, corpus_root=project.project_root.parent)
+    journal_size = 0
+    with suppress(FileNotFoundError):
+        journal_size = log.path.stat().st_size
+    if journal_size > _TYPOGRAPHY_CORRECTIONS_MAX_BYTES:
+        return _typography_unavailable_entry(journal_size=journal_size)
+
     required_labels = {label.value for label in TYPOGRAPHY_TAXONOMY.labels if label.required_for_completion}
     reviewed_keys = reviewed_word_keys(log.records(), required_labels=required_labels)
 
