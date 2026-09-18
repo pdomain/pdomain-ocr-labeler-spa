@@ -93,7 +93,7 @@ mutation route must never report false success.
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -102,7 +102,7 @@ from pydantic import BaseModel, field_validator
 from ..core.jobs import JobRunner
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.page_store import LabelerPageStore
-from ..core.project_state import ProjectState
+from ..core.project_state import PageState, ProjectState
 from ..settings import Settings
 from .dependencies import (
     bind_page_labeling_lease,
@@ -504,6 +504,80 @@ def _not_implemented(message: str) -> JSONResponse:
     )
 
 
+class _WordPositionSnapshot(NamedTuple):
+    """Both directions of a page's current word-position mapping.
+
+    ``key_by_identity`` maps ``id(word)`` to its current sidecar key
+    (``"{line_index}_{word_index}"``); ``identity_by_key`` is the reverse.
+    Taking one snapshot immediately before a structural line/paragraph edit
+    and another immediately after lets
+    ``_reindex_sidecar_maps_after_structural_edit`` follow each surviving
+    word to its new key regardless of how the edit reordered or renumbered
+    lines and words — see that function's docstring for why a positional-
+    offset formula cannot safely stand in for this on line merge.
+    """
+
+    key_by_identity: dict[int, str]
+    identity_by_key: dict[str, int]
+
+
+def _snapshot_word_positions(page: Any) -> _WordPositionSnapshot:
+    """Snapshot every word currently on the page, keyed both ways.
+
+    Walks ``page.lines[li].words[wi]`` — the exact indexing
+    ``PageState.char_bboxes_map`` / ``glyph_annotations_map`` /
+    ``glyph_predictions_map`` use — and records each word's identity
+    against its current sidecar key.
+    """
+    key_by_identity: dict[int, str] = {}
+    identity_by_key: dict[str, int] = {}
+    for li, line in enumerate(getattr(page, "lines", None) or []):
+        for wi, word in enumerate(getattr(line, "words", None) or []):
+            key = f"{li}_{wi}"
+            key_by_identity[id(word)] = key
+            identity_by_key[key] = id(word)
+    return _WordPositionSnapshot(key_by_identity=key_by_identity, identity_by_key=identity_by_key)
+
+
+def _reindex_sidecar_maps_after_structural_edit(
+    pstate: PageState,
+    *,
+    before: _WordPositionSnapshot,
+    after: _WordPositionSnapshot,
+) -> None:
+    """Rekey every sidecar entry to its word's new position after a structural edit.
+
+    Line/paragraph structural mutations (delete, merge, split, group) can
+    delete whole lines — renumbering every later line — and, for line and
+    paragraph merge, interleave surviving words in an order a positional-
+    offset formula cannot predict: ``Block.merge``
+    (``pdomain_book_tools/ocr/block.py``) re-sorts the merged item list by
+    bbox position rather than appending, so "the second line's words land
+    after the first line's" does not generally hold.
+
+    Comparing a word-identity snapshot taken immediately before the
+    mutation (``before``) against one taken immediately after (``after``)
+    gives each surviving word's exact new key without having to model the
+    underlying library's reordering. A word whose identity is absent from
+    ``after`` was removed by the edit — its sidecar entry, if any, is
+    dropped rather than left pointing at a key that now names a different
+    word (mirrors ``api/words.py::_reindex_word_sidecar_map`` for the
+    word-index-only case that delete/merge already handle within a line).
+    """
+    for mapping in (pstate.char_bboxes_map, pstate.glyph_annotations_map, pstate.glyph_predictions_map):
+        updated: dict[str, object] = {}
+        for old_key, value in mapping.items():
+            word_id = before.identity_by_key.get(old_key)
+            if word_id is None:
+                continue
+            new_key = after.key_by_identity.get(word_id)
+            if new_key is None:
+                continue
+            updated[new_key] = value
+        mapping.clear()
+        mapping.update(updated)
+
+
 def _finalize_structural_edit(
     *,
     page: Any,
@@ -667,6 +741,7 @@ def _line_mutation_handler(
         line = _resolve_line(page, line_index)
         if line is None:
             return _line_not_found(line_index)
+        before = _snapshot_word_positions(page) if structural else None
         ok = mutate(page, line)
         if not ok:
             return _mutation_failed(
@@ -674,6 +749,10 @@ def _line_mutation_handler(
             )
         changes = [{"type": mutation_label, "line": line_index}]
         if structural:
+            if before is not None:
+                _reindex_sidecar_maps_after_structural_edit(
+                    pstate, before=before, after=_snapshot_word_positions(page)
+                )
             _finalize_structural_edit(
                 page=page,
                 pstate=pstate,
@@ -1003,11 +1082,15 @@ def merge_lines(
     line_indices = list(body.line_indices)
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
+        before = _snapshot_word_positions(page)
         ok = bool(page.merge_lines(line_indices))
         if not ok:
             return _mutation_failed(
                 f"merge_lines rejected indices={line_indices}",
             )
+        _reindex_sidecar_maps_after_structural_edit(
+            pstate, before=before, after=_snapshot_word_positions(page)
+        )
         _finalize_structural_edit(
             page=page,
             pstate=pstate,
@@ -1062,11 +1145,15 @@ def split_by_words(
 
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
+        before = _snapshot_word_positions(page)
         ok = bool(page.split_line_with_selected_words(word_keys))
         if not ok:
             return _mutation_failed(
                 f"split_line_with_selected_words rejected keys={word_keys}",
             )
+        _reindex_sidecar_maps_after_structural_edit(
+            pstate, before=before, after=_snapshot_word_positions(page)
+        )
         _finalize_structural_edit(
             page=page,
             pstate=pstate,
@@ -1254,9 +1341,13 @@ def delete_lines_batch(
     line_indices = list(body.line_indices)
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
+        before = _snapshot_word_positions(page)
         ok = bool(page.delete_lines(line_indices))
         if not ok:
             return _mutation_failed(f"delete_lines rejected indices={line_indices}")
+        _reindex_sidecar_maps_after_structural_edit(
+            pstate, before=before, after=_snapshot_word_positions(page)
+        )
         _finalize_structural_edit(
             page=page,
             pstate=pstate,
@@ -1303,9 +1394,13 @@ def delete_paragraphs_batch(
     paragraph_indices = list(body.paragraph_indices)
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
+        before = _snapshot_word_positions(page)
         ok = bool(page.delete_paragraphs(paragraph_indices))
         if not ok:
             return _mutation_failed(f"delete_paragraphs rejected indices={paragraph_indices}")
+        _reindex_sidecar_maps_after_structural_edit(
+            pstate, before=before, after=_snapshot_word_positions(page)
+        )
         _finalize_structural_edit(
             page=page,
             pstate=pstate,
@@ -1352,9 +1447,13 @@ def split_selected_paragraphs(
     paragraph_indices = list(body.paragraph_indices)
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
+        before = _snapshot_word_positions(page)
         ok = bool(page.split_paragraphs(paragraph_indices))
         if not ok:
             return _mutation_failed(f"split_paragraphs rejected indices={paragraph_indices}")
+        _reindex_sidecar_maps_after_structural_edit(
+            pstate, before=before, after=_snapshot_word_positions(page)
+        )
         _finalize_structural_edit(
             page=page,
             pstate=pstate,
@@ -1401,9 +1500,13 @@ def group_selected_words_into_paragraph(
     word_keys: list[tuple[int, int]] = [(int(li), int(wi)) for li, wi in body.word_indices]
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
+        before = _snapshot_word_positions(page)
         ok = bool(page.group_selected_words_into_new_paragraph(word_keys))
         if not ok:
             return _mutation_failed(f"group_selected_words rejected keys={word_keys}")
+        _reindex_sidecar_maps_after_structural_edit(
+            pstate, before=before, after=_snapshot_word_positions(page)
+        )
         _finalize_structural_edit(
             page=page,
             pstate=pstate,
@@ -1463,6 +1566,7 @@ def _paragraph_mutation_handler(
         paragraph = _resolve_paragraph(page, paragraph_index)
         if paragraph is None:
             return _paragraph_not_found(paragraph_index)
+        before = _snapshot_word_positions(page) if structural else None
         ok = mutate(page, paragraph)
         if not ok:
             return _mutation_failed(
@@ -1470,6 +1574,10 @@ def _paragraph_mutation_handler(
             )
         changes = [{"type": mutation_label, "paragraph": paragraph_index}]
         if structural:
+            if before is not None:
+                _reindex_sidecar_maps_after_structural_edit(
+                    pstate, before=before, after=_snapshot_word_positions(page)
+                )
             _finalize_structural_edit(
                 page=page,
                 pstate=pstate,
@@ -1692,11 +1800,15 @@ def merge_paragraphs(
     paragraph_indices = list(body.paragraph_indices)
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
+        before = _snapshot_word_positions(page)
         ok = bool(page.merge_paragraphs(paragraph_indices))
         if not ok:
             return _mutation_failed(
                 f"merge_paragraphs rejected indices={paragraph_indices}",
             )
+        _reindex_sidecar_maps_after_structural_edit(
+            pstate, before=before, after=_snapshot_word_positions(page)
+        )
         _finalize_structural_edit(
             page=page,
             pstate=pstate,
@@ -1956,12 +2068,16 @@ def split_paragraph_after_line(
                 f"after_line_index={after_idx})",
             )
 
+        before = _snapshot_word_positions(page)
         ok = bool(page.split_paragraph_after_line(page_line_index))
         if not ok:
             return _mutation_failed(
                 f"split_paragraph_after_line rejected paragraph={paragraph_index} "
                 f"page_line_index={page_line_index}",
             )
+        _reindex_sidecar_maps_after_structural_edit(
+            pstate, before=before, after=_snapshot_word_positions(page)
+        )
         _finalize_structural_edit(
             page=page,
             pstate=pstate,
@@ -2026,11 +2142,15 @@ def split_line_with_selected_words(
 
     page_lock = project_state.get_page_lock(page_index)
     with page_lock:
+        before = _snapshot_word_positions(page)
         ok = bool(page.split_line_with_selected_words(word_keys))
         if not ok:
             return _mutation_failed(
                 f"split_line_with_selected_words rejected keys={word_keys}",
             )
+        _reindex_sidecar_maps_after_structural_edit(
+            pstate, before=before, after=_snapshot_word_positions(page)
+        )
         _finalize_structural_edit(
             page=page,
             pstate=pstate,
