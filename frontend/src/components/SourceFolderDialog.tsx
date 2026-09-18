@@ -211,8 +211,9 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
       }}
     >
       {/* DialogContent auto-composes DialogPortal + DialogOverlay (pdomain-ui convention).
-          The overlay uses class "dialog-overlay" — primitives.css defines the backdrop.
-          Tailwind overrides supply the labeler's visual chrome. */}
+          The overlay uses class "dialog-overlay" and the content uses class "dialog" —
+          both ARE defined in primitives.css (positioning + chrome); the Tailwind classes
+          below only add labeler-specific sizing/color on top of it. */}
       <DialogContent
         data-testid="source-folder-dialog"
         // pdomain-ui's shared ".dialog" class (primitives.css) already supplies
