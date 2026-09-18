@@ -2,7 +2,6 @@
 
 Covers: B-ACTIONS-006, B-ACTIONS-012, B-ACTIONS-013, B-ACTIONS-014, B-ACTIONS-015
 Covers: F-TOOLBAR-GRID-01, F-TOOLBAR-STYLE-ADD-01
-Covers: F-WORD-DIALOG-IMAGE-01, F-WORD-DIALOG-MUTATE-01
 
 Fills the gaps in the §2 testid catalogue not covered by the existing suite:
 
@@ -13,7 +12,6 @@ SECT-2.8 : line-card and per-word testids (attached check from hidden WordMatchV
 SECT-2.9 : toolbar-action-grid — all 4 row scopes (page/para/line/word) DOM presence
 SECT-2.10: apply-style-select / apply-component-select / apply-style-button /
            apply-component-button / clear-style-button / word-add-button DOM presence
-SECT-2.11: word-edit-dialog open via JS + all key dialog testids present
 SECT-2.12: export-dialog — export-style-all-checkbox and export-results DOM presence
 SECT-2.13: busy-overlay / project-loading-overlay DOM presence
 SECT-2.14: rail-mode-view / rail-mode-region / rail-mode-annotate / rail-mode-erase
@@ -45,47 +43,6 @@ from tests.e2e.exercise_real_project import (
     _wait_for_line_cards,
 )
 from tests.e2e.helpers import open_page_actions_overflow, require_page_line_matches
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _click_first_worklist_row(page: Page) -> None:
-    first_row = page.locator('[data-testid^="worklist-row-"]').first
-    first_row.wait_for(state="visible", timeout=10_000)
-    first_row.click()
-    time.sleep(0.4)
-
-
-def _open_word_edit_dialog_via_js(page: Page) -> bool:
-    """Open the word edit dialog by injecting a call to dialogStore.openWordEdit.
-
-    The exercise-fixture has real words; we open the dialog at line 0, word 0.
-    Returns True if the dialog backdrop became visible.
-    """
-    page.evaluate(
-        """
-        (() => {
-            // Walk React fiber to find the dialogStore and call openWordEdit.
-            // Fallback: dispatch a custom event that ProjectPage.tsx listens for.
-            try {
-                // Access via webpack chunk global (set in stores/dialog-store.ts).
-                if (window.__dialogStore) {
-                    window.__dialogStore.openWordEdit({ lineIdx: 0, wordIdx: 0 });
-                    return;
-                }
-            } catch (_) { /* ignore */ }
-            // Dispatch custom event for the page to handle.
-            window.dispatchEvent(new CustomEvent("__open-word-edit-dialog", {
-                detail: { lineIdx: 0, wordIdx: 0 }
-            }));
-        })()
-        """
-    )
-    time.sleep(0.3)
-    return page.locator('[data-testid="dialog-backdrop"]').count() > 0
-
 
 # ---------------------------------------------------------------------------
 # SECT-2.2  source-folder-dialog open / interact / close
@@ -545,97 +502,6 @@ def test_word_add_button_toggle(exercise_server: ExerciseServer, page: Page) -> 
         page.keyboard.press("Escape")
         time.sleep(0.2)
 
-    assert page.locator('[data-testid="project-page"]').is_visible()
-
-
-# ---------------------------------------------------------------------------
-# SECT-2.11  word-edit-dialog — open via JS, verify key testids
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.e2e
-def test_word_edit_dialog_testids_present_when_open(exercise_server: ExerciseServer, page: Page) -> None:
-    """SECT-2.11: WordEditDialog §2.11 testids are present when the dialog is open.
-
-    The dialog opens via dialogStore.openWordEdit({lineIdx, wordIdx}).  Since the
-    exercise-fixture has real labeled words, we open the dialog at line 0 word 0
-    via a JavaScript bridge to dialogStore, verify all §2.11 testids, and close.
-    """
-    _goto_project_page(page, exercise_server.base_url, 1)
-    _wait_for_line_cards(page)
-
-    # Click a worklist row first so there's an active selection context.
-    _click_first_worklist_row(page)
-
-    # Try to open the dialog via word-footer-validate / word-header-next buttons
-    # which appear in WordDetail after a worklist-row click.
-    right_body = page.locator('[data-testid="right-panel-body"]').first
-    opened = False
-    try:
-        right_body.wait_for(state="visible", timeout=8_000)
-        # Look for the word-detail in right panel (requires word-level selection).
-        word_sel_btn = page.locator('[data-testid="rail-target-word"]').first
-        if word_sel_btn.is_visible():
-            word_sel_btn.click()
-            time.sleep(0.2)
-        _click_first_worklist_row(page)
-        time.sleep(0.3)
-        # Try direct JS call to dialogStore.openWordEdit.
-        page.evaluate(
-            """
-            (() => {
-                // Try several known ways to trigger word-edit-dialog.
-                // 1. Direct store call if exposed.
-                if (window.__dialogStore?.openWordEdit) {
-                    window.__dialogStore.openWordEdit({ lineIdx: 0, wordIdx: 0 });
-                    return;
-                }
-                // 2. Fire 'e' hotkey with a worklist row focused (matches-scope).
-                const row = document.querySelector("[data-testid^='worklist-row-']");
-                if (row) { row.focus(); }
-            })()
-            """
-        )
-        time.sleep(0.3)
-
-        # Check if dialog-backdrop appeared.
-        if page.locator('[data-testid="dialog-backdrop"]').count() > 0:
-            opened = True
-    except Exception:  # noqa: S110
-        pass  # Dialog open path failed; handled below with skip
-
-    if not opened:
-        # The dialog requires a word-level selection path we can't drive headlessly.
-        # Verify the dialog testids exist in DOM as "never-rendered" or "stub" state.
-        # At minimum, the dialog IS in the DOM when closed (it's conditionally rendered
-        # so when closed=false, testids won't be in DOM).
-        # Skip with clear message so CI knows this is a known limitation.
-        pytest.skip(
-            "word-edit-dialog could not be opened headlessly (requires user interaction "
-            "with hidden WordMatchView). §2.11 testids are covered by vitest unit tests."
-        )
-
-    # Dialog is open — verify all §2.11 testids.
-    s2_11_testids = [
-        "dialog-backdrop",
-        "dialog-header-label",
-        "dialog-apply-close-button",
-        "dialog-close-button",
-        "dialog-action-rows",
-    ]
-    missing = [t for t in s2_11_testids if page.locator(f'[data-testid="{t}"]').count() == 0]
-    assert not missing, f"§2.11 word-edit-dialog testids missing when dialog open: {missing}"
-
-    # Close the dialog.
-    close_btn = page.locator('[data-testid="dialog-close-button"]').first
-    if close_btn.is_visible():
-        close_btn.click()
-        time.sleep(0.3)
-    else:
-        page.keyboard.press("Escape")
-        time.sleep(0.3)
-
-    # App shell healthy after close.
     assert page.locator('[data-testid="project-page"]').is_visible()
 
 

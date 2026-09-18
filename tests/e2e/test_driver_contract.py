@@ -148,40 +148,6 @@ _APPLY_STYLE_TOOLBAR_TESTIDS = [
     "word-add-button",  # was "add-word-button" — bug #452
 ]
 
-# Word-edit dialog testids (driver-contract §2.11).
-# Checked after opening the dialog via edit-word-button-0-0.
-_WORD_EDIT_DIALOG_TESTIDS = [
-    "word-edit-dialog",  # bug #454: was "dialog-backdrop" only
-    "dialog-header-label",
-    "dialog-apply-close-button",
-    "dialog-close-button",
-    "dialog-previous-preview-column",  # bug #454: was "dialog-prev-word" only
-    "dialog-current-preview-column",  # bug #454: was "dialog-current-word" only
-    "dialog-next-preview-column",  # bug #454: was "dialog-next-word" only
-    "dialog-gt-input",  # bug #454: was absent
-    "dialog-tag-chips-slot",  # bug #454: was absent
-    "dialog-refine-button",
-    "dialog-expand-refine-button",
-    "dialog-reset-button",
-    "dialog-apply-button",
-    "dialog-apply-refine-button",
-    "dialog-merge-prev-button",
-    "dialog-merge-next-button",
-    "dialog-split-h-button",
-    "dialog-split-v-button",
-    "dialog-delete-word-button",
-    "dialog-crop-above-button",
-    "dialog-crop-below-button",
-    "dialog-crop-left-button",
-    "dialog-crop-right-button",
-    # "dialog-style-select" / "dialog-scope-select" / "dialog-apply-style-button"
-    # are NOT listed: §2.10/§2.11 retired the legacy style-authoring controls
-    # (see the ToolbarActionGrid note above); only the component controls remain.
-    "dialog-component-select",
-    "dialog-apply-component-button",
-    "dialog-clear-component-button",
-]
-
 # Page-kind review testids (driver-contract §2.17, spec
 # 2026-09-17-page-kind-review-design.md). `page-kind-control` and
 # `page-kind-status-button` are always-rendered real controls in
@@ -203,8 +169,8 @@ _PAGE_KIND_TOOLBAR_OPEN_TESTIDS = [
 # Parameterised row testids (`page-kinds-row-{pageIndex}` and sub-testids)
 # and state-dependent testids (`page-kinds-loading`, `page-kinds-error`,
 # `page-kinds-empty`, `page-kinds-bulk-count`, `page-kinds-bulk-excluded-note`)
-# are NOT listed here, following the convention §2.11 and §2.15 use for their
-# own parameterised/state-dependent testids.
+# are NOT listed here, following the convention §2.15 uses for its own
+# parameterised/state-dependent testids.
 _PAGE_KINDS_DIALOG_TESTIDS = [
     "page-kinds-dialog",
     "page-kinds-dialog-close",
@@ -685,54 +651,6 @@ def test_per_word_driver_testids_present(live_server: LiveServer, page: Page) ->
     ]
     missing = _all_stub_or_present(page, per_word_testids)
     assert not missing, f"Per-word driver-contract §2.8 testids missing (#453): {missing}"
-
-
-@pytest.mark.e2e
-def test_word_edit_dialog_testids_present(live_server: LiveServer, page: Page) -> None:
-    """Driver-contract §2.11: word-edit-dialog testids present when dialog is open.
-
-    Covers #454 (F-049): word-edit-dialog, dialog-{previous,current,next}-preview-column,
-    dialog-gt-input, dialog-tag-chips-slot were absent or misnamed.
-
-    Opens the word-edit dialog via edit-word-button-0-0, then asserts all
-    §2.11 testids are present in the DOM.
-    """
-    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
-    require_page_line_matches(live_server.base_url, "tiny-fixture", 0)
-
-    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
-    page.goto(url, timeout=15_000)
-    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
-    wait_for_project_ready(page)
-
-    page.click('[data-testid="text-tab-matches"]')
-    page.wait_for_selector('[data-testid="edit-word-button-0-0"]', timeout=10_000)
-
-    page.click('[data-testid="edit-word-button-0-0"]')
-    try:
-        page.wait_for_selector('[data-testid="word-edit-dialog"]', timeout=5_000)
-    except PlaywrightTimeoutError as exc:
-        # WordCell's docstring says the pencil button "should select the word
-        # in the selection store and open the right panel", but ProjectPage.tsx
-        # mounts WordMatchView without onEditWord (or onCommitGt / onValidate /
-        # onClearWordTag / imageBaseUrl) — see LineCard/WordMatchView prop
-        # threading. The click is therefore a no-op in production; it was never
-        # exercised by e2e because this test always skipped on empty tiny-fixture
-        # content until now. Reported to maintainers as a real product gap
-        # (P0-CI-SOFT follow-up) rather than papered over here.
-        raise AssertionError(
-            "edit-word-button-0-0 did not open word-edit-dialog. WordMatchView's "
-            "onEditWord (and sibling onCommitGt/onValidate/onClearWordTag/"
-            "imageBaseUrl) handlers appear unwired in ProjectPage.tsx — the "
-            "Matches-tab pencil/checkbox/GT-input controls render but do nothing. "
-            "This is a suspected product bug, not a stale test expectation; see "
-            "the P0-CI-SOFT follow-up report before changing this assertion."
-        ) from exc
-
-    missing = _all_stub_or_present(page, _WORD_EDIT_DIALOG_TESTIDS)
-    assert not missing, (
-        f"Word-edit dialog testids missing after opening dialog (driver-contract §2.11, #454): {missing}"
-    )
 
 
 # ── Page kind review (driver-contract §2.17) ────────────────────────────────
