@@ -170,7 +170,11 @@ export const toolbarMapping: ToolbarMappingRecord = {
   },
 
   // Word scope actions
-  "word-merge": null, // disabled
+  "word-merge": {
+    endpoint: "/api/projects/{projectId}/pages/{pageIndex}/words/merge",
+    method: "POST",
+    body: { scope: "word" },
+  },
   "word-refine": {
     endpoint: "/api/projects/{projectId}/pages/{pageIndex}/refine",
     method: "POST",

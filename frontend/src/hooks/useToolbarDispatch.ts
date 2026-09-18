@@ -22,6 +22,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { toast } from "../lib/toast";
 import { toolbarMapping } from "../lib/toolbarMapping";
+import { selectWord } from "../stores/selection-store";
 import type { ButtonStates, Selection } from "./useToolbarButtonStates";
 
 // ─── ButtonStates key → toolbarMapping key ──────────────────────────────────
@@ -66,6 +67,7 @@ const STATE_KEY_TO_MAPPING_KEY: Record<keyof ButtonStates, string> = {
   line_unvalidate: "line-unvalidate",
   line_delete: "line-delete",
   // Word row
+  word_merge: "word-merge",
   word_refine: "word-refine",
   word_expand_refine: "word-expand-refine",
   word_expand: "word-expand",
@@ -217,8 +219,19 @@ export function useToolbarDispatch(
       }
       return apiSend(req);
     },
-    onSuccess: () => {
+    onSuccess: (_data, stateKey) => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      // word_merge removes one of the two selected words — leaving the
+      // selection pointing at a word_index that no longer exists is the
+      // same class of defect as a stale page-scoped selection. The
+      // surviving word keeps the pair's lower word_index (ruling 1), so
+      // point the selection there instead of at a gone-away tuple.
+      if (stateKey === "word_merge") {
+        const [first, second] = selection.selected_words;
+        if (!first || !second) return;
+        if (first[0] !== second[0]) return;
+        selectWord(pageIndex, first[0], Math.min(first[1], second[1]));
+      }
     },
     onError: (err) => {
       toast.error(err.message || "Toolbar action failed");

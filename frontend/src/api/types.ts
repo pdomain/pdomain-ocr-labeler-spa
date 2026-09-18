@@ -1337,12 +1337,44 @@ export interface paths {
          * Merge Words
          * @description ``POST .../words/{li}/{wi}/merge`` — merge with adjacent word.
          *
+         *     Used by the right panel's ``StructureSection`` ("Merge with prev/next").
          *     Spec 23 §9 row 10 names ``page.merge_words(targets)``, which is not
-         *     implemented in pdomain-book-tools (tracking pdomain/pdomain-book-tools#53).
-         *     The route delegates to per-line ``Line.merge_word_left(wi)`` /
-         *     ``Line.merge_word_right(wi)`` from ``pdomain_book_tools/ocr/block.py:785,789``.
+         *     implemented in pdomain-book-tools (tracking pdomain/pdomain-book-tools#53);
+         *     this route resolves the adjacent pair itself and calls the shared
+         *     ``_merge_words_core`` (see the block comment above it for why it does
+         *     not delegate to ``Line.merge_word_left``/``merge_word_right``).
          */
         post: operations["merge_words_api_projects__project_id__pages__page_index__words__line_index___word_index__merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/words/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge Words Batch
+         * @description ``POST .../words/merge`` — merge exactly two adjacent same-line words.
+         *
+         *     Mirrors ``lines/merge``'s collective shape (the toolbar sends the
+         *     current ``selected_words`` set) rather than the older per-word
+         *     ``direction`` shape ``merge_words`` uses. Word merge is stricter than
+         *     line merge: exactly two entries, same line, adjacent word indices —
+         *     anything else is a 400 ``word_merge_invalid_selection`` rather than a
+         *     silent no-op, matching how this route's `toolbar-word-merge` cell
+         *     surfaces a reason instead of just staying disabled (driver-contract
+         *     §2.9). Backs the ``toolbar-word-merge`` toolbar cell — see
+         *     ``docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md``.
+         */
+        post: operations["merge_words_batch_api_projects__project_id__pages__page_index__words_merge_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2631,11 +2663,10 @@ export interface paths {
          *
          *     Reads each of the journals it needs exactly once: the page-kind
          *     proposal and reviewed journals (via ``page_kinds_rows``), the region
-         *     proposal and decision journals, and — depending on project shape — the
-         *     word-review-counts journal or ``ImportedTextValidationLog`` (shared by
-         *     the ``word`` and ``typography`` entries), plus the typography-
-         *     corrections journal for the ``typography`` entry's numerator. It opens
-         *     no page.
+         *     proposal and decision journals, then — depending on project shape — the
+         *     word-review-counts journal or ``ImportedTextValidationLog`` for the
+         *     ``word`` entry, and the typography-review-counts rollup for the
+         *     ``typography`` entry's numerator. It opens no page.
          */
         get: operations["get_review_queue"];
         put?: never;
@@ -4376,6 +4407,34 @@ export interface components {
             line_indices: number[];
         };
         /**
+         * MergeWordsBatchRequest
+         * @description ``POST .../words/merge`` body — word-scope collective merge.
+         *
+         *     Mirrors ``MergeLinesRequest``'s collective shape (a list the toolbar's
+         *     current selection fills), not the older per-word ``direction`` shape
+         *     ``MergeWordsRequest`` uses. Word merge is stricter than line merge:
+         *     exactly two entries, same line, adjacent word indices — see
+         *     ``merge_words_batch`` for the validation and
+         *     ``docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md``
+         *     for why.
+         */
+        MergeWordsBatchRequest: {
+            /**
+             * Scope
+             * @default word
+             * @constant
+             */
+            scope: "word";
+            /**
+             * Word Indices
+             * @default []
+             */
+            word_indices: [
+                number,
+                number
+            ][];
+        };
+        /**
          * MergeWordsRequest
          * @description Spec §2 lines 327-328.
          */
@@ -5236,9 +5295,16 @@ export interface components {
          *
          *     ``pages_not_counted`` and ``is_lower_bound`` matter for ``word`` and
          *     ``typography`` only; both default to the "nothing to distrust" value for
-         *     the other kinds. ``is_lower_bound`` is ``True`` for ``typography``
-         *     always (its per-head staleness check is skipped — see
-         *     ``core.typography_review.reviewed_word_keys``) and for ``word`` whenever
+         *     the other kinds. For ``typography``, ``pages_not_counted`` also covers a
+         *     word-counted page with no ``TypographyReviewCountsJournal`` row of its
+         *     own yet — untouched, or corrected before this rollup existed; the two
+         *     are indistinguishable from a rollup-only read, so both are excluded from
+         *     ``total``/``outstanding`` rather than reported as a confidently wrong
+         *     zero (see ``_typography_entry``). ``is_lower_bound`` is ``True`` for
+         *     ``typography`` always, on top of that — its per-head staleness check is
+         *     skipped, and its reviewed count is each word's *latest-ever* correction
+         *     rather than one bound to the page's current epoch (see
+         *     ``core.typography_review_counts``) — and for ``word`` whenever
          *     ``pages_not_counted`` is above zero.
          */
         ReviewQueueKindEntry: {
@@ -7701,6 +7767,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["MergeWordsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merge_words_batch_api_projects__project_id__pages__page_index__words_merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MergeWordsBatchRequest"];
             };
         };
         responses: {

@@ -15,6 +15,7 @@ import { useState } from "react";
 
 import {
   useToolbarButtonStates,
+  wordMergeEligibility,
   type ButtonStates,
   type PageData,
   type Selection,
@@ -88,6 +89,7 @@ const LINE_MAP: ScopeMap = {
 };
 
 const WORD_MAP: ScopeMap = {
+  merge: "word_merge",
   refine: "word_refine",
   "expand-refine": "word_expand_refine",
   expand: "word_expand",
@@ -217,6 +219,14 @@ export function ToolbarActionGrid({
               const isStub = stateKey == null;
               const isEnabled = !isStub && states[stateKey];
               const testId = `toolbar-${scope}-${action}`;
+              // toolbar-word-merge: an enabled-but-structurally-stub cell still
+              // needs a reason when disabled (driver-contract §2.9) rather than
+              // the generic label — see wordMergeEligibility's docstring.
+              const title = isStub
+                ? undefined
+                : stateKey === "word_merge" && !isEnabled
+                  ? (wordMergeEligibility(selection).reason ?? `${scope} ${ACTION_LABELS[action]}`)
+                  : `${scope} ${ACTION_LABELS[action]}`;
 
               return (
                 <button
@@ -224,7 +234,7 @@ export function ToolbarActionGrid({
                   data-testid={testId}
                   data-testid-stub={isStub ? "true" : undefined}
                   disabled={!isEnabled}
-                  title={isStub ? undefined : `${scope} ${ACTION_LABELS[action]}`}
+                  title={title}
                   onClick={() => {
                     if (!isStub && stateKey && isEnabled) {
                       onAction(stateKey);
