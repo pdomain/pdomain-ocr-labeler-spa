@@ -15,6 +15,12 @@
 // Slice 14 deliberately does NOT mount WordMatchView itself — the consumer
 // (ProjectPage) provides word content via `wordSlot` so the panel stays free
 // of API/data coupling.
+//
+// Above the level-routed body, always mounted whenever a page is loaded
+// (independent of `level`): <CarriedRejectionsPanel>, a collapsed, counted
+// summary of this page's carried rejections with a "Bring back" undo — see
+// that component's own doc comment (right-panel/RegionDetail.tsx) for why
+// it cannot be gated on `level === "region"` the way <RegionDetail> is.
 
 import { PanelRightClose } from "@/icons/local-shims";
 import { cn } from "@/lib/utils";
@@ -25,7 +31,7 @@ import { BlockDetail } from "../right-panel/BlockDetail";
 import { ParagraphDetail } from "../right-panel/ParagraphDetail";
 import { MultiWordDetail } from "../right-panel/MultiWordDetail";
 import { MultiLineDetail } from "../right-panel/MultiLineDetail";
-import { RegionDetail } from "../right-panel/RegionDetail";
+import { RegionDetail, CarriedRejectionsPanel } from "../right-panel/RegionDetail";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -97,6 +103,15 @@ export function RightPanel({
           <PanelRightClose className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
+
+      {/* A carried rejection is reachable whether or not anything is
+          currently selected — see CarriedRejectionsPanel's own doc comment
+          for why it lives here, outside the level-routed body below, rather
+          than inside <RegionDetail>. Renders nothing when the page has no
+          carried rejection to show. */}
+      {page && projectId !== undefined && pageIndex !== undefined && (
+        <CarriedRejectionsPanel page={page} projectId={projectId} pageIndex={pageIndex} />
+      )}
 
       {/* Body */}
       <div

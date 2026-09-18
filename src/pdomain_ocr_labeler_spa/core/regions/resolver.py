@@ -43,7 +43,9 @@ def is_undecided(decision: RegionDecision | None) -> bool:
     refusal (``REJECTED``) or already names a ``region_id`` — accepted,
     edited and carried decisions all name one, since each promotes the
     proposal into a confirmed region. ``True`` otherwise, including when
-    there is no decision at all.
+    there is no decision at all, or when the latest decision is ``REOPENED``
+    — a person asking to see a rejected (possibly carried-rejected) proposal
+    again, which names no ``region_id`` of its own, same as ``REJECTED``.
 
     Deliberately excludes ``resolve_regions``'s confidence-threshold check:
     the threshold is how a caller decides whether a proposal can *stand in*

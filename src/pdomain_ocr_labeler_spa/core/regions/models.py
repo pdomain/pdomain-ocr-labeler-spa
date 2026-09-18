@@ -32,12 +32,24 @@ class Disposition(StrEnum):
     EDITED = "edited"
     REJECTED = "rejected"
     CARRIED = "carried"
+    #: Reverses a ``REJECTED`` decision (a person's own, or one carried
+    #: forward onto a later run's proposal) and puts the proposal back to
+    #: undecided. Journaled rather than erasing the rejection it reverses —
+    #: this store is append-only, so "undo" is one more fact recorded after
+    #: it, not a rewrite of what came before (mirrors
+    #: ``PageKindReviewedMarker``'s ``history`` withdrawal marker, the one
+    #: other place this codebase reverses a decision). Carries no
+    #: ``region_id`` of its own — reopening asks a person to decide again, it
+    #: does not itself decide anything.
+    REOPENED = "reopened"
 
     @property
     def knowledge_state(self) -> KnowledgeState:
         """The knowledge state this disposition asserts about the proposal."""
         if self is Disposition.REJECTED:
             return KnowledgeState.VERIFIED_NEGATIVE
+        if self is Disposition.REOPENED:
+            return KnowledgeState.UNKNOWN
         return KnowledgeState.POSITIVE
 
 
@@ -153,7 +165,10 @@ class RegionDecision:
 
     A proposal with no decision is unreviewed. A proposal with a ``REJECTED``
     decision was looked at and refused. Those are opposite facts, and keeping
-    them apart is why this record exists at all.
+    them apart is why this record exists at all. A ``REOPENED`` decision is a
+    third fact layered on top of a rejection, not a rewrite of it: the
+    rejection stays on record, and this says a person later asked to see the
+    proposal again.
     """
 
     decision_id: str
@@ -172,13 +187,17 @@ class RegionDecision:
     #: carried acceptance, over the one disposition rejection already has, since
     #: a rejection produces no region of its own to attribute a "carried" origin
     #: to. Forbidden on ``ACCEPTED``/``EDITED``, which always name a proposal a
-    #: person just looked at, never a carry.
+    #: person just looked at, never a carry. Also forbidden on ``REOPENED``: a
+    #: reopen reverses this exact proposal's own latest rejection, never a
+    #: different proposal's — there is nothing to name a carry from.
     carried_from_run_id: str | None = None
     carried_from_proposal_id: str | None = None
 
     def __post_init__(self) -> None:
-        if self.disposition is not Disposition.REJECTED and self.region_id is None:
+        if self.disposition not in (Disposition.REJECTED, Disposition.REOPENED) and self.region_id is None:
             raise ValueError(f"a {self.disposition.value} decision must name the region_id it produced")
+        if self.disposition is Disposition.REOPENED and self.region_id is not None:
+            raise ValueError("a reopened decision names no region_id — it asks for a decision, not one")
         has_carried_from_run = self.carried_from_run_id is not None
         has_carried_from_proposal = self.carried_from_proposal_id is not None
         if self.disposition is Disposition.CARRIED:

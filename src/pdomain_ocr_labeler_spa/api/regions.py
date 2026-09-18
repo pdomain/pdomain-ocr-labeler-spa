@@ -425,6 +425,24 @@ def _proposal_already_accepted(proposal_id: str, region_id: str) -> JSONResponse
     )
 
 
+def _proposal_not_rejected(proposal_id: str) -> JSONResponse:
+    """409 when un-rejecting a proposal whose latest decision is not a rejection.
+
+    Un-reject only ever reverses a refusal — a person's own, or one a re-run
+    carried forward onto a later proposal. Nothing else is there to undo:
+    an undecided proposal is already what un-reject would leave it as, and
+    an accepted/edited/carried proposal names a confirmed region un-reject
+    has no business touching (delete the region instead).
+    """
+    return JSONResponse(
+        status_code=409,
+        content=ApiError(
+            error="proposal_not_rejected",
+            message=f"proposal {proposal_id} is not currently rejected; nothing to bring back",
+        ).model_dump(),
+    )
+
+
 def _proposal_not_found(proposal_id: str) -> JSONResponse:
     return JSONResponse(
         status_code=404,
@@ -1188,6 +1206,114 @@ def reject_region_proposal(
             run_id=proposal.run_id,
             proposal_id=proposal_id,
             disposition=Disposition.REJECTED,
+            region_id=None,
+            actor="default",
+            decided_at=datetime.now(UTC).isoformat(),
+        ),
+    )
+    if decision_err is not None:
+        return decision_err
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+        page_store=store,
+    )
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/regions/proposals/{proposal_id}/unreject",
+    response_model=PagePayload,
+    operation_id="unreject_region_proposal",
+)
+def unreject_region_proposal(
+    *,
+    project_id: str,
+    page_index: int,
+    proposal_id: str,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+    # Read-only here, exactly as ``reject_region_proposal``: un-reject never
+    # writes the page blob, and the payload helper needs it only to read the
+    # same image-provenance digest ``GET /pages`` reads.
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
+) -> JSONResponse:
+    """Un-reject a proposal: put it back to undecided, for a person to see again.
+
+    Records ``reopened`` (``KnowledgeState.UNKNOWN``) rather than erasing or
+    rewriting the rejection it reverses — the decision log is append-only,
+    and "a person changed their mind" is itself a fact worth keeping, the same
+    way ``accept_region_proposal`` already allows an accept after a rejection
+    without touching the rejection record. Never touches the page blob:
+    reopening asks for a fresh decision, it does not make one, so this route
+    has no ``bind_page_labeling_lease`` dependency, same as
+    ``reject_region_proposal``.
+
+    Works identically whether the rejection being reversed was a person's own
+    direct decision or one a later run carried forward onto *this* proposal
+    (``carried_from_proposal_id`` set) — either way this un-rejects the exact
+    proposal named in the URL. It never touches a different proposal's
+    decision: un-rejecting a carried rejection leaves the original rejection
+    it carried from on the record, untouched, so a reader can still tell a
+    carried rejection from a direct one after the reversal, the same as
+    before it.
+
+    Returns 409 (``proposal_not_rejected``) when the proposal's latest
+    decision is not a rejection — an undecided, accepted, edited or carried
+    proposal has nothing for this route to bring back. Idempotent the same
+    way reject is: a second un-reject once the proposal is already reopened
+    is a no-op, answered with the current payload rather than appending a
+    second ``reopened`` decision.
+
+    The page must be loaded, exactly as every sibling proposal-decision route
+    requires — resolved first, ``page_not_loaded`` otherwise.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+    project = project_state.loaded_project
+    assert project is not None
+
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    proposal_log = RegionProposalLog(project.project_root)
+    proposal = _find_proposal(proposal_log, page_index, proposal_id)
+    if proposal is None:
+        return _proposal_not_found(proposal_id)
+
+    decision_log = RegionDecisionLog(project.project_root)
+    latest = decision_log.decision_for(proposal_id, run_id=proposal.run_id)
+
+    # A held or double-tapped "bring back" sends the request twice; answer
+    # the second one with the current payload rather than appending a second
+    # reopened decision, the same no-op-on-repeat rule reject already follows.
+    if latest is not None and latest.disposition is Disposition.REOPENED:
+        return _refresh_payload_response(
+            project_id=project_id,
+            page_index=page_index,
+            project_state=project_state,
+            settings=settings,
+            app_config=app_config,
+            page_store=store,
+        )
+
+    if latest is None or latest.disposition is not Disposition.REJECTED:
+        return _proposal_not_rejected(proposal_id)
+
+    decision_err = _append_decision_or_error(
+        decision_log,
+        RegionDecision(
+            decision_id=uuid.uuid4().hex,
+            run_id=proposal.run_id,
+            proposal_id=proposal_id,
+            disposition=Disposition.REOPENED,
             region_id=None,
             actor="default",
             decided_at=datetime.now(UTC).isoformat(),

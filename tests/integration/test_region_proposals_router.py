@@ -1939,3 +1939,160 @@ def test_carry_waits_for_the_page_lock_before_reading_or_appending(toolbar_loade
     assert not worker.is_alive()
     assert results == [(1, 0)]
     assert any(d.disposition is Disposition.CARRIED for d in decision_log.decisions())
+
+
+# ── Un-reject: bringing a rejected proposal back to undecided ──────────────
+
+
+def test_unreject_puts_a_rejected_proposal_back_to_undecided(toolbar_loaded: Any) -> None:
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_proposal(client, project_root, proposal_id="p1")
+    rejected = client.post(f"{_BASE}/regions/proposals/p1/reject")
+    assert rejected.status_code == 200, rejected.text
+
+    r = client.post(f"{_BASE}/regions/proposals/p1/unreject")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # Undecided again: back in the resolved (unconfirmed) region list.
+    unconfirmed = [reg for reg in body["regions"] if not reg["confirmed"]]
+    assert any(reg["proposal_id"] == "p1" for reg in unconfirmed)
+    proposal_view = next(p for p in body["proposals"] if p["proposal_id"] == "p1")
+    assert proposal_view["disposition"] == "reopened"
+    assert proposal_view["decided_region_id"] is None
+
+    decision = RegionDecisionLog(project_root).decision_for("p1", run_id="r1")
+    assert decision is not None
+    assert decision.disposition is Disposition.REOPENED
+    assert decision.region_id is None
+
+
+def test_unreject_unknown_proposal_returns_404(toolbar_loaded: Any) -> None:
+    client, _ps, _page = toolbar_loaded
+    r = client.post(f"{_BASE}/regions/proposals/does-not-exist/unreject")
+    assert r.status_code == 404, r.text
+
+
+def test_unreject_an_undecided_proposal_returns_409(toolbar_loaded: Any) -> None:
+    client, project_state, _page = toolbar_loaded
+    _seed_proposal(client, project_state.loaded_project.project_root, proposal_id="p1")
+
+    r = client.post(f"{_BASE}/regions/proposals/p1/unreject")
+    assert r.status_code == 409, r.text
+    assert r.json()["error"] == "proposal_not_rejected"
+
+
+def test_unreject_an_accepted_proposal_returns_409(toolbar_loaded: Any) -> None:
+    client, project_state, _page = toolbar_loaded
+    _seed_proposal(client, project_state.loaded_project.project_root, proposal_id="p1")
+    accepted = client.post(f"{_BASE}/regions/proposals/p1/accept")
+    assert accepted.status_code == 200, accepted.text
+
+    r = client.post(f"{_BASE}/regions/proposals/p1/unreject")
+    assert r.status_code == 409, r.text
+    assert r.json()["error"] == "proposal_not_rejected"
+
+
+def test_unrejecting_twice_records_only_one_reopened_decision(toolbar_loaded: Any) -> None:
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_proposal(client, project_root, proposal_id="p1")
+    client.post(f"{_BASE}/regions/proposals/p1/reject")
+
+    first = client.post(f"{_BASE}/regions/proposals/p1/unreject")
+    assert first.status_code == 200, first.text
+    second = client.post(f"{_BASE}/regions/proposals/p1/unreject")
+    assert second.status_code == 200, second.text
+
+    decisions = [d for d in RegionDecisionLog(project_root).decisions() if d.proposal_id == "p1"]
+    reopened = [d for d in decisions if d.disposition is Disposition.REOPENED]
+    assert len(reopened) == 1
+
+
+def test_unreject_decision_persist_failure_returns_a_structured_error(
+    toolbar_loaded: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+
+    client, project_state, _page = toolbar_loaded
+    _seed_proposal(client, project_state.loaded_project.project_root, proposal_id="p1")
+    client.post(f"{_BASE}/regions/proposals/p1/reject")
+
+    def _raise(self: RegionDecisionLog, decision: Any) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(RegionDecisionLog, "append", _raise)
+
+    r = client.post(f"{_BASE}/regions/proposals/p1/unreject")
+    assert r.status_code == 503, r.text
+    assert r.json()["error"] == "decision_persist_failed"
+
+
+def test_unrejecting_a_carried_rejection_restores_it_without_touching_the_original(
+    toolbar_loaded: Any,
+) -> None:
+    """The carried-rejected proposal a re-run produced is un-rejected on its own
+    id; the person's original rejection it was carried from is never rewritten
+    — its ``carried_from_*`` fields stay on the record, provenance intact.
+    """
+    from pdomain_book_contracts.annotation import RegionRole
+
+    from pdomain_ocr_labeler_spa.core.regions.decision_log import RegionDecisionLog
+    from pdomain_ocr_labeler_spa.core.regions.detector import DetectedRegion
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition
+    from pdomain_ocr_labeler_spa.core.regions.proposal_log import RegionProposalLog
+
+    client, project_state, _page = toolbar_loaded
+    project_root = project_state.loaded_project.project_root
+    _seed_proposal(client, project_root, proposal_id="p1", role=RegionRole.POETRY)
+    rejected = client.post(f"{_BASE}/regions/proposals/p1/reject")
+    assert rejected.status_code == 200, rejected.text
+    _mark_page_reviewed(project_root)
+
+    def _overlapping_detector(detector_input: Any) -> list[DetectedRegion]:
+        del detector_input
+        return [DetectedRegion(role=RegionRole.POETRY, box=(5, 5, 50, 50), confidence=0.6, evidence={})]
+
+    _run_propose_regions_job(client, detector=_overlapping_detector)
+
+    new_proposal = next(p for p in RegionProposalLog(project_root).proposals_for_page(0) if p.run_id != "r1")
+    decision_log = RegionDecisionLog(project_root)
+    before_carry = decision_log.decision_for(new_proposal.proposal_id, run_id=new_proposal.run_id)
+    assert before_carry is not None
+    assert before_carry.disposition is Disposition.REJECTED
+    assert before_carry.carried_from_proposal_id == "p1"
+
+    r = client.post(f"{_BASE}/regions/proposals/{new_proposal.proposal_id}/unreject")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    unconfirmed = [reg for reg in body["regions"] if not reg["confirmed"]]
+    assert any(reg["proposal_id"] == new_proposal.proposal_id for reg in unconfirmed)
+
+    # The original rejection (p1) is untouched: same disposition, no
+    # carried_from of its own (it was the person's own direct rejection).
+    original = decision_log.decision_for("p1", run_id="r1")
+    assert original is not None
+    assert original.disposition is Disposition.REJECTED
+    assert original.carried_from_proposal_id is None
+
+    # The carried rejection's own record — the one this route reversed —
+    # remains on the journal exactly as it was: the append-only log gained a
+    # new REOPENED entry, it did not rewrite the REJECTED one.
+    carried_entries = [
+        d
+        for d in decision_log.decisions()
+        if d.proposal_id == new_proposal.proposal_id and d.disposition is Disposition.REJECTED
+    ]
+    assert len(carried_entries) == 1
+    assert carried_entries[0].carried_from_proposal_id == "p1"
+    assert carried_entries[0].carried_from_run_id == "r1"
+
+    latest = decision_log.decision_for(new_proposal.proposal_id, run_id=new_proposal.run_id)
+    assert latest is not None
+    assert latest.disposition is Disposition.REOPENED

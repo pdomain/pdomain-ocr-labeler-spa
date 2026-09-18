@@ -104,6 +104,24 @@ def test_is_undecided_is_false_for_a_decision_naming_a_region() -> None:
     assert is_undecided(carried) is False
 
 
+def test_is_undecided_is_true_for_a_reopened_decision() -> None:
+    """A reopened decision — un-rejecting a rejection, direct or carried —
+    behaves as undecided again, the same as a proposal nobody has looked at.
+    """
+    from pdomain_ocr_labeler_spa.core.regions.resolver import is_undecided
+
+    reopened = RegionDecision(
+        decision_id="d3",
+        run_id="r1",
+        proposal_id="p1",
+        disposition=Disposition.REOPENED,
+        region_id=None,
+        actor="default",
+        decided_at="2026-09-18T10:00:00+00:00",
+    )
+    assert is_undecided(reopened) is True
+
+
 def test_a_confirmed_region_wins_over_a_proposal() -> None:
     """ "Wins over" means the specific proposal promoted into this region, not the page."""
     from pdomain_ocr_labeler_spa.core.regions.resolver import resolve_regions
@@ -190,6 +208,24 @@ def test_a_rejected_proposal_is_never_returned_even_above_the_threshold() -> Non
         [], [_proposal("p1", 0.99)], {"p1": rejected}, {}, threshold=0.5, current_facet_digests={}
     )
     assert resolved == []
+
+
+def test_a_reopened_proposal_is_returned_like_any_undecided_one() -> None:
+    from pdomain_ocr_labeler_spa.core.regions.resolver import resolve_regions
+
+    reopened = RegionDecision(
+        decision_id="d1",
+        run_id="r1",
+        proposal_id="p1",
+        disposition=Disposition.REOPENED,
+        region_id=None,
+        actor="default",
+        decided_at="2026-09-18T10:00:00+00:00",
+    )
+    resolved = resolve_regions(
+        [], [_proposal("p1", 0.99)], {"p1": reopened}, {}, threshold=0.5, current_facet_digests={}
+    )
+    assert [r.proposal_id for r in resolved] == ["p1"]
 
 
 def test_the_unattended_row_where_both_human_stores_are_empty() -> None:

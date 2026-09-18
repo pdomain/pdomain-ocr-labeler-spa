@@ -11,24 +11,47 @@
 //   - an id in neither list (normal right after a decision removes a
 //     proposal) renders a short "no longer on the page" message.
 //
+// This file also exports <CarriedRejectionsPanel> — a sibling to
+// <RegionDetail>, not a part of it (see that component's own doc comment for
+// why): a re-run must not ask about a rejection again, but nothing should
+// suppress a proposal without a person being able to see, and undo, the
+// suppression (docs/context/current-state.md "nothing in the SPA shows or
+// undoes a carried rejection"). Collapsed and counted by default — a
+// carried rejection is usually correct, so it stays out of the way until
+// opened; only ``page.proposals`` entries whose latest decision is a
+// rejection *and* names ``carried_from_proposal_id`` count, never an
+// ordinary direct rejection (which already had a person's attention) or one
+// already brought back (``disposition: "reopened"``, no longer rejected).
+// "Bring back" posts to ``.../unreject``, appending a ``reopened`` decision
+// — the decision log is append-only, so this never rewrites the rejection
+// it reverses; the proposal simply becomes undecided again, same as any
+// other.
+//
 // data-testids:
-//   region-detail                    — outer container
-//   region-detail-role               — role text (proposal or confirmed)
-//   region-detail-confidence         — proposal confidence, two decimals
-//   region-detail-stale-badge        — shown when the proposal is stale
-//   region-detail-evidence-{key}     — one row per evidence entry
-//   region-detail-accept             — accept the proposal, no role override
-//   region-detail-accept-as-select   — role picker for "accept as"
-//   region-detail-accept-as-apply    — apply the "accept as" role
-//   region-detail-reject             — reject the proposal
-//   region-detail-accept-error       — inline error after a failed accept
-//   region-detail-reject-error       — inline error after a failed reject
-//   region-detail-origin             — "From a proposal" / "Drawn by hand"
-//   region-detail-change-role-select — role picker for a confirmed region
-//   region-detail-change-role-apply  — apply the changed role
-//   region-detail-edit-error         — inline error after a failed edit
-//   region-detail-delete             — delete a confirmed region (confirm-gated)
-//   region-detail-delete-error       — inline error after a failed delete
+//   region-detail                       — outer container (role/proposal-or-confirmed body)
+//   region-detail-role                  — role text (proposal or confirmed)
+//   region-detail-confidence            — proposal confidence, two decimals
+//   region-detail-stale-badge           — shown when the proposal is stale
+//   region-detail-evidence-{key}        — one row per evidence entry
+//   region-detail-accept                — accept the proposal, no role override
+//   region-detail-accept-as-select      — role picker for "accept as"
+//   region-detail-accept-as-apply       — apply the "accept as" role
+//   region-detail-reject                — reject the proposal
+//   region-detail-accept-error          — inline error after a failed accept
+//   region-detail-reject-error          — inline error after a failed reject
+//   region-detail-origin                — "From a proposal" / "Drawn by hand"
+//   region-detail-change-role-select    — role picker for a confirmed region
+//   region-detail-change-role-apply     — apply the changed role
+//   region-detail-edit-error            — inline error after a failed edit
+//   region-detail-delete                — delete a confirmed region (confirm-gated)
+//   region-detail-delete-error          — inline error after a failed delete
+//   carried-rejections-summary          — outer container, present only when count > 0
+//   carried-rejections-toggle           — expand/collapse the list (aria-expanded)
+//   carried-rejections-count            — the count text
+//   carried-rejections-list             — expanded list container
+//   carried-rejections-item-{proposalId}        — one row
+//   carried-rejections-bring-back-{proposalId}  — un-reject that row's proposal
+//   carried-rejections-error-{proposalId}       — inline error after a failed un-reject
 
 import { useState, useSyncExternalStore } from "react";
 import { selectionStore } from "../../stores/selection-store";
@@ -36,6 +59,7 @@ import { dialogStore } from "../../stores/dialog-store";
 import {
   useAcceptProposal,
   useRejectProposal,
+  useUnrejectProposal,
   useEditRegion,
   useDeleteRegion,
   useRegionDecisionPending,
@@ -189,6 +213,152 @@ export function RegionDetail({ page, projectId, pageIndex }: RegionDetailProps) 
   }
 
   return <NotSelected />;
+}
+
+// ─── Carried-rejections panel ──────────────────────────────────────────────
+//
+// Deliberately NOT part of <RegionDetail> above: RightPanel only mounts
+// RegionDetail once `selection-store.level === "region"`, which — like
+// every other rail target — only happens once a person clicks an actual
+// proposal or confirmed region (`selectProposal`/`selectRegion`; pressing
+// `5` alone only aims `rail-store.target`, same as every other target key —
+// see Rail.tsx's own comment on its region `TargetCell`). A page whose only
+// work is a carried rejection has no proposal or region left to click, so
+// gating the summary on `level` would make it unreachable in exactly the
+// case it exists for. <CarriedRejectionsPanel> is mounted by RightPanel
+// unconditionally instead (whenever a page is loaded), independent of
+// selection — see RightPanel.tsx.
+
+export interface CarriedRejectionsPanelProps {
+  page: PagePayload;
+  projectId: string;
+  pageIndex: number;
+}
+
+/** A rejected proposal whose latest decision names where it was carried from
+ * — the fact this summary exists to surface. Never an ordinary direct
+ * rejection (no `carried_from_proposal_id`) and never one already brought
+ * back (`disposition` moves off `"rejected"` the moment a `reopened`
+ * decision is appended, which is exactly what drops it out of this list). */
+function isCarriedRejection(proposal: RegionProposalView): boolean {
+  return proposal.disposition === "rejected" && proposal.carried_from_proposal_id != null;
+}
+
+export function CarriedRejectionsPanel({
+  page,
+  projectId,
+  pageIndex,
+}: CarriedRejectionsPanelProps) {
+  const unrejectProposal = useUnrejectProposal(projectId, pageIndex);
+  const decisionPending = useRegionDecisionPending(projectId, pageIndex);
+  const carriedRejections = (page.proposals ?? []).filter(isCarriedRejection);
+
+  return (
+    <CarriedRejectionsSummary
+      items={carriedRejections}
+      unrejectProposal={unrejectProposal}
+      decisionPending={decisionPending}
+    />
+  );
+}
+
+interface CarriedRejectionsSummaryProps {
+  items: RegionProposalView[];
+  unrejectProposal: ReturnType<typeof useUnrejectProposal>;
+  decisionPending: boolean;
+}
+
+function CarriedRejectionsSummary({
+  items,
+  unrejectProposal,
+  decisionPending,
+}: CarriedRejectionsSummaryProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (items.length === 0) return null;
+
+  return (
+    <div
+      data-testid="carried-rejections-summary"
+      className="border-b border-border-1 text-[11px] shrink-0"
+    >
+      <button
+        type="button"
+        data-testid="carried-rejections-toggle"
+        aria-expanded={expanded}
+        onClick={() => {
+          setExpanded((prev) => !prev);
+        }}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-ink-2 hover:text-ink-1 hover:bg-bg-raised/60 transition-colors"
+      >
+        <span data-testid="carried-rejections-count">
+          {items.length} rejected proposal{items.length === 1 ? "" : "s"} carried from an earlier
+          decision
+        </span>
+        <span aria-hidden="true">{expanded ? "▾" : "▸"}</span>
+      </button>
+      {expanded && (
+        <ul data-testid="carried-rejections-list" className="flex flex-col">
+          {items.map((item) => (
+            <CarriedRejectionRow
+              key={item.proposal_id}
+              item={item}
+              unrejectProposal={unrejectProposal}
+              decisionPending={decisionPending}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+interface CarriedRejectionRowProps {
+  item: RegionProposalView;
+  unrejectProposal: ReturnType<typeof useUnrejectProposal>;
+  decisionPending: boolean;
+}
+
+function CarriedRejectionRow({
+  item,
+  unrejectProposal,
+  decisionPending,
+}: CarriedRejectionRowProps) {
+  const testSuffix = item.proposal_id;
+  const isThisPending =
+    unrejectProposal.isPending && unrejectProposal.variables.proposalId === item.proposal_id;
+  return (
+    <li
+      data-testid={`carried-rejections-item-${testSuffix}`}
+      className="flex items-center justify-between gap-2 px-3 py-1.5 border-t border-border-1/40"
+    >
+      <div className="flex flex-col">
+        <span className="text-ink-1">{item.role}</span>
+        <span className="text-ink-3 font-mono tabular-nums">{item.confidence.toFixed(2)}</span>
+      </div>
+      <div className="flex flex-col items-end gap-0.5">
+        <button
+          type="button"
+          data-testid={`carried-rejections-bring-back-${testSuffix}`}
+          disabled={unrejectProposal.isPending || decisionPending}
+          onClick={() => {
+            unrejectProposal.mutate({ proposalId: item.proposal_id });
+          }}
+          className="text-[11px] px-2 py-1 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+        >
+          {isThisPending ? "Bringing back…" : "Bring back"}
+        </button>
+        {unrejectProposal.isError && unrejectProposal.variables.proposalId === item.proposal_id && (
+          <p
+            data-testid={`carried-rejections-error-${testSuffix}`}
+            className="text-[10px] text-status-mismatch italic"
+          >
+            Failed. Try again.
+          </p>
+        )}
+      </div>
+    </li>
+  );
 }
 
 function NotSelected() {

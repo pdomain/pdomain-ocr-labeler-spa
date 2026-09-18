@@ -907,6 +907,16 @@ export interface paths {
          *     public ``Job`` model plus an ``event`` field naming the SSE event kind
          *     (``snapshot`` / ``progress`` / ``complete`` / ``error`` / ``cancelled``)
          *     — see ``JobRunner._emit`` and ``_job_snapshot`` for the shared shape.
+         *
+         *     Registers the broker listener (``broker.listen``) *before* reading the
+         *     job's current status for the initial snapshot — not after, the way an
+         *     earlier version did by capturing ``job`` once and re-checking that same
+         *     stale reference post-yield. That let a job racing to a terminal state
+         *     between the initial fetch and the (only then made) ``subscribe`` call
+         *     both report a stale non-terminal snapshot *and* subscribe to an
+         *     already-closed, already-drained broker channel: the terminal event was
+         *     gone for good and the stream hung forever. Listening first closes the
+         *     race — see ``JobEventBroker.listen``'s docstring for the guarantee.
          */
         get: operations["job_events_api_jobs__job_id__events_get"];
         put?: never;
@@ -1732,6 +1742,54 @@ export interface paths {
          *     make.
          */
         post: operations["reject_region_proposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/regions/proposals/{proposal_id}/unreject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unreject Region Proposal
+         * @description Un-reject a proposal: put it back to undecided, for a person to see again.
+         *
+         *     Records ``reopened`` (``KnowledgeState.UNKNOWN``) rather than erasing or
+         *     rewriting the rejection it reverses — the decision log is append-only,
+         *     and "a person changed their mind" is itself a fact worth keeping, the same
+         *     way ``accept_region_proposal`` already allows an accept after a rejection
+         *     without touching the rejection record. Never touches the page blob:
+         *     reopening asks for a fresh decision, it does not make one, so this route
+         *     has no ``bind_page_labeling_lease`` dependency, same as
+         *     ``reject_region_proposal``.
+         *
+         *     Works identically whether the rejection being reversed was a person's own
+         *     direct decision or one a later run carried forward onto *this* proposal
+         *     (``carried_from_proposal_id`` set) — either way this un-rejects the exact
+         *     proposal named in the URL. It never touches a different proposal's
+         *     decision: un-rejecting a carried rejection leaves the original rejection
+         *     it carried from on the record, untouched, so a reader can still tell a
+         *     carried rejection from a direct one after the reversal, the same as
+         *     before it.
+         *
+         *     Returns 409 (``proposal_not_rejected``) when the proposal's latest
+         *     decision is not a rejection — an undecided, accepted, edited or carried
+         *     proposal has nothing for this route to bring back. Idempotent the same
+         *     way reject is: a second un-reject once the proposal is already reopened
+         *     is a no-op, answered with the current payload rather than appending a
+         *     second ``reopened`` decision.
+         *
+         *     The page must be loaded, exactly as every sibling proposal-decision route
+         *     requires — resolved first, ``page_not_loaded`` otherwise.
+         */
+        post: operations["unreject_region_proposal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5158,7 +5216,15 @@ export interface components {
          *     earlier proposal's confirmed region or recorded rejection and reused that
          *     decision rather than asking again. Both are ``None`` for a decision a person
          *     made directly on this exact proposal, carried or not — the one signal a
-         *     caller has for telling a carried decision from a fresh one.
+         *     caller has for telling a carried decision from a fresh one, including
+         *     after a ``reopened`` decision reverses it (a ``POST .../unreject`` reverses
+         *     only the proposal named in the URL; it never rewrites the ``carried_from_*``
+         *     fields of the decision it reverses, so this stays true before and after).
+         *
+         *     ``disposition`` also reads ``"reopened"``: a person asked to see a
+         *     rejected — possibly carried-rejected — proposal again. A reopened
+         *     proposal has no ``decided_region_id`` and behaves as undecided in
+         *     ``PagePayload.regions``, the same as one nobody has looked at yet.
          */
         RegionProposalView: {
             /** Proposal Id */
@@ -8264,6 +8330,39 @@ export interface operations {
         };
     };
     reject_region_proposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unreject_region_proposal: {
         parameters: {
             query?: never;
             header?: never;

@@ -3,10 +3,11 @@
 // Plan: docs/plans/2026-09-17-region-review-surface.md — Task 3
 //
 // Endpoints (all real per api/regions.py, mounted under /api/projects):
-//   POST   /api/projects/{pid}/pages/{idx}/regions/proposals/{proposalId}/accept → PagePayload
-//   POST   /api/projects/{pid}/pages/{idx}/regions/proposals/{proposalId}/reject → PagePayload
-//   PATCH  /api/projects/{pid}/pages/{idx}/regions/{regionId}                    → PagePayload
-//   DELETE /api/projects/{pid}/pages/{idx}/regions/{regionId}                    → PagePayload
+//   POST   /api/projects/{pid}/pages/{idx}/regions/proposals/{proposalId}/accept   → PagePayload
+//   POST   /api/projects/{pid}/pages/{idx}/regions/proposals/{proposalId}/reject   → PagePayload
+//   POST   /api/projects/{pid}/pages/{idx}/regions/proposals/{proposalId}/unreject → PagePayload
+//   PATCH  /api/projects/{pid}/pages/{idx}/regions/{regionId}                      → PagePayload
+//   DELETE /api/projects/{pid}/pages/{idx}/regions/{regionId}                      → PagePayload
 //
 // Every mutation invalidates ["page", projectId, pageIndex] on success and never
 // writes the cache directly, matching every other mutation in hooks/useLineMutations.ts —
@@ -136,6 +137,31 @@ export function useRejectProposal(projectId: string, pageIndex: number) {
     mutationFn: ({ proposalId }) =>
       apiRequest<PagePayload>(
         `${pageBase(projectId, pageIndex)}/regions/proposals/${encodeURIComponent(proposalId)}/reject`,
+        "POST",
+      ),
+    onSuccess: () => {
+      invalidateAfterDecision(qc, projectId, pageIndex);
+    },
+  });
+}
+
+// ─── useUnrejectProposal ────────────────────────────────────────────────────
+
+/**
+ * Bring a rejected proposal — a person's own, or one carried forward from an
+ * earlier rejection — back to undecided. No body.
+ *
+ * Same shared `mutationKey` as accept/reject/edit/delete: a carried-rejection
+ * "Bring back" click while another region decision for this page is in
+ * flight is disabled, exactly as those already are.
+ */
+export function useUnrejectProposal(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { proposalId: string }>({
+    mutationKey: decisionMutationKey(projectId, pageIndex),
+    mutationFn: ({ proposalId }) =>
+      apiRequest<PagePayload>(
+        `${pageBase(projectId, pageIndex)}/regions/proposals/${encodeURIComponent(proposalId)}/unreject`,
         "POST",
       ),
     onSuccess: () => {
