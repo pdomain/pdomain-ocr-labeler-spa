@@ -5,14 +5,16 @@
 // useRefineWordBbox (word-scope refine job).
 //
 // Endpoints:
-//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/rebox         → PagePayload
-//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/merge         → PagePayload
-//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/split         → PagePayload
-//   POST /api/projects/{pid}/pages/{idx}/words/delete-batch            → PagePayload (P1.3)
-//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/nudge         → PagePayload (S1.1)
-//   POST /api/projects/{pid}/pages/{idx}/refine                        → 202 {job_id} (P1-BBOX-UI)
+//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/rebox              → PagePayload
+//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/merge              → PagePayload
+//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/split              → PagePayload
+//   POST /api/projects/{pid}/pages/{idx}/words/delete-batch                 → PagePayload (P1.3)
+//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/nudge              → PagePayload (S1.1)
+//   POST /api/projects/{pid}/pages/{idx}/refine                             → 202 {job_id} (P1-BBOX-UI)
+//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/glyph-annotations  → PagePayload (M11 Task 4)
+//   POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/accept-prediction  → PagePayload (M11 Task 4)
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { components } from "../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -26,6 +28,9 @@ type UpdateWordGroundTruthRequest = components["schemas"]["UpdateWordGroundTruth
 type NudgeBboxRequest = components["schemas"]["NudgeBboxRequest"];
 type RefineScopeRequest = components["schemas"]["RefineScopeRequest"];
 type RefineJobResponse = components["schemas"]["RefineJobResponse"];
+type GlyphAnnotationsModel = components["schemas"]["GlyphAnnotationsModel"];
+type SetGlyphAnnotationsRequest = components["schemas"]["SetGlyphAnnotationsRequest"];
+type AcceptGlyphPredictionRequest = components["schemas"]["AcceptGlyphPredictionRequest"];
 
 // ─── internal helpers ──────────────────────────────────────────────────────
 
@@ -488,4 +493,90 @@ export function useAdjustWordGap(projectId: string, pageIndex: number) {
     },
     isPending: reboxMutation.isPending,
   };
+}
+
+// ─── Glyph annotation mutations (M11 Task 4) ──────────────────────────────
+//
+// P0-GLYPH-UI (docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md):
+// `useWordMutations.ts` had no glyph mutation hooks at all, so every POST
+// from `GlyphAnnotationPanel` would have needed hand-rolled fetch calls with
+// no shared invalidation. Both hooks below share one `mutationKey` — the
+// same defect useRegionMutations.ts's `useRegionDecisionPending` docstring
+// describes: two components building independent mutation instances against
+// the same QueryClient must still see each other's in-flight request, or a
+// double-click (or a second future mount point, e.g. a chip popover) can
+// fire a second POST while the first is still running.
+
+/** The shared `mutationKey` both glyph-annotation mutations below register under. */
+function glyphAnnotationMutationKey(projectId: string, pageIndex: number): readonly unknown[] {
+  return ["glyph-annotation-decision", projectId, pageIndex];
+}
+
+/**
+ * True while a `useSetGlyphAnnotations` or `useAcceptGlyphPrediction` call
+ * for this page is in flight, regardless of which component instance
+ * started it.
+ */
+export function useGlyphAnnotationPending(projectId: string, pageIndex: number): boolean {
+  return useIsMutating({ mutationKey: glyphAnnotationMutationKey(projectId, pageIndex) }) > 0;
+}
+
+// ─── useSetGlyphAnnotations ────────────────────────────────────────────────
+
+/**
+ * Set or clear a word's confirmed glyph annotations (ligatures, long-s
+ * positions, swash) — Typography section of `WordDetail`.
+ *
+ * `annotations: null` unsets back to "not reviewed"; `annotations:
+ * {ligatures:[],long_s_positions:[],swash:false,source:"human"}` marks the
+ * word reviewed with nothing to annotate (tri-state — spec §3).
+ *
+ * Endpoint: ``POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/glyph-annotations``
+ */
+export function useSetGlyphAnnotations(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<
+    PagePayload,
+    Error,
+    { lineIndex: number; wordIndex: number; annotations: GlyphAnnotationsModel | null }
+  >({
+    mutationKey: glyphAnnotationMutationKey(projectId, pageIndex),
+    mutationFn: ({ lineIndex, wordIndex, annotations }) => {
+      const body: SetGlyphAnnotationsRequest = { annotations };
+      return apiPost<PagePayload>(
+        `${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/glyph-annotations`,
+        body,
+      );
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
+}
+
+// ─── useAcceptGlyphPrediction ──────────────────────────────────────────────
+
+/**
+ * Confirm a word's glyph predictions, promoting them to confirmed
+ * annotations with `source: "human_confirmed"` (server-assigned).
+ *
+ * Endpoint: ``POST /api/projects/{pid}/pages/{idx}/words/{li}/{wi}/accept-prediction``
+ * Body is always `{}` (`AcceptGlyphPredictionRequest` carries no fields —
+ * acceptance is wholesale, matching the backend's wholesale accept).
+ */
+export function useAcceptGlyphPrediction(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { lineIndex: number; wordIndex: number }>({
+    mutationKey: glyphAnnotationMutationKey(projectId, pageIndex),
+    mutationFn: ({ lineIndex, wordIndex }) => {
+      const body: AcceptGlyphPredictionRequest = {};
+      return apiPost<PagePayload>(
+        `${wordBase(projectId, pageIndex, lineIndex, wordIndex)}/accept-prediction`,
+        body,
+      );
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    },
+  });
 }
