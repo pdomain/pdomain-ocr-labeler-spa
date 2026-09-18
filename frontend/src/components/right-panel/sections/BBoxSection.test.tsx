@@ -54,16 +54,18 @@ vi.mock("sonner", () => ({
 // `useSyncExternalStore` inside a small wrapper component — real SSE-level
 // behavior (EventSource wiring, invalidation, toast wording) is covered by
 // useBboxRefineTracking.test.tsx; this file only needs to prove BBoxSection
-// consumes the resulting `{ jobId, wordKey, outcome, start }` shape
-// correctly.
+// consumes the resulting `{ jobId, word, outcome, start }` shape correctly.
+// `start`/`completeWith` qualify by ("p1", 0) — every test below renders
+// BBoxSection with that same projectId/pageIndex, matching what the real
+// hook's `start()` would have captured (review round 2 finding 1).
 interface FakeRefineTrackingState {
   jobId: string | null;
-  wordKey: string | null;
+  word: UseBboxRefineTrackingResult["word"];
   outcome: BboxRefineOutcome | null;
 }
 
 function createFakeRefineTracking() {
-  let state: FakeRefineTrackingState = { jobId: null, wordKey: null, outcome: null };
+  let state: FakeRefineTrackingState = { jobId: null, word: null, outcome: null };
   const listeners = new Set<() => void>();
   function notify() {
     listeners.forEach((l) => {
@@ -80,7 +82,7 @@ function createFakeRefineTracking() {
     return state;
   }
   function start(jobId: string, wordKey: string) {
-    state = { ...state, jobId, wordKey };
+    state = { ...state, jobId, word: { projectId: "p1", pageIndex: 0, wordKey } };
     notify();
   }
   /** Simulate the ancestor's real hook delivering a terminal outcome —
@@ -89,14 +91,18 @@ function createFakeRefineTracking() {
   function completeWith(wordKey: string, refined: number) {
     state = {
       jobId: null,
-      wordKey: null,
-      outcome: { wordKey, refined, token: (state.outcome?.token ?? 0) + 1 },
+      word: null,
+      outcome: {
+        word: { projectId: "p1", pageIndex: 0, wordKey },
+        refined,
+        token: (state.outcome?.token ?? 0) + 1,
+      },
     };
     notify();
   }
   function useTracking(): UseBboxRefineTrackingResult {
     const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-    return { jobId: snapshot.jobId, wordKey: snapshot.wordKey, outcome: snapshot.outcome, start };
+    return { jobId: snapshot.jobId, word: snapshot.word, outcome: snapshot.outcome, start };
   }
   return { useTracking, start, completeWith, getState: getSnapshot };
 }
@@ -457,7 +463,7 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     await user.click(screen.getByTestId("bbox-refine-button"));
 
     await waitFor(() => expect(tracking.getState().jobId).toBe("job-start-1"));
-    expect(tracking.getState().wordKey).toBe("0-0");
+    expect(tracking.getState().word).toEqual({ projectId: "p1", pageIndex: 0, wordKey: "0-0" });
   });
 
   it("a delivered outcome for this word's key resyncs the coordinate inputs", async () => {

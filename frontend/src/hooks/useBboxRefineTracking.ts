@@ -27,15 +27,35 @@
 // Toast lifecycle lives here too (not at the BBoxSection call site): the
 // call site can unmount mid-job (that's the whole bug this hook fixes), so
 // it cannot be trusted to still be around to show the terminal toast.
+//
+// Review round 2, finding 1: ProjectPage — the sole owner of this hook — is
+// reused across page and project navigation (React Router keeps the same
+// component instance; only its route params change), so `projectId` /
+// `pageIndex` are live values that can drift out from under an in-flight
+// job. `start()` captures them at call time into `word` (below); every
+// later read (the invalidation key, the outcome's word) uses that captured
+// value, never this hook's own current parameters. Without this, starting
+// a refine on page 3 and navigating to page 4 before it completes would
+// invalidate page 4 (leaving page 3, the page the job actually changed,
+// stale) and would expose a bare `wordKey` string cheap enough for a
+// same-indexed word on page 4 to collide with.
 
 import { useState } from "react";
 import { useJobProgress, type JobProgressEvent } from "./useJobProgress";
 import { useJobCompletionInvalidation } from "./useJobCompletionInvalidation";
 import { toast } from "../lib/toast";
 
-export interface BboxRefineOutcome {
-  /** `${line_index}-${word_index}` — matches BBoxSection's own `wordKey`. */
+/** Identifies which word, on which page of which project, a refine job or
+ * outcome belongs to. */
+export interface BboxWordRef {
+  projectId: string;
+  pageIndex: number;
+  /** `${line_index}-${word_index}` within that page. */
   wordKey: string;
+}
+
+export interface BboxRefineOutcome {
+  word: BboxWordRef;
   /** `result.refined` from the terminal job event. 0 means a real no-op —
    * see the "refine no-ops without an attached OCR image" note in
    * BBoxSection.tsx. */
@@ -48,13 +68,17 @@ export interface BboxRefineOutcome {
 export interface UseBboxRefineTrackingResult {
   /** The in-flight refine_bboxes job id, or null when none is running. */
   jobId: string | null;
-  /** Which word (`${line_index}-${word_index}`) the in-flight job belongs
-   * to. Stays set only while `jobId` is non-null. */
-  wordKey: string | null;
-  /** The most recent terminal outcome for any word. A consumer checks
-   * `outcome.wordKey` against its own word key before acting on it. */
+  /** Which word the in-flight job belongs to — the project/page/word
+   * captured when `start()` was called, not this hook's current
+   * parameters. Stays set only while `jobId` is non-null. */
+  word: BboxWordRef | null;
+  /** The most recent terminal outcome for any word. A consumer compares
+   * `outcome.word` against its own (projectId, pageIndex, wordKey) before
+   * acting on it. */
   outcome: BboxRefineOutcome | null;
-  /** Call once a refine POST returns 202 + job_id. */
+  /** Call once a refine POST returns 202 + job_id, passing this word's
+   * local `${line_index}-${word_index}` key. Captures this hook's current
+   * `projectId` / `pageIndex` at the moment of the call. */
   start: (jobId: string, wordKey: string) => void;
 }
 
@@ -77,7 +101,7 @@ export function useBboxRefineTracking(
   pageIndex: number | undefined,
 ): UseBboxRefineTrackingResult {
   const [jobId, setJobId] = useState<string | null>(null);
-  const [wordKey, setWordKey] = useState<string | null>(null);
+  const [word, setWord] = useState<BboxWordRef | null>(null);
   const [outcome, setOutcome] = useState<BboxRefineOutcome | null>(null);
   const jobProgress = useJobProgress(jobId);
 
@@ -86,9 +110,14 @@ export function useBboxRefineTracking(
     jobProgress,
     setActiveJobId: (id) => {
       setJobId(id);
-      if (id === null) setWordKey(null);
+      if (id === null) setWord(null);
     },
-    invalidationKey: ["page", projectId, pageIndex],
+    // `word` here is still the value captured by `start()` — this render
+    // (the one where `jobProgress.status` first reads "complete") runs
+    // before `setWord(null)` above ever fires, so this key always names
+    // the page the job actually started on, never this hook's current
+    // (possibly since-navigated-away-from) `projectId` / `pageIndex`.
+    invalidationKey: ["page", word?.projectId, word?.pageIndex],
     onComplete: (id, event) => {
       const refined = readRefinedCount(event);
       if (refined > 0) {
@@ -96,8 +125,8 @@ export function useBboxRefineTracking(
           `Bbox refine complete (${String(refined)} word${refined === 1 ? "" : "s"} updated)`,
           { id },
         );
-        if (wordKey) {
-          setOutcome((prev) => ({ wordKey, refined, token: (prev?.token ?? 0) + 1 }));
+        if (word) {
+          setOutcome((prev) => ({ word, refined, token: (prev?.token ?? 0) + 1 }));
         }
       } else {
         toast.warn("Bbox refine ran, but nothing changed.", { id });
@@ -121,9 +150,10 @@ export function useBboxRefineTracking(
   });
 
   function start(newJobId: string, newWordKey: string): void {
+    if (projectId === undefined || pageIndex === undefined) return;
     setJobId(newJobId);
-    setWordKey(newWordKey);
+    setWord({ projectId, pageIndex, wordKey: newWordKey });
   }
 
-  return { jobId, wordKey, outcome, start };
+  return { jobId, word, outcome, start };
 }

@@ -34,7 +34,7 @@
 // guaranteed to stay mounted for the whole session) and passed down as the
 // `refineTracking` prop. This component only calls `refineTracking.start`
 // once a refine POST returns 202, and reads `refineTracking.jobId` /
-// `.wordKey` / `.outcome` back to compute its own busy state and to resync
+// `.word` / `.outcome` back to compute its own busy state and to resync
 // `draft` once a real (refined > 0) outcome for this word lands.
 //
 // All original testids preserved except `bbox-crop-button`, renamed to
@@ -54,7 +54,10 @@ import { Input } from "@pdomain/pdomain-ui/primitives";
 import { Button } from "@pdomain/pdomain-ui/primitives";
 import { useReboxWord, useRefineWordBbox } from "../../../hooks/useWordMutations";
 import { useRefineAvailable } from "../../../hooks/useRefineAvailable";
-import type { UseBboxRefineTrackingResult } from "../../../hooks/useBboxRefineTracking";
+import type {
+  UseBboxRefineTrackingResult,
+  BboxWordRef,
+} from "../../../hooks/useBboxRefineTracking";
 import { toast } from "../../../lib/toast";
 import type { components } from "../../../api/types";
 
@@ -117,6 +120,28 @@ function applyNudge(bbox: BBox, dir: NudgeDir, step: number): BBox {
   }
 }
 
+// ─── word-ref comparison (review round 2, finding 1) ──────────────────────
+// `refineTracking.word` / `outcome.word` are qualified by the project and
+// page the job was actually started on (captured inside
+// useBboxRefineTracking's `start()`), not read reactively — so comparing
+// them against this component's OWN current `projectId` / `pageIndex` /
+// `wordKey` here is what makes a same-indexed word on a since-navigated-
+// away-from page fail to match, even though `wordKey` alone would collide.
+
+function isSameWord(
+  ref: BboxWordRef | null,
+  projectId: string,
+  pageIndex: number,
+  wordKey: string,
+): boolean {
+  return (
+    ref !== null &&
+    ref.projectId === projectId &&
+    ref.pageIndex === pageIndex &&
+    ref.wordKey === wordKey
+  );
+}
+
 // ─── BBoxSection ─────────────────────────────────────────────────────────
 
 export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBoxSectionProps) {
@@ -166,7 +191,11 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
   // render-time-adjustment way as `pendingRefineSync` above.
   const [lastSeenOutcomeToken, setLastSeenOutcomeToken] = useState<number | null>(null);
   const outcome = refineTracking.outcome;
-  if (outcome?.wordKey === wordKey && outcome.token !== lastSeenOutcomeToken) {
+  if (
+    outcome &&
+    isSameWord(outcome.word, projectId, pageIndex, wordKey) &&
+    outcome.token !== lastSeenOutcomeToken
+  ) {
     setLastSeenOutcomeToken(outcome.token);
     if (outcome.refined > 0) {
       setPendingRefineSync(true);
@@ -188,11 +217,9 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
   // orphan the first — see the same doc comment), not the manual
   // rebox/nudge/reset controls, which are independent per-word mutations
   // with nothing to do with the shared slot.
-  const refineJobRunningHere = refineTracking.jobId !== null && refineTracking.wordKey === wordKey;
-  const refineJobRunningElsewhere =
-    refineTracking.jobId !== null &&
-    refineTracking.wordKey !== null &&
-    refineTracking.wordKey !== wordKey;
+  const refineJobRunningHere =
+    refineTracking.jobId !== null && isSameWord(refineTracking.word, projectId, pageIndex, wordKey);
+  const refineJobRunningElsewhere = refineTracking.jobId !== null && !refineJobRunningHere;
 
   /** Queue a `refine_bboxes` job scoped to this word. */
   function startRefine(mode: RefineMode, paddingPx: number, loadingMessage: string) {

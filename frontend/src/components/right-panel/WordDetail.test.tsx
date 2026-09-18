@@ -53,7 +53,7 @@ type PagePayload = components["schemas"]["PagePayload"];
  * that is exactly the behavior it proves. */
 const NOOP_BBOX_REFINE: UseBboxRefineTrackingResult = {
   jobId: null,
-  wordKey: null,
+  word: null,
   outcome: null,
   start: () => undefined,
 };

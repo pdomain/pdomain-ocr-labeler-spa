@@ -1,12 +1,14 @@
 // useBboxRefineTracking.test.tsx — unit tests for the hoisted refine_bboxes
-// job tracker (review finding 3, docs/issues/2026-07-21-bbox-refine-crop-misleading.md).
+// job tracker (review finding 3, docs/issues/2026-07-21-bbox-refine-crop-misleading.md,
+// plus review round 2 finding 1).
 //
 // See WordDetail.test.tsx's "collapses mid-job" test for the integration-
 // level proof that this hook, called from an always-mounted ancestor,
 // survives BBoxSection's own accordion collapsing mid-job — that is the
 // scenario this hook exists to fix, and it needs the real Accordion +
 // BBoxSection composition to demonstrate. This file covers the hook's own
-// state machine in isolation: start/outcome/toast wiring.
+// state machine in isolation: start/outcome/toast wiring and page-
+// navigation safety (round 2 finding 1).
 
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -90,19 +92,19 @@ describe("useBboxRefineTracking", () => {
     vi.clearAllMocks();
   });
 
-  it("start() sets jobId and wordKey", () => {
+  it("start() sets jobId and word (projectId, pageIndex, wordKey)", () => {
     const { Wrapper } = makeWrapper();
     const { result } = renderHook(() => useBboxRefineTracking("p1", 0), { wrapper: Wrapper });
 
     expect(result.current.jobId).toBeNull();
-    expect(result.current.wordKey).toBeNull();
+    expect(result.current.word).toBeNull();
 
     act(() => {
       result.current.start("job-1", "0-0");
     });
 
     expect(result.current.jobId).toBe("job-1");
-    expect(result.current.wordKey).toBe("0-0");
+    expect(result.current.word).toEqual({ projectId: "p1", pageIndex: 0, wordKey: "0-0" });
   });
 
   it("a completed job with refined > 0 sets outcome, invalidates, and shows success", () => {
@@ -116,9 +118,13 @@ describe("useBboxRefineTracking", () => {
 
     es.dispatch({ job_id: "job-1", status: "complete", result: { refined: 2 } });
 
-    expect(result.current.outcome).toEqual({ wordKey: "0-0", refined: 2, token: 1 });
+    expect(result.current.outcome).toEqual({
+      word: { projectId: "p1", pageIndex: 0, wordKey: "0-0" },
+      refined: 2,
+      token: 1,
+    });
     expect(result.current.jobId).toBeNull();
-    expect(result.current.wordKey).toBeNull();
+    expect(result.current.word).toBeNull();
     expect(invalidateSpy).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: ["page", "p1", 0] }),
     );
@@ -192,6 +198,69 @@ describe("useBboxRefineTracking", () => {
     expect(toastMock).toHaveBeenCalledWith("boom", expect.objectContaining({ id: "job-1" }));
     expect(result.current.jobId).toBeNull();
     expect(result.current.outcome).toBeNull();
+
+    vi.unstubAllGlobals();
+  });
+
+  // ─── Review round 2, finding 1 (high): ProjectPage is reused across page
+  // and project navigation, so the project/page a job started on must be
+  // captured at start() time, not read reactively from this hook's own
+  // (drifting) parameters when the job later completes. ──────────────────
+
+  it("invalidates the page a job started on, not whatever page is current when it completes", () => {
+    const { Wrapper, invalidateSpy } = makeWrapper();
+    const es = mockEventSource();
+    const { result, rerender } = renderHook(
+      ({ pageIndex }: { pageIndex: number }) => useBboxRefineTracking("p1", pageIndex),
+      { wrapper: Wrapper, initialProps: { pageIndex: 3 } },
+    );
+
+    act(() => {
+      result.current.start("job-1", "0-0");
+    });
+
+    // Navigate to page 4 before the job completes — ProjectPage re-renders
+    // this same hook instance with new props; the job is still about the
+    // bbox on page 3.
+    rerender({ pageIndex: 4 });
+
+    es.dispatch({ job_id: "job-1", status: "complete", result: { refined: 1 } });
+
+    expect(invalidateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: ["page", "p1", 3] }),
+    );
+    expect(invalidateSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: ["page", "p1", 4] }),
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  it("qualifies the outcome's word by the page the job started on — a same-indexed word on another page does not match", () => {
+    const { Wrapper } = makeWrapper();
+    const es = mockEventSource();
+    const { result, rerender } = renderHook(
+      ({ pageIndex }: { pageIndex: number }) => useBboxRefineTracking("p1", pageIndex),
+      { wrapper: Wrapper, initialProps: { pageIndex: 3 } },
+    );
+
+    act(() => {
+      result.current.start("job-1", "0-0");
+    });
+    rerender({ pageIndex: 4 });
+    es.dispatch({ job_id: "job-1", status: "complete", result: { refined: 1 } });
+
+    // A BBoxSection for word "0-0" now showing page 4 must not treat this
+    // outcome as its own — it belongs to page 3's word "0-0", a different
+    // word that merely shares the same (line, word) index.
+    const outcome = result.current.outcome;
+    expect(outcome).not.toBeNull();
+    expect(outcome?.word).toEqual({ projectId: "p1", pageIndex: 3, wordKey: "0-0" });
+    const matchesPage4Word00 =
+      outcome?.word.projectId === "p1" &&
+      outcome.word.pageIndex === 4 &&
+      outcome.word.wordKey === "0-0";
+    expect(matchesPage4Word00).toBe(false);
 
     vi.unstubAllGlobals();
   });
