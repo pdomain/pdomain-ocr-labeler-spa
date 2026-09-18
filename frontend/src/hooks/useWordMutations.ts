@@ -25,6 +25,7 @@ type AddWordRequest = components["schemas"]["AddWordRequest"];
 type UpdateWordGroundTruthRequest = components["schemas"]["UpdateWordGroundTruthRequest"];
 type NudgeBboxRequest = components["schemas"]["NudgeBboxRequest"];
 type RefineScopeRequest = components["schemas"]["RefineScopeRequest"];
+type RefineJobResponse = components["schemas"]["RefineJobResponse"];
 
 // ─── internal helpers ──────────────────────────────────────────────────────
 
@@ -83,11 +84,6 @@ export function useReboxWord(projectId: string, pageIndex: number) {
 
 // ─── useRefineWordBbox (P1-BBOX-UI) ────────────────────────────────────────
 
-/** Response for `POST .../refine` — 202 Accepted + job id. */
-export interface RefineWordBboxResponse {
-  job_id: string;
-}
-
 /**
  * Queue a real bbox-refinement job (`refine_bboxes`) scoped to a single word.
  *
@@ -96,13 +92,16 @@ export interface RefineWordBboxResponse {
  * `refine_bboxes` job that — per `core/jobs/handlers/refine.py` — snaps the
  * word's bbox to ink (`mode: "refine"`), expands then snaps
  * (`mode: "expand_then_refine"`), or only expands by `paddingPx`
- * (`mode: "expand_only"`). Returns `{ job_id }`; the caller tracks
+ * (`mode: "expand_only"`). Returns the generated `RefineJobResponse`
+ * (`{ job_id }`) rather than a hand-written duplicate of that shape, so a
+ * server-side contract change is caught by `make openapi-export`
+ * regenerating `api/types.ts`, not silently missed here. The caller tracks
  * completion via `useJobProgress` and invalidates the page query itself
  * (this hook does not — the 202 response precedes any actual bbox change).
  */
 export function useRefineWordBbox(projectId: string, pageIndex: number) {
   return useMutation<
-    RefineWordBboxResponse,
+    RefineJobResponse,
     Error,
     {
       lineIndex: number;
@@ -120,7 +119,7 @@ export function useRefineWordBbox(projectId: string, pageIndex: number) {
         line_indices: [],
         word_indices: [[lineIndex, wordIndex]],
       };
-      return apiPost<RefineWordBboxResponse>(
+      return apiPost<RefineJobResponse>(
         `/api/projects/${encodeURIComponent(projectId)}/pages/${encodeURIComponent(String(pageIndex))}/refine`,
         body,
       );
