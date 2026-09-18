@@ -116,7 +116,15 @@ class RegionProposalView(BaseModel):
     earlier proposal's confirmed region or recorded rejection and reused that
     decision rather than asking again. Both are ``None`` for a decision a person
     made directly on this exact proposal, carried or not — the one signal a
-    caller has for telling a carried decision from a fresh one.
+    caller has for telling a carried decision from a fresh one, including
+    after a ``reopened`` decision reverses it (a ``POST .../unreject`` reverses
+    only the proposal named in the URL; it never rewrites the ``carried_from_*``
+    fields of the decision it reverses, so this stays true before and after).
+
+    ``disposition`` also reads ``"reopened"``: a person asked to see a
+    rejected — possibly carried-rejected — proposal again. A reopened
+    proposal has no ``decided_region_id`` and behaves as undecided in
+    ``PagePayload.regions``, the same as one nobody has looked at yet.
     """
 
     proposal_id: str

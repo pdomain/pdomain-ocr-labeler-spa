@@ -514,6 +514,13 @@ def _origin_rejected_proposals_by_page(
     ``_origin_decisions_by_region_id``'s "never a carried one" rule for
     acceptance carry, so a later run's match always traces back to a real
     person's rejection, never a machine's restatement of one.
+
+    Also excludes a proposal whose *latest* decision is ``REOPENED``: a
+    person asked to see it again, so a re-run must treat it as ordinary
+    undecided work rather than carrying the withdrawn rejection forward onto
+    a new proposal. The ``disposition is not REJECTED`` check below already
+    covers this — ``REOPENED`` is simply the other disposition, besides
+    ``REJECTED`` itself, that can be a proposal's latest decision here.
     """
     by_page: dict[int, list[RegionProposal]] = {}
     for (proposal_id, _run_id), decision in latest_by_proposal.items():

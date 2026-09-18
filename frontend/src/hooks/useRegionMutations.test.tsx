@@ -5,6 +5,7 @@
 // Covers:
 //   - useAcceptProposal: POST .../regions/proposals/{id}/accept, body {} or { role }
 //   - useRejectProposal: POST .../regions/proposals/{id}/reject, no body
+//   - useUnrejectProposal: POST .../regions/proposals/{id}/unreject, no body
 //   - useEditRegion: PATCH .../regions/{id}, body { role }
 //   - useDeleteRegion: DELETE .../regions/{id}, no body
 //
@@ -21,6 +22,7 @@ import { server } from "../test/server";
 import {
   useAcceptProposal,
   useRejectProposal,
+  useUnrejectProposal,
   useEditRegion,
   useDeleteRegion,
   useRegionDecisionPending,
@@ -152,6 +154,43 @@ describe("useRejectProposal", () => {
   });
 });
 
+describe("useUnrejectProposal", () => {
+  it("POSTs to the unreject route with no body and invalidates the page query", async () => {
+    let method: string | undefined;
+    let path: string | undefined;
+    let body: string;
+    server.use(
+      http.post(
+        "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/unreject",
+        async ({ request }) => {
+          method = request.method;
+          path = new URL(request.url).pathname;
+          body = await request.text();
+          return HttpResponse.json({
+            project_id: PROJECT_ID,
+            page_index: PAGE_IDX,
+            line_matches: [],
+          });
+        },
+      ),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useUnrejectProposal(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapper(qc),
+    });
+
+    await act(() => result.current.mutateAsync({ proposalId: "prop-1" }));
+
+    expect(method).toBe("POST");
+    expect(path).toBe(
+      `/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/regions/proposals/prop-1/unreject`,
+    );
+    expect(body!).toBe("");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID, PAGE_IDX] });
+  });
+});
+
 describe("useEditRegion", () => {
   it("PATCHes the region route with { role } and invalidates the page query", async () => {
     let method: string | undefined;
@@ -246,6 +285,23 @@ describe("review-queue invalidation", () => {
     const qc = makeQueryClient();
     const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
     const { result } = renderHook(() => useRejectProposal(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapper(qc),
+    });
+
+    await act(() => result.current.mutateAsync({ proposalId: "prop-1" }));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["review-queue", PROJECT_ID] });
+  });
+
+  it("useUnrejectProposal invalidates the review queue on success", async () => {
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/unreject", () =>
+        HttpResponse.json({ project_id: PROJECT_ID, page_index: PAGE_IDX, line_matches: [] }),
+      ),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useUnrejectProposal(PROJECT_ID, PAGE_IDX), {
       wrapper: makeWrapper(qc),
     });
 

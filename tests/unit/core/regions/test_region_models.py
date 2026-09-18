@@ -160,6 +160,7 @@ def test_disposition_maps_onto_a_knowledge_state() -> None:
     assert Disposition.EDITED.knowledge_state is KnowledgeState.POSITIVE
     assert Disposition.REJECTED.knowledge_state is KnowledgeState.VERIFIED_NEGATIVE
     assert Disposition.CARRIED.knowledge_state is KnowledgeState.POSITIVE
+    assert Disposition.REOPENED.knowledge_state is KnowledgeState.UNKNOWN
 
 
 def test_a_carried_decision_names_the_run_and_proposal_it_carried_from() -> None:
@@ -259,6 +260,57 @@ def test_a_rejected_decision_needs_neither_or_both_carried_from_fields() -> None
             actor="propose_regions",
             decided_at="2026-09-18T12:00:00+00:00",
             carried_from_run_id="r1",
+        )
+
+
+def test_a_reopened_decision_names_no_region_and_no_carried_from() -> None:
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition, RegionDecision
+
+    reopened = RegionDecision(
+        decision_id="d7",
+        run_id="r1",
+        proposal_id="p1",
+        disposition=Disposition.REOPENED,
+        region_id=None,
+        actor="default",
+        decided_at="2026-09-18T12:00:00+00:00",
+    )
+    restored = RegionDecision.from_dict(reopened.to_dict())
+    assert restored == reopened
+    assert restored.region_id is None
+    assert restored.carried_from_run_id is None
+    assert restored.carried_from_proposal_id is None
+
+
+def test_a_reopened_decision_rejects_a_region_id() -> None:
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition, RegionDecision
+
+    with pytest.raises(ValueError, match="names no region_id"):
+        RegionDecision(
+            decision_id="d8",
+            run_id="r1",
+            proposal_id="p1",
+            disposition=Disposition.REOPENED,
+            region_id="reg-1",
+            actor="default",
+            decided_at="2026-09-18T12:00:00+00:00",
+        )
+
+
+def test_a_reopened_decision_rejects_carried_provenance() -> None:
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition, RegionDecision
+
+    with pytest.raises(ValueError, match="only set on a carried decision"):
+        RegionDecision(
+            decision_id="d9",
+            run_id="r1",
+            proposal_id="p1",
+            disposition=Disposition.REOPENED,
+            region_id=None,
+            actor="default",
+            decided_at="2026-09-18T12:00:00+00:00",
+            carried_from_run_id="r0",
+            carried_from_proposal_id="p0",
         )
 
 
