@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-07-19
+last_verified: 2026-09-18
 ---
 
 # Intent map
@@ -82,11 +82,6 @@ No product-direction blocker is established by current repository evidence.
   upstream `pdomain-ui` enhancements or permanent local ownership. Current
   composition is recorded in `docs/architecture/03-frontend.md` and
   `docs/architecture/26-right-panel-detail.md`.
-- Decide whether `pdomain-ui`'s `JobRow`/`JobsDrawer` gain a `cancelled`
-  status and a pause/resume capability flag, or this app builds its own
-  persistent jobs surface instead. `JobsPill` alone (header trigger/badge)
-  is unaffected and can ship independently. See
-  [`../issues/2026-09-18-jobs-pill-status-contract-gap.md`](../issues/2026-09-18-jobs-pill-status-contract-gap.md).
 - Decide whether the broad directory-level RUF002 exceptions in
   `pyproject.toml` are intentional policy. GitHub issue #456 removed the global
   ignore, but the remaining exceptions conflict with `CONVENTIONS.md`, which

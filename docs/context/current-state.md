@@ -222,9 +222,11 @@ Spec: [`../../specs/20-glyph-annotations.md`](../../specs/20-glyph-annotations.m
   [`../plans/2026-07-21-pgdp-alignment-remaining.md`](../plans/2026-07-21-pgdp-alignment-remaining.md).
   Its status table predates 2026-09-18 — items 7–9 (project-card metadata, root
   filters, the archive decision) that it lists open or partial were resolved
-  2026-09-18, see `decisions.md`. Items 4 (jobs pill/drawer) and 10 (shared
-  workbench layout) were not touched and are still open as the table
-  describes.
+  2026-09-18, see `decisions.md`. Item 4 (jobs pill/drawer) shipped 2026-09-18
+  once `@pdomain/pdomain-ui@0.13.0` closed the upstream contract gap the item
+  was blocked on (`cancelled` `JobStatus`, `Job.pausable`) — see `decisions.md`.
+  Item 10 (shared workbench layout) was decided against, not built — also see
+  `decisions.md`.
 - Open findings, keyboard entries now closed (`6db2e42` registered `mod+,`,
   `mod+j` and `mod+shift+r`; BUG-KBD-4 was already done). The XDG data root
   default (BUG-SMOKE-3) is now closed too — see `decisions.md`.

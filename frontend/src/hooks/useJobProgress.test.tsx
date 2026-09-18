@@ -15,6 +15,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { useJobProgress, type JobProgressEvent } from "./useJobProgress";
+import { subscribeJobsBus } from "../lib/jobsBus";
 
 // --- minimal EventSource mock ---
 
@@ -211,6 +212,23 @@ describe("useJobProgress", () => {
     await waitFor(() => expect(result.current).not.toBeNull());
     expect(result.current?.progress.current).toBe(1);
     expect(result.current?.event).toBe("snapshot");
+  });
+
+  it("signals jobsBus once it starts tracking a job and again on its terminal event", async () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeJobsBus(listener);
+
+    const { result } = renderHook(() => useJobProgress("job-abc"));
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    const src = lastSource!;
+    act(() => {
+      src._emit("complete", COMPLETE_FRAME);
+    });
+    await waitFor(() => expect(result.current?.status).toBe("complete"));
+
+    expect(listener).toHaveBeenCalledTimes(2);
+    unsubscribe();
   });
 
   it("closes EventSource on unmount before terminal event", () => {

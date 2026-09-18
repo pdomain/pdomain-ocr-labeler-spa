@@ -92,6 +92,31 @@ vi.mock("@pdomain/pdomain-ui/shell", () => ({
   // doesn't need the real pdomain-ui SuiteSiblingsContext wiring; the real
   // wiring is covered by SuiteLauncher.test.tsx.
   LauncherSlot: () => <div data-testid="launcher-slot-stub" />,
+  // JobsSurface.tsx (item 4, jobs pill/drawer) renders <JobsPill/> inside
+  // HeaderBar's rightSlot and calls useUtilityDock() there — stub both so
+  // App.test.tsx doesn't need the real UtilityDockContext.Provider the real
+  // AppShell supplies. Real wiring is covered by JobsSurface.test.tsx.
+  JobsPill: ({
+    activeJobs = [],
+    onClick,
+  }: {
+    activeJobs?: { id: string }[];
+    onClick?: () => void;
+  }) => (
+    <button type="button" data-testid="jobs-pill-stub" onClick={onClick}>
+      Jobs ({activeJobs.length})
+    </button>
+  ),
+  useUtilityDock: () => ({
+    active: null,
+    pinned: false,
+    width: 320,
+    open: () => undefined,
+    close: () => undefined,
+    toggle: () => undefined,
+    setPinned: () => undefined,
+    setWidth: () => undefined,
+  }),
   // Other exports that App.tsx imports as types — provide no-op values so
   // TypeScript import side-effects compile cleanly.
 }));

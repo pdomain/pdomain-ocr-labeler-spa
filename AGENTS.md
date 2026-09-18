@@ -109,8 +109,8 @@ Summary of what closed 2026-09-18 (full reasoning in
 - Residual `tsconfig.test.json` strictness — untouched:
   `docs/plans/2026-07-21-tsconfig-test-strictness.md`.
 - PGDP alignment remaining is partial: project-card metadata, root filters,
-  and the archive decision closed 2026-09-18; the jobs pill/drawer and a
-  shared workbench layout are still open.
+  the archive decision, and the jobs pill/drawer closed 2026-09-18; a shared
+  workbench layout was decided against, not built.
   `docs/plans/2026-07-21-pgdp-alignment-remaining.md`.
 
 Per-slice history is preserved in git log and GitHub closed milestones.

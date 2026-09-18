@@ -27,6 +27,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { components } from "../api/types";
+import { notifyJobsBus } from "../lib/jobsBus";
 
 type Job = components["schemas"]["Job"];
 type JobStatus = components["schemas"]["JobStatus"];
@@ -150,6 +151,11 @@ export function useJobProgress(jobId: string | null | undefined): JobProgressEve
     const es = new EventSource(`/api/jobs/${encodeURIComponent(trackedJobId)}/events`);
     esRef.current = es;
 
+    // Bridges useJobsList's idle→active gap (jobsBus.ts): the moment this
+    // hook starts tracking a job is the earliest the app can know one
+    // exists, well before any poll would find it.
+    notifyJobsBus();
+
     function handleProgress(e: MessageEvent) {
       let raw: unknown;
       try {
@@ -168,6 +174,10 @@ export function useJobProgress(jobId: string | null | undefined): JobProgressEve
       if (TERMINAL.has(event.status)) {
         es.close();
         esRef.current = null;
+        // Final state reached — make sure the shared jobs list picks up
+        // the terminal status even if its own poll interval had already
+        // stopped (e.g. this was the only active job).
+        notifyJobsBus();
       }
     }
 

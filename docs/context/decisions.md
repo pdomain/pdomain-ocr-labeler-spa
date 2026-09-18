@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-07-21
+last_verified: 2026-09-18
 ---
 
 # Decisions
@@ -13,7 +13,7 @@ last_verified: 2026-07-21
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-07-21
+- **Last verified:** 2026-09-18
 - **Read when:** looking for durable migration, lifecycle, or changed-direction rationale.
 - **Search terms:** decisions, tombstones, retirement, changed direction, docgraph,
   sidecar durability, char_ranges_map, labeler_sidecars.
@@ -1915,3 +1915,32 @@ family and not touched.
   already true; and `WordMatchView` stays out of shared worklist alignment,
   because its behaviour and test contracts are load-bearing and today added
   several more.
+
+### [2026-09-18] Retired: the jobs pill status contract gap — pdomain-ui shipped both fixes
+
+- Report: `docs/issues/2026-09-18-jobs-pill-status-contract-gap.md` (now
+  deleted; see below).
+- The gap: `pdomain-ui@0.12.1`'s `JobRow` had no `cancelled` member in its
+  `JobStatus` union — every option (`failed`, `succeeded`/`done`, `paused`)
+  misrepresented a cooperatively cancelled job's cause or outcome — and
+  rendered a Pause/Resume hover control unconditionally, with no capability
+  flag, for a backend with no pause/resume concept. Filed the same day it
+  blocked PGDP-alignment item 4 (jobs pill/drawer): the honest response to a
+  real contract mismatch is a gap report, not an adapter forcing a coarser
+  enum over a state it can't hold.
+- The fix: `pdomain-ui@0.13.0` added `cancelled` to `JobRow`'s `JobStatus`
+  (its own accent color, label, and `job-row-status-cancelled` testid,
+  mirroring `JobStatusPip`'s five-state palette) and a `Job.pausable` flag
+  (default `true`) gating the Pause/Resume control. Verified directly
+  against the installed package before building on it, not taken on faith.
+- What shipped once unblocked: `useJobsList` (rebuilds from `GET /api/jobs`,
+  the source of truth — the broker buffers nothing and a job only tracks its
+  latest progress fraction, so a surface subscribing to the stream late could
+  never recover a missed event) plus `JobsPill` + `AppShell`'s `jobs` prop →
+  `UtilityDock` → `JobsPanelBody`, the integration path the original report
+  already named. Every row passes `pausable: false` — this backend genuinely
+  has no pause/resume concept, so the flag is used to omit the control, not
+  merely to make it compile.
+- The report is deleted per this repo's own convention (docs/issues/README.md):
+  resolved issues don't stay as files, their reasoning becomes a tombstone
+  here.

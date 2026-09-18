@@ -385,6 +385,30 @@ a time. See
 The driver agent specifically watches for `notification-negative-*` to
 detect operation failures.
 
+### 2.13a Jobs pill / docked panel (item 4, jobs pill/drawer)
+
+Persistent jobs surface: a header-anchored pill (always present, every
+route, chrome-level — `App.tsx`'s `HeaderBar` `rightSlot`) plus AppShell's
+docked Jobs panel it opens. Rebuilt from `GET /api/jobs`
+(`frontend/src/hooks/useJobsList.ts`), not from the per-job SSE stream.
+
+| Testid | What it is |
+|---|---|
+| `jobs-pill` | Wrapper div around pdomain-ui's `JobsPill` (that component has no testid of its own — see `components/shell/JobsSurface.tsx`). Click toggles the docked Jobs panel. |
+| `jobs-pill-count` | pdomain-ui: the pill's ambient count badge. Present only while ≥1 job is queued/running; absent (not zero-valued) when idle. |
+| `utility-dock` | pdomain-ui: the right-side docked panel shell (shared with Settings / Keybinds — one surface visible at a time). |
+| `jobs-panel-body` | pdomain-ui: the Jobs panel content, rendered inside `utility-dock` once the pill has been clicked. |
+| `job-row` | pdomain-ui: one row per job in `jobs-panel-body`. |
+| `job-row-status-failed` | pdomain-ui: shown on a `job-row` whose status is `failed` (backend `error`). |
+| `job-row-status-cancelled` | pdomain-ui: shown on a `job-row` whose status is `cancelled` (backend `cancelled`) — distinct from `job-row-status-failed`, mirroring `useJobCompletionInvalidation`'s existing `onCancelled`/`onError` split. |
+| `job-row-open` | pdomain-ui: "Open" button on a done job's row — navigates to that job's project. |
+
+No `job-delete-{id}` testid is reachable: `AppShellJobsProps.onJobDelete` is
+intentionally left unset (no "delete a job record" endpoint exists), which
+omits pdomain-ui's Delete button entirely rather than wiring a dead one.
+Same reasoning for the "View all jobs" footer link (`onViewAll` unset — no
+dedicated all-jobs route exists).
+
 ### 2.14 Rail — mode + target selectors
 
 The Rail is the 64px left column. It has three sections: MODE, TARGET, and LAYERS (legend only).
