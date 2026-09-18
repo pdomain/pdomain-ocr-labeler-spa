@@ -611,6 +611,60 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     });
   });
 
+  // ─── Review finding 4 (medium): refineTracking.jobId is one shared value
+  // across every word; a job started on one word must not disable another
+  // word's controls with no explanation. ─────────────────────────────────
+
+  it("does not disable this word's controls while a DIFFERENT word's refine job runs", async () => {
+    const tracking = createFakeRefineTracking();
+    act(() => {
+      tracking.start("job-other-word", "9-9");
+    });
+
+    renderBBox(makeWord(DEFAULT_BBOX), tracking); // this word is "0-0"
+
+    expect(screen.getByTestId("bbox-input-x")).not.toBeDisabled();
+    expect(screen.getByTestId("bbox-nudge-right")).not.toBeDisabled();
+    expect(screen.getByTestId("bbox-reset-button")).not.toBeDisabled();
+  });
+
+  it("disables this word's refine buttons (not its manual controls) while a different word's job runs, and says why", async () => {
+    const tracking = createFakeRefineTracking();
+    act(() => {
+      tracking.start("job-other-word", "9-9");
+    });
+
+    renderBBox(makeWord(DEFAULT_BBOX), tracking); // this word is "0-0"
+
+    const refineButton = screen.getByTestId("bbox-refine-button");
+    // The availability probe (msw) resolves asynchronously; wait past its
+    // loading state so the title reflects the "other word" reason, not
+    // "checking availability".
+    await waitFor(() => expect(refineButton.title.toLowerCase()).toContain("another word"));
+    expect(refineButton).toBeDisabled();
+    expect(screen.getByTestId("bbox-expand-refine-button")).toBeDisabled();
+    expect(screen.getByTestId("bbox-expand-button")).toBeDisabled();
+
+    // Manual editing stays available — only the job-backed buttons wait.
+    expect(screen.getByTestId("bbox-input-x")).not.toBeDisabled();
+  });
+
+  it("still disables this word's own controls while ITS OWN refine job runs", async () => {
+    server.use(
+      http.post("/api/projects/p1/pages/0/refine", () =>
+        HttpResponse.json({ job_id: "job-this-word" }, { status: 202 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderBBox(makeWord(DEFAULT_BBOX)); // "0-0"
+
+    await user.click(screen.getByTestId("bbox-refine-button"));
+
+    await waitFor(() => expect(screen.getByTestId("bbox-input-x")).toBeDisabled());
+    expect(screen.getByTestId("bbox-nudge-right")).toBeDisabled();
+    expect(screen.getByTestId("bbox-reset-button")).toBeDisabled();
+  });
+
   // ─── P1-BBOX-UI: useRefineAvailable capability gate ────────────────────────
 
   it("disables Refine/Expand+Refine/Expand and explains why when the probe reports unavailable", async () => {

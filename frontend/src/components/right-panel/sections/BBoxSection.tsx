@@ -180,10 +180,19 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
   const refineAvailable = refineProbe.data?.available ?? false;
   const refineProbeLoading = refineProbe.isLoading;
 
-  // Review finding 3: whether a refine_bboxes job is in flight, per the
-  // hoisted tracker — not yet scoped to this word (review finding 4 narrows
-  // this to `refineTracking.wordKey === wordKey` in the next change).
-  const refineJobRunning = refineTracking.jobId !== null;
+  // Review finding 4: `refineTracking.jobId` is one shared value across
+  // every word (the hoisted tracker has a single slot — see
+  // useBboxRefineTracking.ts's module doc comment). Scoped so that a job
+  // running for a DIFFERENT word only disables the refine-job-backed
+  // buttons here (they share that one slot, so starting a second job would
+  // orphan the first — see the same doc comment), not the manual
+  // rebox/nudge/reset controls, which are independent per-word mutations
+  // with nothing to do with the shared slot.
+  const refineJobRunningHere = refineTracking.jobId !== null && refineTracking.wordKey === wordKey;
+  const refineJobRunningElsewhere =
+    refineTracking.jobId !== null &&
+    refineTracking.wordKey !== null &&
+    refineTracking.wordKey !== wordKey;
 
   /** Queue a `refine_bboxes` job scoped to this word. */
   function startRefine(mode: RefineMode, paddingPx: number, loadingMessage: string) {
@@ -236,17 +245,22 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
     commitBbox(updated);
   }
 
-  const busy = reboxMutation.isPending || refineMutation.isPending || refineJobRunning;
+  // review finding 4: scoped to this word's own job, so a different word's
+  // in-flight refine no longer disables this word's manual controls.
+  const busy = reboxMutation.isPending || refineMutation.isPending || refineJobRunningHere;
 
-  // Refine-button-specific disabled reason: the probe still loading, or the
-  // engine reported unavailable. `busy` (above) separately covers an
-  // in-flight rebox/refine mutation and disables every button in this
-  // section, refine or not.
+  // Refine-button-specific disabled reason: the probe still loading, the
+  // engine unavailable, or (review finding 4) a different word's job
+  // already holds the tracker's one slot. `busy` (above) separately covers
+  // an in-flight rebox/refine mutation for THIS word and disables every
+  // button in this section, refine or not.
   const refineDisabledTitle = refineProbeLoading
     ? "Checking refine availability…"
     : !refineAvailable
       ? "Refine is not available in this deployment."
-      : null;
+      : refineJobRunningElsewhere
+        ? "A refine is already running for another word — wait for it to finish."
+        : null;
 
   return (
     <div data-testid="bbox-section" data-word-key={wordKey} className="flex flex-col gap-2 py-1">
@@ -414,7 +428,7 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
             data-testid="bbox-refine-button"
             variant="secondary"
             size="sm"
-            disabled={busy || !refineAvailable}
+            disabled={busy || !refineAvailable || refineJobRunningElsewhere}
             title={refineDisabledTitle ?? "Snap bbox to ink boundary"}
             onClick={() => {
               startRefine("refine", REFINE_PADDING_PX, "Refining bbox…");
@@ -426,7 +440,7 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
             data-testid="bbox-expand-refine-button"
             variant="secondary"
             size="sm"
-            disabled={busy || !refineAvailable}
+            disabled={busy || !refineAvailable || refineJobRunningElsewhere}
             title={refineDisabledTitle ?? "Expand bbox, then snap to ink boundary"}
             onClick={() => {
               startRefine("expand_then_refine", REFINE_PADDING_PX, "Expanding + refining bbox…");
@@ -438,7 +452,7 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
             data-testid="bbox-expand-button"
             variant="secondary"
             size="sm"
-            disabled={busy || !refineAvailable}
+            disabled={busy || !refineAvailable || refineJobRunningElsewhere}
             title={
               refineDisabledTitle ??
               `Expand bbox by ${String(EXPAND_ONLY_PADDING_PX)}px on each side (no refine)`
