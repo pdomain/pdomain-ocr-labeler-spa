@@ -43,9 +43,11 @@ offending resource.
 from __future__ import annotations
 
 import gc
+import logging
 import warnings
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from pdomain_ocr_labeler_spa.bootstrap import build_app
@@ -135,6 +137,29 @@ def test_startup_shutdown_clean(tmp_path: Path) -> None:
         f"from our code: "
         f"{[(w.category.__name__, w.filename, str(w.message)) for w in leaks]}"
     )
+
+
+def test_startup_logs_the_data_root_actually_in_use(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    """BUG-SMOKE-3: the startup message must name the real ``settings.data_root``.
+
+    Uses an explicit override (rather than the default) so the assertion
+    also covers "true even when overridden" — the message is built from the
+    live ``Settings`` instance, not recomputed from scratch.
+    """
+    settings = Settings(
+        host="127.0.0.1",
+        port=8080,
+        config_root=tmp_path / "config",
+        data_root=tmp_path / "custom-data-root",
+        cache_root=tmp_path / "cache",
+        mode="api_only",
+    )
+    app = build_app(settings)
+
+    with caplog.at_level(logging.INFO, logger="pdomain_ocr_labeler_spa.bootstrap"), TestClient(app):
+        pass
+
+    assert f"Using data directory: {settings.data_root}" in caplog.text
 
 
 def test_lifespan_runs_when_used_as_context_manager(tmp_path: Path) -> None:

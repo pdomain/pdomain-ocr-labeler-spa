@@ -226,10 +226,10 @@ Spec: [`../../specs/20-glyph-annotations.md`](../../specs/20-glyph-annotations.m
   workbench layout) were not touched and are still open as the table
   describes.
 - Open findings, keyboard entries now closed (`6db2e42` registered `mod+,`,
-  `mod+j` and `mod+shift+r`; BUG-KBD-4 was already done):
-  [`open-findings.md`](open-findings.md) still lists the XDG data root
-  default, the reload zero-area GT box check, and the hierarchy-coverage E2E
-  gap, none touched 2026-09-18.
+  `mod+j` and `mod+shift+r`; BUG-KBD-4 was already done). The XDG data root
+  default (BUG-SMOKE-3) is now closed too — see `decisions.md`.
+  [`open-findings.md`](open-findings.md) still lists the reload zero-area GT
+  box check and the hierarchy-coverage E2E gap, neither touched.
 - Residual test-tsconfig strictness (#366 leftover), untouched 2026-09-18:
   [`../plans/2026-07-21-tsconfig-test-strictness.md`](../plans/2026-07-21-tsconfig-test-strictness.md).
 - Already done (do not re-plan): #404 lint-deviations catalogue

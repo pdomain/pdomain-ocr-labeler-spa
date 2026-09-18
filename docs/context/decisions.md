@@ -1814,3 +1814,33 @@ family and not touched.
 - The count is a filter over the proposal list the page response already
   returns, refetched by the existing invalidation, so it is server truth rather
   than a separate aggregate that could drift.
+
+### [2026-09-18] Fixed: the default data root ignored XDG and could orphan an install (BUG-SMOKE-3)
+
+- `Settings.data_root` defaulted to `~/pdomain-ocr-labeler-spa`, a path this
+  app invented rather than the one Linux applications are supposed to use.
+  Ruled: default to the OS-aware data directory, honour `XDG_DATA_HOME` (and
+  the macOS / Windows equivalents already documented in
+  `docs/architecture/01-data-models.md §5`), and migrate nobody silently.
+- What ships: `default_data_root()` in `settings.py` picks
+  `${XDG_DATA_HOME:-~/.local/share}/pdomain-ocr-labeler-spa` on Linux,
+  `~/Library/Application Support/pdomain-ocr-labeler-spa` on macOS, and
+  `%LOCALAPPDATA%/pdomain-ocr-labeler-spa` on Windows — unless the pre-XDG
+  `~/pdomain-ocr-labeler-spa` already exists and the new location doesn't, in
+  which case it keeps using the old directory. A person who has been using
+  this app must not open it and find it empty.
+- The lifespan startup hook logs `Using data directory: <path>` once, always
+  naming the real `settings.data_root` (so the line stays true under
+  `PDLABELER_DATA_ROOT` / `--data-root` too), and a WARNING follow-up when the
+  legacy directory is the one kept.
+- **Not implemented, deliberately:** auto-discovery of the legacy NiceGUI
+  app's directory, `~/.local/share/pd-ocr-labeler/`. That is a different
+  application's data; silently adopting it would be exactly the invisible
+  behaviour this policy exists to avoid. `PDLABELER_DATA_ROOT` / `--data-root`
+  already covered the override case — pointing either at that directory
+  works today, no new setting needed.
+- Known gap left alone: `config_root` and `cache_root` still ignore
+  `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` even though the same spec table names
+  them. BUG-SMOKE-3 was scoped to `data_root` — the one with a real
+  compatibility hazard, since `config_root` / `cache_root` hold no
+  irreplaceable user data. Filed as a follow-up, not fixed here.

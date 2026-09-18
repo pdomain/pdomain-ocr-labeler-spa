@@ -5,11 +5,18 @@ Spec: ``docs/architecture/02-backend.md §3``.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 
-from pdomain_ocr_labeler_spa.settings import Settings
+from pdomain_ocr_labeler_spa.settings import (
+    Settings,
+    _xdg_data_root,  # private helper — BUG-SMOKE-3 platform-branch coverage
+    data_root_legacy_note,
+    default_data_root,
+    describe_data_root,
+)
 
 
 @pytest.mark.parametrize(
@@ -107,9 +114,15 @@ def test_settings_ignores_extra_env(monkeypatch: pytest.MonkeyPatch) -> None:
     Settings()  # must not raise
 
 
-def test_path_roots_default_under_user_home() -> None:
+def test_path_roots_default_under_user_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Isolate HOME and XDG_DATA_HOME so this test is deterministic — BUG-SMOKE-3
+    # made data_root's default depend on both, and a real environment (a dev
+    # container, say) may set XDG_DATA_HOME outside $HOME.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+
     s = Settings()
-    home = Path.home()
+    home = tmp_path
     assert s.config_root.is_absolute()
     assert s.data_root.is_absolute()
     assert s.cache_root.is_absolute()
@@ -292,3 +305,148 @@ def test_settings_max_concurrent_ocr_jobs_default_and_env(monkeypatch: pytest.Mo
 
     monkeypatch.setenv("PDLABELER_MAX_CONCURRENT_OCR_JOBS", "0")
     assert Settings().max_concurrent_ocr_jobs == 0
+
+
+# ── BUG-SMOKE-3: data_root's XDG-compatibility policy ─────────────────────
+#
+# Ruling: default to the OS-aware data directory, honour XDG_DATA_HOME (and
+# the macOS / Windows equivalents), never lose an existing pre-XDG install,
+# and never auto-discover the legacy pd-ocr-labeler app's directory.
+
+
+def test_data_root_defaults_to_xdg_data_home_when_set(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A fresh install with ``XDG_DATA_HOME`` set uses it."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "custom-xdg-data"))
+
+    assert default_data_root() == tmp_path / "custom-xdg-data" / "pdomain-ocr-labeler-spa"
+
+
+def test_data_root_falls_back_to_local_share_when_xdg_unset(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A fresh install with no ``XDG_DATA_HOME`` falls back to ``~/.local/share``."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+
+    assert default_data_root() == home / ".local" / "share" / "pdomain-ocr-labeler-spa"
+
+
+def test_data_root_keeps_legacy_dir_when_it_exists_and_xdg_does_not(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An existing pre-XDG install keeps being used rather than starting empty.
+
+    A person who has been using this app must not open it and find it empty —
+    the new XDG location doesn't exist yet, so the old one (which has data)
+    wins.
+    """
+    monkeypatch.setattr(sys, "platform", "linux")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    legacy = home / "pdomain-ocr-labeler-spa"
+    (legacy / "labeled-projects").mkdir(parents=True)
+
+    assert default_data_root() == legacy
+
+
+def test_data_root_prefers_xdg_when_it_already_has_data_too(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Once the XDG location exists, it wins even if the legacy dir also exists.
+
+    The compatibility fallback only covers the "old install, empty new
+    install" case — it must not keep pinning a project to the legacy
+    directory forever.
+    """
+    monkeypatch.setattr(sys, "platform", "linux")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    xdg_data_home = tmp_path / "xdg-data"
+    monkeypatch.setenv("XDG_DATA_HOME", str(xdg_data_home))
+    (home / "pdomain-ocr-labeler-spa").mkdir(parents=True)
+    (xdg_data_home / "pdomain-ocr-labeler-spa").mkdir(parents=True)
+
+    assert default_data_root() == xdg_data_home / "pdomain-ocr-labeler-spa"
+
+
+def test_explicit_data_root_override_beats_xdg_and_legacy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``PDLABELER_DATA_ROOT`` wins over both the default and the legacy fallback."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    (home / "pdomain-ocr-labeler-spa").mkdir(parents=True)  # legacy install exists too
+    override = tmp_path / "explicit-override"
+    monkeypatch.setenv("PDLABELER_DATA_ROOT", str(override))
+
+    assert Settings().data_root == override
+
+
+def test_xdg_data_root_uses_application_support_on_macos(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """macOS gets Apple's per-user data convention, not a Linux XDG path."""
+    monkeypatch.setattr(sys, "platform", "darwin")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+
+    assert _xdg_data_root() == home / "Library" / "Application Support" / "pdomain-ocr-labeler-spa"
+
+
+def test_xdg_data_root_uses_local_appdata_on_windows(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Windows gets ``%LOCALAPPDATA%``, not a Linux XDG path."""
+    monkeypatch.setattr(sys, "platform", "win32")
+    local_appdata = tmp_path / "AppData" / "Local"
+    monkeypatch.setenv("LOCALAPPDATA", str(local_appdata))
+
+    assert _xdg_data_root() == local_appdata / "pdomain-ocr-labeler-spa"
+
+
+def test_xdg_data_root_falls_back_on_windows_without_localappdata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Without ``%LOCALAPPDATA%`` set, fall back to ``~/AppData/Local``."""
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+
+    assert _xdg_data_root() == home / "AppData" / "Local" / "pdomain-ocr-labeler-spa"
+
+
+def test_describe_data_root_names_the_given_path() -> None:
+    """The startup line must name the exact ``data_root`` it's given."""
+    custom = Path("/srv/pdomain-ocr-labeler-spa-data")
+    assert describe_data_root(custom) == f"Using data directory: {custom}"
+
+
+def test_data_root_legacy_note_is_none_for_a_fresh_xdg_install(tmp_path: Path) -> None:
+    """No compatibility note when ``data_root`` isn't the legacy directory."""
+    assert data_root_legacy_note(tmp_path / "fresh") is None
+
+
+def test_data_root_legacy_note_fires_when_legacy_dir_is_kept(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The note names both the legacy path in use and the new default to move to."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    legacy = home / "pdomain-ocr-labeler-spa"
+    legacy.mkdir(parents=True)
+
+    note = data_root_legacy_note(legacy)
+
+    assert note is not None
+    assert str(legacy) in note
+    assert str(home / ".local" / "share" / "pdomain-ocr-labeler-spa") in note

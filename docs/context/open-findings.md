@@ -40,12 +40,17 @@ full keyboard path.
 
 ## Persistence and page findings
 
-### BUG-SMOKE-3 — The default data root is not XDG-compatible
+### BUG-SMOKE-3 — The default data root is not XDG-compatible — Resolved
 
-`src/pdomain_ocr_labeler_spa/settings.py` still defaults to
-`~/pdomain-ocr-labeler-spa`, while existing Linux labeler data may live under
-`~/.local/share/pd-ocr-labeler/`. Decide and implement a compatibility policy
-before claiming automatic discovery of legacy labeled pages.
+`Settings.data_root` now defaults to the OS-aware data directory
+(`${XDG_DATA_HOME:-~/.local/share}/pdomain-ocr-labeler-spa` on Linux; the
+macOS / Windows equivalents in `docs/architecture/01-data-models.md §5`). An
+existing pre-XDG install at `~/pdomain-ocr-labeler-spa` keeps being used, and
+is announced at startup, when that legacy directory has data and the new
+location doesn't yet — nobody's projects go missing on upgrade. The legacy
+NiceGUI app's directory (`~/.local/share/pd-ocr-labeler/`) is never
+auto-discovered; `PDLABELER_DATA_ROOT` / `--data-root` still override
+everything. See `docs/context/decisions.md`.
 
 ### BUG-RELOAD-1 — Zero-area unmatched-GT boxes need explicit handling
 
