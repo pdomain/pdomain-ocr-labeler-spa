@@ -81,15 +81,26 @@ As of 2026-09-17:
   and `p` step through undecided proposals, `enter` accepts, `x` rejects, and selection advances by
   itself. The page actions menu starts both proposal runs. `tests/e2e/test_region_review_loop.py`
   drives the loop in a real browser.
-- **Decisions carry across runs, for confirmed regions with a recorded origin.** A new proposal
-  matching a confirmed region, same role and box IoU of at least 0.7, gets a `carried` decision
-  naming that region, so a re-run does not bring back reviewed work. The carry runs under the page
-  lock. Deleting a region rejects every proposal whose latest decision names it. Two gaps are known,
-  not yet owned by a fix: a hand-drawn region, or a confirmed region whose accepting decision is
-  missing, matches a new proposal but is not carried
-  (`core/jobs/handlers/propose_regions.py::_carry_decisions_for_page` only carries from an origin
-  `accepted`/`edited` decision); and a rejected proposal is never matched against at all, so a re-run
-  can resurface something a person already declined.
+- **Decisions carry across runs, both acceptances and rejections, matched the same way.** A new
+  proposal matching a confirmed region, same role and box IoU of at least 0.7, gets a `carried`
+  decision naming that region; a new proposal matching a proposal a person's own latest decision
+  rejected gets a `rejected` decision instead, naming that rejection as its `carried_from_run_id`/
+  `carried_from_proposal_id` — a rejection is an answer, and a re-run must not ask it again, the
+  same as an acceptance. Both matches use the one IoU rule (`_best_iou_match` in
+  `core/jobs/handlers/propose_regions.py`), run under the page lock, and always trace back to a
+  person's own decision, never a previous carry. Deleting a region rejects every proposal whose
+  latest decision names it. A confirmed region whose accepting decision never made it into the
+  decision log (a real shape: `accept_region_proposal` writes the page blob before the decision, so
+  a decision-log append failure right after a successful accept leaves this gap) still carries,
+  reconstructed from the block's own `source_proposal_id` joined against the proposal log. A
+  hand-drawn region deliberately does not carry forward: it has no real proposal behind it, so
+  there is nothing a carried decision's `carried_from_*` fields could honestly name — the matching
+  proposal is simply left for a person to review once more, which costs a click rather than hiding
+  anything. A carried rejection is visible to a reader of `PagePayload.proposals`/
+  `RegionProposalListItem` via its own `carried_from_run_id`/`carried_from_proposal_id`, but no SPA
+  surface renders it yet — nothing in the product today lets a person see or undo a carried
+  rejection (or, for that matter, an ordinary one) once made; the canvas and review queue simply
+  never show a rejected proposal again.
 - **A book-wide review queue.** `GET .../regions/review-queue` returns the book's undecided count, a
   per-page summary, and up to 500 items in reading or confidence order. It uses the same
   undecided rule as the page view. In the SPA, `]` and `[` jump to the next or previous page with
@@ -190,12 +201,16 @@ Spec: [`../../specs/20-glyph-annotations.md`](../../specs/20-glyph-annotations.m
   docstring (`api/regions.py`) and pinned by
   `tests/integration/test_region_membership_word_identity.py`. Outside the
   sidecar-reindex family closed 2026-09-18 (below).
-- **Region carry-forward has two gaps**, both in
-  `core/jobs/handlers/propose_regions.py`: a hand-drawn region, or a
-  confirmed region whose accepting decision is missing, matches a new
-  proposal on a re-run but is not carried; and a rejected proposal is never
-  matched against at all, so a re-run can resurface something a person
-  already declined.
+- **Region carry-forward's rejection gap is fixed** (`fix/carry-forward-gaps`,
+  2026-09-18): a new proposal matching a proposal a person's latest decision
+  rejected now gets a carried `rejected` decision of its own, and a
+  confirmed region whose accepting decision never reached the decision log
+  still carries, reconstructed from the block's `source_proposal_id`. A
+  hand-drawn region stays deliberately uncarried — see
+  `core/jobs/handlers/propose_regions.py::_origin_reference_for_region`'s
+  docstring for why. Open: nothing in the SPA lets a person see or undo a
+  carried rejection today (`PagePayload.proposals` carries the provenance;
+  no surface renders it) — tracked as a finding, not yet a fix.
 - **Folio detection can miss an OCR lookalike**, such as `IO` for `10`: the
   peel in `core/regions/furniture.py` only recognizes a digits-only pattern.
 - **Whether the OCR engine should warm up at server start is still open**,

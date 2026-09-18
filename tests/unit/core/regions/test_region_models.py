@@ -214,6 +214,54 @@ def test_a_non_carried_decision_rejects_carried_provenance() -> None:
         )
 
 
+def test_a_rejected_decision_may_name_where_it_carried_from() -> None:
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition, RegionDecision
+
+    decision = RegionDecision(
+        decision_id="d4",
+        run_id="r2",
+        proposal_id="p9",
+        disposition=Disposition.REJECTED,
+        region_id=None,
+        actor="propose_regions",
+        decided_at="2026-09-18T12:00:00+00:00",
+        carried_from_run_id="r1",
+        carried_from_proposal_id="p1",
+    )
+
+    restored = RegionDecision.from_dict(decision.to_dict())
+
+    assert restored.carried_from_run_id == "r1"
+    assert restored.carried_from_proposal_id == "p1"
+
+
+def test_a_rejected_decision_needs_neither_or_both_carried_from_fields() -> None:
+    from pdomain_ocr_labeler_spa.core.regions.models import Disposition, RegionDecision
+
+    # A person's own rejection — no carried_from at all — is unchanged and legal.
+    RegionDecision(
+        decision_id="d5",
+        run_id="r1",
+        proposal_id="p1",
+        disposition=Disposition.REJECTED,
+        region_id=None,
+        actor="default",
+        decided_at="2026-09-18T12:00:00+00:00",
+    )
+
+    with pytest.raises(ValueError, match="or neither"):
+        RegionDecision(
+            decision_id="d6",
+            run_id="r2",
+            proposal_id="p9",
+            disposition=Disposition.REJECTED,
+            region_id=None,
+            actor="propose_regions",
+            decided_at="2026-09-18T12:00:00+00:00",
+            carried_from_run_id="r1",
+        )
+
+
 def test_a_resolved_region_carries_word_membership_and_staleness() -> None:
     from pdomain_book_contracts.annotation import RegionRole
 

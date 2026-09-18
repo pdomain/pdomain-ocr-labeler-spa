@@ -163,20 +163,39 @@ class RegionDecision:
     region_id: str | None
     actor: str
     decided_at: str
+    #: Set together, naming the earlier proposal this decision reuses rather than
+    #: re-deciding. Required on ``CARRIED`` (an acceptance carried forward onto a
+    #: new proposal, naming the confirmed region's origin proposal). Optional on
+    #: ``REJECTED``: unset for a person's own rejection, set when a re-run
+    #: matched a new proposal against an earlier rejection and carried the
+    #: refusal forward rather than asking again — the same provenance rule as a
+    #: carried acceptance, over the one disposition rejection already has, since
+    #: a rejection produces no region of its own to attribute a "carried" origin
+    #: to. Forbidden on ``ACCEPTED``/``EDITED``, which always name a proposal a
+    #: person just looked at, never a carry.
     carried_from_run_id: str | None = None
     carried_from_proposal_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.disposition is not Disposition.REJECTED and self.region_id is None:
             raise ValueError(f"a {self.disposition.value} decision must name the region_id it produced")
+        has_carried_from_run = self.carried_from_run_id is not None
+        has_carried_from_proposal = self.carried_from_proposal_id is not None
         if self.disposition is Disposition.CARRIED:
-            if self.carried_from_run_id is None or self.carried_from_proposal_id is None:
+            if not (has_carried_from_run and has_carried_from_proposal):
                 raise ValueError(
                     "a carried decision must name carried_from_run_id and carried_from_proposal_id"
                 )
-        elif self.carried_from_run_id is not None or self.carried_from_proposal_id is not None:
+        elif self.disposition is Disposition.REJECTED:
+            if has_carried_from_run != has_carried_from_proposal:
+                raise ValueError(
+                    "a rejected decision must name both carried_from_run_id and "
+                    "carried_from_proposal_id, or neither"
+                )
+        elif has_carried_from_run or has_carried_from_proposal:
             raise ValueError(
-                "carried_from_run_id/carried_from_proposal_id are only set on a carried decision"
+                "carried_from_run_id/carried_from_proposal_id are only set on a carried "
+                "decision, or a rejected decision carried forward from an earlier rejection"
             )
 
     def to_dict(self) -> dict[str, Any]:

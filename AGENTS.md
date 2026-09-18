@@ -86,7 +86,7 @@ named has a 2026-09-17 or 2026-09-18 tombstone in `docs/context/decisions.md`.
 
 High-level status, including what actually remains open (a word-identity bug
 that 404s typography after a ground-truth edit, a transient empty-page read
-race, region carry-forward gaps for hand-drawn/rejected proposals, OCR
+race, no SPA surface for seeing or undoing a carried region rejection, OCR
 lookalike folios, the OCR-warmup question, and no release since `v0.2.0`):
 [`docs/context/current-state.md`](docs/context/current-state.md).
 

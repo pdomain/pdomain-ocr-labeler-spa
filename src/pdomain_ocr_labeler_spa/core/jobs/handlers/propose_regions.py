@@ -110,7 +110,7 @@ import logging
 import uuid
 from contextlib import ExitStack
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from eventsourcing.application import AggregateNotFoundError
 from pdomain_book_tools.ocr.page import Page
@@ -124,7 +124,11 @@ from ...page_kind.reviewed_store import PageKindReviewedStore
 from ...page_measurement import measure_book
 from ...page_state import ensure_page_model
 from ...project_state import PageState, ProjectState
-from ...regions.block_adapter import compute_page_facet_digests, confirmed_regions_from_page
+from ...regions.block_adapter import (
+    HAND_DRAWN_SENTINEL,
+    compute_page_facet_digests,
+    confirmed_regions_from_page,
+)
 from ...regions.decision_log import RegionDecisionLog
 from ...regions.detector import (
     BookFittedDetector,
@@ -139,6 +143,8 @@ from ._labeling_page_lease import leased_labeling_page
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from uuid import UUID
+
+    from pdomain_book_contracts.annotation import RegionRole
 
     from ...models import Project
     from ...ocr.predictor import PredictorCache
@@ -376,24 +382,49 @@ def _box_iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> floa
     return intersection / union
 
 
-def _best_carry_match(proposal: RegionProposal, confirmed: Sequence[ResolvedRegion]) -> ResolvedRegion | None:
-    """The confirmed region this proposal carries from, or ``None``.
+class _RoleBoxed(Protocol):
+    """Structural shape shared by ``RegionProposal`` and ``ResolvedRegion``.
+
+    Carry-forward has exactly one notion of "same proposal": same role, box
+    IoU at or above ``_CARRY_IOU_THRESHOLD``. Both a still-live confirmed
+    region (what acceptance carry matches against) and an earlier proposal a
+    person rejected (what rejection carry matches against) satisfy this
+    shape, so ``_best_iou_match`` below is the one place that rule lives.
+    """
+
+    # Read-only, not plain attributes: both ``RegionProposal`` and
+    # ``ResolvedRegion`` are frozen dataclasses, and a frozen field is not
+    # assignable — a plain ``Protocol`` attribute declaration demands both
+    # read *and* write, which neither satisfies.
+    @property
+    def role(self) -> RegionRole: ...
+    @property
+    def box(self) -> tuple[int, int, int, int]: ...
+
+
+def _best_iou_match[T: _RoleBoxed](proposal: RegionProposal, candidates: Sequence[T]) -> T | None:
+    """The candidate this proposal matches, or ``None``.
 
     A match needs the same role and a box IoU at or above
-    ``_CARRY_IOU_THRESHOLD``. When more than one confirmed region qualifies,
-    the highest IoU wins; on an exact tie the earlier region in page order
+    ``_CARRY_IOU_THRESHOLD``. When more than one candidate qualifies, the
+    highest IoU wins; on an exact tie the earlier one in ``candidates``
     keeps the match.
     """
-    best: ResolvedRegion | None = None
+    best: T | None = None
     best_iou = _CARRY_IOU_THRESHOLD
-    for region in confirmed:
-        if region.role != proposal.role:
+    for candidate in candidates:
+        if candidate.role != proposal.role:
             continue
-        iou = _box_iou(proposal.box, region.box)
+        iou = _box_iou(proposal.box, candidate.box)
         if iou > best_iou or (best is None and iou == best_iou):
-            best = region
+            best = candidate
             best_iou = iou
     return best
+
+
+def _best_carry_match(proposal: RegionProposal, confirmed: Sequence[ResolvedRegion]) -> ResolvedRegion | None:
+    """The confirmed region this proposal carries from, or ``None``. See ``_best_iou_match``."""
+    return _best_iou_match(proposal, confirmed)
 
 
 def _origin_decisions_by_region_id(
@@ -417,43 +448,153 @@ def _origin_decisions_by_region_id(
     return origin_by_region_id
 
 
+def _origin_reference_for_region(
+    region: ResolvedRegion,
+    *,
+    origin_by_region_id: Mapping[str, RegionDecision],
+    proposal_by_id: Mapping[str, RegionProposal],
+) -> tuple[str, str] | None:
+    """The ``(run_id, proposal_id)`` a carry onto ``region`` should name, or ``None``.
+
+    Two sources, in this order:
+
+    1. The region's own accepted/edited origin decision (``origin_by_region_id``)
+       — the normal case, unchanged from before this function existed.
+    2. Failing that, the real proposal id the confirming route itself stamped
+       onto the block at accept time (``region.proposal_id``, i.e. the block's
+       ``source_proposal_id`` — see ``block_adapter.confirmed_regions_from_page``),
+       joined against the proposal log for its run id. This covers a confirmed
+       region whose accepting decision never made it into the decision log:
+       ``accept_region_proposal`` writes the page blob, with ``source_proposal_id``
+       stamped on the block, *before* it appends the decision (see that route's
+       own docstring) — a decision-log append failure right after a successful
+       accept leaves exactly this shape, and it is a real gap the append-only
+       proposal log can still answer honestly.
+
+    ``None`` for a hand-drawn region (``region.proposal_id`` is
+    ``HAND_DRAWN_SENTINEL`` or absent) or one naming a proposal id the log has
+    no record of. Deliberate, not a further gap: a carried decision's
+    ``carried_from_run_id``/``carried_from_proposal_id`` must name a real
+    proposal a person actually decided about (``RegionDecision.__post_init__``
+    enforces this), and a hand-drawn region has no such proposal — there is
+    nothing honest to carry from. The proposal that matched it simply stays
+    undecided, the same as any other unmatched proposal, for a person to look
+    at once — the safe direction to fail in, unlike a suppressed proposal.
+    """
+    if region.region_id is not None:
+        origin_decision = origin_by_region_id.get(region.region_id)
+        if origin_decision is not None:
+            return origin_decision.run_id, origin_decision.proposal_id
+
+    proposal_id = region.proposal_id
+    if proposal_id is None or proposal_id == HAND_DRAWN_SENTINEL:
+        return None
+    proposal = proposal_by_id.get(proposal_id)
+    if proposal is None:
+        return None
+    return proposal.run_id, proposal.proposal_id
+
+
+def _origin_rejected_proposals_by_page(
+    latest_by_proposal: Mapping[tuple[str, str], RegionDecision],
+    proposal_by_id: Mapping[str, RegionProposal],
+) -> dict[int, list[RegionProposal]]:
+    """Every proposal, grouped by page, that a person's own decision most recently rejected.
+
+    ``latest_by_proposal`` (``RegionDecisionLog.latest_by_proposal``'s exact
+    result) rather than a raw decision list: ``accept_region_proposal`` allows
+    accepting a proposal a person already rejected (its own idempotence check
+    only blocks a repeat *accept*, never an accept after a reject — see that
+    route's docstring), so a proposal's rejection is not necessarily its last
+    word. Only the latest decision per proposal settles it, the same rule
+    every other reader of this journal already follows.
+
+    Excludes a decision that is itself a carried rejection
+    (``carried_from_proposal_id is not None``) — mirrors
+    ``_origin_decisions_by_region_id``'s "never a carried one" rule for
+    acceptance carry, so a later run's match always traces back to a real
+    person's rejection, never a machine's restatement of one.
+    """
+    by_page: dict[int, list[RegionProposal]] = {}
+    for (proposal_id, _run_id), decision in latest_by_proposal.items():
+        if decision.disposition is not Disposition.REJECTED:
+            continue
+        if decision.carried_from_proposal_id is not None:
+            continue
+        proposal = proposal_by_id.get(proposal_id)
+        if proposal is None:
+            continue
+        by_page.setdefault(proposal.page_index, []).append(proposal)
+    return by_page
+
+
 def _carry_decisions_for_page(
     *,
     page: Page,
     proposals: Sequence[RegionProposal],
     origin_by_region_id: Mapping[str, RegionDecision],
+    proposal_by_id: Mapping[str, RegionProposal],
+    rejected_origins: Sequence[RegionProposal] = (),
     decided_at: str,
 ) -> tuple[list[RegionDecision], int]:
     """Carried decisions for one page's newly proposed regions.
 
+    Each new proposal is checked against the page's confirmed regions first
+    (acceptance carry, unchanged) and, only when that finds no match, against
+    ``rejected_origins`` (rejection carry — see
+    ``_origin_rejected_proposals_by_page``): a proposal already covered by a
+    live confirmed region takes precedence over a historical rejection, since
+    the confirmed region is the page's current answer.
+
     Returns the decisions to append, plus the count of distinct confirmed
-    regions that matched a new proposal but had no origin decision to carry
-    from — a hand-drawn region, or one whose confirming decision is missing.
+    regions that matched a new proposal but had no real proposal to carry
+    from — a hand-drawn region, or one naming a proposal id the log has no
+    record of (see ``_origin_reference_for_region``).
     """
     confirmed = confirmed_regions_from_page(page)
     decisions: list[RegionDecision] = []
     regions_with_no_origin: set[str] = set()
     for proposal in proposals:
-        match = _best_carry_match(proposal, confirmed)
-        if match is None or match.region_id is None:
-            continue
-        origin = origin_by_region_id.get(match.region_id)
-        if origin is None:
-            regions_with_no_origin.add(match.region_id)
-            continue
-        decisions.append(
-            RegionDecision(
-                decision_id=uuid.uuid4().hex,
-                run_id=proposal.run_id,
-                proposal_id=proposal.proposal_id,
-                disposition=Disposition.CARRIED,
-                region_id=match.region_id,
-                actor="propose_regions",
-                decided_at=decided_at,
-                carried_from_run_id=origin.run_id,
-                carried_from_proposal_id=origin.proposal_id,
+        match = _best_iou_match(proposal, confirmed)
+        if match is not None:
+            origin_ref = _origin_reference_for_region(
+                match, origin_by_region_id=origin_by_region_id, proposal_by_id=proposal_by_id
             )
-        )
+            if origin_ref is None:
+                if match.region_id is not None:
+                    regions_with_no_origin.add(match.region_id)
+                continue
+            origin_run_id, origin_proposal_id = origin_ref
+            decisions.append(
+                RegionDecision(
+                    decision_id=uuid.uuid4().hex,
+                    run_id=proposal.run_id,
+                    proposal_id=proposal.proposal_id,
+                    disposition=Disposition.CARRIED,
+                    region_id=match.region_id,
+                    actor="propose_regions",
+                    decided_at=decided_at,
+                    carried_from_run_id=origin_run_id,
+                    carried_from_proposal_id=origin_proposal_id,
+                )
+            )
+            continue
+
+        rejection_match = _best_iou_match(proposal, rejected_origins)
+        if rejection_match is not None:
+            decisions.append(
+                RegionDecision(
+                    decision_id=uuid.uuid4().hex,
+                    run_id=proposal.run_id,
+                    proposal_id=proposal.proposal_id,
+                    disposition=Disposition.REJECTED,
+                    region_id=None,
+                    actor="propose_regions",
+                    decided_at=decided_at,
+                    carried_from_run_id=rejection_match.run_id,
+                    carried_from_proposal_id=rejection_match.proposal_id,
+                )
+            )
     return decisions, len(regions_with_no_origin)
 
 
@@ -464,6 +605,8 @@ def _carry_page(
     page_index: int,
     proposals: Sequence[RegionProposal],
     origin_by_region_id: Mapping[str, RegionDecision],
+    proposal_by_id: Mapping[str, RegionProposal],
+    rejected_origins: Sequence[RegionProposal] = (),
     decided_at: str,
 ) -> tuple[int, int]:
     """Match and append one page's carried decisions under that page's lock.
@@ -486,6 +629,8 @@ def _carry_page(
             page=page,
             proposals=proposals,
             origin_by_region_id=origin_by_region_id,
+            proposal_by_id=proposal_by_id,
+            rejected_origins=rejected_origins,
             decided_at=decided_at,
         )
         for decision in carried:
@@ -1049,13 +1194,29 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     # or above ``_CARRY_IOU_THRESHOLD`` — carries that region's earlier
     # confirmation forward as its own decision, so a re-run does not re-
     # propose work a person already did (spec §"Decisions must carry across
-    # runs first"). The decision journal is read once here, for the whole
-    # run, not once per proposal.
+    # runs first"). The same rule, over the page's earlier rejections instead
+    # of its confirmed regions, carries a refusal forward too: a person who
+    # rejected a proposal has answered that question, and a re-run must not
+    # ask it again either (docs/context/current-state.md's third
+    # carry-forward gap). ``carried_count`` below covers both — a re-run
+    # reusing an earlier decision, positive or negative, either way.
+    #
+    # The decision and proposal journals are each read once here, for the
+    # whole run, not once per proposal — ``latest_decision_by_proposal`` is
+    # built from the one ``decisions()`` read rather than a second call to
+    # ``latest_by_proposal()``, which would re-read and re-parse the same
+    # file.
     decision_log = RegionDecisionLog(project.project_root)
     carried_count = 0
     carry_skipped_region_count = 0
     if new_proposals_by_page:
-        origin_by_region_id = _origin_decisions_by_region_id(decision_log.decisions())
+        all_decisions = decision_log.decisions()
+        origin_by_region_id = _origin_decisions_by_region_id(all_decisions)
+        latest_decision_by_proposal: dict[tuple[str, str], RegionDecision] = {}
+        for decision in all_decisions:
+            latest_decision_by_proposal[decision.proposal_id, decision.run_id] = decision
+        proposal_by_id: dict[str, RegionProposal] = {p.proposal_id: p for p in proposal_log.proposals()}
+        rejected_by_page = _origin_rejected_proposals_by_page(latest_decision_by_proposal, proposal_by_id)
         decided_at = datetime.now(UTC).isoformat()
         for idx, page_proposals in new_proposals_by_page.items():
             appended, skipped = await asyncio.to_thread(
@@ -1065,6 +1226,8 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
                 page_index=idx,
                 proposals=page_proposals,
                 origin_by_region_id=origin_by_region_id,
+                proposal_by_id=proposal_by_id,
+                rejected_origins=rejected_by_page.get(idx, ()),
                 decided_at=decided_at,
             )
             carried_count += appended
@@ -1072,8 +1235,9 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
 
     if carry_skipped_region_count:
         log.info(
-            "propose_regions: run=%s project=%s skipped %d confirmed region(s) with no "
-            "accepted/edited origin decision (hand-drawn, or a missing decision)",
+            "propose_regions: run=%s project=%s skipped %d confirmed region(s) with no real "
+            "originating proposal to carry from (hand-drawn, or a proposal record the log no "
+            "longer has)",
             run_id,
             project.project_id,
             carry_skipped_region_count,
