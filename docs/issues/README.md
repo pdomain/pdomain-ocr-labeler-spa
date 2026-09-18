@@ -126,7 +126,6 @@ The normalize report stays open on its frontend half.
 
 | Issue | ID | Sev |
 | --- | --- | --- |
-| [`2026-07-21-suite-launcher-app-shims.md`](2026-07-21-suite-launcher-app-shims.md) | P1-SUITE | Medium |
 | [`2026-07-21-project-list-metadata-filters-noop.md`](2026-07-21-project-list-metadata-filters-noop.md) | P2-ROOT | Medium |
 
 ## Page-load status (2026-08-08)

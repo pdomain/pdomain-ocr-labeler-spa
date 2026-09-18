@@ -770,3 +770,27 @@ under load in this environment.
   `docs/issues/2026-09-18-text-normalization-waits-on-a-module-...`. A route, a
   probe and a page-text call all wait on that same missing module and report the
   feature as one upgrade away.
+
+### [2026-09-18] Retired: the suite launcher showed nothing and launched nothing
+
+- Old path: `docs/issues/2026-07-21-suite-launcher-app-shims.md`
+- Outcome: implemented
+- Superseded by: `frontend/src/api/suite.ts`,
+  `frontend/src/components/shell/SuiteLauncher.tsx` and `HeaderBar`'s new
+  `rightSlot`
+- Resolved by: `df005c0` (merge of `fix/suite-launcher`)
+- Rationale kept: `App.tsx` passed stubs, so the installed list was always empty
+  and every launch answered that it needed host configuration, which the local
+  launcher this app runs can never return. Fixing that exposed a second defect:
+  `AppShell` only assembles the built-in header that mounts `LauncherSlot` when
+  no custom header is passed, and this app always passes one, so working stubs
+  would still have shown nothing. The launcher is now rendered explicitly
+  through `HeaderBar`. One client with runtime validation serves both the
+  launcher and the export dialog, which had its own duplicate fetches. A
+  disabled sibling is not offered as a tile, and a refused launch says why.
+  Evidence: `frontend/src/api/suite.test.ts`,
+  `frontend/src/components/shell/SuiteLauncher.test.tsx`,
+  `ExportDialogUtils.test.ts` and `tests/e2e/test_suite_launcher_empty.py`.
+- Remaining work: only the empty state is proven in a browser, because no
+  sibling app can be installed in this environment. Listing and launching are
+  covered at the unit level.
