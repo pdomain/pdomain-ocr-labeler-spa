@@ -27,6 +27,7 @@ import {
 import { reviewSelectionIntentStore } from "../stores/review-selection-intent-store";
 import { worklistStore } from "../stores/worklist-store";
 import { dialogStore } from "../stores/dialog-store";
+import { useUiPrefs } from "../stores/ui-prefs";
 import { toast } from "../lib/toast";
 import type { components } from "../api/types";
 
@@ -177,6 +178,7 @@ beforeEach(() => {
   worklistStore.reset();
   dialogStore.reset();
   reviewSelectionIntentStore.setState({ intent: null });
+  useUiPrefs.setState({ reviewQueueKind: null });
 });
 
 afterEach(() => {
@@ -185,6 +187,7 @@ afterEach(() => {
   worklistStore.reset();
   dialogStore.reset();
   reviewSelectionIntentStore.setState({ intent: null });
+  useUiPrefs.setState({ reviewQueueKind: null });
   vi.restoreAllMocks();
 });
 
@@ -785,5 +788,128 @@ describe("useRegionReviewHotkeys: ']' and '[' move between pages with work", () 
     expect(navigate).not.toHaveBeenCalled();
     expect(infoSpy).toHaveBeenCalledWith("Review queue is still loading.");
     expect(reviewSelectionIntentStore.getState().intent).toBeNull();
+  });
+});
+
+// ─── '['/']' follow the selected review-queue kind ─────────────────────────
+// Spec: pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-
+// review-next.md "How the SPA uses the new route" — "`[`/`]` keep working on
+// the selected kind."
+//
+// Only `first_page_index` is available for a non-region kind — a single
+// known page, not an ordered list of every page with work the way the
+// region-only route's `pages` summary is. So for a non-region kind, both
+// keys collapse to the same action: jump to that one known page if not
+// already there. There is no genuine "next"/"previous" to compute without
+// more than one data point, and this suite documents that rather than
+// pretending otherwise.
+
+function kindEntry(overrides: Record<string, unknown> = {}) {
+  return {
+    kind: "word",
+    outstanding: 0,
+    total: 0,
+    available: true,
+    blocked_by: null,
+    first_page_index: null,
+    pages_not_counted: 0,
+    is_lower_bound: false,
+    ...overrides,
+  };
+}
+
+function mockKindsQueue(kinds: Record<string, unknown>[]) {
+  server.use(
+    http.get(`/api/projects/${PROJECT_ID}/review-queue`, () => HttpResponse.json({ kinds })),
+  );
+}
+
+describe("useRegionReviewHotkeys: '['/']' follow the selected kind", () => {
+  it("']' jumps to a non-region kind's first_page_index, unconditionally of rail target", async () => {
+    railStore.getState().setTarget("word");
+    useUiPrefs.setState({ reviewQueueKind: "word" });
+    mockKindsQueue([kindEntry({ kind: "word", outstanding: 9, first_page_index: 7 })]);
+    const { navigate, qc } = renderHotkeys(PAGE, { pageIndex: 0 });
+    await waitFor(() => expect(qc.getQueryData(["review-queue-kinds", PROJECT_ID])).toBeDefined());
+
+    pressKey("]");
+
+    expect(navigate).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/pages/pageno/8`);
+  });
+
+  it("'[' makes the same jump as ']' — only one known page exists to jump to", async () => {
+    useUiPrefs.setState({ reviewQueueKind: "word" });
+    mockKindsQueue([kindEntry({ kind: "word", outstanding: 9, first_page_index: 7 })]);
+    const { navigate, qc } = renderHotkeys(PAGE, { pageIndex: 0 });
+    await waitFor(() => expect(qc.getQueryData(["review-queue-kinds", PROJECT_ID])).toBeDefined());
+
+    pressKey("[");
+
+    expect(navigate).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/pages/pageno/8`);
+  });
+
+  it("does nothing but toast when already on the kind's only known page", async () => {
+    const infoSpy = vi.spyOn(toast, "info");
+    useUiPrefs.setState({ reviewQueueKind: "word" });
+    mockKindsQueue([kindEntry({ kind: "word", outstanding: 9, first_page_index: 0 })]);
+    const { navigate, qc } = renderHotkeys(PAGE, { pageIndex: 0 });
+    await waitFor(() => expect(qc.getQueryData(["review-queue-kinds", PROJECT_ID])).toBeDefined());
+
+    pressKey("]");
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalledWith(
+      "Word's only known page is this one — there is no further page to jump to.",
+    );
+  });
+
+  it("says there is no known starting page yet when first_page_index is null", async () => {
+    const infoSpy = vi.spyOn(toast, "info");
+    useUiPrefs.setState({ reviewQueueKind: "typography" });
+    mockKindsQueue([
+      kindEntry({
+        kind: "typography",
+        outstanding: 40,
+        first_page_index: null,
+        is_lower_bound: true,
+      }),
+    ]);
+    const { navigate, qc } = renderHotkeys(PAGE, { pageIndex: 0 });
+    await waitFor(() => expect(qc.getQueryData(["review-queue-kinds", PROJECT_ID])).toBeDefined());
+
+    pressKey("]");
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalledWith("Typography has no known starting page yet.");
+  });
+
+  it("names the reason when the selected kind is unavailable", async () => {
+    const infoSpy = vi.spyOn(toast, "info");
+    useUiPrefs.setState({ reviewQueueKind: "glyph" });
+    mockKindsQueue([
+      kindEntry({
+        kind: "glyph",
+        available: false,
+        unavailable_reason: "no glyph predictor is wired",
+      }),
+    ]);
+    const { navigate, qc } = renderHotkeys(PAGE, { pageIndex: 0 });
+    await waitFor(() => expect(qc.getQueryData(["review-queue-kinds", PROJECT_ID])).toBeDefined());
+
+    pressKey("]");
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalledWith("Glyph is unavailable: no glyph predictor is wired.");
+  });
+
+  it("still requires the region rail target when the selected kind is (or falls back to) region", () => {
+    railStore.getState().setTarget("word");
+    useUiPrefs.setState({ reviewQueueKind: "region" });
+    const { navigate } = renderHotkeys(PAGE, { pageIndex: 0 });
+
+    pressKey("]");
+    pressKey("[");
+
+    expect(navigate).not.toHaveBeenCalled();
   });
 });
