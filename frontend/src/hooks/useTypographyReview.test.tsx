@@ -2,10 +2,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import type { ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { server } from "../test/server";
 import {
   useAppendTypographyCorrection,
+  useSetImportedTextValidation,
   useTypographyHead,
   useTypographyWorklist,
 } from "./useTypographyReview";
@@ -94,5 +95,56 @@ describe("typography review hooks", () => {
     });
 
     expect(queryClient.getQueryState(["typography-worklist", "p1", 0])?.isInvalidated).toBe(true);
+  });
+
+  // Reviewer finding (high): appending a typography correction is exactly
+  // the action that changes the typography kind's outstanding count, but
+  // the review-queue-kinds cache (Rail badge, Queue panel, bracket keys)
+  // never invalidated, so it went stale after every correction.
+  it("invalidates the per-kind review queue after a successful correction", async () => {
+    server.use(
+      http.post("/api/projects/p1/pages/0/typography/words/w1/corrections", () =>
+        HttpResponse.json({ word_id: "w1" }),
+      ),
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useAppendTypographyCorrection("p1", 0, "w1"), {
+      wrapper: localWrapper,
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({} as never);
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["review-queue-kinds", "p1"] });
+  });
+
+  // Reviewer finding (high): same staleness gap on the imported-text-
+  // validation path (labeling-bundle projects), which changes the word
+  // kind's outstanding count directly.
+  it("invalidates the per-kind review queue after setting imported text validation", async () => {
+    server.use(
+      http.post("/api/projects/p1/pages/0/typography/words/w1/text-validation", () =>
+        HttpResponse.json({ word_id: "w1", validated: true }),
+      ),
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useSetImportedTextValidation("p1", 0, "w1"), {
+      wrapper: localWrapper,
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({} as never);
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["review-queue-kinds", "p1"] });
   });
 });

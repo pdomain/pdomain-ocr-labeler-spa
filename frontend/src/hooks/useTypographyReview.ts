@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateBookReviewQueue } from "./useBookReviewQueue";
 import type { components } from "../api/types";
 
 export type TypographyHead = components["schemas"]["TypographyHeadResponse"];
@@ -89,6 +90,12 @@ export function useSetImportedTextValidation(projectId: string, pageIndex: numbe
       void queryClient.invalidateQueries({
         queryKey: ["typography-worklist", projectId, pageIndex],
       });
+      // One-answer-to-what-to-review-next: for a labeling-bundle project,
+      // this IS the word-validation path (ImportedTextValidationLog, not
+      // save_page_content_to_store), so it changes the word kind's own
+      // outstanding count directly — the Rail badge and Queue panel must
+      // see it.
+      invalidateBookReviewQueue(queryClient, projectId);
     },
     onError: (error) => {
       if (error.status === 409) {
@@ -131,6 +138,10 @@ export function useAppendTypographyCorrection(
       void queryClient.invalidateQueries({
         queryKey: ["typography-worklist", projectId, pageIndex],
       });
+      // One-answer-to-what-to-review-next: a correction is exactly the
+      // action that changes the typography kind's outstanding count — the
+      // Rail badge and Queue panel must see it.
+      invalidateBookReviewQueue(queryClient, projectId);
     },
     onError: (error) => {
       if (error.status === 409) {
