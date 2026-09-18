@@ -22,7 +22,9 @@ export type RotatePageResponse = components["schemas"]["RotatePageResponse"];
 export type AutoRotateAllResponse = components["schemas"]["AutoRotateAllResponse"];
 export type PageKind = components["schemas"]["PageKind"];
 export type BBox = components["schemas"]["BBox"];
-export type ErasePixelsRequest = components["schemas"]["ErasePixelsRequest"];
+// Not exported: only used below to type the erase-pixels request body built
+// inside `useErasePagePixels`'s own `mutationFn`.
+type ErasePixelsRequest = components["schemas"]["ErasePixelsRequest"];
 export type EraseShape = ErasePixelsRequest["shape"];
 
 // ─── internal helpers ──────────────────────────────────────────────────────

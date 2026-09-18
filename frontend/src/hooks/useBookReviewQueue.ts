@@ -93,13 +93,28 @@ export function useBookReviewQueue(projectId: string | undefined) {
  * with outstanding work and no `blocked_by`". A kind with work but a
  * `blocked_by` value is waiting on something else, not the thing to do next.
  *
+ * Picks by `REVIEW_QUEUE_KIND_ORDER` rather than the array's own order: the
+ * backend happens to serialize `kinds` in that same sequence today
+ * (`api/review_queue.py`'s `get_review_queue` builds the list in exactly
+ * this order), but nothing about the wire format guarantees it, and this is
+ * the one place "first" is priority-sensitive — silently trusting response
+ * order would make a future backend reordering a silent misprioritization
+ * here instead of a loud type error.
+ *
  * Returns `undefined` when every kind is either done, unavailable, or
  * blocked — there is nothing to default to.
  */
 export function firstActionableKind(
   kinds: readonly ReviewQueueKindEntry[],
 ): ReviewQueueKindEntry | undefined {
-  return kinds.find((entry) => entry.outstanding > 0 && entry.blocked_by === null);
+  const byKind = new Map(kinds.map((entry) => [entry.kind, entry]));
+  for (const kind of REVIEW_QUEUE_KIND_ORDER) {
+    const entry = byKind.get(kind);
+    if (entry !== undefined && entry.outstanding > 0 && entry.blocked_by === null) {
+      return entry;
+    }
+  }
+  return undefined;
 }
 
 /** Invalidates the `["review-queue-kinds", projectId]` cache — every `useBookReviewQueue` variant for this project. */

@@ -47,6 +47,7 @@ import {
   firstActionableKind,
   blockedByMessage,
   REVIEW_QUEUE_KIND_LABELS,
+  REVIEW_QUEUE_KIND_ORDER,
   type ReviewQueueKindEntry,
   type ReviewQueueKindName,
 } from "../../hooks/useBookReviewQueue";
@@ -226,6 +227,20 @@ function KindSelector({ kinds, active, onSelect }: KindSelectorProps) {
 }
 
 /**
+ * `kinds` in `REVIEW_QUEUE_KIND_ORDER`, not response order — the selector
+ * pills, like `firstActionableKind` (useBookReviewQueue.ts), show "the
+ * order the work happens" rather than however the backend happened to
+ * serialize the list.
+ */
+function orderedKinds(kinds: readonly ReviewQueueKindEntry[]): ReviewQueueKindEntry[] {
+  const byKind = new Map(kinds.map((entry) => [entry.kind, entry]));
+  return REVIEW_QUEUE_KIND_ORDER.flatMap((kind) => {
+    const entry = byKind.get(kind);
+    return entry === undefined ? [] : [entry];
+  });
+}
+
+/**
  * Outstanding-count sentence. `is_lower_bound` reads as "At least N" — never
  * a completion figure (design: "A count that may understate says so in the
  * response, not only in prose").
@@ -334,7 +349,7 @@ export function ReviewQueuePanel({ projectId, pageIndex }: ReviewQueuePanelProps
     getReviewQueueKind,
   );
   const bookQueueQ = useBookReviewQueue(projectId);
-  const kinds = bookQueueQ.data?.kinds ?? [];
+  const kinds = orderedKinds(bookQueueQ.data?.kinds ?? []);
   const autoKind = firstActionableKind(kinds)?.kind;
   const resolvedKind: ReviewQueueKindName = explicitKind ?? autoKind ?? "region";
   const activeEntry = kinds.find((k) => k.kind === resolvedKind);

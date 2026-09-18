@@ -32,8 +32,11 @@ type Job = components["schemas"]["Job"];
 type JobStatus = components["schemas"]["JobStatus"];
 type JobProgress = components["schemas"]["JobProgress"];
 
+// Not exported: `JobProgressEvent` (below, exported and widely consumed)
+// carries this literal union structurally as its own `event` field, so no
+// external caller needs to name `JobEventKind` itself.
 /** The SSE event kind — the `event:` line name, echoed in the frame's own `event` field. */
-export type JobEventKind = "snapshot" | "progress" | "complete" | "error" | "cancelled";
+type JobEventKind = "snapshot" | "progress" | "complete" | "error" | "cancelled";
 
 /** A job-progress SSE frame: the public `Job` model plus the SSE event kind. */
 export interface JobProgressEvent extends Job {

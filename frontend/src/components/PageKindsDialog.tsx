@@ -45,16 +45,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@pdomain/pdomain-ui/primitives";
-import type { components } from "../api/types";
 import {
   usePageKinds,
   useBulkConfirmPageKinds,
   type BulkConfirmPageKindItem,
+  type PageKindsListItem,
 } from "../hooks/usePageKinds";
 import { pageNoUrl } from "../lib/routes";
 import { PAGE_KINDS, type PageKind } from "../lib/pageKinds";
-
-type PageKindsListItem = components["schemas"]["PageKindsListItem"];
 
 type ReviewFilter = "unreviewed" | "all";
 
