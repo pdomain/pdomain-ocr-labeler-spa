@@ -39,6 +39,7 @@ import {
   useErasePixels,
 } from "../../hooks/useWordMutations";
 import { findWordByIndex, getWordOrder } from "../../lib/word-order";
+import type { UseBboxRefineTrackingResult } from "../../hooks/useBboxRefineTracking";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -83,9 +84,13 @@ export interface WordDetailProps {
   page: PagePayload;
   projectId: string;
   pageIndex: number;
+  /** Hoisted refine_bboxes job tracker, owned by ProjectPage — see
+   * BBoxSection.tsx's module doc comment (review finding 3). Forwarded
+   * straight through to BBoxSection. */
+  bboxRefine: UseBboxRefineTrackingResult;
 }
 
-export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
+export function WordDetail({ page, projectId, pageIndex, bboxRefine }: WordDetailProps) {
   const { data: refineProbe } = useRefineAvailable();
   const refineAvailable = refineProbe?.available ?? false;
   const updateGt = useUpdateWordGroundTruth(projectId, pageIndex);
@@ -196,7 +201,12 @@ export function WordDetail({ page, projectId, pageIndex }: WordDetailProps) {
             Bounding Box
           </Accordion.Trigger>
           <Accordion.Content>
-            <BBoxSection word={word} projectId={projectId} pageIndex={pageIndex} />
+            <BBoxSection
+              word={word}
+              projectId={projectId}
+              pageIndex={pageIndex}
+              refineTracking={bboxRefine}
+            />
           </Accordion.Content>
         </Accordion.Item>
 

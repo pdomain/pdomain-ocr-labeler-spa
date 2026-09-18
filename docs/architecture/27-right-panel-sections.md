@@ -55,7 +55,7 @@ WordDetail > Accordion
 │   ├── CoordReadout strip
 │   ├── 2×2 numeric input grid (X, Y, W, H)
 │   ├── Nudge sub-row (step input + L/R/U/D buttons)
-│   └── Actions sub-row (Refine / Expand+Refine / Crop) + Reset
+│   └── Actions sub-row (Refine / Expand+Refine / Expand) + Reset
 │
 ├── ReboxSection             [Accordion.Item value="rebox", tag="accent"]
 │   ├── Tool segmented control (Snap / Draw / Pan)
@@ -193,13 +193,24 @@ when the word changes.
   immediately; blur commits the current draft value to the server.
 - Nudge: "Step" input sets `nudgeStep` (integer px, min 1). L/R/T/B buttons
   call `applyNudge(draft, dir, nudgeStep)` and commit immediately.
-- Refine button: currently calls `commitBbox(draft)` (same as a manual
-  commit — snap-to-ink is not yet wired).
-- Expand+Refine: expands the draft bbox by 4 px on each side, updates draft,
-  then commits.
-- Crop: calls `commitBbox(draft)` (same as Refine — backend crop endpoint not
-  yet separately wired).
-- Reset: restores draft to `originalBbox` and commits.
+- Refine / Expand+Refine / Expand (P1-BBOX-UI, fixed 2026-09-18 in `cb6214f`;
+  see the tombstone in `docs/context/decisions.md`): each queues the
+  real `refine_bboxes` job (`POST .../refine`, `useRefineWordBbox`) scoped
+  to this word (`scope: "word"`, `word_indices: [[line_index, word_index]]`),
+  mapped onto the three modes `core/jobs/handlers/refine.py` implements —
+  Refine → `mode: "refine"` (snap bbox to ink), Expand+Refine →
+  `mode: "expand_then_refine"` (expand, then snap to ink), Expand →
+  `mode: "expand_only"` (expand only, no snap; renamed from "Crop" — the
+  backend has no image-crop operation). Progress is tracked via
+  `useJobProgress` + `useJobCompletionInvalidation`, same job pattern as
+  `PageActionsCompact`: a loading toast, a success/error toast on the
+  terminal event, and invalidation of `["page", projectId, pageIndex]` on
+  completion. All three are disabled — with an explanatory message
+  (`bbox-refine-unavailable`) — when `useRefineAvailable()` reports
+  `available: false`. `refine_bboxes` is not in the backend's cancellable
+  job set, so no Cancel action is offered.
+- Reset: restores draft to `originalBbox` and commits (plain rebox, not a
+  refine job).
 
 ### ReboxSection / ReboxCanvas
 
@@ -297,9 +308,10 @@ Unicode picker toggle (`char-fixer-open-picker-button`): shows/hides inline
 | `bbox-nudge-right` | button | Nudge right |
 | `bbox-nudge-top` | button | Nudge up |
 | `bbox-nudge-bottom` | button | Nudge down |
-| `bbox-refine-button` | button | Refine (snap-to-ink stub) |
-| `bbox-expand-refine-button` | button | Expand 4px then commit |
-| `bbox-crop-button` | button | Crop (stub) |
+| `bbox-refine-button` | button | Refine — queues `refine_bboxes` job, `mode: "refine"` (P1-BBOX-UI) |
+| `bbox-expand-refine-button` | button | Expand+Refine — queues `refine_bboxes` job, `mode: "expand_then_refine"` (P1-BBOX-UI) |
+| `bbox-expand-button` | button | Expand — queues `refine_bboxes` job, `mode: "expand_only"`; renamed from `bbox-crop-button` since the backend has no crop capability (P1-BBOX-UI) |
+| `bbox-refine-unavailable` | p | Shown, and the three buttons above disabled, when `useRefineAvailable()` reports `available: false` |
 | `bbox-reset-button` | button | Restore original bbox |
 
 ### ReboxSection / ReboxCanvas
@@ -415,11 +427,13 @@ cells, not form fields.
 
 ## 9. Open questions
 
-1. **BBoxSection Refine / Crop wiring**: both "Refine" and "Crop" currently call
-   `commitBbox(draft)` — identical to a manual save. Snap-to-ink refinement would
-   require a dedicated backend endpoint (e.g. `POST .../words/{li}/{wi}/snap-bbox`)
-   that accepts a candidate bbox and returns an ink-snapped version. This endpoint
-   does not exist yet.
+1. ~~**BBoxSection Refine / Crop wiring**~~ — resolved (P1-BBOX-UI, fixed
+   2026-09-18 in `cb6214f`; see the tombstone in `docs/context/decisions.md`):
+   Refine and
+   Expand+Refine now queue the real `refine_bboxes` job (`POST .../refine`)
+   instead of a plain rebox; "Crop" was renamed "Expand" and mapped onto the
+   job's `expand_only` mode, since the backend has no image-crop operation
+   to map it onto honestly. See §5 BBoxSection above.
 
 2. **ErasePixels lasso polygon fill**: lasso ops are sent as `shape: "rect"`
    (AABB approximation). Backend polygon fill is not yet implemented. A future

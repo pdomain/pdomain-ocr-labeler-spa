@@ -659,3 +659,28 @@ and browser gates pass on the merged tree.
   `pdomain-book-tools` has no progress callback. The design's open question about
   adding one stays open, as does whether the OCR engine should warm up at server
   start.
+
+### [2026-09-18] Retired: the bbox buttons named actions they did not take
+
+- Old path: `docs/issues/2026-07-21-bbox-refine-crop-misleading.md`
+- Outcome: implemented
+- Superseded by:
+  `frontend/src/components/right-panel/sections/BBoxSection.tsx`,
+  `frontend/src/hooks/useBboxRefineTracking.ts` and
+  `frontend/src/hooks/useWordMutations.ts` (`useRefineWordBbox`)
+- Resolved by: `cb6214f` (merge of `fix/bbox-refine`)
+- Rationale kept: Refine, Expand + Refine and Crop all called a plain rebox.
+  The first two now submit the real refine job with the matching mode. Crop was
+  renamed Expand, because the backend has no crop at all and `expand_only` is
+  what the button actually does. Making these real turned a fast local edit into
+  a job that takes seconds, which the panel was not built for, so three further
+  defects were fixed along the way: a refine result no longer overwrites the
+  coordinate field a person is typing in, the job is tracked above the accordion
+  that unmounts when collapsed and is tied to the page it started on, and a job
+  that never finishes clears itself instead of stranding the controls. Evidence:
+  `BBoxSection.test.tsx`, `useBboxRefineTracking.test.tsx`,
+  `tests/e2e/test_bbox_refine_buttons.py`.
+- Remaining work: only `expand_only` is proven end to end in a browser. The
+  other two modes need a page image that a synthetic fixture cannot supply, so
+  they are covered by unit tests alone. The fields a resync changes get no
+  visual cue.
