@@ -79,6 +79,36 @@ TYPOGRAPHY_TAXONOMY = TypographyTaxonomy(
     ),
 )
 
+_TYPOGRAPHY_ACCEPTED_DECISIONS = {
+    CorrectionDecision.ACCEPT,
+    CorrectionDecision.APPROVED_EDIT,
+    CorrectionDecision.REVIEWED_REGULAR,
+}
+
+
+def _typography_reviewed(correction: TypographyCorrection | None) -> bool:
+    """Whether ``correction`` reflects a complete grapheme-level typography
+    review: an accepted decision, a replacement, an explicit reviewed
+    ``review_state``, and every taxonomy label required for completion set
+    to a positive or negative state.
+
+    Shared by ``typography_page_review`` (page-wide aggregate) and
+    ``_current_head`` (single-word ``typography_reviewed`` field) so the
+    per-word gate in P1-VALIDATE-GATE uses exactly the rule the page-level
+    completion count already uses — not a re-derived approximation.
+    """
+    if correction is None or correction.replacement is None:
+        return False
+    if correction.decision not in _TYPOGRAPHY_ACCEPTED_DECISIONS:
+        return False
+    if correction.replacement.review_state not in {ReviewState.REVIEWED, ReviewState.REVIEWED_REGULAR}:
+        return False
+    required_labels = {label.value for label in TYPOGRAPHY_TAXONOMY.labels if label.required_for_completion}
+    return all(
+        correction.replacement.label_states.get(label) in {LabelState.POSITIVE, LabelState.NEGATIVE}
+        for label in required_labels
+    )
+
 
 class LabelStates(RootModel[dict[str, Literal["unknown", "positive", "negative"]]]):
     """Exact tri-state map retained by FastAPI's OpenAPI compatibility pass."""
@@ -149,6 +179,15 @@ class TypographyHeadResponse(BaseModel):
     imported_text_validation_available: bool
     revision: int
     correction: TypographyCorrection | None
+    # P1-VALIDATE-GATE: whether *this word's own* graphemes have a complete,
+    # accepted typography review — the per-word analogue of
+    # ``TypographyPageReviewResponse.typography_reviewed_words``. Computed by
+    # ``_typography_reviewed`` from this word's own current correction, which
+    # ``_current_head`` has already epoch-filtered to this word's binding, so
+    # no separate staleness check is needed here (contrast
+    # ``typography_page_review``, which shares one page-wide epoch across
+    # words and so re-checks each word's own hashes against it).
+    typography_reviewed: bool
     head_token: str
 
 
@@ -655,6 +694,7 @@ def _current_head(
         imported_text_validation_available=state.labeling_bundle is not None,
         revision=word_head.revision if word_head else 0,
         correction=word_head,
+        typography_reviewed=_typography_reviewed(word_head),
         head_token="0" * 64,
     )
     return response.model_copy(
@@ -1002,16 +1042,10 @@ def typography_page_review(
     total = len(active_word_ids)
     lineage_root = records[0].correction if records else None
     heads = tuple(sorted(heads_by_word.values(), key=lambda item: item.word_id))
-    accepted = {
-        CorrectionDecision.ACCEPT,
-        CorrectionDecision.APPROVED_EDIT,
-        CorrectionDecision.REVIEWED_REGULAR,
-    }
     text_reviewed = 0
     typography_reviewed = 0
     blocked = total - len(heads)
     for correction in heads:
-        replacement = correction.replacement
         try:
             current = _initial_binding(project, page_index, correction.word_id, state, page)
         except HTTPException:
@@ -1026,18 +1060,7 @@ def typography_page_review(
                 or lineage_root.page_head_sha256 != current.page_head_sha256
             )
         valid_text = not stale and correction.word_id in text_validated_word_ids
-        valid_typography = False
-        if not stale and correction.decision in accepted and replacement is not None:
-            required_labels = {
-                label.value for label in TYPOGRAPHY_TAXONOMY.labels if label.required_for_completion
-            }
-            valid_typography = replacement.review_state in {
-                ReviewState.REVIEWED,
-                ReviewState.REVIEWED_REGULAR,
-            } and all(
-                replacement.label_states.get(label) in {LabelState.POSITIVE, LabelState.NEGATIVE}
-                for label in required_labels
-            )
+        valid_typography = not stale and _typography_reviewed(correction)
         if valid_text:
             text_reviewed += 1
         if valid_typography:
