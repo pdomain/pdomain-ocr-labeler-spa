@@ -28,6 +28,7 @@
 import { createStore } from "zustand/vanilla";
 import { useSyncExternalStore } from "react";
 import type { ReviewQueueOrder } from "../hooks/useReviewQueue";
+import type { ReviewQueueKindName } from "../hooks/useBookReviewQueue";
 
 export interface LayerVisibility {
   block: boolean;
@@ -101,6 +102,17 @@ export interface UiPrefsState {
    * whose query key already separates the two orders' caches.
    */
   reviewQueueOrder: ReviewQueueOrder;
+  /**
+   * pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-review-
+   * next.md "How the SPA uses the new route": the Queue tab's kind selector,
+   * and the kind `[`/`]` follow (useRegionReviewHotkeys.ts). `null` means
+   * "no explicit pick yet" — the UI falls back to `firstActionableKind`
+   * (the first kind, in list order, with outstanding work and no
+   * `blocked_by`), which can change as work is done. Once a person picks a
+   * kind directly, it sticks for the session even if a different kind
+   * becomes the auto-picked default.
+   */
+  reviewQueueKind: ReviewQueueKindName | null;
   /** IS-6: Whether the right panel is open. Default: true. */
   rightPanelOpen: boolean;
   /** Theme preference — Slice 24. Default: "system". */
@@ -205,6 +217,7 @@ const INITIAL_PREFS: UiPrefsState = {
   drawerOpen: true,
   drawerTab: "worklist",
   reviewQueueOrder: "reading",
+  reviewQueueKind: null,
   rightPanelOpen: true,
   theme: readPersistedTheme(),
   matchFilterMode: "all",

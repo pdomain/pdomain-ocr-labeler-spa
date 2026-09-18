@@ -119,6 +119,75 @@ export const handlers: RequestHandler[] = [
     HttpResponse.json({ total_undecided: 0, pages: [], items: [] }),
   ),
 
+  // One-answer-to-what-to-review-next (pdomain-ocr-synth's
+  // docs/specs/2026-09-18-one-answer-to-what-to-review-next.md) — baseline
+  // handler for the per-kind book review queue, so any component/hook
+  // mounting useBookReviewQueue (Rail's "next kind" badge, the Queue drawer
+  // tab's kind selector, useRegionReviewHotkeys' bracket keys) without an
+  // explicit override doesn't hit onUnhandledRequest: "error". Default: every
+  // kind reports zero outstanding work, so nothing is actionable and
+  // `firstActionableKind` resolves to `undefined` — this keeps every
+  // pre-existing region-only test's fallback-to-"region" behavior intact.
+  // Tests that assert kind-driven behavior register their own
+  // server.use(...) override.
+  http.get("/api/projects/:pid/review-queue", () =>
+    HttpResponse.json({
+      kinds: [
+        {
+          kind: "page_kind",
+          outstanding: 0,
+          total: 0,
+          available: true,
+          blocked_by: null,
+          first_page_index: null,
+          pages_not_counted: 0,
+          is_lower_bound: false,
+        },
+        {
+          kind: "region",
+          outstanding: 0,
+          total: 0,
+          available: true,
+          blocked_by: null,
+          first_page_index: null,
+          pages_not_counted: 0,
+          is_lower_bound: false,
+        },
+        {
+          kind: "word",
+          outstanding: 0,
+          total: 0,
+          available: true,
+          blocked_by: null,
+          first_page_index: null,
+          pages_not_counted: 0,
+          is_lower_bound: false,
+        },
+        {
+          kind: "typography",
+          outstanding: 0,
+          total: 0,
+          available: true,
+          blocked_by: null,
+          first_page_index: null,
+          pages_not_counted: 0,
+          is_lower_bound: false,
+        },
+        {
+          kind: "glyph",
+          outstanding: 0,
+          total: 0,
+          available: false,
+          blocked_by: null,
+          first_page_index: null,
+          pages_not_counted: 0,
+          is_lower_bound: false,
+          unavailable_reason: "no glyph predictor is wired",
+        },
+      ],
+    }),
+  ),
+
   // Page-kind review (pdomain-ocr-synth's
   // docs/specs/2026-09-17-page-kind-review-design.md) — baseline handlers for
   // the book-wide list, the bulk confirm route, and the single-page confirm
