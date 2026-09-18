@@ -13,11 +13,21 @@ These tests inject a fake ``page_loader`` onto ``runner.context`` so the
 handler can be exercised end-to-end without pulling DocTR / pdomain_book_tools
 into the test process.
 
-The SSE HTTP stream is race-prone in tests — the job often finishes
-before an EventSource subscribes (the broker only replays events that
-arrive *after* subscription). We instead wrap ``broker.publish`` to
-collect every event at the publish site, which matches what a
-race-free SSE subscriber would have seen.
+``JobEventBroker`` has no event buffering by design (``core/jobs/events.py``
+module docstring): events published before a subscriber registers are gone
+for good, so only a subscriber already listening when the job runs sees its
+full progress sequence. A late subscriber — the common case for a job this
+fast, run against a fake loader — only ever gets the job's current terminal
+snapshot via ``GET .../events``, never the intermediate 0.1/0.9 fractions
+these tests assert on. (A related but distinct bug — the SSE handler could
+hang forever by re-checking a stale, captured-once job reference instead of
+a fresh one, subscribing to an already-closed broker channel — was fixed
+2026-09-18 by splitting ``subscribe`` into ``listen``/``drain``/``unlisten``;
+see ``docs/context/decisions.md``. That fix makes late subscription safe,
+not retroactive — it still can't replay history no one recorded.) We
+instead wrap ``broker.publish`` to collect every event at the publish site,
+which matches what a subscriber registered before the job started would
+have seen.
 """
 
 from __future__ import annotations

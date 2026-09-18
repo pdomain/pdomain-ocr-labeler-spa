@@ -38,7 +38,6 @@ from .dependencies import (
 from .middleware.error_handler import ApiError
 from .pages import (
     PagePayload,
-    _build_history_info,
     _check_project_and_page,
     _page_payload,
     _resolve_page_object_for_pages,
@@ -86,8 +85,12 @@ def _execute_history_op(
     read ``prior_kind`` or the aggregate mid-restore, and must not land
     between the marker write and the in-memory swap — either of those would
     let the page blob's kind and the latest reviewed marker disagree.
-    ``threading.Lock`` is not reentrant, so nothing reachable from inside
-    this block may acquire this same page's lock again.
+    ``ProjectState.get_page_lock`` is a re-entrant ``threading.RLock`` (it has
+    to be — ``_page_payload`` below also takes it), but this block still
+    releases it before calling ``_page_payload`` rather than nesting: nothing
+    here needs a second acquisition, and doing the restore work itself
+    outside the lock would let a concurrent read observe a half-restored
+    page.
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
@@ -231,14 +234,21 @@ def _execute_history_op(
     # ``_finalize_reocr_outcome``), so this ordering is deadlock-free either way.
     project_state.set_page_state(page_index, pstate)
 
+    # ``page_store=store`` so ``_page_payload`` both reads the image/rotation/
+    # region facets this route was previously (silently) omitting and stamps
+    # ``history`` itself, under its own lock acquisition — this call happens
+    # after the ``with page_lock:`` block above has already released the
+    # lock, so a mutation from another request could land here before this
+    # fix; now it can't split word counts from ``history`` in the response
+    # (2026-09-18 page-history-consistency fix — same race ``get_page`` had).
     payload = _page_payload(
         project_id=project_id,
         page_index=page_index,
         project_state=project_state,
         settings=settings,
         app_config=app_config,
+        page_store=store,
     )
-    payload.history = _build_history_info(store, page_id, depth=depth)
     return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
 
 
