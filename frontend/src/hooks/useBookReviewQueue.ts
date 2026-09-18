@@ -106,3 +106,13 @@ export function firstActionableKind(
 export function invalidateBookReviewQueue(qc: QueryClient, projectId: string): void {
   void qc.invalidateQueries({ queryKey: bookReviewQueueKey(projectId) });
 }
+
+/**
+ * "Waiting on X to be reviewed first." — the one sentence every surface
+ * that shows `blocked_by` uses (Queue drawer banner, bracket-key toast).
+ * Reviewer finding (low): the drawer and the keys used to say this two
+ * different ways; a shared string keeps them from drifting apart again.
+ */
+export function blockedByMessage(blockedBy: ReviewQueueKindName): string {
+  return `Waiting on ${REVIEW_QUEUE_KIND_LABELS[blockedBy]} to be reviewed first.`;
+}

@@ -45,6 +45,7 @@ import { useReviewQueue, type ReviewQueueOrder } from "../../hooks/useReviewQueu
 import {
   useBookReviewQueue,
   firstActionableKind,
+  blockedByMessage,
   REVIEW_QUEUE_KIND_LABELS,
   type ReviewQueueKindEntry,
   type ReviewQueueKindName,
@@ -267,7 +268,7 @@ function KindSummary({ entry, onStart }: KindSummaryProps) {
       </p>
       {entry.blocked_by !== null && (
         <p data-testid="review-queue-kind-blocked" className="text-ink-3">
-          Waiting on {REVIEW_QUEUE_KIND_LABELS[entry.blocked_by]} to be reviewed first.
+          {blockedByMessage(entry.blocked_by)}
         </p>
       )}
       {entry.pages_not_counted > 0 && (
@@ -382,7 +383,7 @@ export function ReviewQueuePanel({ projectId, pageIndex }: ReviewQueuePanelProps
           data-testid="review-queue-kind-blocked"
           className="px-3 py-1.5 text-[10px] text-ink-3 border-b border-border-1"
         >
-          Waiting on {REVIEW_QUEUE_KIND_LABELS[activeEntry.blocked_by]} to be reviewed first.
+          {blockedByMessage(activeEntry.blocked_by)}
         </p>
       )}
 

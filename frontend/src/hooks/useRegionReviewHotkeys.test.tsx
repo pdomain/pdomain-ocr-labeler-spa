@@ -940,4 +940,29 @@ describe("useRegionReviewHotkeys: '['/']' follow the selected kind", () => {
     // Follows the explicit "word" pick, not page_kind (the auto default).
     expect(navigate).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/pages/pageno/8`);
   });
+
+  // Reviewer finding (low): the Queue drawer shows a "Waiting on X" banner
+  // for a blocked entry (ReviewQueuePanel.tsx), but the keys navigated to
+  // that same entry's first_page_index with no mention of the block — the
+  // two surfaces disagreed about whether there was anything to say.
+  it("says what a blocked kind is waiting for when navigating to it", async () => {
+    const infoSpy = vi.spyOn(toast, "info");
+    useUiPrefs.setState({ reviewQueueKind: "typography" });
+    mockKindsQueue([
+      kindEntry({
+        kind: "typography",
+        outstanding: 40,
+        first_page_index: 7,
+        blocked_by: "word",
+        is_lower_bound: true,
+      }),
+    ]);
+    const { navigate, qc } = renderHotkeys(PAGE, { pageIndex: 0 });
+    await waitFor(() => expect(qc.getQueryData(["review-queue-kinds", PROJECT_ID])).toBeDefined());
+
+    pressKey("]");
+
+    expect(navigate).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/pages/pageno/8`);
+    expect(infoSpy).toHaveBeenCalledWith("Waiting on Word to be reviewed first.");
+  });
 });

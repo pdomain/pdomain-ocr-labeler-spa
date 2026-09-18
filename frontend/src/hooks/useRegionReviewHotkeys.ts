@@ -100,6 +100,7 @@ import { useReviewQueue, reviewQueueKey, type RegionReviewQueueResponse } from "
 import {
   useBookReviewQueue,
   firstActionableKind,
+  blockedByMessage,
   REVIEW_QUEUE_KIND_LABELS,
   type ReviewQueueKindEntry,
   type ReviewQueueKindName,
@@ -140,12 +141,19 @@ const QUEUE_LOADING_MESSAGE = "Review queue is still loading.";
  * once". Both keys collapse to the same action here, deliberately: jump to
  * `first_page_index` if not already there, and say so, honestly, once there
  * is nowhere further the data can send a person.
+ *
+ * Reviewer finding (low): a blocked entry can still carry a
+ * `first_page_index` (typography mirrors word's while blocked, for
+ * example), and the keys used to navigate there with no mention of the
+ * block — the Queue drawer's banner for the same entry
+ * (ReviewQueuePanel.tsx) says what it is waiting for; the keys must say
+ * the same thing, via `blockedByMessage`, not stay silent.
  */
 function nonRegionKindMessage(
   kind: Exclude<ReviewQueueKindName, "region">,
   entry: ReviewQueueKindEntry | undefined,
   pageIndex: number,
-): { message: string } | { navigateToPageIndex: number } {
+): { message: string } | { navigateToPageIndex: number; blockedNote?: string } {
   const label = REVIEW_QUEUE_KIND_LABELS[kind];
   if (!entry?.available) {
     const reason = entry?.unavailable_reason;
@@ -160,7 +168,9 @@ function nonRegionKindMessage(
       message: `${label}'s only known page is this one — there is no further page to jump to.`,
     };
   }
-  return { navigateToPageIndex: firstPageIndex };
+  return entry.blocked_by !== null
+    ? { navigateToPageIndex: firstPageIndex, blockedNote: blockedByMessage(entry.blocked_by) }
+    : { navigateToPageIndex: firstPageIndex };
 }
 
 export interface UseRegionReviewHotkeysArgs {
@@ -489,6 +499,9 @@ export function useRegionReviewHotkeys({
     if ("message" in result) {
       toast.info(result.message);
       return;
+    }
+    if (result.blockedNote !== undefined) {
+      toast.info(result.blockedNote);
     }
     void navigate(pageNoUrl(projectId, result.navigateToPageIndex + 1));
   }
