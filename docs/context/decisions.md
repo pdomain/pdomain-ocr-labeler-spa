@@ -1467,3 +1467,58 @@ bulk-mark apply specifically (Task 3, the STUB this entry fixes).
   person reviewing a word. That last is cosmetic feedback with no defect
   behind it, and renaming without seeing the two panels side by side would be
   churn.
+
+## 2026-09-18 — Per-word sidecars did not follow their words
+
+### What was wrong
+
+`PageState.char_bboxes_map`, `glyph_annotations_map` and `glyph_predictions_map`
+are keyed `"{line_index}_{word_index}"`. Every structural edit that changes a
+word's position shifts those indices, and until today nothing re-keyed the maps.
+So a person's hand-drawn character boxes and glyph marks silently moved onto
+neighbouring words. Nothing was lost and nothing errored, which is why it
+survived this long.
+
+Eleven routes were affected. Found in sequence, each fix exposing the next:
+word delete, then line delete and merge, paragraph delete, merge and split,
+line split, both extract-words-to-new-line routes, group-words-to-paragraph,
+word split, and word add.
+
+### How each is fixed, and why they differ
+
+- **Word delete** uses a formula: words shift within one line, and
+  `Page.delete_words` documents removing highest index first, so a batch
+  replays in that order. Word operations never reorder within a line, so a
+  formula is honest here.
+- **Line and paragraph operations** use an identity snapshot: record each word's
+  key by object identity before the mutation, look again after, and re-key to
+  wherever the word actually went. This exists because my proposed formula was
+  wrong and the implementer said so. `Block.merge` extends the word list and
+  then re-sorts by x position, so merged words interleave rather than append and
+  no offset describes where one lands.
+- **Word split refuses** when the word carries any sidecar entry. Splitting
+  destroys the original word object and creates two new ones, so neither
+  approach can say where its entries belong. Dividing character boxes at a split
+  point is a real feature with its own design. Later words in the line still
+  reindex.
+- **Word add** needs no refusal. It constructs one new word and re-sorts;
+  no existing word object is replaced, so the snapshot carries all of them.
+
+### What this cost, and the pattern worth keeping
+
+Every one of these was found by writing a failing test first and watching it
+fail for the predicted reason. Four of five word-delete tests failed on the
+first run with exactly the symptom predicted; the line-level tests showed a
+deleted line's own entries surviving under their old keys.
+
+The family is closed: all six shifting routes reindex, and rebox, nudge, GT
+rematch and the style and component toggles were confirmed to mutate in place.
+
+### Adjacent, still open
+
+`api/regions.py::set_region_word_membership` moves words between `page.lines`
+entries and can renumber every line on the page. Its own docstring already
+records this as a known flaw in `stable_word_id` and reading-order keying,
+owned elsewhere and pinned by
+`tests/integration/test_region_membership_word_identity.py`. Not part of this
+family and not touched.
