@@ -415,8 +415,9 @@ class IGlyphPredictor(Protocol):
         # keyed by word_id; values have source="predicted"
 ```
 
-Adapter `none` (default — no classifier wired) returns `{}`. Adapter
-`local_pdtrainer` calls into pd-ocr-trainer when present.
+Adapter `none` returns `{}`, and it is the only adapter that exists. The
+`local_pdtrainer` adapter named here was to call into pd-ocr-trainer, which
+is retired; see the note in §9.
 
 Predictions populate `WordMatch.glyph_predictions` on every page
 fetch (cheap — runs over the in-memory `Page`). Predictions are NOT
@@ -493,10 +494,26 @@ glyph_review_required: false   # default — opt-in
 
 ## 9. Predictions data path
 
+> **No predictor exists, and none will be built here (decided 2026-09-18).**
+> The rest of this section describes the seam as designed, and the seam is
+> real: `glyph_predictions` is threaded from `ProjectState` through to
+> `WordMatch`, and the accept-prediction route works. What never arrived is
+> step 1. `pd-ocr-trainer` is retired; its successor `pdomain-ocr-training`
+> consumes glyph features rather than producing them;
+> `pdomain-pgdp-measure` flags shape anomalies rather than glyph type; and a
+> predictor reading OCR codepoints would fire on nothing, measured across
+> 2,722 real OCR words carrying no U+017F and none of U+FB00–U+FB06. The
+> product advertises nothing it cannot do: the predicted chips and the accept
+> button render only when a prediction exists, so today they render nothing.
+> Human marks reach recognition eval through the glyph-feature sidecar the
+> dataset export writes instead. See `docs/context/decisions.md`, two entries
+> dated 2026-09-18.
+
 End-to-end:
 
 1. **Training time** (out of repo). pd-ocr-trainer trains a
-   classifier; ships weights + an inference adapter.
+   classifier; ships weights + an inference adapter. **This never happened
+   and that repository is retired.**
 2. **OCR time** (SPA). When the SPA runs OCR on a page (or loads cached
    OCR), the configured `IGlyphPredictor` runs on the resulting `Page`
    and produces `dict[word_id, GlyphAnnotations(source="predicted")]`.

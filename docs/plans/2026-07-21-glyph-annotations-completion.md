@@ -438,12 +438,13 @@ git commit -m "feat(m11): add glyph annotation mutation hooks"
 > **Known limitation (2026-09-18, record — not a defect of this task):**
 > the accept button cannot fire for a real user today. `glyph_predictions_map`
 > is never populated by any production code path — `IGlyphPredictor` is
-> unwired (Task 10's "Predictions attach", still open). The mark-reviewed
-> path (set/clear annotations) works end to end, browser-tested included;
-> accept-prediction is wired and unit-tested (mocked predictions) but is
-> scaffolding until a real predictor exists and something calls it during
-> payload build. Do not read "Task 5 done" as "accept is usable" — it isn't,
-> yet.
+> unwired. On 2026-09-18 that was settled the other way: no predictor will
+> be built here, and Task 10's "Predictions attach" is closed by decision,
+> not by implementation. The mark-reviewed path (set/clear annotations) works
+> end to end, browser-tested included; accept-prediction is wired and
+> unit-tested against mocked predictions and stays a seam that renders
+> nothing. Do not read "Task 5 done" as "accept is usable" — nothing produces
+> a prediction for it to accept.
 
 **Files:**
 - Modify: `frontend/src/components/right-panel/WordDetail.tsx`
@@ -696,12 +697,19 @@ git commit -m "test(m11): e2e glyph panel and bulk mark flows"
 
 Only after Tasks 1–9 green:
 
-- [ ] **Predictions attach:** call `NoneGlyphPredictor` (or configured adapter)
-  in `_page_payload` to fill `glyph_predictions_map` / WordMatch fields.
-  Until this lands, the FE accept-prediction path (Task 5) is scaffolding
-  only — no production code ever writes `glyph_predictions_map`, so the
-  accept button cannot fire for a real user (see the callout at the top of
-  Task 5).
+- [x] **Predictions attach — closed on 2026-09-18 by deciding not to.** The
+  labeler will not build a glyph predictor. `NoneGlyphPredictor` returns
+  `None` for every word, so calling it would fill the map with nothing and
+  change no behaviour. The real adapter this plan waited on was to come from
+  `pd-ocr-trainer`, which is retired; its successor `pdomain-ocr-training`
+  consumes glyph features rather than producing them, `pdomain-pgdp-measure`
+  flags shape anomalies rather than glyph type, and a predictor reading OCR
+  codepoints would fire on nothing — 2,722 real OCR words were scanned and
+  none carry U+017F or U+FB00–U+FB06. The accept-prediction path stays as a
+  seam that renders nothing today, at near-zero cost. See the two decision
+  entries dated 2026-09-18 in `docs/context/decisions.md`. The human marking
+  path is made to pay off instead, by exporting a glyph-feature sidecar for
+  recognition eval.
 - [ ] **Canvas overlay:** `predictions-overlay-toggle` + ghost outlines §5.6
   (`--predictions-ghost-color`).
 - [ ] **Per-mark accept vs wholesale:** UI currently accepts whole prediction

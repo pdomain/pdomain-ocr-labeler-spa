@@ -1132,3 +1132,54 @@ bulk-mark apply specifically (Task 3, the STUB this entry fixes).
   caller — checked via this app's own git history and the driver-agent
   contract (`docs/architecture/13-driver-contract.md`), neither references
   it outside the now-removed `OCRConfigModal.tsx` probe.
+
+### [2026-09-18] Decided: the labeler will not build a glyph predictor
+
+- Question: Task 10 of `docs/plans/2026-07-21-glyph-annotations-completion.md`.
+  `IGlyphPredictor` has one implementation, `NoneGlyphPredictor`, which returns
+  `None` for every word, so the accept-prediction affordance can never fire.
+  `specs/20-glyph-annotations.md` names `pd-ocr-trainer` as the producer of the
+  real adapter. That repository is retired.
+- Decision: no predictor will be written here, and the seam stays. What changes
+  is the roadmap, which had been waiting on a repository that no longer exists.
+- What the search found, on 2026-09-18:
+  - A predictor over OCR codepoints is a few lines, and would fire on nothing.
+    Scanned the only real project store on this machine, 2,722 OCR words across
+    18 pages: zero contain U+017F or any of U+FB00–U+FB06. DocTR does not emit
+    those forms on this corpus, so a text scan has no signal to read.
+  - `pdomain-pgdp-measure` is a pinned dependency and does not classify glyph
+    type. Its `glyph_shape.py` says so itself: it flags ink unlike a
+    character's usual shape and "never reads or proposes a label". No
+    occurrence of ligature or swash anywhere in its source. Its `glyphs` CLI is
+    an offline corpus tool that needs a finished PGDP alignment as input.
+  - `pdomain-ocr-training`, which supersedes `pd-ocr-trainer`, consumes glyph
+    features rather than producing them, and has no classifier planned.
+  - `pdomain-book-tools` defines the annotation schema and no detection logic.
+- Cost of keeping the seam: near zero, and unlike the normalization probe it
+  advertises nothing to a person. The chips and the accept button render only
+  when a prediction exists, so today they render nothing. `glyph_predictions`
+  is already threaded from `ProjectState` through to `WordMatch`; the map is
+  simply never written.
+- What to do instead: make the human marks pay off downstream. See the next
+  entry.
+
+### [2026-09-18] Decided: the labeler's dataset export writes the glyph-feature sidecar
+
+- Question: `pdomain-ocr-training`'s `docs/context/intent-map.md` carries this
+  under "Needs owner decision" — whether dataset export or the trainer SPA
+  writes the glyph-feature JSON sidecar that lets recognition eval slice CER
+  and WER by ligature, long s and swash.
+- Decision: the labeler's dataset export writes it.
+- Why: the export is the only place where both facts exist at the same moment,
+  the person's glyph annotations for a word and the recognition crop filename
+  that word becomes. The trainer SPA would have to rebuild that join from
+  nothing. The contract is `dict[crop_id, {ligatures, long_s, swash}]` keyed by
+  the DocTR recognition val-set label key, defined by `GlyphFeatureSet` in
+  `pdomain-ocr-training`'s `protocols.py`.
+- One rule the shape imposes: a crop absent from the sidecar means unknown, not
+  feature-free. `_emit_glyph_slices` excludes an absent crop from both the
+  positive and the negative set. So only a word somebody actually reviewed gets
+  an entry; writing all-false for an unreviewed word would assert the absence of
+  something nobody checked.
+- What this unblocks: the manual glyph path stops being a dead end. A person's
+  marks reach recognition eval without any classifier existing.
