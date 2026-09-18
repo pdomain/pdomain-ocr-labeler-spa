@@ -21,8 +21,11 @@ graph (with GT loading, page envelopes, etc.) lands in M2-proper's
 
 Design notes:
 
-- **Pure**. No filesystem mutation. Only reads: one ``iterdir()`` plus
-  one ``stat()`` per entry (via ``is_dir`` / ``is_symlink``).
+- **Pure**. No filesystem mutation. Reads: one ``iterdir()`` plus one
+  ``stat()`` per entry for the enumeration walk itself, plus — per
+  project, for ``page_count`` (P2-ROOT) — either one more ``iterdir()``
+  (filesystem-image shape) or one small JSON file read + parse
+  (``book-labeling-manifest.json`` shape). See ``_count_pages``.
 - **Idempotent + stable**. Repeated calls produce the same list (case-
   folded primary sort key, raw-name secondary tiebreak). The frontend
   dropdown keys on order.
@@ -33,6 +36,19 @@ Design notes:
   visible-but-unselectable project here; the future load endpoint
   will error loudly when a user tries to open one. Splitting that
   validation gate into M2-proper keeps this module a pure scan.
+- **Uncached, cost scales with total files, not project count**
+  (P2-ROOT). Every ``GET /api/projects`` call re-scans every project
+  from scratch; there's no memoization across requests. Because
+  ``page_count`` for the filesystem-image shape is an ``iterdir()`` per
+  project, the aggregate cost of one list call is roughly proportional
+  to the total number of files across every discovered project, not to
+  the number of projects — one project with 10,000 loose files costs
+  about the same as 200 projects of 50 files each. Fine at today's
+  scale (measured ~22ms for 20 projects x 50 files — see
+  ``docs/context/decisions.md`` P2-ROOT entry); revisit if a source
+  root's total file count grows much larger, or if ``GET /api/projects``
+  starts getting called often enough for per-call cost to matter (e.g.
+  polling).
 """
 
 from __future__ import annotations
@@ -41,13 +57,23 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from pdomain_book_tools.typography import BookLabelingManifest
+from pydantic import ValidationError
+
 logger = logging.getLogger(__name__)
 
-# Image extensions counted for ``page_count``. Mirrors the set pinned in
+# Image extensions counted for ``page_count`` on the plain filesystem-image
+# project shape. Mirrors the set pinned in
 # ``core/persistence/ground_truth.py`` and ``core/persistence/project_envelope.py``
 # (each module keeps its own copy per the existing per-module convention here —
 # see those modules' docstrings).
 _IMAGE_EXTS = (".png", ".jpg", ".jpeg")
+
+# Shape-marker filenames. Mirrors the detection order in
+# ``api.projects.load_project`` — book-labeling-manifest.json wins over
+# labeling-bundle.json, which wins over the plain filesystem-image shape.
+_BOOK_MANIFEST_FILENAME = "book-labeling-manifest.json"
+_LABELING_BUNDLE_FILENAME = "labeling-bundle.json"
 
 
 @dataclass(frozen=True)
@@ -70,20 +96,35 @@ class EnumeratedProject:
     - ``label``: human-readable display name. Defaults to
       ``project_id``; gets a dedup suffix on basename collisions
       (spec §2 line 215).
-    - ``page_count``: number of ``.png``/``.jpg``/``.jpeg`` files
-      directly under ``project_root``, or ``None`` when the directory
-      couldn't be read (permission error, removed mid-scan, etc.) —
-      P2-ROOT (``docs/issues/2026-07-21-project-list-metadata-filters-noop.md``).
+    - ``page_count``: the project's real page count, or ``None`` when it
+      can't be determined cheaply — P2-ROOT
+      (``docs/issues/2026-07-21-project-list-metadata-filters-noop.md``).
+      This repo supports three project shapes (mirrors the detection
+      order in ``api.projects.load_project``), and each has a different
+      cheap source of truth — see ``_count_pages`` for the per-shape
+      logic:
 
-      Cost: one extra ``iterdir()`` per project, same cost class as
-      the top-level enumeration scan already performed by this
-      module. Measured on this repo's dev fixtures at ~1ms for 20
-      projects of 50 files each (filesystem-only; no event-store
-      access) — see ``docs/context/decisions.md`` P2-ROOT entry for
-      the full measurement, including why per-project *review
-      progress* is deliberately NOT computed here (a live per-page
-      event-store walk measured ~200ms for the same 20-project
-      fixture and scales with total page count across every project).
+      1. ``book-labeling-manifest.json`` present: the manifest's own
+         ``pages`` list length. A book stores each page under its own
+         materialization directory, not as top-level image files, so
+         counting top-level files would silently report 0 for a real
+         book — a confident wrong number, worse than "unknown".
+      2. ``labeling-bundle.json`` present: always 1 — this shape embeds
+         exactly one page (image + words) in its descriptor by
+         construction (single ``page_id`` / ``image_sha256``).
+      3. Neither present: count of ``.png``/``.jpg``/``.jpeg`` files
+         directly under ``project_root`` (one extra ``iterdir()`` per
+         project, same cost class as the top-level enumeration scan
+         already performed by this module).
+
+      Cost: measured on this repo's dev fixtures at ~1ms for 20
+      filesystem-image projects of 50 files each — see
+      ``docs/context/decisions.md`` P2-ROOT entry for the full
+      measurement, including why per-project *review progress* is
+      deliberately NOT computed here (a live per-page event-store walk
+      measured ~200ms for the same 20-project fixture and scales with
+      total page count across every project), and a caveat on how this
+      scan's own cost scales.
     """
 
     project_id: str
@@ -207,13 +248,70 @@ def enumerate_projects(source_projects_root: Path | None) -> list[EnumeratedProj
 
 
 def _count_pages(project_root: Path) -> int | None:
+    """Return this project's page count, or ``None`` when it can't be
+    determined cheaply.
+
+    Detects the same three project shapes ``api.projects.load_project``
+    detects, in the same order, and reads each one's cheapest real source
+    of truth:
+
+    1. ``book-labeling-manifest.json`` present → ``len(manifest.pages)``.
+       Only this one JSON file is read and parsed — NOT
+       ``load_book_labeling_manifest_directory``, which additionally opens
+       one directory per page and hashes every match-graph file (O(pages)
+       filesystem opens that would defeat the point of a cheap list scan).
+    2. ``labeling-bundle.json`` present → always 1 (this shape is a
+       single-page format by construction; no need to open the file).
+    3. Neither present → count of top-level image files (the plain
+       filesystem-image project shape).
+
+    Any failure along the way (unreadable directory, malformed manifest
+    JSON) degrades to ``None`` — "unknown" — rather than a wrong number
+    (e.g. 0 for a 300-page book whose pages live in per-page
+    materialization directories, not as top-level files) or a crash.
+    """
+    try:
+        manifest_path = project_root / _BOOK_MANIFEST_FILENAME
+        if manifest_path.is_file():
+            return _count_book_manifest_pages(manifest_path)
+        if (project_root / _LABELING_BUNDLE_FILENAME).is_file():
+            return 1
+    except OSError:
+        logger.debug(
+            "enumerate_projects: page_count shape detection failed for %s", project_root, exc_info=True
+        )
+        return None
+    return _count_image_files(project_root)
+
+
+def _count_book_manifest_pages(manifest_path: Path) -> int | None:
+    """Read + validate a ``book-labeling-manifest.json`` and count its pages.
+
+    Cheap: one file read plus pydantic validation of the manifest — no
+    per-page filesystem access. Any read or validation failure (missing
+    file in a TOCTOU race, malformed JSON, schema violation) degrades to
+    ``None`` rather than a wrong count.
+    """
+    try:
+        payload = manifest_path.read_bytes()
+        manifest = BookLabelingManifest.model_validate_json(payload)
+    except (OSError, ValidationError, ValueError):
+        logger.debug(
+            "enumerate_projects: page_count unavailable for manifest %s", manifest_path, exc_info=True
+        )
+        return None
+    return len(manifest.pages)
+
+
+def _count_image_files(project_root: Path) -> int | None:
     """Count image files directly under ``project_root``, or ``None`` on error.
 
     Cheap: one ``iterdir()`` plus a suffix check per file, the same cost
     class as the enumeration scan above. Any ``OSError`` (permission
     denied, directory removed between the caller's ``is_dir()`` check and
-    this call, etc.) degrades to ``None`` — "unknown" — rather than
-    raising, so one unreadable project never fails the whole list.
+    this call, a per-entry stat racing a concurrent delete, etc.) degrades
+    to ``None`` — "unknown" — rather than raising or returning a partial
+    count, so one unreadable project never fails the whole list.
     """
     try:
         return sum(1 for f in project_root.iterdir() if f.is_file() and f.suffix.lower() in _IMAGE_EXTS)

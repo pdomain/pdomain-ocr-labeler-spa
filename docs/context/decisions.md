@@ -894,3 +894,50 @@ item 9 tracks the semantics decision and is explicitly out of scope here.
   it, dishonest chips are gone); item 4 (status field for Active/Complete/
   Archived filtering) is intentionally still open pending the archive-semantics
   decision this entry does not make.
+
+### Review follow-up (same day): shape detection, and a cost caveat
+
+A reviewer found the first cut of `page_count` counted only top-level image
+files, which is one of three project shapes this repo supports. A
+`book-labeling-manifest.json` project (a materialized typography book) stores
+each page under its own per-page materialization directory, and a
+`labeling-bundle.json` project (a single-page portable review bundle) embeds
+its one image in a descriptor — neither keeps top-level image files. Both are
+selectable from the same source root as an ordinary filesystem-image project.
+The top-level-only scan therefore reported `page_count: 0` for a real,
+possibly-hundreds-of-pages book: a confident wrong number, worse than the dash
+it replaced.
+
+Fixed by detecting the same three shapes `api.projects.load_project` already
+detects, in the same order, in `core.project_enumeration._count_pages`:
+
+1. `book-labeling-manifest.json` present → `len(manifest.pages)`, read from
+   that one JSON file only (NOT `load_book_labeling_manifest_directory`,
+   which additionally opens one directory per page and hashes every
+   match-graph file — O(pages) filesystem opens that would defeat the point
+   of a cheap list scan). A present-but-malformed manifest degrades to
+   `None`, same as an unreadable directory — never a wrong count.
+2. `labeling-bundle.json` present → always `1`. `LabelingBundle` has exactly
+   one `page_id` / `image_sha256` by construction, so this is a structural
+   fact of the shape; the file doesn't need to be opened at all.
+3. Neither present → the original top-level image-file count.
+
+Tests: `tests/unit/core/test_project_enumeration.py` covers all three shapes,
+a malformed manifest, manifest-wins-over-bundle precedence, and a
+manifest-backed project with a known 300-page count (the reviewer's exact
+repro shape). `tests/integration/test_projects_router.py` covers the same two
+non-default shapes end to end through `GET /api/projects`. A further test
+covers the unreadable-project case failing partway through the per-entry scan
+(a per-file `is_file()` raising, not just the directory `iterdir()` itself) —
+the code already handled that correctly (one `try` wraps the whole scan), but
+nothing had proved it before.
+
+**Cost caveat, unchanged by the shape fix:** the scan is uncached — every
+`GET /api/projects` call re-walks every project from scratch — and its
+aggregate cost scales with the total number of files/pages across every
+discovered project, not with the number of projects. One project with 10,000
+loose top-level files costs about the same as 200 projects of 50 files each.
+Fine at today's measured scale (~22ms for 20 projects × 50 files); revisit if
+a source root's total file/page count grows much larger, or if
+`GET /api/projects` starts being called often enough (e.g. polling) for
+per-call cost to matter.

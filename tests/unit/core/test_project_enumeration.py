@@ -55,10 +55,12 @@ beyond logging at DEBUG.
 
 from __future__ import annotations
 
+from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from pdomain_book_tools.typography import BookLabelingManifest, BookLabelingPage
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -67,6 +69,41 @@ from pdomain_ocr_labeler_spa.core.project_enumeration import (
     EnumeratedProject,
     enumerate_projects,
 )
+
+
+def _sha(payload: bytes) -> str:
+    return sha256(payload).hexdigest()
+
+
+def _write_book_manifest(root: Path, *, page_count: int) -> BookLabelingManifest:
+    """Write a minimal, schema-valid ``book-labeling-manifest.json``.
+
+    Deliberately does NOT create the pages' materialization directories —
+    ``core.project_enumeration``'s page-count path only reads and validates
+    this one JSON file (unlike
+    ``core.persistence.book_labeling_manifest.load_book_labeling_manifest_directory``,
+    which additionally opens one directory per page). If the count path ever
+    regressed to calling the full loader, this fixture would make that
+    regression fail loudly instead of silently doing extra I/O.
+    """
+    root.mkdir()
+    pages = tuple(
+        BookLabelingPage(
+            page_index=index,
+            page_id=f"pgdp:project:{index:03d}.png",
+            labeling_bundle_id=_sha(f"bundle-{index}".encode()),
+            materialization_relative_path=f"pages/{index + 1:03d}",
+            materialization_sha256=_sha(f"materialization-{index}".encode()),
+            configuration_hash="c" * 64,
+            taxonomy_version="labeler-v1",
+            taxonomy_hash="a" * 64,
+        )
+        for index in range(page_count)
+    )
+    manifest = BookLabelingManifest(book_id="pgdp-project", pages=pages)
+    (root / "book-labeling-manifest.json").write_bytes(manifest.to_json_bytes())
+    return manifest
+
 
 # ── empty / invalid roots ─────────────────────────────────────────────────
 
@@ -307,3 +344,73 @@ def test_enumerate_page_count_none_when_directory_unreadable(
     out = enumerate_projects(tmp_path)
     assert len(out) == 1
     assert out[0].page_count is None
+
+
+# ── page_count — book-labeling-manifest.json shape ─────────────────────────
+#
+# A book-labeling-manifest.json project stores each page under its own
+# materialization directory, not as top-level image files, so the default
+# filesystem scan silently reports 0 pages for a real book — a confident
+# wrong number. The manifest's own ``pages`` list is the real, cheap count.
+
+
+def test_enumerate_page_count_from_book_labeling_manifest(tmp_path: Path) -> None:
+    """A 300-page manifest-backed project reports 300, not 0."""
+    proj = tmp_path / "Book"
+    _write_book_manifest(proj, page_count=300)
+    out = enumerate_projects(tmp_path)
+    assert len(out) == 1
+    assert out[0].page_count == 300
+
+
+def test_enumerate_page_count_from_book_labeling_manifest_ignores_top_level_files(
+    tmp_path: Path,
+) -> None:
+    """The manifest count wins even if stray top-level image files exist —
+    proves this isn't accidentally falling back to the filesystem scan."""
+    proj = tmp_path / "Book"
+    _write_book_manifest(proj, page_count=5)
+    (proj / "cover.png").write_bytes(b"")
+    out = enumerate_projects(tmp_path)
+    assert out[0].page_count == 5
+
+
+def test_enumerate_page_count_none_for_malformed_book_manifest(tmp_path: Path) -> None:
+    """A present-but-unparseable manifest degrades to ``None`` — not 0, not
+    a crash, and not a fallback to the (likely-empty) filesystem scan."""
+    proj = tmp_path / "Book"
+    proj.mkdir()
+    (proj / "book-labeling-manifest.json").write_text("not valid json")
+    out = enumerate_projects(tmp_path)
+    assert len(out) == 1
+    assert out[0].page_count is None
+
+
+# ── page_count — labeling-bundle.json shape ─────────────────────────────────
+#
+# A labeling-bundle.json project embeds exactly one page (image + words) in
+# its descriptor — LabelingBundle has a single page_id/image_sha256 by
+# construction, so the real count is always 1. No need to open the file.
+
+
+def test_enumerate_page_count_for_labeling_bundle_project(tmp_path: Path) -> None:
+    """A labeling-bundle.json project reports page_count == 1, not 0 — even
+    with no top-level image files present."""
+    proj = tmp_path / "SinglePage"
+    proj.mkdir()
+    (proj / "labeling-bundle.json").write_text("{}")
+    out = enumerate_projects(tmp_path)
+    assert len(out) == 1
+    assert out[0].page_count == 1
+
+
+def test_enumerate_page_count_book_manifest_takes_priority_over_labeling_bundle(
+    tmp_path: Path,
+) -> None:
+    """Mirrors ``api.projects.load_project``'s shape-detection order: a
+    book-labeling-manifest.json, if present, wins over labeling-bundle.json."""
+    proj = tmp_path / "Both"
+    _write_book_manifest(proj, page_count=7)
+    (proj / "labeling-bundle.json").write_text("{}")
+    out = enumerate_projects(tmp_path)
+    assert out[0].page_count == 7
