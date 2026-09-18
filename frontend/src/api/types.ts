@@ -1759,12 +1759,8 @@ export interface paths {
          * List Page Kinds
          * @description Every page's proposed and confirmed kind, in page order.
          *
-         *     Reads the proposal journal once (``PageKindProposalLog.latest_by_page``)
-         *     and the reviewed journal once (``PageKindReviewedStore.latest_by_page``)
-         *     — a book of any size costs exactly two file reads. ``confirmed_kind``
-         *     comes from the live page when it is loaded; otherwise from the latest
-         *     reviewed marker, which is ``None`` for a marker written before the
-         *     marker carried a kind (reported as "reviewed, kind not recorded").
+         *     See ``page_kinds_rows`` for how the rows are built — this route just
+         *     wraps them in the book-level response shape.
          */
         get: operations["list_page_kinds"];
         put?: never;
@@ -2609,6 +2605,41 @@ export interface paths {
          *     used to return a silent 200 stub and now fails loudly instead.
          */
         post: operations["group_selected_words_into_new_paragraph_api_projects__project_id__pages__page_index__words_group_into_paragraph_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/review-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Review Queue
+         * @description One entry per kind of review work, in the order the work happens.
+         *
+         *     Words before typography before export; regions depend only on page
+         *     kinds being proposed, not reviewed; glyphs sit outside the chain. See
+         *     ``ReviewQueueKindEntry`` for what each field means and
+         *     ``_region_entry``/``_typography_entry`` for the exact ``blocked_by``
+         *     gates, and ``_word_entry`` for the three project shapes it counts
+         *     (ordinary, single-page labeling-bundle, multi-page labeling-bundle book).
+         *
+         *     Reads each of the journals it needs exactly once: the page-kind
+         *     proposal and reviewed journals (via ``page_kinds_rows``), the region
+         *     proposal and decision journals, and — depending on project shape — the
+         *     word-review-counts journal or ``ImportedTextValidationLog`` (shared by
+         *     the ``word`` and ``typography`` entries), plus the typography-
+         *     corrections journal for the ``typography`` entry's numerator. It opens
+         *     no page.
+         */
+        get: operations["get_review_queue"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5224,6 +5255,65 @@ export interface components {
          * @enum {string}
          */
         ReviewDecision: "approved" | "rejected" | "needs_changes";
+        /**
+         * ReviewQueueKindEntry
+         * @description One kind's outstanding-work count, in the order the work happens.
+         *
+         *     ``blocked_by`` names another kind that is genuinely stopping this one
+         *     right now — live, not a fixed label: it is ``None`` once that is no
+         *     longer true, even for a kind that is always blocked in principle (e.g.
+         *     typography once every word is validated). A caller should pick the
+         *     first entry, in list order, with ``outstanding > 0`` and
+         *     ``blocked_by is None``.
+         *
+         *     ``first_page_index`` is the earliest page a person should jump to for
+         *     this kind's outstanding work — ``None`` when there is none
+         *     (``outstanding == 0``) or the kind is unavailable.
+         *
+         *     ``pages_not_counted`` and ``is_lower_bound`` matter for ``word`` and
+         *     ``typography`` only; both default to the "nothing to distrust" value for
+         *     the other kinds. ``is_lower_bound`` is ``True`` for ``typography``
+         *     always (its per-head staleness check is skipped — see
+         *     ``core.typography_review.reviewed_word_keys``) and for ``word`` whenever
+         *     ``pages_not_counted`` is above zero.
+         */
+        ReviewQueueKindEntry: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "page_kind" | "region" | "word" | "typography" | "glyph";
+            /** Outstanding */
+            outstanding: number;
+            /** Total */
+            total: number;
+            /** Available */
+            available: boolean;
+            /** Blocked By */
+            blocked_by: ("page_kind" | "region" | "word" | "typography" | "glyph") | null;
+            /** First Page Index */
+            first_page_index: number | null;
+            /**
+             * Pages Not Counted
+             * @default 0
+             */
+            pages_not_counted: number;
+            /**
+             * Is Lower Bound
+             * @default false
+             */
+            is_lower_bound: boolean;
+            /** Unavailable Reason */
+            unavailable_reason?: string | null;
+        };
+        /**
+         * ReviewQueueResponse
+         * @description The book-level answer to "what should I review next", for every kind.
+         */
+        ReviewQueueResponse: {
+            /** Kinds */
+            kinds: components["schemas"]["ReviewQueueKindEntry"][];
+        };
         /**
          * ReviewState
          * @description Lifecycle state for a word review.
@@ -9397,6 +9487,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PagePayload"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_review_queue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewQueueResponse"];
                 };
             };
             /** @description Validation Error */

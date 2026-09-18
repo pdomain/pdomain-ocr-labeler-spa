@@ -491,3 +491,34 @@ def test_undo_depth_bound_respected(tmp_path: Path, seeded_project: Path) -> Non
         r = c.post("/api/projects/book1/pages/0/undo")
         assert r.status_code == 409, r.text
         assert r.json()["error"] == "undo_unavailable"
+
+
+# ── Word-review-counts row (pdomain-ocr-synth's docs/specs/2026-09-18-one-
+# answer-to-what-to-review-next.md) ──────────────────────────────────────────
+#
+# Undo/redo restores an existing blob as the page's new head without calling
+# ``save_page_content_to_store`` — so it must append its own counts row for
+# the content it just restored, or the journal's newest row for the page
+# keeps describing content the page no longer has.
+
+
+@pytest.mark.integration
+def test_undo_reverts_the_word_review_counts_row(client: TestClient, seeded_project: Path) -> None:
+    from pdomain_ocr_labeler_spa.core.review_counts import WordReviewCountsJournal
+
+    journal = WordReviewCountsJournal(seeded_project)
+
+    _get_history(client)  # prime: loads the page into memory
+    r = client.post("/api/projects/book1/pages/0/words/0/0/validated", json={"validated": True})
+    assert r.status_code == 200, r.text
+
+    saved = journal.latest_by_page()[0]
+    assert saved.total_words == 3
+    assert saved.validated_words == 1
+
+    r = client.post("/api/projects/book1/pages/0/undo")
+    assert r.status_code == 200, r.text
+
+    reverted = journal.latest_by_page()[0]
+    assert reverted.total_words == 3
+    assert reverted.validated_words == 0, "undo must revert the counts row, not leave the pre-undo count"

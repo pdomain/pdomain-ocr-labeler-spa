@@ -26,6 +26,7 @@ from ..core.page_state import PageLoadOutcome
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import ProjectState
+from ..core.review_counts import append_word_review_counts_best_effort
 from ..settings import Settings
 from .dependencies import (
     bind_page_labeling_lease,
@@ -177,6 +178,17 @@ def _execute_history_op(
             changes=[{"type": op, "restores": target, "undoes": current}],
         )
         store.save_page(agg)
+
+        # pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-
+        # review-next.md "A per-page count journal": undo/redo restores an
+        # existing blob as the new head without going through
+        # ``save_page_content_to_store``, so it must append its own counts
+        # row here or the journal's newest row for this page keeps
+        # describing content the page no longer has — overstating
+        # completion once the restored content has fewer validated words
+        # than what was last saved. Counts from ``restored_page`` itself,
+        # the content this call just made current.
+        append_word_review_counts_best_effort(page=restored_page, store=store, content_hash=restored_hash)
 
         # pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
         # "An undo or redo that changes the kind writes a marker too": the

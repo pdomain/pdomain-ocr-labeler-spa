@@ -91,6 +91,7 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from .models import PageSource, Project
 from .persistence.paths import labeled_projects_root
 from .project_state import PageState, ProjectState
+from .review_counts import append_word_review_counts_best_effort
 
 if TYPE_CHECKING:
     from pdomain_book_contracts.annotation import PageKind
@@ -454,6 +455,15 @@ def save_page_content_to_store(
     )
     agg.labeler_edited(provenance_node=prov_node, changes=changes or [])
     store.save_page(agg)
+
+    # pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-review-
+    # next.md "A per-page count journal, written where the page is already
+    # saved": the row is appended only *after* the head save above has
+    # succeeded — a row naming a hash that never became the page's head would
+    # be untrustworthy — and the append is itself best-effort so an
+    # unwritable journal never turns this already-saved edit into a 503.
+    append_word_review_counts_best_effort(page=page, store=store, content_hash=content_hash)
+
     return content_hash
 
 
