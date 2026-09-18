@@ -194,6 +194,20 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
   // Track word identity for potential future key-based reset.
   const wordKey = `${word.line_index}-${word.word_index ?? 0}`;
 
+  // Review round 3, finding 2: BBoxSection has no `key` tied to word
+  // identity (WordDetail reuses the same instance across a selection
+  // change), so the coordinate inputs are the same DOM nodes across words —
+  // nothing blurs them just because `word` changed underneath (e.g. the
+  // `]`/`[` word-advance hotkeys change the selection without touching
+  // this input at all). Left uncleared, a field focused on one word would
+  // keep exempting itself from every future word's resync too. Same
+  // render-time-adjustment idiom as `prevBboxSignature` below.
+  const [prevWordKey, setPrevWordKey] = useState(wordKey);
+  if (wordKey !== prevWordKey) {
+    setPrevWordKey(wordKey);
+    setFocusedField(null);
+  }
+
   // Keep a ref to the original bbox for Reset.
   const originalBbox = word.bbox;
 

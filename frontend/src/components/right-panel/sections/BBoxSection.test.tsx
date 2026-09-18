@@ -619,6 +619,85 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     expect(screen.getByTestId("bbox-input-x").value).toBe("777");
   });
 
+  // ─── Review round 3, finding 2 (medium): `focusedField` must be cleared
+  // explicitly when the selected word changes. BBoxSection has no `key`
+  // tied to word identity (WordDetail reuses the same instance across a
+  // selection change), so the coordinate inputs are the same DOM nodes
+  // across words — nothing blurs them just because `word` changed underneath.
+  // Without an explicit clear, a field focused on one word would keep
+  // exempting itself from every future word's resync too. ────────────────
+
+  it("clears focusedField when the selected word changes, so it doesn't exempt the new word's field from resync", async () => {
+    // Deliberately uses `rerender` with a new `word` prop, not a click on
+    // some "switch word" control — clicking anything focusable would blur
+    // X itself and mask exactly the gap this test guards: WordDetail
+    // reuses the same BBoxSection instance (no `key` tied to word
+    // identity) when the selection changes, so the coordinate inputs are
+    // the same DOM nodes across words, and nothing about a prop update
+    // blurs them on its own (a real example: the `]`/`[` word-advance
+    // hotkeys change the selection without touching this input at all).
+    const WORD_A = makeWord(DEFAULT_BBOX); // "0-0"
+    const WORD_B_BBOX: BBox = { x: 50, y: 60, width: 70, height: 80 };
+    const WORD_B_RESYNCED: BBox = { x: 51, y: 61, width: 71, height: 81 };
+    const WORD_B: WordMatch = { ...makeWord(WORD_B_BBOX), line_index: 1, word_index: 1 }; // "1-1"
+
+    const tracking = createFakeRefineTracking();
+    const qc = makeQueryClient();
+
+    function Harness({ word }: { word: WordMatch }) {
+      const refineTracking = tracking.useTracking();
+      return (
+        <BBoxSection word={word} projectId="p1" pageIndex={0} refineTracking={refineTracking} />
+      );
+    }
+
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <QueryClientProvider client={qc}>
+        <Harness word={WORD_A} />
+      </QueryClientProvider>,
+    );
+
+    // Focus X on word A — no blur.
+    const xInput = screen.getByTestId("bbox-input-x");
+    await user.click(xInput);
+    expect(xInput).toHaveFocus();
+
+    // Selection changes to word B via a prop update alone — same DOM
+    // input node, so focus persists (confirming this reproduces the real
+    // risk). `draft` itself does not resync off a plain prop change today
+    // (a separate, pre-existing gap this test isn't about — the only
+    // thing that ever writes `word.bbox` into `draft` is the outcome-driven
+    // resync below), so this step only needs to prove focus survived.
+    rerender(
+      <QueryClientProvider client={qc}>
+        <Harness word={WORD_B} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId("bbox-input-x")).toHaveFocus();
+
+    // Word B's own refine job completes, and its result lands — the one
+    // path that does write `word.bbox` into `draft`.
+    act(() => {
+      tracking.completeWith("1-1", 1);
+    });
+    rerender(
+      <QueryClientProvider client={qc}>
+        <Harness word={{ ...WORD_B, bbox: WORD_B_RESYNCED }} />
+      </QueryClientProvider>,
+    );
+
+    // If `focusedField` had carried over from word A ("x"), the resync
+    // would keep whatever `draft.x` already was (word A's stale 10)
+    // instead of taking word B's resynced 51 like every other field.
+    await waitFor(() => {
+      expect(screen.getByTestId("bbox-input-x").value).toBe("51");
+    });
+    expect(screen.getByTestId("bbox-input-y").value).toBe("61");
+    expect(screen.getByTestId("bbox-input-w").value).toBe("71");
+    expect(screen.getByTestId("bbox-input-h").value).toBe("81");
+  });
+
   // ─── Review finding 2 (high): refine and expand_then_refine no-op when
   // the page has no cv2_numpy_page_image (true for any page loaded from the
   // store) — a documented outcome, not an edge case. The resync must key
