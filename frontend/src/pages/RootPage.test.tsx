@@ -461,7 +461,7 @@ describe("RootPage P2-ROOT — Active / Complete / Archived filter chips removed
     setupProjectList([]);
     renderWithProviders(<RootPage />);
     await waitFor(() => {
-      expect(screen.getByTestId("root-search-filter-bar")).toBeInTheDocument();
+      expect(screen.getByTestId("root-search-bar")).toBeInTheDocument();
     });
     expect(screen.queryByTestId("root-filter-chips")).not.toBeInTheDocument();
     expect(screen.queryByTestId("root-filter-chip-all")).not.toBeInTheDocument();

@@ -32,7 +32,7 @@ last_verified: 2026-07-13
 - **Trigger:** User opens `/` with no restorable last project.
 - **Preconditions:** Server is running; source projects may be empty or present.
 - **Observable output:** `data-testid="app-shell"` is visible; the root screen
-  shows `empty-project-state`, `root-search-filter-bar`, and either
+  shows `empty-project-state`, `root-search-bar`, and either
   `root-projects-grid` or `root-empty-projects`.
 - **Backend / side-effects:** `GET /api/session-state` returns no active
   project; `GET /api/projects` enumerates source projects; no files are

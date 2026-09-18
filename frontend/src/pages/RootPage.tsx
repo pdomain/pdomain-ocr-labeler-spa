@@ -336,7 +336,7 @@ function ProjectListView({ projects }: { projects: ProjectKey[] }) {
 
       {/* Search bar */}
       <div
-        data-testid="root-search-filter-bar"
+        data-testid="root-search-bar"
         className="flex items-center gap-3 px-6 py-3 bg-bg-surface border-b border-border-1 flex-wrap"
       >
         {/* Search field */}
