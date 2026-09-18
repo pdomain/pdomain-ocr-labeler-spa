@@ -103,6 +103,7 @@ import {
 import { worklistStore } from "../stores/worklist-store";
 import { focusWorklistLine } from "../stores/worklist-focus";
 import { pageNoUrl } from "../lib/routes";
+import { getLabelerExtension } from "../lib/labelerExtension";
 
 import { PageActionsCompact } from "../components/PageActionsCompact";
 import ProjectNavigationControls, {
@@ -784,9 +785,7 @@ export default function ProjectPage() {
   // overflow-menu item (`disabled={disabled || !hasEditedImage}`) — firing
   // this with no edited image to reload would re-run plain OCR under a
   // misleading "(edited)" confirm, so the hotkey is a no-op instead.
-  const labelerExt = pagePayload?.page_record?.extensions?.["labeler"] as
-    { has_edited_image?: boolean } | undefined;
-  const hasEditedImage = labelerExt?.has_edited_image === true;
+  const hasEditedImage = getLabelerExtension(pagePayload?.page_record).has_edited_image === true;
   function handleReloadOcrEdited() {
     if (!hasEditedImage) return;
     dialogStore.openConfirm({
