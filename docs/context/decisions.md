@@ -1888,3 +1888,30 @@ family and not touched.
   ground-truth placeholder carries no word index and is filtered out before it
   can become an overlay item, and the grouping layers filter on positive width
   and height as well.
+
+### [2026-09-18] Decided: no shared workbench layout extraction
+
+- Question: item 10 of `docs/plans/2026-07-21-pgdp-alignment-remaining.md`,
+  consuming `pdomain-ui`'s `WorkbenchLayout` instead of the layout
+  `ProjectPage.tsx` and the local shell components own today.
+- Decision: do not do it. The item stays recorded and unbuilt rather than open.
+- Why: its own acceptance criteria are "layout responsibilities clearer and
+  easier to test" and "no domain mutation behaviour in shared layout". Both are
+  internal. Nobody using this product gets anything, and the plan rates the
+  effort large, multi-session, and possibly requiring changes to a shared
+  package this repository does not own.
+- What would change it: a second application needing the same layout. Alignment
+  between two real consumers is worth extracting for. Alignment with a component
+  nothing else here consumes is a refactor looking for a reason.
+- The adjacent items are not covered by this. Item 4, a persistent jobs surface,
+  is user-visible and is being built. Item 15, a history panel letting somebody
+  inspect undo and redo traversal, is also user-visible and is the strongest
+  remaining candidate in that plan, though the plan is honest that it is a full
+  milestone slice rather than an evening's work.
+- Item 11's decisions, which the plan left as decisions rather than code, are
+  taken here too: the worklist adapter shim and its wrapper are permanent unless
+  `pdomain-ui` accepts generic row constraints and a testid prop; the filter and
+  count chips, density, sort and bulk chrome stay labeler-local, which is
+  already true; and `WordMatchView` stays out of shared worklist alignment,
+  because its behaviour and test contracts are load-bearing and today added
+  several more.

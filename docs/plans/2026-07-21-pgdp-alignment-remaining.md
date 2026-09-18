@@ -55,7 +55,7 @@ parent backlog Out-Of-Scope section.
 | 7 | Project-card metadata | **open** | `ProjectKey` is only `project_id`/`project_root`/`label` ([`api/projects.py`](../../src/pdomain_ocr_labeler_spa/api/projects.py)); cards hard-code null page/progress placeholders ([`RootPage.tsx`](../../frontend/src/pages/RootPage.tsx)) |
 | 8 | Root filters | **open** | Non-`all` filters intentionally no-op ([`RootPage.tsx`](../../frontend/src/pages/RootPage.tsx) L350–353); unclear-items still notes this |
 | 9 | Archive/restore decision | **partial** | Archive menu removed; delete is permanent with confirm ([`RootPage.tsx`](../../frontend/src/pages/RootPage.tsx)). Decision not yet recorded as a durable ADR/intent entry |
-| 10 | Shared workbench layout | **open** | No `WorkbenchLayout` consumption; layout owned by [`ProjectPage.tsx`](../../frontend/src/pages/ProjectPage.tsx) + local shell components |
+| 10 | Shared workbench layout | **declined 2026-09-18** | No `WorkbenchLayout` consumption; layout owned by [`ProjectPage.tsx`](../../frontend/src/pages/ProjectPage.tsx) + local shell components |
 | 11 | Worklist adapter | **partial** | Drawer uses `@pdomain/pdomain-ui/worklist` `WordList` with GAP-1/GAP-2 shims ([`Worklist.tsx`](../../frontend/src/components/drawer/Worklist.tsx)); filter/count chrome still local; not formally decided/documented as final adapter |
 | 12 | Detail panel shell | **partial** | [`RightPanel.tsx`](../../frontend/src/components/shell/RightPanel.tsx) has header/collapse/body routing; frame not extracted or compared to pdomain-ui |
 | 13 | Status/confidence chips | **shipped** | `StatusPip` imported from `@pdomain/pdomain-ui/primitives` in worklist, WordHeader, LineDetail, BlockDetail, MultiLineDetail; local StatusPip.tsx deleted |
