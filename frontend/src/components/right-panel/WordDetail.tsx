@@ -51,6 +51,7 @@ import {
   useErasePixels,
   useSetGlyphAnnotations,
   useAcceptGlyphPrediction,
+  useGlyphAnnotationPending,
 } from "../../hooks/useWordMutations";
 import { findWordByIndex, getWordOrder } from "../../lib/word-order";
 import type { UseBboxRefineTrackingResult } from "../../hooks/useBboxRefineTracking";
@@ -133,6 +134,17 @@ export function WordDetail({ page, projectId, pageIndex, bboxRefine }: WordDetai
   const erasePixels = useErasePixels(projectId, pageIndex);
   const setGlyphAnnotations = useSetGlyphAnnotations(projectId, pageIndex);
   const acceptGlyphPrediction = useAcceptGlyphPrediction(projectId, pageIndex);
+  // Reviewer finding 1 (2026-09-18): a shared mutationKey alone only lets
+  // something *observe* an in-flight glyph write — it does not stop a
+  // second `.mutate()` from a double-click. Consume the shared pending
+  // signal (same `x.isPending || sharedPending` pattern RegionDetail uses
+  // for useRegionDecisionPending) and disable the panel's actions while
+  // either mutation, from any instance, is in flight.
+  const glyphAnnotationSharedPending = useGlyphAnnotationPending(projectId, pageIndex);
+  const glyphPanelDisabled =
+    setGlyphAnnotations.isPending ||
+    acceptGlyphPrediction.isPending ||
+    glyphAnnotationSharedPending;
 
   const state = useSyncExternalStore(
     subscribeSelection,
@@ -336,6 +348,7 @@ export function WordDetail({ page, projectId, pageIndex, bboxRefine }: WordDetai
               onAcceptPrediction={() => {
                 acceptGlyphPrediction.mutate({ lineIndex: lineIdx, wordIndex: wordIdx });
               }}
+              disabled={glyphPanelDisabled}
             />
           </Accordion.Content>
         </Accordion.Item>

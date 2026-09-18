@@ -272,6 +272,45 @@ describe("WordDetail — GlyphAnnotationPanel mount (M11 Task 5)", () => {
     );
   });
 
+  it("double-clicking Mark reviewed while the write is in flight posts once", async () => {
+    let postCount = 0;
+    let resolvePost!: () => void;
+    server.use(
+      http.post("/api/projects/p1/pages/0/words/0/0/glyph-annotations", async ({ request }) => {
+        postCount += 1;
+        await request.json();
+        return new Promise<Response>((resolve) => {
+          resolvePost = () => resolve(HttpResponse.json(makePageWithGlyph({})));
+        });
+      }),
+    );
+
+    selectWord(0, 0);
+    const user = userEvent.setup();
+    renderWithQuery(
+      <WordDetail
+        page={makePageWithGlyph({})}
+        projectId="p1"
+        pageIndex={0}
+        bboxRefine={NOOP_BBOX_REFINE}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /glyphs/i }));
+    const markReviewedButton = await screen.findByTestId("glyph-panel-mark-reviewed-empty");
+
+    await user.click(markReviewedButton);
+    await waitFor(() => expect(markReviewedButton).toBeDisabled());
+
+    // A second click while the first write is still in flight must not
+    // fire a second POST. userEvent respects the native `disabled`
+    // attribute the same way a real double-click would.
+    await user.click(markReviewedButton);
+
+    resolvePost();
+    await waitFor(() => expect(postCount).toBe(1));
+  });
+
   it("accepts a prediction, posting to the accept-prediction route", async () => {
     let called = false;
     server.use(
