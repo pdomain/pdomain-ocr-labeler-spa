@@ -1,14 +1,19 @@
-"""``POST /api/projects/{project_id}/pages/{page_index}/undo|redo`` — per-page undo/redo.
+"""``.../undo|redo|jump`` + ``.../history/versions`` — per-page undo/redo/jump.
 
-Spec authority: ``docs/specs/2026-06-12-event-store-undo.md`` (slice H-B).
+Spec authority: ``docs/specs/2026-06-12-event-store-undo.md`` (slice H-B,
+U-M7 "history panel + jump-to-version").
 
-Undo/redo is blob-version restore: each operation APPENDS a new
+Undo/redo/jump are all blob-version restore: each operation APPENDS a new
 ``LabelerEdited`` event whose provenance node re-points the head at an
 existing content blob (``core/page_history.build_history_marker_node``).
 No event is ever deleted or rewritten — the head always moves forward
 while content moves backward. Cross-session durability falls out for
 free: the marker node's ``blob_refs[0]`` is what the restart read path
 (``api/_page_content.py`` → ``head.blob_refs[0]``) resolves.
+
+``GET .../history/versions`` is the read-only counterpart: it derives the
+same active chain undo/redo/jump already agree on
+(``core/page_history.build_version_list``) and never mutates anything.
 """
 
 from __future__ import annotations
@@ -18,9 +23,10 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from ..core.models import PageSource
-from ..core.page_history import HistoryOp, build_history_marker_node, derive_history
+from ..core.page_history import HistoryOp, build_history_marker_node, build_version_list, derive_history
 from ..core.page_kind.reviewed_store import PageKindReviewedStore
 from ..core.page_state import PageLoadOutcome
 from ..core.persistence.config_yaml import AppConfig
@@ -53,6 +59,26 @@ router = APIRouter(
 )
 
 
+class HistoryVersionInfo(BaseModel):
+    """One row of the U-M7 history panel — spec §"API surface".
+
+    Read-only wire shape for ``GET .../history/versions``; mirrors
+    ``core.page_history.VersionEntry`` field-for-field. ``timestamp`` is
+    ``None`` only for the OCR-ingest root row — see ``VersionEntry``.
+    """
+
+    node_id: str
+    label: str
+    timestamp: datetime | None
+    is_current: bool
+
+
+class JumpRequest(BaseModel):
+    """Body of ``POST .../jump`` — spec §"Jump-to-version semantics"."""
+
+    node_id: str
+
+
 def _history_conflict(error: str, message: str) -> JSONResponse:
     return JSONResponse(
         status_code=409,
@@ -69,11 +95,14 @@ def _execute_history_op(
     settings: Settings,
     app_config: AppConfig,
     store: LabelerPageStore | None,
+    jump_target_node_id: str | None = None,
 ) -> JSONResponse:
-    """Shared undo/redo implementation (spec §"Version-chain derivation").
+    """Shared undo/redo/jump implementation (spec §"Version-chain derivation").
 
     1. Derive the version chain + cursor from the aggregate's provenance.
-    2. 409 when the requested step is unavailable (bounds / depth / no store).
+    2. 409 when the requested step is unavailable (bounds / depth / no store;
+       for ``jump``, when ``jump_target_node_id`` is not on the active chain
+       — U-M7 "409 when the target is not in the active chain").
     3. Read the restored blob, rebuild the ``Page``.
     4. Append the marker ``LabelerEdited`` event (head moves forward,
        content moves backward) — U-9: the changelog records the op.
@@ -129,12 +158,19 @@ def _execute_history_op(
 
         depth = _resolve_undo_depth(settings)
         state = derive_history(graph, depth=depth)
-        target = state.undo_target() if op == "undo" else state.redo_target()
+        if op == "undo":
+            target = state.undo_target()
+        elif op == "redo":
+            target = state.redo_target()
+        else:
+            target = state.jump_target(jump_target_node_id) if jump_target_node_id is not None else None
         if target is None:
-            return _history_conflict(
-                f"{op}_unavailable",
-                f"nothing to {op} for page {page_index}",
+            message = (
+                f"target {jump_target_node_id!r} is not in the active chain for page {page_index}"
+                if op == "jump"
+                else f"nothing to {op} for page {page_index}"
             )
+            return _history_conflict(f"{op}_unavailable", message)
         current = state.chain[state.cursor]
 
         target_node = graph.nodes.get(target)
@@ -304,13 +340,97 @@ def redo_page(
     )
 
 
+@router.post("/{page_index}/jump", response_model=PagePayload)
+def jump_page(
+    *,
+    project_id: str,
+    page_index: int,
+    body: JumpRequest,
+    project_state: ProjectState = Depends(get_project_state),  # pyright: ignore[reportCallInDefaultInitializer]
+    settings: Settings = Depends(get_settings),  # pyright: ignore[reportCallInDefaultInitializer]
+    app_config: AppConfig = Depends(get_app_config),  # pyright: ignore[reportCallInDefaultInitializer]
+    store: LabelerPageStore | None = Depends(get_page_store_optional),  # pyright: ignore[reportCallInDefaultInitializer]
+) -> JSONResponse:
+    """``POST .../jump`` — restore an arbitrary version on the active chain (U-15).
+
+    Same mechanism as undo/redo (spec §"Jump-to-version semantics"): appends
+    a ``history_op`` marker with ``op="jump"``, so it is exactly as
+    append-only and auditable as undo/redo — never a rewrite of history.
+    409 ``jump_unavailable`` when ``body.node_id`` is not on the active
+    chain (truncated by a prior real edit, or never existed).
+    """
+    return _execute_history_op(
+        op="jump",
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+        store=store,
+        jump_target_node_id=body.node_id,
+    )
+
+
+@router.get("/{page_index}/history/versions", response_model=list[HistoryVersionInfo])
+def get_history_versions(
+    *,
+    project_id: str,
+    page_index: int,
+    project_state: ProjectState = Depends(get_project_state),  # pyright: ignore[reportCallInDefaultInitializer]
+    settings: Settings = Depends(get_settings),  # pyright: ignore[reportCallInDefaultInitializer]
+    store: LabelerPageStore | None = Depends(get_page_store_optional),  # pyright: ignore[reportCallInDefaultInitializer]
+) -> JSONResponse:
+    """``GET .../history/versions`` — read-only version list for the history panel (U-14).
+
+    Never mutates anything: reads the same provenance graph undo/redo/jump
+    read, under the same per-page lock (consistency with any concurrent
+    mutation), and returns ``[]`` whenever there is nothing to show (no
+    project/page mismatch aside — that still 404s) rather than a 409, since
+    an empty list is a normal, valid answer for a GET.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    pstate = project_state.get_page_state(page_index)
+    if store is None or pstate is None or pstate.page_id is None:
+        return JSONResponse(status_code=200, content=[])
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        try:
+            agg = store.get_page(pstate.page_id)
+        except Exception:
+            log.debug("get_history_versions: aggregate load failed for page_id=%s", pstate.page_id)
+            return JSONResponse(status_code=200, content=[])
+        graph = agg.record.provenance
+        if graph is None:
+            return JSONResponse(status_code=200, content=[])
+        versions = build_version_list(graph, agg.record.changelog, depth=_resolve_undo_depth(settings))
+
+    body = [
+        HistoryVersionInfo(
+            node_id=v.node_id,
+            label=v.label,
+            timestamp=v.timestamp,
+            is_current=v.is_current,
+        ).model_dump(mode="json")
+        for v in versions
+    ]
+    return JSONResponse(status_code=200, content=body)
+
+
 def install_history_router(app) -> None:  # type: ignore[no-untyped-def]
     """Register the history router. Called from ``bootstrap.build_app``."""
     app.include_router(router)
 
 
 __all__ = [
+    "HistoryVersionInfo",
+    "JumpRequest",
+    "get_history_versions",
     "install_history_router",
+    "jump_page",
     "redo_page",
     "router",
     "undo_page",

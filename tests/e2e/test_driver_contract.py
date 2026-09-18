@@ -204,6 +204,24 @@ _REVIEW_QUEUE_PANEL_TESTIDS = [
     "review-queue-order-confidence",
 ]
 
+# History panel (driver-contract §2.19, spec 2026-06-12-event-store-undo.md
+# "U-M7 — history panel + jump-to-version"). `drawer-tab-history` is an
+# always-rendered real control in Drawer.tsx's tab strip once a project page
+# loads.
+_HISTORY_TAB_TESTIDS = [
+    "drawer-tab-history",
+]
+
+# `history-panel` is rendered as soon as the History tab opens; its rows
+# (`history-version-row` / `history-jump-button`) and loading/empty state
+# testids are state-dependent (at least one version — the OCR root — always
+# exists once a page has loaded, but asserting a row here would depend on
+# fixture timing the same way §2.18's `review-queue-list` avoids), so only
+# the outer container is asserted, following the §2.18 convention.
+_HISTORY_PANEL_TESTIDS = [
+    "history-panel",
+]
+
 
 def _all_stub_or_present(page: Page, testids: list[str]) -> list[str]:
     """Return list of testids that are completely absent from the DOM."""
@@ -802,4 +820,47 @@ def test_review_queue_panel_testids_present(live_server: LiveServer, page: Page)
     missing = _all_stub_or_present(page, _REVIEW_QUEUE_PANEL_TESTIDS)
     assert not missing, (
         f"Review queue panel testids missing after opening the Queue tab (driver-contract §2.18): {missing}"
+    )
+
+
+# ── History panel (driver-contract §2.19) ───────────────────────────────────
+
+
+@pytest.mark.e2e
+def test_history_tab_present(live_server: LiveServer, page: Page) -> None:
+    """Driver-contract §2.19: drawer-tab-history always rendered on a loaded project page."""
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
+    page.goto(url, timeout=15_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+    wait_for_project_ready(page)
+
+    missing = _all_stub_or_present(page, _HISTORY_TAB_TESTIDS)
+    assert not missing, f"History tab testid missing from project page (driver-contract §2.19): {missing}"
+
+
+@pytest.mark.e2e
+def test_history_panel_testids_present(live_server: LiveServer, page: Page) -> None:
+    """Driver-contract §2.19: history-panel present once the History tab opens.
+
+    tiny-fixture's page 0 is always seeded via the event-store path
+    (conftest.py's ``_seed_tiny_fixture_page0_words``), so its OCR root
+    version always exists — the panel body renders (never stays on
+    ``history-loading`` indefinitely), but only the outer container is
+    asserted, matching §2.18's convention for its own state-dependent rows.
+    """
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+
+    url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
+    page.goto(url, timeout=15_000)
+    page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
+    wait_for_project_ready(page)
+
+    page.click('[data-testid="drawer-tab-history"]')
+    page.wait_for_selector('[data-testid="history-panel"]', timeout=10_000)
+
+    missing = _all_stub_or_present(page, _HISTORY_PANEL_TESTIDS)
+    assert not missing, (
+        f"History panel testids missing after opening the History tab (driver-contract §2.19): {missing}"
     )

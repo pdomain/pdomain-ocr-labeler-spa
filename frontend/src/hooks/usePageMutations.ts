@@ -12,6 +12,7 @@
 
 import { useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
 import { invalidateBookReviewQueue } from "./useBookReviewQueue";
+import { historyVersionsKey } from "./useHistoryVersions";
 import type { components } from "../api/types";
 
 export type ReloadOCRResponse = components["schemas"]["ReloadOCRResponse"];
@@ -262,6 +263,10 @@ export function useUndoPage(projectId: string, pageIndex: number) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
       void qc.invalidateQueries({ queryKey: ["page-kinds", projectId] });
+      // U-M7: the History tab's current-row highlight must move too, even
+      // when undo is triggered from the toolbar button rather than the
+      // panel's own jump action.
+      void qc.invalidateQueries({ queryKey: historyVersionsKey(projectId, pageIndex) });
     },
   });
 }
@@ -281,6 +286,38 @@ export function useRedoPage(projectId: string, pageIndex: number) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
       void qc.invalidateQueries({ queryKey: ["page-kinds", projectId] });
+      // U-M7: keep the History tab's current-row highlight in sync — see useUndoPage.
+      void qc.invalidateQueries({ queryKey: historyVersionsKey(projectId, pageIndex) });
+    },
+  });
+}
+
+// ─── useJumpToVersion (U-M7 history panel) ─────────────────────────────────
+
+/**
+ * Restore an arbitrary version on the active chain — the History tab's
+ * "jump" action (U-15). Same mechanism as undo/redo: appends a
+ * `history_op` marker, never rewrites history.
+ *
+ * POST .../jump → 200 PagePayload, or 409 `jump_unavailable` when the
+ * target has been truncated by a later real edit (U-16) or never existed.
+ * On success, invalidate the page query, the `["page-kinds", projectId]`
+ * prefix (see useUndoPage — a jump can restore an earlier/later page kind),
+ * and this page's version list so the new current-row highlight shows up
+ * immediately rather than waiting for the next unrelated refetch.
+ *
+ * Spec: docs/specs/2026-06-12-event-store-undo.md (U-M7 "Jump-to-version
+ * semantics").
+ */
+export function useJumpToVersion(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { nodeId: string }>({
+    mutationFn: ({ nodeId }) =>
+      apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/jump`, { node_id: nodeId }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+      void qc.invalidateQueries({ queryKey: ["page-kinds", projectId] });
+      void qc.invalidateQueries({ queryKey: historyVersionsKey(projectId, pageIndex) });
     },
   });
 }

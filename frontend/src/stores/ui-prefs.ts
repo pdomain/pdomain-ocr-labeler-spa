@@ -70,9 +70,11 @@ export function nextMatchFilter(current: MatchFilter): MatchFilter {
  * S2.2: "text" tab added for the visible full-page GT/OCR read-only view.
  * Book review queue design ("What this increment does not build" — the
  * queue panel this tab now builds): "queue" added for the book-wide
- * review-queue panel.
+ * review-queue panel. U-M7 (docs/specs/2026-06-12-event-store-undo.md
+ * "history panel + jump-to-version"): "history" added for the read-only
+ * per-page version list.
  */
-export type DrawerTab = "worklist" | "hierarchy" | "text" | "queue";
+export type DrawerTab = "worklist" | "hierarchy" | "text" | "queue" | "history";
 
 /** Slice 24 — theme preference. */
 export type ThemePreference = "dark" | "light" | "system";

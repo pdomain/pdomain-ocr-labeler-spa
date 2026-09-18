@@ -26,6 +26,7 @@ import {
   useRematchGt,
   useUndoPage,
   useRedoPage,
+  useJumpToVersion,
   useConfirmPageKind,
   useErasePagePixels,
   ERASE_PAGE_PIXELS_TIMEOUT_MS,
@@ -335,6 +336,10 @@ describe("useUndoPage: page-kinds invalidation", () => {
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID, PAGE_IDX] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page-kinds", PROJECT_ID] });
+    // U-M7: the History tab's current-row highlight must move on undo too.
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["page-history-versions", PROJECT_ID, PAGE_IDX],
+    });
   });
 });
 
@@ -358,6 +363,84 @@ describe("useRedoPage: page-kinds invalidation", () => {
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID, PAGE_IDX] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page-kinds", PROJECT_ID] });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["page-history-versions", PROJECT_ID, PAGE_IDX],
+    });
+  });
+});
+
+// ─── useJumpToVersion (U-M7 history panel) ──────────────────────────────────
+// Spec: docs/specs/2026-06-12-event-store-undo.md §"Jump-to-version semantics".
+
+describe("useJumpToVersion", () => {
+  it("POSTs {node_id} to /jump and resolves with the refreshed PagePayload", async () => {
+    let receivedBody: unknown;
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/jump`, async ({ request }) => {
+        receivedBody = await request.json();
+        return HttpResponse.json({
+          project_id: PROJECT_ID,
+          page_index: PAGE_IDX,
+          history: { undo_available: false, redo_available: true, cursor: 0, depth: 50 },
+        });
+      }),
+    );
+
+    const { result } = renderHook(() => useJumpToVersion(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapper(),
+    });
+    await act(async () => {
+      result.current.mutate({ nodeId: "root" });
+    });
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+    expect(receivedBody).toEqual({ node_id: "root" });
+    expect(result.current.data?.history?.redo_available).toBe(true);
+  });
+
+  it("surfaces a 409 as an error (target not on the active chain)", async () => {
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/jump`, () =>
+        HttpResponse.json(
+          { error: "jump_unavailable", message: "target not in active chain" },
+          { status: 409 },
+        ),
+      ),
+    );
+    const { result } = renderHook(() => useJumpToVersion(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapper(),
+    });
+    await act(async () => {
+      result.current.mutate({ nodeId: "truncated-node" });
+    });
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
+  });
+
+  it("invalidates the page, page-kinds, and history-versions queries on success", async () => {
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/jump`, () =>
+        HttpResponse.json({ project_id: PROJECT_ID, page_index: PAGE_IDX }),
+      ),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useJumpToVersion(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapperFor(qc),
+    });
+
+    await act(async () => {
+      result.current.mutate({ nodeId: "edit-0" });
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID, PAGE_IDX] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page-kinds", PROJECT_ID] });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["page-history-versions", PROJECT_ID, PAGE_IDX],
+    });
   });
 });
 

@@ -13,6 +13,7 @@
  *   - GitBranch       — used as hierarchy tab icon in Drawer
  *   - PanelRightClose — used as right-panel collapse icon in RightPanel
  *   - FolderOpen      — used as open-folder / change-project icon
+ *   - History         — used as history tab icon in Drawer (U-M7)
  */
 
 import React from "react";
@@ -161,6 +162,24 @@ export function FileText({ size = 24, className, ...rest }: IconProps) {
       <line x1="16" y1="13" x2="8" y2="13" />
       <line x1="16" y1="17" x2="8" y2="17" />
       <polyline points="10 9 9 9 8 9" />
+    </svg>
+  );
+}
+
+/** History (clock + counter-clockwise arrow) — used for the History tab in Drawer (U-M7). */
+export function History({ size = 24, className, ...rest }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      {...BASE_SVG_PROPS}
+      className={className}
+      {...rest}
+    >
+      <path d="M3 12a9 9 0 1 0 2.64-6.36L3 8" />
+      <polyline points="3 3 3 8 8 8" />
+      <polyline points="12 7 12 12 16 14" />
     </svg>
   );
 }

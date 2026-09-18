@@ -38,12 +38,14 @@ from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
 if TYPE_CHECKING:
-    from pdomain_ops.pages import ProvenanceGraph, ProvenanceNode
+    from collections.abc import Sequence
+
+    from pdomain_ops.pages import PageChangeEntry, ProvenanceGraph, ProvenanceNode
 
 DEFAULT_UNDO_DEPTH = 50
 """Default maximum number of undo steps offered (``PDLABELER_UNDO_DEPTH``)."""
 
-HistoryOp = Literal["undo", "redo"]
+HistoryOp = Literal["undo", "redo", "jump"]
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,16 @@ class HistoryState:
     def redo_target(self) -> str | None:
         """Node id of the version a redo would restore, or ``None``."""
         return self.chain[self.cursor + 1] if self.redo_available else None
+
+    def jump_target(self, node_id: str) -> str | None:
+        """Node id to restore for a jump to *node_id*, or ``None`` if unreachable.
+
+        U-M7 §"Jump-to-version semantics": the target must be on the
+        *active* chain (a restorable version) — not merely present
+        somewhere in the graph. Truncated (undone-past) versions are data
+        but not reachable, exactly like ``undo_target``/``redo_target``.
+        """
+        return node_id if node_id in self.chain else None
 
 
 def _history_op_marker(node: ProvenanceNode) -> dict[str, Any] | None:
@@ -125,6 +137,79 @@ def derive_history(graph: ProvenanceGraph, *, depth: int = DEFAULT_UNDO_DEPTH) -
     return HistoryState(chain=tuple(chain), cursor=cursor, depth=depth)
 
 
+@dataclass(frozen=True)
+class VersionEntry:
+    """One row of the U-M7 history panel — a restorable version on the active chain.
+
+    ``timestamp`` is ``None`` only for the OCR-ingest root node: unlike every
+    edit/undo/redo/jump node (``core/page_state.py`` stamps
+    ``datetime.now(UTC)``), ``_ingest_ocr_result``
+    (``adapters/ocr/local_doctr.py``) never sets ``ProvenanceNode.timestamp``
+    on the root node it builds. The panel must show that gap honestly
+    (no relative time for that row) rather than approximate it.
+    """
+
+    node_id: str
+    label: str
+    timestamp: datetime | None
+    is_current: bool
+
+
+def _label_for_node(node: ProvenanceNode, entry: PageChangeEntry | None) -> str:
+    """Human-readable label for one chain version.
+
+    The OCR root node (``source="ocr"``, never routed through
+    ``PageAggregate.labeler_edited`` and so never in the changelog) is
+    labeled "OCR". Every other chain node is a ``LabelerEdited`` node with a
+    matching ``PageChangeEntry``; its label is derived from the first
+    change's ``type`` (e.g. ``"word_validated"`` → "Word validated") — never
+    fabricated when the changelog entry is missing or empty.
+    """
+    if node.source == "ocr":
+        return "OCR"
+    if entry is not None and entry.changes:
+        first = entry.changes[0]
+        change_type = first.get("type") if isinstance(first, dict) else None
+        if isinstance(change_type, str) and change_type:
+            return change_type.replace("_", " ").capitalize()
+    return "Edit"
+
+
+def build_version_list(
+    graph: ProvenanceGraph,
+    changelog: Sequence[PageChangeEntry],
+    *,
+    depth: int = DEFAULT_UNDO_DEPTH,
+) -> list[VersionEntry]:
+    """Ordered, read-only version list for the U-M7 history panel.
+
+    Reuses ``derive_history`` so the panel's rows can never disagree with
+    what undo/redo actually treat as restorable — one row per chain entry
+    (the OCR root plus every real edit), oldest first. Undo/redo/jump
+    *marker* nodes never contribute their own row (spec §API surface + U-14:
+    "one row per version (plus the OCR root)") — they only move the cursor
+    among existing rows, exactly as ``derive_history`` already accounts for.
+    Pure, no I/O: ``changelog`` and ``graph`` are already-loaded aggregate
+    state.
+    """
+    state = derive_history(graph, depth=depth)
+    changelog_by_node = {entry.provenance_node_id: entry for entry in changelog}
+    versions: list[VersionEntry] = []
+    for index, node_id in enumerate(state.chain):
+        node = graph.nodes.get(node_id)
+        if node is None:  # pragma: no cover - chain invariant (nodes always resolve)
+            continue
+        versions.append(
+            VersionEntry(
+                node_id=node_id,
+                label=_label_for_node(node, changelog_by_node.get(node_id)),
+                timestamp=node.timestamp,
+                is_current=index == state.cursor,
+            )
+        )
+    return versions
+
+
 def build_history_marker_node(
     *,
     op: HistoryOp,
@@ -159,6 +244,8 @@ __all__ = [
     "DEFAULT_UNDO_DEPTH",
     "HistoryOp",
     "HistoryState",
+    "VersionEntry",
     "build_history_marker_node",
+    "build_version_list",
     "derive_history",
 ]

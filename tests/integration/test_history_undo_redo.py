@@ -535,3 +535,186 @@ def test_undo_reverts_the_word_review_counts_row(client: TestClient, seeded_proj
     reverted = journal.latest_by_page()[0]
     assert reverted.total_words == 3
     assert reverted.validated_words == 0, "undo must revert the counts row, not leave the pre-undo count"
+
+
+# ── U-M7: GET .../history/versions + POST .../jump ────────────────────────────
+
+
+def _get_versions(client: TestClient) -> list[dict[str, object]]:
+    r = client.get("/api/projects/book1/pages/0/history/versions")
+    assert r.status_code == 200, r.text
+    versions: list[dict[str, object]] = r.json()
+    return versions
+
+
+@pytest.mark.integration
+def test_versions_lists_root_only_on_a_fresh_page(client: TestClient) -> None:
+    _get_history(client)  # prime: loads the page into memory
+    versions = _get_versions(client)
+    assert len(versions) == 1
+    assert versions[0]["label"] == "OCR"
+    assert versions[0]["is_current"] is True
+    # The OCR root never gets a timestamp — honest gap, not a fabricated one.
+    assert versions[0]["timestamp"] is None
+
+
+@pytest.mark.integration
+def test_versions_lists_one_row_per_edit_with_labels_and_timestamps(client: TestClient) -> None:
+    """U-14: each edit is a row with an op label and (for edits) a real timestamp."""
+    _get_history(client)  # prime: loads the page into memory
+    r = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "the"})
+    assert r.status_code == 200, r.text
+    r = client.post("/api/projects/book1/pages/0/words/0/0/validated", json={"validated": True})
+    assert r.status_code == 200, r.text
+
+    versions = _get_versions(client)
+    assert len(versions) == 3, "OCR root + 2 edits"
+    assert versions[0]["label"] == "OCR"
+    for row in versions[1:]:
+        assert row["timestamp"] is not None
+        assert row["label"] and row["label"] != "OCR"
+    assert versions[-1]["is_current"] is True
+    assert all(not v["is_current"] for v in versions[:-1])
+
+
+@pytest.mark.integration
+def test_versions_current_row_moves_after_undo(client: TestClient) -> None:
+    _get_history(client)  # prime: loads the page into memory
+    r = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "the"})
+    assert r.status_code == 200, r.text
+    r = client.post("/api/projects/book1/pages/0/undo")
+    assert r.status_code == 200, r.text
+
+    versions = _get_versions(client)
+    assert len(versions) == 2, "the undo marker adds no row of its own (U-14)"
+    assert versions[0]["is_current"] is True
+    assert versions[1]["is_current"] is False
+
+
+@pytest.mark.integration
+def test_versions_endpoint_never_mutates_history(client: TestClient) -> None:
+    """Read-only per spec acceptance — repeated GETs never change undo/redo state."""
+    _get_history(client)  # prime: loads the page into memory
+    r = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "the"})
+    assert r.status_code == 200, r.text
+    before = _get_history(client)
+    for _ in range(3):
+        _get_versions(client)
+    after = _get_history(client)
+    assert before == after
+
+
+@pytest.mark.integration
+def test_versions_404_when_project_unknown(tmp_path: Path) -> None:
+    settings = _make_settings(tmp_path)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        r = c.get("/api/projects/nope/pages/0/history/versions")
+        assert r.status_code == 404
+
+
+@pytest.mark.integration
+def test_jump_restores_an_older_version(client: TestClient) -> None:
+    """U-15: jump to a specific version id restores it, symmetric with undo."""
+    _get_history(client)  # prime: loads the page into memory
+    r = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "the"})
+    assert r.status_code == 200, r.text
+    r = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "them"})
+    assert r.status_code == 200, r.text
+
+    versions = _get_versions(client)
+    root_id = versions[0]["node_id"]
+    assert versions[0]["label"] == "OCR"
+
+    r = client.post("/api/projects/book1/pages/0/jump", json={"node_id": root_id})
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert "teh" in payload["page_text_gt"]
+    assert payload["history"]["undo_available"] is False
+    assert payload["history"]["redo_available"] is True
+
+    versions_after = _get_versions(client)
+    assert versions_after[0]["is_current"] is True
+
+
+@pytest.mark.integration
+def test_jump_forward_after_undo(client: TestClient) -> None:
+    """U-15: jump also works forward, symmetric with redo."""
+    _get_history(client)  # prime: loads the page into memory
+    r = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "the"})
+    assert r.status_code == 200, r.text
+    versions = _get_versions(client)
+    edited_id = versions[-1]["node_id"]
+
+    r = client.post("/api/projects/book1/pages/0/undo")
+    assert r.status_code == 200, r.text
+    assert "teh" in r.json()["page_text_gt"]
+
+    r = client.post("/api/projects/book1/pages/0/jump", json={"node_id": edited_id})
+    assert r.status_code == 200, r.text
+    assert "the" in r.json()["page_text_gt"]
+
+
+@pytest.mark.integration
+def test_jump_409_for_a_truncated_or_unknown_target(client: TestClient) -> None:
+    """U-16: jump obeys the linear model — a truncated node is no longer reachable."""
+    _get_history(client)  # prime: loads the page into memory
+    r = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "A"})
+    assert r.status_code == 200, r.text
+    r = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "B"})
+    assert r.status_code == 200, r.text
+    truncated_versions = _get_versions(client)
+    b_node_id = truncated_versions[-1]["node_id"]
+
+    r = client.post("/api/projects/book1/pages/0/undo")
+    assert r.status_code == 200, r.text
+    r = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "C"})
+    assert r.status_code == 200, r.text
+
+    r = client.post("/api/projects/book1/pages/0/jump", json={"node_id": b_node_id})
+    assert r.status_code == 409, r.text
+    assert r.json()["error"] == "jump_unavailable"
+
+    r = client.post("/api/projects/book1/pages/0/jump", json={"node_id": "never-existed"})
+    assert r.status_code == 409, r.text
+    assert r.json()["error"] == "jump_unavailable"
+
+
+@pytest.mark.integration
+def test_jump_appends_a_marker_and_never_deletes_events(client: TestClient, seeded_project: Path) -> None:
+    """Append-only: jump must land as a new changelog/provenance entry, never a rewrite."""
+    _get_history(client)  # prime: loads the page into memory
+    r = client.post("/api/projects/book1/pages/0/words/0/0/gt", json={"text": "the"})
+    assert r.status_code == 200, r.text
+    versions = _get_versions(client)
+    root_id = versions[0]["node_id"]
+
+    r = client.post("/api/projects/book1/pages/0/jump", json={"node_id": root_id})
+    assert r.status_code == 200, r.text
+
+    fresh = LabelerPageStore(project_dir=seeded_project)
+    try:
+        proj_agg = fresh.get_project(_project_uuid("book1"))
+        page_id = proj_agg.record.page_ids[0]
+        agg = fresh.get_page(page_id)
+        graph = agg.record.provenance
+        assert graph is not None
+        # Every node written along the way is still present — nothing was deleted.
+        assert root_id in graph.nodes
+        last_changes = agg.record.changelog[-1].changes
+        assert any(c.get("type") == "jump" for c in last_changes)
+    finally:
+        fresh.close()
+
+
+@pytest.mark.integration
+def test_openapi_has_jump_and_history_versions(tmp_path: Path) -> None:
+    settings = _make_settings(tmp_path)
+    app = build_app(settings)
+    with TestClient(app) as c:
+        schema = c.get("/openapi.json").json()
+    paths = schema["paths"]
+    assert "/api/projects/{project_id}/pages/{page_index}/jump" in paths
+    assert "/api/projects/{project_id}/pages/{page_index}/history/versions" in paths
+    version_props = schema["components"]["schemas"]["HistoryVersionInfo"]["properties"]
+    assert set(version_props) >= {"node_id", "label", "timestamp", "is_current"}

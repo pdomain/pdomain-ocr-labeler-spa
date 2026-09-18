@@ -563,6 +563,33 @@ convention) and the proposal id; the conformance test asserts only the
 static/trigger testids above, the same convention §2.15 and §2.17 use for
 their parameterised testids.
 
+### 2.19 History panel (U-M7, spec `2026-06-12-event-store-undo.md`)
+
+A fifth Drawer tab, "History", is a **read-only** list of the active
+version chain for the open page — the OCR root plus every real edit, oldest
+first, with an op label and a relative time, the current version
+highlighted. It never mutates history through any path except **jump**
+(`POST .../jump`), which the U-M7 spec itself designs as exactly as
+append-only as the existing `undo-button`/`redo-button` mutations — see
+`docs/specs/2026-06-12-event-store-undo.md` "Jump-to-version semantics".
+
+| Testid | What it is |
+|---|---|
+| `drawer-tab-history` | History tab trigger (Drawer header, alongside `drawer-tab-worklist` etc.) |
+| `history-panel` | Outer panel container |
+| `history-loading` | Shown before the first fetch resolves |
+| `history-empty` | Shown once loaded with no version history (event store unwired) |
+| `history-error` | Shown when a jump request fails (e.g. 409 `jump_unavailable`) |
+| `history-version-list` | Row list container |
+| `history-version-row` | One row — the **same** testid on every row (not parameterised, per spec); distinguish rows via the row's `data-node-id` attribute (the version's provenance node id) and `data-current="true"` on the active row |
+| `history-jump-button` | Per-row jump action; **absent** on the current row (nothing to jump to) |
+
+`history-version-row`'s `data-node-id` is read directly off the row element,
+not a separate testid suffix — the U-M7 spec's own wording ("with the
+version's `node_id` as a data attribute") rules out the `{param}`-suffix
+convention §2.15/§2.17/§2.18 use for their own per-row testids. The
+conformance test asserts only the static/trigger testids above.
+
 ---
 
 ## 3. ARIA + accessible-name guarantees
