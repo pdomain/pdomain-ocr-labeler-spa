@@ -581,10 +581,22 @@ def page_to_line_matches(
                 line_matches.append(lm)
 
             except Exception:
-                log.debug("page_to_line_matches: skipping line %d (exception)", line_idx, exc_info=True)
+                # WARNING, not DEBUG: a page that legitimately has no OCR
+                # text returns an empty ``line_matches`` too, and the wire
+                # response is identical either way (rule: a 200 with an
+                # empty page must be distinguishable from a lie). Logging
+                # this catch at DEBUG made a page that *has* lines but hit
+                # an unexpected exception here look, in the logs, exactly
+                # like a page that never had any — indistinguishable from
+                # the outside. Raising the level to WARNING at least gives
+                # an operator a way to tell the two apart after the fact.
+                log.warning("page_to_line_matches: skipping line %d (exception)", line_idx, exc_info=True)
 
     except Exception:
-        log.debug("page_to_line_matches: failed to iterate page lines", exc_info=True)
+        # See the inner ``except`` above: WARNING so a page that came back
+        # empty because of a bug is distinguishable, in the logs, from one
+        # that is legitimately empty.
+        log.warning("page_to_line_matches: failed to iterate page lines", exc_info=True)
 
     return record, line_matches
 

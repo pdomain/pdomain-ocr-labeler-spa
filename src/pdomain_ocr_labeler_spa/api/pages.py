@@ -1322,299 +1322,323 @@ def _page_payload(
 
     pstate = project_state.get_page_state(page_index)
 
-    # Page record + line matches: lifted from the cached PageState outcome.
-    # ``PageLoadOutcome.payload`` across lanes (M5b event-store adoption):
-    # both the OCR lane (``run_ocr``) and the restart read lane
-    # (``load_labeled``) now put a ``pdomain_book_tools.ocr.page.Page`` in
-    # ``payload``. (``load_cached`` is retired and always returns None.)
-    #
-    # For the OCR lane (``source == PageSource.OCR``), we call
-    # ``page_to_line_matches`` to lift the live ``Page`` object into
-    # ``PageRecord + LineMatch[]`` (B1 fix, issue #330).
-    # For labeled/cached lanes, lifting from ``UserPageEnvelope`` is a
-    # future slice — until then we fall back to the envelope's
-    # ``payload.page`` dict if it has a ``Page.from_dict`` path, or
-    # degrade gracefully to ``page_record=None`` / ``line_matches=[]``.
-    page_record: PageRecord | None = None
-    line_matches: list[LineMatch] = []
-    outcome = pstate.page_record if pstate is not None else None
-    if outcome is not None:
-        payload_obj = getattr(outcome, "payload", None)
-        source = getattr(outcome, "source", None)
+    # Holds the per-page mutation lock for the whole payload build below
+    # (not just the line-matches lift) -- pdomain_book_tools.ocr.page.Page's
+    # .items / .lines / .words properties all sort the page's shared
+    # _items list as a side effect of every single read (Page._sort_items
+    # -> list.sort()), and CPython's list.sort() briefly empties the list's
+    # backing array while it runs (a defense against a hostile comparator
+    # that mutates the list mid-sort). Two READERS of the same live Page
+    # from two threads -- two concurrent GETs, or a GET racing a mutation
+    # route's own read -- can interleave on that emptied window and
+    # permanently stomp the list back to empty: whichever thread's sort
+    # call restores its own (possibly already-emptied) snapshot last wins.
+    # Root-caused and reported 2026-09-18 (empty-page-payload race). This
+    # function touches the live page more than once (line-matches, then
+    # regions/proposals below), so the lock must span the whole build, not
+    # just the first touch: a caller must see either the fully-pre-mutation
+    # or fully-post-mutation page for its entire response, never a page
+    # that is mid-sort or only half read. The mutation routes already take
+    # this same per-page lock (spec 23 Sec13) around their own read+mutate+
+    # save; taking it here too makes every live-Page read serialize against
+    # every other live-Page read *and* write.
+    with project_state.get_page_lock(page_index):
+        # Page record + line matches: lifted from the cached PageState outcome.
+        # ``PageLoadOutcome.payload`` across lanes (M5b event-store adoption):
+        # both the OCR lane (``run_ocr``) and the restart read lane
+        # (``load_labeled``) now put a ``pdomain_book_tools.ocr.page.Page`` in
+        # ``payload``. (``load_cached`` is retired and always returns None.)
+        #
+        # For the OCR lane (``source == PageSource.OCR``), we call
+        # ``page_to_line_matches`` to lift the live ``Page`` object into
+        # ``PageRecord + LineMatch[]`` (B1 fix, issue #330).
+        # For labeled/cached lanes, lifting from ``UserPageEnvelope`` is a
+        # future slice — until then we fall back to the envelope's
+        # ``payload.page`` dict if it has a ``Page.from_dict`` path, or
+        # degrade gracefully to ``page_record=None`` / ``line_matches=[]``.
+        page_record: PageRecord | None = None
+        line_matches: list[LineMatch] = []
+        outcome = pstate.page_record if pstate is not None else None
+        if outcome is not None:
+            payload_obj = getattr(outcome, "payload", None)
+            source = getattr(outcome, "source", None)
 
-        if payload_obj is not None and 0 <= page_index < len(project.image_paths):
-            image_path = project_state.labeling_image_path(page_index)
-            page_source = PageSource(str(source)) if source else PageSource.OCR
+            if payload_obj is not None and 0 <= page_index < len(project.image_paths):
+                image_path = project_state.labeling_image_path(page_index)
+                page_source = PageSource(str(source)) if source else PageSource.OCR
 
-            # Event-store adoption (M5b): OCR lane stores a live Page object
-            # directly in PageLoadOutcome.payload. Detect by isinstance or
-            # duck-typing (.lines attribute), then call page_to_line_matches.
-            from pdomain_book_tools.ocr.page import Page as _Page
+                # Event-store adoption (M5b): OCR lane stores a live Page object
+                # directly in PageLoadOutcome.payload. Detect by isinstance or
+                # duck-typing (.lines attribute), then call page_to_line_matches.
+                from pdomain_book_tools.ocr.page import Page as _Page
 
-            is_page = isinstance(payload_obj, _Page) or hasattr(payload_obj, "lines")
-            if is_page:
-                log.debug(
-                    "_page_payload: OCR-lane Page for %s/%d — building line_matches",
-                    project_id,
-                    page_index,
-                )
-                _fuzz = app_config.fuzz_threshold if app_config is not None else 0.8
-                _char_bboxes_map = pstate.char_bboxes_map if pstate is not None else None
-                _glyph_ann_map = pstate.glyph_annotations_map if pstate is not None else None
-                _glyph_pred_map = pstate.glyph_predictions_map if pstate is not None else None
-                from ..core.typography_review import stable_page_id as _stable_page_id
+                is_page = isinstance(payload_obj, _Page) or hasattr(payload_obj, "lines")
+                if is_page:
+                    log.debug(
+                        "_page_payload: OCR-lane Page for %s/%d — building line_matches",
+                        project_id,
+                        page_index,
+                    )
+                    _fuzz = app_config.fuzz_threshold if app_config is not None else 0.8
+                    _char_bboxes_map = pstate.char_bboxes_map if pstate is not None else None
+                    _glyph_ann_map = pstate.glyph_annotations_map if pstate is not None else None
+                    _glyph_pred_map = pstate.glyph_predictions_map if pstate is not None else None
+                    from ..core.typography_review import stable_page_id as _stable_page_id
 
-                _logical_page_id = (
-                    str(pstate.logical_page_id)
-                    if pstate is not None and pstate.logical_page_id is not None
-                    else _stable_page_id(project_id=project_id, page_index=page_index)
-                )
-                _rec, _lms = page_to_line_matches(
-                    payload_obj,
-                    page_index,
-                    image_path,
-                    source=page_source,
-                    fuzz_threshold=_fuzz,
-                    char_bboxes_map=_char_bboxes_map if _char_bboxes_map else None,  # pyright: ignore[reportArgumentType]
-                    glyph_annotations_map=_glyph_ann_map if _glyph_ann_map else None,
-                    glyph_predictions_map=_glyph_pred_map if _glyph_pred_map else None,
-                    project_id=project_id,
-                    stable_page_id=_logical_page_id,
-                )
-                if _lms or _rec is not None:
-                    page_record = _rec
-                    line_matches = _lms
-            else:
-                log.warning(
-                    "_page_payload: payload type %s has no .lines for %s/%d — degrading",
-                    type(payload_obj).__name__,
-                    project_id,
-                    page_index,
-                )
-                # Degraded path: no Page available yet (fresh server before OCR runs).
-                from ..core.typography_review import stable_page_id as _stable_page_id
+                    _logical_page_id = (
+                        str(pstate.logical_page_id)
+                        if pstate is not None and pstate.logical_page_id is not None
+                        else _stable_page_id(project_id=project_id, page_index=page_index)
+                    )
+                    _rec, _lms = page_to_line_matches(
+                        payload_obj,
+                        page_index,
+                        image_path,
+                        source=page_source,
+                        fuzz_threshold=_fuzz,
+                        char_bboxes_map=_char_bboxes_map if _char_bboxes_map else None,  # pyright: ignore[reportArgumentType]
+                        glyph_annotations_map=_glyph_ann_map if _glyph_ann_map else None,
+                        glyph_predictions_map=_glyph_pred_map if _glyph_pred_map else None,
+                        project_id=project_id,
+                        stable_page_id=_logical_page_id,
+                    )
+                    if _lms or _rec is not None:
+                        page_record = _rec
+                        line_matches = _lms
+                else:
+                    log.warning(
+                        "_page_payload: payload type %s has no .lines for %s/%d — degrading",
+                        type(payload_obj).__name__,
+                        project_id,
+                        page_index,
+                    )
+                    # Degraded path: no Page available yet (fresh server before OCR runs).
+                    from ..core.typography_review import stable_page_id as _stable_page_id
 
-                _logical_page_id = (
-                    str(pstate.logical_page_id)
-                    if pstate is not None and pstate.logical_page_id is not None
-                    else _stable_page_id(project_id=project_id, page_index=page_index)
-                )
-                page_record = PageRecord(
-                    page_id=__import__("uuid").UUID(_logical_page_id),
-                    page_index=page_index,
-                    image_path=image_path,
-                    source=page_source.value if hasattr(page_source, "value") else str(page_source),
-                )
+                    _logical_page_id = (
+                        str(pstate.logical_page_id)
+                        if pstate is not None and pstate.logical_page_id is not None
+                        else _stable_page_id(project_id=project_id, page_index=page_index)
+                    )
+                    _page_source_str = (
+                        page_source.value if hasattr(page_source, "value") else str(page_source)
+                    )
+                    page_record = PageRecord(
+                        page_id=__import__("uuid").UUID(_logical_page_id),
+                        page_index=page_index,
+                        image_path=image_path,
+                        source=_page_source_str,
+                    )
+                    from pdomain_ops.pages import set_extension as _set_ext
+
+                    from ..core.labeler_extension import LabelerPageExtension
+
+                    _set_ext(
+                        page_record,
+                        "labeler",
+                        LabelerPageExtension(
+                            page_number=page_index + 1,
+                            page_source=_page_source_str,
+                            payload_error="no Page object in payload — load or run OCR first",
+                        ),
+                    )
+                    # line_matches stays []
+
+        # GAP-1: stamp provenance_summary onto the page_record so the
+        # frontend source badge can show a tooltip.  Done here (after
+        # page_record is finalised) so page_to_line_matches stays
+        # pdomain_book_tools-import-free.
+        if page_record is not None:
+            summary = _build_provenance_summary(page_record)
+            if summary is not None:
+                page_record = page_record.model_copy(update={"provenance_summary": summary})
+
+        # C28 link 3: surface durable rotation metadata.  The rotate jobs persist
+        # ``rotation_degrees`` / ``rotation_source`` on the PageAggregate record,
+        # but ``page_to_line_matches`` rebuilds ``page_record`` fresh on every
+        # call, so the fields stay at their defaults (0 / "none") and the SPA
+        # rotation badge can never render.  Read them back from the aggregate
+        # keyed by ``pstate.page_id`` (stamped by both the OCR-lane ingest and the
+        # labeled-lane reload).  Best-effort: a store read failure degrades to the
+        # defaults rather than failing the payload.
+        if page_record is not None and page_store is not None and pstate is not None:
+            agg_page_id = pstate.page_id
+            if agg_page_id is not None:
+                try:
+                    agg_record = page_store.get_page(agg_page_id).record
+                    if agg_record.rotation_degrees or agg_record.rotation_source != "none":
+                        page_record = page_record.model_copy(
+                            update={
+                                "rotation_degrees": agg_record.rotation_degrees,
+                                "rotation_source": agg_record.rotation_source,
+                            }
+                        )
+                except Exception:  # pragma: no cover - defensive
+                    log.debug(
+                        "_page_payload: rotation-metadata read failed for page_id=%s",
+                        agg_page_id,
+                        exc_info=True,
+                    )
+
+        # Lane C / Task C2: surface whether a persisted edited-image blob exists
+        # (Lane A4 erase-pixels path writes ``pstate.edited_image_blob``) onto the
+        # labeler extension so the frontend can truthfully enable the
+        # "Reload OCR (Edited)" button. We only flip the flag to True; the default
+        # (False) already covers the no-edit case.
+        if page_record is not None and pstate is not None:
+            has_edited = getattr(pstate, "edited_image_blob", None) is not None
+            if has_edited:
+                from pdomain_ops.pages import get_extension as _get_ext
                 from pdomain_ops.pages import set_extension as _set_ext
 
-                from ..core.labeler_extension import LabelerPageExtension
+                from ..core.labeler_extension import LabelerPageExtension as _LabelerExt
 
+                existing = _get_ext(page_record, "labeler", _LabelerExt) or _LabelerExt()
                 _set_ext(
                     page_record,
                     "labeler",
-                    LabelerPageExtension(
-                        page_number=page_index + 1,
-                        page_source=page_source.value if hasattr(page_source, "value") else str(page_source),
-                        payload_error="no Page object in payload — load or run OCR first",
-                    ),
-                )
-                # line_matches stays []
-
-    # GAP-1: stamp provenance_summary onto the page_record so the
-    # frontend source badge can show a tooltip.  Done here (after
-    # page_record is finalised) so page_to_line_matches stays
-    # pdomain_book_tools-import-free.
-    if page_record is not None:
-        summary = _build_provenance_summary(page_record)
-        if summary is not None:
-            page_record = page_record.model_copy(update={"provenance_summary": summary})
-
-    # C28 link 3: surface durable rotation metadata.  The rotate jobs persist
-    # ``rotation_degrees`` / ``rotation_source`` on the PageAggregate record,
-    # but ``page_to_line_matches`` rebuilds ``page_record`` fresh on every
-    # call, so the fields stay at their defaults (0 / "none") and the SPA
-    # rotation badge can never render.  Read them back from the aggregate
-    # keyed by ``pstate.page_id`` (stamped by both the OCR-lane ingest and the
-    # labeled-lane reload).  Best-effort: a store read failure degrades to the
-    # defaults rather than failing the payload.
-    if page_record is not None and page_store is not None and pstate is not None:
-        agg_page_id = pstate.page_id
-        if agg_page_id is not None:
-            try:
-                agg_record = page_store.get_page(agg_page_id).record
-                if agg_record.rotation_degrees or agg_record.rotation_source != "none":
-                    page_record = page_record.model_copy(
-                        update={
-                            "rotation_degrees": agg_record.rotation_degrees,
-                            "rotation_source": agg_record.rotation_source,
-                        }
-                    )
-            except Exception:  # pragma: no cover - defensive
-                log.debug(
-                    "_page_payload: rotation-metadata read failed for page_id=%s",
-                    agg_page_id,
-                    exc_info=True,
+                    existing.model_copy(update={"has_edited_image": True}),
                 )
 
-    # Lane C / Task C2: surface whether a persisted edited-image blob exists
-    # (Lane A4 erase-pixels path writes ``pstate.edited_image_blob``) onto the
-    # labeler extension so the frontend can truthfully enable the
-    # "Reload OCR (Edited)" button. We only flip the flag to True; the default
-    # (False) already covers the no-edit case.
-    if page_record is not None and pstate is not None:
-        has_edited = getattr(pstate, "edited_image_blob", None) is not None
-        if has_edited:
-            from pdomain_ops.pages import get_extension as _get_ext
-            from pdomain_ops.pages import set_extension as _set_ext
+        # Encoded dims from on-disk image.  None when PIL can't open the
+        # bytes; the URL builder degrades gracefully.
+        encoded_dims: EncodedDims | None = None
+        if 0 <= page_index < len(project.image_paths):
+            dims = _read_source_dims(project_state.labeling_image_path(page_index))
+            if dims is not None:
+                encoded_dims = EncodedDims.from_source_dims(*dims)
 
-            from ..core.labeler_extension import LabelerPageExtension as _LabelerExt
+        image_url = _build_image_url(project_id, page_index, encoded_dims)
 
-            existing = _get_ext(page_record, "labeler", _LabelerExt) or _LabelerExt()
-            _set_ext(
-                page_record,
-                "labeler",
-                existing.model_copy(update={"has_edited_image": True}),
+        # Plaintext: empty until OCR runs. Rendered verbatim — text
+        # normalization is not offered (docs/architecture/18-text-normalization.md).
+        page_text_ocr = _render_plaintext(line_matches, source="ocr")
+        page_text_gt = _render_plaintext(line_matches, source="gt")
+
+        # spec-23-E §10: ``pstate.selection`` is the per-page UI selection
+        # mutated by ``POST .../selection``; echo it onto the payload so a
+        # subsequent ``GET`` sees the same selection. Defaults to empty
+        # ``Selection()`` for pages with no ``PageState`` yet.
+        selection = pstate.selection if pstate is not None else Selection()
+
+        # BUG-SMOKE-2 fix: stamp the PAGE-level generation (``pstate.generation``),
+        # not the project-level counter (``project_state.generation``).
+        #
+        # ``save_page`` validates ``body.generation == pstate.generation``; the
+        # GET response must return the same value so the frontend can echo it back
+        # on save.  The project-level counter is bumped by project load / page-nav
+        # events and starts at 4+ after a normal load, while ``pstate.generation``
+        # starts at 0 and only increments on word/line mutations.  Stamping the
+        # project-level counter caused every first save attempt to 409.
+        page_generation = pstate.generation if pstate is not None else 0
+
+        # Region/proposal assembly. Only a genuine ``Page`` carries block
+        # structure — the duck-typed test stubs some payloads use elsewhere in
+        # this file expose ``.lines`` but not ``.items``/``.words``, so this is
+        # gated on a real ``isinstance`` check rather than the looser duck-typed
+        # ``is_page`` test used above for the line-matches path.
+        _resolved_page_for_regions: Page | None = None
+        if pstate is not None and pstate.page_record is not None:
+            _raw_payload = pstate.page_record.payload
+            if isinstance(_raw_payload, Page):
+                _resolved_page_for_regions = _raw_payload
+
+        regions: list[RegionView] = []
+        proposals: list[RegionProposalView] = []
+        if _resolved_page_for_regions is not None:
+            regions, proposals = _resolve_regions_and_proposals(
+                page=_resolved_page_for_regions,
+                project_root=project.project_root,
+                page_index=page_index,
+                page_store=page_store,
+                page_id=pstate.page_id if pstate is not None else None,
             )
 
-    # Encoded dims from on-disk image.  None when PIL can't open the
-    # bytes; the URL builder degrades gracefully.
-    encoded_dims: EncodedDims | None = None
-    if 0 <= page_index < len(project.image_paths):
-        dims = _read_source_dims(project_state.labeling_image_path(page_index))
-        if dims is not None:
-            encoded_dims = EncodedDims.from_source_dims(*dims)
-
-    image_url = _build_image_url(project_id, page_index, encoded_dims)
-
-    # Plaintext: empty until OCR runs. Rendered verbatim — text
-    # normalization is not offered (docs/architecture/18-text-normalization.md).
-    page_text_ocr = _render_plaintext(line_matches, source="ocr")
-    page_text_gt = _render_plaintext(line_matches, source="gt")
-
-    # spec-23-E §10: ``pstate.selection`` is the per-page UI selection
-    # mutated by ``POST .../selection``; echo it onto the payload so a
-    # subsequent ``GET`` sees the same selection. Defaults to empty
-    # ``Selection()`` for pages with no ``PageState`` yet.
-    selection = pstate.selection if pstate is not None else Selection()
-
-    # BUG-SMOKE-2 fix: stamp the PAGE-level generation (``pstate.generation``),
-    # not the project-level counter (``project_state.generation``).
-    #
-    # ``save_page`` validates ``body.generation == pstate.generation``; the
-    # GET response must return the same value so the frontend can echo it back
-    # on save.  The project-level counter is bumped by project load / page-nav
-    # events and starts at 4+ after a normal load, while ``pstate.generation``
-    # starts at 0 and only increments on word/line mutations.  Stamping the
-    # project-level counter caused every first save attempt to 409.
-    page_generation = pstate.generation if pstate is not None else 0
-
-    # Region/proposal assembly. Only a genuine ``Page`` carries block
-    # structure — the duck-typed test stubs some payloads use elsewhere in
-    # this file expose ``.lines`` but not ``.items``/``.words``, so this is
-    # gated on a real ``isinstance`` check rather than the looser duck-typed
-    # ``is_page`` test used above for the line-matches path.
-    _resolved_page_for_regions: Page | None = None
-    if pstate is not None and pstate.page_record is not None:
-        _raw_payload = pstate.page_record.payload
-        if isinstance(_raw_payload, Page):
-            _resolved_page_for_regions = _raw_payload
-
-    regions: list[RegionView] = []
-    proposals: list[RegionProposalView] = []
-    if _resolved_page_for_regions is not None:
-        regions, proposals = _resolve_regions_and_proposals(
-            page=_resolved_page_for_regions,
-            project_root=project.project_root,
-            page_index=page_index,
-            page_store=page_store,
-            page_id=pstate.page_id if pstate is not None else None,
+        # Confirmed page kind: lifted from the same resolved ``Page`` object
+        # regions/proposals above use — only the confirm route's human action
+        # ever sets ``Page.page_kind``, so a page with no such object yet has
+        # no kind to surface.
+        page_kind: PageKind | None = (
+            _resolved_page_for_regions.page_kind if _resolved_page_for_regions is not None else None
         )
 
-    # Confirmed page kind: lifted from the same resolved ``Page`` object
-    # regions/proposals above use — only the confirm route's human action
-    # ever sets ``Page.page_kind``, so a page with no such object yet has
-    # no kind to surface.
-    page_kind: PageKind | None = (
-        _resolved_page_for_regions.page_kind if _resolved_page_for_regions is not None else None
-    )
-
-    # page_kind_reviewed: best-effort read of the durable review journal.
-    # ``PageKindReviewedStore.is_reviewed`` re-reads and re-parses the whole
-    # JSONL journal on every call, but ``_page_payload`` runs once per page
-    # GET (not in a loop), so that cost is acceptable here. Degrades to
-    # ``False`` — "not yet reviewed" — rather than failing the whole payload
-    # on a read error, the same degrade the rotation-metadata read above
-    # uses.
-    page_kind_reviewed = False
-    try:
-        page_kind_reviewed = PageKindReviewedStore(project.project_root).is_reviewed(page_index)
-    except Exception:  # pragma: no cover - defensive
-        log.debug(
-            "_page_payload: page-kind-reviewed read failed for project=%s page=%d",
-            project_id,
-            page_index,
-            exc_info=True,
-        )
-
-    # page_kind_proposal: best-effort read of the durable proposal journal,
-    # the same degrade-to-None-on-failure discipline as page_kind_reviewed
-    # above.
-    page_kind_proposal: PageKindProposalView | None = None
-    try:
-        proposal = PageKindProposalLog(project.project_root).latest_proposal_for_page(page_index)
-        if proposal is not None:
-            page_kind_proposal = PageKindProposalView(
-                proposal_id=proposal.proposal_id,
-                run_id=proposal.run_id,
-                kind=proposal.kind,
-                confidence=proposal.confidence,
-                evidence=dict(proposal.evidence),
+        # page_kind_reviewed: best-effort read of the durable review journal.
+        # ``PageKindReviewedStore.is_reviewed`` re-reads and re-parses the whole
+        # JSONL journal on every call, but ``_page_payload`` runs once per page
+        # GET (not in a loop), so that cost is acceptable here. Degrades to
+        # ``False`` — "not yet reviewed" — rather than failing the whole payload
+        # on a read error, the same degrade the rotation-metadata read above
+        # uses.
+        page_kind_reviewed = False
+        try:
+            page_kind_reviewed = PageKindReviewedStore(project.project_root).is_reviewed(page_index)
+        except Exception:  # pragma: no cover - defensive
+            log.debug(
+                "_page_payload: page-kind-reviewed read failed for project=%s page=%d",
+                project_id,
+                page_index,
+                exc_info=True,
             )
-    except Exception:  # pragma: no cover - defensive
-        log.debug(
-            "_page_payload: page-kind-proposal read failed for project=%s page=%d",
-            project_id,
-            page_index,
-            exc_info=True,
-        )
 
-    # image_drift: best-effort cheap comparison of the current source image
-    # against the digest it was OCR'd from — see ``_image_drift_for_page``.
-    image_drift: ImageDrift | None = None
-    try:
-        image_drift = _image_drift_for_page(
-            project_state=project_state,
+        # page_kind_proposal: best-effort read of the durable proposal journal,
+        # the same degrade-to-None-on-failure discipline as page_kind_reviewed
+        # above.
+        page_kind_proposal: PageKindProposalView | None = None
+        try:
+            proposal = PageKindProposalLog(project.project_root).latest_proposal_for_page(page_index)
+            if proposal is not None:
+                page_kind_proposal = PageKindProposalView(
+                    proposal_id=proposal.proposal_id,
+                    run_id=proposal.run_id,
+                    kind=proposal.kind,
+                    confidence=proposal.confidence,
+                    evidence=dict(proposal.evidence),
+                )
+        except Exception:  # pragma: no cover - defensive
+            log.debug(
+                "_page_payload: page-kind-proposal read failed for project=%s page=%d",
+                project_id,
+                page_index,
+                exc_info=True,
+            )
+
+        # image_drift: best-effort cheap comparison of the current source image
+        # against the digest it was OCR'd from — see ``_image_drift_for_page``.
+        image_drift: ImageDrift | None = None
+        try:
+            image_drift = _image_drift_for_page(
+                project_state=project_state,
+                page_index=page_index,
+                pstate=pstate,
+                page_store=page_store,
+            )
+        except Exception:  # pragma: no cover - defensive
+            log.debug(
+                "_page_payload: image-drift check failed for project=%s page=%d",
+                project_id,
+                page_index,
+                exc_info=True,
+            )
+
+        return PagePayload(
+            project_id=project_id,
             page_index=page_index,
-            pstate=pstate,
-            page_store=page_store,
+            page_record=page_record,
+            line_matches=line_matches,
+            selection=selection,
+            encoded_dims=encoded_dims,
+            line_filter=LineFilter.ALL,
+            image_url=image_url,
+            generation=page_generation,
+            page_text_ocr=page_text_ocr,
+            page_text_gt=page_text_gt,
+            regions=regions,
+            proposals=proposals,
+            page_kind=page_kind,
+            page_kind_reviewed=page_kind_reviewed,
+            page_kind_proposal=page_kind_proposal,
+            image_drift=image_drift,
         )
-    except Exception:  # pragma: no cover - defensive
-        log.debug(
-            "_page_payload: image-drift check failed for project=%s page=%d",
-            project_id,
-            page_index,
-            exc_info=True,
-        )
-
-    return PagePayload(
-        project_id=project_id,
-        page_index=page_index,
-        page_record=page_record,
-        line_matches=line_matches,
-        selection=selection,
-        encoded_dims=encoded_dims,
-        line_filter=LineFilter.ALL,
-        image_url=image_url,
-        generation=page_generation,
-        page_text_ocr=page_text_ocr,
-        page_text_gt=page_text_gt,
-        regions=regions,
-        proposals=proposals,
-        page_kind=page_kind,
-        page_kind_reviewed=page_kind_reviewed,
-        page_kind_proposal=page_kind_proposal,
-        image_drift=image_drift,
-    )
 
 
 # ── Routes ───────────────────────────────────────────────────────────
@@ -1897,68 +1921,82 @@ def save_page(
     # in-memory save. Wave 0.4: only advance last_saved_generation when a
     # content blob was written, or when no store is wired intentionally.
     # Changelog-only fallback and missing page_id must leave the page dirty.
+    #
+    # Holds the per-page lock for the whole content-save + glyph-count
+    # section below, matching every other mutation route (``toggle_validated``
+    # et al. via ``_save_to_store_best_effort``'s callers). This route was the
+    # one write path that skipped it — ``save_page_content_to_store`` reads
+    # ``page.to_dict()``, which reads ``page.items`` (and so does the
+    # glyph-review-count's ``page.words`` below), and both of those properties
+    # sort the page's shared ``_items`` list as a side effect of every read.
+    # An unlocked ``/save`` racing a concurrent ``GET`` (or another mutation)
+    # on the same page could corrupt that shared list — see the matching
+    # comment in ``_page_payload`` for the full mechanism (2026-09-18
+    # empty-page-payload race).
     content_saved = False
-    if store is not None and pstate.page_id is not None:
-        try:
-            changes = [{"type": "save_page", "page_index": page_index}]
-            payload = pstate.page_record.payload if pstate.page_record is not None else None
-            if payload is not None and callable(getattr(payload, "to_dict", None)):
-                save_page_content_to_store(
-                    page_id=pstate.page_id,
-                    page=payload,
-                    store=store,
-                    changes=changes,
-                    labeler_sidecars=pstate,
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        if store is not None and pstate.page_id is not None:
+            try:
+                changes = [{"type": "save_page", "page_index": page_index}]
+                payload = pstate.page_record.payload if pstate.page_record is not None else None
+                if payload is not None and callable(getattr(payload, "to_dict", None)):
+                    save_page_content_to_store(
+                        page_id=pstate.page_id,
+                        page=payload,
+                        store=store,
+                        changes=changes,
+                        labeler_sidecars=pstate,
+                    )
+                    content_saved = True
+                else:
+                    # No live Page to re-serialize — changelog only is not durable.
+                    log.debug(
+                        "save_page: page %d has no serializable payload — "
+                        "changelog-only write; leaving dirty bit set",
+                        page_index,
+                    )
+                    save_page_to_store(
+                        page_id=pstate.page_id,
+                        changes=changes,
+                        store=store,
+                    )
+            except Exception as exc:
+                log.exception("save_page: store persist failed project=%s page=%d", project_id, page_index)
+                return JSONResponse(
+                    status_code=500,
+                    content=ApiError(
+                        error="save_failed",
+                        message=f"failed to persist page {page_index}: {exc}",
+                    ).model_dump(),
                 )
-                content_saved = True
-            else:
-                # No live Page to re-serialize — changelog only is not durable.
-                log.debug(
-                    "save_page: page %d has no serializable payload — "
-                    "changelog-only write; leaving dirty bit set",
-                    page_index,
-                )
-                save_page_to_store(
-                    page_id=pstate.page_id,
-                    changes=changes,
-                    store=store,
-                )
-        except Exception as exc:
-            log.exception("save_page: store persist failed project=%s page=%d", project_id, page_index)
-            return JSONResponse(
-                status_code=500,
-                content=ApiError(
-                    error="save_failed",
-                    message=f"failed to persist page {page_index}: {exc}",
-                ).model_dump(),
+        elif store is None:
+            content_saved = True
+        else:
+            log.debug(
+                "save_page: page %d has no page_id — not marking clean",
+                page_index,
             )
-    elif store is None:
-        content_saved = True
-    else:
-        log.debug(
-            "save_page: page %d has no page_id — not marking clean",
-            page_index,
-        )
 
-    if content_saved:
-        pstate.last_saved_generation = pstate.generation
+        if content_saved:
+            pstate.last_saved_generation = pstate.generation
 
-    # Glyph-review gate: warn (but never block) when required and incomplete.
-    # Counts reviewed words via glyph_annotations_map vs total page words.
-    # Falls back silently when payload isn't a lifted Page (e.g. UserPageEnvelope).
-    warnings: list[str] = []
-    if app_config.glyph_review_required:
-        _page_for_count = _resolve_page_object_for_pages(pstate)
-        if _page_for_count is not None:
-            total_words = len(_page_for_count.words)
-            reviewed_words = len(pstate.glyph_annotations_map)
-            if reviewed_words < total_words:
-                unreviewed = total_words - reviewed_words
-                msg = (
-                    f"glyph_review_incomplete: {unreviewed} of"
-                    f" {total_words} word(s) have not been glyph-reviewed"
-                )
-                warnings.append(msg)
+        # Glyph-review gate: warn (but never block) when required and incomplete.
+        # Counts reviewed words via glyph_annotations_map vs total page words.
+        # Falls back silently when payload isn't a lifted Page (e.g. UserPageEnvelope).
+        warnings: list[str] = []
+        if app_config.glyph_review_required:
+            _page_for_count = _resolve_page_object_for_pages(pstate)
+            if _page_for_count is not None:
+                total_words = len(_page_for_count.words)
+                reviewed_words = len(pstate.glyph_annotations_map)
+                if reviewed_words < total_words:
+                    unreviewed = total_words - reviewed_words
+                    msg = (
+                        f"glyph_review_incomplete: {unreviewed} of"
+                        f" {total_words} word(s) have not been glyph-reviewed"
+                    )
+                    warnings.append(msg)
 
     return JSONResponse(
         status_code=200,
