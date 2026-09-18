@@ -7,7 +7,7 @@ kind: issue
 level: I2
 ---
 
-# The word edit dialog the driver contract documents does not exist
+# Word-level merge has no home in the product
 
 ## Agent Index
 
@@ -16,74 +16,89 @@ level: I2
 - **Level:** I2
 - **Last verified:** 2026-09-18
 - **Resolution:** Open
-- **Severity:** Low as a defect, medium as a contract lie. Nothing is lost; a
-  button does nothing and a documented surface is absent.
+- **Severity:** Low as a defect, but the capability is genuinely missing —
+  the toolbar button for it is a permanent, disabled stub.
 - **Affected version:** master at `fc2be39`
-- **Read when:** implementing word-level merge, editing the driver contract's
-  word-edit section, or wondering why the pencil on a word cell does nothing.
-- **Search terms:** word-edit-dialog, WordCell pencil, onEditWord, driver
-  contract 2.11, word merge, toolbar-word-merge.
+- **Read when:** implementing word-level merge, or wondering why
+  `toolbar-word-merge` never becomes clickable.
+- **Search terms:** word merge, toolbar-word-merge, WORD_MAP, ToolbarActionGrid,
+  driver contract §2.9.
 
-## The dialog is gone from the code and still in the contract
+## What's left after the word-edit dialog cleanup
 
-`data-testid="word-edit-dialog"` and its whole family appear nowhere in
-`frontend/src` outside test files. `dialogStore` has no `wordEdit` key; its keys
-are `ocrConfig`, `export`, `hotkeyHelp`, `sourceFolder`, `pageKinds` and
-`confirm`. The driver contract still documents the dialog in §2.11, and
-`tests/e2e/test_driver_contract.py::test_word_edit_dialog_testids_present`
-fails against it.
+This issue originally covered three problems: a driver-contract section
+(§2.11) documenting a word-edit dialog that no longer existed in the code, a
+pencil button on each word cell that called a handler nothing supplied, and
+word-level merge, which the driver contract tied to that dialog. The first
+two are fixed: §2.11 is retired from `docs/architecture/13-driver-contract.md`,
+and `WordCell`'s pencil now selects the word and opens the right panel
+(`ProjectPage.tsx`'s `handleEditWord`), matching `WordCell`'s own docstring.
+No dialog was rebuilt — `WordDetail` in the right panel already covers bbox,
+rebox, the char fixer, erase pixels, and the style/component palettes.
 
-That test was skipping until 2026-09-18. The tiny fixture's pages were
-one-pixel placeholders, so every test needing word content skipped in every
-environment. Seeding real words turned the skip into this failure. See the
-2026-09-18 tombstone in `docs/context/decisions.md`.
+Word-level merge is what remains. It didn't move to the right panel along
+with everything else the dialog used to do, and it has nowhere to go.
 
-## The pencil on a word cell does nothing
+## The toolbar button is a permanent stub
 
-`WordCell` renders a pencil button that calls `onEditWord`. `ProjectPage`
-mounts `WordMatchView` without passing `onEditWord`, so the click is a no-op.
-It also passes no `onCommitGt`, `onValidate`, `onClearWordTag` or
-`imageBaseUrl`.
+`ToolbarActionGrid`'s 4×14 grid always renders a `toolbar-word-merge` cell
+(driver-contract §2.9), but the grid's action map has no `merge` entry for
+the `word` scope:
 
-## This looks deliberate, except for word merge
+```ts
+// frontend/src/components/ToolbarActionGrid.tsx — WORD_MAP
+const WORD_MAP: Partial<Record<Action, string>> = {
+  refine: "word_refine",
+  "expand-refine": "word_expand_refine",
+  expand: "word_expand",
+  "w-to-l": "word_w_to_l",
+  "to-para": "word_to_para",
+  "gt-to-ocr": "word_gt_to_ocr",
+  "ocr-to-gt": "word_ocr_to_gt",
+  validate: "word_validate",
+  unvalidate: "word_unvalidate",
+  delete: "word_delete",
+  // no "merge" key
+};
+```
 
-The right panel's `WordDetail` accordion now covers what the dialog did:
-bbox, rebox, char fixer, erase pixels, and the style and component palettes.
-The absence of the dialog is total and consistent, which reads as a finished
-migration from a modal to the inline panel rather than a regression.
+Cells without a map entry render `display: none` with `data-testid-stub="true"`
+(driver-contract §2.9's convention for "not implemented" vs. "not present").
+`toolbar-word-merge` is permanently in that state — not disabled pending a
+selection, but structurally incapable of doing anything, because there is no
+mutation for it to dispatch.
 
-One capability did not move. The driver contract's §2.9 ties word-level merge
-to the dialog, `ToolbarActionGrid`'s word map has no merge entry, so
-`toolbar-word-merge` is a permanent stub, and no part of the right panel offers
-word merge. Merging two words is a real editing operation with nowhere to go.
-
-## The help modal advertises eighteen dead shortcuts for it
-
-`hotkeyMap.ts` has eighteen entries under `scope: "dialog"` — enter, escape,
-shift+enter, the arrow navigation, four nudge pairs, `r`, `shift+r`, `m`,
-`shift+m` and delete. `WordDetail` has no keyboard handling at all, so none of
-them do anything, and the help modal lists every one. Found 2026-09-18 while
-registering the hotkeys that the react-hotkeys-hook 5 bump had broken.
-
-Removing them is not a two-line change: it touches the `Scope` union,
-`hotkeyMap.test.ts`'s valid-scope list and `hotkey-bridge.ts`'s scope-to-group
-switch. It also presumes the answer to the first decision below, so it waits on
-that.
+For comparison, line-level merge works: `toolbar-line-merge` has a live
+`LINE_MAP` entry and a backend endpoint. Word-level merge has neither.
 
 ## What to decide
 
-1. **Retire §2.11** of the driver contract, and delete or rewrite
-   `test_word_edit_dialog_testids_present`, since the surface it describes was
-   replaced on purpose.
-2. **Either wire the pencil to select the word and open the right panel**,
-   which is what `WordCell`'s own docstring says it should do, **or remove the
-   button**. It should not sit there doing nothing.
-3. **Decide where word merge lives.** That is the one capability the migration
-   dropped, and it needs a home before §2.9 can be honest.
+Merging two words is a real editing operation — the driver contract's §2.9
+description of `toolbar-word-merge` implies it should exist, and it did (via
+the dialog) before the migration to the right panel. Someone needs to decide:
+
+1. **Where does word merge live?** Candidates: a `WordDetail` action in the
+   right panel (matching how bbox/rebox/erase moved there), a wired
+   `toolbar-word-merge` cell (matching how line merge already works), or a
+   hotkey-only flow. Whichever surface, it needs a backend endpoint — none
+   exists for word-level merge today (only line-level).
+2. **What does "merge" mean for two words?** Concatenate OCR/GT text with or
+   without a space, union their bboxes, keep the earlier word's `word_id` —
+   these choices need a decision before implementation, not during it.
 
 ## What is NOT broken
 
-The right panel's word editing works, and is covered by `test_ui_coverage.py`
-against the exercise fixture. Word validation, ground-truth commit and tagging
-all work from the panel. This issue is about one dead button, one documented
-surface that no longer exists, and one capability with no home.
+Every other word-editing capability works from the right panel: bbox editing,
+rebox, the char fixer, erase pixels, style/component tagging, validation, and
+GT commit. This issue is scoped to the one capability — word merge — that the
+dialog-to-panel migration dropped.
+
+## Resolution
+
+_Open._ The word-edit dialog and pencil-button parts of this issue are fixed
+(see `docs/architecture/13-driver-contract.md` §2.11 and §2.9, and
+`ProjectPage.tsx`'s `handleEditWord`). Word-level merge itself is unresolved
+pending the decision above. When it lands: wire a `merge` entry into
+`WORD_MAP` (or its right-panel equivalent) and the corresponding backend
+endpoint, set frontmatter + Agent Index `Status: retired`, add the resolving
+commit/spec link here, and route the retirement through `doc-retirer`.

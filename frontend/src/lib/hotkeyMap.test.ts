@@ -15,7 +15,6 @@ const VALID_SCOPES: Scope[] = [
   "global",
   "viewport",
   "matches",
-  "dialog",
   "source-folder",
   "gt-input",
   "region-review",

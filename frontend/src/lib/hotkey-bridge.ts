@@ -12,7 +12,6 @@
 //   global (modal openers)    → view
 //   viewport                  → selection
 //   matches                   → editing
-//   dialog                    → editing
 //   source-folder             → other
 //   gt-input                  → editing
 
@@ -108,8 +107,6 @@ export function scopeToGroup(scope: Scope, combo: string): HotkeyGroup {
     case "viewport":
       return "selection";
     case "matches":
-      return "editing";
-    case "dialog":
       return "editing";
     case "source-folder":
       return "other";

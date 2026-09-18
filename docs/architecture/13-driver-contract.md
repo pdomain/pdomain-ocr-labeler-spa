@@ -317,10 +317,13 @@ The grid has 14 columns × 4 rows. Cell testid is
 So e.g. `toolbar-page-refine` = "Refine all bboxes on this page".
 `toolbar-line-validate` = "Validate selected lines".
 
-Cells the legacy doesn't have (e.g. `toolbar-word-merge` —
-word-merge is in the dialog) are `display: none` but the testid
-still exists, with `data-testid-stub="true"` so the driver can
-distinguish "not present" from "stubbed".
+Cells the legacy doesn't have (e.g. `toolbar-word-merge`) are
+`display: none` but the testid still exists, with
+`data-testid-stub="true"` so the driver can distinguish "not present"
+from "stubbed". `toolbar-word-merge` is a permanent stub: word-level
+merge has no home in the product (§2.11 retired the dialog that used
+to host it) — see
+`docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`.
 
 ### 2.10 Typography authoring
 
@@ -328,40 +331,19 @@ The legacy toolbar style row and its test IDs are retired. Typography driver
 flows select a word, open `typography-section`, fetch its head, and submit a
 correction. Structural component and Add Word controls retain their own IDs.
 
-### 2.11 Word edit dialog
+### 2.11 Word edit dialog (retired)
 
-| Testid | What it is |
-|---|---|
-| `word-edit-dialog` | Outer Radix Dialog wrapper |
-| `dialog-header-label` | "Edit Line N, Word M" |
-| `dialog-apply-close-button` | check-icon (top-right) |
-| `dialog-close-button` | close-icon (top-right) |
-| `dialog-previous-preview-column` | Left preview column |
-| `dialog-current-preview-column` | Centre column |
-| `dialog-next-preview-column` | Right preview column |
-| `dialog-tag-chips-slot` | Container for tag chips |
-| `dialog-current-zoom-toggle` | 1x/2x/5x/10x toggle |
-| `dialog-gt-input` | GT input inside dialog |
-| `dialog-component-select` | Component select |
-| `dialog-apply-component-button` | Apply Component |
-| `dialog-clear-component-button` | Clear Component |
-| `dialog-merge-prev-button` | Merge Prev |
-| `dialog-merge-next-button` | Merge Next |
-| `dialog-split-h-button` | H |
-| `dialog-split-v-button` | V |
-| `dialog-delete-word-button` | Delete |
-| `dialog-crop-above-button` | Crop Above |
-| `dialog-crop-below-button` | Crop Below |
-| `dialog-crop-left-button` | Crop Left |
-| `dialog-crop-right-button` | Crop Right |
-| `dialog-refine-button` | Refine (preview) |
-| `dialog-expand-refine-button` | Expand + Refine (preview) |
-| `dialog-nudge-{edge}-{sign}-button` | 8 nudge buttons (edge ∈ left/right/top/bottom, sign ∈ minus/plus) |
-| `dialog-reset-button` | Reset |
-| `dialog-apply-button` | Apply |
-| `dialog-apply-refine-button` | Apply + Refine |
+The word-edit modal this section used to document does not exist in the
+code, and its testids (`word-edit-dialog`, `dialog-*`) never shipped
+alongside the inline right panel. The move from a modal to the panel was
+deliberate: `WordDetail` (right panel, §2.7) covers bbox, rebox, char
+fixer, erase pixels, and the style/component palettes that the dialog
+used to own. The pencil on a word cell (`edit-word-button-{l}-{w}`, §2.8)
+selects that word and opens the right panel — it does not open a dialog.
 
-Hotkey: `Enter` on `dialog-gt-input` commits.
+Word-level merge did not move with the rest of the dialog's surface; see
+the §2.9 note on `toolbar-word-merge` and
+`docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`.
 
 ### 2.12 Export dialog
 

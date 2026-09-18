@@ -95,6 +95,7 @@ import {
   promoteCompleteWordLines,
   selectProposal,
   useSelectionForPage,
+  selectWord,
 } from "../stores/selection-store";
 import {
   reviewSelectionIntentStore,
@@ -1210,6 +1211,15 @@ export default function ProjectPage() {
     </div>
   );
 
+  // P2-WORD-EDIT: WordCell's own docstring says the pencil "Should select
+  // the word in the selection store and open the right panel." There is no
+  // dialog to open (driver-contract §2.11 retired) — WordDetail in the right
+  // panel already covers the same ground the old modal did.
+  function handleEditWord(lineIndex: number, wordIndex: number) {
+    selectWord(idx0, lineIndex, wordIndex);
+    useUiPrefs.setState({ rightPanelOpen: true });
+  }
+
   // Right panel slot — RightPanel routes on selection-store.level.
   // Word-level content is WordDetail (Slice 16).
   // D-051 (2026-06-14): TextTabs + WordMatchView are now mounted visibly in
@@ -1226,7 +1236,7 @@ export default function ProjectPage() {
           setMatchFilter(f);
         }}
       >
-        <WordMatchView lines={lines} filter={uiPrefs.matchFilter} />
+        <WordMatchView lines={lines} filter={uiPrefs.matchFilter} onEditWord={handleEditWord} />
       </TextTabs>
       <PlaintextEditor source="gt" page={pagePayload} />
       <PlaintextEditor source="ocr" page={pagePayload} />

@@ -3,7 +3,7 @@
 // Issue #235
 //
 // Single source of truth for both registration (useHotkey) and the ? help modal.
-// Scopes: global | viewport | matches | dialog | source-folder | gt-input
+// Scopes: global | viewport | matches | source-folder | gt-input
 //
 // Combo syntax: "mod+s", "mod+shift+r", "mod+,", "shift+?" etc.
 // "mod" maps to Ctrl on Windows/Linux and Cmd on Mac (react-hotkeys-hook convention).
@@ -28,7 +28,7 @@
 // help modal; it doesn't need to know which matching mode a combo uses.
 
 export type Scope =
-  "global" | "viewport" | "matches" | "dialog" | "source-folder" | "gt-input" | "region-review";
+  "global" | "viewport" | "matches" | "source-folder" | "gt-input" | "region-review";
 
 export interface HotkeyEntry {
   combo: string;
@@ -80,26 +80,6 @@ export const HOTKEY_MAP: HotkeyEntry[] = [
   { combo: "r", scope: "matches", description: "Refine" },
   { combo: "shift+r", scope: "matches", description: "Expand+Refine" },
   { combo: "m", scope: "matches", description: "Merge words" },
-
-  // ── Word Edit Dialog ─────────────────────────────────────────────────────
-  { combo: "enter", scope: "dialog", description: "Commit GT" },
-  { combo: "escape", scope: "dialog", description: "Close dialog" },
-  { combo: "shift+enter", scope: "dialog", description: "Apply and close" },
-  { combo: "arrowleft", scope: "dialog", description: "Previous word" },
-  { combo: "arrowright", scope: "dialog", description: "Next word" },
-  { combo: "shift+arrowleft", scope: "dialog", description: "Nudge left edge" },
-  { combo: "shift+arrowright", scope: "dialog", description: "Nudge right edge" },
-  { combo: "shift+arrowup", scope: "dialog", description: "Nudge top edge (expand)" },
-  { combo: "shift+arrowdown", scope: "dialog", description: "Nudge top edge (shrink)" },
-  { combo: "ctrl+arrowleft", scope: "dialog", description: "Nudge right edge (shrink)" },
-  { combo: "ctrl+arrowright", scope: "dialog", description: "Nudge right edge (expand)" },
-  { combo: "ctrl+arrowup", scope: "dialog", description: "Nudge bottom edge (shrink)" },
-  { combo: "ctrl+arrowdown", scope: "dialog", description: "Nudge bottom edge (expand)" },
-  { combo: "r", scope: "dialog", description: "Refine" },
-  { combo: "shift+r", scope: "dialog", description: "Expand+Refine" },
-  { combo: "m", scope: "dialog", description: "Apply style" },
-  { combo: "shift+m", scope: "dialog", description: "Apply component" },
-  { combo: "delete", scope: "dialog", description: "Delete word (with confirm)" },
 
   // ── Source-folder dialog ─────────────────────────────────────────────────
   { combo: "enter", scope: "source-folder", description: "Open typed path" },
