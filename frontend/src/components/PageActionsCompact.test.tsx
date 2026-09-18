@@ -1401,6 +1401,42 @@ describe("PageActionsCompact: page-kind toolbar control", () => {
     expect(screen.getByTestId("page-kind-control")).toHaveTextContent(/propose page kinds/i);
   });
 
+  it("does not cap a normal confirmed label to a fixed width (P0-CI-SOFT review)", async () => {
+    // The toolbar-collision fix (P0-CI-SOFT follow-up) must not apply a
+    // *fixed* max-width to the button: that would ellipsis ordinary
+    // confirmed/proposed labels ("Proposed: chapter opening (0.87)") behind
+    // a hover regardless of how much room the toolbar actually has. `truncate`
+    // alone is fine — it only clips when flex-shrink genuinely runs out of
+    // room — jsdom doesn't run real layout, so a fixed `max-w-` class is the
+    // one static signal this DOM-level test can check.
+    stubPageKind({ page_kind: "chapter opening", page_kind_reviewed: true });
+    renderCompact();
+    const btn = await screen.findByTestId("page-kind-status-button");
+    await waitFor(() => {
+      expect(btn).toHaveTextContent(/chapter opening/i);
+    });
+    expect(btn.className).not.toMatch(/\bmax-w-/);
+  });
+
+  it("does not cap a normal proposed label with confidence to a fixed width (P0-CI-SOFT review)", async () => {
+    stubPageKind({
+      page_kind_proposal: {
+        proposal_id: "p1",
+        run_id: "r1",
+        kind: "chapter opening",
+        confidence: 0.87,
+        evidence: {},
+      },
+    });
+    renderCompact();
+    const btn = await screen.findByTestId("page-kind-status-button");
+    await waitFor(() => {
+      expect(btn).toHaveTextContent(/chapter opening/i);
+      expect(btn).toHaveTextContent("0.87");
+    });
+    expect(btn.className).not.toMatch(/\bmax-w-/);
+  });
+
   it("opening the control preselects the confirmed kind and Confirm re-sends it", async () => {
     stubPageKind({ page_kind: "blank", page_kind_reviewed: true });
     const spy = vi.fn(() =>

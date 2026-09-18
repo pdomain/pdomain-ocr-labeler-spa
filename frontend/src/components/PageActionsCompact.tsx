@@ -168,19 +168,28 @@ function PageKindControl({ page, confirmPageKind }: PageKindControlProps) {
     statusLabel = "No page kind";
   }
 
-  // Cap the button's rendered width (truncate + max-w) rather than letting
-  // the "No page kind — run Propose page kinds" hint grow it unbounded:
-  // page-actions-bar's buttons are shrink-0 in a fixed-width toolbar center
-  // slot, so an uncapped label here overflows past the slot's edge — with
-  // real word content, the toolbar's right slot (WorkspaceMetrics) renders a
-  // nonzero-width "N exact" strip that then sits, later in DOM order, on top
-  // of that overflow and steals its clicks (P0-CI-SOFT follow-up).
-  // page-actions-bar's own overflow-hidden (below) is the containment
-  // backstop; this truncation keeps the common "no page kind yet" case from
-  // needing it. The full hint text is still in the DOM (toHaveTextContent
-  // assertions pass) and still reaches the user via `title` on hover.
+  // Let this control shrink (min-w-0, no shrink-0) and truncate with an
+  // ellipsis, rather than capping statusLabel to a fixed max-width:
+  // page-actions-bar's other buttons already fill nearly all of the
+  // toolbar's fixed-width center slot on its own, so any uncapped label
+  // here overflows past the slot's edge — with real word content, the
+  // toolbar's right slot (WorkspaceMetrics) renders a nonzero-width "N
+  // exact" strip that then sits, later in DOM order, on top of that
+  // overflow and steals its clicks (P0-CI-SOFT follow-up). A *fixed* cap
+  // would ellipsis ordinary confirmed/proposed labels ("Proposed: chapter
+  // opening (0.87)") behind a hover too, hiding the kind and confidence for
+  // sighted non-hovering users. Flex-shrink + truncate instead only clips
+  // when the row is genuinely too narrow to fit the full text — every other
+  // button in this group keeps its natural size (this is the one child
+  // that gives way) — and shows the complete label whenever there's room.
+  // Clicking/tapping the button opens the kind select regardless of whether
+  // the hint is fully visible, so keyboard and touch users reach the same
+  // information (which kind to pick) without relying on hover; only the
+  // "try Propose page kinds instead" suggestion may need a click to fully
+  // read, via the `title` tooltip. The full hint text is still in the DOM
+  // (toHaveTextContent assertions pass).
   return (
-    <div data-testid="page-kind-control" className="flex items-center gap-1 shrink-0">
+    <div data-testid="page-kind-control" className="flex items-center gap-1 min-w-0">
       <button
         type="button"
         data-testid="page-kind-status-button"
@@ -190,7 +199,7 @@ function PageKindControl({ page, confirmPageKind }: PageKindControlProps) {
           setOpen((v) => !v);
         }}
         title={proposal ? undefined : "No page kind — run Propose page kinds to get one"}
-        className="px-2 py-0.5 text-[11px] rounded-sm border border-border-2 bg-bg-raised text-ink-2 hover:text-ink-1 hover:border-accent transition-colors max-w-[9rem] truncate"
+        className="px-2 py-0.5 text-[11px] rounded-sm border border-border-2 bg-bg-raised text-ink-2 hover:text-ink-1 hover:border-accent transition-colors truncate min-w-0"
       >
         {statusLabel}
         {!confirmed && !proposal && (
@@ -830,18 +839,30 @@ export function PageActionsCompact({ projectId, pageIndex }: PageActionsCompactP
   const provenanceSummary = pageQ.data?.page_record?.provenance_summary ?? null;
 
   return (
-    // overflow-hidden: the toolbar's center slot has a fixed width (it sits
-    // between the nav and metrics slots); without this, a button-group wider
-    // than that width silently paints past the slot's edge and on top of
-    // whatever renders in the metrics slot to its right, stealing pointer
-    // events there (P0-CI-SOFT follow-up — page-kind-status-button vs the
-    // WorkspaceMetrics "N exact" strip). Individual buttons are still
-    // shrink-0 (never squished); this only clips the group as a last resort
-    // if it's ever wider than the slot allows.
+    // overflow-hidden: the primary fix for the toolbar collision is
+    // PageKindControl's own truncation (min-w-0 + truncate) giving way
+    // before anything overflows page-actions-bar at all — verified this
+    // *is* load-bearing, not just PageKindControl's truncation alone:
+    // removing overflow-hidden with truncation still in place reintroduces
+    // the click failure on page-kind-status-button (confirmed by hand,
+    // P0-CI-SOFT follow-up). It is a hard clip, not a graceful one — at a
+    // narrow enough viewport, page-actions-bar's other buttons alone can
+    // already consume nearly all of the toolbar's fixed-width center slot,
+    // so even PageKindControl's shortest label ("No page kind", no hint)
+    // can still be a few pixels wider than the remaining room. This is the
+    // backstop for that residual case: it keeps whatever doesn't fit from
+    // ever painting on top of the metrics slot to the right, rather than
+    // guaranteeing PageKindControl is always fully visible (that would need
+    // shrinking the other, pre-existing buttons in this row too, out of
+    // scope here).
     <div data-testid="page-actions-bar" className="flex overflow-hidden">
       <ButtonGroup
         data-testid="page-actions-compact"
-        className="flex items-center gap-1 shrink-0"
+        // Not shrink-0 (unlike its individual buttons): page-actions-bar's
+        // fixed-width center slot needs *something* here able to give way
+        // when the row is too wide for the slot (P0-CI-SOFT follow-up —
+        // see PageKindControl below, the one child that actually shrinks).
+        className="flex items-center gap-1 min-w-0"
         aria-label="Page actions"
       >
         {/* D-050: driver-contract §2.5 canonical testids on visible buttons */}
