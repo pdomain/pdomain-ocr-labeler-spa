@@ -414,6 +414,7 @@ export function WordDetail({ page, projectId, pageIndex, bboxRefine }: WordDetai
         lineIndex={lineIdx}
         wordIndex={wordIdx}
         isValidated={word.is_validated}
+        wordId={word.word_id ?? null}
       />
     </div>
   );

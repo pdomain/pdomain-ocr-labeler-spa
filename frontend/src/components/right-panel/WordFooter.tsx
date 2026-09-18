@@ -18,7 +18,7 @@ import { KeyCap } from "@pdomain/pdomain-ui/primitives";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { walkSibling } from "../../stores/selection-store";
 import type { components } from "../../api/types";
-import { useTypographyReview } from "../../hooks/useTypographyReview";
+import { useTypographyHead, useTypographyReview } from "../../hooks/useTypographyReview";
 
 type PagePayload = components["schemas"]["PagePayload"];
 type ToggleValidatedRequest = components["schemas"]["ToggleValidatedRequest"];
@@ -96,6 +96,11 @@ export interface WordFooterProps {
   lineIndex: number;
   wordIndex: number;
   isValidated: boolean;
+  /** Stable typography-review word id (P2.f / P1.3's `word.word_id`).
+   * `null`/absent means this word has no stable identity yet (see
+   * `_word_to_word_match`'s conditional `word_id` assignment), so the
+   * typography-review gate below does not apply to it. */
+  wordId?: string | null;
 }
 
 export function WordFooter({
@@ -105,13 +110,29 @@ export function WordFooter({
   lineIndex,
   wordIndex,
   isValidated,
+  wordId,
 }: WordFooterProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const toggleValidated = useToggleValidated(projectId, pageIndex);
   const deleteWord = useDeleteWord(projectId, pageIndex);
   const typographyReview = useTypographyReview(projectId, pageIndex);
-  const reviewComplete = typographyReview.data?.complete ?? false;
+  // P1-VALIDATE-GATE: gate the validate direction on *this word's own*
+  // typography review, not the whole page's (docs/issues/
+  // 2026-09-18-the-per-word-validate-button-can-never-validate-a-word.md,
+  // option 2). Gating on page-wide completion made completion require every
+  // word already validated, which made the button that validates a word
+  // permanently disabled for the first unvalidated word. `typography_reviewed`
+  // is server-computed per word (`TypographyHeadResponse`, same rule as
+  // `TypographyPageReviewResponse.typography_reviewed_words`), so this reads
+  // "somebody has looked at this word's graphemes" without summing over every
+  // other word on the page. When there's no stable `wordId` yet, typography
+  // review doesn't apply to this word (TypographySection shows "Typography
+  // needs a stable word ID." in the same case) — don't block on it.
+  const typographyHead = useTypographyHead(projectId, pageIndex, wordId);
+  const wordTypographyReviewed = wordId
+    ? (typographyHead.data?.typography_reviewed ?? false)
+    : true;
 
   function handleValidate() {
     toggleValidated.mutate({ lineIndex, wordIndex, validated: !isValidated });
@@ -135,7 +156,7 @@ export function WordFooter({
       <button
         data-testid="word-footer-validate"
         onClick={handleValidate}
-        disabled={toggleValidated.isPending || (!isValidated && !reviewComplete)}
+        disabled={toggleValidated.isPending || (!isValidated && !wordTypographyReviewed)}
         className={[
           "flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm text-xs font-medium transition-colors",
           "border",

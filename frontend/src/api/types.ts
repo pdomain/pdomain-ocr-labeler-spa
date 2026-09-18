@@ -5821,6 +5821,8 @@ export interface components {
             /** Revision */
             revision: number;
             correction: components["schemas"]["TypographyCorrection"] | null;
+            /** Typography Reviewed */
+            typography_reviewed: boolean;
             /** Head Token */
             head_token: string;
         };
