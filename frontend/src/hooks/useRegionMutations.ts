@@ -30,6 +30,7 @@
 // hook instance sees a mutation any other instance started.
 
 import { useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateBookReviewQueue } from "./useBookReviewQueue";
 import type { components } from "../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -91,6 +92,11 @@ function invalidateAfterDecision(
 ): void {
   void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
   void qc.invalidateQueries({ queryKey: ["review-queue", projectId] });
+  // One-answer-to-what-to-review-next: the Rail's next-kind badge and the
+  // Queue panel's default both read useBookReviewQueue, whose region
+  // outstanding count must stay in step with every decision the same way
+  // the region-only route above does.
+  invalidateBookReviewQueue(qc, projectId);
 }
 
 // ─── useAcceptProposal ─────────────────────────────────────────────────────
