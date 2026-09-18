@@ -67,6 +67,11 @@ export async function fetchSuiteInstalledRaw(): Promise<unknown[]> {
   return body as unknown[];
 }
 
+/** Is `row.enabled` strictly `true`? Shared by every "usable sibling" check below. */
+function isEnabledRow(row: Record<string, unknown>): boolean {
+  return row["enabled"] === true;
+}
+
 /**
  * Loose per-row check: is `row` an installed, enabled app with this
  * `app_id`? Used by ExportDialogUtils, which only ever needs to know
@@ -77,7 +82,7 @@ export async function fetchSuiteInstalledRaw(): Promise<unknown[]> {
 export function isEnabledSuiteApp(row: unknown, appId: string): boolean {
   if (typeof row !== "object" || row === null) return false;
   const r = row as Record<string, unknown>;
-  return r["app_id"] === appId && r["enabled"] === true;
+  return r["app_id"] === appId && isEnabledRow(r);
 }
 
 /** The subset of the backend's `InstalledApp` row the launcher list needs. */
@@ -89,9 +94,16 @@ interface SuiteInstalledAppRow {
 
 /**
  * Strict per-row guard for the launcher list: every field
- * `toShellInstalledApp` reads must be present with the right runtime type.
+ * `toShellInstalledApp` reads must be present with the right runtime type,
+ * AND the row must be enabled. A disabled sibling is dropped here rather
+ * than rendered as a clickable tile that always 409s — pdomain-ui's
+ * `LauncherTile` has no disabled visual state, so a disabled row would look
+ * like an ordinary tile and, after the click, fall back to the same generic
+ * "Host config required" text `postLaunch`'s failure path uses for every
+ * other refusal, misdescribing why the launch didn't work.
+ *
  * A malformed row (e.g. a sibling on an incompatible pdomain-ops version)
- * is dropped rather than failing the whole list.
+ * is likewise dropped rather than failing the whole list.
  */
 function isSuiteInstalledAppRow(value: unknown): value is SuiteInstalledAppRow {
   if (typeof value !== "object" || value === null) return false;
@@ -99,7 +111,8 @@ function isSuiteInstalledAppRow(value: unknown): value is SuiteInstalledAppRow {
   return (
     typeof r["app_id"] === "string" &&
     typeof r["display_name"] === "string" &&
-    typeof r["default_port"] === "number"
+    typeof r["default_port"] === "number" &&
+    isEnabledRow(r)
   );
 }
 

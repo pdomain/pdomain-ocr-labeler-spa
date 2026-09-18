@@ -71,6 +71,21 @@ describe("fetchSuiteInstalledApps", () => {
     expect(apps).toHaveLength(1);
     expect(apps[0]?.id).toBe("pdomain-ocr-trainer-spa");
   });
+
+  it("drops a disabled row — a disabled sibling never becomes a launcher entry", async () => {
+    server.use(
+      http.get("/api/suite/installed", () =>
+        HttpResponse.json([
+          { ...FULL_ROW, enabled: false },
+          { ...FULL_ROW, app_id: "other-app" },
+        ]),
+      ),
+    );
+
+    const apps = await fetchSuiteInstalledApps();
+    expect(apps).toHaveLength(1);
+    expect(apps[0]?.id).toBe("other-app");
+  });
 });
 
 describe("fetchSuiteInstalledRaw + isEnabledSuiteApp", () => {

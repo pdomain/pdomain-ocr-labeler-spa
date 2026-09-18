@@ -60,6 +60,29 @@ describe("SuiteLauncher: lists what the route returns", () => {
   });
 });
 
+describe("SuiteLauncher: a disabled sibling", () => {
+  it("never becomes a tile — falls back to the empty state instead", async () => {
+    server.use(
+      http.get("/api/suite/installed", () =>
+        HttpResponse.json([
+          {
+            app_id: "pdomain-ocr-trainer-spa",
+            display_name: "OCR Trainer",
+            default_port: 8090,
+            enabled: false,
+          },
+        ]),
+      ),
+    );
+
+    renderLauncher();
+
+    expect(await screen.findByTestId("suite-launcher-empty")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Launch OCR Trainer" })).toBeNull();
+    expect(screen.queryByTestId("launcher-tile-pdomain-ocr-trainer-spa")).toBeNull();
+  });
+});
+
 describe("SuiteLauncher: no siblings installed", () => {
   it("says so instead of showing an empty menu", async () => {
     server.use(http.get("/api/suite/installed", () => HttpResponse.json([])));
@@ -128,7 +151,12 @@ describe("SuiteLauncher: launching a sibling", () => {
     openSpy.mockRestore();
   });
 
-  it("explains a refused launch (disabled app) with the backend's real reason", async () => {
+  it("explains a refused launch (backend 409) with the backend's real reason", async () => {
+    // The row itself reads enabled=true — a disabled row never becomes a
+    // tile at all (see "SuiteLauncher: a disabled sibling" above). This
+    // 409 models the backend refusing anyway (e.g. disabled server-side in
+    // the gap between the list fetch and the click), the race the launcher
+    // list can't rule out just by filtering at fetch time.
     server.use(
       http.get("/api/suite/installed", () =>
         HttpResponse.json([
@@ -136,7 +164,7 @@ describe("SuiteLauncher: launching a sibling", () => {
             app_id: "pdomain-ocr-trainer-spa",
             display_name: "OCR Trainer",
             default_port: 8090,
-            enabled: false,
+            enabled: true,
           },
         ]),
       ),
