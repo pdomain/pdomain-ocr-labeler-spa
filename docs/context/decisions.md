@@ -1467,3 +1467,63 @@ bulk-mark apply specifically (Task 3, the STUB this entry fixes).
   person reviewing a word. That last is cosmetic feedback with no defect
   behind it, and renaming without seeing the two panels side by side would be
   churn.
+
+### [2026-09-18] Fixed: word identity diverged from OCR text the moment ground truth was corrected
+
+- Found while making `tests/e2e/test_parity_persistence.py` honest — see that
+  file's `_prepare_word_for_validation` docstring, Finding 2, for the original
+  report.
+- `core/page_to_line_matches.py` minted a word's `word_id` from its OCR text,
+  once, when building the page payload. `api/typography.py`'s `_review_words`
+  recomputed the same word's identity from its *live* `ground_truth_text` on
+  every call instead. The two agreed only while ground truth read the same as
+  OCR. The moment a person corrected a word's ground truth — the core activity
+  of this product — every `/typography/words/{word_id}/...` lookup for that
+  word 404d, permanently, unless the edit was later reverted to exactly match
+  the OCR text. That fed straight into the per-word Validate button's gate
+  (`typography_reviewed` on `TypographyHeadResponse`, added earlier the same
+  day — see "Retired: the per-word validate button could never validate a
+  word," above): once corrected, a word could be unvalidated but never
+  validated again, reintroducing that morning's retired bug through a
+  different door.
+- Decision: word identity is derived from OCR text everywhere, matching
+  `page_to_line_matches.py` and the upstream contract's own stated invariant
+  — `pdomain_book_contracts.typography.review.make_word_id`'s docstring reads
+  "Corrections never reissue this ID." Position-only identity (reading order
+  with no text) was rejected: it survives text edits but not the word
+  add/delete/merge/split routes already in the API surface, which would have
+  meant reindexing every open review on every structural edit. A genuinely
+  stored id, assigned once and carried in the content blob, is the more
+  robust long-term answer, but every existing project has no such carrier —
+  that migration is a larger, separate change (tracked nowhere yet; flagged
+  here as future work), not bundled into this fix.
+- Corrections already recorded under the old (ground-truth-derived) id are
+  not orphaned: `_canonical_word_id_map` resolves both the current
+  (OCR-derived) id and the legacy (ground-truth-derived) id for each on-page
+  position to the same canonical id, so a lookup under either finds the same
+  word's history. New corrections continue an existing lineage's own stored
+  id (so `TypographyCorrectionLog`'s exact-match revision-chain validation —
+  deliberately word-id-scheme-agnostic, unmodified by this fix — keeps
+  matching it) and only start a fresh lineage under the current id when no
+  prior review exists.
+- One field was deliberately left alone: `_current_page_content`'s own
+  internal `"word_id"` hash ingredient (feeding `page_sha256`) still reads
+  ground-truth text, unchanged. That value is never returned to a caller —
+  only hashed — and switching it to OCR-derived text would change
+  `page_sha256` for every already-reviewed word on a page the instant this
+  shipped, breaking every open correction's epoch continuity on first load.
+  `"corrected_text"`, hashed alongside it, already changes on every
+  ground-truth edit, so nothing is lost by leaving it alone.
+- A related, pre-existing behavior surfaced while testing this, not changed
+  here: `TypographyBinding.page_sha256` is a whole-page hash, so editing any
+  one word's ground truth invalidates every word's correction epoch on that
+  page, not just the edited word's. A completed review legitimately reports
+  `typography_reviewed: false` right after any page edit and needs a fresh
+  review — expected staleness, not a bug, and out of scope here.
+- Tests: `tests/integration/test_typography_word_id_survives_gt_edit.py` —
+  the 404 reproduction, the end-to-end review-survives-an-edit case, and a
+  direct proof that a correction filed under the legacy id resolves through
+  the current one. `tests/unit/api/test_typography_corrections.py`'s fixtures
+  encoded the old (ground-truth-derived) id scheme directly and were updated
+  to the OCR-derived one.
+- Shipped in `fix/word-id-gt-divergence`.

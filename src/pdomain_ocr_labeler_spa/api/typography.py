@@ -7,7 +7,7 @@ import json
 from base64 import b64decode
 from binascii import Error as Base64Error
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from pdomain_book_tools.typography import (
@@ -51,6 +51,9 @@ from ..core.typography_review import (
 )
 from ..core.typography_review_counts import append_typography_review_counts_best_effort
 from .dependencies import bind_page_labeling_lease, get_project_state
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 router = APIRouter(tags=["typography"])
 
@@ -422,6 +425,81 @@ def _corrected_word_text(word: object) -> str:
     return text if isinstance(text, str) else ""
 
 
+def _word_identity_text(word: object) -> str:
+    """Return the OCR text this word's stable identity is derived from.
+
+    A word's ``word_id`` must survive ground-truth correction — editing
+    ground truth is the core activity of this product. This reads the same
+    field ``core/page_to_line_matches.py`` feeds into ``stable_word_id``
+    when it mints the id embedded in the page payload: raw OCR ``text``,
+    never ``ground_truth_text``. Use ``_corrected_word_text``/
+    ``_review_words`` for the word's current (ground-truth) content — a
+    deliberately different, live value.
+    """
+    text = getattr(word, "text", None)
+    return text if isinstance(text, str) else ""
+
+
+def _review_identity_texts(
+    project: Project,
+    page_index: int,
+    state: ProjectState,
+    page_override: object | None = None,
+) -> tuple[str, ...]:
+    """Return each on-page word's OCR text, in reading order.
+
+    This is the stable half of a word's identity (see
+    ``_word_identity_text``) and mirrors ``core/page_to_line_matches.py``'s
+    ``ocr_text`` exactly, so a ``word_id`` computed here always agrees with
+    the id embedded in the page payload the frontend already holds,
+    regardless of any ground-truth edit. Only used for the derived-id path
+    — bundle-backed projects carry a genuinely stored ``word_id`` and never
+    reach this function.
+    """
+    page_words = _page_words(project, page_index, state, page_override)
+    if page_words is not None:
+        return tuple(_word_identity_text(word) for word in page_words)
+    return tuple(_source_text(project, page_index, state).split())
+
+
+def _canonical_word_id_map(
+    project: Project,
+    page_index: int,
+    state: ProjectState,
+    page_override: object | None = None,
+) -> dict[str, str]:
+    """Map every id a correction might be recorded under to its current id.
+
+    Word identity moved from ground-truth text (live, the pre-fix scheme)
+    to OCR text (stable). A correction appended before this fix keeps the
+    ground-truth-derived id it was written under — the append-only journal
+    is never rewritten — so resolving "this word's history" by the new id
+    alone would silently orphan it. This maps both the current id and the
+    legacy (ground-truth-derived) id for each on-page position to the
+    current id, so a lookup that canonicalizes a stored ``word_id`` through
+    this map finds the same word's history under either scheme.
+
+    Empty for bundle-backed projects: their ``word_id`` is stored on the
+    imported ``WordTypography``, never derived, so no legacy scheme exists.
+    """
+    if state.labeling_bundle is not None:
+        return {}
+    page_id = _logical_page_id(project, page_index, state)
+    identity_texts = _review_identity_texts(project, page_index, state, page_override)
+    legacy_texts = _review_words(project, page_index, state, page_override)
+    mapping: dict[str, str] = {}
+    for index, identity_text in enumerate(identity_texts):
+        current_id = stable_word_id(
+            project_id=project.project_id, page_id=page_id, reading_order=index, text=identity_text
+        )
+        legacy_id = stable_word_id(
+            project_id=project.project_id, page_id=page_id, reading_order=index, text=legacy_texts[index]
+        )
+        mapping[current_id] = current_id
+        mapping[legacy_id] = current_id
+    return mapping
+
+
 def _text_validated_word_ids(
     project: Project,
     page_index: int,
@@ -439,13 +517,13 @@ def _text_validated_word_ids(
     if page_words is None:
         return set()
     page_id = _logical_page_id(project, page_index, state)
-    texts = _review_words(project, page_index, state, page_override)
+    identity_texts = _review_identity_texts(project, page_index, state, page_override)
     return {
         stable_word_id(
             project_id=project.project_id,
             page_id=page_id,
             reading_order=index,
-            text=texts[index],
+            text=identity_texts[index],
         )
         for index, word in enumerate(page_words)
         if "validated" in (getattr(word, "word_labels", None) or ())
@@ -505,6 +583,19 @@ def _current_page_content(
     state: ProjectState,
     page_override: object | None = None,
 ) -> object:
+    """Build the hash input for this page's ``page_sha256`` staleness fingerprint.
+
+    Deliberately keeps its own ``"word_id"`` sub-field ground-truth-derived
+    (via ``_corrected_word_text``), matching the pre-fix scheme, even though
+    that is no longer this project's real word identity elsewhere (see
+    ``_review_identity_texts``). This value is never returned to a caller —
+    it is only hashed into ``page_sha256`` — and switching it to the
+    OCR-derived identity would change that hash for every already-reviewed
+    word on the page the moment this ships, breaking every existing
+    correction's epoch continuity in ``TypographyCorrectionLog.current_epoch``
+    on first load. ``"corrected_text"`` below already changes this hash on
+    every ground-truth edit, so nothing is lost by leaving this alone.
+    """
     page = _current_page(project, page_index, state, page_override)
     if page is None:
         line_words: list[list[object]] = [list(_source_text(project, page_index, state).split())]
@@ -570,12 +661,19 @@ def _word_text(
     if bundle_word is not None:
         return bundle_word.text
     page_id = _logical_page_id(project, page_index, state)
-    for index, text in enumerate(_review_words(project, page_index, state, page_override)):
+    # Canonicalize first: a caller may still hold a legacy (ground-truth-
+    # derived) id minted before this fix shipped — see
+    # ``_canonical_word_id_map``.
+    id_map = _canonical_word_id_map(project, page_index, state, page_override)
+    canonical_word_id = id_map.get(word_id, word_id)
+    identity_texts = _review_identity_texts(project, page_index, state, page_override)
+    content_texts = _review_words(project, page_index, state, page_override)
+    for index, identity_text in enumerate(identity_texts):
         candidate = stable_word_id(
-            project_id=project.project_id, page_id=page_id, reading_order=index, text=text
+            project_id=project.project_id, page_id=page_id, reading_order=index, text=identity_text
         )
-        if candidate == word_id:
-            return text
+        if candidate == canonical_word_id:
+            return content_texts[index]
     raise HTTPException(status_code=404, detail="word not found on page")
 
 
@@ -589,14 +687,15 @@ def _active_word_ids(
     if bundle is not None:
         return {word.word_id for word in bundle.words}
     page_id = _logical_page_id(project, page_index, state)
+    identity_texts = _review_identity_texts(project, page_index, state, page_override)
     return {
         stable_word_id(
             project_id=project.project_id,
             page_id=page_id,
             reading_order=index,
-            text=text,
+            text=identity_text,
         )
-        for index, text in enumerate(_review_words(project, page_index, state, page_override))
+        for index, identity_text in enumerate(identity_texts)
     }
 
 
@@ -651,6 +750,12 @@ def _current_head(
     log: TypographyCorrectionLog,
     state: ProjectState,
 ) -> TypographyHeadResponse:
+    # A caller may still hold a legacy (ground-truth-derived) id minted
+    # before word identity moved to OCR text — canonicalize up front so a
+    # stale-but-still-valid id keeps resolving, and the response hands back
+    # the current id going forward. See ``_canonical_word_id_map``.
+    id_map = _canonical_word_id_map(project, page_index, state)
+    word_id = id_map.get(word_id, word_id)
     logical_page_id = _logical_page_id(project, page_index, state)
     initial = _initial_binding(project, page_index, word_id, state)
     records = log.current_epoch(
@@ -658,7 +763,14 @@ def _current_head(
         logical_page_id=logical_page_id,
         current=initial,
     )
-    word_head = next((row.correction for row in reversed(records) if row.correction.word_id == word_id), None)
+    word_head = next(
+        (
+            row.correction
+            for row in reversed(records)
+            if id_map.get(row.correction.word_id, row.correction.word_id) == word_id
+        ),
+        None,
+    )
     text = _word_text(project, page_index, word_id, state)
     response = TypographyHeadResponse(
         project_id=project.project_id,
@@ -689,11 +801,22 @@ def _correction_lineage_binding(
     initial: TypographyBinding,
     records: tuple[TypographyJournalEnvelope, ...],
     word_id: str,
+    id_map: Mapping[str, str],
 ) -> TypographyBinding:
-    """Resolve portable correction ancestry without replacing persisted UI state."""
+    """Resolve portable correction ancestry without replacing persisted UI state.
+
+    *word_id* and every ``record.correction.word_id`` are canonicalized
+    through *id_map* before comparison, so a lineage that started under a
+    legacy (ground-truth-derived) id — see ``_canonical_word_id_map`` — is
+    still recognized as the same word's history.
+    """
     page_head = records[-1].correction if records else None
     word_head = next(
-        (record.correction for record in reversed(records) if record.correction.word_id == word_id),
+        (
+            record.correction
+            for record in reversed(records)
+            if id_map.get(record.correction.word_id, record.correction.word_id) == word_id
+        ),
         None,
     )
     return TypographyBinding(
@@ -759,6 +882,7 @@ def append_typography_correction(
     taxonomy = state.labeling_bundle.taxonomy if state.labeling_bundle else TYPOGRAPHY_TAXONOMY
     log = TypographyCorrectionLog(project.project_root, corpus_root=project.project_root.parent)
     with state.get_page_lock(page_index):
+        id_map = _canonical_word_id_map(project, page_index, state)
         head = _current_head(project, page_index, word_id, log, state)
         initial = _initial_binding(project, page_index, word_id, state)
         records = log.current_epoch(
@@ -766,7 +890,7 @@ def append_typography_correction(
             logical_page_id=logical_page_id,
             current=initial,
         )
-        lineage = _correction_lineage_binding(initial, records, word_id)
+        lineage = _correction_lineage_binding(initial, records, head.word_id, id_map)
         if submission.expected_head != head.head_token:
             raise HTTPException(status_code=409, detail="typography head is stale")
         if (
@@ -789,7 +913,13 @@ def append_typography_correction(
         try:
             correction = TypographyCorrection(
                 correction_id=submission.correction_id,
-                word_id=word_id,
+                # Continue the existing lineage's own stored id — which may
+                # be a legacy, ground-truth-derived id minted before this
+                # fix shipped — so ``TypographyCorrectionLog``'s exact-match
+                # revision-chain validation (``core/typography_review.py``)
+                # keeps matching it. A word with no prior review starts a
+                # fresh lineage under its current (OCR-derived) id.
+                word_id=(head.correction.word_id if head.correction is not None else head.word_id),
                 revision=head.revision + 1,
                 supersedes_id=head.correction.correction_id if head.correction else None,
                 base_page_sha256=lineage.page_sha256,
@@ -1021,11 +1151,16 @@ def typography_page_review(
         )
     else:
         records = ()
+    # Canonicalize every stored correction's id before grouping: a lineage
+    # that started under a legacy (ground-truth-derived) id — see
+    # ``_canonical_word_id_map`` — must still roll up under the same word.
+    id_map = _canonical_word_id_map(project, page_index, state, page)
     heads_by_word: dict[str, TypographyCorrection] = {}
     first_by_word: dict[str, TypographyCorrection] = {}
     for record in records:
-        first_by_word.setdefault(record.correction.word_id, record.correction)
-        heads_by_word[record.correction.word_id] = record.correction
+        canonical_id = id_map.get(record.correction.word_id, record.correction.word_id)
+        first_by_word.setdefault(canonical_id, record.correction)
+        heads_by_word[canonical_id] = record.correction
     text_validated_word_ids = _text_validated_word_ids(project, page_index, state, page)
     heads_by_word = {
         word_id: correction for word_id, correction in heads_by_word.items() if word_id in active_word_ids
@@ -1035,17 +1170,17 @@ def typography_page_review(
     }
     total = len(active_word_ids)
     lineage_root = records[0].correction if records else None
-    heads = tuple(sorted(heads_by_word.values(), key=lambda item: item.word_id))
+    canonical_heads = tuple(sorted(heads_by_word.items(), key=lambda item: item[0]))
     text_reviewed = 0
     typography_reviewed_count = 0
-    blocked = total - len(heads)
-    for correction in heads:
+    blocked = total - len(canonical_heads)
+    for canonical_id, correction in canonical_heads:
         try:
-            current = _initial_binding(project, page_index, correction.word_id, state, page)
+            current = _initial_binding(project, page_index, canonical_id, state, page)
         except HTTPException:
             stale = True
         else:
-            first = first_by_word[correction.word_id]
+            first = first_by_word[canonical_id]
             stale = (
                 lineage_root is None
                 or lineage_root.base_page_sha256 != current.page_sha256
@@ -1053,7 +1188,7 @@ def typography_page_review(
                 or first.base_text_sha256 != current.text_sha256
                 or lineage_root.page_head_sha256 != current.page_head_sha256
             )
-        valid_text = not stale and correction.word_id in text_validated_word_ids
+        valid_text = not stale and canonical_id in text_validated_word_ids
         valid_typography = not stale and typography_reviewed(
             correction, required_labels=_TYPOGRAPHY_REQUIRED_LABELS
         )
@@ -1067,13 +1202,13 @@ def typography_page_review(
         project_id=project_id,
         page_index=page_index,
         logical_page_id=_logical_page_id(project, page_index, state),
-        reviewed_words=len(heads),
+        reviewed_words=len(canonical_heads),
         text_reviewed_words=text_reviewed,
         typography_reviewed_words=typography_reviewed_count,
         blocked_words=blocked,
         total_words=total,
         complete=(text_reviewed == total and typography_reviewed_count == total and blocked == 0),
-        heads=heads,
+        heads=tuple(correction for _canonical_id, correction in canonical_heads),
     )
 
 
@@ -1212,8 +1347,13 @@ def export_typography_correction_bundle(
             )
         else:
             records = ()
+        # Canonicalize every stored correction's id before matching against
+        # it: a lineage that started under a legacy (ground-truth-derived)
+        # id — see ``_canonical_word_id_map`` — must still be selectable and
+        # exportable under its current word.
+        id_map = _canonical_word_id_map(project, page_index, state)
         text_validated_word_ids = _text_validated_word_ids(project, page_index, state)
-        latest_ids = {record.correction.word_id for record in records}
+        latest_ids = {id_map.get(record.correction.word_id, record.correction.word_id) for record in records}
         selected_ids = latest_ids if request.selected_word_ids is None else set(request.selected_word_ids)
         if (
             not records
@@ -1230,7 +1370,11 @@ def export_typography_correction_bundle(
         lineage_root = records[0].correction
         for word_id in selected_ids:
             initial = _initial_binding(project, page_index, word_id, state)
-            word_root = next(record.correction for record in records if record.correction.word_id == word_id)
+            word_root = next(
+                record.correction
+                for record in records
+                if id_map.get(record.correction.word_id, record.correction.word_id) == word_id
+            )
             if (
                 lineage_root.base_page_sha256 != initial.page_sha256
                 or lineage_root.base_image_sha256 != initial.image_sha256
@@ -1240,7 +1384,9 @@ def export_typography_correction_bundle(
                 raise HTTPException(status_code=409, detail="selected correction head is stale")
         latest_by_word = {
             word_id: next(
-                record.correction for record in reversed(records) if record.correction.word_id == word_id
+                record.correction
+                for record in reversed(records)
+                if id_map.get(record.correction.word_id, record.correction.word_id) == word_id
             )
             for word_id in selected_ids
         }
@@ -1269,7 +1415,7 @@ def export_typography_correction_bundle(
         selected_head_positions = tuple(
             index
             for index, record in enumerate(records)
-            if record.correction.word_id in selected_ids
+            if id_map.get(record.correction.word_id, record.correction.word_id) in selected_ids
             and not any(
                 later.correction.word_id == record.correction.word_id for later in records[index + 1 :]
             )
