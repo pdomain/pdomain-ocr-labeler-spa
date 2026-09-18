@@ -8,11 +8,14 @@ real reviewer would see:
     filter) drains to zero rows once every word is validated.
   - paragraph merge      → after ``para-merge`` the page reports one fewer
     paragraph (read back through the API the UI itself drives).
-  - word style apply     → the right-panel ``style-chip-italics`` flips to
-    ``aria-pressed="true"`` after the chip is clicked and the page query
-    re-fetches.
 
 These exercise the real Lane A–E wiring end-to-end through the rendered UI.
+
+The word-style-apply case this file used to cover (V2c) was retired by
+6a04cbe (canonical grapheme review editor): whole-word styling and its
+``style-chip-italics`` toggle were removed in favor of the typography
+review workflow, which has no equivalent single-click "chip goes active"
+affordance to assert on.
 
 Spec: docs/plans/2026-06-03-labeler-spa-legacy-parity.md §M-Final V2
 """
@@ -31,7 +34,6 @@ from tests.e2e.exercise_real_project import (
     _wait_for_line_cards,
 )
 from tests.e2e.helpers import require_page_line_matches
-from tests.e2e.test_ui_coverage import _select_first_word_via_hierarchy
 
 pytestmark = pytest.mark.e2e
 
@@ -157,43 +159,3 @@ def test_paragraph_merge_reduces_paragraph_count(exercise_server: ExerciseServer
             break
         time.sleep(0.3)
     assert after == before - 1, f"paragraph count {before} -> {after} (expected one fewer)"
-
-
-# ---------------------------------------------------------------------------
-# V2c — word style apply flips the right-panel style chip to active
-# ---------------------------------------------------------------------------
-
-
-def test_word_style_apply_marks_chip_active(exercise_server: ExerciseServer, page: Page) -> None:
-    """Apply 'italics' to a word via the right-panel StylePalette; the chip
-    flips to aria-pressed='true' once the page query re-fetches.
-
-    This is the visible DOM proof that the apply-style round-trip
-    (POST .../style → page invalidation → re-render with the new label)
-    completed — not merely a network 200.
-    """
-    _require_word_content(exercise_server.base_url, page_index=0)
-    _goto_project_page(page, exercise_server.base_url, 1)
-    _wait_for_line_cards(page)
-
-    selected = _select_first_word_via_hierarchy(page)
-    assert selected, "could not select a word node via the hierarchy tree"
-
-    chip = page.locator('[data-testid="style-chip-italics"]').first
-    chip.wait_for(state="visible", timeout=10_000)
-
-    # If the word is already italic (fixture state), this assertion is still
-    # meaningful: we toggle and assert the resulting on-state.
-    if chip.get_attribute("aria-pressed") == "true":
-        # Toggle to mixed then off then back on to leave a deterministic state.
-        chip.click()  # on -> mixed
-        time.sleep(0.4)
-        chip.click()  # mixed -> off
-        time.sleep(0.4)
-
-    chip.click()  # -> on
-    page.wait_for_selector(
-        '[data-testid="style-chip-italics"][aria-pressed="true"]',
-        timeout=15_000,
-    )
-    assert chip.get_attribute("aria-pressed") == "true"
