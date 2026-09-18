@@ -62,7 +62,8 @@ export interface ButtonStates {
   line_validate: boolean;
   line_unvalidate: boolean;
   line_delete: boolean;
-  // Word row (10 buttons — no Merge, SplitAfter, SplitSelected)
+  // Word row (11 buttons — no SplitAfter, SplitSelected)
+  word_merge: boolean;
   word_refine: boolean;
   word_expand_refine: boolean;
   word_expand: boolean;
@@ -73,6 +74,44 @@ export interface ButtonStates {
   word_validate: boolean;
   word_unvalidate: boolean;
   word_delete: boolean;
+}
+
+/**
+ * Word merge acts on exactly two selected words that are adjacent in the
+ * same line — see docs/issues/2026-09-18-the-word-edit-dialog-the-driver-
+ * contract-documents-does-not-exist.md ruling 1. Anything else leaves
+ * `toolbar-word-merge` disabled with a reason, rather than a silently dead
+ * button (driver-contract §2.9's stub/disabled distinction).
+ *
+ * This only covers the structural precondition the client can check for
+ * free from `selection` alone. Whether either word carries durable
+ * per-word state (typography corrections, glyph annotations, char bboxes)
+ * is authoritative server-side data the button does not have — a
+ * structurally-valid pair still gets a live 400 with a specific reason if
+ * the server refuses it (surfaced via the toolbar's existing error toast).
+ */
+export function wordMergeEligibility(selection: Selection): {
+  enabled: boolean;
+  reason: string | null;
+} {
+  const words = selection.selected_words;
+  if (words.length !== 2) {
+    return { enabled: false, reason: "Select exactly two words to merge." };
+  }
+  const first = words[0];
+  const second = words[1];
+  if (!first || !second) {
+    return { enabled: false, reason: "Select exactly two words to merge." };
+  }
+  const [lineA, wordA] = first;
+  const [lineB, wordB] = second;
+  if (lineA !== lineB) {
+    return { enabled: false, reason: "Selected words must be on the same line to merge." };
+  }
+  if (Math.abs(wordA - wordB) !== 1) {
+    return { enabled: false, reason: "Selected words must be adjacent to merge." };
+  }
+  return { enabled: true, reason: null };
 }
 
 export function useToolbarButtonStates(selection: Selection, page: PageData): ButtonStates {
@@ -166,6 +205,7 @@ export function useToolbarButtonStates(selection: Selection, page: PageData): Bu
     line_unvalidate: nLines >= 1 && selectedLinesHaveValidated,
     line_delete: nLines >= 1,
 
+    word_merge: wordMergeEligibility(selection).enabled,
     word_refine: nWords >= 1,
     word_expand_refine: nWords >= 1,
     word_expand: nWords >= 1,

@@ -3,13 +3,13 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-09-17
+last_verified: 2026-09-18
 ---
 
 # 13 — Driver-Compatibility Contract
 
 > **Status**: Active
-> **Last updated**: 2026-09-17
+> **Last updated**: 2026-09-18
 > **Spec-Issue**: pdomain/pdomain-ocr-labeler-spa#30
 
 The `pd-ocr-labeler-driver` agent operates the labeler UI through
@@ -317,13 +317,25 @@ The grid has 14 columns × 4 rows. Cell testid is
 So e.g. `toolbar-page-refine` = "Refine all bboxes on this page".
 `toolbar-line-validate` = "Validate selected lines".
 
-Cells the legacy doesn't have (e.g. `toolbar-word-merge`) are
-`display: none` but the testid still exists, with
-`data-testid-stub="true"` so the driver can distinguish "not present"
-from "stubbed". `toolbar-word-merge` is a permanent stub: word-level
-merge has no home in the product (§2.11 retired the dialog that used
-to host it) — see
-`docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`.
+Cells the legacy doesn't have are `display: none` but the testid still
+exists, with `data-testid-stub="true"` so the driver can distinguish
+"not present" from "stubbed".
+
+`toolbar-word-merge` is live (word-level merge's home in the product —
+§2.11 retired the dialog that used to host it; see
+`docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`).
+It merges exactly two selected words that are adjacent in the same line
+(`selection.selected_words`), concatenating OCR and GT text with no
+separator and unioning their bounding boxes into the first word's slot;
+the second word is removed. It is disabled — with a reason in its
+`title` — for any other selection shape (not exactly two words, words on
+different lines, non-adjacent words). A structurally valid pair the
+server still refuses (either word carries typography corrections, glyph
+annotations, or char bboxes — merging would orphan that per-word state)
+surfaces as a toast, not a disabled button: the client cannot know that
+case without asking the server. Backend: `POST
+.../pages/{page_index}/words/merge`, body `{word_indices: [[li, wi],
+[li, wi]]}`.
 
 ### 2.10 Typography authoring
 
@@ -341,8 +353,10 @@ fixer, erase pixels, and the style/component palettes that the dialog
 used to own. The pencil on a word cell (`edit-word-button-{l}-{w}`, §2.8)
 selects that word and opens the right panel — it does not open a dialog.
 
-Word-level merge did not move with the rest of the dialog's surface; see
-the §2.9 note on `toolbar-word-merge` and
+Word-level merge did not move with the rest of the dialog's surface — it
+now lives in the toolbar's word-scope `toolbar-word-merge` cell (§2.9)
+over a multi-word selection, not in `WordDetail`, which shows one word at
+a time. See
 `docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`.
 
 ### 2.12 Export dialog

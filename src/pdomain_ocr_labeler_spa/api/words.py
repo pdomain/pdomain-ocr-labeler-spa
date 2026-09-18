@@ -63,10 +63,11 @@ from fastapi.responses import JSONResponse
 from pdomain_book_tools.ocr.page import Page
 from pydantic import BaseModel, field_validator
 
-from ..core.models import BBox, GlyphAnnotationsModel
+from ..core.models import BBox, GlyphAnnotationsModel, Project
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import PageState, ProjectState
+from ..core.typography_review import TypographyCorrectionLog, stable_page_id, stable_word_id
 from ..settings import Settings
 from .dependencies import (
     bind_page_labeling_lease,
@@ -204,6 +205,22 @@ class MergeWordsRequest(BaseModel):
     """Spec §2 lines 327-328."""
 
     direction: Literal["left", "right"]
+
+
+class MergeWordsBatchRequest(BaseModel):
+    """``POST .../words/merge`` body — word-scope collective merge.
+
+    Mirrors ``MergeLinesRequest``'s collective shape (a list the toolbar's
+    current selection fills), not the older per-word ``direction`` shape
+    ``MergeWordsRequest`` uses. Word merge is stricter than line merge:
+    exactly two entries, same line, adjacent word indices — see
+    ``merge_words_batch`` for the validation and
+    ``docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md``
+    for why.
+    """
+
+    scope: Literal["word"] = "word"
+    word_indices: list[tuple[int, int]] = []
 
 
 # ``ErasePixelsRequest`` lives in ``api/pages.py`` now (imported above) —
@@ -1033,6 +1050,224 @@ def split_word(
     )
 
 
+# ── Word merge — shared core (words/{li}/{wi}/merge + words/merge) ─────
+#
+# Two routes reach the same merge: the older per-word `direction` shape
+# (`merge_words`, used by StructureSection's "Merge with prev/next") and
+# the collective shape the toolbar's `toolbar-word-merge` cell sends
+# (`merge_words_batch`, mirroring `lines/merge`). Both share
+# `_merge_words_core` so the refusal check, text/bbox merge, and sidecar
+# reindex live in exactly one place — see
+# docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md
+# ruling 2. Deliberately does NOT delegate to pdomain-book-tools'
+# `Line.merge_word_left`/`merge_word_right`: that helper clears
+# `ground_truth_text` for *every* word in the line (a line-wide GT reset
+# meant for the "line shape changed" case), which would erase the GT of
+# words this merge never touched — the wrong result for "OCR split one
+# word in two". `Word.merge()` (the same primitive book-tools' helper
+# calls under the hood) concatenates OCR + GT text with no separator and
+# unions the two bounding boxes; that is exactly ruling 2's contract, so
+# it is called directly instead.
+
+_MergeRefusalKind = Literal["char_bbox", "glyph_annotation", "typography_correction"]
+
+
+def _resolve_logical_page_id(project: Project, page_index: int, project_state: ProjectState) -> str:
+    """Return the same logical page id ``api/typography.py::_logical_page_id`` would.
+
+    Typography corrections are keyed by a word_id derived from this id
+    (``stable_word_id``) — the refusal check below must resolve the exact
+    same id typography reads/writes use, including the labeling-bundle
+    override, or it would silently miss corrections that exist under a
+    bundle-scoped page id.
+    """
+    bundle = project_state.labeling_bundle
+    if bundle is not None:
+        return bundle.page_id
+    return stable_page_id(project_id=project.project_id, page_index=page_index)
+
+
+def _reading_order_for_word(page: Any, line_index: int, word_index: int) -> int:
+    """Return this word's page-wide reading-order index (0-based).
+
+    Mirrors the counter in ``core/page_to_line_matches.py`` (words counted
+    line-by-line, word-by-word) — ``stable_word_id`` needs the identical
+    value, or it derives a different id than the one the typography
+    journal was written under.
+    """
+    order = 0
+    for li, line in enumerate(getattr(page, "lines", None) or []):
+        words = getattr(line, "words", None) or []
+        if li == line_index:
+            return order + word_index
+        order += len(words)
+    return order + word_index
+
+
+def _word_merge_annotation_kind(
+    *,
+    pstate: PageState,
+    line_index: int,
+    word_index: int,
+    word: Any,
+) -> Literal["char_bbox", "glyph_annotation"] | None:
+    """Return which sidecar/attribute kind this word carries, else None.
+
+    ``char_bboxes_map``/``glyph_annotations_map`` are keyed positionally
+    (``"{line_index}_{word_index}"``), NOT by the typography word_id — a
+    key merely being present (even an explicitly-empty
+    ``GlyphAnnotationsModel()``) means a human reviewed this word, so its
+    presence alone is enough to refuse (see ``set_glyph_annotations``).
+    ``word.glyph_annotations`` (the pdomain-book-tools attribute) is
+    checked too — ``core/page_to_line_matches.py`` reads it as a fallback
+    when the sidecar has no entry, so it is a second live source of the
+    same kind of state.
+    """
+    sidecar_key = f"{line_index}_{word_index}"
+    if sidecar_key in pstate.char_bboxes_map:
+        return "char_bbox"
+    if sidecar_key in pstate.glyph_annotations_map:
+        return "glyph_annotation"
+    if getattr(word, "glyph_annotations", None) is not None:
+        return "glyph_annotation"
+    return None
+
+
+def _word_merge_has_typography_correction(
+    *,
+    project: Project,
+    logical_page_id: str,
+    page: Any,
+    line_index: int,
+    word_index: int,
+    word: Any,
+) -> bool:
+    """Return True when this word's derived word_id has a typography correction."""
+    reading_order = _reading_order_for_word(page, line_index, word_index)
+    text = str(getattr(word, "text", "") or "")
+    word_id = stable_word_id(
+        project_id=project.project_id,
+        page_id=logical_page_id,
+        reading_order=reading_order,
+        text=text,
+    )
+    log = TypographyCorrectionLog(project.project_root, corpus_root=project.project_root.parent)
+    return log.head(logical_page_id, word_id) is not None
+
+
+def _word_merge_invalid_selection(message: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content=ApiError(error="word_merge_invalid_selection", message=message).model_dump(),
+    )
+
+
+def _word_merge_refused(*, kind: _MergeRefusalKind, line_index: int, word_index: int) -> JSONResponse:
+    readable = kind.replace("_", " ")
+    return JSONResponse(
+        status_code=400,
+        content=ApiError(
+            error="word_merge_would_orphan_annotations",
+            message=(
+                f"Cannot merge: word at line {line_index}, word {word_index} carries {readable} "
+                "that would be lost. Merge is refused rather than orphaning it."
+            ),
+            details={"line_index": line_index, "word_index": word_index, "kind": kind},
+        ).model_dump(),
+    )
+
+
+def _reindex_word_sidecar_map(
+    mapping: dict[str, object], *, line_index: int, removed_word_index: int
+) -> None:
+    """Shift keys for words after ``removed_word_index`` in ``line_index`` down by one.
+
+    Called after a word is removed from a line (merge). ``mapping`` is
+    keyed ``"{line_index}_{word_index}"`` — every later word in the same
+    line now sits one index lower, so its sidecar entry must move with it
+    or it silently attaches to the wrong word on the next read.
+    """
+    prefix = f"{line_index}_"
+    updated: dict[str, object] = {}
+    for key, value in mapping.items():
+        if key.startswith(prefix):
+            suffix = key[len(prefix) :]
+            if suffix.isdigit():
+                word_index = int(suffix)
+                if word_index > removed_word_index:
+                    updated[f"{line_index}_{word_index - 1}"] = value
+                    continue
+        updated[key] = value
+    mapping.clear()
+    mapping.update(updated)
+
+
+def _reindex_word_sidecar_maps_after_removal(
+    pstate: PageState, *, line_index: int, removed_word_index: int
+) -> None:
+    _reindex_word_sidecar_map(
+        pstate.char_bboxes_map, line_index=line_index, removed_word_index=removed_word_index
+    )
+    _reindex_word_sidecar_map(
+        pstate.glyph_annotations_map, line_index=line_index, removed_word_index=removed_word_index
+    )
+    _reindex_word_sidecar_map(
+        pstate.glyph_predictions_map, line_index=line_index, removed_word_index=removed_word_index
+    )
+
+
+def _merge_words_core(
+    *,
+    project: Project,
+    project_state: ProjectState,
+    pstate: PageState,
+    page: Any,
+    page_index: int,
+    line_index: int,
+    keep_index: int,
+    remove_index: int,
+) -> JSONResponse | None:
+    """Merge ``remove_index`` into ``keep_index`` within one line, or refuse.
+
+    Returns a 400 ``JSONResponse`` when either word carries typography
+    corrections, glyph annotations, or char bboxes (see module docstring
+    above ``_MergeRefusalKind``). On success mutates ``page``/``pstate``
+    in place (merged text/bbox on the surviving word, sidecar-map
+    reindex) and returns None; the caller still owns
+    ``_finalize_structural_edit`` (rematch + persist — the single choke
+    point for content saves, per ``save_page_content_to_store``).
+    """
+    line = page.lines[line_index]
+    words = line.words
+    keep_word = words[keep_index]
+    remove_word = words[remove_index]
+
+    logical_page_id = _resolve_logical_page_id(project, page_index, project_state)
+    for word_index, word in ((keep_index, keep_word), (remove_index, remove_word)):
+        kind: _MergeRefusalKind | None = _word_merge_annotation_kind(
+            pstate=pstate, line_index=line_index, word_index=word_index, word=word
+        )
+        if kind is None and _word_merge_has_typography_correction(
+            project=project,
+            logical_page_id=logical_page_id,
+            page=page,
+            line_index=line_index,
+            word_index=word_index,
+            word=word,
+        ):
+            kind = "typography_correction"
+        if kind is not None:
+            return _word_merge_refused(kind=kind, line_index=line_index, word_index=word_index)
+
+    # Word.merge() — concatenates OCR + GT text with no separator (in
+    # left-to-right bbox order) and unions the two bounding boxes. `keep_word`
+    # survives at `keep_index`; `remove_word` is discarded.
+    keep_word.merge(remove_word)
+    line.remove_item(remove_word)
+    _reindex_word_sidecar_maps_after_removal(pstate, line_index=line_index, removed_word_index=remove_index)
+    return None
+
+
 @router.post(
     "/{project_id}/pages/{page_index}/words/{line_index}/{word_index}/merge",
     response_model=PagePayload,
@@ -1051,18 +1286,21 @@ def merge_words(
 ) -> JSONResponse:
     """``POST .../words/{li}/{wi}/merge`` — merge with adjacent word.
 
+    Used by the right panel's ``StructureSection`` ("Merge with prev/next").
     Spec 23 §9 row 10 names ``page.merge_words(targets)``, which is not
-    implemented in pdomain-book-tools (tracking pdomain/pdomain-book-tools#53).
-    The route delegates to per-line ``Line.merge_word_left(wi)`` /
-    ``Line.merge_word_right(wi)`` from ``pdomain_book_tools/ocr/block.py:785,789``.
+    implemented in pdomain-book-tools (tracking pdomain/pdomain-book-tools#53);
+    this route resolves the adjacent pair itself and calls the shared
+    ``_merge_words_core`` (see the block comment above it for why it does
+    not delegate to ``Line.merge_word_left``/``merge_word_right``).
     """
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
         return err
 
+    project = project_state.loaded_project
     pstate = project_state.get_page_state(page_index)
     page = _resolve_page_object(pstate)
-    if pstate is None or page is None:
+    if project is None or pstate is None or page is None:
         return _page_not_loaded(page_index)
 
     page_lock = project_state.get_page_lock(page_index)
@@ -1072,14 +1310,29 @@ def merge_words(
             return _word_not_found(line_index, word_index)
         # Resolve the line — guaranteed in-range by _resolve_word success.
         line = page.lines[line_index]
+        words = line.words
         if body.direction == "left":
-            ok = line.merge_word_left(word_index)
+            if word_index == 0:
+                return _mutation_failed(f"merge_word_left rejected line={line_index} word={word_index}")
+            keep_index, remove_index = word_index - 1, word_index
         else:
-            ok = line.merge_word_right(word_index)
-        if not ok:
-            return _mutation_failed(
-                f"merge_word_{body.direction} rejected line={line_index} word={word_index}"
-            )
+            if word_index >= len(words) - 1:
+                return _mutation_failed(f"merge_word_right rejected line={line_index} word={word_index}")
+            keep_index, remove_index = word_index, word_index + 1
+
+        refusal = _merge_words_core(
+            project=project,
+            project_state=project_state,
+            pstate=pstate,
+            page=page,
+            page_index=page_index,
+            line_index=line_index,
+            keep_index=keep_index,
+            remove_index=remove_index,
+        )
+        if refusal is not None:
+            return refusal
+
         from .lines_paragraphs import _finalize_structural_edit
 
         _finalize_structural_edit(
@@ -1094,6 +1347,103 @@ def merge_words(
                     "line": line_index,
                     "word": word_index,
                     "direction": body.direction,
+                }
+            ],
+        )
+
+    return _refresh_payload_response(
+        project_id=project_id,
+        page_index=page_index,
+        project_state=project_state,
+        settings=settings,
+        app_config=app_config,
+        page_store=store,
+    )
+
+
+@router.post(
+    "/{project_id}/pages/{page_index}/words/merge",
+    response_model=PagePayload,
+)
+def merge_words_batch(
+    *,
+    project_id: str,
+    page_index: int,
+    body: MergeWordsBatchRequest,
+    project_state: ProjectState = Depends(get_project_state),
+    settings: Settings = Depends(get_settings),
+    app_config: AppConfig = Depends(get_app_config),
+    store: LabelerPageStore | None = Depends(get_page_store_optional),
+) -> JSONResponse:
+    """``POST .../words/merge`` — merge exactly two adjacent same-line words.
+
+    Mirrors ``lines/merge``'s collective shape (the toolbar sends the
+    current ``selected_words`` set) rather than the older per-word
+    ``direction`` shape ``merge_words`` uses. Word merge is stricter than
+    line merge: exactly two entries, same line, adjacent word indices —
+    anything else is a 400 ``word_merge_invalid_selection`` rather than a
+    silent no-op, matching how this route's `toolbar-word-merge` cell
+    surfaces a reason instead of just staying disabled (driver-contract
+    §2.9). Backs the ``toolbar-word-merge`` toolbar cell — see
+    ``docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md``.
+    """
+    err = _check_project_and_page(project_id, page_index, project_state)
+    if err is not None:
+        return err
+
+    project = project_state.loaded_project
+    pstate = project_state.get_page_state(page_index)
+    page = _resolve_page_object(pstate)
+    if project is None or pstate is None or page is None:
+        return _page_not_loaded(page_index)
+
+    word_indices: list[tuple[int, int]] = [(int(li), int(wi)) for li, wi in body.word_indices]
+    if len(word_indices) != 2:
+        return _word_merge_invalid_selection(
+            f"word merge requires exactly two selected words, got {len(word_indices)}"
+        )
+    (line_a, word_a), (line_b, word_b) = word_indices
+    if line_a != line_b:
+        return _word_merge_invalid_selection("selected words must be on the same line to merge")
+    if abs(word_a - word_b) != 1:
+        return _word_merge_invalid_selection("selected words must be adjacent to merge")
+
+    line_index = line_a
+    keep_index, remove_index = sorted((word_a, word_b))
+
+    page_lock = project_state.get_page_lock(page_index)
+    with page_lock:
+        if _resolve_word(page, line_index, keep_index) is None or (
+            _resolve_word(page, line_index, remove_index) is None
+        ):
+            return _word_not_found(line_index, remove_index)
+
+        refusal = _merge_words_core(
+            project=project,
+            project_state=project_state,
+            pstate=pstate,
+            page=page,
+            page_index=page_index,
+            line_index=line_index,
+            keep_index=keep_index,
+            remove_index=remove_index,
+        )
+        if refusal is not None:
+            return refusal
+
+        from .lines_paragraphs import _finalize_structural_edit
+
+        _finalize_structural_edit(
+            page=page,
+            pstate=pstate,
+            project_state=project_state,
+            page_index=page_index,
+            store=store,
+            changes=[
+                {
+                    "type": "word_merge_batch",
+                    "line_index": line_index,
+                    "word_indices": [keep_index, remove_index],
                 }
             ],
         )
@@ -1438,6 +1788,7 @@ __all__ = [
     "ApplyComponentRequest",
     "DeleteWordsBatchRequest",
     "ErasePixelsRequest",
+    "MergeWordsBatchRequest",
     "MergeWordsRequest",
     "NudgeBboxRequest",
     "ReboxWordRequest",

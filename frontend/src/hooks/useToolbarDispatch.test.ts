@@ -6,6 +6,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { resolveToolbarRequest, useToolbarDispatch } from "./useToolbarDispatch";
 import type { Selection } from "./useToolbarButtonStates";
+import { clearSelection, selectionStore } from "../stores/selection-store";
 
 vi.mock("../lib/toast", () => ({
   toast: {
@@ -110,6 +111,70 @@ describe("resolveToolbarRequest — line derivation from word selections (P1.7 /
     };
     const req = resolveToolbarRequest("word_w_to_l", "proj1", 0, empty);
     expect(req).toBeNull();
+  });
+});
+
+describe("resolveToolbarRequest — word_merge", () => {
+  it("posts the selected word pair to words/merge with scope word", () => {
+    const sel: Selection = {
+      selection_mode: "word",
+      selected_paragraphs: [],
+      selected_lines: [],
+      selected_words: [
+        [2, 0],
+        [2, 1],
+      ],
+    };
+    const req = resolveToolbarRequest("word_merge", "proj1", 3, sel);
+    expect(req).not.toBeNull();
+    expect(req!.url).toBe("/api/projects/proj1/pages/3/words/merge");
+    expect(req!.method).toBe("POST");
+    expect(req!.body["scope"]).toBe("word");
+    expect(req!.body["word_indices"]).toEqual([
+      [2, 0],
+      [2, 1],
+    ]);
+  });
+});
+
+describe("useToolbarDispatch — word_merge selects the surviving word on success", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearSelection();
+  });
+
+  function makeWrapper() {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    return ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+  }
+
+  it("re-selects the lower word_index of the merged pair, not the removed one", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const sel: Selection = {
+      selection_mode: "word",
+      selected_paragraphs: [],
+      selected_lines: [],
+      selected_words: [
+        [2, 4],
+        [2, 3],
+      ],
+    };
+    const { result } = renderHook(() => useToolbarDispatch("proj1", 0, sel), {
+      wrapper: makeWrapper(),
+    });
+    result.current("word_merge");
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    await waitFor(() => expect(selectionStore.getState().selectedWords).toEqual([[2, 3]]));
+    expect(selectionStore.getState().path).toEqual({ pageIndex: 0, lineId: 2, wordId: [2, 3] });
+    fetchSpy.mockRestore();
   });
 });
 

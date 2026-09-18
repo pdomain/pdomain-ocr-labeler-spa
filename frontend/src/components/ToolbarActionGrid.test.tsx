@@ -166,6 +166,51 @@ describe("ToolbarActionGrid — interactions", () => {
   });
 });
 
+describe("ToolbarActionGrid — toolbar-word-merge (word-scope multi-select merge)", () => {
+  it("is not a stub cell — it has a live WORD_MAP entry", () => {
+    render(<ToolbarActionGrid {...defaultProps} />);
+    const btn = screen.getByTestId("toolbar-word-merge");
+    expect(btn.getAttribute("data-testid-stub")).toBeNull();
+  });
+
+  it("is disabled for an empty selection, with a reason naming what's needed", () => {
+    render(<ToolbarActionGrid {...defaultProps} />);
+    const btn = screen.getByTestId("toolbar-word-merge");
+    expect(btn).toBeDisabled();
+    expect(btn.title).toMatch(/exactly two/);
+  });
+
+  it("is disabled with a same-line reason for two non-adjacent words", () => {
+    const sel: Selection = {
+      ...emptySelection,
+      selected_words: [
+        [0, 0],
+        [0, 2],
+      ],
+    };
+    render(<ToolbarActionGrid {...defaultProps} selection={sel} />);
+    const btn = screen.getByTestId("toolbar-word-merge");
+    expect(btn).toBeDisabled();
+    expect(btn.title).toMatch(/adjacent/);
+  });
+
+  it("is enabled for exactly two adjacent words on the same line, and dispatches on click", () => {
+    const onAction = vi.fn();
+    const sel: Selection = {
+      ...emptySelection,
+      selected_words: [
+        [0, 0],
+        [0, 1],
+      ],
+    };
+    render(<ToolbarActionGrid {...defaultProps} selection={sel} onAction={onAction} />);
+    const btn = screen.getByTestId("toolbar-word-merge");
+    expect(btn).not.toBeDisabled();
+    fireEvent.click(btn);
+    expect(onAction).toHaveBeenCalledWith("word_merge");
+  });
+});
+
 describe("ToolbarActionGrid — ButtonStates injection (external states override)", () => {
   it("accepts external buttonStates to override computed states", () => {
     const externalStates: Partial<ButtonStates> = {

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { type PageData, type Selection, useToolbarButtonStates } from "./useToolbarButtonStates";
+import {
+  type PageData,
+  type Selection,
+  useToolbarButtonStates,
+  wordMergeEligibility,
+} from "./useToolbarButtonStates";
 
 const emptySelection: Selection = {
   selection_mode: "word",
@@ -324,6 +329,7 @@ describe("line validate / unvalidate", () => {
 describe("word row — requires ≥1 word selected", () => {
   it("all word buttons are false with empty selection", () => {
     const s = useToolbarButtonStates(emptySelection, makePage());
+    expect(s.word_merge).toBe(false);
     expect(s.word_refine).toBe(false);
     expect(s.word_expand_refine).toBe(false);
     expect(s.word_expand).toBe(false);
@@ -349,6 +355,113 @@ describe("word row — requires ≥1 word selected", () => {
     expect(s.word_gt_to_ocr).toBe(true);
     expect(s.word_ocr_to_gt).toBe(true);
     expect(s.word_delete).toBe(true);
+  });
+});
+
+describe("word merge", () => {
+  it("word_merge is false with no words selected", () => {
+    const s = useToolbarButtonStates(emptySelection, emptyPage);
+    expect(s.word_merge).toBe(false);
+  });
+
+  it("word_merge is false with 1 word selected", () => {
+    const sel: Selection = { ...emptySelection, selected_words: [[0, 0]] };
+    expect(useToolbarButtonStates(sel, emptyPage).word_merge).toBe(false);
+  });
+
+  it("word_merge is false with 3 words selected", () => {
+    const sel: Selection = {
+      ...emptySelection,
+      selected_words: [
+        [0, 0],
+        [0, 1],
+        [0, 2],
+      ],
+    };
+    expect(useToolbarButtonStates(sel, emptyPage).word_merge).toBe(false);
+  });
+
+  it("word_merge is false for two words on different lines", () => {
+    const sel: Selection = {
+      ...emptySelection,
+      selected_words: [
+        [0, 0],
+        [1, 0],
+      ],
+    };
+    expect(useToolbarButtonStates(sel, emptyPage).word_merge).toBe(false);
+  });
+
+  it("word_merge is false for two non-adjacent words on the same line", () => {
+    const sel: Selection = {
+      ...emptySelection,
+      selected_words: [
+        [0, 0],
+        [0, 2],
+      ],
+    };
+    expect(useToolbarButtonStates(sel, emptyPage).word_merge).toBe(false);
+  });
+
+  it("word_merge is true for two adjacent words on the same line", () => {
+    const sel: Selection = {
+      ...emptySelection,
+      selected_words: [
+        [0, 0],
+        [0, 1],
+      ],
+    };
+    expect(useToolbarButtonStates(sel, emptyPage).word_merge).toBe(true);
+  });
+
+  it("word_merge is true regardless of tuple order (adjacency is order-independent)", () => {
+    const sel: Selection = {
+      ...emptySelection,
+      selected_words: [
+        [0, 1],
+        [0, 0],
+      ],
+    };
+    expect(useToolbarButtonStates(sel, emptyPage).word_merge).toBe(true);
+  });
+});
+
+describe("wordMergeEligibility reasons", () => {
+  it("names the count problem when not exactly two words are selected", () => {
+    expect(wordMergeEligibility(emptySelection).reason).toMatch(/exactly two/);
+  });
+
+  it("names the cross-line problem for words on different lines", () => {
+    const sel: Selection = {
+      ...emptySelection,
+      selected_words: [
+        [0, 0],
+        [1, 0],
+      ],
+    };
+    expect(wordMergeEligibility(sel).reason).toMatch(/same line/);
+  });
+
+  it("names the adjacency problem for non-adjacent words", () => {
+    const sel: Selection = {
+      ...emptySelection,
+      selected_words: [
+        [0, 0],
+        [0, 2],
+      ],
+    };
+    expect(wordMergeEligibility(sel).reason).toMatch(/adjacent/);
+  });
+
+  it("has no reason when eligible", () => {
+    const sel: Selection = {
+      ...emptySelection,
+      selected_words: [
+        [0, 0],
+        [0, 1],
+      ],
+    };
+    expect(wordMergeEligibility(sel)).toEqual({ enabled: true, reason: null });
   });
 });
 
