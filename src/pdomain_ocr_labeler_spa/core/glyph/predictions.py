@@ -1,10 +1,13 @@
 """IGlyphPredictor — Protocol for glyph-annotation predictions.
 
-Mirrors IOCREngine's seam pattern. v1 ships only `none_`; pd-ocr-trainer
-delivers the local classifier when its glyph-feature work lands.
+Mirrors IOCREngine's seam pattern. `NoneGlyphPredictor` is the only adapter
+that exists, and none will be built here (decided 2026-09-18): `pd-ocr-trainer`
+is retired, and no successor produces glyph features. See
+`docs/context/decisions.md` and `specs/20-glyph-annotations.md` §9. The seam
+stays at near-zero cost — the accept-prediction UI simply never fires.
 
-Predictions are NOT persisted — they are recomputed at page-fetch time.
-The frontend renders them as greyed-out chips with accept/reject.
+Predictions are NOT persisted — they would be recomputed at page-fetch time.
+The frontend renders them as greyed-out chips with accept/reject, when present.
 """
 
 from __future__ import annotations

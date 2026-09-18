@@ -1,9 +1,9 @@
 ---
 kind: spec
-status: draft
+status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-09-18
 ---
 
 # Behavior unit spec - Glyph annotations
@@ -34,7 +34,9 @@ last_verified: 2026-07-13
   without crashing.
 - **Tier(s):** A
 - **Regression:** no
-- **Test:** -
+- **Test:** `frontend/src/components/WordCell.test.tsx` (badge absent/amber/
+  blue/green cases) and `frontend/src/components/glyph/GlyphChip.test.tsx`
+  (confirmed vs. predicted chip rendering).
 
 ### B-GLYPH-002 - Manual glyph review edits word-level annotations
 
@@ -51,7 +53,10 @@ last_verified: 2026-07-13
   keeps panel recoverable.
 - **Tier(s):** A
 - **Regression:** no
-- **Test:** -
+- **Test:** `frontend/src/components/right-panel/WordDetail.test.tsx` (mount +
+  mark-reviewed), `frontend/src/components/glyph/GlyphAnnotationPanel.test.tsx`,
+  and `tests/e2e/test_glyph_panel.py` (browser click through to a persisted
+  server-side value).
 
 ### B-GLYPH-003 - Prediction accept/reject creates human review state
 
@@ -66,7 +71,14 @@ last_verified: 2026-07-13
 - **Bad-state / error:** No predictions returns a recoverable backend error.
 - **Tier(s):** A
 - **Regression:** no
-- **Test:** -
+- **Test:** accept only —
+  `frontend/src/components/right-panel/WordDetail.test.tsx`'s "accepts a
+  prediction, posting to the accept-prediction route" test and
+  `frontend/src/hooks/useWordMutations.test.tsx`'s `useAcceptGlyphPrediction`
+  suite. No test drives the reject button
+  (`glyph-panel-reject-prediction-{kind}`): predictions never populate in the
+  e2e suite (`IGlyphPredictor` has no live adapter — see §9), and no unit test
+  clicks it either.
 
 ### B-GLYPH-004 - Bulk glyph mark dialog previews and applies recipes
 
@@ -83,7 +95,12 @@ last_verified: 2026-07-13
   dialog open.
 - **Tier(s):** A+B
 - **Regression:** no
-- **Test:** -
+- **Test:** `frontend/src/components/glyph/BulkGlyphMarkDialog.test.tsx`
+  (rendering, Cancel, and that a successful apply invalidates the page query
+  while a failed apply or a dry-run does not) and, on the backend,
+  `tests/integration/test_glyph_routes.py`'s
+  `test_glyph_bulk_mark_dry_run_returns_preview_without_mutating` and
+  `test_glyph_bulk_mark_apply_stamps_words_and_bumps_generation`.
 
 ### B-GLYPH-005 - Glyph side-channel preserves null, empty, and populated states
 
@@ -98,23 +115,36 @@ last_verified: 2026-07-13
 - **Backend / side-effects:** Page-state glyph annotation maps retain human
   review state for refreshed page payloads within the loaded session;
   predictions are not saved as accepted annotations unless user accepts.
-- **Bad-state / error:** Reload/process-boundary persistence under the new
-  event-store model still needs a dedicated behavior test.
+- **Bad-state / error:** none observed — a fresh-store reload correctly
+  restores each tri-state case.
 - **Tier(s):** A
 - **Regression:** no
-- **Test:** -
+- **Test:** `tests/integration/test_glyph_routes.py`'s
+  `test_glyph_annotations_populated_persist_across_fresh_store_reload`,
+  `test_glyph_annotations_empty_reviewed_persist_across_fresh_store_reload`,
+  `test_glyph_annotations_cleared_removes_entry_across_fresh_store_reload`,
+  and `test_glyph_bulk_mark_apply_persists_across_fresh_store_reload` — each
+  closes and reopens the event store between write and read.
 
 ## Adversarial Review
 
-**Accepted finding:** The described frontend glyph components do not exist; this remains draft
-behavior even though Q-A5–Q-A7 are resolved.
+**2026-07-13 finding (superseded):** the described frontend glyph components did not exist; this
+was draft behavior even though Q-A5–Q-A7 were resolved.
 
-**Stage:** migration-time current-state review on 2026-07-13.
+**2026-09-18 update:** the components exist, are mounted in `WordDetail`, and the behaviors above
+are backed by real tests — see each record's **Test** field. Two things are not claimed as shipped:
+the `glyph-panel-reject-prediction-{kind}` button has no test coverage (B-GLYPH-003), and no
+predictor exists to populate `glyph_predictions` at all — the labeler will not build one (decided
+2026-09-18, `docs/context/decisions.md`), so the accept/reject prediction UI is a seam that renders
+nothing for any real user today.
 
-**Source:** an independent read-only reviewer compared this document with current
-code, tests, architecture, and git history.
+**Stage:** migration-time current-state review on 2026-07-13; docs close-out verification on
+2026-09-18.
 
-**Result:** the review accepted the finding above and used it to declare the
-metadata status. Residual risks remain explicit here or in
-`docs/context/intent-map.md`; deferred or blocked behavior is not claimed as
-shipped.
+**Source:** an independent read-only reviewer compared this document with current code, tests,
+architecture, and git history on 2026-07-13; the 2026-09-18 update re-verified against current
+`frontend/src/components/glyph/*`, `frontend/src/components/right-panel/WordDetail.tsx`, and the
+test files cited above.
+
+**Result:** residual risks remain explicit here or in `docs/context/intent-map.md`; deferred or
+blocked behavior is not claimed as shipped.

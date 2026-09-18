@@ -667,6 +667,16 @@ available (delegated 2026-05-06; not yet implemented).
 
 ## M11 — Glyph-level side-channel annotations
 
+> **Residual note (2026-09-18):** the manual review path below shipped, but
+> not as originally designed here. The data model came from
+> `pdomain_book_contracts` (this doc's `pdomain-book-tools` naming was
+> superseded); durability uses a content-blob sidecar rather than the v2.2
+> envelope bump; the panel mounts in the right panel (`WordDetail`), not
+> `<WordEditDialog>`, which was retired; and no predictor was ever shipped
+> or will be — `pd-ocr-trainer` is retired, and the labeler will not build
+> one itself. See `docs/context/decisions.md`'s 2026-09-18 entries and
+> `specs/20-glyph-annotations.md` §9 for what actually shipped.
+
 **Outcome.** Per-word typography annotations (CT/ST ligatures, long-s
 positions, swash) editable via a new Typography section in
 `<WordEditDialog>` and a chip-row under each `<WordCell>`. Page-scope

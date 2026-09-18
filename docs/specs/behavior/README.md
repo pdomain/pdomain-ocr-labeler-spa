@@ -57,8 +57,9 @@ the capture methodology.
 
 ## Adversarial Review
 
-**Accepted finding:** The behavior-ID and coverage workflow is live; generated coverage does not
-prove blocked glyph behavior exists.
+**Accepted finding:** The behavior-ID and coverage workflow is live; generated coverage on its own
+does not prove a behavior is wired end to end in production, only that a test cites its ID — see
+`component-glyph-annotations.md`'s 2026-09-18 update for a case where that gap has since closed.
 
 **Stage:** migration-time current-state review on 2026-07-13.
 

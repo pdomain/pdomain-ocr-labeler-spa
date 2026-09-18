@@ -55,20 +55,29 @@ implementation decisions before they can be treated as locked behavior.
 
 ## Right panel and glyphs
 
-- `GlyphAnnotationPanel` exists, but no production mount point or frontend hook
-  for `POST glyph-annotations` / `POST accept-prediction` was found.
-- Word glyph chip click handlers look like placeholders. A real user path for
-  manual glyph review needs confirmation.
+- **Resolved 2026-09-18:** `GlyphAnnotationPanel` is now mounted in
+  `WordDetail`'s "Glyphs" accordion item, wired to
+  `useSetGlyphAnnotations` / `useAcceptGlyphPrediction`
+  (`frontend/src/hooks/useWordMutations.ts`). The real user path is
+  select a word on the canvas, open Glyphs, then mark. See
+  `docs/specs/behavior/component-glyph-annotations.md`.
+- Word glyph **chip** click handlers (`WordCell.tsx`, under the GT input)
+  are still placeholders (`/* future: open panel */`) — clicking a chip
+  does nothing. This is narrower than the item above: the panel itself has
+  a real, tested entry path; only the chip shortcut into it is unwired.
 - BBox Refine/Crop and Rebox Snap currently collapse to simpler/manual rebox
   behavior. Decide whether to document current stubs or require real endpoints.
 - Erase lasso is sent as an axis-aligned rectangle, not a polygon fill.
 - CharFixer `char_bboxes` are surfaced through refreshed page payloads, but
   durable process-boundary persistence and downstream export/consumer semantics
   are still undefined.
-- Bulk glyph apply closes the dialog, but page data invalidation/refetch wiring
-  was not obvious.
-- Glyph annotation null/empty/populated state is modeled in the page payload,
-  but there is no behavior test proving it survives a fresh page-store reload.
+- **Resolved 2026-09-18:** bulk glyph apply now invalidates the page query on
+  a successful apply (`BulkGlyphMarkDialog.tsx`), tested in
+  `BulkGlyphMarkDialog.test.tsx`.
+- **Resolved 2026-09-18:** glyph annotation null/empty/populated state
+  surviving a fresh page-store reload is now proven by
+  `tests/integration/test_glyph_routes.py`'s four
+  `*_persist_across_fresh_store_reload` tests.
 
 ## Actions, jobs, and persistence
 

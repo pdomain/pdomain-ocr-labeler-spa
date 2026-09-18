@@ -1,5 +1,7 @@
 """E2E: selecting a word and marking glyph review reaches the API (M11 Task 9).
 
+Covers: F-GLYPH-REVIEW-01
+
 Plan: docs/plans/2026-07-21-glyph-annotations-completion.md — Task 9.
 Issue: docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md.
 

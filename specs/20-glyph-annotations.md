@@ -3,13 +3,14 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-09-18
 ---
 
 # 20 — Glyph-level Side-channel Annotations
 
-> **Status**: Active
-> **Last updated**: 2026-05-11
+> **Status**: Active — manual review path and dataset-export sidecar shipped
+> 2026-09-18; no predictor exists or will be built (§9).
+> **Last updated**: 2026-09-18
 > **Spec-Issue**: pdomain/pdomain-ocr-labeler-spa#44
 
 How the SPA records and edits **typographic features** (ct/st ligatures,
@@ -25,12 +26,15 @@ it: GT stays "perfect" ASCII; annotations are a parallel structure.
 > 18 covers _which glyphs map to which ASCII_; 20 covers _how
 > typographic features are preserved as data_ even after the glyph
 > itself is normalized away.
-> Data-model owner — **pdomain-book-tools**
-> (`pdomain_book_tools.ocr.glyph_annotations` — NEW, not yet shipped).
-> Predictions producer — **pd-ocr-trainer**
-> (glyph-feature classifier — NEW, not yet shipped).
+> Data-model owner — **pdomain-book-contracts**
+> (`pdomain_book_contracts.ocr.glyph_annotations` — shipped; this spec's
+> original `pdomain-book-tools` naming was superseded by that sibling
+> package). Mirrored in this repo as `GlyphAnnotationsModel`
+> (`core/models.py`).
+> Predictions producer — **none, and none will be built here**
+> (decided 2026-09-18, §9; `pd-ocr-trainer` is retired).
 > Driver consumer — **pd-ocr-labeler-driver**
-> (bulk-mark automation; testids §6).
+> (bulk-mark automation; testids §6, shipped).
 
 ---
 
@@ -68,18 +72,19 @@ counts toward "reviewed".
 
 ## 2. Where this lives
 
-| Concern | Owner | Status |
+| Concern | Owner | Status (2026-09-18) |
 |---|---|---|
-| `GlyphAnnotations` data model + JSON shape | `pdomain_book_tools.ocr.glyph_annotations` | NEW — needs delegation to pdomain-book-tools |
-| Per-word predictions producer | pd-ocr-trainer (glyph-feature classifier) | NEW — needs delegation to pd-ocr-trainer |
-| Envelope schema bump (v2.1 → v2.2) | THIS SPEC + [`01-data-models.md`](../docs/architecture/01-data-models.md) §3, §4 | NEW |
-| `<GlyphAnnotationPanel>` + chip widget | THIS SPEC | NEW |
-| Per-page bulk-mark endpoints | THIS SPEC §4 | NEW |
-| testid additions for driver bulk-mark | THIS SPEC §6, [`13-driver-contract.md`](../docs/architecture/13-driver-contract.md) | NEW |
+| `GlyphAnnotations` data model + JSON shape | `pdomain_book_contracts.ocr.glyph_annotations` (this spec's original `pdomain_book_tools` naming was superseded by that sibling package) | Shipped — mirrored as `GlyphAnnotationsModel` in `core/models.py` |
+| Per-word predictions producer | pd-ocr-trainer (glyph-feature classifier) | Will not be built here — decided 2026-09-18, see §9 |
+| Envelope schema bump (v2.1 → v2.2) | superseded — see the §4 residual note | Not built as designed; durability uses the content-blob `labeler_sidecars` carrier instead |
+| `<GlyphAnnotationPanel>` + chip widget | `frontend/src/components/glyph/*` | Shipped — mounted in `WordDetail`'s Glyphs accordion item |
+| Per-page bulk-mark endpoints | `POST .../glyph-bulk-mark` | Shipped — persists and refreshes the page |
+| testid additions for driver bulk-mark | [`13-driver-contract.md`](../docs/architecture/13-driver-contract.md) §2.15 | Shipped |
 
-The SPA ships **no** glyph-feature classifier itself. It surfaces
-predictions from pd-ocr-trainer when present; otherwise the panel
-operates in pure manual mode.
+The SPA ships **no** glyph-feature classifier itself, and never will (§9):
+the `IGlyphPredictor` seam is real, but its only adapter is `none`, which
+always returns no predictions. The panel operates in pure manual mode for
+every user today.
 
 ---
 

@@ -1,5 +1,7 @@
 """Integration tests for glyph annotation routes — plan Tasks 2 and 3.
 
+Covers: B-GLYPH-005
+
 Covers the HTTP surface of M11 glyph review:
 
 - ``POST .../words/{li}/{wi}/glyph-annotations`` (set / clear)

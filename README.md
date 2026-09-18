@@ -119,7 +119,7 @@ Specs are split into two trees as of 2026-05-14:
 |---|---|
 | [`16-milestones.md`](specs/16-milestones.md) | M0…M9 milestone breakdown (living) |
 | [`17-decisions.md`](specs/17-decisions.md) | ADRs / decisions log (append-only) |
-| [`20-glyph-annotations.md`](specs/20-glyph-annotations.md) | Glyph-level annotations (not yet implemented; blocked on `pdomain-book-tools` upstream) |
+| [`20-glyph-annotations.md`](specs/20-glyph-annotations.md) | Glyph-level annotations — manual review and dataset-export path implemented; no predictor exists or will be built (`docs/context/decisions.md`, 2026-09-18) |
 
 ### Architecture (implemented — `docs/architecture/`)
 
