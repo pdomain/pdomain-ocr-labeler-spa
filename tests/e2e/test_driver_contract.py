@@ -32,12 +32,13 @@ from __future__ import annotations
 import httpx
 import pytest
 from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from tests.e2e.conftest import LiveServer
 from tests.e2e.helpers import (
     SEED_TIMEOUT,
     open_page_actions_overflow,
-    page_line_match_count,
+    require_page_line_matches,
     wait_for_project_ready,
 )
 
@@ -136,11 +137,12 @@ _TEXT_TABS_TESTIDS = [
 
 # Apply Style toolbar row (driver-contract §2.10) — present when project page loads.
 # Parameterised stubs ("toolbar-{scope}-{action}") are NOT listed here.
+# "apply-style-select" / "scope-select" / "apply-style-button" are NOT listed:
+# §2.10 retired the legacy style-authoring row and its testids (typography now
+# flows through typography-section instead) — see ToolbarActionGrid.tsx and
+# ToolbarActionGrid.test.tsx ("does not expose legacy style authoring controls").
 _APPLY_STYLE_TOOLBAR_TESTIDS = [
-    "apply-style-select",
-    "scope-select",  # was "apply-scope-select" — bug #452
     "apply-component-select",
-    "apply-style-button",
     "apply-component-button",  # bug #452: was absent
     "clear-component-button",  # bug #452: was absent
     "word-add-button",  # was "add-word-button" — bug #452
@@ -172,10 +174,10 @@ _WORD_EDIT_DIALOG_TESTIDS = [
     "dialog-crop-below-button",
     "dialog-crop-left-button",
     "dialog-crop-right-button",
-    "dialog-style-select",
-    "dialog-scope-select",
+    # "dialog-style-select" / "dialog-scope-select" / "dialog-apply-style-button"
+    # are NOT listed: §2.10/§2.11 retired the legacy style-authoring controls
+    # (see the ToolbarActionGrid note above); only the component controls remain.
     "dialog-component-select",
-    "dialog-apply-style-button",
     "dialog-apply-component-button",
     "dialog-clear-component-button",
 ]
@@ -245,6 +247,33 @@ def _all_stub_or_present(page: Page, testids: list[str]) -> list[str]:
         if count == 0:
             missing.append(tid)
     return missing
+
+
+def _wait_word_match_view_visible(page: Page, timeout: int = 10_000) -> None:
+    """Wait for ``word-match-view`` to become visible, with a diagnostic on timeout.
+
+    With real word content, ``word-match-view`` renders in the DOM but has
+    computed height 0: its ``className="flex-1 overflow-auto"`` only sizes it
+    when the immediate parent is a flex container, but TextTabs.tsx's
+    matches-panel wraps ``children`` in a plain (non-flex) ``<div>``, and the
+    inline ``style={{contain: "strict"}}`` on WordMatchView's root then keeps
+    the browser from falling back to the content-derived height. This was
+    never exercised by e2e before (tiny-fixture always had zero words; the
+    exercise-fixture-based tests use the Worklist/right-panel path instead of
+    WordMatchView). Reported to maintainers as a real product gap
+    (P0-CI-SOFT follow-up) rather than papered over here.
+    """
+    try:
+        page.wait_for_selector('[data-testid="word-match-view"]', timeout=timeout)
+    except PlaywrightTimeoutError as exc:
+        raise AssertionError(
+            "word-match-view did not become visible after selecting the Matches tab. "
+            "It is present in the DOM but collapses to zero height with real word "
+            "content (a flex/contain CSS mismatch in WordMatchView.tsx / TextTabs.tsx), "
+            "not a missing-content issue. This is a suspected product bug, not a stale "
+            "test expectation; see the P0-CI-SOFT follow-up report before changing this "
+            "assertion."
+        ) from exc
 
 
 def _load_tiny_fixture(base_url: str, source_root_path: str) -> None:
@@ -582,8 +611,11 @@ def test_glyph_bulk_dialog_testids_present(live_server: LiveServer, page: Page) 
 def test_apply_style_toolbar_testids_present(live_server: LiveServer, page: Page) -> None:
     """Driver-contract §2.10: all Apply Style toolbar testids present on project page.
 
-    Covers #452 (F-047): scope-select, apply-component-button, clear-component-button,
-    word-add-button were missing or had wrong IDs.
+    Covers #452 (F-047): apply-component-button, clear-component-button,
+    word-add-button were missing or had wrong IDs. Does not check
+    apply-style-select / scope-select / apply-style-button — the legacy
+    style-authoring row those belonged to is retired (see
+    _APPLY_STYLE_TOOLBAR_TESTIDS).
     """
     _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
 
@@ -606,11 +638,7 @@ def test_per_line_driver_testids_present(live_server: LiveServer, page: Page) ->
     Asserts line-card-0 and line-checkbox-0 are present after the matches tab renders.
     """
     _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
-    if page_line_match_count(live_server.base_url, "tiny-fixture", 0) == 0:
-        pytest.skip(
-            "tiny-fixture has no word content in this environment — per-line/word "
-            "driver testids are verified against the exercise fixture (test_spec_s2_coverage)"
-        )
+    require_page_line_matches(live_server.base_url, "tiny-fixture", 0)
 
     url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
     page.goto(url, timeout=15_000)
@@ -619,7 +647,7 @@ def test_per_line_driver_testids_present(live_server: LiveServer, page: Page) ->
 
     # Navigate to the Matches tab (text-tab-matches) to ensure word-match-view renders.
     page.click('[data-testid="text-tab-matches"]')
-    page.wait_for_selector('[data-testid="word-match-view"]', timeout=10_000)
+    _wait_word_match_view_visible(page)
 
     # The tiny-fixture has at least one line; line-card-0 and line-checkbox-0 must exist.
     missing = _all_stub_or_present(page, ["line-card-0", "line-checkbox-0"])
@@ -634,11 +662,7 @@ def test_per_word_driver_testids_present(live_server: LiveServer, page: Page) ->
     word-image-cell-{l}-{w} were absent or on alias attributes.
     """
     _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
-    if page_line_match_count(live_server.base_url, "tiny-fixture", 0) == 0:
-        pytest.skip(
-            "tiny-fixture has no word content in this environment — per-word "
-            "driver testids are verified against the exercise fixture (test_spec_s2_coverage)"
-        )
+    require_page_line_matches(live_server.base_url, "tiny-fixture", 0)
 
     url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
     page.goto(url, timeout=15_000)
@@ -646,7 +670,7 @@ def test_per_word_driver_testids_present(live_server: LiveServer, page: Page) ->
     wait_for_project_ready(page)
 
     page.click('[data-testid="text-tab-matches"]')
-    page.wait_for_selector('[data-testid="word-match-view"]', timeout=10_000)
+    _wait_word_match_view_visible(page)
 
     # word-image-cell-0-0, word-checkbox-0-0, word-validate-button-0-0 must exist
     # for the first word (line 0, word 0).
@@ -674,11 +698,7 @@ def test_word_edit_dialog_testids_present(live_server: LiveServer, page: Page) -
     §2.11 testids are present in the DOM.
     """
     _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
-    if page_line_match_count(live_server.base_url, "tiny-fixture", 0) == 0:
-        pytest.skip(
-            "tiny-fixture has no word content in this environment — word-edit-dialog "
-            "testids are verified against the exercise fixture (test_spec_s2_coverage)"
-        )
+    require_page_line_matches(live_server.base_url, "tiny-fixture", 0)
 
     url = f"{live_server.base_url}/projects/tiny-fixture/pages/pageno/1"
     page.goto(url, timeout=15_000)
@@ -689,7 +709,25 @@ def test_word_edit_dialog_testids_present(live_server: LiveServer, page: Page) -
     page.wait_for_selector('[data-testid="edit-word-button-0-0"]', timeout=10_000)
 
     page.click('[data-testid="edit-word-button-0-0"]')
-    page.wait_for_selector('[data-testid="word-edit-dialog"]', timeout=5_000)
+    try:
+        page.wait_for_selector('[data-testid="word-edit-dialog"]', timeout=5_000)
+    except PlaywrightTimeoutError as exc:
+        # WordCell's docstring says the pencil button "should select the word
+        # in the selection store and open the right panel", but ProjectPage.tsx
+        # mounts WordMatchView without onEditWord (or onCommitGt / onValidate /
+        # onClearWordTag / imageBaseUrl) — see LineCard/WordMatchView prop
+        # threading. The click is therefore a no-op in production; it was never
+        # exercised by e2e because this test always skipped on empty tiny-fixture
+        # content until now. Reported to maintainers as a real product gap
+        # (P0-CI-SOFT follow-up) rather than papered over here.
+        raise AssertionError(
+            "edit-word-button-0-0 did not open word-edit-dialog. WordMatchView's "
+            "onEditWord (and sibling onCommitGt/onValidate/onClearWordTag/"
+            "imageBaseUrl) handlers appear unwired in ProjectPage.tsx — the "
+            "Matches-tab pencil/checkbox/GT-input controls render but do nothing. "
+            "This is a suspected product bug, not a stale test expectation; see "
+            "the P0-CI-SOFT follow-up report before changing this assertion."
+        ) from exc
 
     missing = _all_stub_or_present(page, _WORD_EDIT_DIALOG_TESTIDS)
     assert not missing, (
@@ -734,7 +772,23 @@ def test_page_kind_toolbar_open_testids_present(live_server: LiveServer, page: P
     page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
     wait_for_project_ready(page)
 
-    page.click('[data-testid="page-kind-status-button"]')
+    try:
+        page.click('[data-testid="page-kind-status-button"]', timeout=10_000)
+    except PlaywrightTimeoutError as exc:
+        # With a real match-status summary ("N exact") in the canvas stage's
+        # floating stage-toolbar__right overlay, that overlay now overlaps
+        # page-kind-status-button and intercepts the click — a real layout/
+        # z-index collision, not a missing-content issue. Only surfaces with
+        # real word content (tiny-fixture always had zero words before).
+        # Reported to maintainers as a real product gap (P0-CI-SOFT
+        # follow-up) rather than papered over here.
+        raise AssertionError(
+            "page-kind-status-button click was intercepted by the canvas stage's "
+            "stage-toolbar__right match-status overlay ('N exact'). This is a "
+            "suspected product bug (overlapping/z-index layout), not a stale test "
+            "expectation; see the P0-CI-SOFT follow-up report before changing this "
+            "assertion."
+        ) from exc
     page.wait_for_selector('[data-testid="page-kind-select"]', timeout=5_000)
 
     missing = _all_stub_or_present(page, _PAGE_KIND_TOOLBAR_OPEN_TESTIDS)

@@ -145,9 +145,11 @@ def page_line_match_count(base_url: str, project_id: str, page_index: int) -> in
     connection, non-200, malformed body) as "no content available" -> 0, so the
     guard degrades to a clean skip instead of a flaky failure.
 
-    **Do not use this for the exercise-fixture** — that fixture is deterministically
-    seeded via the event store (since d0c1494) and content is an invariant.  Use
-    :func:`require_page_line_matches` there so backend regressions fail loudly.
+    **Do not use this for exercise-fixture or tiny-fixture page 0** — both are
+    deterministically seeded via the event store (exercise-fixture since
+    d0c1494; tiny-fixture page 0 since the P0-CI-SOFT fixture-content fix) and
+    content is an invariant there. Use :func:`require_page_line_matches` for
+    those so backend regressions fail loudly instead of skipping.
     """
     try:
         r = httpx.get(
@@ -168,7 +170,8 @@ def require_page_line_matches(base_url: str, project_id: str, page_index: int) -
     """Assert that the page has real OCR content and return the line-match count.
 
     Use this for fixtures that are **deterministically seeded** via the event
-    store (e.g. ``exercise-fixture`` since d0c1494).  Content presence is an
+    store (e.g. ``exercise-fixture`` since d0c1494; ``tiny-fixture`` page 0
+    since the P0-CI-SOFT fixture-content fix). Content presence is an
     invariant — a 0-count means the seeding path or the page endpoint has
     regressed, not that the environment lacks an OCR model.
 
@@ -193,7 +196,7 @@ def require_page_line_matches(base_url: str, project_id: str, page_index: int) -
     except (ValueError, AttributeError) as exc:
         raise AssertionError(f"Malformed page response for {project_id}/pages/{page_index}: {exc}") from exc
     assert count > 0, (
-        f"exercise-fixture page {page_index} has 0 line_matches — "
+        f"{project_id} page {page_index} has 0 line_matches — "
         "event-store seeding invariant violated (check _ingest_ocr_result path)"
     )
     return count

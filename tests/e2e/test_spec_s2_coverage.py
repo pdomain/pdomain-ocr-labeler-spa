@@ -483,23 +483,25 @@ def test_toolbar_delete_cells_exist(exercise_server: ExerciseServer, page: Page)
 
 @pytest.mark.e2e
 def test_apply_style_toolbar_row_present(exercise_server: ExerciseServer, page: Page) -> None:
-    """SECT-2.10: apply-style-select / apply-component-select / buttons are in DOM.
+    """SECT-2.10: apply-component-select / apply-component-button / etc. are in DOM.
 
-    Per driver-contract §2.10, the Apply Style row lives below the main toolbar
-    grid and must expose: apply-style-select, scope-select (apply-scope-select),
-    apply-style-button, apply-component-select, apply-component-button,
-    clear-component-button (or clear-style-button), word-add-button.
+    Per driver-contract §2.10, the legacy style-authoring row (apply-style-select,
+    scope-select, apply-style-button) is retired — see ToolbarActionGrid.tsx and
+    ToolbarActionGrid.test.tsx ("does not expose legacy style authoring
+    controls"). The Apply Style row below the main toolbar grid now exposes only
+    the component controls: apply-component-select, apply-component-button,
+    clear-component-button, word-add-button.
     """
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
-    # apply-style-select and apply-component-select are rendered inside toolbar-action-grid.
+    # apply-component-select is rendered inside toolbar-action-grid.
     page.wait_for_selector('[data-testid="toolbar-action-grid"]', state="attached", timeout=10_000)
 
     s2_10_testids = [
-        "apply-style-select",
         "apply-component-select",
-        "apply-style-button",
+        "apply-component-button",
+        "clear-component-button",
         "word-add-button",  # canonical id (was "add-word-button" — bug #452)
     ]
     missing = [t for t in s2_10_testids if page.locator(f'[data-testid="{t}"]').count() == 0]
@@ -507,13 +509,18 @@ def test_apply_style_toolbar_row_present(exercise_server: ExerciseServer, page: 
 
 
 @pytest.mark.e2e
-def test_apply_style_button_clickable(exercise_server: ExerciseServer, page: Page) -> None:
-    """SECT-2.10b: clicking apply-style-button does not crash the app."""
+def test_apply_component_button_clickable(exercise_server: ExerciseServer, page: Page) -> None:
+    """SECT-2.10b: clicking apply-component-button does not crash the app.
+
+    Was ``test_apply_style_button_clickable`` / ``apply-style-button`` — that
+    control is retired (see ``test_apply_style_toolbar_row_present``); this is
+    its current real analogue in the Apply Style row.
+    """
     _goto_project_page(page, exercise_server.base_url, 1)
     _wait_for_line_cards(page)
 
-    btn = page.locator('[data-testid="apply-style-button"]').first
-    assert btn.count() > 0, "apply-style-button must be in DOM"
+    btn = page.locator('[data-testid="apply-component-button"]').first
+    assert btn.count() > 0, "apply-component-button must be in DOM"
 
     if btn.is_visible():
         btn.click()
