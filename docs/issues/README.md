@@ -127,7 +127,6 @@ The normalize report stays open on its frontend half.
 
 | Issue | ID | Sev |
 | --- | --- | --- |
-| [`2026-07-21-e2e-non-blocking-soft-skips.md`](2026-07-21-e2e-non-blocking-soft-skips.md) | P0-CI-SOFT / P2-E2E-GATE | High |
 | [`2026-07-21-suite-launcher-app-shims.md`](2026-07-21-suite-launcher-app-shims.md) | P1-SUITE | Medium |
 | [`2026-07-21-project-list-metadata-filters-noop.md`](2026-07-21-project-list-metadata-filters-noop.md) | P2-ROOT | Medium |
 
@@ -142,6 +141,12 @@ The normalize report stays open on its frontend half.
 | --- | --- | --- |
 | [`2026-08-08-ruff-version-skew.md`](2026-08-08-ruff-version-skew.md) | P1-RUFF-SKEW | Medium |
 | [`2026-08-08-dep-refresh-cannot-auto-land.md`](2026-08-08-dep-refresh-cannot-auto-land.md) | P2-DEP-REFRESH | Medium |
+
+## Word editing (2026-09-18)
+
+| Issue | ID | Sev |
+| --- | --- | --- |
+| [`2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`](2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md) | P2-WORD-EDIT | Low |
 
 ## Selection (2026-09-17)
 

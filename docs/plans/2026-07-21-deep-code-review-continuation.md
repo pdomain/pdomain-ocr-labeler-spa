@@ -272,7 +272,7 @@ Each row is a governed issue under `docs/issues/`. Prefer implementing by issue
 | 3b | (existing) [`docs/context/open-findings.md`](../context/open-findings.md) + open-findings plan | KBD / XDG / RELOAD / HIER |
 | 4 | [`docs/issues/2026-05-22-gh-430-ci-equivalence.md`](../issues/2026-05-22-gh-430-ci-equivalence.md) | P1-CI-GATES |
 | 4 | [`docs/issues/2026-05-22-gh-433-openapi-drift.md`](../issues/2026-05-22-gh-433-openapi-drift.md) | P1-CI-GATES |
-| 4 | [`docs/issues/2026-07-21-e2e-non-blocking-soft-skips.md`](../issues/2026-07-21-e2e-non-blocking-soft-skips.md) | P0-CI-SOFT, P2-E2E-GATE |
+| 4 | done 2026-09-18 in `fc2be39`; see the tombstone in `docs/context/decisions.md` | P0-CI-SOFT, P2-E2E-GATE |
 | 5 | [`docs/issues/2026-07-21-suite-launcher-app-shims.md`](../issues/2026-07-21-suite-launcher-app-shims.md) | P1-SUITE |
 | 5 | done 2026-09-17 in `8275e8f`; see the tombstone in `docs/context/decisions.md` | P1-JOBS-API |
 | 5 | [`docs/issues/2026-07-21-project-list-metadata-filters-noop.md`](../issues/2026-07-21-project-list-metadata-filters-noop.md) | P2-ROOT |

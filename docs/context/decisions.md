@@ -684,3 +684,27 @@ and browser gates pass on the merged tree.
   other two modes need a page image that a synthetic fixture cannot supply, so
   they are covered by unit tests alone. The fields a resync changes get no
   visual cue.
+
+### [2026-09-18] Retired: the browser suite could pass while proving nothing
+
+- Old path: `docs/issues/2026-07-21-e2e-non-blocking-soft-skips.md`
+- Outcome: implemented, local half; the CI half was already moot
+- Superseded by: `tests/e2e/conftest.py` (the seeded tiny fixture and the
+  skip-budget gate) and `tests/e2e/test_skip_budget_gate.py`
+- Resolved by: `fc2be39` (merge of `fix/e2e-fixture`)
+- Rationale kept: the tiny fixture's pages were one-pixel placeholders, so every
+  test needing word content skipped in every environment, and the suite reported
+  success while proving nothing. The fixture now carries real words, seeded the
+  way other fixtures seed pages rather than by running OCR; the skips that hid
+  gaps are assertions; retired testids were dropped from the driver-contract
+  expectations; and a session gate fails a run that skips for a reason outside a
+  documented allowlist, scoped so a target whose tests are meant to skip is not
+  caught. The GitHub workflows this issue also named were removed on 2026-09-13.
+- What it exposed: two real product bugs, both fixed in the same merge. The word
+  match list mounted no rows at all once a page had words, because its container
+  measured zero height. A metrics chip that only renders when a page has words
+  painted over the page-kind button and took its clicks.
+- Counts: the suite went from 142 passed, 14 failed, 11 skipped to 151 passed,
+  12 failed, 7 skipped. Ten of those failures predate this work and are untouched.
+- Remaining work: those ten pre-existing failures, and one deliberately left red
+  for a word-edit dialog the driver contract documents but the code does not have.
