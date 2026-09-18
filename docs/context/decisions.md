@@ -1569,12 +1569,13 @@ family and not touched.
   shipped, breaking every open correction's epoch continuity on first load.
   `"corrected_text"`, hashed alongside it, already changes on every
   ground-truth edit, so nothing is lost by leaving it alone.
-- A related, pre-existing behavior surfaced while testing this, not changed
-  here: `TypographyBinding.page_sha256` is a whole-page hash, so editing any
-  one word's ground truth invalidates every word's correction epoch on that
-  page, not just the edited word's. A completed review legitimately reports
-  `typography_reviewed: false` right after any page edit and needs a fresh
-  review — expected staleness, not a bug, and out of scope here.
+- A related, pre-existing behaviour surfaced while testing this and was called
+  expected staleness here. **That was wrong, and it was fixed the same day.**
+  `TypographyBinding.page_sha256` was a whole-page hash, so editing any one
+  word's ground truth invalidated every word's correction epoch on that page.
+  Combined with the validate gate above, correcting one word made every other
+  word on the page un-validatable until re-reviewed, and correcting words is
+  the main activity. See the next entry.
 - Tests: `tests/integration/test_typography_word_id_survives_gt_edit.py` —
   the 404 reproduction, the end-to-end review-survives-an-edit case, and a
   direct proof that a correction filed under the legacy id resolves through
@@ -1582,3 +1583,36 @@ family and not touched.
   encoded the old (ground-truth-derived) id scheme directly and were updated
   to the OCR-derived one.
 - Shipped in `fix/word-id-gt-divergence`.
+
+### [2026-09-18] Fixed: a review went stale when a neighbouring word changed
+
+- A typography correction was bound to `page_sha256`, a hash over every word's
+  ground-truth text and bounding box. Any edit anywhere on the page broke the
+  epoch for every word on it. With the same day's validate gate reading that
+  epoch, correcting one word's ground truth made every other word on the page
+  impossible to validate until its graphemes were reviewed again.
+- Decision: a correction is a statement about one word's graphemes, so it goes
+  stale when that word's own content or position changes, not when a neighbour
+  does. The hash now covers structure only: reading order, word count and OCR
+  text.
+- Bounding boxes came out of the hash too, which I had not asked for and the
+  implementer argued for. Nudging a box is as routine an edit as correcting
+  text, so leaving it in would have reproduced the same bug through another
+  door. The cost, stated rather than hidden: a word's own bbox nudge no longer
+  stales its own review either, because the upstream contract hard-validates
+  `WordTypography.text_sha256` against a literal hash of the text and leaves no
+  per-word slot to carry bbox currency. Documented in `_current_page_content`
+  and pinned by a test.
+- Still stale a review, because they genuinely change what it was about: adding,
+  deleting, merging and splitting a word.
+- Corrections under the old hash are bridged, not orphaned. The structural hash
+  is tried first, then the old whole-page formula recomputed from live state. A
+  pre-existing correction reads as current on deploy, goes stale on the next
+  unrelated edit exactly as it always did rather than worse, and the gap closes
+  for good once that word is reviewed again.
+- A latent bug fell out of it: the per-word staleness check compared a word's
+  **first** correction in the epoch against live text rather than its latest.
+  The whole-page reset had masked it, because first and latest were almost
+  always the same record. Fixed in `typography_page_review` and the export
+  bundle.
+- Shipped in `cc41211`.
