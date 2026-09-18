@@ -25,6 +25,18 @@
 // CANCELLABLE / BEST_EFFORT_CANCEL policy sets), so no Cancel action is
 // offered for these jobs.
 //
+// Review finding 3: the refine_bboxes job tracker (SSE subscription +
+// terminal-status invalidation + toast) does NOT live in this component.
+// This component's `Accordion.Content` unmounts whenever the "Bounding Box"
+// item collapses (Radix removes closed content from the DOM), which would
+// close the SSE connection and drop the terminal event mid-job. The tracker
+// lives in `useBboxRefineTracking`, owned by ProjectPage (the only ancestor
+// guaranteed to stay mounted for the whole session) and passed down as the
+// `refineTracking` prop. This component only calls `refineTracking.start`
+// once a refine POST returns 202, and reads `refineTracking.jobId` /
+// `.wordKey` / `.outcome` back to compute its own busy state and to resync
+// `draft` once a real (refined > 0) outcome for this word lands.
+//
 // All original testids preserved except `bbox-crop-button`, renamed to
 // `bbox-expand-button` (see above). New testids (P3.a + P1-BBOX-UI):
 //   bbox-nudge-step             — step px input
@@ -41,9 +53,8 @@ import { useState } from "react";
 import { Input } from "@pdomain/pdomain-ui/primitives";
 import { Button } from "@pdomain/pdomain-ui/primitives";
 import { useReboxWord, useRefineWordBbox } from "../../../hooks/useWordMutations";
-import { useJobProgress } from "../../../hooks/useJobProgress";
-import { useJobCompletionInvalidation } from "../../../hooks/useJobCompletionInvalidation";
 import { useRefineAvailable } from "../../../hooks/useRefineAvailable";
+import type { UseBboxRefineTrackingResult } from "../../../hooks/useBboxRefineTracking";
 import { toast } from "../../../lib/toast";
 import type { components } from "../../../api/types";
 
@@ -65,6 +76,9 @@ export interface BBoxSectionProps {
   word: WordMatch;
   projectId: string;
   pageIndex: number;
+  /** Hoisted refine_bboxes job tracker — see the module doc comment
+   * (review finding 3) for why this lives in an ancestor rather than here. */
+  refineTracking: UseBboxRefineTrackingResult;
 }
 
 type BBoxField = "x" | "y" | "width" | "height";
@@ -105,7 +119,7 @@ function applyNudge(bbox: BBox, dir: NudgeDir, step: number): BBox {
 
 // ─── BBoxSection ─────────────────────────────────────────────────────────
 
-export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
+export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBoxSectionProps) {
   const reboxMutation = useReboxWord(projectId, pageIndex);
   const refineMutation = useRefineWordBbox(projectId, pageIndex);
 
@@ -123,12 +137,11 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
   // reset) already knows the new bbox locally and calls `setDraft` itself —
   // `draft` never needs to resync from the `word` prop for those. A refine
   // job is different: the server computes the new bbox, so `draft` only
-  // ever knows the real value once the completed job's invalidation
-  // refetches the page query and a fresh `word.bbox` arrives as a prop.
-  // `pendingRefineSync` is set once, in the job's `onComplete` below, and
+  // ever knows the real value once the ancestor's `useBboxRefineTracking`
+  // invalidates the page query and a fresh `word.bbox` arrives as a prop.
+  // `pendingRefineSync` is armed below (from `refineTracking.outcome`) and
   // consumed the next time `word.bbox` actually changes — adjusting state
-  // during render (not in an effect, and not a ref — refs may not be read
-  // during render, only state) the same way `useJobProgress` resets
+  // during render (not in an effect) the same way `useJobProgress` resets
   // `latest` on `jobId` change, so this doesn't cost an extra render or use
   // an effect to watch a prop. Gating on the flag (rather than resyncing on
   // every `word.bbox` change unconditionally) matters: an unconditional
@@ -146,6 +159,20 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
     }
   }
 
+  // Review finding 2 (now sourced from the hoisted tracker's outcome
+  // instead of a locally-owned job-completion callback): arm the resync
+  // only once, per outcome token, for THIS word, and only when the job
+  // actually refined something. `lastSeenOutcomeToken` is consumed the same
+  // render-time-adjustment way as `pendingRefineSync` above.
+  const [lastSeenOutcomeToken, setLastSeenOutcomeToken] = useState<number | null>(null);
+  const outcome = refineTracking.outcome;
+  if (outcome?.wordKey === wordKey && outcome.token !== lastSeenOutcomeToken) {
+    setLastSeenOutcomeToken(outcome.token);
+    if (outcome.refined > 0) {
+      setPendingRefineSync(true);
+    }
+  }
+
   // P1-BBOX-UI: capability probe — the Refine / Expand+Refine / Expand
   // buttons are disabled (with an explanatory message) rather than failing
   // on click when the server has no refine engine wired.
@@ -153,62 +180,10 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
   const refineAvailable = refineProbe.data?.available ?? false;
   const refineProbeLoading = refineProbe.isLoading;
 
-  // Tracks the in-flight refine_bboxes job (Refine / Expand+Refine / Expand
-  // all share one tracker — only one can run at a time from this section).
-  const [refineJobId, setRefineJobId] = useState<string | null>(null);
-  const refineJobProgress = useJobProgress(refineJobId);
-  const refineJobRunning =
-    refineJobId !== null &&
-    (refineJobProgress === null ||
-      (refineJobProgress.status !== "complete" &&
-        refineJobProgress.status !== "error" &&
-        refineJobProgress.status !== "cancelled"));
-
-  useJobCompletionInvalidation({
-    activeJobId: refineJobId,
-    jobProgress: refineJobProgress,
-    setActiveJobId: setRefineJobId,
-    invalidationKey: ["page", projectId, pageIndex],
-    onComplete: (jobId, event) => {
-      // Review finding 2: "refine" and "expand_then_refine" no-op whenever
-      // the page has no `cv2_numpy_page_image` attached — true for every
-      // page loaded from the store, not an edge case
-      // (core/jobs/handlers/refine.py; word.refine_bbox(None, ...) and
-      // word.expand_then_refine_bbox(None) both return False without
-      // raising). The job still reaches "complete" with `refined: 0` in
-      // its result. Treating that as success and arming the resync
-      // unconditionally left the flag armed with nothing to consume — it
-      // would only fire (mis-attributing an unrelated bbox change to this
-      // refine) whenever `word.bbox` next happened to change for any other
-      // reason. Key off the job's own count of what it touched instead.
-      const refinedRaw = event.result?.refined;
-      const refined = typeof refinedRaw === "number" ? refinedRaw : 0;
-      if (refined > 0) {
-        setPendingRefineSync(true);
-        toast.success(
-          `Bbox refine complete (${String(refined)} word${refined === 1 ? "" : "s"} updated)`,
-          { id: jobId },
-        );
-      } else {
-        toast.warn("Bbox refine ran, but nothing changed.", { id: jobId });
-      }
-    },
-    onError: (jobId, errorMessage) => {
-      toast.error(errorMessage ?? "Bbox refine failed", { id: jobId });
-    },
-    // refine_bboxes is not in the backend's cancellable set — no Cancel
-    // action is offered, so a "cancelled" status is not expected here in
-    // practice, but the transition is still handled for completeness.
-    onCancelled: (jobId, event) => {
-      toast.warn(event.progress.message || "Bbox refine cancelled", { id: jobId });
-    },
-    onRunning: (jobId, event) => {
-      const msg = event.progress.message || "Refining bbox…";
-      void import("sonner").then(({ toast: sonnerToast }) => {
-        sonnerToast.loading(msg, { id: jobId });
-      });
-    },
-  });
+  // Review finding 3: whether a refine_bboxes job is in flight, per the
+  // hoisted tracker — not yet scoped to this word (review finding 4 narrows
+  // this to `refineTracking.wordKey === wordKey` in the next change).
+  const refineJobRunning = refineTracking.jobId !== null;
 
   /** Queue a `refine_bboxes` job scoped to this word. */
   function startRefine(mode: RefineMode, paddingPx: number, loadingMessage: string) {
@@ -216,7 +191,7 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
       { lineIndex: word.line_index, wordIndex: word.word_index ?? 0, mode, paddingPx },
       {
         onSuccess: (data) => {
-          setRefineJobId(data.job_id);
+          refineTracking.start(data.job_id, wordKey);
           void import("sonner").then(({ toast: sonnerToast }) => {
             sonnerToast.loading(loadingMessage, { id: data.job_id });
           });

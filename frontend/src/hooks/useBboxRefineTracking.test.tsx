@@ -1,0 +1,198 @@
+// useBboxRefineTracking.test.tsx — unit tests for the hoisted refine_bboxes
+// job tracker (review finding 3, docs/issues/2026-07-21-bbox-refine-crop-misleading.md).
+//
+// See WordDetail.test.tsx's "collapses mid-job" test for the integration-
+// level proof that this hook, called from an always-mounted ancestor,
+// survives BBoxSection's own accordion collapsing mid-job — that is the
+// scenario this hook exists to fix, and it needs the real Accordion +
+// BBoxSection composition to demonstrate. This file covers the hook's own
+// state machine in isolation: start/outcome/toast wiring.
+
+import React from "react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { renderHook, act } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useBboxRefineTracking } from "./useBboxRefineTracking";
+
+const toastMock = vi.hoisted(() => {
+  const fn = Object.assign(vi.fn(), {
+    loading: vi.fn(),
+    success: vi.fn(),
+    error: vi.fn(),
+  });
+  return fn;
+});
+vi.mock("sonner", () => ({
+  toast: toastMock,
+}));
+
+/** Build a synthetic SSE frame in the real wire shape — mirrors
+ * BBoxSection.test.tsx's `jobFrame`. */
+function jobFrame(input: {
+  job_id: string;
+  status: string;
+  progress?: { message?: string; current?: number; total?: number };
+  error_message?: string | null;
+  result?: Record<string, unknown> | null;
+}) {
+  return {
+    id: input.job_id,
+    type: "refine_bboxes",
+    project_id: "p1",
+    status: input.status,
+    progress: { current: 0, total: 0, message: "", ...input.progress },
+    error_message: input.error_message ?? null,
+    result: input.result ?? null,
+    created_at: new Date(0).toISOString(),
+    updated_at: new Date(0).toISOString(),
+    event: input.status,
+  };
+}
+
+function mockEventSource() {
+  let progressListener: ((e: MessageEvent) => void) | null = null;
+  const mockES = {
+    addEventListener: vi.fn((type: string, fn: unknown) => {
+      if (type === "progress" || type === "complete" || type === "error") {
+        progressListener = fn as (e: MessageEvent) => void;
+      }
+    }),
+    removeEventListener: vi.fn(),
+    close: vi.fn(),
+    readyState: 1 as number,
+  };
+  vi.stubGlobal(
+    "EventSource",
+    vi.fn(function () {
+      return mockES;
+    }),
+  );
+  return {
+    dispatch(data: Parameters<typeof jobFrame>[0]) {
+      act(() => {
+        progressListener?.({ data: JSON.stringify(jobFrame(data)) } as MessageEvent);
+      });
+    },
+  };
+}
+
+function makeWrapper() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+  const Wrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  );
+  return { qc, invalidateSpy, Wrapper };
+}
+
+describe("useBboxRefineTracking", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("start() sets jobId and wordKey", () => {
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useBboxRefineTracking("p1", 0), { wrapper: Wrapper });
+
+    expect(result.current.jobId).toBeNull();
+    expect(result.current.wordKey).toBeNull();
+
+    act(() => {
+      result.current.start("job-1", "0-0");
+    });
+
+    expect(result.current.jobId).toBe("job-1");
+    expect(result.current.wordKey).toBe("0-0");
+  });
+
+  it("a completed job with refined > 0 sets outcome, invalidates, and shows success", () => {
+    const { Wrapper, invalidateSpy } = makeWrapper();
+    const es = mockEventSource();
+    const { result } = renderHook(() => useBboxRefineTracking("p1", 0), { wrapper: Wrapper });
+
+    act(() => {
+      result.current.start("job-1", "0-0");
+    });
+
+    es.dispatch({ job_id: "job-1", status: "complete", result: { refined: 2 } });
+
+    expect(result.current.outcome).toEqual({ wordKey: "0-0", refined: 2, token: 1 });
+    expect(result.current.jobId).toBeNull();
+    expect(result.current.wordKey).toBeNull();
+    expect(invalidateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: ["page", "p1", 0] }),
+    );
+    // lib/toast.ts's success()/warn()/error() all call the base sonner
+    // `toast(message, opts)` function directly (styling via a border-left
+    // color, not sonner's own .success()/.warn()/.error() methods) — so the
+    // mock's calls live on the callable itself, not sub-properties of it.
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.stringContaining("Bbox refine complete"),
+      expect.objectContaining({ id: "job-1" }),
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  it("a completed job with refined: 0 does not set outcome and says nothing changed", () => {
+    const { Wrapper } = makeWrapper();
+    const es = mockEventSource();
+    const { result } = renderHook(() => useBboxRefineTracking("p1", 0), { wrapper: Wrapper });
+
+    act(() => {
+      result.current.start("job-1", "0-0");
+    });
+
+    es.dispatch({ job_id: "job-1", status: "complete", result: { refined: 0 } });
+
+    expect(result.current.outcome).toBeNull();
+    expect(result.current.jobId).toBeNull();
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.stringContaining("nothing changed"),
+      expect.objectContaining({ id: "job-1" }),
+    );
+    const successCall = toastMock.mock.calls.find(
+      ([msg]: [unknown]) => msg === "Bbox refine complete",
+    );
+    expect(successCall).toBeUndefined();
+
+    vi.unstubAllGlobals();
+  });
+
+  it("two outcomes for the same word with the same refined count get distinct tokens", () => {
+    const { Wrapper } = makeWrapper();
+    const es = mockEventSource();
+    const { result } = renderHook(() => useBboxRefineTracking("p1", 0), { wrapper: Wrapper });
+
+    act(() => {
+      result.current.start("job-1", "0-0");
+    });
+    es.dispatch({ job_id: "job-1", status: "complete", result: { refined: 1 } });
+    expect(result.current.outcome?.token).toBe(1);
+
+    act(() => {
+      result.current.start("job-2", "0-0");
+    });
+    es.dispatch({ job_id: "job-2", status: "complete", result: { refined: 1 } });
+    expect(result.current.outcome?.token).toBe(2);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("a failed job shows an error toast and clears jobId without setting outcome", () => {
+    const { Wrapper } = makeWrapper();
+    const es = mockEventSource();
+    const { result } = renderHook(() => useBboxRefineTracking("p1", 0), { wrapper: Wrapper });
+
+    act(() => {
+      result.current.start("job-1", "0-0");
+    });
+    es.dispatch({ job_id: "job-1", status: "error", error_message: "boom" });
+
+    expect(toastMock).toHaveBeenCalledWith("boom", expect.objectContaining({ id: "job-1" }));
+    expect(result.current.jobId).toBeNull();
+    expect(result.current.outcome).toBeNull();
+
+    vi.unstubAllGlobals();
+  });
+});

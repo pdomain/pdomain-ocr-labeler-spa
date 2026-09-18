@@ -6,6 +6,7 @@
 // `refine_bboxes` job (POST .../refine) instead of a plain rebox.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { useSyncExternalStore } from "react";
 import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -13,6 +14,10 @@ import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-quer
 import { BBoxSection } from "./BBoxSection";
 import { bboxHint } from "./bboxUtils";
 import { server } from "../../../test/server";
+import type {
+  BboxRefineOutcome,
+  UseBboxRefineTrackingResult,
+} from "../../../hooks/useBboxRefineTracking";
 import type { components } from "../../../api/types";
 
 type WordMatch = components["schemas"]["WordMatch"];
@@ -22,7 +27,11 @@ type RefineScopeRequest = components["schemas"]["RefineScopeRequest"];
 // ─── sonner mock ──────────────────────────────────────────────────────────
 // Mocked at module level so both the direct import in lib/toast.ts and the
 // dynamic import("sonner") in BBoxSection resolve to the same mock object —
-// mirrors PageActionsCompact.test.tsx.
+// mirrors PageActionsCompact.test.tsx. Review finding 3 moved the
+// completion toast lifecycle to useBboxRefineTracking (its own test file
+// covers that); what stays local to BBoxSection is the immediate "job
+// started" loading toast and the POST-failure error toast, both still
+// exercised below.
 const toastMock = vi.hoisted(() => {
   const fn = Object.assign(vi.fn(), {
     loading: vi.fn(),
@@ -35,57 +44,64 @@ vi.mock("sonner", () => ({
   toast: toastMock,
 }));
 
-/** Build a synthetic SSE frame in the real wire shape (public `Job` model +
- * `event`) — mirrors PageActionsCompact.test.tsx's `jobFrame`. */
-function jobFrame(input: {
-  job_id: string;
-  status: string;
-  progress?: { message?: string; current?: number; total?: number };
-  error_message?: string | null;
-  result?: Record<string, unknown> | null;
-}) {
-  return {
-    id: input.job_id,
-    type: "refine_bboxes",
-    project_id: "p1",
-    status: input.status,
-    progress: { current: 0, total: 0, message: "", ...input.progress },
-    error_message: input.error_message ?? null,
-    result: input.result ?? null,
-    created_at: new Date(0).toISOString(),
-    updated_at: new Date(0).toISOString(),
-    event: input.status,
-  };
+// ─── fake refineTracking (review finding 3) ────────────────────────────────
+// Review finding 3 hoisted the refine_bboxes job tracker out of BBoxSection
+// into useBboxRefineTracking, owned by an always-mounted ancestor
+// (ProjectPage) and threaded down as a prop. This fake stands in for that
+// ancestor in tests: a plain external store (same shape as this app's
+// worklistStore/dialogStore) a test can drive directly (`start` /
+// `completeWith` / `clearJob`), read reactively through
+// `useSyncExternalStore` inside a small wrapper component — real SSE-level
+// behavior (EventSource wiring, invalidation, toast wording) is covered by
+// useBboxRefineTracking.test.tsx; this file only needs to prove BBoxSection
+// consumes the resulting `{ jobId, wordKey, outcome, start }` shape
+// correctly.
+interface FakeRefineTrackingState {
+  jobId: string | null;
+  wordKey: string | null;
+  outcome: BboxRefineOutcome | null;
 }
 
-/** Stub EventSource capturing the SSE listener so a test can dispatch a
- * synthetic job-progress event — mirrors PageActionsCompact.test.tsx. */
-function mockEventSource() {
-  let progressListener: ((e: MessageEvent) => void) | null = null;
-  const mockES = {
-    addEventListener: vi.fn((type: string, fn: unknown) => {
-      if (type === "progress" || type === "complete" || type === "error") {
-        progressListener = fn as (e: MessageEvent) => void;
-      }
-    }),
-    removeEventListener: vi.fn(),
-    close: vi.fn(),
-    readyState: 1 as number,
-  };
-  vi.stubGlobal(
-    "EventSource",
-    vi.fn(function () {
-      return mockES;
-    }),
-  );
-  return {
-    dispatch(data: Parameters<typeof jobFrame>[0]) {
-      act(() => {
-        progressListener?.({ data: JSON.stringify(jobFrame(data)) } as MessageEvent);
-      });
-    },
-  };
+function createFakeRefineTracking() {
+  let state: FakeRefineTrackingState = { jobId: null, wordKey: null, outcome: null };
+  const listeners = new Set<() => void>();
+  function notify() {
+    listeners.forEach((l) => {
+      l();
+    });
+  }
+  function subscribe(cb: () => void) {
+    listeners.add(cb);
+    return () => {
+      listeners.delete(cb);
+    };
+  }
+  function getSnapshot() {
+    return state;
+  }
+  function start(jobId: string, wordKey: string) {
+    state = { ...state, jobId, wordKey };
+    notify();
+  }
+  /** Simulate the ancestor's real hook delivering a terminal outcome —
+   * clears the in-flight job and (for a real refine) records the outcome
+   * this word's BBoxSection should react to. */
+  function completeWith(wordKey: string, refined: number) {
+    state = {
+      jobId: null,
+      wordKey: null,
+      outcome: { wordKey, refined, token: (state.outcome?.token ?? 0) + 1 },
+    };
+    notify();
+  }
+  function useTracking(): UseBboxRefineTrackingResult {
+    const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+    return { jobId: snapshot.jobId, wordKey: snapshot.wordKey, outcome: snapshot.outcome, start };
+  }
+  return { useTracking, start, completeWith, getState: getSnapshot };
 }
+
+type FakeRefineTracking = ReturnType<typeof createFakeRefineTracking>;
 
 const DEFAULT_BBOX: BBox = { x: 10, y: 20, width: 30, height: 15 };
 
@@ -146,15 +162,20 @@ function makeQueryClient() {
   });
 }
 
-function renderBBox(word = makeWord()) {
+function renderBBox(word = makeWord(), tracking: FakeRefineTracking = createFakeRefineTracking()) {
   const qc = makeQueryClient();
+  function Wrapper() {
+    const refineTracking = tracking.useTracking();
+    return <BBoxSection word={word} projectId="p1" pageIndex={0} refineTracking={refineTracking} />;
+  }
   return {
     ...render(
       <QueryClientProvider client={qc}>
-        <BBoxSection word={word} projectId="p1" pageIndex={0} />
+        <Wrapper />
       </QueryClientProvider>,
     ),
     qc,
+    tracking,
   };
 }
 
@@ -424,62 +445,42 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     expect(capturedBody!.word_indices).toEqual([[3, 5]]);
   });
 
-  it("a completed refine job invalidates the page query", async () => {
+  it("Refine calls refineTracking.start with the returned job id and this word's key", async () => {
     server.use(
       http.post("/api/projects/p1/pages/0/refine", () =>
-        HttpResponse.json({ job_id: "job-complete-1" }, { status: 202 }),
+        HttpResponse.json({ job_id: "job-start-1" }, { status: 202 }),
       ),
     );
-    const qc = makeQueryClient();
-    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
-    const es = mockEventSource();
     const user = userEvent.setup();
-
-    render(
-      <QueryClientProvider client={qc}>
-        <BBoxSection word={makeWord()} projectId="p1" pageIndex={0} />
-      </QueryClientProvider>,
-    );
+    const { tracking } = renderBBox(makeWord(DEFAULT_BBOX)); // line_index 0, word_index 0
 
     await user.click(screen.getByTestId("bbox-refine-button"));
-    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
 
-    es.dispatch({ job_id: "job-complete-1", status: "complete" });
-
-    await waitFor(() =>
-      expect(invalidateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ queryKey: ["page", "p1", 0] }),
-      ),
-    );
-
-    vi.unstubAllGlobals();
+    await waitFor(() => expect(tracking.getState().jobId).toBe("job-start-1"));
+    expect(tracking.getState().wordKey).toBe("0-0");
   });
 
-  it("a completed refine job's invalidated refetch updates the coordinate inputs", async () => {
-    // Regression guard: BBoxSection's `draft` used to be a mount-time-only
-    // snapshot of `word.bbox` — invalidating the page query refetched fresh
-    // data, but nothing resynced `draft` to it, so the coordinate inputs
-    // stayed on the pre-refine values even though the server (and the rest
-    // of the app, reading the same refetched query) had already moved on.
-    // This wraps BBoxSection in a small harness that subscribes to the same
-    // `["page", projectId, pageIndex]` query WordDetail does, passing the
-    // refetched word down as a fresh prop — the render-time resync in
-    // BBoxSection should pick it up once the job completes.
+  it("a delivered outcome for this word's key resyncs the coordinate inputs", async () => {
+    // Regression guard (review finding 3 follow-on of the original P1-BBOX-UI
+    // fix): BBoxSection's `draft` used to be a mount-time-only snapshot of
+    // `word.bbox`. The completion outcome now arrives as a prop
+    // (`refineTracking.outcome`) instead of a locally-owned SSE stream —
+    // this proves BBoxSection still resyncs `draft` once a matching,
+    // real (`refined > 0`) outcome for this word lands, the same way it did
+    // before the job tracker moved out to useBboxRefineTracking.
     // The GET handler mimics a real backend: it keeps returning the
-    // original bbox until the refine POST has actually landed, only then
-    // switching to the expanded one — a handler hardcoded to the expanded
-    // value from the start would mask this test's whole premise, since
-    // TanStack Query's default `refetchOnMount` would pick it up on mount,
-    // long before the job ever "completes".
+    // original bbox until the caller "commits" the expanded one — a
+    // handler hardcoded to the expanded value from the start would mask
+    // this test's premise, since TanStack Query's default `refetchOnMount`
+    // would pick it up on mount, long before any outcome arrives.
     const EXPANDED_BBOX: BBox = { x: 6, y: 16, width: 38, height: 23 };
     let currentBbox = DEFAULT_BBOX;
     server.use(
-      http.post("/api/projects/p1/pages/0/refine", () => {
-        currentBbox = EXPANDED_BBOX;
-        return HttpResponse.json({ job_id: "job-sync-1" }, { status: 202 });
-      }),
       http.get("/api/projects/p1/pages/0", () => HttpResponse.json(makePageResponse(currentBbox))),
     );
+
+    const tracking = createFakeRefineTracking();
+    const qc = makeQueryClient();
 
     function Harness() {
       const q = useQuery({
@@ -490,13 +491,12 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
         },
         initialData: makePageResponse(DEFAULT_BBOX),
       });
+      const refineTracking = tracking.useTracking();
       const word = q.data.line_matches[0].word_matches[0];
-      return <BBoxSection word={word} projectId="p1" pageIndex={0} />;
+      return (
+        <BBoxSection word={word} projectId="p1" pageIndex={0} refineTracking={refineTracking} />
+      );
     }
-
-    const qc = makeQueryClient();
-    const es = mockEventSource();
-    const user = userEvent.setup();
 
     render(
       <QueryClientProvider client={qc}>
@@ -506,10 +506,20 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
 
     expect(screen.getByTestId("bbox-input-x").value).toBe("10");
 
-    await user.click(screen.getByTestId("bbox-expand-refine-button"));
-    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
-
-    es.dispatch({ job_id: "job-sync-1", status: "complete", result: { refined: 1 } });
+    // Real timing (see useBboxRefineTracking.ts's onComplete): the outcome
+    // is recorded and the page query is invalidated in the same tick, and
+    // the invalidation's refetch resolves afterward — arming
+    // `pendingRefineSync` before `word.bbox` actually changes is exactly
+    // what lets BBoxSection tell "this bbox change is the refine's result"
+    // apart from an unrelated one (review finding 2). Reproduce that
+    // ordering here: outcome first, then the bbox catches up.
+    act(() => {
+      tracking.completeWith("0-0", 1);
+    });
+    currentBbox = EXPANDED_BBOX;
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ["page", "p1", 0] });
+    });
 
     await waitFor(() => {
       expect(screen.getByTestId("bbox-input-x").value).toBe("6");
@@ -517,61 +527,29 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     expect(screen.getByTestId("bbox-input-y").value).toBe("16");
     expect(screen.getByTestId("bbox-input-w").value).toBe("38");
     expect(screen.getByTestId("bbox-input-h").value).toBe("23");
-
-    vi.unstubAllGlobals();
   });
 
   // ─── Review finding 2 (high): refine and expand_then_refine no-op when
   // the page has no cv2_numpy_page_image (true for any page loaded from the
-  // store) — a documented outcome, not an edge case. The job's terminal
-  // event carries `result.refined`; the resync must key off it rather than
-  // arming unconditionally on any "complete" status. ─────────────────────
+  // store) — a documented outcome, not an edge case. The resync must key
+  // off the outcome's `refined` count. See useBboxRefineTracking.test.tsx
+  // for the toast-wording coverage (that lives in the hook now). ─────────
 
-  it("a no-op refine (result.refined: 0) says nothing changed instead of claiming success", async () => {
-    server.use(
-      http.post("/api/projects/p1/pages/0/refine", () =>
-        HttpResponse.json({ job_id: "job-noop-1" }, { status: 202 }),
-      ),
-    );
-    const es = mockEventSource();
-    const user = userEvent.setup();
-    renderBBox();
-
-    await user.click(screen.getByTestId("bbox-refine-button"));
-    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
-
-    es.dispatch({ job_id: "job-noop-1", status: "complete", result: { refined: 0 } });
-
-    await waitFor(() => {
-      const calls = toastMock.mock.calls as [unknown, { style?: { borderLeft?: string } }?][];
-      const nothingChangedCall = calls.find(
-        ([msg]) => typeof msg === "string" && msg.toLowerCase().includes("nothing changed"),
-      );
-      expect(nothingChangedCall).toBeDefined();
-    });
-
-    // The generic "complete" success wording must not also fire — a no-op
-    // is not success.
-    const successCalls = toastMock.mock.calls as [unknown][];
-    expect(successCalls.some(([msg]) => msg === "Bbox refine complete")).toBe(false);
-
-    vi.unstubAllGlobals();
-  });
-
-  it("a no-op refine (result.refined: 0) does not arm a resync for a later, unrelated bbox change", async () => {
-    // The bug: `pendingRefineSync` used to arm unconditionally on any
-    // "complete" status. A no-op refine never changes `word.bbox`, so the
-    // flag just sat there armed — until some later, wholly unrelated change
-    // to `word.bbox` (a GT rematch, a different word's edit landing on the
-    // same query, anything) arrived as a fresh prop and got silently
-    // snapped into `draft`, as if IT were the refine's result.
+  it("a no-op outcome (refined: 0) does not arm a resync for a later, unrelated bbox change", async () => {
+    // The bug this guards: `pendingRefineSync` used to arm unconditionally
+    // on any "complete" status. A no-op refine never changes `word.bbox`,
+    // so the flag just sat there armed — until some later, wholly
+    // unrelated change to `word.bbox` (a GT rematch, a different word's
+    // edit landing on the same query, anything) arrived as a fresh prop
+    // and got silently snapped into `draft`, as if IT were the refine's
+    // result.
     let currentBbox: BBox = DEFAULT_BBOX;
     server.use(
-      http.post("/api/projects/p1/pages/0/refine", () =>
-        HttpResponse.json({ job_id: "job-noop-2" }, { status: 202 }),
-      ),
       http.get("/api/projects/p1/pages/0", () => HttpResponse.json(makePageResponse(currentBbox))),
     );
+
+    const tracking = createFakeRefineTracking();
+    const qc = makeQueryClient();
 
     function Harness() {
       const q = useQuery({
@@ -582,13 +560,12 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
         },
         initialData: makePageResponse(DEFAULT_BBOX),
       });
+      const refineTracking = tracking.useTracking();
       const word = q.data.line_matches[0].word_matches[0];
-      return <BBoxSection word={word} projectId="p1" pageIndex={0} />;
+      return (
+        <BBoxSection word={word} projectId="p1" pageIndex={0} refineTracking={refineTracking} />
+      );
     }
-
-    const qc = makeQueryClient();
-    const es = mockEventSource();
-    const user = userEvent.setup();
 
     render(
       <QueryClientProvider client={qc}>
@@ -596,18 +573,9 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
       </QueryClientProvider>,
     );
 
-    await user.click(screen.getByTestId("bbox-refine-button"));
-    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
-
-    // The job completes as a genuine no-op — the bbox never changed.
-    es.dispatch({ job_id: "job-noop-2", status: "complete", result: { refined: 0 } });
-    await waitFor(() => {
-      const calls = toastMock.mock.calls as [unknown][];
-      expect(
-        calls.some(
-          ([msg]) => typeof msg === "string" && msg.toLowerCase().includes("nothing changed"),
-        ),
-      ).toBe(true);
+    // The job completes as a genuine no-op — nothing was refined.
+    act(() => {
+      tracking.completeWith("0-0", 0);
     });
 
     // Now something else entirely changes this word's bbox and the same
@@ -621,40 +589,6 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     await waitFor(() => expect(qc.getQueryData(["page", "p1", 0])).toBeDefined());
 
     expect(screen.getByTestId("bbox-input-x").value).toBe("10");
-
-    vi.unstubAllGlobals();
-  });
-
-  it("a failed refine job shows an error toast", async () => {
-    server.use(
-      http.post("/api/projects/p1/pages/0/refine", () =>
-        HttpResponse.json({ job_id: "job-fail-1" }, { status: 202 }),
-      ),
-    );
-    const es = mockEventSource();
-    const user = userEvent.setup();
-    renderBBox();
-
-    await user.click(screen.getByTestId("bbox-refine-button"));
-    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
-
-    es.dispatch({
-      job_id: "job-fail-1",
-      status: "error",
-      error_message: "refine_bboxes: page 0 not loaded; run OCR / load first",
-    });
-
-    await waitFor(() => {
-      const calls = toastMock.mock.calls as [unknown, { style?: { borderLeft?: string } }?][];
-      const errorCall = calls.find(
-        ([msg, opts]) =>
-          msg === "refine_bboxes: page 0 not loaded; run OCR / load first" &&
-          opts?.style?.borderLeft?.includes("status-mismatch"),
-      );
-      expect(errorCall).toBeDefined();
-    });
-
-    vi.unstubAllGlobals();
   });
 
   it("a POST failure to start the refine job shows an error toast", async () => {

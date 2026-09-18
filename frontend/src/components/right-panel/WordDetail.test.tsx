@@ -23,15 +23,40 @@ vi.mock("../../hooks/useRefineAvailable", () => ({
   useRefineAvailable: () => ({ data: { available: true } }),
 }));
 
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+// ─── sonner mock ──────────────────────────────────────────────────────────
+// Needed only by the "collapses mid-job" describe block below (the real
+// useBboxRefineTracking hook shows toasts) — mirrors BBoxSection.test.tsx /
+// useBboxRefineTracking.test.tsx.
+const toastMock = vi.hoisted(() => {
+  const fn = Object.assign(vi.fn(), { loading: vi.fn(), success: vi.fn(), error: vi.fn() });
+  return fn;
+});
+vi.mock("sonner", () => ({ toast: toastMock }));
+
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import { server } from "../../test/server";
 import { WordDetail, resolveWord } from "./WordDetail";
 import { clearSelection, selectWord } from "../../stores/selection-store";
+import { useBboxRefineTracking } from "../../hooks/useBboxRefineTracking";
+import type { UseBboxRefineTrackingResult } from "../../hooks/useBboxRefineTracking";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
+
+/** Static no-op stand-in for `bboxRefine` — none of the tests in this
+ * describe block open the "Bounding Box" accordion item, so BBoxSection
+ * never actually mounts and reads it. The "collapses mid-job" describe
+ * block below uses the real `useBboxRefineTracking` hook instead, since
+ * that is exactly the behavior it proves. */
+const NOOP_BBOX_REFINE: UseBboxRefineTrackingResult = {
+  jobId: null,
+  wordKey: null,
+  outcome: null,
+  start: () => undefined,
+};
 
 function makeQueryClient() {
   return new QueryClient({
@@ -102,13 +127,17 @@ describe("WordDetail (Slice 16)", () => {
   });
 
   it("shows 'No word selected' when no word in selection-store", () => {
-    renderWithQuery(<WordDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    renderWithQuery(
+      <WordDetail page={makePage()} projectId="p1" pageIndex={0} bboxRefine={NOOP_BBOX_REFINE} />,
+    );
     expect(screen.getByTestId("word-detail")).toHaveTextContent(/no word selected/i);
   });
 
   it("renders 6 accordion items when word is selected", () => {
     selectWord(0, 0);
-    renderWithQuery(<WordDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    renderWithQuery(
+      <WordDetail page={makePage()} projectId="p1" pageIndex={0} bboxRefine={NOOP_BBOX_REFINE} />,
+    );
     expect(screen.getByTestId("word-detail")).toBeInTheDocument();
     // 6 accordion triggers
     const triggers = screen.getAllByRole("button");
@@ -127,7 +156,9 @@ describe("WordDetail (Slice 16)", () => {
 
   it("shows word identity label in the header (P2.a)", () => {
     selectWord(0, 0);
-    renderWithQuery(<WordDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    renderWithQuery(
+      <WordDetail page={makePage()} projectId="p1" pageIndex={0} bboxRefine={NOOP_BBOX_REFINE} />,
+    );
     // P2.a: header now shows "Line N · Word N", not the raw OCR text
     expect(screen.getByTestId("word-header-id")).toHaveTextContent("Line 1 · Word 1");
   });
@@ -139,7 +170,9 @@ describe("WordDetail (Slice 16)", () => {
 
   it("passes the page image and word bbox to the word image crop preview", () => {
     selectWord(0, 0);
-    renderWithQuery(<WordDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    renderWithQuery(
+      <WordDetail page={makePage()} projectId="p1" pageIndex={0} bboxRefine={NOOP_BBOX_REFINE} />,
+    );
 
     const crop = screen.getByTestId("word-image-crop");
     expect(crop).toHaveAttribute("viewBox", "10 20 30 15");
@@ -149,11 +182,152 @@ describe("WordDetail (Slice 16)", () => {
   it("disables prev/next pager buttons by word order, not logical word_index value", () => {
     selectWord(0, 3);
     renderWithQuery(
-      <WordDetail page={makePageWithLogicalWordIndex(3)} projectId="p1" pageIndex={0} />,
+      <WordDetail
+        page={makePageWithLogicalWordIndex(3)}
+        projectId="p1"
+        pageIndex={0}
+        bboxRefine={NOOP_BBOX_REFINE}
+      />,
     );
 
     expect(screen.getByTestId("word-detail")).not.toHaveTextContent(/word not found/i);
     expect(screen.getByTestId("word-header-prev")).toBeDisabled();
     expect(screen.getByTestId("word-header-next")).toBeDisabled();
+  });
+});
+
+// ─── Review finding 3 (high): refine job tracking survives an accordion
+// collapse ──────────────────────────────────────────────────────────────
+//
+// BBoxSection lives inside `Accordion.Content`, which Radix removes from
+// the DOM when the "Bounding Box" item collapses. Before this fix, the
+// refine_bboxes job tracker (SSE subscription + terminal-status
+// invalidation) lived inside BBoxSection itself, so collapsing the item
+// mid-job closed the EventSource and the completed refine never
+// invalidated the page query — the refined bbox was lost from the UI until
+// something unrelated refetched it. `useBboxRefineTracking` is now owned by
+// whichever ancestor calls it (ProjectPage, in production); this harness
+// calls it at the same level `renderWithQuery`'s callers render WordDetail
+// from, to prove the tracking is unaffected by BBoxSection's own mount
+// state.
+
+/** Build a synthetic SSE frame in the real wire shape — mirrors
+ * BBoxSection.test.tsx / useBboxRefineTracking.test.tsx's `jobFrame`. */
+function jobFrame(input: {
+  job_id: string;
+  status: string;
+  result?: Record<string, unknown> | null;
+}) {
+  return {
+    id: input.job_id,
+    type: "refine_bboxes",
+    project_id: "p1",
+    status: input.status,
+    progress: { current: 0, total: 0, message: "" },
+    error_message: null,
+    result: input.result ?? null,
+    created_at: new Date(0).toISOString(),
+    updated_at: new Date(0).toISOString(),
+    event: input.status,
+  };
+}
+
+function mockEventSource() {
+  let progressListener: ((e: MessageEvent) => void) | null = null;
+  const mockES = {
+    addEventListener: vi.fn((type: string, fn: unknown) => {
+      if (type === "progress" || type === "complete" || type === "error") {
+        progressListener = fn as (e: MessageEvent) => void;
+      }
+    }),
+    removeEventListener: vi.fn(),
+    close: vi.fn(),
+    readyState: 1 as number,
+  };
+  vi.stubGlobal(
+    "EventSource",
+    vi.fn(function () {
+      return mockES;
+    }),
+  );
+  return {
+    dispatch(data: Parameters<typeof jobFrame>[0]) {
+      act(() => {
+        progressListener?.({ data: JSON.stringify(jobFrame(data)) } as MessageEvent);
+      });
+    },
+  };
+}
+
+/** Mirrors how ProjectPage wires WordDetail: calls the real tracking hook
+ * once, at a level that stays mounted regardless of what WordDetail (or
+ * BBoxSection, underneath it) does with the accordion. */
+function BboxRefineHarness({
+  page,
+  projectId,
+  pageIndex,
+}: {
+  page: PagePayload;
+  projectId: string;
+  pageIndex: number;
+}) {
+  const bboxRefine = useBboxRefineTracking(projectId, pageIndex);
+  return (
+    <WordDetail page={page} projectId={projectId} pageIndex={pageIndex} bboxRefine={bboxRefine} />
+  );
+}
+
+describe("WordDetail + useBboxRefineTracking: collapses mid-job (review finding 3)", () => {
+  beforeEach(() => {
+    clearSelection();
+    vi.clearAllMocks();
+  });
+
+  it("collapsing the Bounding Box accordion mid-job still invalidates the page query when the job completes", async () => {
+    server.use(
+      http.post("/api/projects/p1/pages/0/refine", () =>
+        HttpResponse.json({ job_id: "job-collapse-1" }, { status: 202 }),
+      ),
+    );
+
+    selectWord(0, 0);
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const es = mockEventSource();
+    const user = userEvent.setup();
+
+    render(
+      <QueryClientProvider client={qc}>
+        <BboxRefineHarness page={makePage()} projectId="p1" pageIndex={0} />
+      </QueryClientProvider>,
+    );
+
+    // Open the "Bounding Box" accordion item — its content (BBoxSection)
+    // only attaches to the DOM once opened (Radix removes closed content).
+    const bboxTrigger = screen.getByRole("button", { name: /bounding box/i });
+    await user.click(bboxTrigger);
+    const refineButton = await screen.findByTestId("bbox-refine-button");
+
+    await user.click(refineButton);
+    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
+
+    // Collapse the accordion item — BBoxSection unmounts. The job is still
+    // running server-side; nothing in this component tree is watching its
+    // SSE stream from inside the collapsed content anymore.
+    await user.click(bboxTrigger);
+    await waitFor(() => expect(screen.queryByTestId("bbox-refine-button")).not.toBeInTheDocument());
+
+    // The job completes after the collapse. If tracking lived inside
+    // BBoxSection, this event would arrive on a closed EventSource and
+    // never be observed.
+    es.dispatch({ job_id: "job-collapse-1", status: "complete", result: { refined: 1 } });
+
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ queryKey: ["page", "p1", 0] }),
+      ),
+    );
+
+    vi.unstubAllGlobals();
   });
 });
