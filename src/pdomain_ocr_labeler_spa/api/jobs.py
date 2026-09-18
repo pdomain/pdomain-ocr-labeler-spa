@@ -107,24 +107,41 @@ async def job_events(
     public ``Job`` model plus an ``event`` field naming the SSE event kind
     (``snapshot`` / ``progress`` / ``complete`` / ``error`` / ``cancelled``)
     — see ``JobRunner._emit`` and ``_job_snapshot`` for the shared shape.
+
+    Registers the broker listener (``broker.listen``) *before* reading the
+    job's current status for the initial snapshot — not after, the way an
+    earlier version did by capturing ``job`` once and re-checking that same
+    stale reference post-yield. That let a job racing to a terminal state
+    between the initial fetch and the (only then made) ``subscribe`` call
+    both report a stale non-terminal snapshot *and* subscribe to an
+    already-closed, already-drained broker channel: the terminal event was
+    gone for good and the stream hung forever. Listening first closes the
+    race — see ``JobEventBroker.listen``'s docstring for the guarantee.
     """
     job = runner.get_job(job_id)
     if job is None:
         return _job_not_found(job_id)
 
     async def stream() -> AsyncIterator[str]:
-        snapshot = _job_snapshot(job)
-        ev_name = snapshot["event"] if snapshot["event"] in ("complete", "error", "cancelled") else "snapshot"
-        yield _sse_line(str(ev_name), snapshot)
+        queue = await broker.listen(job_id)
+        try:
+            current = runner.get_job(job_id) or job
+            snapshot = _job_snapshot(current)
+            ev_name = (
+                snapshot["event"] if snapshot["event"] in ("complete", "error", "cancelled") else "snapshot"
+            )
+            yield _sse_line(str(ev_name), snapshot)
 
-        if job.status in _TERMINAL:
-            return
-
-        async for event in broker.subscribe(job_id):
-            ev_type = event.get("event", "progress")
-            yield _sse_line(str(ev_type), event)
-            if ev_type in ("complete", "error", "cancelled"):
+            if current.status in _TERMINAL:
                 return
+
+            async for event in broker.drain(queue):
+                ev_type = event.get("event", "progress")
+                yield _sse_line(str(ev_type), event)
+                if ev_type in ("complete", "error", "cancelled"):
+                    return
+        finally:
+            await broker.unlisten(job_id, queue)
 
     return StreamingResponse(stream(), media_type="text/event-stream")
 
