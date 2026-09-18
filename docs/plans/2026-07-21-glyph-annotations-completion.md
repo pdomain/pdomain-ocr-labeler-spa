@@ -145,7 +145,7 @@ in `ConcaveTrillion/ocr-container-meta` or archived SPA issues):
 
 **Files:** none (investigation only)
 
-- [ ] **Step 1: Confirm current glyph files and open failures**
+- [x] **Step 1: Confirm current glyph files and open failures**
 
 ```bash
 cd /workspaces/pdomain/pdomain-ocr-labeler-spa
@@ -155,6 +155,11 @@ cd frontend && pnpm exec vitest run src/components/glyph src/components/WordCell
 ```
 
 Expected: unit/vitest suites for existing scaffold pass; grep shows map write sites and unmounted panel / placeholder chip handlers.
+
+Update (2026-09-18): the payload-inject and generation-bump gaps this step
+found were already closed on `master` by the time this backend pass started
+(commits `eb11eb9`, `89bbe6d`) — see Task 1 below. Frontend mount (Steps
+2/5/6) remains unmounted; out of scope for this backend-only pass.
 
 - [ ] **Step 2: Record mount decision**
 
@@ -176,7 +181,7 @@ Do not resurrect `WordEditDialog`.
 Without this, every API mutation that writes `glyph_annotations_map` is
 invisible to the SPA. This is the highest-leverage residual bug.
 
-- [ ] **Step 1: Write failing unit test — map overrides / stamps WordMatch**
+- [x] **Step 1: Write failing unit test — map overrides / stamps WordMatch**
 
 Add a test that builds a tiny Page/word stub, passes
 `glyph_annotations_map={"0_0": {"ligatures": [{"kind": "ct", "char_span": [0, 2]}], "long_s_positions": [], "swash": false, "source": "human"}}`,
@@ -188,13 +193,17 @@ Also assert:
 - empty dict value `{ligatures:[], long_s_positions:[], swash:false, source:human}` → non-None empty reviewed
 - optional `glyph_predictions_map` stamps `glyph_predictions`
 
-- [ ] **Step 2: Run test — expect fail**
+Tests added in `tests/unit/core/test_page_to_line_matches.py`.
+
+- [x] **Step 2: Run test — expect fail**
 
 ```bash
 uv run pytest tests/unit/core/ -k glyph -q
 ```
 
-- [ ] **Step 3: Implement stamp path**
+Update (2026-09-18): the tests **passed immediately** — see Step 3.
+
+- [x] **Step 3: Implement stamp path**
 
 Mirror `char_bboxes_map` / `char_ranges_map`:
 
@@ -205,13 +214,22 @@ Mirror `char_bboxes_map` / `char_ranges_map`:
 3. In `_page_payload`, pass `pstate.glyph_annotations_map` and
    `pstate.glyph_predictions_map` into `page_to_line_matches`.
 
-- [ ] **Step 4: Run tests — expect pass**
+Update (2026-09-18): already implemented on `master` before this pass
+(commit `89bbe6d feat: inject glyph sidecars into page payload and
+persist`) — `page_to_line_matches.py` already has both kwargs and
+`_glyph_from_sidecar`; `api/pages.py::_page_payload` already passes
+`pstate.glyph_annotations_map` / `glyph_predictions_map`. No code change
+needed for this step; only the regression tests were missing.
+
+- [x] **Step 4: Run tests — expect pass**
 
 ```bash
 uv run pytest tests/unit/core/ -k "glyph or page_to_line_matches" -q
 ```
 
-- [ ] **Step 5: Commit**
+5 passed.
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/pdomain_ocr_labeler_spa/core/page_to_line_matches.py \
