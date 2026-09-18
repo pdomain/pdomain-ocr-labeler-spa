@@ -101,7 +101,9 @@ _LONE_HEADER_CONFIDENCE = 0.4
 could be the top line of body text under a misplaced band."""
 
 _FOLIO_PATTERN = re.compile(r"^[0-9ivxlcdmIVXLCDM]+$")
-"""Digits, roman numerals, or both. Anything else reads as a running head."""
+"""Digits, roman numerals, or both. Anything else reads as a running head,
+unless ``_is_folio_via_lookalikes`` recognizes it as a digit folio OCR'd with
+lookalike letters — see ``_FOLIO_LOOKALIKE_SUBSTITUTIONS``."""
 
 _MAX_BAND_TO_WORD_HEIGHT_RATIO = 6
 """A band this many times taller than the median height of its own in-band
@@ -120,6 +122,83 @@ _DIGITS_ONLY_PATTERN = re.compile(r"^[0-9]+$")
 """Matches a peelable folio edge word — digits only, never a roman numeral.
 See ``_EDGE_FOLIO_PEEL_GAP_RATIO``: a head ending in a word such as ``CIVIL``
 or ``MIX`` must keep it, so roman numerals are excluded from the peel."""
+
+_ROMAN_ONLY_PATTERN = re.compile(r"^[ivxlcdmIVXLCDM]+$")
+"""A token spelled entirely in roman-numeral letters, no digits at all.
+
+Checked before ``_FOLIO_LOOKALIKE_SUBSTITUTIONS`` is ever tried, both for the
+peel and for ``_Cluster.is_folio``. ``I`` and lowercase ``l`` are each both a
+roman-numeral letter and a lookalike for digit ``1``, so a real roman
+numeral such as ``II`` or ``III`` would otherwise convert cleanly to an
+all-digit string (``11``, ``111``) under the substitution below. The roman
+reading always wins: excluded here, ``II`` keeps whatever the plain
+``_FOLIO_PATTERN``/peel-exclusion behaviour already gives it, unchanged by
+this fix.
+"""
+
+_FOLIO_LOOKALIKE_SUBSTITUTIONS = {
+    "I": "1",
+    "l": "1",
+    "|": "1",
+    "O": "0",
+}
+"""OCR digit lookalikes accepted, case-sensitively, when a token would
+otherwise read as a running head rather than a folio.
+
+Derived from a real OCR misread, not a guessed list:
+``.m15f-evidence/real-book-region-run/README.md``'s 2026-09-17 three-book
+hardening run recorded page 25 of ``projectID657550412c8dc`` — real DocTR
+output on a real book — OCR'ing its folio ``10`` as ``IO``. That page alone
+justifies ``I`` for ``1`` and ``O`` for ``0``. Lowercase ``l`` and the pipe
+``|`` are added on the same reasoning the evidence itself names: in this
+corpus's typefaces, ``I``, ``l`` and ``|`` all render as the identical bare
+vertical stroke DocTR draws for a ``1`` — which one the model emits for that
+stroke is a font accident, not a different signal.
+
+Deliberately excluded:
+
+- Lowercase ``o`` and ``i``. The same hardening run's page 26 recorded its
+  folio ``11`` misread as ``II`` — uppercase, as the evidence records it —
+  never lowercase ``ii``. Keeping the map case-sensitive costs nothing and is
+  what keeps ``Io`` (a real word, and one of the cases this fix must not
+  misread) from ever fully converting: only its ``I`` substitutes, not its
+  lowercase ``o``.
+- Uppercase ``S`` for ``5``. Never observed on any page read for this fix, and
+  a uniquely expensive guess to add anyway: ``SO`` is one of the commonest
+  short words in English and sits exactly where a folio sits. Leaving ``S``
+  out of the map is what keeps ``SO`` from ever fully converting to digits.
+
+See ``test_a_real_word_of_lookalike_letters_is_never_a_folio``.
+"""
+
+_FOLIO_LOOKALIKE_TRANSLATION = str.maketrans(_FOLIO_LOOKALIKE_SUBSTITUTIONS)
+
+_MAX_LOOKALIKE_FOLIO_LENGTH = 4
+"""A token longer than this is never read as a folio through the lookalike
+path, even if every character substitutes cleanly to a digit. The longer a
+run of lookalike letters, the more likely it is coincidental prose rather
+than a misread page number, and no folio in this corpus needs five digits —
+the longest folio in the module's own fixtures, ``xvii``, is four characters.
+Applies only to the lookalike path: a plain digit or roman-numeral folio (for
+instance ``232.``) is never length-capped, unchanged by this fix.
+"""
+
+
+def _is_folio_via_lookalikes(stripped: str) -> bool:
+    """Whether ``stripped`` reads as a folio only after normalizing OCR digit lookalikes.
+
+    A fallback, never a replacement, for ``_FOLIO_PATTERN`` and
+    ``_DIGITS_ONLY_PATTERN`` — a caller applies this only once its own plain
+    check has already failed. See ``_ROMAN_ONLY_PATTERN`` and
+    ``_FOLIO_LOOKALIKE_SUBSTITUTIONS`` for what this excludes and why.
+    """
+    if not stripped or len(stripped) > _MAX_LOOKALIKE_FOLIO_LENGTH:
+        return False
+    if _ROMAN_ONLY_PATTERN.match(stripped):
+        return False
+    substituted = stripped.translate(_FOLIO_LOOKALIKE_TRANSLATION)
+    return bool(_DIGITS_ONLY_PATTERN.match(substituted))
+
 
 _EDGE_FOLIO_PEEL_GAP_RATIO = 1.6
 """Peel a digit-only edge word off a cluster when its gap to its in-cluster
@@ -180,7 +259,11 @@ class _Cluster:
     @property
     def is_folio(self) -> bool:
         stripped = _strip_folio_punctuation(self.text.replace(" ", ""))
-        return bool(stripped) and bool(_FOLIO_PATTERN.match(stripped))
+        if not stripped:
+            return False
+        if _FOLIO_PATTERN.match(stripped):
+            return True
+        return _is_folio_via_lookalikes(stripped)
 
 
 class _BandWords(NamedTuple):
@@ -395,7 +478,7 @@ def _cluster(words: list[_ScaledWord], gap_px: float) -> list[_Cluster]:
 
 
 def _peel_one_end(clusters: list[_Cluster], *, at_start: bool, median_word_space_px: float) -> list[_Cluster]:
-    """Split the digit-only edge word off the leftmost or rightmost cluster, if it clears the gap bar."""
+    """Split the digit(-lookalike) edge word off the leftmost/rightmost cluster, if it clears the gap bar."""
     index = 0 if at_start else -1
     cluster = clusters[index]
     if len(cluster.words) <= 1:
@@ -405,7 +488,7 @@ def _peel_one_end(clusters: list[_Cluster], *, at_start: bool, median_word_space
     )
     gap = (neighbour.box[0] - edge.box[2]) if at_start else (edge.box[0] - neighbour.box[2])
     stripped = _strip_folio_punctuation(_scaled_word_text(edge))
-    if not (stripped and _DIGITS_ONLY_PATTERN.match(stripped)):
+    if not (stripped and (_DIGITS_ONLY_PATTERN.match(stripped) or _is_folio_via_lookalikes(stripped))):
         return clusters
     if gap <= _EDGE_FOLIO_PEEL_GAP_RATIO * median_word_space_px:
         return clusters
@@ -421,7 +504,7 @@ def _peel_one_end(clusters: list[_Cluster], *, at_start: bool, median_word_space
 
 
 def _peel_edge_folios(clusters: list[_Cluster], median_word_space_px: float | None) -> list[_Cluster]:
-    """Split a digit-only folio off either end of a page's clusters — book-fitted path only.
+    """Split a digit(-lookalike) folio off either end of a page's clusters — book-fitted path only.
 
     A long running head can sit barely a word space away from its own folio,
     so the book-wide gap threshold alone cannot separate them (see the module

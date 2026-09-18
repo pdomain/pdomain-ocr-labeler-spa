@@ -1689,3 +1689,40 @@ family and not touched.
   starts well before anyone opens it. Neither is true today, and the GPU probe
   raising when the card is full, tracked in `pdomain-ops`, is a reason to prefer
   building late rather than early.
+
+### [2026-09-18] Folio recognition accepts OCR digit lookalikes, narrowly
+
+- `core/regions/furniture.py` classified a band's trailing token as a folio
+  only if it was digits, roman numerals, or both. An OCR misread that turns a
+  digit into a lookalike letter — `IO` for `10` — was not recognized, and the
+  peel that splits a tight-clustered folio off a long head applied the same
+  digits-only test to the edge word. Real evidence:
+  `.m15f-evidence/real-book-region-run/README.md`'s 2026-09-17 three-book
+  hardening run recorded page 25 of `projectID657550412c8dc` OCR'ing its folio
+  `10` as `IO`, and page 26's `11` as `II` (already a folio only by accident,
+  since `II` also reads as a roman numeral).
+- Fix: `_is_folio_via_lookalikes`, a fallback tried only once the plain
+  digits/roman check has already failed, both for classification
+  (`_Cluster.is_folio`) and for the tight-cluster peel. Substitutions are
+  case-sensitive and narrow: `I`, lowercase `l`, and `|` for `1` (all render
+  as the same bare vertical stroke in this corpus's typefaces); `O` for `0`.
+  Capped at four characters, and never applied to a token spelled entirely in
+  roman-numeral letters — `I` and `l` are also roman digits, so a real roman
+  numeral such as `II` must keep reading as one, not fall through to `11`.
+- Deliberately excluded: lowercase `o`/`i`, and `S` for `5`. No page read for
+  this fix showed either, and both are expensive to add: `S` especially,
+  because `SO` is one of the commonest short words in English and sits
+  exactly where a folio sits. The exclusions are what keep `SO` and `Io` —
+  both real words — from ever fully converting to digits.
+- What does not change: `DetectedRegion` never carries text, only a role, a
+  box and a confidence. Recognizing a lookalike folio moves the proposed role
+  from `page header` to `page number`; it never rewrites the OCR'd word. No
+  folio anywhere in this codebase is parsed to an integer, so there is no
+  second place a lookalike substitution could leak into displayed or exported
+  text.
+- Tests: `tests/unit/core/regions/test_furniture.py` — the real `IO`-for-`10`
+  example (direct classification and via the peel), `SO`/`Io` as real words
+  that must stay headers, `II` as a roman numeral that must stay attached to
+  its head word even though it fully lookalike-converts to `11`, a token past
+  the length cap, and a check that the underlying word's OCR/ground-truth text
+  is untouched by recognition.
