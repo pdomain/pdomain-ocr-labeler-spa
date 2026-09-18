@@ -245,7 +245,7 @@ git commit -m "fix(m11): inject glyph sidecars into page payload"
 - Create: `tests/integration/api/test_glyph_routes.py` (or nearest integration layout)
 - Modify if needed: `api/words.py` / `api/pages.py` for correct status codes
 
-- [ ] **Step 1: Write failing integration tests**
+- [x] **Step 1: Write failing integration tests**
 
 Cover:
 
@@ -258,17 +258,37 @@ Cover:
 
 Use existing project/page fixtures from other word-mutation integration tests.
 
-- [ ] **Step 2: Run — expect fail until Task 1 lands; then fix any remaining route bugs**
+Added `tests/integration/test_glyph_routes.py` (flat layout — matches this
+repo's existing `tests/integration/` convention, not the
+`tests/integration/api/` path the plan's file map suggested).
+
+- [x] **Step 2: Run — expect fail until Task 1 lands; then fix any remaining route bugs**
 
 ```bash
 uv run pytest tests/integration -k glyph -q
 ```
 
-- [ ] **Step 3: Add `test_gt_rejects_ligature_codepoints.py`**
+Update (2026-09-18): Task 1 was already done (see above), so the set/accept
+tests passed immediately. The bulk-mark **apply** test failed with
+`TypeError: Object of type UUID is not JSON serializable` — `glyph_bulk_mark`
+returned a hand-built `JSONResponse(content=response.model_dump())` (no
+`mode="json"`), which chokes on the UUID nested in `page.page_record.page_id`.
+Fixed here by returning the declared `GlyphBulkMarkResponse` model instance
+directly (mirrors the jobs-API wire-shape fix, commit `324fb8b`). The
+separate durable-persistence gap (bulk-mark's STUB store write) is Task 3's
+fix, below. All 8 Task-2 tests pass after this fix.
+
+- [x] **Step 3: Add `test_gt_rejects_ligature_codepoints.py`**
 
 Assert POST GT with `ﬁ` or `ſ` returns 400 validation_error (spec §10).
 
-- [ ] **Step 4: Commit**
+Added as `test_update_word_gt_rejects_ligature_codepoints` /
+`test_update_word_gt_rejects_long_s_codepoint` in
+`tests/integration/test_glyph_routes.py` rather than a separate file — the
+validator (`UpdateWordGroundTruthRequest._reject_forbidden_codepoints`) was
+already shipped; only the test was missing.
+
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "test(m11): integration coverage for glyph routes"

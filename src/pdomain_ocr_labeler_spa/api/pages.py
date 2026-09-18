@@ -2729,7 +2729,7 @@ def glyph_bulk_mark(
     settings: Settings = Depends(get_settings),  # pyright: ignore[reportCallInDefaultInitializer]
     app_config: AppConfig = Depends(get_app_config),  # pyright: ignore[reportCallInDefaultInitializer]
     page_store: LabelerPageStore | None = Depends(get_page_store_optional),  # pyright: ignore[reportCallInDefaultInitializer]
-) -> JSONResponse:
+) -> GlyphBulkMarkResponse | JSONResponse:
     """``POST .../pages/{idx}/glyph-bulk-mark`` — apply a glyph-mark recipe to the page.
 
     Runs synchronously (page-scope bulk is fast).  Dry-run returns preview
@@ -2808,12 +2808,16 @@ def glyph_bulk_mark(
     affected = [f"{li}_{wi}" for (li, wi) in result.affected_word_ids]
     skipped = [f"{li}_{wi}" for (li, wi) in result.skipped_word_ids]
 
-    response = GlyphBulkMarkResponse(
+    # Return the declared response_model directly (not a hand-built
+    # JSONResponse dict): FastAPI's response_model then validates and
+    # serializes it, correctly handling non-JSON-native nested fields
+    # (e.g. ``page.page_record.page_id: UUID``) the way the jobs API's
+    # wire-shape fix does (``JobRunner.to_public_job`` callers).
+    return GlyphBulkMarkResponse(
         affected_word_ids=affected,
         skipped_word_ids=skipped,
         page=page_payload_out,
     )
-    return JSONResponse(content=response.model_dump())
 
 
 def _resolve_page_object_for_pages(pstate: PageState | None) -> Page | None:
