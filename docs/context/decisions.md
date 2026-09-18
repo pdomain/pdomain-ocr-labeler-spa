@@ -708,3 +708,43 @@ and browser gates pass on the merged tree.
   12 failed, 7 skipped. Ten of those failures predate this work and are untouched.
 - Remaining work: those ten pre-existing failures, and one deliberately left red
   for a word-edit dialog the driver contract documents but the code does not have.
+
+## 2026-09-18 — The browser suite's long-standing failures, triaged
+
+Ten browser tests had been failing on master for weeks with nobody looking at
+them, and two more appeared when the suite's fixtures were given real content.
+All were triaged on 2026-09-18 and fixed in `199aa66`. The suite went from 142
+passed, 14 failed to 160 passed, 2 failed.
+
+**Eight were stale tests, all from one commit.** `6a04cbe` (2026-08-22, the
+grapheme review editor) retired whole-word styling, deleting the component, the
+hook and the API route, and made text and typography review a precondition for
+validating a word and for exporting. It updated five test files and missed
+these eight. Two were deleted because their capability is gone; the rest now
+drive the review the product requires.
+
+**Five hotkeys the app advertised did nothing.** `?` and `mod+,` broke at the
+2026-09-13 react-hotkeys-hook 4 to 5 bump, which matches on physical key code;
+that bump adapted the test fixtures to the new library rather than the product,
+and no test pressed a key, so nothing caught it. `mod+o`, `mod+j` and
+`mod+shift+r` had never been registered at all. All five now work, and `?` and
+`,` match the character a person types rather than a US keyboard position.
+`mod+,` also turned out to be split into two dead hotkeys by the library's own
+comma delimiter.
+
+**The hotkey help dialog rendered off-screen**, its close button unreachable.
+It carried both pdomain-ui's shared `.dialog` transform and Tailwind's
+`-translate-x-1/2 -translate-y-1/2`, which this build emits as the `translate`
+longhand. Those are separate CSS properties that compose, so the box moved by
+twice what was intended. The confirm and source folder dialogs had the same
+duplication. Nobody had seen it because the shortcut that opens the dialog had
+been dead for five days.
+
+**What this says about the pattern.** Each fix exposed the next: a dead
+shortcut hid a broken dialog, blank fixtures hid a list that rendered nothing,
+and a test suite that skipped instead of failing hid all of it. Two findings
+were filed rather than fixed, in `docs/issues/2026-09-18-*`.
+
+Remaining: `test_word_edit_dialog_testids_present`, tracked in its own issue,
+and `test_validate_and_save_keyboard_only`, which passes alone and fails only
+under load in this environment.

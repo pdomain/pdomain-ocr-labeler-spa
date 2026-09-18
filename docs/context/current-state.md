@@ -106,6 +106,16 @@ import `PageRecord` and `RotationSource` from `pdomain_ops.pages`; the temporary
 `core.models` compatibility exports have been removed. Structural, persistence,
 validation, conversion, and rotation tests enforce the boundary.
 
+## The browser suite
+
+151 of 169 browser tests pass, with 2 failing and 7 skipped, as of `199aa66`.
+Both failures have a named owner: one is the word edit gap filed in
+`docs/issues/2026-09-18-the-word-edit-dialog-...`, and one passes alone and
+fails only under load in this environment. A run that skips for a reason
+outside `tests/e2e/conftest.py`'s allowlist now fails, so the suite can no
+longer report success while hiding a gap. See the 2026-09-18 tombstones in
+`decisions.md` for what the last triage found.
+
 ## Open work
 
 Cross-cutting prioritization (deep review Waves 0–6, verified 2026-07-21):
