@@ -748,3 +748,25 @@ were filed rather than fixed, in `docs/issues/2026-09-18-*`.
 Remaining: `test_word_edit_dialog_testids_present`, tracked in its own issue,
 and `test_validate_and_save_keyboard_only`, which passes alone and fails only
 under load in this environment.
+
+### [2026-09-18] Retired: the export request's dead normalize flag
+
+- Old path: `docs/issues/2026-07-21-export-normalize-flag-dead.md`
+- Outcome: removed, not implemented
+- Superseded by: `src/pdomain_ocr_labeler_spa/api/export.py` and
+  `core/jobs/handlers/export.py`, which no longer mention it
+- Resolved by: `c68661d` (merge of `fix/export-normalize`)
+- Rationale kept: `ExportRequest` accepted `normalize_recognition_labels`,
+  documented as long s and ligature normalization; the SPA sent it hardcoded
+  false, and the handler's normalizer called `core.text_normalize`, which probes
+  for a `pdomain-book-tools` module that has never existed. So even the wired
+  path was a permanent no-op. No long s or ligature normalizer exists in any
+  sibling repo, so making the flag work would have meant inventing a text
+  normalization feature to justify an option nobody could use. It was removed
+  instead, and `docs/architecture/18-text-normalization.md` now says
+  normalization is not offered. Pydantic ignores unknown fields, so a caller
+  still sending it gets an ordinary 202, which a regression test pins.
+- What it exposed: the normalize capability itself, filed as
+  `docs/issues/2026-09-18-text-normalization-waits-on-a-module-...`. A route, a
+  probe and a page-text call all wait on that same missing module and report the
+  feature as one upgrade away.

@@ -101,7 +101,6 @@ All four reports are resolved and deleted. See the 2026-08-08 tombstones in
 
 | Issue | ID | Sev |
 | --- | --- | --- |
-| [`2026-07-21-export-normalize-flag-dead.md`](2026-07-21-export-normalize-flag-dead.md) | P1-NORMALIZE | Medium |
 
 The export-list and store-first-CLI reports are resolved and deleted; see the
 2026-08-08 tombstones in [`../context/decisions.md`](../context/decisions.md).
@@ -148,6 +147,7 @@ The normalize report stays open on its frontend half.
 | --- | --- | --- |
 | [`2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`](2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md) | P2-WORD-EDIT | Low |
 | [`2026-09-18-the-per-word-validate-button-can-never-validate-a-word.md`](2026-09-18-the-per-word-validate-button-can-never-validate-a-word.md) | P1-VALIDATE-GATE | Medium |
+| [`2026-09-18-text-normalization-waits-on-a-module-that-has-never-existed.md`](2026-09-18-text-normalization-waits-on-a-module-that-has-never-existed.md) | P2-NORMALIZE-DEAD | Low |
 
 ## Selection (2026-09-17)
 
