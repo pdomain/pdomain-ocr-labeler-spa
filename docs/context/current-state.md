@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-07-21
+last_verified: 2026-09-18
 ---
 
 # Current state
@@ -13,7 +13,7 @@ last_verified: 2026-07-21
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-09-17
+- **Last verified:** 2026-09-18
 - **Read when:** orienting on shipped behavior, open work, or repository risk.
 - **Search terms:** current state, shipped, open work, risks, roadmap.
 
@@ -138,19 +138,31 @@ Cross-cutting prioritization (deep review Waves 0–6, verified 2026-07-21):
 Standing overnight stream index:
 [`../plans/2026-07-21-overnight-work-index.md`](../plans/2026-07-21-overnight-work-index.md).
 
-- **Highest product risk (deep review + adversarial recheck):** char/glyph
-  sidecar maps and rematch can return 200 without durable event-store write;
-  export list API is empty while manifests exist; CLI export is not store-first;
-  job SSE FE↔BE shape mismatch; canvas erase unmounted; image_drift banner
-  hard-off. See Waves 0–1 and 3a/3b issues.
+- **Highest product risk (deep review + adversarial recheck, historical —
+  see `decisions.md` for what Waves 0–1 and 3a/3b already resolved):**
+  rematch could return 200 without a durable event-store write; export list
+  API was empty while manifests existed; CLI export was not store-first; job
+  SSE FE↔BE shape mismatched; canvas erase was unmounted; the image_drift
+  banner was hard-off. Char and glyph sidecar maps now write durably; see
+  the char-sidecar and glyph durability entries in `decisions.md`.
 - PGDP/pdomain-ui alignment is partial. Remaining slices:
   [`../plans/2026-07-21-pgdp-alignment-remaining.md`](../plans/2026-07-21-pgdp-alignment-remaining.md)
   (source backlog:
   [`../plans/2026-06-14-labeler-spa-pgdp-alignment-backlog.md`](../plans/2026-06-14-labeler-spa-pgdp-alignment-backlog.md)).
-- Glyph annotations (M11) are scaffolded (~35% scaffold / ~20% usable path).
-  Residual wire-up:
+- Glyph annotations (M11) — the manual review path is shipped. A person
+  selects a word, marks its ligatures, long s or swash, or marks it
+  reviewed with no marks; the mark persists through save and reload; a
+  bulk apply persists and refreshes the page. The dataset export writes a
+  `recognition/glyph_features.json` sidecar so those human marks reach
+  recognition evaluation, keyed by crop id
+  (`core/jobs/handlers/glyph_sidecar.py`). No glyph predictor exists and
+  none will be built here (decided 2026-09-18) — the accept-prediction
+  button never fires; the seam stays, rendering nothing. Two small gaps
+  remain: a glyph chip click still does not open the review panel (only
+  selecting the word does), and there is no browser-level bulk-mark e2e.
+  See `decisions.md`'s 2026-09-18 entries and
   [`../plans/2026-07-21-glyph-annotations-completion.md`](../plans/2026-07-21-glyph-annotations-completion.md).
-  Spec: [`../../specs/20-glyph-annotations.md`](../../specs/20-glyph-annotations.md).
+  Spec: [`../../specs/20-glyph-annotations.md`](../../specs/20-glyph-annotations.md) §9.
 - Active local issues: CI vs `make ci` (#430) and OpenAPI drift (#433) —
   [`../plans/2026-07-21-ci-openapi-gates.md`](../plans/2026-07-21-ci-openapi-gates.md).
 - Open findings (keyboard, XDG data root, reload, hierarchy E2E):

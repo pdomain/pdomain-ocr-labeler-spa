@@ -94,9 +94,15 @@ Summary:
 
 - **Wave 0 data integrity first** — char sidecars, rematch, save dirty-bit,
   mutation silent-200 (`docs/issues/2026-07-21-sidecar-*` etc.).
-- M11 glyph annotations: scaffold exists; residual payload inject + WordDetail
-  wire-up — `docs/plans/2026-07-21-glyph-annotations-completion.md` /
-  `docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md`.
+- M11 glyph annotations: the manual review path is shipped — a person can
+  select a word, mark ligatures/long-s/swash or mark it reviewed with no
+  marks, and the mark survives save and reload; bulk apply persists and
+  refreshes. No predictor exists and none will be built (decided
+  2026-09-18) — the accept-prediction button never fires. See
+  `docs/context/decisions.md` (2026-09-18 entries) and
+  `docs/plans/2026-07-21-glyph-annotations-completion.md`. Residual polish:
+  glyph chips still don't open the panel on click, and there is no bulk-mark
+  browser e2e.
 - Export list + CLI store-first — corresponding `docs/issues/2026-07-21-export-*`
   / `cli-export-*` issues.
 - Job SSE FE↔BE shape, canvas erase, image-drift, cancel — Wave 3 issues.

@@ -59,7 +59,7 @@ Run `make behavior-coverage` to regenerate.
 | B-GLYPH-002 | no | test-written |
 | B-GLYPH-003 | no | test-written |
 | B-GLYPH-004 | no | test-written |
-| B-GLYPH-005 | no | specified |
+| B-GLYPH-005 | no | test-written |
 | B-JOBS-001 | no | test-written |
 | B-JOBS-002 | no | test-written |
 | B-JOBS-003 | no | test-written |
@@ -104,7 +104,7 @@ Run `make behavior-coverage` to regenerate.
 | B-SHELL-011 | no | test-written |
 | F-DRIVER-OPEN-EDIT-01 | no | specified |
 | F-EXPORT-OPTIONS-01 | no | test-written |
-| F-GLYPH-REVIEW-01 | no | specified |
+| F-GLYPH-REVIEW-01 | no | test-written |
 | F-HOTKEY-HELP-01 | no | test-written |
 | F-IMAGE-DRIFT-01 | no | specified |
 | F-JOB-SSE-01 | no | test-written |
@@ -119,5 +119,5 @@ Run `make behavior-coverage` to regenerate.
 | F-SOURCE-ROOT-01 | no | test-written |
 | F-TOOLBAR-GRID-01 | no | test-written |
 | F-TOOLBAR-STYLE-ADD-01 | no | test-written |
-| F-WORD-DIALOG-IMAGE-01 | no | test-written |
-| F-WORD-DIALOG-MUTATE-01 | no | test-written |
+| F-WORD-DIALOG-IMAGE-01 | no | specified |
+| F-WORD-DIALOG-MUTATE-01 | no | specified |

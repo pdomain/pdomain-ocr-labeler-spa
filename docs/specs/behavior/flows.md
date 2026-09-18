@@ -275,16 +275,23 @@ last_verified: 2026-07-13
   3. B-GLYPH-005 - page-state persistence preserves review state.
 - **Expected end state (UI + backend):** Human glyph annotations survive reload
   with null/empty/populated states intact.
-- **Bad-state / error:** Production panel mount and frontend POST wiring remain
-  unclear.
+- **Bad-state / error:** none observed for the mark-reviewed/reset path this
+  flow drives end to end; the reject-prediction button (B-GLYPH-003) has no
+  test coverage, and no predictor exists to populate predictions for a real
+  user (see `specs/20-glyph-annotations.md` §9).
 - **Tier(s):** A+B
 - **Regression:** no
-- **Test:** -
+- **Test:** `tests/e2e/test_glyph_panel.py` drives steps 1–3 in a browser
+  (select word, open Glyphs, mark reviewed) and confirms the server
+  persisted it; step 3's reload/persistence claim is proven separately at
+  the integration level by `tests/integration/test_glyph_routes.py` (see
+  B-GLYPH-005).
 
 ## Adversarial Review
 
-**Accepted finding:** The flow catalogue matches current routes broadly; deferred glyph and other
-explicit stubs remain non-shipped.
+**Accepted finding:** The flow catalogue matches current routes broadly. F-GLYPH-REVIEW-01 shipped
+on 2026-09-18 (mark/reset/bulk apply, all persisted); other explicit stubs in this catalogue remain
+non-shipped.
 
 **Stage:** migration-time current-state review on 2026-07-13.
 

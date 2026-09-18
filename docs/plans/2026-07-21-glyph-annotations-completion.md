@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-07-21
+last_verified: 2026-09-18
 created: 2026-07-21
 owner: maintainers
 kind: plan
@@ -725,26 +725,95 @@ Only after Tasks 1–9 green:
 **Files:**
 - `docs/specs/behavior/component-glyph-annotations.md`
 - `docs/specs/behavior/unclear-items.md`
+- `docs/specs/behavior/flows.md`
+- `docs/specs/behavior/coverage.md` (regenerated, not hand-edited)
 - `docs/context/current-state.md`
 - `AGENTS.md` / `README.md` glyph status lines
-- `docs/architecture/13-driver-contract.md` if toggle added
+- `specs/20-glyph-annotations.md` (§9 predictor note)
 
-- [ ] **Step 1:** Point B-GLYPH-001…005 at real tests; update adversarial review
-  status from “components do not exist” to residual list or “wired”.
-- [ ] **Step 2:** Clear unclear-items glyph bullets that Tasks 1–7 fixed.
-- [ ] **Step 3:** Current-state / AGENTS: replace “frontend not shipped” with
-  accurate residual (or “shipped” if Tasks 1–9 complete).
+- [x] **Step 1:** Point B-GLYPH-001…005 at real tests; update adversarial review
+  status from "components do not exist" to residual list or "wired".
+
+Update (2026-09-18, docs close-out): done. Each of B-GLYPH-001…005 now
+names the real unit/integration/e2e test(s) that assert it, verified by
+opening each test rather than assuming from its filename. One honest
+gap recorded rather than papered over: B-GLYPH-003's reject-prediction
+button (`glyph-panel-reject-prediction-{kind}`) has no test anywhere —
+accept is tested, reject is not. `docs/specs/behavior/coverage.md` was
+regenerated via `uv run python -m scripts.behavior_coverage` after
+adding `Covers: B-GLYPH-005` to `tests/integration/test_glyph_routes.py`
+and `Covers: F-GLYPH-REVIEW-01` to `tests/e2e/test_glyph_panel.py`; both
+now show `test-written` instead of `specified`.
+
+- [x] **Step 2:** Clear unclear-items glyph bullets that Tasks 1–7 fixed.
+
+Update (2026-09-18): three of five glyph bullets in
+`docs/specs/behavior/unclear-items.md` are marked resolved (panel mount
++ hooks, bulk-apply invalidation, reload persistence). The chip-click
+bullet is narrowed, not cleared — it is still true today: `WordCell.tsx`
+glyph chip clicks are still `/* future: open panel */` stubs. That is
+Task 6, which this pass did not implement (see below).
+
+- [x] **Step 3:** Current-state / AGENTS: replace "frontend not shipped" with
+  accurate residual (or "shipped" if Tasks 1–9 complete).
+
+Update (2026-09-18): **Tasks 1–9 are not all complete** — see the
+status note below, added while writing this close-out and found by
+re-reading this plan's own checkboxes rather than assuming. Docs now
+describe the manual review path as shipped (it is, and is tested end to
+end) while naming the specific residual items honestly instead of
+claiming full completion. `AGENTS.md`, `README.md`, and
+`docs/context/current-state.md` were updated; `docs/context/decisions.md`
+already carried the authoritative 2026-09-18 decisions this pass draws
+from.
+
 - [ ] **Step 4:** Full gate
 
 ```bash
 make ci AI=1
 ```
 
-- [ ] **Step 5: Final commit**
+Not run in this pass (frontend build/lint require `pnpm`, out of scope
+for a docs-only close-out). Ran instead:
+`uv run pytest tests/ --ignore=tests/e2e -m "not slow and not integration" -n 8 -q -p no:cacheprovider`
+(unaffected — no `src/` or `frontend/src/` behavior changed) and
+`uv run python -m scripts.behavior_coverage` (see Step 1).
 
-```bash
-git commit -m "docs(m11): record glyph annotation completion status"
-```
+- [x] **Step 5: Final commit**
+
+Committed on `docs/glyph-closeout`, not `master` — this is a worktree
+docs pass, not the implementation branch the earlier tasks' commit
+messages describe.
+
+### Status note (2026-09-18 docs close-out) — plan is NOT fully closed
+
+Re-reading this plan's own checkboxes while writing the docs close-out found
+real, still-open work that this plan's earlier "Update" notes had not
+flagged as blocking:
+
+- **Task 5, Step 3** (ligature kind enum parity) — unchecked, explicitly
+  deferred.
+- **Task 6** (wire glyph chip clicks to open the panel) — unchecked,
+  explicitly skipped. `WordCell.tsx`'s glyph chip `onClick` handlers are
+  still `/* future: open panel */` placeholders today. The word-edit-dialog
+  question Task 6 was blocked on was resolved on 2026-09-18 (see
+  `docs/context/decisions.md`), which unblocks this task, but nobody has
+  since implemented the chip → select-word-and-open-panel wiring.
+- **Task 8** (verify `glyphs_reviewed` metric and the `glyph_review_required`
+  save warning) — unchecked; not verified in any pass so far.
+- **Task 9, Step 2** (`tests/e2e/test_bulk_glyph_mark.py`) — no such file
+  exists. Bulk apply is proven at the backend-integration and
+  frontend-unit levels only, not in a browser.
+
+None of these block the "usable path" claim this plan's own Stop
+Conditions define (mark CT/reviewed/reset, see badges update, bulk-mark a
+page and see chips, save+reload and still see confirmed annotations) — all
+four are demonstrated, the last three by `tests/integration/
+test_glyph_routes.py` and `BulkGlyphMarkDialog.test.tsx`, the first two by
+`tests/e2e/test_glyph_panel.py` and `WordDetail.test.tsx`. But this plan is
+not "Tasks 1–11 complete," and this document's `status` frontmatter is left
+as `draft` rather than marked done, so a future reader does not have to
+rediscover this by re-reading every checkbox again.
 
 ---
 

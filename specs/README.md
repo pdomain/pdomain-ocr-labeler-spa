@@ -30,7 +30,7 @@ Specs are now organized into two trees:
 |---|---|---|
 | 16 | [`16-milestones.md`](16-milestones.md) | M0…M9 milestone breakdown — living roadmap |
 | 17 | [`17-decisions.md`](17-decisions.md) | ADRs / decisions log — append-only |
-| 20 | [`20-glyph-annotations.md`](20-glyph-annotations.md) | Glyph-level annotations (open issues #267–#270, blocked on `pdomain-book-tools` upstream) |
+| 20 | [`20-glyph-annotations.md`](20-glyph-annotations.md) | Glyph-level annotations — manual review and dataset-export path shipped; no predictor exists or will be built |
 
 ## Implemented specs (under `docs/architecture/`)
 
