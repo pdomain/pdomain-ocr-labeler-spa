@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
-from playwright.sync_api import Page
+from playwright.sync_api import Page, expect
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from tests.e2e.conftest import LiveServer
@@ -84,11 +84,14 @@ def test_page_navigation_keyboard_only(live_server: LiveServer, page: Page) -> N
     assert "/pages/pageno/2" in page.url, f"Expected pageno/2 after Ctrl+ArrowRight, got {page.url}"
 
     wait_for_page_loaded(page, live_server.base_url, timeout=10_000)
-    # Brief pause to allow React Router state + hotkey re-registration to settle
-    # after the client-side navigation. The hotkey handler captures currentPageNo
-    # from a closure; re-registration from the new render needs to complete before
-    # we fire the next key.
-    page.wait_for_timeout(300)
+    # Wait for the page-number input (ProjectNavigationControls, testid
+    # nav-page-input) to reflect page 2 before firing the next hotkey. Its
+    # value is derived straight from the route param, so once it reads "2"
+    # the component has re-rendered with the new currentPageNo and the
+    # Mod+ArrowLeft handler's closure is current — a fixed sleep here was a
+    # guess at how long that re-render takes, and guesses are what make a
+    # test flaky under machine load.
+    expect(page.locator('[data-testid="nav-page-input"]')).to_have_value("2", timeout=10_000)
 
     # Navigate back to page 1 with Ctrl+ArrowLeft (Mod+ArrowLeft).
     # This is the BUG-KBD-6 / #402 regression guard: Ctrl+ArrowLeft was
@@ -123,11 +126,14 @@ def test_global_hotkeys_wired_no_console_error(live_server: LiveServer, page: Pa
     # Ensure the project page shell is present.
     page.wait_for_selector('[data-testid="project-page"]', timeout=10_000)
 
-    # Press Ctrl+S (Mod+S — Save Page hotkey, registered in useGlobalHotkeys).
-    page.keyboard.press("Control+s")
-
-    # Allow the async save mutation to settle.
-    page.wait_for_timeout(500)
+    # Press Ctrl+S (Mod+S — Save Page hotkey, registered in useGlobalHotkeys)
+    # and wait for the save request it fires, rather than a fixed sleep that
+    # merely guesses how long the mutation takes.
+    with page.expect_response(lambda r: r.url.endswith("/save")) as save_resp_info:
+        page.keyboard.press("Control+s")
+    assert save_resp_info.value.status == 200, (
+        f"Save request failed: {save_resp_info.value.status} {save_resp_info.value.text()}"
+    )
 
     # The project-page shell must still be alive (no crash).
     page.wait_for_selector('[data-testid="project-page"]', timeout=5_000)
@@ -139,20 +145,42 @@ def test_global_hotkeys_wired_no_console_error(live_server: LiveServer, page: Pa
 
 @pytest.mark.e2e
 def test_validate_and_save_keyboard_only(live_server: LiveServer, page: Page) -> None:
-    """Load a page and invoke save with only keyboard shortcuts.
+    """Load a page and invoke validate + save with only keyboard shortcuts.
 
     Hotkeys exercised:
+      J     — select the first line card (matches scope)
+      V     — validate the selected line (matches scope)
       Mod+S — save page (global scope)
 
-    Note: The ``V`` (validate) hotkey requires a focused line card in the
-    matches scope. tiny-fixture page 1 is deterministically seeded with one
-    line of word content (see conftest.py's ``_seed_tiny_fixture_page0_words``,
+    Finding (superseding the old docstring's claim that clicking a line
+    card "focuses" it for the matches scope): ``LineCard``'s outer element
+    carries no click handler, and the matches-scope hotkeys read
+    ``worklistStore.selectedLineIndex`` — which nothing in ``LineCard`` or
+    ``WordMatchView`` ever sets. A mouse click on the card previously used
+    here does not select anything; worse, because ``LineCard`` renders each
+    word's editable GT ``<input>`` inline, Playwright's element-center click
+    reliably lands inside one of those inputs instead, which (a) leaves V/U/D
+    and Mod+S silently inert — ``enableOnFormTags`` is ``False`` for both
+    scopes — and (b) types the literal "v" into the ground-truth text,
+    corrupting it. That combination made the old test pass while proving
+    nothing and, incidentally, mutating fixture data on every run.
+
+    ``J`` (next line, matches scope) is the actual, product-correct way to
+    select a line with the keyboard — it calls ``focusWorklistLine``, which
+    is the one function that sets ``selectedLineIndex``. Using it here also
+    keeps this test true to its own file's charter: keyboard only, no mouse.
+
+    tiny-fixture page 1 is deterministically seeded with one line of word
+    content (see conftest.py's ``_seed_tiny_fixture_page0_words``,
     P0-CI-SOFT), so a line card is always present here — this is not an
     OCR-availability guess. This test verifies that:
 
     1. The project page loads and renders its shell.
-    2. V focuses/validates the first line card.
-    3. Ctrl+S triggers a save-page request without raising a console error.
+    2. J selects the first line; V validates it — asserted via the
+       validate-batch response status and the Validate button flipping to
+       "Unvalidate".
+    3. Ctrl+S saves the page — asserted via the save response status and
+       body, not just "no console error".
     """
     _goto_page1(live_server, page)
 
@@ -186,19 +214,34 @@ def test_validate_and_save_keyboard_only(live_server: LiveServer, page: Page) ->
             "product bug, not a stale test expectation; see the P0-CI-SOFT "
             "follow-up report before changing this assertion."
         ) from exc
-    line_cards = page.locator('[data-testid^="line-card-"]')
-    # Focus the first line card so the matches-scope hotkeys are active.
-    line_cards.first.click()
-    page.keyboard.press("v")
-    # After pressing V the card state may update — just wait a moment
-    # for any async update to settle before saving.
-    page.wait_for_timeout(300)
 
-    # Save the page with Ctrl+S (Mod+S global hotkey).
-    page.keyboard.press("Control+s")
+    validate_button = page.locator('[data-testid="line-validate-button-0"]')
+    expect(validate_button).to_have_text("Validate")
 
-    # The save action is async. Wait briefly for any network request to settle.
-    page.wait_for_timeout(500)
+    # J selects line 0 (focusWorklistLine) so the matches-scope V hotkey has
+    # a line to act on.
+    page.keyboard.press("j")
+
+    # V validates the selected line. Wait for the validate-batch response
+    # itself (not a timer), then assert it succeeded and that the button
+    # flips to "Unvalidate" — proof the validate actually happened, not just
+    # that the app didn't crash.
+    with page.expect_response(lambda r: r.url.endswith("/words/validate-batch")) as validate_resp_info:
+        page.keyboard.press("v")
+    validate_resp = validate_resp_info.value
+    assert validate_resp.status == 200, (
+        f"Validate request failed: {validate_resp.status} {validate_resp.text()}"
+    )
+    expect(validate_button).to_have_text("Unvalidate", timeout=5_000)
+
+    # Save the page with Ctrl+S (Mod+S global hotkey). Wait for the save
+    # response itself and assert it succeeded — a 500 here must fail the test.
+    with page.expect_response(lambda r: r.url.endswith("/save")) as save_resp_info:
+        page.keyboard.press("Control+s")
+    save_resp = save_resp_info.value
+    assert save_resp.status == 200, f"Save request failed: {save_resp.status} {save_resp.text()}"
+    save_body = save_resp.json()
+    assert save_body.get("saved") is True, f"Save response did not report success: {save_body}"
 
     # Assert the page shell is still alive (no fatal crash from keyboard ops).
     page.wait_for_selector('[data-testid="project-page"]', timeout=5_000)
