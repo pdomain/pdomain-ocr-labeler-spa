@@ -267,7 +267,11 @@ describe("useBboxRefineTracking", () => {
 
   // ─── Review round 2, finding 3 (medium): refine_bboxes is not
   // cancellable; a job that never reaches a terminal state must not leave
-  // this tracker's one slot claimed forever. ─────────────────────────────
+  // this tracker's one slot claimed forever. Review round 3, finding 1
+  // (high): the runner drains one job at a time, and a slow job ahead of
+  // this one in the queue can hold it QUEUED well past the stall window —
+  // the window must start from the job's own first "running" status, not
+  // from `start()`/the 202. ────────────────────────────────────────────
 
   describe("stall timeout", () => {
     beforeEach(() => {
@@ -278,14 +282,42 @@ describe("useBboxRefineTracking", () => {
       vi.unstubAllGlobals();
     });
 
-    it("clears the slot and warns if the job never reaches a terminal state", () => {
+    it("does not time out a job that stays queued past the stall window", () => {
       const { Wrapper } = makeWrapper();
-      mockEventSource(); // stubs EventSource; no frame is ever dispatched — the hang this guards against.
+      const es = mockEventSource();
+      const { result } = renderHook(() => useBboxRefineTracking("p1", 0), { wrapper: Wrapper });
+
+      act(() => {
+        result.current.start("job-queued", "0-0");
+      });
+      // The runner hasn't dequeued this job yet — a slower job ahead of it
+      // (an export, a save project) is still running. Only the initial
+      // "queued" snapshot has arrived; the job has not started.
+      es.dispatch({ job_id: "job-queued", status: "queued" });
+
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+
+      expect(result.current.jobId).toBe("job-queued");
+      expect(result.current.word).not.toBeNull();
+      const timeoutCall = toastMock.mock.calls.find(
+        ([msg]: [unknown]) => typeof msg === "string" && msg.includes("timed out"),
+      );
+      expect(timeoutCall).toBeUndefined();
+    });
+
+    it("clears the slot and warns if a running job goes silent past the stall window", () => {
+      const { Wrapper } = makeWrapper();
+      const es = mockEventSource();
       const { result } = renderHook(() => useBboxRefineTracking("p1", 0), { wrapper: Wrapper });
 
       act(() => {
         result.current.start("job-stuck", "0-0");
       });
+      // The runner dequeued it and started executing — the window begins
+      // here, not at `start()`.
+      es.dispatch({ job_id: "job-stuck", status: "running" });
       expect(result.current.jobId).toBe("job-stuck");
 
       act(() => {
@@ -308,6 +340,7 @@ describe("useBboxRefineTracking", () => {
       act(() => {
         result.current.start("job-1", "0-0");
       });
+      es.dispatch({ job_id: "job-1", status: "running" });
       es.dispatch({ job_id: "job-1", status: "complete", result: { refined: 1 } });
 
       act(() => {

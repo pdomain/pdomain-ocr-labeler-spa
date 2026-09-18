@@ -46,15 +46,21 @@ import { useJobCompletionInvalidation } from "./useJobCompletionInvalidation";
 import { toast } from "../lib/toast";
 
 /**
- * How long a refine_bboxes job may stay in flight before this tracker gives
- * up on it, clears its slot, and warns (review round 2, finding 3).
- * `handle_refine_bboxes` runs synchronously, in-process, against a single
- * word, with no OCR engine call involved — normal completion is well under
- * a second. 30s is generous enough to never false-positive on a slow but
- * genuine run, while still recovering in a realistic time from an SSE drop,
- * a server restart mid-job, or any other way the terminal event never
- * arrives — refine_bboxes is not cancellable, so without this a stuck job
- * would otherwise claim this tracker's one slot forever.
+ * How long a refine_bboxes job may run before this tracker gives up on it,
+ * clears its slot, and warns (review round 2, finding 3). Measured from the
+ * job's own first "running" status, not from `start()` / the 202 (review
+ * round 3, finding 1) — the runner drains one job at a time
+ * (core/jobs/runner.py's `run_forever`), so a slow job already in flight
+ * (an export, a save project) can hold this one QUEUED well past any
+ * window measured from submission. `handle_refine_bboxes` runs
+ * synchronously, in-process, against a single word, with no OCR engine
+ * call involved, once it actually starts — normal completion from there is
+ * well under a second. 30s is generous enough to never false-positive on a
+ * slow but genuine run, while still recovering in a realistic time from an
+ * SSE drop, a server restart mid-job, or any other way the terminal event
+ * never arrives after the job starts — refine_bboxes is not cancellable,
+ * so without this a stuck job would otherwise claim this tracker's one
+ * slot forever.
  */
 const STALL_TIMEOUT_MS = 30_000;
 
@@ -162,13 +168,29 @@ export function useBboxRefineTracking(
     },
   });
 
-  // Review round 2, finding 3: give up on a job that never reaches a
-  // terminal state — see STALL_TIMEOUT_MS above for why 30s. Restarts
-  // whenever `jobId` changes (a fresh job, or the slot clearing); the
-  // effect's own cleanup cancels the pending timer on every normal
-  // completion, so this never fires for a job that resolves in time.
+  // Review round 2, finding 3 / round 3, finding 1: give up on a job that
+  // starts running and then goes silent — see STALL_TIMEOUT_MS above for
+  // why 30s and why it's measured from "running", not from `start()`. A
+  // job still QUEUED behind an earlier one in the runner (see
+  // core/jobs/runner.py's single-worker `run_forever`) has not started
+  // yet, so it isn't stalled — timing it out here would clear the slot and
+  // close the SSE subscription while the job is still genuinely in the
+  // queue, then let a retry start a second job racing the first, and leave
+  // nobody listening when the first one eventually completes and changes
+  // the box. `isRunning` only reflects the SSE-reported status — no
+  // separate "still queued" timer is started for it, on purpose: the
+  // runner queue has no bound of its own, and this component has no way to
+  // tell "a slow job ahead of it" apart from "stuck forever" while queued.
+  // `isRunning` is a plain boolean, so multiple "running" progress ticks
+  // (refine_bboxes reports none in practice; the handler is synchronous
+  // with no sub-progress) don't restart the timer — it's one 30s window
+  // from the first running signal. The effect's own cleanup cancels the
+  // pending timer once the job leaves "running" for any reason (a normal
+  // completion, or the slot clearing), so this never fires for a job that
+  // resolves in time.
+  const isRunning = jobId !== null && jobProgress?.status === "running";
   useEffect(() => {
-    if (jobId === null) return;
+    if (!isRunning) return;
     const timer = setTimeout(() => {
       setJobId(null);
       setWord(null);
@@ -177,7 +199,14 @@ export function useBboxRefineTracking(
     return () => {
       clearTimeout(timer);
     };
-  }, [jobId]);
+    // `jobId` is listed for the toast id it reads, alongside `isRunning`
+    // (the actual gate). Every `jobProgress` update produces a new event
+    // object, but `isRunning` collapses that to a stable boolean, so
+    // repeated "running" ticks for the same job (refine_bboxes reports
+    // none in practice — the handler is synchronous with no sub-progress)
+    // don't restart the timer; it stays one 30s window from the first
+    // running signal.
+  }, [isRunning, jobId]);
 
   function start(newJobId: string, newWordKey: string): void {
     if (projectId === undefined || pageIndex === undefined) return;
