@@ -1755,3 +1755,35 @@ family and not touched.
   it is a scheduling-order race rather than a load problem. A scripted
   interleave that completes the job between the snapshot and the subscribe
   reproduced it deterministically, hung before the fix and passed after.
+
+### [2026-09-18] Fixed: a page response could contradict itself
+
+- Found by sweeping the test suite for tests that document product awkwardness
+  and cope with it, which is the lesson the lost-terminal-event fix taught
+  earlier the same day. `tests/e2e/test_undo_redo.py`'s polling helper named
+  this race precisely and polled around it.
+- The defect: `get_page` built its word counts inside `_page_payload`'s
+  per-page lock and then read `history.undo_available` afterwards, unlocked. A
+  mutation landing between the two reads produced one JSON body showing an
+  updated validated count beside an undo button reporting itself disabled, or
+  the reverse. One response, two instants.
+- Fixed by moving the history build inside the lock, the same answer the
+  empty-payload race got one layer down. The lock is re-entrant and already
+  holds several store reads, so this adds no new category of slow work.
+- The same pattern was in `undo` and `redo`, which read history after their own
+  lock block had exited. Fixed there too, and that route was not passing the
+  page store to the payload builder at all, so its responses had been silently
+  omitting the region, rotation and image-drift facets.
+- Worth recording about the test: the first version passed by luck.
+  `undo_available` is monotonic, so it could only catch the race in one narrow
+  window at the start of a run. It now asserts that the validated count equals
+  the history cursor, which both advance by one per mutation, so every response
+  is checkable. Against the unfixed code that fails reliably, 33
+  self-inconsistent responses in a single run. **A race test that cannot fail
+  on most of its samples is not a race test.**
+- One thing deliberately not changed: `tests/integration/test_reload_ocr_job.py`
+  keeps wrapping the broker. Its docstring conflated two things, and only one
+  was fixed. The hang is gone, but the broker still buffers nothing and a job
+  tracks only its latest progress fraction, so a late subscriber can never
+  recover the intermediate progress events those tests assert on. The docstring
+  now says that rather than the stale reason.
