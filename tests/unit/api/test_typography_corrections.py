@@ -326,7 +326,14 @@ def test_reviewed_replacement_rejects_missing_required_taxonomy_state(tmp_path: 
     assert response.status_code == 422
 
 
-def test_progress_ignores_inactive_historical_word_identity(tmp_path: Path) -> None:
+def test_progress_blocks_a_word_whose_own_ground_truth_changed_since_review(tmp_path: Path) -> None:
+    """A word's own ground-truth edit blocks page completion, but its prior
+    correction stays visible in ``heads`` as a reviewed-but-now-stale entry
+    — it is not dropped from view the way a whole-page epoch reset used to
+    drop it. Word identity is unaffected (OCR text, not ground truth, drives
+    it — ``_set_current_page`` never changes word 0's OCR text), so this is
+    a pure content-staleness case, not an identity change.
+    """
     client, _page_id, word_id = _client(tmp_path)
     path = f"/api/projects/alpha/pages/0/typography/words/{word_id}"
     head = client.get(f"{path}/head").json()
@@ -343,9 +350,10 @@ def test_progress_ignores_inactive_historical_word_identity(tmp_path: Path) -> N
 
     progress = client.get("/api/projects/alpha/pages/0/typography/review").json()
     assert progress["total_words"] == 1
-    assert progress["reviewed_words"] == 0
+    assert progress["reviewed_words"] == 1
     assert progress["blocked_words"] == 1
-    assert progress["heads"] == []
+    assert progress["complete"] is False
+    assert [row["correction_id"] for row in progress["heads"]] == ["old-word"]
     assert progress["complete"] is False
 
 
@@ -1083,7 +1091,19 @@ def test_interleaved_page_global_edits_validate_and_export(tmp_path: Path) -> No
             assert hashlib.sha256(resolved.read_bytes()).hexdigest() == artifact.sha256
 
 
-def test_same_text_line_structure_change_starts_a_distinct_page_epoch(tmp_path: Path) -> None:
+def test_bbox_change_no_longer_starts_a_distinct_page_epoch(tmp_path: Path) -> None:
+    """A word's bounding box is no longer part of ``page_sha256`` at all.
+
+    Nudging a bbox is a routine, frequent editing action — like a
+    ground-truth edit, just less common — so a shared page-wide fingerprint
+    that included it would reproduce the exact over-invalidation bug this
+    granularity fix closes, through a different door. See
+    ``_current_page_content``'s docstring for why this is a deliberate,
+    surfaced gap rather than a silent one: there is no available per-word
+    hash slot to carry bbox currency instead, since the upstream review
+    contract hard-validates ``WordTypography.text_sha256`` against a
+    literal ``sha256(text)``.
+    """
     client, _page_id, first_word_id, _second_word_id = _client_two_words(tmp_path)
     path = f"/api/projects/alpha/pages/0/typography/words/{first_word_id}/head"
     before = client.get(path).json()
@@ -1092,11 +1112,25 @@ def test_same_text_line_structure_change_starts_a_distinct_page_epoch(tmp_path: 
     page = page_state.page_record.payload
     page.words[0].ground_truth_bounding_box = (1, 2, 3, 4)
     geometry_changed = client.get(path).json()
-    assert geometry_changed["page_sha256"] != before["page_sha256"]
+    assert geometry_changed["page_sha256"] == before["page_sha256"]
     del page.words[0].ground_truth_bounding_box
     page.words[0].bounding_box = (5, 6, 7, 8)
     alternate_geometry = client.get(path).json()
-    assert alternate_geometry["page_sha256"] != geometry_changed["page_sha256"]
+    assert alternate_geometry["page_sha256"] == geometry_changed["page_sha256"]
+
+
+def test_line_regrouping_still_starts_a_distinct_page_epoch(tmp_path: Path) -> None:
+    """Regrouping the same words into different lines is a genuine
+    structural change — ordered line boundaries are still part of
+    ``page_sha256`` (2026-08-22's "ordered line and word boundaries"), even
+    though ground truth and bbox no longer are.
+    """
+    client, _page_id, first_word_id, _second_word_id = _client_two_words(tmp_path)
+    path = f"/api/projects/alpha/pages/0/typography/words/{first_word_id}/head"
+    before = client.get(path).json()
+    page_state = client.app.state.project_state.get_page_state(0)
+    assert page_state is not None and page_state.page_record is not None
+    page = page_state.page_record.payload
     page.lines = [
         SimpleNamespace(words=[page.words[0]]),
         SimpleNamespace(words=[page.words[1]]),
@@ -1105,16 +1139,19 @@ def test_same_text_line_structure_change_starts_a_distinct_page_epoch(tmp_path: 
     after = client.get(path).json()
 
     assert after["text"] == before["text"]
-    assert after["page_sha256"] != alternate_geometry["page_sha256"]
+    assert after["page_sha256"] != before["page_sha256"]
 
 
-def test_text_change_starts_new_active_correction_epoch(tmp_path: Path) -> None:
-    """A ground-truth text change starts a new correction epoch (the old
-    correction falls out, since the page content hash it was recorded
-    against no longer matches) — but the word's own identity is unaffected:
-    the same ``word_id`` resolves both the old (now-stale) and new heads.
-    Word identity is OCR-derived and ``_set_current_page`` never changes
-    word 0's OCR text, only its ground truth.
+def test_text_change_stales_but_continues_the_word_s_own_correction_chain(tmp_path: Path) -> None:
+    """A ground-truth text change stales this word's own review, but — since
+    ``page_sha256`` is structural-only and this page's structure is
+    unaffected by a ground-truth-only edit — the page epoch does not reset,
+    and the new review continues the same word's revision chain (revision 2,
+    superseding revision 1) rather than starting a disconnected one. The
+    word's own identity is unaffected either way: the same ``word_id``
+    resolves both heads. Word identity is OCR-derived and
+    ``_set_current_page`` never changes word 0's OCR text, only its ground
+    truth.
     """
     client, _page_id, word_id = _client(tmp_path)
     path = f"/api/projects/alpha/pages/0/typography/words/{word_id}"
@@ -1130,7 +1167,9 @@ def test_text_change_starts_new_active_correction_epoch(tmp_path: Path) -> None:
 
         _set_current_page(client, words=[("Changed", True)])
         new_head = client.get(f"{path}/head").json()
-        assert new_head["correction"] is None
+        assert new_head["typography_reviewed"] is False
+        assert new_head["correction"] is not None
+        assert new_head["correction"]["correction_id"] == "old-epoch"
         assert (
             client.post(
                 f"{path}/corrections",
@@ -1142,16 +1181,27 @@ def test_text_change_starts_new_active_correction_epoch(tmp_path: Path) -> None:
         progress = client.get("/api/projects/alpha/pages/0/typography/review").json()
         assert progress["reviewed_words"] == 1
         assert progress["heads"][0]["correction_id"] == "new-epoch"
+        assert progress["heads"][0]["supersedes_id"] == "old-epoch"
         assert progress["complete"] is True
+        # The labeling bundle must describe the lineage's own starting point
+        # (word text "Word", matching revision 1's base) — not the word's
+        # current live text ("Changed") — because ``old-epoch`` is still the
+        # exported chain's first entry; ``CorrectionBundle.validate_against``
+        # checks revision 1 against the bundle's own word content.
+        bundle = _labeling_bundle(old_head, word_id, text="Word").model_dump(mode="json")
         exported = client.post(
             "/api/projects/alpha/pages/0/typography/correction-bundles/export",
-            json={
-                "labeling_bundle": _labeling_bundle(new_head, word_id, text="Changed").model_dump(mode="json")
-            },
+            json={"labeling_bundle": bundle},
         )
 
     assert exported.status_code == 200, exported.text
-    assert [row["correction_id"] for row in exported.json()["bundle"]["corrections"]] == ["new-epoch"]
+    # Both revisions export: a valid revision chain carries its own history,
+    # unlike the old whole-page-epoch-reset design, which silently dropped a
+    # word's own prior revision from the export the moment any edit landed.
+    assert [row["correction_id"] for row in exported.json()["bundle"]["corrections"]] == [
+        "old-epoch",
+        "new-epoch",
+    ]
 
 
 def test_canonical_typography_edit_reloads_and_is_undone_by_successor(tmp_path: Path) -> None:
