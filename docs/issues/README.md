@@ -73,10 +73,9 @@ Lead with the **smallest decisive evidence**, separate **observation** from
 
 ## GitHub-migrated issue records
 
-- [`2026-05-22-gh-430-ci-equivalence.md`](2026-05-22-gh-430-ci-equivalence.md)
-  — open (pre-commit + knip missing from GH).
-- [`2026-05-22-gh-433-openapi-drift.md`](2026-05-22-gh-433-openapi-drift.md)
-  — open (drift job vs gitignored openapi.json).
+The 430 CI-equivalence and 433 OpenAPI-drift records are retired as moot: the
+GitHub workflows they describe were deleted on 2026-09-13 in `df3f5ff`. See the
+2026-09-18 tombstone in [`../context/decisions.md`](../context/decisions.md).
 
 The 437 schema-quality and 460 resolver-narrowing records were implemented and
 are retired; see the 2026-09-18 tombstone in

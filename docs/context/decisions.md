@@ -1404,3 +1404,33 @@ bulk-mark apply specifically (Task 3, the STUB this entry fixes).
   char bbox or glyph annotation maps after removing a word, so later words in
   the line inherit the wrong sidecars. Word merge reindexes; delete does not.
 - Shipped in `3ee93c6`.
+
+### [2026-09-18] Retired as moot: the two GitHub CI issues
+
+- Reports: `docs/issues/2026-05-22-gh-430-ci-equivalence.md` and
+  `docs/issues/2026-05-22-gh-433-openapi-drift.md`.
+- Both describe `.github/workflows/ci.yml`. That file, and every other workflow
+  in the repository, was deleted on 2026-09-13 in `df3f5ff` by owner request,
+  with branch protection turned off at the same time. Nothing runs on GitHub
+  automatically any more.
+- So 430, "GitHub CI does not run every check in `make ci`", is answered
+  trivially and permanently: GitHub CI runs nothing, in either direction. And
+  433's ineffective diff target has no file left to live in.
+- Implementing either would have meant recreating GitHub Actions CI to satisfy
+  issues about a workflow the owner deliberately killed. The implementer
+  stopped and reported rather than building through the wrong premise, which
+  was the right call. Same treatment as the two sibling reports already retired
+  this way, `2026-08-08-dep-refresh-cannot-auto-land.md` and the CI half of
+  `2026-07-21-e2e-non-blocking-soft-skips.md`.
+- 433's reasoning was verified anyway, since it would still apply if CI ever
+  returns. `frontend/openapi.json` is gitignored and never tracked, so a
+  `git diff` against it cannot fail. A probe field added to a request model and
+  exported showed up in `frontend/src/api/types.ts` and changed the diff's exit
+  code; adding `openapi.json` to the same command changed nothing. No class of
+  schema change was found that reaches the backend and not the types file. If a
+  drift gate is ever rebuilt, check the types file and drop the other target.
+- `docs/plans/2026-07-21-ci-openapi-gates.md` predates the removal and still
+  tells a reader to edit `ci.yml`. Corrected alongside this.
+- Found at the same time and unrelated to either issue: `make ci AI=1` is red
+  on master at `frontend-knip`, on eight pre-existing unused exports and
+  exported types. Everything before it in the chain passes.

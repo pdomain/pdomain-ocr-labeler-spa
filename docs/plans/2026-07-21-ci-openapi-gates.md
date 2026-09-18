@@ -3,12 +3,22 @@ last_verified: 2026-07-21
 created: 2026-07-21
 owner: maintainers
 kind: plan
-status: draft
+status: retired
 priority: now
 repo: pdomain/pdomain-ocr-labeler-spa
 ---
 
 # CI OpenAPI Gates Implementation Plan
+
+> **Retired 2026-09-18. Do not execute this plan.** Every task below edits
+> `.github/workflows/ci.yml`, which no longer exists: all GitHub workflows were
+> deleted on 2026-09-13 in `df3f5ff` by owner request, and branch protection
+> was turned off at the same time. Following this plan would recreate the CI
+> the owner deliberately removed. Issues #430 and #433 are retired as moot; see
+> the 2026-09-18 tombstone in `docs/context/decisions.md`, which also records
+> the one finding worth keeping: if a drift gate is ever rebuilt, check
+> `frontend/src/api/types.ts` and not `frontend/openapi.json`, which is
+> gitignored and cannot fail a diff.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -117,8 +127,8 @@ Acceptable overlap: the new `pre-commit` job re-runs some lint/format/typecheck 
 | `docs/architecture/15-deployment-dev.md` | Modify | Drift gate shows `types.ts` only; note intermediate schema |
 | `docs/architecture/module-map.md` | Modify | Correct “openapi.json checked into repo” |
 | `docs/architecture/14-testing.md` | Modify | Document `pre-commit` + knip in CI job list |
-| `docs/issues/2026-05-22-gh-430-ci-equivalence.md` | Modify (after ship) | `status:implemented` + resolution evidence |
-| `docs/issues/2026-05-22-gh-433-openapi-drift.md` | Modify (after ship) | `status:implemented` + resolution evidence |
+| `2026-05-22-gh-430-ci-equivalence.md` | retired moot 2026-09-18 | see tombstone |
+| `2026-05-22-gh-433-openapi-drift.md` | retired moot 2026-09-18 | see tombstone |
 | `docs/issues/README.md` | Modify (after ship) | Move #430/#433 to resolved; note GH closes |
 
 No Makefile changes required — targets already exist and are correct.
@@ -377,8 +387,8 @@ Confirm `docs/architecture/01-data-models.md` §6 still says types.ts is committ
 ## Task 5 — Close the loop on issue records (after green CI)
 
 **Files:**
-- Modify: `docs/issues/2026-05-22-gh-430-ci-equivalence.md`
-- Modify: `docs/issues/2026-05-22-gh-433-openapi-drift.md`
+- Retired moot 2026-09-18: `2026-05-22-gh-430-ci-equivalence.md`
+- Retired moot 2026-09-18: `2026-05-22-gh-433-openapi-drift.md`
 - Modify: `docs/issues/README.md`
 - Optional GH: close issues #430, #433, #437, #460 on `pdomain/pdomain-ocr-labeler-spa`
 

@@ -270,8 +270,8 @@ Each row is a governed issue under `docs/issues/`. Prefer implementing by issue
 | 3b | done 2026-09-17 in `f1d227f`; see the tombstone in `docs/context/decisions.md` | P1-MATCH-NAV |
 | 3b | done 2026-09-18 in `cb6214f`; see the tombstone in `docs/context/decisions.md` | P1-BBOX-UI |
 | 3b | (existing) [`docs/context/open-findings.md`](../context/open-findings.md) + open-findings plan | KBD / XDG / RELOAD / HIER |
-| 4 | [`docs/issues/2026-05-22-gh-430-ci-equivalence.md`](../issues/2026-05-22-gh-430-ci-equivalence.md) | P1-CI-GATES |
-| 4 | [`docs/issues/2026-05-22-gh-433-openapi-drift.md`](../issues/2026-05-22-gh-433-openapi-drift.md) | P1-CI-GATES |
+| 4 | `2026-05-22-gh-430-ci-equivalence.md` — **retired moot 2026-09-18** (GitHub workflows deleted); see tombstone | P1-CI-GATES |
+| 4 | `2026-05-22-gh-433-openapi-drift.md` — **retired moot 2026-09-18** (GitHub workflows deleted); see tombstone | P1-CI-GATES |
 | 4 | done 2026-09-18 in `fc2be39`; see the tombstone in `docs/context/decisions.md` | P0-CI-SOFT, P2-E2E-GATE |
 | 5 | done 2026-09-18 in `df005c0`; see the tombstone in `docs/context/decisions.md` | P1-SUITE |
 | 5 | done 2026-09-17 in `8275e8f`; see the tombstone in `docs/context/decisions.md` | P1-JOBS-API |
