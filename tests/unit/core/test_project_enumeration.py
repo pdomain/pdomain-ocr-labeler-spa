@@ -346,6 +346,34 @@ def test_enumerate_page_count_none_when_directory_unreadable(
     assert out[0].page_count is None
 
 
+def test_enumerate_page_count_none_when_a_per_entry_check_raises_mid_iteration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The directory itself opens fine (``iterdir()`` succeeds); a later
+    per-entry check (``is_file()``) raises partway through — e.g. an entry
+    removed between listing and stat-ing it. This must still degrade to
+    ``None``, not a partial/wrong count and not a crash."""
+    proj = tmp_path / "Flaky"
+    proj.mkdir()
+    (proj / "001.png").write_bytes(b"")
+    (proj / "vanishes.png").write_bytes(b"")
+    (proj / "002.png").write_bytes(b"")
+    vanishes = (proj / "vanishes.png").resolve()
+
+    original_is_file = Path.is_file
+
+    def _flaky_is_file(self: Path) -> bool:
+        if self.resolve() == vanishes:
+            raise OSError(f"vanished mid-iteration: {self}")
+        return original_is_file(self)
+
+    monkeypatch.setattr(Path, "is_file", _flaky_is_file)
+
+    out = enumerate_projects(tmp_path)
+    assert len(out) == 1
+    assert out[0].page_count is None
+
+
 # ── page_count — book-labeling-manifest.json shape ─────────────────────────
 #
 # A book-labeling-manifest.json project stores each page under its own
