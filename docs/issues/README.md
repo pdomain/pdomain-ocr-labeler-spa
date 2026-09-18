@@ -122,7 +122,6 @@ The normalize report stays open on its frontend half.
 
 | Issue | ID | Sev |
 | --- | --- | --- |
-| [`2026-07-21-bbox-refine-crop-misleading.md`](2026-07-21-bbox-refine-crop-misleading.md) | P1-BBOX-UI | Medium |
 
 ### Wave 4–5 — CI confidence + suite chrome
 
