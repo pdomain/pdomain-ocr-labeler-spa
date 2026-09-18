@@ -35,8 +35,8 @@ These issue records are `status:implemented` and need GitHub-issue closure / led
 
 | Local issue record | GH issue | Evidence summary |
 |---|---|---|
-| `docs/issues/2026-05-22-gh-437-openapi-schema-quality.md` | #437 | Conformance tests in `tests/conformance/test_response_models.py` and `tests/unit/api/test_route_conformance.py` (commits `bd3d173`, `e4838a1`, `8a80ce5`, `7faaa7b`) |
-| `docs/issues/2026-05-23-gh-460-resolver-narrowing.md` | #460 | Nominal `isinstance` + guarded structural `.lines` fallback; decision in `docs/context/decisions.md` (commit `b66fc19`) |
+| `2026-05-22-gh-437-openapi-schema-quality.md` — retired 2026-09-18 | #437 | Conformance tests in `tests/conformance/test_response_models.py` and `tests/unit/api/test_route_conformance.py` (commits `bd3d173`, `e4838a1`, `8a80ce5`, `7faaa7b`) |
+| `2026-05-23-gh-460-resolver-narrowing.md` — retired 2026-09-18 | #460 | Nominal `isinstance` + guarded structural `.lines` fallback; decision in `docs/context/decisions.md` (commit `b66fc19`) |
 
 When shipping this plan's PR, close #437 and #460 with the evidence above if they are still open on GitHub. No code changes for them.
 

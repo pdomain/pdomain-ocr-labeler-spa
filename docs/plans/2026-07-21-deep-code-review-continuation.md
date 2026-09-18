@@ -275,7 +275,7 @@ Each row is a governed issue under `docs/issues/`. Prefer implementing by issue
 | 4 | done 2026-09-18 in `fc2be39`; see the tombstone in `docs/context/decisions.md` | P0-CI-SOFT, P2-E2E-GATE |
 | 5 | done 2026-09-18 in `df005c0`; see the tombstone in `docs/context/decisions.md` | P1-SUITE |
 | 5 | done 2026-09-17 in `8275e8f`; see the tombstone in `docs/context/decisions.md` | P1-JOBS-API |
-| 5 | [`docs/issues/2026-07-21-project-list-metadata-filters-noop.md`](../issues/2026-07-21-project-list-metadata-filters-noop.md) | P2-ROOT |
+| 5 | `2026-07-21-project-list-metadata-filters-noop.md` — **resolved 2026-09-18**, deleted; see tombstone | P2-ROOT |
 
 Full catalogue: [`docs/issues/README.md`](../issues/README.md).
 
