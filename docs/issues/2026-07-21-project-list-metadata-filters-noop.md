@@ -7,7 +7,7 @@ last_verified: 2026-07-21
 level: I2
 ---
 
-# Project list cards lack metadata; non-all root filters are no-ops
+# The project list has no status to filter or sort by
 
 ## Agent Index
 
@@ -16,7 +16,7 @@ level: I2
 - **Level:** I2
 - **Last verified:** 2026-07-21
 - **Resolution:** Open
-- **Severity:** Medium — root project chrome shows placeholders; filter chips do not filter
+- **Severity:** Low. The dishonest chrome is gone as of 2026-09-18; what remains is a capability nobody can offer yet.
 - **Affected version:** deep code review 2026-07-21 (`P2-ROOT`); PGDP items 7+8
 - **Read when:** changing RootPage cards, project enumeration API, or root filter chips.
 - **Search terms:** ProjectKey, RootPage, root-filter-chip, pageCount, progressPercent, P2-ROOT, PGDP 7, PGDP 8.
@@ -34,6 +34,27 @@ project cards hard-code `pageCount` and `progressPercent` as `null` placeholders
 do nothing: non-`all` filters still return the full list because the API has no
 status (or page/progress) metadata. This is **P2-ROOT** / PGDP alignment items
 7+8 (Wave 5).
+
+## What changed on 2026-09-18, and what is left
+
+Merge `3200aa7` gave the cards a real page count, read from the manifest for a
+book project and from the directory otherwise, and removed the Active, Complete
+and Archived chips rather than leaving them inert. The product no longer claims
+anything it cannot do.
+
+Two things are still missing, and both need a decision before they can be built:
+
+- **Progress.** The only source of review state is every page's aggregate inside
+  each project's event store, measured at about ten times the cost of the page
+  count and growing with the whole corpus, on every list call. A save-time cache
+  would make it cheap, and `write_project_json` and `Project.saved_pages` already
+  exist for something like it, but nothing calls them. Someone has to decide
+  whether the save path should write that.
+- **Archived.** Nothing in this codebase defines what archived means. Until
+  somebody does, no filter can honestly offer it. This is the undecided archive
+  semantics question, PGDP item 9.
+
+The original report follows, for the detail it carries.
 
 ## Impact
 
