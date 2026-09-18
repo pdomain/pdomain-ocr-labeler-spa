@@ -16,6 +16,8 @@ in their docstring so future readers know which milestone wires them.
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 from typing import Literal
 
@@ -27,6 +29,98 @@ Mode = Literal["normal", "api_only"]
 StorageBackend = Literal["filesystem", "s3"]
 AuthMode = Literal["none"]
 OCREngine = Literal["local_doctr", "modal", "shared_container"]
+
+# The app-name leaf used under every OS-aware root (config_root / data_root /
+# cache_root) — matches the distribution name, per
+# ``docs/architecture/01-data-models.md §5``.
+_APP_DIRNAME = "pdomain-ocr-labeler-spa"
+
+
+def _legacy_data_root() -> Path:
+    """The pre-XDG default (``~/pdomain-ocr-labeler-spa``).
+
+    BUG-SMOKE-3: kept only as a fallback for installs that predate this app
+    adopting OS-aware paths (see :func:`default_data_root`). Never write new
+    installs here. A function (not a module-level constant) so it re-reads
+    ``Path.home()`` on every call — tests that monkeypatch ``HOME`` would
+    otherwise observe a value cached from import time.
+    """
+    return Path.home() / _APP_DIRNAME
+
+
+def _xdg_data_root() -> Path:
+    """The OS-aware default ``data_root`` for the current platform.
+
+    Spec: ``docs/architecture/01-data-models.md §5`` (``data_root`` row):
+
+    - Linux / other POSIX: ``$XDG_DATA_HOME`` (default ``~/.local/share``).
+    - macOS: ``~/Library/Application Support`` — Apple's per-user data
+      convention; ``XDG_DATA_HOME`` has no meaning there.
+    - Windows: ``%LOCALAPPDATA%`` (default ``~/AppData/Local``) — the
+      per-user, non-roaming data location.
+
+    Every branch appends ``_APP_DIRNAME`` as the leaf.
+    """
+    home = Path.home()
+    if sys.platform == "win32":
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        base = Path(local_appdata) if local_appdata else home / "AppData" / "Local"
+        return base / _APP_DIRNAME
+    if sys.platform == "darwin":
+        return home / "Library" / "Application Support" / _APP_DIRNAME
+    xdg_data_home = os.environ.get("XDG_DATA_HOME")
+    base = Path(xdg_data_home) if xdg_data_home else home / ".local" / "share"
+    return base / _APP_DIRNAME
+
+
+def default_data_root() -> Path:
+    """Resolve ``Settings.data_root``'s default.
+
+    BUG-SMOKE-3 ruling: default to the OS-aware data directory
+    (:func:`_xdg_data_root`), but if a pre-XDG install already has data at
+    the legacy location (:func:`_legacy_data_root`, i.e. ``~/pdomain-ocr-labeler-spa``)
+    and the new location doesn't exist yet, keep using the legacy directory —
+    a person who has been using this app must not open it and find it empty.
+
+    Deliberately does **not** look for the legacy NiceGUI app's directory
+    (``~/.local/share/pd-ocr-labeler/``) — that is a different application's
+    data; silently adopting it would be exactly the invisible behaviour this
+    policy exists to avoid. Point ``PDLABELER_DATA_ROOT`` / ``--data-root`` at
+    it explicitly to use it.
+    """
+    legacy = _legacy_data_root()
+    xdg = _xdg_data_root()
+    if legacy.exists() and not xdg.exists():
+        return legacy
+    return xdg
+
+
+def describe_data_root(data_root: Path) -> str:
+    """Startup line naming the data directory actually in use.
+
+    Describes the resolved value you pass in — never recomputes it — so it
+    stays true regardless of whether ``data_root`` came from the default, an
+    env var, a config file, or ``--data-root``.
+    """
+    return f"Using data directory: {data_root}"
+
+
+def data_root_legacy_note(data_root: Path) -> str | None:
+    """A one-time compatibility note, or ``None`` if it doesn't apply.
+
+    BUG-SMOKE-3: when the resolved ``data_root`` is the pre-XDG legacy
+    directory and it exists while the OS-aware default does not, say so —
+    silently keeping an old directory without telling anyone is the failure
+    mode this policy exists to avoid.
+    """
+    xdg = _xdg_data_root()
+    if data_root == _legacy_data_root() and data_root != xdg and data_root.exists() and not xdg.exists():
+        return (
+            f"{data_root} is the pre-XDG data directory and still has your data, so it's "
+            f"still in use. The default is now {xdg} — move your files there and set "
+            f"PDLABELER_DATA_ROOT={xdg} (or pass --data-root) to switch."
+        )
+    return None
 
 
 class Settings(BaseSettings):
@@ -62,7 +156,7 @@ class Settings(BaseSettings):
 
     # ── OS-aware roots (docs/architecture/01-data-models.md §5) ──────────────────────────
     config_root: Path = Field(default_factory=lambda: Path.home() / ".config" / "pdomain-ocr-labeler-spa")
-    data_root: Path = Field(default_factory=lambda: Path.home() / "pdomain-ocr-labeler-spa")
+    data_root: Path = Field(default_factory=default_data_root)
     cache_root: Path = Field(default_factory=lambda: Path.home() / ".cache" / "pdomain-ocr-labeler-spa")
 
     # ── Project discovery (docs/architecture/02-backend.md §3 lines 130-132) ─────────────

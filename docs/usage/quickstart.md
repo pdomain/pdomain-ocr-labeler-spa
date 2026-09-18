@@ -86,10 +86,15 @@ prefix.
 |----------|---------|--------|
 | `PDLABELER_HOST` | `127.0.0.1` | Bind host |
 | `PDLABELER_PORT` | next free from 8080 | Bind port |
-| `PDLABELER_DATA_ROOT` | `~/pdomain-ocr-labeler-spa` | Data root for projects |
+| `PDLABELER_DATA_ROOT` | `${XDG_DATA_HOME:-~/.local/share}/pdomain-ocr-labeler-spa` (macOS: `~/Library/Application Support/pdomain-ocr-labeler-spa`; Windows: `%LOCALAPPDATA%/pdomain-ocr-labeler-spa`) | Data root for projects |
 | `PDLABELER_SOURCE_PROJECTS_ROOT` | (none) | Root whose subdirectories appear as selectable projects |
 
-(`src/pdomain_ocr_labeler_spa/settings.py:47-78`, source-checked 2026-06-01)
+If you have an existing `~/pdomain-ocr-labeler-spa` from before this app adopted
+OS-aware paths and the new default location doesn't exist yet, the SPA keeps using
+that directory instead of starting empty, and says so at startup. See
+`docs/architecture/01-data-models.md §5` and `docs/context/decisions.md` (BUG-SMOKE-3).
+
+(`src/pdomain_ocr_labeler_spa/settings.py`, source-checked 2026-09-18)
 
 ---
 

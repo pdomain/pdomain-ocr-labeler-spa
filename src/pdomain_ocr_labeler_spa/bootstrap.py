@@ -91,7 +91,7 @@ from .core.regions.poetry import PoetryDetector
 from .core.source_root_state import SourceRootCarrier
 from .core.startup_discovery import resolve_initial_project
 from .middleware.local_trust import LocalTrustMiddleware
-from .settings import Settings
+from .settings import Settings, data_root_legacy_note, describe_data_root
 
 log = logging.getLogger(__name__)
 
@@ -154,6 +154,17 @@ def _make_lifespan(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # BUG-SMOKE-3: say which data directory is actually in use, once,
+        # at startup — the message describes ``settings.data_root`` (the
+        # instance this closure was built with), so it stays true whether
+        # that value came from the OS-aware default, PDLABELER_DATA_ROOT,
+        # or --data-root. A WARNING follow-up fires only when a pre-XDG
+        # install is being kept in place instead of the new default.
+        log.info(describe_data_root(settings.data_root))
+        legacy_note = data_root_legacy_note(settings.data_root)
+        if legacy_note is not None:
+            log.warning(legacy_note)
+
         # Issue #223 — pidfile check: warn if another live process holds
         # the cache root; write our own PID regardless.  Advisory-only;
         # does not prevent startup.
