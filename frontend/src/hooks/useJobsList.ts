@@ -42,7 +42,7 @@ const ACTIVE_POLL_MS = 3_000;
 /** Coalesces bursts of jobsBus signals (e.g. several jobs starting together). */
 const BUS_DEBOUNCE_MS = 200;
 
-export const JOBS_QUERY_KEY = ["jobs"] as const;
+const JOBS_QUERY_KEY = ["jobs"] as const;
 
 /**
  * Pure interval decision, exported so the "poll only while something is
