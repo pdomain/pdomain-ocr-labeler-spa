@@ -2,6 +2,13 @@
 // Spec: specs/20-glyph-annotations.md §5.5
 // Issue #270
 //
+// M11 Task 7 (docs/plans/2026-07-21-glyph-annotations-completion.md):
+// a successful (non-dry-run) apply invalidates the ["page", projectId,
+// pageIndex] query — before this, the dialog closed on apply with no
+// invalidation, so `WordCell` chips/badges stayed stale until something
+// unrelated refetched the page
+// (docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md defect 3).
+//
 // data-testids (spec §7):
 //   bulk-glyph-mark-dialog         — outer dialog container
 //   bulk-glyph-recipe-select       — recipe dropdown
@@ -12,6 +19,7 @@
 //   bulk-glyph-preview-count       — span containing "N words will be modified"
 
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 export interface BulkGlyphMarkDialogProps {
   open: boolean;
@@ -38,6 +46,7 @@ export function BulkGlyphMarkDialog({
   pageIndex,
   onClose,
 }: BulkGlyphMarkDialogProps) {
+  const qc = useQueryClient();
   const [recipe, setRecipe] = useState<Recipe>("ct_substring");
   const [skipAnnotated, setSkipAnnotated] = useState(true);
   const [acceptPredictions, setAcceptPredictions] = useState(false);
@@ -88,6 +97,11 @@ export function BulkGlyphMarkDialog({
     setError(null);
     try {
       await callBulkMark(false);
+      // Affected words' annotations/predictions now live only in the
+      // response the dialog just discarded — invalidate so WordCell badges
+      // and chips refetch the current state instead of showing stale data
+      // until something unrelated refetches the page.
+      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Apply failed");
