@@ -8,7 +8,7 @@ Spec: docs/issues/2026-07-21-e2e-non-blocking-soft-skips.md
 
 from __future__ import annotations
 
-from tests.e2e.conftest import _skip_budget_exempt_file
+from tests.e2e.conftest import _ALLOWED_SKIP_PREFIXES, _skip_budget_exempt_file
 
 
 def test_exercise_real_project_file_is_exempt() -> None:
@@ -27,3 +27,14 @@ def test_other_e2e_files_are_not_exempt() -> None:
     """The exemption is scoped to exercise_real_project.py only."""
     nodeid = "tests/e2e/test_ui_coverage.py::test_worklist_sort_select_changes[chromium]"
     assert not _skip_budget_exempt_file(nodeid)
+
+
+def test_exercise_fixture_missing_is_an_allowed_skip_reason() -> None:
+    """``exercise_server`` skips with this reason when the committed fixture
+    data is absent — the same kind of environment precondition as the
+    allowlisted "SPA not built" skip beside it, so it must give its own
+    actionable message instead of failing the session for an unrelated
+    reason.
+    """
+    reason = "Exercise fixture missing — run: uv run python scripts/generate_exercise_fixture.py"
+    assert reason.startswith(_ALLOWED_SKIP_PREFIXES)

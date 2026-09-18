@@ -204,6 +204,9 @@ _ALLOWED_SKIP_PREFIXES = (
     # SPA build is a precondition `make e2e` always satisfies (frontend-build
     # runs first); this only fires for a bare `pytest tests/e2e` without it.
     "SPA not built",
+    # exercise_server's fixture-data precondition — the committed exercise-
+    # fixture project (scripts/generate_exercise_fixture.py) is missing.
+    "Exercise fixture missing",
     # axe-core is not yet an installed frontend devDependency (separate,
     # pre-existing gap — see the P0-CI-SOFT follow-up report).
     "axe-core bundle not found",
