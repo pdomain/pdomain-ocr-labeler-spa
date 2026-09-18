@@ -267,6 +267,7 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
             data-testid="bbox-input-x"
             type="number"
             size="sm"
+            disabled={busy}
             value={draft.x}
             onChange={(e) => {
               handleChange("x", e.target.value);
@@ -283,6 +284,7 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
             data-testid="bbox-input-y"
             type="number"
             size="sm"
+            disabled={busy}
             value={draft.y}
             onChange={(e) => {
               handleChange("y", e.target.value);
@@ -299,6 +301,7 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
             data-testid="bbox-input-w"
             type="number"
             size="sm"
+            disabled={busy}
             value={draft.width}
             onChange={(e) => {
               handleChange("width", e.target.value);
@@ -315,6 +318,7 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
             data-testid="bbox-input-h"
             type="number"
             size="sm"
+            disabled={busy}
             value={draft.height}
             onChange={(e) => {
               handleChange("height", e.target.value);

@@ -205,6 +205,29 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     expect(screen.getByTestId("bbox-reset-button")).toBeInTheDocument();
   });
 
+  // ─── Review finding 1 (high): inputs must be disabled while a refine job
+  // is in flight, or a keystroke made during the run is silently lost the
+  // moment the completion resync fires. ──────────────────────────────────
+
+  it("disables the coordinate inputs while a refine job is running", async () => {
+    server.use(
+      http.post("/api/projects/p1/pages/0/refine", () =>
+        HttpResponse.json({ job_id: "job-busy-1" }, { status: 202 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderBBox();
+
+    expect(screen.getByTestId("bbox-input-x")).not.toBeDisabled();
+
+    await user.click(screen.getByTestId("bbox-refine-button"));
+
+    await waitFor(() => expect(screen.getByTestId("bbox-input-x")).toBeDisabled());
+    expect(screen.getByTestId("bbox-input-y")).toBeDisabled();
+    expect(screen.getByTestId("bbox-input-w")).toBeDisabled();
+    expect(screen.getByTestId("bbox-input-h")).toBeDisabled();
+  });
+
   it("fires word PATCH (rebox) mutation on input blur-sm with changed value", async () => {
     const handler = vi.fn((_req: Request) =>
       Promise.resolve(HttpResponse.json(makePageResponse(DEFAULT_BBOX))),
