@@ -1,6 +1,18 @@
 // ExportDialogUtils.ts — non-component helpers for ExportDialog.
 // Extracted per react-refresh rule: non-component exports must not live
 // in .tsx files alongside components.
+//
+// Shares its /api/suite/* calls with the AppShell launcher
+// (components/shell/SuiteLauncher.tsx) via api/suite.ts, rather than each
+// hand-rolling its own fetch — see
+// docs/issues/2026-07-21-suite-launcher-app-shims.md next step 2.
+
+import {
+  fetchSuiteInstalledRaw,
+  isEnabledSuiteApp,
+  launchSuiteApp,
+  describeLaunchFailure,
+} from "../api/suite";
 
 /** App ID for the OCR trainer in the suite registry. */
 const TRAINER_APP_ID = "pdomain-ocr-trainer-spa";
@@ -14,10 +26,8 @@ const TRAINER_APP_ID = "pdomain-ocr-trainer-spa";
  */
 export async function fetchTrainerInstalled(): Promise<boolean> {
   try {
-    const res = await fetch("/api/suite/installed");
-    if (!res.ok) return false;
-    const apps = (await res.json()) as Array<{ app_id: string; enabled: boolean }>;
-    return apps.some((a) => a.app_id === TRAINER_APP_ID && a.enabled);
+    const rows = await fetchSuiteInstalledRaw();
+    return rows.some((row) => isEnabledSuiteApp(row, TRAINER_APP_ID));
   } catch {
     return false;
   }
@@ -26,21 +36,15 @@ export async function fetchTrainerInstalled(): Promise<boolean> {
 /**
  * Call /api/suite/launch for the trainer app.
  *
- * Returns the launch result on success; on any error logs to console
- * and returns null (caller decides whether to surface to the user).
+ * Returns the launch result on success; on any failure (refused or
+ * network/server error) logs the honest reason to console and returns null
+ * (caller decides whether to surface it to the user).
  */
 export async function launchTrainer(): Promise<{ kind: string; url?: string } | null> {
-  try {
-    const res = await fetch(`/api/suite/launch?app_id=${encodeURIComponent(TRAINER_APP_ID)}`, {
-      method: "POST",
-    });
-    if (!res.ok) {
-      console.warn(`launch trainer: HTTP ${res.status}`);
-      return null;
-    }
-    return (await res.json()) as { kind: string; url?: string };
-  } catch (e) {
-    console.warn("launch trainer: fetch failed", e);
-    return null;
+  const outcome = await launchSuiteApp(TRAINER_APP_ID);
+  if (outcome.kind === "opened") {
+    return { kind: outcome.kind, url: outcome.url };
   }
+  console.warn(`launch trainer: ${describeLaunchFailure(outcome)}`);
+  return null;
 }

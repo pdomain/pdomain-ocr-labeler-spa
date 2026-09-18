@@ -14,9 +14,11 @@
 //        load() returns localStorage-seeded defaults; persist callbacks are no-ops.
 //        Full wiring deferred to Phase 2.5 (reactive stores migration).
 // GAP-2: POST /api/ui-prefs backend endpoint not yet implemented — same as GAP-1.
-// GAP-3: Suite launcher callbacks still use frontend shims. The backend mounts
-//        /api/suite/* for compute/settings endpoints, but sibling app launch UX
-//        remains deferred until the app catalog contract is settled.
+//
+// P1-SUITE (docs/issues/2026-07-21-suite-launcher-app-shims.md, resolved):
+//        the former GAP-3 fetchInstalled/postLaunch shims are replaced by
+//        components/shell/SuiteLauncher.tsx, backed by the real
+//        /api/suite/installed + /api/suite/launch routes.
 
 import { BrowserRouter, Routes, Route, Navigate, useParams, useMatch } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -27,16 +29,14 @@ import {
   AppShell,
   ComputeTargetPanel,
   createApiDeviceConfig,
-  SuiteSiblingsProvider,
   type SettingsPanelDescriptor,
   type UIPrefsConfig,
-  type InstalledApp,
-  type LaunchResult,
 } from "@pdomain/pdomain-ui/shell";
 import { useDeviceInfo } from "@pdomain/pdomain-ui/stores";
 import HeaderBar from "./components/HeaderBar";
 import { CudaSetupGuidance } from "./components/CudaSetupGuidance";
 import { Rail } from "./components/shell/Rail";
+import { SuiteLauncherProvider, SuiteLauncherHeaderSlot } from "./components/shell/SuiteLauncher";
 import RootPage from "./pages/RootPage";
 import ProjectPage from "./pages/ProjectPage";
 import TypographyWorklistPage from "./pages/TypographyWorklistPage";
@@ -277,9 +277,13 @@ function AppInner() {
      * and rightPanel are not used at the AppShell level; ProjectPage owns its
      * interior canvas/worklist/detail layout inside main.
      *
-     * launcherSlot="header": pdomain-ui AppShell injects LauncherSlot into the
-     * header zone. The SuiteSiblingsProvider (wrapped in App()) supplies the
-     * sibling list via fetchInstalled / postLaunch callbacks.
+     * launcherSlot="header" is declared for AppShellContext's benefit, but
+     * AppShell only assembles its *built-in* header (which is what would
+     * actually read that prop to place LauncherSlot) when `header` is left
+     * undefined — passing a custom `header` node, as this app does, bypasses
+     * that assembly entirely. SuiteLauncherHeaderSlot (rendered via
+     * HeaderBar's rightSlot below) renders LauncherSlot explicitly instead;
+     * see components/shell/SuiteLauncher.tsx for the full explanation.
      */
     <div data-testid="app-shell" className="h-screen w-full">
       <AppShell
@@ -293,11 +297,13 @@ function AppInner() {
         header={
           <>
             {/* D-047: chrome-only HeaderBar — no document/page-scoped controls.
-             * The AppShell injects the LauncherSlot + SettingsSlot ⚙ (which owns
-             * the Appearance/theme panel, D-048) into this header zone. */}
+             * SuiteLauncherHeaderSlot (rightSlot) owns the sibling-app
+             * launcher; the Settings ⚙ gear is a separate, pre-existing gap
+             * (not P1-SUITE) — see the AppShell header-assembly note above. */}
             <HeaderBar
               projectName={headerProjectName}
               projectRoot={onProjectRoute ? headerProjectRoot : null}
+              rightSlot={<SuiteLauncherHeaderSlot />}
             />
             {/* S6.3(a): OCR config trigger reachable on the root route (#405).
              * PageActionsCompact owns this button on project routes (inside the
@@ -495,49 +501,25 @@ const UI_PREFS_CONFIG: UIPrefsConfig = {
   },
 };
 
-// ── Phase 2.4: SuiteSiblings fetch/launch shims (GAP-3) ─────────────────────
-//
-// The launcher callbacks are still intentionally shimmed even though the backend
-// now mounts suite compute/settings endpoints.
-// fetchInstalled returns an empty list (no siblings shown in launcher).
-// postLaunch returns requires-host-config so the launcher shows an error
-// rather than a crash if somehow invoked.
-async function fetchInstalled(): Promise<InstalledApp[]> {
-  // GAP-3: when pdomain-ocr-ops mounts /api/suite/* in FastAPI, replace with:
-  //   const res = await fetch("/api/suite/installed");
-  //   if (!res.ok) return [];
-  //   return (await res.json()) as InstalledApp[];
-  return [];
-}
-
-async function postLaunch(id: string): Promise<LaunchResult> {
-  // GAP-3: when pdomain-ocr-ops mounts /api/suite/* in FastAPI, replace with:
-  //   const res = await fetch(`/api/suite/launch`, {
-  //     method: "POST", body: JSON.stringify({ id }),
-  //     headers: { "Content-Type": "application/json" },
-  //   });
-  //   return (await res.json()) as LaunchResult;
-  return { kind: "requires-host-config", siblingId: id };
-}
-
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         {/*
-         * Phase 2.4: SuiteSiblingsProvider supplies the launcher context
-         * that pdomain-ui AppShell's LauncherSlot reads via useSuiteSiblingsContext().
-         * fetchInstalled / postLaunch remain shims (GAP-3) until the sibling
-         * launcher contract is wired through the app catalog.
+         * P1-SUITE: SuiteLauncherProvider supplies the real fetchInstalled /
+         * postLaunch callbacks (api/suite.ts, backed by /api/suite/installed
+         * + /api/suite/launch) to SuiteSiblingsProvider, which pdomain-ui's
+         * LauncherSlot reads via useSuiteSiblingsContext(). See
+         * components/shell/SuiteLauncher.tsx.
          */}
-        <SuiteSiblingsProvider value={{ fetchInstalled, postLaunch }}>
+        <SuiteLauncherProvider>
           <ComputeStateWarmup />
           <AppInner />
           {/* Single Toaster instance — all toasts routed through sonner.
               Position: bottom-right (Slice 26).
               Theme matches data-theme preference. */}
           <ThemedToaster />
-        </SuiteSiblingsProvider>
+        </SuiteLauncherProvider>
       </BrowserRouter>
     </QueryClientProvider>
   );

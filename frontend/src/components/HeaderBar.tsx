@@ -15,8 +15,15 @@
 // Visible layout (chrome only):
 //   Left:   logo glyph + "OCR Labeler" + "Projects" link [+ "/" + project-name
 //           breadcrumb] [+ resolved project-root path label]
-//   (The AppShell injects the LauncherSlot + SettingsSlot ⚙ into its header zone
-//   alongside this bar; HeaderBar carries no document-scoped controls.)
+//   Right:  `rightSlot` (flush right, after the spacer) — App.tsx passes
+//           SuiteLauncherHeaderSlot here (docs/issues/2026-07-21-suite-launcher-app-shims.md).
+//   HeaderBar itself carries no document-scoped controls.
+//
+// Historical note: this spacer originally existed for pdomain-ui AppShell's
+// *built-in* header (app icon/name + LauncherSlot + SettingsSlot ⚙), which
+// only renders when AppShell's `header` prop is left undefined. App.tsx
+// passes a custom `header` node, so that built-in assembly never ran and
+// nothing filled the space after the spacer — `rightSlot` now does.
 //
 // D-052 (2026-06-14): the last `display:none` stub block is removed. Source-folder
 // dialog and OCR-config modal fields now live exclusively on their real, visible
@@ -24,6 +31,7 @@
 // OPEN the modal (click `source-folder-button` / `ocr-config-trigger-button`).
 
 import { Link } from "react-router-dom";
+import type { ReactNode } from "react";
 
 // ─── HeaderBar ───────────────────────────────────────────────────────────────
 
@@ -38,9 +46,14 @@ export interface HeaderBarProps {
    * the project breadcrumb on project routes. Only rendered when non-null/truthy.
    */
   projectRoot?: string | null;
+  /**
+   * Rendered after the flex-1 spacer, flush right — see the file-header
+   * comment. App.tsx passes `<SuiteLauncherHeaderSlot/>` here.
+   */
+  rightSlot?: ReactNode;
 }
 
-export default function HeaderBar({ projectName, projectRoot }: HeaderBarProps = {}) {
+export default function HeaderBar({ projectName, projectRoot, rightSlot }: HeaderBarProps = {}) {
   return (
     <header
       data-testid="header-bar"
@@ -106,9 +119,9 @@ export default function HeaderBar({ projectName, projectRoot }: HeaderBarProps =
         </span>
       )}
 
-      {/* Spacer — pushes the AppShell-injected LauncherSlot + SettingsSlot ⚙
-       * (rendered by pdomain-ui AppShell into the header zone) to the right. */}
+      {/* Spacer — pushes rightSlot (SuiteLauncherHeaderSlot) flush right. */}
       <div className="flex-1 min-w-0" />
+      {rightSlot}
     </header>
   );
 }
