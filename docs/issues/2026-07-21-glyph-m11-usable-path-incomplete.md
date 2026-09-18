@@ -27,6 +27,27 @@ level: I1
   [`docs/plans/2026-07-21-deep-code-review-continuation.md`](../plans/2026-07-21-deep-code-review-continuation.md),
   [`specs/20-glyph-annotations.md`](../../specs/20-glyph-annotations.md)
 
+## What changed on 2026-09-18
+
+The usable path exists now, in `0f8f20b` and `c0cbf76`. A person can select a
+word, mark its glyphs or mark it reviewed with no marks, and that mark reaches
+the server, returns on the next read, and survives a save and reload. A bulk
+apply persists and refreshes the page. Before this, bulk apply did not merely
+fail to save; it raised on the page id and failed outright for everyone.
+
+Two things remain, and one of them is the reason this report stays open:
+
+- **Nothing produces glyph predictions.** `IGlyphPredictor` is unwired, so the
+  accept button cannot fire for any real user. Until a predictor exists, accept
+  is scaffolding. Task 10 of the plan.
+- **The chip click still goes nowhere**, because it targets a word edit dialog
+  this codebase no longer has. Task 6, blocked on
+  `docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`.
+  Once that is decided, the chip should select the word and let the right panel
+  show it, not open a dialog.
+
+The original report follows.
+
 ## Summary
 
 M11 glyph annotations have a substantial **scaffold** (models, routes, bulk

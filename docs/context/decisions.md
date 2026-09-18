@@ -1012,3 +1012,28 @@ route the same way:
 round trips (Task 2) plus fresh-store reload coverage for all three
 `glyph_annotations` tri-states (absent / empty-reviewed / populated) and for
 bulk-mark apply specifically (Task 3, the STUB this entry fixes).
+
+### [2026-09-18] Glyph annotations: the review path works, the predictor does not exist
+
+- Issue: `docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md`, narrowed
+  rather than retired
+- Resolved by: `0f8f20b` (backend) and `c0cbf76` (frontend)
+- What was wrong: annotations reached in-memory maps and stopped there, the
+  panel was never mounted, the mutation hooks did not exist, and a bulk apply
+  did not refresh the page it had just changed. Worse than unsaved: every
+  non-dry-run bulk apply raised on the page id it could not serialize, so the
+  feature failed outright. Verified against the pre-fix commits.
+- What works now: select a word, mark its ligatures, long s or swash, or mark it
+  reviewed with no marks. The mark reaches the server, comes back on the next
+  read, and survives a save and reload, carried by the same content-blob sidecar
+  the character maps use. A bulk apply persists and refreshes the page.
+  `tests/e2e/test_glyph_panel.py` drives it and checks the server, not the
+  screen.
+- What is still scaffolding: nothing produces glyph predictions. `IGlyphPredictor`
+  is unwired, so the accept button cannot fire for anyone. That is Task 10 of
+  `docs/plans/2026-07-21-glyph-annotations-completion.md`, and the plan now says
+  so where a reader will meet it.
+- One naming call: the panel sits in a "Glyphs" accordion item, not the plan's
+  "Typography", because a separate typography review feature already owns that
+  label. Two adjacent items named Glyphs and Typography is the state; whether
+  that reads well to a person reviewing a word is worth a look.
