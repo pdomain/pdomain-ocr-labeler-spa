@@ -657,8 +657,8 @@ and browser gates pass on the merged tree.
   `tests/e2e/test_page_load_progress.py`.
 - Remaining work: predictor build and the OCR pass are one stage, not two, because
   `pdomain-book-tools` has no progress callback. The design's open question about
-  adding one stays open, as does whether the OCR engine should warm up at server
-  start.
+  adding one stays open. **The warm-up question is answered below, on
+  2026-09-18: no.**
 
 ### [2026-09-18] Retired: the bbox buttons named actions they did not take
 
@@ -1658,3 +1658,34 @@ family and not touched.
 - What this unblocks: the first `region-decisions.jsonl` this system has ever
   had. Nothing has ever reviewed a region proposal, so there is no data on where
   role detection fails. Every future role claim needs that.
+
+### [2026-09-18] Decided: the OCR engine does not warm up at server start
+
+- Question carried since the 2026-09-17 page-load-progress entry: should the
+  OCR predictor be built eagerly when the server starts, so the first page that
+  needs OCR does not pay for it?
+- Decision: no. The predictor stays lazy, built on first use and kept by
+  `core/ocr/predictor.PredictorCache`.
+- Why, in the order that decided it:
+  - **The problem it would solve is already solved.** A cold page open used to
+    block behind a full-screen spinner for up to half a minute. Since `9768576`
+    a miss submits a `load_page` job, the fetch returns at once, and the job
+    names the store miss and the device OCR will run on. The wait is visible and
+    the rest of the shell stays usable. Warm-up would remove a wait a person can
+    now watch.
+  - **It would move the wait somewhere with no progress at all.** Server start
+    has no UI. Paying the model load there makes the server look slow to start
+    rather than making a page fast, and a person who starts the server and opens
+    an already-labeled project waits for nothing they need.
+  - **Most sessions never OCR.** Opening a labeled project reads from the store.
+    Loading detection and recognition models for that is memory and, on a GPU
+    box, video memory spent on nothing.
+  - **The cost is already paid once, not per page.** The predictor cache means
+    the second page that needs OCR does not rebuild it, so warm-up would save
+    that cost exactly once per server lifetime, for the sessions that use it at
+    all.
+- What would change this: a measurement showing the first-OCR wait is long
+  enough to matter *despite* the progress job, or a deployment where the server
+  starts well before anyone opens it. Neither is true today, and the GPU probe
+  raising when the card is full, tracked in `pdomain-ops`, is a reason to prefer
+  building late rather than early.

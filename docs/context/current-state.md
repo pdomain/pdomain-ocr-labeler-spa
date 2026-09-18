@@ -198,10 +198,10 @@ Spec: [`../../specs/20-glyph-annotations.md`](../../specs/20-glyph-annotations.m
   already declined.
 - **Folio detection can miss an OCR lookalike**, such as `IO` for `10`: the
   peel in `core/regions/furniture.py` only recognizes a digits-only pattern.
-- **Whether the OCR engine should warm up at server start is still open**,
-  carried from the 2026-09-17 page-load-progress decision in `decisions.md`.
-- **No release since `v0.2.0`, tagged 2026-06-06** — 634 commits ahead of it
-  on `master` as of 2026-09-18. `docs/runbooks/release.md` has the steps.
+- ~~Whether the OCR engine should warm up at server start~~ — decided
+  2026-09-18: no. The predictor stays lazy; see `decisions.md`.
+- **Released `v0.3.0` on 2026-09-18**, 561 commits after `v0.2.0`, with the pip
+  index regenerated. `docs/runbooks/release.md` has the steps.
 - PGDP/pdomain-ui alignment is partial:
   [`../plans/2026-07-21-pgdp-alignment-remaining.md`](../plans/2026-07-21-pgdp-alignment-remaining.md).
   Its status table predates 2026-09-18 — items 7–9 (project-card metadata, root
