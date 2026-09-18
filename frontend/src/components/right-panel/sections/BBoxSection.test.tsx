@@ -234,11 +234,13 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     expect(screen.getByTestId("bbox-reset-button")).toBeInTheDocument();
   });
 
-  // ─── Review finding 1 (high): inputs must be disabled while a refine job
-  // is in flight, or a keystroke made during the run is silently lost the
-  // moment the completion resync fires. ──────────────────────────────────
+  // ─── Review round 2, findings 2/3 (superseding round 1 finding 1): the
+  // coordinate inputs are never disabled by refine-job state — see the
+  // module doc comment for why a disable-based fix kept reopening this
+  // same window. Nudge/Reset (one-shot clicks, not typing sessions) still
+  // gate on the job instead, to protect the tracker's one job slot. ──────
 
-  it("disables the coordinate inputs while a refine job is running", async () => {
+  it("never disables the coordinate inputs while a refine job is running", async () => {
     server.use(
       http.post("/api/projects/p1/pages/0/refine", () =>
         HttpResponse.json({ job_id: "job-busy-1" }, { status: 202 }),
@@ -251,10 +253,14 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
 
     await user.click(screen.getByTestId("bbox-refine-button"));
 
-    await waitFor(() => expect(screen.getByTestId("bbox-input-x")).toBeDisabled());
-    expect(screen.getByTestId("bbox-input-y")).toBeDisabled();
-    expect(screen.getByTestId("bbox-input-w")).toBeDisabled();
-    expect(screen.getByTestId("bbox-input-h")).toBeDisabled();
+    // The job is now running for this word (Nudge/Reset gate on it)…
+    await waitFor(() => expect(screen.getByTestId("bbox-nudge-right")).toBeDisabled());
+    expect(screen.getByTestId("bbox-reset-button")).toBeDisabled();
+    // …but the coordinate inputs stay usable throughout.
+    expect(screen.getByTestId("bbox-input-x")).not.toBeDisabled();
+    expect(screen.getByTestId("bbox-input-y")).not.toBeDisabled();
+    expect(screen.getByTestId("bbox-input-w")).not.toBeDisabled();
+    expect(screen.getByTestId("bbox-input-h")).not.toBeDisabled();
   });
 
   it("fires word PATCH (rebox) mutation on input blur-sm with changed value", async () => {
@@ -535,6 +541,77 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     expect(screen.getByTestId("bbox-input-h").value).toBe("23");
   });
 
+  // ─── Review round 2, finding 2 (medium — reopens finding 1's window):
+  // the coordinate inputs must never be disabled (the earlier "disable
+  // while busy" approach only ever narrows this window, it doesn't close
+  // it — see BBoxSection.tsx's module doc comment for the reasoning behind
+  // this direction change). A resync instead leaves whichever field
+  // currently has focus untouched, merging its result into the rest. ────
+
+  it("keeps typing into a focused field while this word's own refine job runs and its result arrives", async () => {
+    const EXPANDED_BBOX: BBox = { x: 6, y: 16, width: 38, height: 23 };
+    let currentBbox = DEFAULT_BBOX;
+    server.use(
+      http.get("/api/projects/p1/pages/0", () => HttpResponse.json(makePageResponse(currentBbox))),
+    );
+
+    const tracking = createFakeRefineTracking();
+    const qc = makeQueryClient();
+
+    function Harness() {
+      const q = useQuery({
+        queryKey: ["page", "p1", 0],
+        queryFn: async () => {
+          const res = await fetch("/api/projects/p1/pages/0");
+          return res.json() as Promise<ReturnType<typeof makePageResponse>>;
+        },
+        initialData: makePageResponse(DEFAULT_BBOX),
+      });
+      const refineTracking = tracking.useTracking();
+      const word = q.data.line_matches[0].word_matches[0];
+      return (
+        <BBoxSection word={word} projectId="p1" pageIndex={0} refineTracking={refineTracking} />
+      );
+    }
+
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={qc}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+
+    // A refine job for this word is already running (e.g. the user just
+    // clicked Refine) — the inputs must stay usable regardless.
+    act(() => {
+      tracking.start("job-typing-1", "0-0");
+    });
+
+    const xInput = screen.getByTestId("bbox-input-x");
+    expect(xInput).not.toBeDisabled();
+    await user.click(xInput);
+    await user.clear(xInput);
+    await user.type(xInput, "777"); // uncommitted — no blur yet
+
+    // The job's result arrives while X is still focused, mid-edit.
+    act(() => {
+      tracking.completeWith("0-0", 1);
+    });
+    currentBbox = EXPANDED_BBOX;
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ["page", "p1", 0] });
+    });
+
+    // Y/W/H — not focused — pick up the refine's result immediately.
+    await waitFor(() => {
+      expect(screen.getByTestId("bbox-input-y").value).toBe("16");
+    });
+    expect(screen.getByTestId("bbox-input-w").value).toBe("38");
+    expect(screen.getByTestId("bbox-input-h").value).toBe("23");
+    // X — still focused — keeps exactly what the user is typing.
+    expect(screen.getByTestId("bbox-input-x").value).toBe("777");
+  });
+
   // ─── Review finding 2 (high): refine and expand_then_refine no-op when
   // the page has no cv2_numpy_page_image (true for any page loaded from the
   // store) — a documented outcome, not an edge case. The resync must key
@@ -655,7 +732,7 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     expect(screen.getByTestId("bbox-input-x")).not.toBeDisabled();
   });
 
-  it("still disables this word's own controls while ITS OWN refine job runs", async () => {
+  it("still disables Nudge/Reset (not the inputs) while this word's own refine job runs", async () => {
     server.use(
       http.post("/api/projects/p1/pages/0/refine", () =>
         HttpResponse.json({ job_id: "job-this-word" }, { status: 202 }),
@@ -666,9 +743,10 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
 
     await user.click(screen.getByTestId("bbox-refine-button"));
 
-    await waitFor(() => expect(screen.getByTestId("bbox-input-x")).toBeDisabled());
-    expect(screen.getByTestId("bbox-nudge-right")).toBeDisabled();
+    await waitFor(() => expect(screen.getByTestId("bbox-nudge-right")).toBeDisabled());
     expect(screen.getByTestId("bbox-reset-button")).toBeDisabled();
+    // Round 2 findings 2/3: the coordinate inputs are never disabled.
+    expect(screen.getByTestId("bbox-input-x")).not.toBeDisabled();
   });
 
   // ─── P1-BBOX-UI: useRefineAvailable capability gate ────────────────────────

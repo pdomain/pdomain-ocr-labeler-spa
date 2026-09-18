@@ -37,6 +37,40 @@
 // `.word` / `.outcome` back to compute its own busy state and to resync
 // `draft` once a real (refined > 0) outcome for this word lands.
 //
+// Review round 2 findings 2 and 3 — why the coordinate inputs are never
+// disabled: an earlier pass disabled X/Y/W/H while a refine job for this
+// word was in flight, to stop its eventual resync from silently
+// overwriting a keystroke made mid-run (finding 1 of that pass). Finding 2
+// found a narrower version of the exact same bug: invalidation fires
+// un-awaited, then the outcome is armed and the job slot cleared in the
+// same tick, so the inputs re-enable before the refetch that actually
+// carries the new bbox has landed — a keystroke in that gap was still
+// discarded once the resync it raced arrived. The fix that first suggested
+// itself — keep the inputs disabled until the resync is actually consumed,
+// not just until the job reports complete — only narrows the window
+// again: if a refine reports `refined > 0` but the server happens to
+// return the same coordinates already in `draft` (e.g. a manual edit
+// already matched what the refine would have produced), `pendingRefineSync`
+// below never gets a bbox change to consume, and the inputs would stay
+// disabled with no way back — a second, independent stall class, on top of
+// finding 3's "the job itself never completes" — each needing its own
+// timeout to recover from. Disabling on a condition that can fail to
+// resolve is the pattern producing both bugs.
+// Instead: the inputs are never disabled by job state, and the resync
+// (below, in the render-time-adjustment block) applies field-by-field,
+// skipping whichever single field currently has focus (`focusedField`).
+// There's no window to time out, because nothing is ever blocked — the
+// one field genuinely at risk (an uncommitted keystroke) is the one field
+// left alone; the other three still update immediately. Nudge/Reset and
+// the three refine buttons stay gated on job state below (`busy` /
+// `refineJobRunningElsewhere`): they're one-shot clicks, not typing
+// sessions, so they have none of the lost-keystroke risk that motivated
+// moving the inputs off this mechanism, and gating them still protects the
+// tracker's one job slot from a second job (this word's own, or another
+// word's — finding 4) orphaning the first. Finding 3's stall timeout
+// (useBboxRefineTracking.ts) keeps THOSE controls from getting stuck if a
+// job never reaches a terminal state.
+//
 // All original testids preserved except `bbox-crop-button`, renamed to
 // `bbox-expand-button` (see above). New testids (P3.a + P1-BBOX-UI):
 //   bbox-nudge-step             — step px input
@@ -152,6 +186,11 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
   const [draft, setDraft] = useState<BBox>(() => ({ ...word.bbox }));
   const [nudgeStep, setNudgeStep] = useState(1);
 
+  // Review round 2, findings 2/3: which input (if any) currently has focus
+  // — an incoming resync leaves this one field alone (see the module doc
+  // comment above) rather than disabling all of them.
+  const [focusedField, setFocusedField] = useState<BBoxField | null>(null);
+
   // Track word identity for potential future key-based reset.
   const wordKey = `${word.line_index}-${word.word_index ?? 0}`;
 
@@ -180,7 +219,15 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
     setPrevBboxSignature(bboxSignature);
     if (pendingRefineSync) {
       setPendingRefineSync(false);
-      setDraft({ ...word.bbox });
+      // Review round 2, finding 2: apply the refine's result to every
+      // field except one currently focused with an uncommitted edit — that
+      // field keeps what the user is typing; whatever they eventually
+      // blur-commit for it wins over the refine's suggestion.
+      setDraft((prev) => {
+        const next = { ...word.bbox };
+        if (focusedField) next[focusedField] = prev[focusedField];
+        return next;
+      });
     }
   }
 
@@ -253,7 +300,12 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
     });
   }
 
+  function handleFocus(field: BBoxField) {
+    setFocusedField(field);
+  }
+
   function handleBlur(field: BBoxField, value: string) {
+    setFocusedField((current) => (current === field ? null : current));
     const num = Number(value);
     if (!Number.isFinite(num)) return;
     const updated: BBox = { ...draft, [field]: num };
@@ -303,10 +355,12 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
             data-testid="bbox-input-x"
             type="number"
             size="sm"
-            disabled={busy}
             value={draft.x}
             onChange={(e) => {
               handleChange("x", e.target.value);
+            }}
+            onFocus={() => {
+              handleFocus("x");
             }}
             onBlur={(e) => {
               handleBlur("x", e.target.value);
@@ -320,10 +374,12 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
             data-testid="bbox-input-y"
             type="number"
             size="sm"
-            disabled={busy}
             value={draft.y}
             onChange={(e) => {
               handleChange("y", e.target.value);
+            }}
+            onFocus={() => {
+              handleFocus("y");
             }}
             onBlur={(e) => {
               handleBlur("y", e.target.value);
@@ -337,10 +393,12 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
             data-testid="bbox-input-w"
             type="number"
             size="sm"
-            disabled={busy}
             value={draft.width}
             onChange={(e) => {
               handleChange("width", e.target.value);
+            }}
+            onFocus={() => {
+              handleFocus("width");
             }}
             onBlur={(e) => {
               handleBlur("width", e.target.value);
@@ -354,10 +412,12 @@ export function BBoxSection({ word, projectId, pageIndex, refineTracking }: BBox
             data-testid="bbox-input-h"
             type="number"
             size="sm"
-            disabled={busy}
             value={draft.height}
             onChange={(e) => {
               handleChange("height", e.target.value);
+            }}
+            onFocus={() => {
+              handleFocus("height");
             }}
             onBlur={(e) => {
               handleBlur("height", e.target.value);
