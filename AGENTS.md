@@ -3,7 +3,7 @@ kind: process
 status: active
 owner: maintainers
 created: 2026-05-09
-last_verified: 2026-07-21
+last_verified: 2026-09-18
 ---
 
 # AGENTS — pdomain-ocr-labeler-spa
@@ -77,42 +77,41 @@ available in Git history. The legacy `pd-ocr-labeler` is superseded.
 
 **Open work:**
 
-Prioritization authority (Waves 0–6):
-[`docs/plans/2026-07-21-deep-code-review-continuation.md`](docs/plans/2026-07-21-deep-code-review-continuation.md).
+`docs/issues/README.md` has no open issues — the 18 deep-review reports under
+`docs/issues/2026-07-21-*`, plus every report filed on 2026-09-18, are
+resolved and deleted.
+[`docs/plans/2026-07-21-deep-code-review-continuation.md`](docs/plans/2026-07-21-deep-code-review-continuation.md)
+(Waves 0–6) is a historical record now, not a live queue: almost everything it
+named has a 2026-09-17 or 2026-09-18 tombstone in `docs/context/decisions.md`.
 
-Implementable work packages:
-[`docs/issues/README.md`](docs/issues/README.md) (18 deep-review issues under
-`docs/issues/2026-07-21-*`).
-
-Standing overnight stream index:
-[`docs/plans/2026-07-21-overnight-work-index.md`](docs/plans/2026-07-21-overnight-work-index.md).
-
-High-level status:
+High-level status, including what actually remains open (a word-identity bug
+that 404s typography after a ground-truth edit, a transient empty-page read
+race, region carry-forward gaps for hand-drawn/rejected proposals, OCR
+lookalike folios, the OCR-warmup question, and no release since `v0.2.0`):
 [`docs/context/current-state.md`](docs/context/current-state.md).
 
-Summary:
+Summary of what closed 2026-09-18 (full reasoning in
+`docs/context/decisions.md`):
 
-- **Wave 0 data integrity first** — char sidecars, rematch, save dirty-bit,
-  mutation silent-200 (`docs/issues/2026-07-21-sidecar-*` etc.).
+- Wave 0 data integrity, Wave 1 export loop, Wave 2 M11 glyph, Wave 3 job
+  SSE/canvas-erase/image-drift, and Wave 4 CI gates (#430/#433, moot — the
+  GitHub workflows they named were deleted 2026-09-13) are all closed.
 - M11 glyph annotations: the manual review path is shipped — a person can
   select a word, mark ligatures/long-s/swash or mark it reviewed with no
   marks, and the mark survives save and reload; bulk apply persists and
   refreshes. No predictor exists and none will be built (decided
-  2026-09-18) — the accept-prediction button never fires. See
-  `docs/context/decisions.md` (2026-09-18 entries) and
-  `docs/plans/2026-07-21-glyph-annotations-completion.md`. Glyph chips now
-  select the word and open the panel on click, same as the pencil button.
-  Residual polish: there is no bulk-mark browser e2e.
-- Export list + CLI store-first — corresponding `docs/issues/2026-07-21-export-*`
-  / `cli-export-*` issues.
-- Job SSE FE↔BE shape, canvas erase, image-drift, cancel — Wave 3 issues.
-- CI gates (#430/#433) + e2e soft-skips —
-  `docs/plans/2026-07-21-ci-openapi-gates.md`.
-- Open findings (KBD/XDG/RELOAD/HIER) —
-  `docs/plans/2026-07-21-open-findings-fixes.md`.
-- Residual `tsconfig.test.json` strictness —
+  2026-09-18) — the accept-prediction button never fires. Browser coverage:
+  `tests/e2e/test_glyph_panel.py` and `tests/e2e/test_bulk_glyph_mark.py`.
+  Glyph chips select the word and open the panel on click, same as the
+  pencil button.
+- Open findings (`docs/context/open-findings.md`): keyboard entries
+  (BUG-KBD-1/4/5) are closed; the XDG data root default, reload zero-area GT
+  boxes, and hierarchy E2E coverage are untouched and still open.
+- Residual `tsconfig.test.json` strictness — untouched:
   `docs/plans/2026-07-21-tsconfig-test-strictness.md`.
-- PGDP alignment remaining —
+- PGDP alignment remaining is partial: project-card metadata, root filters,
+  and the archive decision closed 2026-09-18; the jobs pill/drawer and a
+  shared workbench layout are still open.
   `docs/plans/2026-07-21-pgdp-alignment-remaining.md`.
 
 Per-slice history is preserved in git log and GitHub closed milestones.

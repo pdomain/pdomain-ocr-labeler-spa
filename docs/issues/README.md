@@ -2,7 +2,7 @@
 Status: active
 Owner: maintainers
 Created: 2026-07-19
-Last verified: 2026-07-21
+Last verified: 2026-09-18
 Kind: process
 Level: I1
 ---
@@ -14,7 +14,7 @@ Level: I1
 - **Kind:** process
 - **Status:** active
 - **Level:** I1
-- **Last verified:** 2026-07-21
+- **Last verified:** 2026-09-18
 - **Read when:** filing a bug / defect / investigation report, or looking up an
   open issue's status, evidence, or resolution.
 - **Search terms:** issues folder, bug report, defect report, issue template,
@@ -27,6 +27,15 @@ failures, regressions, and investigations that need a durable, citable record
 (not a throwaway chat summary). Each report is a docgraph node so it is
 retrievable, linkable from specs/plans/context, and carried in the repo rather
 than in per-machine harness memory.
+
+**There are no open issues right now.** The last one was retired on
+2026-09-18. Every report ever filed here — the 18 deep-review reports, the
+two migrated GitHub records, and every report filed and closed the same day —
+is resolved and deleted; each retirement's reasoning is a tombstone in
+[`../context/decisions.md`](../context/decisions.md). See
+[`../context/current-state.md`](../context/current-state.md) for what is
+actually still open in the product, most of it found rather than filed as a
+governed report.
 
 ## Convention
 
@@ -52,8 +61,8 @@ than in per-machine harness memory.
     file stays in the tree and there is no resolved index to maintain.
 - **Link it (no orphans):** reference every new issue from a governed doc — by
   default an **Open issues** bullet in `docs/context/intent-map.md`, or a Risk in
-  `docs/context/current-state.md`. This `README` also links the live issues below,
-  which satisfies the no-orphan rule.
+  `docs/context/current-state.md`. When this folder holds a live issue again, list
+  it below too, which satisfies the no-orphan rule.
 - **Stage + reindex:** under `mode = "git"` a new doc is invisible until
   `git add`ed; stage it, then `docgraph reindex` and `docgraph check --strict` the
   same turn (a new `dangling` blocks completion).
@@ -87,8 +96,8 @@ issues may still be open.
 Prioritization authority:
 [`../plans/2026-07-21-deep-code-review-continuation.md`](../plans/2026-07-21-deep-code-review-continuation.md).
 
-Open findings (keyboard, XDG, RELOAD, HIER) remain in
-[`../context/open-findings.md`](../context/open-findings.md) + plan
+Open findings (XDG, RELOAD, HIER — the keyboard entries closed 2026-09-18)
+remain in [`../context/open-findings.md`](../context/open-findings.md) + plan
 [`../plans/2026-07-21-open-findings-fixes.md`](../plans/2026-07-21-open-findings-fixes.md)
 — not re-filed as separate issues.
 
@@ -113,6 +122,6 @@ Resolved and deleted. See the 2026-09-18 tombstone in
 All reports are resolved and deleted. The project-list one is in the
 2026-09-18 tombstones. See [`../context/decisions.md`](../context/decisions.md).
 
-Resolved reports are deleted, so this index tracks open work only. Past
-resolutions live in the `docs/context/decisions.md` tombstones and in git
-history.
+Resolved reports are deleted, so this index tracks open work only — right now
+that is nothing. Past resolutions live in the `docs/context/decisions.md`
+tombstones and in git history.
