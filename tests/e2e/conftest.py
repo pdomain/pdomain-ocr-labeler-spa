@@ -238,6 +238,25 @@ _ALLOWED_SKIP_PREFIXES = (
 )
 
 
+def _skip_budget_exempt_file(nodeid: str) -> bool:
+    """Return True when ``nodeid`` is out of scope for the skip-budget gate.
+
+    ``pytest_sessionfinish`` below runs for *every* pytest session that loads
+    this conftest, not just ``make e2e`` — including ``make exercise-real``
+    (``pytest tests/e2e/exercise_real_project.py``). That module is a
+    manual/exploratory workflow harness, not the automated regression gate
+    `make e2e` guards — its own docstring says it is "intentionally not a
+    unit-by-unit pass/fail matrix." Its ~90 CU-2.2 placeholder stubs
+    (``@pytest.mark.skip("TODO: walk in browser — CU-2.2")``) are pre-existing,
+    already-tracked debt (docs/issues/2026-07-21-e2e-non-blocking-soft-skips.md
+    Evidence #4), not something this gate should turn into a hard failure of
+    an unrelated Make target. Exempting the whole file (rather than
+    allowlisting that one reason string) keeps the exemption legible: any
+    skip in this file is out of scope, matching its documented purpose.
+    """
+    return nodeid.startswith("tests/e2e/exercise_real_project.py")
+
+
 def _skip_reason(report: pytest.TestReport) -> str:
     """Extract the human-readable reason from a SKIPPED test report.
 
@@ -265,7 +284,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
     if reporter is None:
         return
-    skipped: list[pytest.TestReport] = reporter.stats.get("skipped", [])
+    skipped: list[pytest.TestReport] = [
+        rep for rep in reporter.stats.get("skipped", []) if not _skip_budget_exempt_file(rep.nodeid)
+    ]
     unexpected = [rep for rep in skipped if not _skip_reason(rep).startswith(_ALLOWED_SKIP_PREFIXES)]
     if unexpected:
         session.exitstatus = 1
