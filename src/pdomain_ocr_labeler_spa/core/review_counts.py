@@ -4,14 +4,25 @@ Spec authority: pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-
 what-to-review-next.md "A per-page count journal, written where the page is
 already saved".
 
-``core.page_state.save_page_content_to_store`` appends one row here after a
-page's content blob is durably saved — the same point that function already
-has the page's fresh content hash to return. A word only counts as reviewed
-when ``"validated"`` is in its ``word_labels`` (``api/words.py``'s
-``_apply_word_validated``), a fact that otherwise lives only inside the
-page's content blob and would cost a full page-blob parse per page to count.
-This journal makes counting a book's words as cheap as counting its regions
-or page kinds: a read of one small file, never a page load.
+``append_word_review_counts_best_effort`` is called from every path that
+writes a page's new head content, right after that write has durably
+succeeded: ``core.page_state.save_page_content_to_store`` (ordinary edits),
+``api.history``'s undo/redo (restoring an existing blob as the new head —
+its own ``labeler_edited`` event, not a ``save_page_content_to_store`` call),
+and ``adapters.ocr.local_doctr``'s OCR ingest (a fresh page under its own
+``ocr_completed`` event, unvalidated by construction). Each caller counts
+directly from the content it just wrote, never by inferring a delta from the
+journal's prior row — a row always describes exactly the content its own
+caller made current, which is what keeps undo/redo and re-OCR from leaving a
+stale, overstated row behind after they replace a page's content outside the
+edit-save path.
+
+A word only counts as reviewed when ``"validated"`` is in its
+``word_labels`` (``api/words.py``'s ``_apply_word_validated``), a fact that
+otherwise lives only inside the page's content blob and would cost a full
+page-blob parse per page to count. This journal makes counting a book's
+words as cheap as counting its regions or page kinds: a read of one small
+file, never a page load.
 
 Mirrors ``PageKindProposalLog``/``PageKindReviewedStore`` — a JSONL row per
 event, an OS append lock, fsync before ``append`` returns, no row ever
@@ -209,4 +220,53 @@ class WordReviewCountsJournal:
             os.close(fd)
 
 
-__all__ = ["PageWordCounts", "WordReviewCountsJournal"]
+def append_word_review_counts_best_effort(*, page: Any, store: Any, content_hash: str) -> None:
+    """Append one row to the word-review-counts journal for *page*. Best effort.
+
+    Shared by every path that writes a page's new head content — see the
+    module docstring. The caller's own content write must have already
+    durably succeeded; this counts *from that same content*, so the row
+    always describes exactly what the caller just made current, never a
+    value inferred from — or left over from — a prior row.
+
+    Runs in its own try/except, logged at warning and swallowed: a failure
+    here must never surface as a failed save, because the edit or restore it
+    would be counting has already landed durably. A row that never gets
+    written just makes a later count say "did not see this page" — the
+    review-queue route already has a field for that (``pages_not_counted``)
+    — rather than reporting an already-successful write as failed.
+
+    ``page_index`` must be an actual ``int``, not merely non-``None`` — a
+    duck-typed test double (or any other caller whose ``page`` doesn't carry
+    a real page index yet) is treated the same as a missing ``project_dir``:
+    there isn't enough to write a trustworthy row, so this returns quietly
+    rather than attempting a write already known to fail JSON encoding and
+    logging a warning nobody can act on.
+    """
+    project_dir = getattr(store, "project_dir", None)
+    page_index = getattr(page, "page_index", None)
+    if project_dir is None or not isinstance(page_index, int):
+        return
+    try:
+        words = getattr(page, "words", None) or []
+        total_words = len(words)
+        validated_words = sum(
+            1 for word in words if "validated" in (getattr(word, "word_labels", None) or ())
+        )
+        WordReviewCountsJournal(project_dir).append(
+            PageWordCounts(
+                page_index=page_index,
+                content_hash=content_hash,
+                total_words=total_words,
+                validated_words=validated_words,
+            )
+        )
+    except Exception:
+        log.warning(
+            "word-review-counts append failed for page_index=%s",
+            page_index,
+            exc_info=True,
+        )
+
+
+__all__ = ["PageWordCounts", "WordReviewCountsJournal", "append_word_review_counts_best_effort"]

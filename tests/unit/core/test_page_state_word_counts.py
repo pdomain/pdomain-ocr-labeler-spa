@@ -24,7 +24,6 @@ from uuid import uuid4
 
 import pytest
 
-from pdomain_ocr_labeler_spa.core import page_state as page_state_module
 from pdomain_ocr_labeler_spa.core.page_state import save_page_content_to_store
 from pdomain_ocr_labeler_spa.core.review_counts import WordReviewCountsJournal
 
@@ -110,7 +109,7 @@ def test_journal_append_failure_is_logged_and_swallowed(
     def _raise(self: WordReviewCountsJournal, counts: Any) -> None:
         raise OSError("disk full")
 
-    monkeypatch.setattr(page_state_module.WordReviewCountsJournal, "append", _raise)
+    monkeypatch.setattr(WordReviewCountsJournal, "append", _raise)
     store = _FakeStore(tmp_path)
     page = _FakePage(page_index=0, words=[_FakeWord(validated=True)])
 

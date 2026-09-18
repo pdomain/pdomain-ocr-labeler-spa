@@ -45,6 +45,7 @@ from ...core.page_state import (
     PageSource,
 )
 from ...core.persistence.ground_truth import find_ground_truth_text
+from ...core.review_counts import append_word_review_counts_best_effort
 from .base import OCRProvenance
 
 logger = logging.getLogger(__name__)
@@ -235,6 +236,16 @@ def _ingest_ocr_result(
         blob_refs=[content_hash, image_hash],
     )
     store.save_page(agg)
+
+    # pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-review-
+    # next.md "A per-page count journal": a fresh OCR ingest writes the
+    # page's new head content through ``ocr_completed``, not
+    # ``save_page_content_to_store`` — so it must append its own counts row
+    # here or a reload/rotate/auto-rotate run that resets a previously
+    # validated page's words leaves the journal reporting the pre-reload
+    # count. Counts from *this* page, whose words are unvalidated by
+    # construction (a fresh OCR result carries no ``"validated"`` labels).
+    append_word_review_counts_best_effort(page=page, store=store, content_hash=content_hash)
 
     # Register into the project aggregate so the restart read path can resolve
     # page_index → page_id. Best-effort: a project-write failure must not lose

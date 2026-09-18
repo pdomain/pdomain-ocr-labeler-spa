@@ -84,7 +84,6 @@ Exception types:
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
@@ -92,12 +91,10 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from .models import PageSource, Project
 from .persistence.paths import labeled_projects_root
 from .project_state import PageState, ProjectState
-from .review_counts import PageWordCounts, WordReviewCountsJournal
+from .review_counts import append_word_review_counts_best_effort
 
 if TYPE_CHECKING:
     from pdomain_book_contracts.annotation import PageKind
-
-log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -465,46 +462,9 @@ def save_page_content_to_store(
     # succeeded — a row naming a hash that never became the page's head would
     # be untrustworthy — and the append is itself best-effort so an
     # unwritable journal never turns this already-saved edit into a 503.
-    _append_word_review_counts_best_effort(page=page, store=store, content_hash=content_hash)
+    append_word_review_counts_best_effort(page=page, store=store, content_hash=content_hash)
 
     return content_hash
-
-
-def _append_word_review_counts_best_effort(*, page: Any, store: Any, content_hash: str) -> None:
-    """Append one row to the word-review-counts journal. Best effort.
-
-    Must only be called after the caller's own content-blob save has already
-    succeeded. Runs in its own try/except, logged at warning and swallowed:
-    a failure here must never surface as a failed save, because the edit it
-    would be counting has already landed durably. A row that never gets
-    written just makes a later count say "did not see this page" — the
-    review-queue route (slice 5) already has a field for that
-    (``pages_not_counted``) — rather than reporting a saved edit as failed.
-    """
-    project_dir = getattr(store, "project_dir", None)
-    page_index = getattr(page, "page_index", None)
-    if project_dir is None or page_index is None:
-        return
-    try:
-        words = getattr(page, "words", None) or []
-        total_words = len(words)
-        validated_words = sum(
-            1 for word in words if "validated" in (getattr(word, "word_labels", None) or ())
-        )
-        WordReviewCountsJournal(project_dir).append(
-            PageWordCounts(
-                page_index=page_index,
-                content_hash=content_hash,
-                total_words=total_words,
-                validated_words=validated_words,
-            )
-        )
-    except Exception:
-        log.warning(
-            "save_page_content_to_store: word-review-counts append failed page_index=%s",
-            page_index,
-            exc_info=True,
-        )
 
 
 __all__ = [
