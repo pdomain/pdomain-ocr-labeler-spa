@@ -698,7 +698,12 @@ def test_hotkey_help_close_button(exercise_server: ExerciseServer, page: Page) -
     _wait_for_line_cards(page)
 
     # Open via keyboard shortcut (most reliable regardless of rail visibility).
-    page.keyboard.press("?")
+    # Playwright's press("?") synthesizes code=Slash but shiftKey=False (it
+    # produces "?" directly rather than replaying an actual Shift+/ chord),
+    # while the frontend registers this hotkey as "shift+slash" — a real
+    # physical-code match that requires shiftKey=True. "Shift+Slash" replays
+    # the actual chord a hardware keyboard sends.
+    page.keyboard.press("Shift+Slash")
     page.wait_for_selector('[data-testid="hotkey-help-dialog"]', timeout=5_000)
 
     close_btn = page.locator('[data-testid="hotkey-help-close"]').first

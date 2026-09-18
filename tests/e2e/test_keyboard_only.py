@@ -220,8 +220,13 @@ def test_hotkey_help_modal_keyboard_only(live_server: LiveServer, page: Page) ->
     """
     _goto_page1(live_server, page)
 
-    # Press ? to open the help modal.
-    page.keyboard.press("?")
+    # Press ? to open the help modal. Playwright's press("?") synthesizes
+    # code=Slash but leaves shiftKey=False (it produces the "?" character
+    # directly rather than replaying an actual Shift+/ chord), while the
+    # frontend registers this hotkey as "shift+slash" — a real physical-code
+    # match that requires shiftKey=True. "Shift+Slash" replays the actual
+    # chord a hardware keyboard sends.
+    page.keyboard.press("Shift+Slash")
 
     # The help modal should appear — HotkeyHelpModal renders with
     # data-testid="hotkey-help-dialog" (frontend/src/components/HotkeyHelpModal.tsx:94).
