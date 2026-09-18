@@ -110,6 +110,71 @@ def _seed_store_page(source_root: Path, project_id: str, *, text: str = "test") 
         store.close()
 
 
+def _complete_typography_review_for_word(
+    base_url: str, project_id: str, page_index: int, word_id: str
+) -> None:
+    """Drive one word's grapheme-level typography review to completion.
+
+    Submits a ``reviewed_regular`` correction with every taxonomy label
+    resolved, via the real HTTP API rather than a browser click — the same
+    round trip TypographySection's "Reviewed regular" button performs. This
+    is what ``_typography_reviewed`` (src/pdomain_ocr_labeler_spa/api/
+    typography.py) requires to report this word's own
+    ``typography_reviewed`` as true; it does not touch any other word or the
+    word's ``is_validated`` flag.
+    """
+    typography_base = f"{base_url}/api/projects/{project_id}/pages/{page_index}/typography/words"
+    head_resp = httpx.get(f"{typography_base}/{word_id}/head", timeout=SEED_TIMEOUT)
+    assert head_resp.status_code == 200, (
+        f"typography head failed for {word_id}: {head_resp.status_code} {head_resp.text}"
+    )
+    head = head_resp.json()
+    taxonomy = head["taxonomy"]
+    replacement = {
+        "word_id": head["word_id"],
+        "text": head["text"],
+        "text_sha256": head["text_sha256"],
+        "page_content_sha256": head["page_sha256"],
+        "image_artifact_sha256": head["image_sha256"],
+        "grapheme_map_version": head["grapheme_map_version"],
+        "taxonomy_version": taxonomy["version"],
+        "taxonomy_hash": taxonomy["taxonomy_hash"],
+        "label_states": {label["value"]: "negative" for label in taxonomy["labels"]},
+        "spans": [],
+        "source_evidence_ids": ["e2e-fixture-seed"],
+        "warnings": [],
+        "whole_word_labels": None,
+        "word_revision": head["word_revision"] + 1,
+        "review_state": "reviewed_regular",
+        "metadata": None,
+    }
+    submission = {
+        "expected_head": head["head_token"],
+        "correction_id": str(uuid.uuid4()),
+        "taxonomy_version": taxonomy["version"],
+        "taxonomy_hash": taxonomy["taxonomy_hash"],
+        "grapheme_map_version": head["grapheme_map_version"],
+        "labeler_id": "local",
+        "decision": "reviewed_regular",
+        "replacement": replacement,
+        "replacement_text_sha256": head["text_sha256"],
+        "replacement_page_sha256": head["page_sha256"],
+        "replacement_image_sha256": head["image_sha256"],
+        "replacement_page_head_sha256": head["page_head_sha256"],
+        "replacement_word_revision": head["word_revision"] + 1,
+        "replacement_artifacts": [],
+        "replacement_artifact_payloads": [],
+        "model_runs": [],
+        "coordinate_transforms": [],
+    }
+    correction_resp = httpx.post(
+        f"{typography_base}/{word_id}/corrections", json=submission, timeout=SEED_TIMEOUT
+    )
+    assert correction_resp.status_code == 200, (
+        f"typography correction failed for {word_id}: {correction_resp.status_code} {correction_resp.text}"
+    )
+
+
 def _complete_typography_review(base_url: str, project_id: str, page_index: int) -> None:
     """Validate every word on a page and drive its typography review to completion.
 
@@ -146,58 +211,8 @@ def _complete_typography_review(base_url: str, project_id: str, page_index: int)
     ]
     assert word_ids, f"page {page_index} has no words with a word_id — nothing to review"
 
-    typography_base = f"{base_url}/api/projects/{project_id}/pages/{page_index}/typography/words"
     for word_id in word_ids:
-        head_resp = httpx.get(f"{typography_base}/{word_id}/head", timeout=SEED_TIMEOUT)
-        assert head_resp.status_code == 200, (
-            f"typography head failed for {word_id}: {head_resp.status_code} {head_resp.text}"
-        )
-        head = head_resp.json()
-        taxonomy = head["taxonomy"]
-        replacement = {
-            "word_id": head["word_id"],
-            "text": head["text"],
-            "text_sha256": head["text_sha256"],
-            "page_content_sha256": head["page_sha256"],
-            "image_artifact_sha256": head["image_sha256"],
-            "grapheme_map_version": head["grapheme_map_version"],
-            "taxonomy_version": taxonomy["version"],
-            "taxonomy_hash": taxonomy["taxonomy_hash"],
-            "label_states": {label["value"]: "negative" for label in taxonomy["labels"]},
-            "spans": [],
-            "source_evidence_ids": ["e2e-fixture-seed"],
-            "warnings": [],
-            "whole_word_labels": None,
-            "word_revision": head["word_revision"] + 1,
-            "review_state": "reviewed_regular",
-            "metadata": None,
-        }
-        submission = {
-            "expected_head": head["head_token"],
-            "correction_id": str(uuid.uuid4()),
-            "taxonomy_version": taxonomy["version"],
-            "taxonomy_hash": taxonomy["taxonomy_hash"],
-            "grapheme_map_version": head["grapheme_map_version"],
-            "labeler_id": "local",
-            "decision": "reviewed_regular",
-            "replacement": replacement,
-            "replacement_text_sha256": head["text_sha256"],
-            "replacement_page_sha256": head["page_sha256"],
-            "replacement_image_sha256": head["image_sha256"],
-            "replacement_page_head_sha256": head["page_head_sha256"],
-            "replacement_word_revision": head["word_revision"] + 1,
-            "replacement_artifacts": [],
-            "replacement_artifact_payloads": [],
-            "model_runs": [],
-            "coordinate_transforms": [],
-        }
-        correction_resp = httpx.post(
-            f"{typography_base}/{word_id}/corrections", json=submission, timeout=SEED_TIMEOUT
-        )
-        assert correction_resp.status_code == 200, (
-            f"typography correction failed for {word_id}: "
-            f"{correction_resp.status_code} {correction_resp.text}"
-        )
+        _complete_typography_review_for_word(base_url, project_id, page_index, word_id)
 
     review_resp = httpx.get(
         f"{base_url}/api/projects/{project_id}/pages/{page_index}/typography/review",

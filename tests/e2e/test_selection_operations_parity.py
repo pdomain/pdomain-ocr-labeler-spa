@@ -44,7 +44,7 @@ from pdomain_ocr_labeler_spa.adapters.ocr.local_doctr import (
 from pdomain_ocr_labeler_spa.bootstrap import build_app
 from pdomain_ocr_labeler_spa.core.persistence.page_store import LabelerPageStore
 from pdomain_ocr_labeler_spa.settings import Settings
-from tests.e2e.test_export_manifest_and_trainer import _complete_typography_review
+from tests.e2e.test_export_manifest_and_trainer import _complete_typography_review_for_word
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -720,24 +720,30 @@ def test_grid3_stb1_per_word_validate_mutates_state_end_to_end(
     the LineDetail surface is a no-op. The word-footer-validate in WordDetail
     (tested here) IS fully wired. See STB-1 in LineDetail.tsx line ~277.
 
-    6a04cbe disabled word-footer-validate for an unvalidated word until the
-    page's text-and-typography review is complete, so this drives that
-    review to completion first (a 4-word fixture — cheap) via the same
-    _complete_typography_review helper the export tests use. That helper
-    validates every word as part of completing the review, so by the time
-    we click, word (0,0) is already validated — the click below exercises
-    the unvalidate direction, which the mutation chain (POST → store →
-    invalidate → re-render) is exactly as real for. Runs on its own
-    mut_server (not the shared sel_server): validating the whole page is a
-    structural mutation that would break test_bulk_line_words_validate_
-    selected_end_to_end's "word (1,0) starts unvalidated" precondition on
-    the shared fixture.
+    f42179b changed the disable condition on word-footer-validate: it no
+    longer gates an unvalidated word on the whole page's text-and-typography
+    review, only on that word's own grapheme-level typography review
+    (``TypographyHeadResponse.typography_reviewed``). So the setup here
+    only has to satisfy that per-word gate for word (0,0) — via
+    _complete_typography_review_for_word, the same POST .../corrections
+    round trip TypographySection's "Reviewed regular" button performs, for
+    just this one word_id. It does not touch is_validated or any other
+    word, so word (0,0) starts unvalidated and the first click below
+    exercises the validate direction; the second click exercises unvalidate.
+    Runs on its own mut_server (not the shared sel_server) because toggling
+    word (0,0)'s validated state is still a mutation that would collide with
+    sibling tests sharing that fixture.
     """
     lm0, _ = _verify_fixture_two_blocks(mut_server.base_url)
     w0 = lm0["word_matches"][0]
     li0, wi0 = w0["line_index"], w0["word_index"]
+    word_id0 = w0.get("word_id")
+    assert word_id0, (
+        f"word (0,0) has no word_id — typography_reviewed gate doesn't apply to it "
+        f"and this test can't set up its precondition: {w0!r}"
+    )
 
-    _complete_typography_review(mut_server.base_url, _PROJECT_ID, page_index=0)
+    _complete_typography_review_for_word(mut_server.base_url, _PROJECT_ID, page_index=0, word_id=word_id0)
 
     _goto_project_page(page, mut_server.project_url)
     _select_first_word_via_hierarchy(page)
@@ -746,36 +752,38 @@ def test_grid3_stb1_per_word_validate_mutates_state_end_to_end(
     footer_validate = page.locator('[data-testid="word-footer-validate"]').first
     footer_validate.wait_for(state="visible", timeout=10_000)
 
-    # Record initial state from button label.
+    # Word (0,0) starts unvalidated (no validate-batch call was made) and its
+    # own typography review is complete, so the validate button must be enabled.
     initial_label = footer_validate.inner_text().strip()
     initial_validated = "✓" in initial_label or "Validated" in initial_label
+    assert not initial_validated, (
+        f"word (0,0) expected to start unvalidated but footer label is {initial_label!r}"
+    )
+    assert footer_validate.get_attribute("disabled") is None, (
+        "word-footer-validate is disabled even though word (0,0)'s own typography "
+        "review is complete — the per-word gate (WordFooter.tsx wordTypographyReviewed) "
+        "did not pick up typography_reviewed=true from the head endpoint."
+    )
 
-    # Click the validate/unvalidate button.
-    footer_validate.click()
-
-    # Wait for the label to flip (query invalidation → re-render).
-    deadline = time.monotonic() + 10
-    label_changed = False
-    while time.monotonic() < deadline:
-        try:
-            new_label = page.locator('[data-testid="word-footer-validate"]').first.inner_text().strip()
-            if new_label != initial_label:
-                label_changed = True
-                break
-        except Exception as _exc:
-            # Playwright may throw transiently while React re-renders; ignore and retry.
-            _ = _exc
-        time.sleep(0.2)
-
-    new_label = footer_validate.inner_text().strip()
-
-    if not label_changed:
-        # Report as a BUG with diagnosis — do not claim success.
+    def _click_and_wait_for_flip(prior_label: str) -> str:
+        """Click word-footer-validate and wait for its label to change from
+        ``prior_label`` (query invalidation → re-render). Returns the new label,
+        or fails with a diagnosis if the label never changes."""
+        footer_validate.click()
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            try:
+                candidate = page.locator('[data-testid="word-footer-validate"]').first.inner_text().strip()
+                if candidate != prior_label:
+                    return candidate
+            except Exception as _exc:
+                # Playwright may throw transiently while React re-renders; ignore and retry.
+                _ = _exc
+            time.sleep(0.2)
         pytest.fail(
             f"GRID-3/STB-1 END-TO-END BUG: word-footer-validate label did NOT change "
             f"after click.\n"
-            f"  Initial label: {initial_label!r}\n"
-            f"  Current label: {new_label!r}\n"
+            f"  Prior label: {prior_label!r}\n"
             f"  Broken path: word-footer-validate → onClick → useValidateWord.mutate() "
             f"(WordFooter.tsx:~116) → POST /api/projects/{_PROJECT_ID}/pages/0/"
             f"words/{li0}/{wi0}/validated → queryClient.invalidateQueries() → re-render.\n"
@@ -783,27 +791,35 @@ def test_grid3_stb1_per_word_validate_mutates_state_end_to_end(
             f"(3) was queryClient.invalidateQueries called? (4) did the component re-render?"
         )
 
-    new_validated = "✓" in new_label or "Validated" in new_label
-    assert new_validated != initial_validated, (
-        f"Label changed but validated direction is identical: "
-        f"initial={initial_validated} ({initial_label!r}), new={new_validated} ({new_label!r})"
-    )
+    def _assert_api_is_validated(expected: bool) -> None:
+        r = httpx.get(f"{mut_server.base_url}/api/projects/{_PROJECT_ID}/pages/0", timeout=10)
+        assert r.status_code == 200
+        payload = r.json()
+        lm = next((lm for lm in payload.get("line_matches", []) if lm["line_index"] == li0), None)
+        assert lm is not None, f"line_index {li0} not found in re-fetched payload"
+        wm = next((wm for wm in lm.get("word_matches", []) if wm["word_index"] == wi0), None)
+        assert wm is not None, f"word_index {wi0} not found in line {li0}"
+        assert wm.get("is_validated") == expected, (
+            f"API says word is_validated={wm.get('is_validated')!r} but expected {expected!r} "
+            "after toggle. Mutation fired and label changed but server persistence did not complete."
+        )
 
-    # API-level confirmation: server reflects the new state.
-    r = httpx.get(f"{mut_server.base_url}/api/projects/{_PROJECT_ID}/pages/0", timeout=10)
-    assert r.status_code == 200
-    payload = r.json()
-    lm = next((lm for lm in payload.get("line_matches", []) if lm["line_index"] == li0), None)
-    assert lm is not None, f"line_index {li0} not found in re-fetched payload"
-    wm = next((wm for wm in lm.get("word_matches", []) if wm["word_index"] == wi0), None)
-    assert wm is not None, f"word_index {wi0} not found in line {li0}"
-    assert wm.get("is_validated") == (not initial_validated), (
-        f"API says word is_validated={wm.get('is_validated')!r} but expected "
-        f"{not initial_validated!r} after toggle. "
-        "Mutation fired and label changed but server persistence did not complete."
-    )
-
+    # First click: validate an unvalidated word — the direction the old
+    # page-wide gate made unreachable through the UI.
+    validated_label = _click_and_wait_for_flip(initial_label)
+    validated_state = "✓" in validated_label or "Validated" in validated_label
+    assert validated_state, f"Label changed on click but did not flip to validated: {validated_label!r}"
+    _assert_api_is_validated(True)
     _save_screenshot(page, "stb1_per_word_validated_state_change")
+
+    # Second click: unvalidate it again — the direction the old test proved.
+    unvalidated_label = _click_and_wait_for_flip(validated_label)
+    unvalidated_state = "✓" in unvalidated_label or "Validated" in unvalidated_label
+    assert not unvalidated_state, (
+        f"Label changed on second click but did not flip back to unvalidated: {unvalidated_label!r}"
+    )
+    _assert_api_is_validated(False)
+    _save_screenshot(page, "stb1_per_word_unvalidated_state_change")
 
 
 # ─── Line-scope helpers + parity-gap regression tests (2026-06-11) ────────────
