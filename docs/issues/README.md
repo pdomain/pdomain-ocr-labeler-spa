@@ -105,9 +105,8 @@ tombstone. See [`../context/decisions.md`](../context/decisions.md).
 
 ### Wave 2 — M11 glyph
 
-| Issue | ID | Sev |
-| --- | --- | --- |
-| [`2026-07-21-glyph-m11-usable-path-incomplete.md`](2026-07-21-glyph-m11-usable-path-incomplete.md) | P0-GLYPH-* | High |
+Resolved and deleted. See the 2026-09-18 tombstone in
+[`../context/decisions.md`](../context/decisions.md).
 
 ### Wave 4–5 — CI confidence + suite chrome
 

@@ -1434,3 +1434,36 @@ bulk-mark apply specifically (Task 3, the STUB this entry fixes).
 - Found at the same time and unrelated to either issue: `make ci AI=1` is red
   on master at `frontend-knip`, on eight pre-existing unused exports and
   exported types. Everything before it in the chain passes.
+
+### [2026-09-18] Retired: the M11 glyph usable path
+
+- Report: `docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md`, open
+  since July and narrowed twice today.
+- Everything it named is now closed. The review path shipped earlier; the three
+  residuals it still carried were closed in this pass, and the predictor
+  question was answered by deciding not to build one.
+- Task 8, the `glyphs_reviewed` metric and the `glyph_review_incomplete` save
+  warning, had never been verified by anyone. Both turn out to be correct. The
+  metric reads the tri-state properly, counting a word reviewed whether it
+  carries marks or an empty annotation object, and the warning counts against
+  the same map the payload reads, so the number a person sees and the number
+  that raises the warning cannot drift. Three integration tests now hold it.
+  This was the one gap that might have been a defect and was not.
+- Task 9's bulk glyph mark browser test was called for and never written. It
+  now opens the real dialog, previews, confirms the dry run mutated nothing,
+  applies, and then makes an independent GET to prove the mark reached the
+  server and that the recipe's selectivity ran: the word containing a ct
+  ligature carries it, the word without stays null.
+- Reject-prediction had no test anywhere. I ruled that rejecting stamps
+  reviewed-with-no-marks, because a person who rejects has looked at the word
+  and judged it carries no such mark, and treating reject as ignore would leave
+  it unreviewed and ask the same question forever. The code already did that,
+  so nothing changed. The test sits beside accept's, because with no predictor
+  nothing can plant a prediction for a browser to reject.
+- Deliberately left open, and not worth an issue: the canvas predictions
+  overlay and per-mark rather than wholesale accept, both of which only matter
+  once predictions exist; ligature-kind parity in Task 5 Step 3; and whether
+  two adjacent accordion items named Glyphs and Typography read well to a
+  person reviewing a word. That last is cosmetic feedback with no defect
+  behind it, and renaming without seeing the two panels side by side would be
+  churn.
