@@ -36,7 +36,8 @@ class LabelerPageStore:
     """
 
     def __init__(self, project_dir: Path) -> None:
-        pd_pages = Path(project_dir) / ".pd-pages"
+        self.project_dir = Path(project_dir)
+        pd_pages = self.project_dir / ".pd-pages"
         pd_pages.mkdir(parents=True, exist_ok=True)
         # Use env= parameter (not os.environ) to avoid polluting other tests
         # running in parallel. Each store gets its own SQLite DB.
