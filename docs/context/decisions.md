@@ -1329,3 +1329,25 @@ bulk-mark apply specifically (Task 3, the STUB this entry fixes).
 - `core.typography_review.reviewed_word_keys` is deleted; it had no other
   caller once the route stopped reading the raw journal.
 - Shipped in `f6f180a`.
+
+### [2026-09-18] Retired: project list metadata and its inert filter chips
+
+- Report: `docs/issues/2026-07-21-project-list-metadata-filters-noop.md`
+- All four of its defects are now answered, across two decisions the same day.
+  Items 1 to 3, page count and honest cards, were settled in the entry
+  "Project-list metadata: page count yes, progress no". Item 4, a status to
+  filter on, is answered by the progress entry above it.
+- Item 4 had been waiting on two things that both arrived today: the archive
+  decision, which removed Archived from the question entirely, and the per-page
+  counts journal, which made progress cheap enough to compute. Neither existed
+  when the earlier decision deliberately declined to ship progress.
+- What the chips are now: Active and Complete, where Complete means every page
+  counted and every counted word validated. A project whose progress is unknown
+  counts as Active rather than vanishing from both chips, because Active is the
+  complement of Complete and not of "has some progress".
+- One cost to watch, measured and recorded in the progress entry: a journal
+  sitting at its pre-compaction ceiling of ten rows a page costs about 37 ms a
+  project to read, against 2.6 ms in the steady state, because every stale row
+  is parsed and discarded until the next append compacts it. At 200 projects
+  that is the difference between half a second and seven. Nothing is wrong
+  today; it is the number to look at first if the list ever feels slow.

@@ -111,9 +111,8 @@ tombstone. See [`../context/decisions.md`](../context/decisions.md).
 
 ### Wave 4–5 — CI confidence + suite chrome
 
-| Issue | ID | Sev |
-| --- | --- | --- |
-| [`2026-07-21-project-list-metadata-filters-noop.md`](2026-07-21-project-list-metadata-filters-noop.md) | P2-ROOT | Medium |
+All reports are resolved and deleted. The project-list one is in the
+2026-09-18 tombstones. See [`../context/decisions.md`](../context/decisions.md).
 
 ## Word editing (2026-09-18)
 
