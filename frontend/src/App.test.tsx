@@ -86,6 +86,12 @@ vi.mock("@pdomain/pdomain-ui/shell", () => ({
   SuiteSiblingsProvider: ({ children }: { value?: unknown; children?: React.ReactNode }) => (
     <>{children}</>
   ),
+  // SuiteLauncher.tsx renders <LauncherSlot/> directly (P1-SUITE — see
+  // components/shell/SuiteLauncher.tsx for why App.tsx can't rely on
+  // AppShell's own built-in header to place it). Stub it here so App.test.tsx
+  // doesn't need the real pdomain-ui SuiteSiblingsContext wiring; the real
+  // wiring is covered by SuiteLauncher.test.tsx.
+  LauncherSlot: () => <div data-testid="launcher-slot-stub" />,
   // Other exports that App.tsx imports as types — provide no-op values so
   // TypeScript import side-effects compile cleanly.
 }));
