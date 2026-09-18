@@ -99,12 +99,9 @@ All four reports are resolved and deleted. See the 2026-08-08 tombstones in
 
 ### Wave 1 — export loop
 
-| Issue | ID | Sev |
-| --- | --- | --- |
-
-The export-list and store-first-CLI reports are resolved and deleted; see the
-2026-08-08 tombstones in [`../context/decisions.md`](../context/decisions.md).
-The normalize report stays open on its frontend half.
+All three reports are resolved and deleted: the export-list and store-first-CLI
+ones in the 2026-08-08 tombstones, and the normalize flag in the 2026-09-18
+tombstone. See [`../context/decisions.md`](../context/decisions.md).
 
 ### Wave 2 — M11 glyph
 
@@ -112,33 +109,11 @@ The normalize report stays open on its frontend half.
 | --- | --- | --- |
 | [`2026-07-21-glyph-m11-usable-path-incomplete.md`](2026-07-21-glyph-m11-usable-path-incomplete.md) | P0-GLYPH-* | High |
 
-### Wave 3a — job SSE
-
-| Issue | ID | Sev |
-| --- | --- | --- |
-
-### Wave 3b — product honesty
-
-| Issue | ID | Sev |
-| --- | --- | --- |
-
 ### Wave 4–5 — CI confidence + suite chrome
 
 | Issue | ID | Sev |
 | --- | --- | --- |
 | [`2026-07-21-project-list-metadata-filters-noop.md`](2026-07-21-project-list-metadata-filters-noop.md) | P2-ROOT | Medium |
-
-## Page-load status (2026-08-08)
-
-| Issue | ID | Sev |
-| --- | --- | --- |
-
-## Tooling (2026-08-08)
-
-| Issue | ID | Sev |
-| --- | --- | --- |
-| [`2026-08-08-ruff-version-skew.md`](2026-08-08-ruff-version-skew.md) | P1-RUFF-SKEW | Medium |
-| [`2026-08-08-dep-refresh-cannot-auto-land.md`](2026-08-08-dep-refresh-cannot-auto-land.md) | P2-DEP-REFRESH | Medium |
 
 ## Word editing (2026-09-18)
 

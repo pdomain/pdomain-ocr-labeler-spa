@@ -794,3 +794,26 @@ under load in this environment.
 - Remaining work: only the empty state is proven in a browser, because no
   sibling app can be installed in this environment. Listing and launching are
   covered at the unit level.
+
+### [2026-09-18] Retired: two tooling reports that time had already answered
+
+Both were verified on 2026-09-18 and neither needed a change.
+
+**Ruff version skew**, old path `docs/issues/2026-08-08-ruff-version-skew.md`.
+Fixed the same day it was filed, in `54a05337`, and the fix has held through
+later dependency bumps. Both gates now run ruff 0.16.7: the hook pin, the
+project floor and the lockfile agree, with a comment in `pyproject.toml` saying
+the floor must track the hook. All 53 findings were fixed rather than
+suppressed, 51 of them by making FastAPI route handlers keyword-only, and
+nothing was added to `docs/process/lint-deviations.md`. Verified today: `uv run
+ruff check` is clean, and a full `make pre-commit-check AI=1` over every tracked
+file leaves the tree byte-identical, so the hook no longer edits source.
+
+**Dependency refresh cannot auto-land**, old path
+`docs/issues/2026-08-08-dep-refresh-cannot-auto-land.md`. It described a failure
+mode of `.github/workflows/dep-refresh.yml`, a workflow that had never run. All
+GitHub workflows were deleted in `df3f5ff` when the project moved to releasing
+from here, so the workflow the report is about no longer exists. If scheduled
+dependency refreshes return, the report's warning is worth re-reading in git
+history first: a dated branch per run with nothing reconciling a failed week's
+leftovers is what produced four stuck pull requests in `pdomain-ui`.
