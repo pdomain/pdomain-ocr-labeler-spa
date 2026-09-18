@@ -106,6 +106,16 @@ import `PageRecord` and `RotationSource` from `pdomain_ops.pages`; the temporary
 `core.models` compatibility exports have been removed. Structural, persistence,
 validation, conversion, and rotation tests enforce the boundary.
 
+- **One answer to what to review next.** `GET .../review-queue` reports every kind
+  of review work in the order the work has to happen: page kinds, regions, words,
+  typography, glyphs. The rail badge names the first kind with work and its count;
+  the Queue tab picks a kind and `[` and `]` follow it. A kind that cannot be
+  answered says why rather than reporting zero, a blocked kind says what it waits
+  for, and a count that may understate reads as "at least". A per-page journal,
+  `.pd-pages/word-review-counts.jsonl`, written where a page is already saved, is
+  what makes word and typography countable: without it, counting a 300-page book's
+  word validation means parsing every page, about 14 seconds.
+
 ## The browser suite
 
 151 of 169 browser tests pass, with 2 failing and 7 skipped, as of `199aa66`.
