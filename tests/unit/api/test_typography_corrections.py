@@ -50,7 +50,10 @@ def _client(tmp_path: Path) -> tuple[TestClient, str, str]:
     image.write_bytes(b"image")
     project_id = "alpha"
     page_id = stable_page_id(project_id=project_id, page_index=0)
-    word_id = stable_word_id(project_id=project_id, page_id=page_id, reading_order=0, text="Word")
+    # Word identity is derived from OCR text (``_set_current_page`` always
+    # gives word 0 the OCR text ``"ocr-0"``), never ground truth — see
+    # ``_word_identity_text`` in ``api/typography.py``.
+    word_id = stable_word_id(project_id=project_id, page_id=page_id, reading_order=0, text="ocr-0")
     app = build_app(Settings(mode="api_only", data_root=tmp_path / "data"))
     app.state.project_state.set_loaded_project(
         Project(
@@ -73,8 +76,8 @@ def _client_two_words(tmp_path: Path) -> tuple[TestClient, str, str, str]:
     assert project is not None
     project.ground_truth_map["page001.png"] = "Alpha Beta"
     _set_current_page(client, words=[("Alpha", True), ("Beta", True)])
-    second_word_id = stable_word_id(project_id="alpha", page_id=page_id, reading_order=1, text="Beta")
-    first_word_id = stable_word_id(project_id="alpha", page_id=page_id, reading_order=0, text="Alpha")
+    second_word_id = stable_word_id(project_id="alpha", page_id=page_id, reading_order=1, text="ocr-1")
+    first_word_id = stable_word_id(project_id="alpha", page_id=page_id, reading_order=0, text="ocr-0")
     return client, page_id, first_word_id, second_word_id
 
 
@@ -123,11 +126,15 @@ def _set_current_page(
 
 
 def test_head_binding_uses_current_persisted_ground_truth_and_page_content(tmp_path: Path) -> None:
-    client, page_id, _word_id = _client(tmp_path)
+    client, page_id, word_id = _client(tmp_path)
+    # ``_set_current_page`` always gives word 0 the OCR text ``"ocr-0"``, so
+    # editing its ground truth to "Corrected" leaves its identity unchanged
+    # — only ``text``/``text_sha256``/``page_sha256`` (all ground-truth- or
+    # content-derived) should move.
     _set_current_page(client, words=[("Corrected", True)])
-    corrected_word_id = stable_word_id(project_id="alpha", page_id=page_id, reading_order=0, text="Corrected")
+    assert stable_word_id(project_id="alpha", page_id=page_id, reading_order=0, text="ocr-0") == word_id
 
-    response = client.get(f"/api/projects/alpha/pages/0/typography/words/{corrected_word_id}/head")
+    response = client.get(f"/api/projects/alpha/pages/0/typography/words/{word_id}/head")
 
     assert response.status_code == 200, response.text
     body = response.json()
@@ -154,9 +161,8 @@ def test_historical_replacement_never_overrides_current_persisted_head_text(tmp_
 
 
 def test_review_requires_persisted_text_validation_not_typography_replacement(tmp_path: Path) -> None:
-    client, page_id, _word_id = _client(tmp_path)
+    client, _page_id, word_id = _client(tmp_path)
     _set_current_page(client, words=[("Word", False)])
-    word_id = stable_word_id(project_id="alpha", page_id=page_id, reading_order=0, text="Word")
     path = f"/api/projects/alpha/pages/0/typography/words/{word_id}"
     with client:
         head = client.get(f"{path}/head").json()
@@ -214,13 +220,9 @@ def test_head_returns_server_segmented_extended_graphemes(tmp_path: Path) -> Non
     project = client.app.state.project_state.loaded_project
     assert project is not None
     project.ground_truth_map["page001.png"] = "a\u0301👨‍👩‍👧‍👦"
+    # Word identity is OCR-derived ("ocr-0", unchanged by
+    # _set_current_page's ground-truth text) -- reuse word_id as-is.
     _set_current_page(client, words=[("a\u0301👨‍👩‍👧‍👦", True)])
-    word_id = stable_word_id(
-        project_id="alpha",
-        page_id=stable_page_id(project_id="alpha", page_index=0),
-        reading_order=0,
-        text="a\u0301👨‍👩‍👧‍👦",
-    )
 
     response = client.get(f"/api/projects/alpha/pages/0/typography/words/{word_id}/head")
 
@@ -1107,26 +1109,31 @@ def test_same_text_line_structure_change_starts_a_distinct_page_epoch(tmp_path: 
 
 
 def test_text_change_starts_new_active_correction_epoch(tmp_path: Path) -> None:
-    client, page_id, old_word_id = _client(tmp_path)
-    old_path = f"/api/projects/alpha/pages/0/typography/words/{old_word_id}"
+    """A ground-truth text change starts a new correction epoch (the old
+    correction falls out, since the page content hash it was recorded
+    against no longer matches) — but the word's own identity is unaffected:
+    the same ``word_id`` resolves both the old (now-stale) and new heads.
+    Word identity is OCR-derived and ``_set_current_page`` never changes
+    word 0's OCR text, only its ground truth.
+    """
+    client, _page_id, word_id = _client(tmp_path)
+    path = f"/api/projects/alpha/pages/0/typography/words/{word_id}"
     with client:
-        old_head = client.get(f"{old_path}/head").json()
+        old_head = client.get(f"{path}/head").json()
         assert (
             client.post(
-                f"{old_path}/corrections",
+                f"{path}/corrections",
                 json=_accepted_edit(old_head, correction_id="old-epoch", text="Word"),
             ).status_code
             == 200
         )
 
         _set_current_page(client, words=[("Changed", True)])
-        new_word_id = stable_word_id(project_id="alpha", page_id=page_id, reading_order=0, text="Changed")
-        new_path = f"/api/projects/alpha/pages/0/typography/words/{new_word_id}"
-        new_head = client.get(f"{new_path}/head").json()
+        new_head = client.get(f"{path}/head").json()
         assert new_head["correction"] is None
         assert (
             client.post(
-                f"{new_path}/corrections",
+                f"{path}/corrections",
                 json=_accepted_edit(new_head, correction_id="new-epoch", text="Changed"),
             ).status_code
             == 200
@@ -1139,9 +1146,7 @@ def test_text_change_starts_new_active_correction_epoch(tmp_path: Path) -> None:
         exported = client.post(
             "/api/projects/alpha/pages/0/typography/correction-bundles/export",
             json={
-                "labeling_bundle": _labeling_bundle(new_head, new_word_id, text="Changed").model_dump(
-                    mode="json"
-                )
+                "labeling_bundle": _labeling_bundle(new_head, word_id, text="Changed").model_dump(mode="json")
             },
         )
 
@@ -1174,6 +1179,12 @@ def test_canonical_typography_edit_reloads_and_is_undone_by_successor(tmp_path: 
     )
     restarted.state.active_project_carrier.set_active_project(project_root)
     with TestClient(restarted) as restarted_client:
+        # Reproduce the same in-memory page shape the first client had —
+        # a real restart reloads the page before typography routes are hit.
+        # Without it there is no page in memory, so word identity falls back
+        # to project.ground_truth_map's raw text and cannot resolve the
+        # OCR-derived id the correction above was recorded under.
+        _set_current_page(restarted_client, words=[("Word", True)])
         reloaded = restarted_client.get(f"{path}/head")
         assert reloaded.status_code == 200
         assert reloaded.json()["page_sha256"] == initial["page_sha256"]

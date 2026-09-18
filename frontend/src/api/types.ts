@@ -1215,6 +1215,15 @@ export interface paths {
          *     Thin scope-resolver over ``Page.delete_words(word_keys)``. Atomic: one
          *     structural mutation + one event per request. Matches the
          *     ``word-delete`` toolbarMapping entry.
+         *
+         *     Deleting a word shifts every later word in its line down one index, so
+         *     ``_reindex_word_sidecar_maps_after_batch_removal`` walks the same
+         *     per-line, highest-index-first order ``Page.delete_words`` uses to keep
+         *     ``PageState.char_bboxes_map`` / ``glyph_annotations_map`` /
+         *     ``glyph_predictions_map`` — keyed ``"{line_index}_{word_index}"`` —
+         *     attached to the words they actually belong to (see
+         *     ``_merge_words_core``, which reindexes for the same reason after a
+         *     word merge removes a word).
          */
         post: operations["delete_words_batch_api_projects__project_id__pages__page_index__words_delete_batch_post"];
         delete?: never;
@@ -1242,6 +1251,16 @@ export interface paths {
          *     pdomain-book-tools picks the closest line by bbox centroid (see
          *     ``Page.add_word_to_page`` at
          *     ``pdomain_book_tools/ocr/page.py:2132``).
+         *
+         *     ``Page.add_word_to_page`` appends the new word to its target line via
+         *     ``Block.add_item``, which then re-sorts the line by x position — so a
+         *     word added between two existing words shifts every later word's index
+         *     by one, same as line/paragraph merge and word split. The new word has
+         *     no sidecar entries of its own to place, and every existing word keeps
+         *     its identity (add never replaces a ``Word`` object), so this reuses
+         *     ``lines_paragraphs``' identity-snapshot reindex with no refusal needed
+         *     — see ``_word_structural_edit_refusal_kind``'s docstring for the split
+         *     case that does need one.
          */
         post: operations["add_word_api_projects__project_id__pages__page_index__words_add_post"];
         delete?: never;
@@ -1316,6 +1335,16 @@ export interface paths {
          *     ``Page.split_word(li, wi, split_fraction)`` in pdomain-book-tools
          *     (``pdomain_book_tools/ocr/page.py:1756``). pdomain-book-tools only supports
          *     horizontal split today; ``direction='vertical'`` returns 400.
+         *
+         *     Refuses (400 ``word_split_would_orphan_annotations``) when the target
+         *     word carries a char-bbox sidecar entry, a glyph annotation, or a
+         *     typography correction — ``Page.split_word`` replaces the word with two
+         *     brand-new ``Word`` objects, so there is no sound way to carry that
+         *     per-word state onto either half (see the block comment above
+         *     ``_WordEditRefusalKind``). Every later word in the line still shifts
+         *     down by one index when the split adds a word; their sidecar entries are
+         *     reindexed via an identity snapshot taken before/after the mutation,
+         *     same mechanism ``lines_paragraphs.py`` uses for line/paragraph merges.
          */
         post: operations["split_word_api_projects__project_id__pages__page_index__words__line_index___word_index__split_post"];
         delete?: never;

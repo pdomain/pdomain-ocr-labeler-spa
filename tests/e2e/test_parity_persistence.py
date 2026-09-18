@@ -13,9 +13,12 @@ End-to-end guard of the M0 persistence fix *through the rendered UI*:
 
 Validate is exercised *before* the GT edit, and this word's per-word
 typography review is completed out of band *before the browser ever loads
-the page* — see ``_prepare_word_for_validation``'s docstring, Finding 2,
-for the product bug that makes any other order break the validate button
-for reasons unrelated to persistence.
+the page* — see ``_prepare_word_for_validation``'s docstring, Finding 1,
+for the reason any other order breaks the validate button for reasons
+unrelated to persistence. (Finding 2, the word-identity/ground-truth
+divergence that made this worse, is fixed — see
+``docs/context/decisions.md`` 2026-09-18 — but Finding 1 alone still
+requires this ordering.)
 
 The style-label leg of this round-trip was removed by 6a04cbe (canonical
 grapheme review editor): whole-word styling (``style-chip-italics``) was
@@ -133,25 +136,22 @@ def _prepare_word_for_validation(base_url: str) -> WordMatch:
        this before the word is ever selected avoids the stale-cache read
        entirely: the query's first fetch already sees the completed
        review.
-    2. **GT-edit poisoning.** ``api/typography.py``'s word lookup
-       (``_review_words`` / ``_word_text``) recomputes each word's identity
-       from its *current ground-truth text* on every call, while
-       ``core/page_to_line_matches.py`` computes the ``word_id`` the
-       frontend holds onto from the word's *OCR text*, once. The two agree
-       only while GT and OCR read the same — true here before any edit.
-       The moment GT diverges, every ``/typography/words/{word_id}/...``
-       lookup for this word 404s, because the id ``api/typography.py``
-       recomputes for this word's position no longer matches the stable id
-       the page payload — and the button's own ``useTypographyHead`` query
-       — still use. Concretely: editing a word's ground truth permanently
-       breaks that word's ``word-footer-validate`` button (it can no
-       longer move from unvalidated to validated, though it can still be
-       unvalidated) unless the GT is later reverted to exactly match the
-       OCR text. That is a real product bug, reported rather than routed
-       around by fixing it here; this test only needs to prove
-       validate-then-edit-then-save-then-reload persistence, so it
-       sidesteps the bug by completing typography review, then validating,
-       before ever touching this word's GT.
+    2. **GT-edit poisoning — fixed 2026-09-18, kept here for history.**
+       ``api/typography.py``'s word lookup (``_review_words`` /
+       ``_word_text``) used to recompute each word's identity from its
+       *current ground-truth text* on every call, while
+       ``core/page_to_line_matches.py`` computed the ``word_id`` the
+       frontend holds onto from the word's *OCR text*, once. The two agreed
+       only while GT and OCR read the same — true here before any edit. The
+       moment GT diverged, every ``/typography/words/{word_id}/...`` lookup
+       for this word 404d, permanently breaking that word's
+       ``word-footer-validate`` button. Word identity is now derived from
+       OCR text everywhere, matching ``page_to_line_matches.py`` — see
+       ``docs/context/decisions.md`` 2026-09-18 ("word identity diverged
+       from OCR text...") and
+       ``tests/integration/test_typography_word_id_survives_gt_edit.py``.
+       This finding no longer applies; Finding 1 alone is why this function
+       still runs before the browser loads the page.
     """
     payload = httpx.get(f"{base_url}/api/projects/{_PROJECT_ID}/pages/{_PAGE_INDEX}", timeout=20)
     assert payload.status_code == 200, f"page fetch failed: {payload.status_code}"
