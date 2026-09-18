@@ -1,17 +1,17 @@
 // useBboxRefineTracking.test.tsx — unit tests for the hoisted refine_bboxes
 // job tracker (review finding 3, docs/issues/2026-07-21-bbox-refine-crop-misleading.md,
-// plus review round 2 finding 1).
+// plus review round 2 findings 1 and 3).
 //
 // See WordDetail.test.tsx's "collapses mid-job" test for the integration-
 // level proof that this hook, called from an always-mounted ancestor,
 // survives BBoxSection's own accordion collapsing mid-job — that is the
 // scenario this hook exists to fix, and it needs the real Accordion +
 // BBoxSection composition to demonstrate. This file covers the hook's own
-// state machine in isolation: start/outcome/toast wiring and page-
-// navigation safety (round 2 finding 1).
+// state machine in isolation: start/outcome/toast wiring, page-navigation
+// safety (round 2 finding 1), and the stall timeout (round 2 finding 3).
 
 import React from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useBboxRefineTracking } from "./useBboxRefineTracking";
@@ -263,5 +263,61 @@ describe("useBboxRefineTracking", () => {
     expect(matchesPage4Word00).toBe(false);
 
     vi.unstubAllGlobals();
+  });
+
+  // ─── Review round 2, finding 3 (medium): refine_bboxes is not
+  // cancellable; a job that never reaches a terminal state must not leave
+  // this tracker's one slot claimed forever. ─────────────────────────────
+
+  describe("stall timeout", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+
+    it("clears the slot and warns if the job never reaches a terminal state", () => {
+      const { Wrapper } = makeWrapper();
+      mockEventSource(); // stubs EventSource; no frame is ever dispatched — the hang this guards against.
+      const { result } = renderHook(() => useBboxRefineTracking("p1", 0), { wrapper: Wrapper });
+
+      act(() => {
+        result.current.start("job-stuck", "0-0");
+      });
+      expect(result.current.jobId).toBe("job-stuck");
+
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+
+      expect(result.current.jobId).toBeNull();
+      expect(result.current.word).toBeNull();
+      expect(toastMock).toHaveBeenCalledWith(
+        expect.stringContaining("timed out"),
+        expect.objectContaining({ id: "job-stuck" }),
+      );
+    });
+
+    it("does not fire the stall warning for a job that completes before the timeout", () => {
+      const { Wrapper } = makeWrapper();
+      const es = mockEventSource();
+      const { result } = renderHook(() => useBboxRefineTracking("p1", 0), { wrapper: Wrapper });
+
+      act(() => {
+        result.current.start("job-1", "0-0");
+      });
+      es.dispatch({ job_id: "job-1", status: "complete", result: { refined: 1 } });
+
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+
+      const timeoutCall = toastMock.mock.calls.find(
+        ([msg]: [unknown]) => typeof msg === "string" && msg.includes("timed out"),
+      );
+      expect(timeoutCall).toBeUndefined();
+    });
   });
 });

@@ -40,10 +40,23 @@
 // stale) and would expose a bare `wordKey` string cheap enough for a
 // same-indexed word on page 4 to collide with.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useJobProgress, type JobProgressEvent } from "./useJobProgress";
 import { useJobCompletionInvalidation } from "./useJobCompletionInvalidation";
 import { toast } from "../lib/toast";
+
+/**
+ * How long a refine_bboxes job may stay in flight before this tracker gives
+ * up on it, clears its slot, and warns (review round 2, finding 3).
+ * `handle_refine_bboxes` runs synchronously, in-process, against a single
+ * word, with no OCR engine call involved — normal completion is well under
+ * a second. 30s is generous enough to never false-positive on a slow but
+ * genuine run, while still recovering in a realistic time from an SSE drop,
+ * a server restart mid-job, or any other way the terminal event never
+ * arrives — refine_bboxes is not cancellable, so without this a stuck job
+ * would otherwise claim this tracker's one slot forever.
+ */
+const STALL_TIMEOUT_MS = 30_000;
 
 /** Identifies which word, on which page of which project, a refine job or
  * outcome belongs to. */
@@ -148,6 +161,23 @@ export function useBboxRefineTracking(
       });
     },
   });
+
+  // Review round 2, finding 3: give up on a job that never reaches a
+  // terminal state — see STALL_TIMEOUT_MS above for why 30s. Restarts
+  // whenever `jobId` changes (a fresh job, or the slot clearing); the
+  // effect's own cleanup cancels the pending timer on every normal
+  // completion, so this never fires for a job that resolves in time.
+  useEffect(() => {
+    if (jobId === null) return;
+    const timer = setTimeout(() => {
+      setJobId(null);
+      setWord(null);
+      toast.warn("Bbox refine timed out — try again.", { id: jobId });
+    }, STALL_TIMEOUT_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [jobId]);
 
   function start(newJobId: string, newWordKey: string): void {
     if (projectId === undefined || pageIndex === undefined) return;
