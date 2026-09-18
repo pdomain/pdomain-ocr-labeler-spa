@@ -37,6 +37,7 @@ import HeaderBar from "./components/HeaderBar";
 import { CudaSetupGuidance } from "./components/CudaSetupGuidance";
 import { Rail } from "./components/shell/Rail";
 import { SuiteLauncherProvider, SuiteLauncherHeaderSlot } from "./components/shell/SuiteLauncher";
+import { useJobsShellProps, JobsIndicator } from "./components/shell/JobsSurface";
 import RootPage from "./pages/RootPage";
 import ProjectPage from "./pages/ProjectPage";
 import TypographyWorklistPage from "./pages/TypographyWorklistPage";
@@ -260,6 +261,11 @@ function AppInner() {
   // S6.2: resolved project_root path for the header label (only on project routes)
   const headerProjectRoot: string | null = projectQ.data?.project_root ?? null;
 
+  // Item 4 (jobs pill / drawer): one shared GET /api/jobs cache entry feeds
+  // both the header pill's ambient count and AppShell's docked Jobs panel.
+  // See components/shell/JobsSurface.tsx.
+  const { shellJobsProps, pillActiveJobs } = useJobsShellProps();
+
   return (
     /*
      * Phase 2.4: pdomain-ui AppShell replaces the local layout wrapper.
@@ -294,16 +300,26 @@ function AppInner() {
         deployMode="local"
         uiPrefsConfig={UI_PREFS_CONFIG}
         settingsPanels={settingsPanels}
+        jobs={shellJobsProps}
         header={
           <>
             {/* D-047: chrome-only HeaderBar — no document/page-scoped controls.
              * SuiteLauncherHeaderSlot (rightSlot) owns the sibling-app
              * launcher; the Settings ⚙ gear is a separate, pre-existing gap
-             * (not P1-SUITE) — see the AppShell header-assembly note above. */}
+             * (not P1-SUITE) — see the AppShell header-assembly note above.
+             * JobsIndicator (item 4) is rendered here for the same reason:
+             * AppShell only assembles its own built-in JobsPill placement
+             * when `header` is left undefined — see
+             * components/shell/JobsSurface.tsx. */}
             <HeaderBar
               projectName={headerProjectName}
               projectRoot={onProjectRoute ? headerProjectRoot : null}
-              rightSlot={<SuiteLauncherHeaderSlot />}
+              rightSlot={
+                <>
+                  <JobsIndicator activeJobs={pillActiveJobs} />
+                  <SuiteLauncherHeaderSlot />
+                </>
+              }
             />
             {/* S6.3(a): OCR config trigger reachable on the root route (#405).
              * PageActionsCompact owns this button on project routes (inside the

@@ -61,6 +61,13 @@ export const handlers: RequestHandler[] = [
   // the cursor POST override this with server.use().
   http.post("/api/projects/:projectId/current-page-index", () => HttpResponse.json({})),
 
+  // GET /api/jobs — persistent jobs surface (item 4, jobs pill/drawer).
+  // useJobsList fetches this once on every AppShell mount regardless of
+  // route; default returns no jobs so tests that don't care about the jobs
+  // surface don't receive MSW "unhandled request" errors. Per-test
+  // overrides use server.use().
+  http.get("/api/jobs", () => HttpResponse.json([])),
+
   // GET /api/suite/installed — default: no apps installed (trainer absent).
   // Tests that need the trainer button visible override with server.use().
   http.get("/api/suite/installed", () => HttpResponse.json([])),
