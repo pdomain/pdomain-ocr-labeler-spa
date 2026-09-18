@@ -51,7 +51,7 @@ button has `data-testid="toolbar-{scope}-{action}"`.
 
 | Column | Action |
 |---|---|
-| Merge | Merge selected (≥2). Lines/Paragraphs only. Words merge in dialog. |
+| Merge | Merge selected (≥2). Words merge two adjacent words in one line. |
 | Refine | Refine bboxes (no expand) |
 | E+R | Expand-then-refine bboxes |
 | Expand | Expand-only bboxes (`expand_to_content` etc.) |
@@ -106,7 +106,7 @@ Each cell click POSTs one of:
 | `paragraph-merge` | `/api/.../paragraphs/merge` | `{paragraph_indices: selected}` |
 | `paragraph-refine` | `/api/.../refine` | `{scope:"paragraph", paragraph_indices, mode:"refine"}` |
 | (… all scope-action combinations follow the same pattern) | | |
-| `word-merge` | (hidden — done in dialog) | — |
+| `word-merge` | `/api/.../words/merge` | `{word_indices: selected}` — exactly two, adjacent, same line; refused if either word carries char bboxes, glyph annotations or typography corrections |
 | `word-refine` | `/api/.../refine` | `{scope:"word", word_indices, mode:"refine"}` |
 | `word-w-to-l` | `/api/.../lines/{n}/split-with-selected-words` | `{word_indices, mode:"extract_to_new"}` |
 | `word-to-para` | `/api/.../paragraphs/group-selected-words` | `{word_indices}` |

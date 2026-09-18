@@ -115,12 +115,6 @@ tombstone. See [`../context/decisions.md`](../context/decisions.md).
 All reports are resolved and deleted. The project-list one is in the
 2026-09-18 tombstones. See [`../context/decisions.md`](../context/decisions.md).
 
-## Word editing (2026-09-18)
-
-| Issue | ID | Sev |
-| --- | --- | --- |
-| [`2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`](2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md) | P2-WORD-EDIT | Low |
-
 Resolved reports are deleted, so this index tracks open work only. Past
 resolutions live in the `docs/context/decisions.md` tombstones and in git
 history.

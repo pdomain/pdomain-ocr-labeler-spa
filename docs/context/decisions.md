@@ -1368,3 +1368,39 @@ bulk-mark apply specifically (Task 3, the STUB this entry fixes).
   those working without loosening the public return type.
 - Their upstream GitHub issues were still open at export and this does not
   close those. The local records are what is retired.
+
+### [2026-09-18] Retired: word merge had nowhere to live
+
+- Report:
+  `docs/issues/2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`,
+  rewritten earlier the same day to cover only word merge after the dialog was
+  retired.
+- Decision, and it was mine: merge lives on the toolbar's word scope cell over
+  a two-word selection. Text concatenates with no separator, because the reason
+  a person merges is that OCR split one word. The boxes union. The merged
+  content takes the first word's slot. The surviving word becomes the
+  selection.
+- Refuse rather than orphan: if either word carries char bboxes, glyph
+  annotations or typography corrections, the merge is declined with a reason.
+  Those are review work nobody can get back, and the common case, fixing a raw
+  OCR split, happens before anyone annotates.
+- Where my framing was wrong, corrected by the implementer: the issue said word
+  merge had nowhere to live, and the right panel's `StructureSection` already
+  had a live merge-with-prev-next feature with its own endpoint. It expresses
+  "these two" by adjacency rather than by selection. The toolbar cell is a
+  second surface for the same operation, not the only one.
+- A live data-loss bug found and fixed on the way: that existing route
+  delegated to `pdomain-book-tools`' `merge_word_left` and `merge_word_right`,
+  which clear `ground_truth_text` for **every word in the line**, not just the
+  merged pair. Anyone using those buttons lost the line's ground truth. Both
+  routes now share one core built on `Word.merge` directly, which does not do
+  that.
+- One detail the ruling got wrong about identity: typography's `word_id` is
+  derived from reading order and text rather than stored, so a merged word
+  cannot literally keep the first word's id. Nothing in this codebase makes
+  that possible. The refusal check means neither word has typography history
+  before a merge proceeds, so it costs nothing.
+- Still open, found while doing this: `delete_words_batch` does not reindex the
+  char bbox or glyph annotation maps after removing a word, so later words in
+  the line inherit the wrong sidecars. Word merge reindexes; delete does not.
+- Shipped in `3ee93c6`.
