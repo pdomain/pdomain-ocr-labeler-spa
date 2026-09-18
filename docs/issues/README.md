@@ -28,10 +28,14 @@ failures, regressions, and investigations that need a durable, citable record
 retrievable, linkable from specs/plans/context, and carried in the repo rather
 than in per-machine harness memory.
 
-**There are no open issues right now.** The last one was retired on
-2026-09-18. Every report ever filed here — the 18 deep-review reports, the
-two migrated GitHub records, and every report filed and closed the same day —
-is resolved and deleted; each retirement's reasoning is a tombstone in
+**One open issue:**
+[`2026-09-18-jobs-pill-status-contract-gap.md`](2026-09-18-jobs-pill-status-contract-gap.md)
+— `pdomain-ui`'s `JobRow`/`JobsDrawer` status contract cannot represent a
+cancelled job honestly; blocks PGDP-alignment item 4 (jobs pill/drawer).
+
+Every other report ever filed here — the 18 deep-review reports, the two
+migrated GitHub records, and every report filed and closed on 2026-09-18 — is
+resolved and deleted; each retirement's reasoning is a tombstone in
 [`../context/decisions.md`](../context/decisions.md). See
 [`../context/current-state.md`](../context/current-state.md) for what is
 actually still open in the product, most of it found rather than filed as a

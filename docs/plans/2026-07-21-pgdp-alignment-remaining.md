@@ -49,7 +49,7 @@ parent backlog Out-Of-Scope section.
 | 1 | Boundary docs | **shipped** | [`docs/context/intent-map.md`](../context/intent-map.md) Rejected section; plan linked from [`docs/README.md`](../README.md); research retired into intent-map + backlog |
 | 2 | UI wrapper audit | **partial** | Button/Input/Chip/KeyCap/StatusPip live on pdomain-ui ([`docs/architecture/03-frontend.md`](../architecture/03-frontend.md) §Shared primitive ownership). No formal migration matrix. Tabs/Accordion owner decision still open in intent-map |
 | 3 | Arch/driver docs refresh | **partial** | [`24-shell-layout.md`](../architecture/24-shell-layout.md) D-047 documents AppShell + ProjectPage; [`13-driver-contract.md`](../architecture/13-driver-contract.md) D-046–D-052 remove most stubs. Residual: §2.11 word-edit dialog rot; [`25-drawer-worklist.md`](../architecture/25-drawer-worklist.md) omits WordList adapter |
-| 4 | Jobs pill/drawer | **open** | No `JobsPill`/`JobsDrawer` usage. Backend `GET /api/jobs` exists ([`api/jobs.py`](../../src/pdomain_ocr_labeler_spa/api/jobs.py)); SPA uses only per-job `useJobProgress` + `BusyOverlay` |
+| 4 | Jobs pill/drawer | **blocked (contract gap filed)** | Inventory done; `pdomain-ui`'s `JobRow`/`JobsDrawer` `JobStatus` has no `cancelled` member (this app already treats cancelled as distinct from error — P1-CANCEL) and always renders a Pause/Resume button this backend can't honor. Gap doc: [`docs/issues/2026-09-18-jobs-pill-status-contract-gap.md`](../issues/2026-09-18-jobs-pill-status-contract-gap.md). `JobsPill` itself (header trigger/badge) is unaffected. SPA still uses only per-job `useJobProgress` + `BusyOverlay` |
 | 5 | Suite launcher endpoints | **open** | [`App.tsx`](../../frontend/src/App.tsx) `fetchInstalled`/`postLaunch` still hard-coded shims (GAP-3). [`ExportDialogUtils.ts`](../../frontend/src/components/ExportDialogUtils.ts) already hits real `/api/suite/*` |
 | 6 | Settings persistence | **partial** | Compute panel registered + warmed ([`App.tsx`](../../frontend/src/App.tsx)); theme/fontScale via localStorage. `persistApp` is a no-op; no `GET/POST /api/ui-prefs` |
 | 7 | Project-card metadata | **open** | `ProjectKey` is only `project_id`/`project_root`/`label` ([`api/projects.py`](../../src/pdomain_ocr_labeler_spa/api/projects.py)); cards hard-code null page/progress placeholders ([`RootPage.tsx`](../../frontend/src/pages/RootPage.tsx)) |
@@ -205,23 +205,46 @@ If Night 1 has leftover time, start **Item 4** jobs inventory only (do not half-
 
 **Effort:** medium. Backend list endpoint exists; pdomain-ui adapter may need shaping.
 
+**Status (2026-09-18): blocked on an upstream contract gap, honesty path taken.**
+`JobsPill`'s own contract (`ActiveJob`: `id`/`title`/`phase`/`pct`/`project`,
+no `status` field) fits trivially — it only reads `activeJobs.length`. The
+per-job detail contract it composes with (`JobRow`, consumed by both
+`JobsDrawer` and `AppShell`'s `jobs` prop → `UtilityDock` → `JobsPanelBody`)
+does not: `JobRow`'s `JobStatus` union has no `cancelled` member, and this
+app already treats a cooperative cancel as distinct from an error
+(`useJobCompletionInvalidation`'s `onCancelled` vs. `onError`, P1-CANCEL) —
+every one of the six available statuses misrepresents a cancelled job's
+outcome or cause. `JobRow` also renders a Pause/Resume hover button
+unconditionally, with no capability flag, for a backend that has no
+pause/resume concept. Per this item's own honesty clause, this is a real
+contract mismatch, not adapter work: see
+[`docs/issues/2026-09-18-jobs-pill-status-contract-gap.md`](../issues/2026-09-18-jobs-pill-status-contract-gap.md)
+for full evidence and the two gaps to close upstream. No frontend or backend
+code changed for this item this session — 4.2 and 4.3 stay unchecked pending
+that upstream decision (tracked in
+[`docs/context/intent-map.md`](../context/intent-map.md) "Needs owner
+decision").
+
 #### Tasks
 
-- [ ] **4.1** Inventory API shape: `GET /api/jobs`, `GET /api/jobs/{id}`, SSE events, cancel.
+- [x] **4.1** Inventory API shape: `GET /api/jobs`, `GET /api/jobs/{id}`, SSE events, cancel.
   - Files: `src/pdomain_ocr_labeler_spa/api/jobs.py`, compare to pdomain-ui `JobsPill`/`JobsDrawer` props (from linked package).
 - [ ] **4.2** Add thin adapter hook (e.g. `useJobsList`) polling or refreshing job list; feed AppShell chrome slot if pdomain-ui exposes one, else mount pill in header zone beside launcher.
-  - Files: new `frontend/src/hooks/useJobsList.ts`, `frontend/src/App.tsx` / header slot, tests.
+  - Blocked: see status note above. Files (when unblocked): new `frontend/src/hooks/useJobsList.ts`, `frontend/src/App.tsx` / header slot, tests.
 - [ ] **4.3** Keep `BusyOverlay` for page-local blocking; do not remove toasts.
-  - Files: `ProjectPage.tsx`, `BusyOverlay.tsx` — no behavior regression.
+  - Not started (nothing changed this session). Files (when unblocked): `ProjectPage.tsx`, `BusyOverlay.tsx` — no behavior regression.
 
 #### Acceptance
 
-- Running export/OCR/save/rotate appears in a persistent jobs surface.
+- Running export/OCR/save/rotate appears in a persistent jobs surface. **Not
+  met — blocked, see status note.**
 - User can inspect recent job state after leaving the originating dialog.
-- Busy overlays + toasts still work.
-- Focused unit tests + at least one browser check for a long job.
+  **Not met.**
+- Busy overlays + toasts still work. **Unaffected — untouched this session.**
+- Focused unit tests + at least one browser check for a long job. **Not
+  applicable — no surface shipped this session.**
 
-**Honesty:** If pdomain-ui JobsPill contract mismatches job JSON, ship adapter gap doc first (half-session) rather than forking UI.
+**Honesty:** If pdomain-ui JobsPill contract mismatches job JSON, ship adapter gap doc first (half-session) rather than forking UI. **Done — see status note and the linked gap doc.**
 
 ---
 
