@@ -1,7 +1,9 @@
 // RootPage.test.tsx — Vitest unit tests for RootPage + EmptyProjectState.
 // Covers: B-ROOT-001, B-ROOT-002, B-ROOT-003, B-ROOT-004, B-ROOT-005, B-ROOT-006
 // Issue #84 (EmptyProjectState) + Issue #274 (RootPage + session-state fetch).
-// P5.h tests: hero band, search field, filter chips, project card redesign.
+// P5.h tests: hero band, search field, project card redesign.
+// P2-ROOT: real page-count metadata on cards; filter chips removed (no honest
+// data source) — see docs/context/decisions.md.
 // Spec: docs/specs/2026-05-12-root-page-design.md §Contract + P5.h (Gaps 59, 60)
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -13,6 +15,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { server } from "../test/server";
 import { EmptyProjectState } from "./RootPage";
 import RootPage from "./RootPage";
+import type { components } from "../api/types";
+
+type ProjectKey = components["schemas"]["ProjectKey"];
 
 // Helper: wrap component with all required providers
 function renderWithProviders(ui: React.ReactElement, { initialPath = "/" } = {}) {
@@ -360,7 +365,7 @@ describe("RootPage: Slice 27 — project cards", () => {
 // --- P5.h: Gap 59 + 60 — project cards redesign + hero band + search + filter chips ---
 
 function setupProjectList(
-  projects = [{ project_id: "p1", project_root: "/data/p1", label: "Alpha" }],
+  projects: ProjectKey[] = [{ project_id: "p1", project_root: "/data/p1", label: "Alpha" }],
 ) {
   server.use(
     http.get("/api/session-state", () =>
@@ -446,24 +451,23 @@ describe("RootPage P5.h — Gap 60: search field", () => {
   });
 });
 
-describe("RootPage P5.h — Gap 60: filter chips", () => {
-  it("renders All / Active / Complete / Archived filter chips", async () => {
+describe("RootPage P2-ROOT — Active / Complete / Archived filter chips removed", () => {
+  // The chips used to render but never filtered (data-active toggled with
+  // no effect on the grid). P2-ROOT removes them rather than wiring up a
+  // fake filter: none of the three has a real, cheap data source — see
+  // docs/context/decisions.md (P2-ROOT) and the RootPage.tsx ProjectListView
+  // docstring for why.
+  it("does not render the former filter-chip group or any of its chips", async () => {
     setupProjectList([]);
     renderWithProviders(<RootPage />);
     await waitFor(() => {
-      expect(screen.getByTestId("root-filter-chip-all")).toBeInTheDocument();
-      expect(screen.getByTestId("root-filter-chip-active")).toBeInTheDocument();
-      expect(screen.getByTestId("root-filter-chip-complete")).toBeInTheDocument();
-      expect(screen.getByTestId("root-filter-chip-archived")).toBeInTheDocument();
+      expect(screen.getByTestId("root-search-bar")).toBeInTheDocument();
     });
-  });
-
-  it("All chip is active by default", async () => {
-    setupProjectList([]);
-    renderWithProviders(<RootPage />);
-    await waitFor(() => {
-      expect(screen.getByTestId("root-filter-chip-all")).toHaveAttribute("data-active", "true");
-    });
+    expect(screen.queryByTestId("root-filter-chips")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("root-filter-chip-all")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("root-filter-chip-active")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("root-filter-chip-complete")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("root-filter-chip-archived")).not.toBeInTheDocument();
   });
 });
 
@@ -562,6 +566,52 @@ describe("RootPage P5.h — Gap 59: project card redesign", () => {
     renderWithProviders(<RootPage />);
     await waitFor(() => {
       expect(screen.getByTestId("root-projects-grid")).toBeInTheDocument();
+    });
+  });
+});
+
+// --- P2-ROOT: real page-count metadata on cards ---
+
+describe("RootPage P2-ROOT — project card page count", () => {
+  it("shows the real page count when the API reports one", async () => {
+    setupProjectList([
+      { project_id: "p1", project_root: "/data/p1", label: "Alpha", page_count: 42 },
+    ]);
+    renderWithProviders(<RootPage />);
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-page-count-p1")).toHaveTextContent("42 pages");
+    });
+  });
+
+  it("uses singular 'page' for a count of 1", async () => {
+    setupProjectList([
+      { project_id: "p1", project_root: "/data/p1", label: "Alpha", page_count: 1 },
+    ]);
+    renderWithProviders(<RootPage />);
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-page-count-p1")).toHaveTextContent("1 page");
+    });
+  });
+
+  it("shows a real zero for an empty project, not a placeholder dash", async () => {
+    setupProjectList([
+      { project_id: "p1", project_root: "/data/p1", label: "Alpha", page_count: 0 },
+    ]);
+    renderWithProviders(<RootPage />);
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-page-count-p1")).toHaveTextContent("0 pages");
+    });
+  });
+
+  it("shows an 'unavailable' message when the API reports page_count as null", async () => {
+    setupProjectList([
+      { project_id: "p1", project_root: "/data/p1", label: "Alpha", page_count: null },
+    ]);
+    renderWithProviders(<RootPage />);
+    await waitFor(() => {
+      expect(screen.getByTestId("project-card-page-count-p1")).toHaveTextContent(
+        "Page count unavailable",
+      );
     });
   });
 });

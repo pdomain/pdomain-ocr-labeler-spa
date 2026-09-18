@@ -32,7 +32,7 @@ last_verified: 2026-07-13
 - **Trigger:** User opens `/` with no restorable last project.
 - **Preconditions:** Server is running; source projects may be empty or present.
 - **Observable output:** `data-testid="app-shell"` is visible; the root screen
-  shows `empty-project-state`, `root-search-filter-bar`, and either
+  shows `empty-project-state`, `root-search-bar`, and either
   `root-projects-grid` or `root-empty-projects`.
 - **Backend / side-effects:** `GET /api/session-state` returns no active
   project; `GET /api/projects` enumerates source projects; no files are
@@ -63,22 +63,31 @@ last_verified: 2026-07-13
 - **Regression:** no
 - **Test:** -
 
-### B-ROOT-003 - Root search and filter reduce the visible project set
+### B-ROOT-003 - Root search reduces the visible project set
 
 - **Flow(s):** -
 - **Composed by:** -
-- **Trigger:** User types in `root-search-input` or clicks a
-  `root-filter-chip-*` chip.
+- **Trigger:** User types in `root-search-input`.
 - **Preconditions:** Multiple projects are discoverable.
 - **Observable output:** `root-projects-grid` updates to matching project
   cards; if none match, `root-empty-search` appears.
-- **Backend / side-effects:** Filtering is client-side over the projects query
-  result; no backend write occurs.
-- **Bad-state / error:** Empty query/filter state resets to the full project
-  list; malformed project metadata renders an individual card error.
+- **Backend / side-effects:** Search matching is client-side over the projects
+  query result; no backend write occurs.
+- **Bad-state / error:** Empty query resets to the full project list;
+  malformed project metadata renders an individual card error.
 - **Tier(s):** A
 - **Regression:** no
 - **Test:** -
+
+Formerly also triggered by an Active / Complete / Archived
+`root-filter-chip-*` chip. Removed (P2-ROOT,
+`docs/context/decisions.md`): none of the three had a real, cheap data
+source — "archived" has no defined semantics anywhere in this codebase, and
+"complete" needs review-progress data this repo deliberately does not
+compute. A chip that changed its highlighted state without changing
+`root-projects-grid` was product-dishonest chrome, so the chips were removed
+rather than left wired to nothing. Re-add this trigger only alongside real
+filtering data.
 
 ### B-ROOT-004 - Restorable session hydrates project before redirect
 

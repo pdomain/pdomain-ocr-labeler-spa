@@ -1,9 +1,11 @@
 // RootPage.tsx — route element for "/".
 // Issue #84 (EmptyProjectState) + Issue #274 (RootPage + session-state fetch) + Slice 27.
 // Issue #327 (auto-resume after server restart: POST /api/projects/load before navigate).
-// P5.h redesign: project cards with thumbnail + progress + search + filter chips + hero band.
+// P5.h redesign: project cards with thumbnail + page count + search + hero band.
+// P2-ROOT: real page_count metadata on cards; the Active/Complete/Archived
+// filter chips (P5.h Gap 60) were removed — see docs/context/decisions.md.
 // Spec: docs/specs/2026-05-12-root-page-design.md + 2026-05-15-hifi-redesign-plan.md Slice 27 + P5.h
-// Gaps closed: 59 (project cards redesign), 60 (search field + filter chips + hero band)
+// Gaps closed: 59 (project cards redesign), 60 (search field + hero band)
 //
 // On mount: calls GET /api/session-state.
 // - If last_project_path is set AND project exists in disk list:
@@ -69,17 +71,6 @@ function deriveProjectId(projectPath: string): string {
   return projectPath.split("/").filter(Boolean).pop() ?? projectPath;
 }
 
-// ─── Filter chip types ────────────────────────────────────────────────────────
-
-type ProjectFilter = "all" | "active" | "complete" | "archived";
-
-const FILTER_LABELS: Record<ProjectFilter, string> = {
-  all: "All",
-  active: "Active",
-  complete: "Complete",
-  archived: "Archived",
-};
-
 // ─── EmptyProjectState (kept for backward compat) ─────────────────────────────
 
 /** Centred placeholder shown when no project is loaded.
@@ -132,28 +123,17 @@ function HeroBand() {
   );
 }
 
-// ─── Progress bar ─────────────────────────────────────────────────────────────
-
-/** Simple horizontal progress bar using accent token. */
-function ProgressBar({ percent }: { percent: number }) {
-  const clamped = Math.min(100, Math.max(0, percent));
-  return (
-    <div className="h-1 w-full bg-bg-raised rounded-full overflow-hidden">
-      <div
-        className="h-full bg-accent transition-all duration-300"
-        style={{ width: `${clamped}%` }}
-        aria-valuenow={clamped}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        role="progressbar"
-      />
-    </div>
-  );
-}
-
 // ─── Project card ─────────────────────────────────────────────────────────────
 
-/** Project card with thumbnail + page count + progress bar + action menu. */
+/** Project card with thumbnail + page count + action menu.
+ *
+ * P2-ROOT: no validation-progress UI here. Computing per-project
+ * reviewed-page counts requires replaying each page's event-store
+ * aggregate, which does not scale to "every project, every list
+ * request" — see ``docs/context/decisions.md`` (P2-ROOT). Only
+ * ``page_count`` (a cheap directory scan) is real metadata; there is
+ * no progress fraction to render a bar for.
+ */
 function ProjectCard({ project }: { project: ProjectKey }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -198,10 +178,10 @@ function ProjectCard({ project }: { project: ProjectKey }) {
     });
   };
 
-  // Placeholder values — these will be populated when the backend exposes them.
-  // For now we display meaningful placeholders so the card structure is visible.
-  const pageCount: number | null = null; // not yet in ProjectKey API
-  const progressPercent: number | null = null; // not yet in ProjectKey API
+  // P2-ROOT: page_count is null when the backend couldn't read the
+  // project directory (permission error, removed mid-scan) — render
+  // that as "unavailable" rather than a bare dash.
+  const pageCount = project.page_count ?? null;
 
   const isLoadError = openMutation.isError;
 
@@ -238,19 +218,13 @@ function ProjectCard({ project }: { project: ProjectKey }) {
         </div>
 
         {/* Page count */}
-        <div className="text-[11px] text-ink-3">
-          {pageCount !== null ? `${pageCount} pages` : "— pages"}
-        </div>
-
-        {/* Progress bar */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-ink-4">Validation</span>
-            <span className="text-[10px] text-ink-3">
-              {progressPercent !== null ? `${progressPercent}%` : "—%"}
-            </span>
-          </div>
-          <ProgressBar percent={progressPercent ?? 0} />
+        <div
+          data-testid={`project-card-page-count-${project.project_id}`}
+          className="text-[11px] text-ink-3"
+        >
+          {pageCount !== null
+            ? `${pageCount} page${pageCount === 1 ? "" : "s"}`
+            : "Page count unavailable"}
         </div>
 
         {/* Source path */}
@@ -321,10 +295,19 @@ function ProjectCard({ project }: { project: ProjectKey }) {
 
 // ─── ProjectListView ──────────────────────────────────────────────────────────
 
-/** Project list view — hero band + search + filter chips + card grid. */
+/** Project list view — hero band + search + card grid.
+ *
+ * P2-ROOT: the former Active / Complete / Archived filter chips are
+ * REMOVED, not wired up as no-ops. None of the three has a real,
+ * cheap data source: "archived" has no defined semantics anywhere in
+ * this codebase (a separate, undecided product question — PGDP item
+ * 9), and "complete" needs review-progress data that this iteration
+ * deliberately does not compute (see ``docs/context/decisions.md``
+ * P2-ROOT). Re-add filtering once that data exists — the same
+ * needs-spec precedent already used for the per-card "Archive" stub.
+ */
 function ProjectListView({ projects }: { projects: ProjectKey[] }) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState<ProjectFilter>("all");
   // P4.2: confirm dialog for destructive card actions (delete). Same
   // dialogStore-driven pattern as ProjectPage — the store holds
   // title/body/onConfirm; this view renders the single dialog instance.
@@ -336,31 +319,24 @@ function ProjectListView({ projects }: { projects: ProjectKey[] }) {
 
   // Filter by search query (case-insensitive match on label + project_id).
   const filteredProjects = useMemo(() => {
-    let list = projects;
-    // Text search
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(
-        (p) =>
-          (p.label || "").toLowerCase().includes(q) ||
-          p.project_id.toLowerCase().includes(q) ||
-          p.project_root.toLowerCase().includes(q),
-      );
-    }
-    // Status filter — "active" / "complete" / "archived" are metadata not yet exposed
-    // by the API, so all non-"all" filters show all projects for now.
-    // When the API gains a `status` field, add filtering here.
-    return list;
-  }, [projects, searchQuery, activeFilter]);
+    if (!searchQuery.trim()) return projects;
+    const q = searchQuery.toLowerCase();
+    return projects.filter(
+      (p) =>
+        (p.label || "").toLowerCase().includes(q) ||
+        p.project_id.toLowerCase().includes(q) ||
+        p.project_root.toLowerCase().includes(q),
+    );
+  }, [projects, searchQuery]);
 
   return (
     <div className="flex flex-col h-full bg-bg-page">
       {/* Hero band */}
       <HeroBand />
 
-      {/* Search + filter bar */}
+      {/* Search bar */}
       <div
-        data-testid="root-search-filter-bar"
+        data-testid="root-search-bar"
         className="flex items-center gap-3 px-6 py-3 bg-bg-surface border-b border-border-1 flex-wrap"
       >
         {/* Search field */}
@@ -380,39 +356,6 @@ function ProjectListView({ projects }: { projects: ProjectKey[] }) {
             aria-label="Search projects"
             className="w-full pl-8 pr-3 py-1.5 text-[12px] bg-bg-sunk border border-border-2 rounded-sm focus:outline-hidden focus:border-accent text-ink-1 placeholder:text-ink-4 transition-colors"
           />
-        </div>
-
-        {/* Filter chips */}
-        <div
-          data-testid="root-filter-chips"
-          className="flex items-center gap-1 flex-wrap"
-          role="group"
-          aria-label="Filter projects"
-        >
-          {(Object.keys(FILTER_LABELS) as ProjectFilter[]).map((f) => (
-            <button
-              key={f}
-              type="button"
-              data-testid={`root-filter-chip-${f}`}
-              data-active={activeFilter === f ? "true" : undefined}
-              onClick={() => {
-                setActiveFilter(f);
-              }}
-              style={
-                activeFilter === f
-                  ? { background: "color-mix(in srgb, var(--accent) 10%, transparent)" }
-                  : undefined
-              }
-              className={[
-                "text-[11px] px-2.5 py-1 rounded-full border transition-colors",
-                activeFilter === f
-                  ? "border-accent text-ink-1 font-medium"
-                  : "border-border-2 bg-bg-raised text-ink-3 hover:border-border-1 hover:text-ink-2",
-              ].join(" ")}
-            >
-              {FILTER_LABELS[f]}
-            </button>
-          ))}
         </div>
       </div>
 

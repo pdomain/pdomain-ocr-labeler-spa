@@ -68,6 +68,8 @@ from pdomain_book_tools.typography import (
     GRAPHEME_SEGMENTATION_VERSION,
     REVIEW_CONTRACT_VERSION,
     ArtifactReference,
+    BookLabelingManifest,
+    BookLabelingPage,
     Evidence,
     LabelingBundle,
     LabelState,
@@ -255,6 +257,110 @@ def test_get_projects_selected_omitted_if_loaded_outside_root(tmp_path: Path, pr
     with TestClient(app) as c:
         body = c.get("/api/projects").json()
     assert body["selected"] is None
+
+
+# ──────────────────────────────────────────────────────────────────────
+# GET /api/projects — page_count (P2-ROOT)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_get_projects_page_count_reflects_known_content(
+    client_with_root: TestClient, projects_root: Path
+) -> None:
+    """A project with real image files on disk reports its true count."""
+    (projects_root / "alpha" / "001.png").write_bytes(b"")
+    (projects_root / "alpha" / "002.png").write_bytes(b"")
+    (projects_root / "alpha" / "notes.txt").write_bytes(b"")  # not an image
+
+    body = client_with_root.get("/api/projects").json()
+    alpha_entry = next(p for p in body["projects"] if p["project_id"] == "alpha")
+    assert alpha_entry["page_count"] == 2
+
+
+def test_get_projects_page_count_zero_for_empty_project(client_with_root: TestClient) -> None:
+    """An empty project directory reports ``page_count: 0`` — a known zero."""
+    body = client_with_root.get("/api/projects").json()
+    beta_entry = next(p for p in body["projects"] if p["project_id"] == "Beta")
+    assert beta_entry["page_count"] == 0
+
+
+def test_get_projects_page_count_null_for_unreadable_project(
+    client_with_root: TestClient, projects_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A project directory that can't be read degrades to
+    ``page_count: null`` — the rest of the list still returns 200 rather
+    than the whole request failing on one bad entry.
+    """
+    resolved_alpha = (projects_root / "alpha").resolve()
+    original_iterdir = Path.iterdir
+
+    def _flaky_iterdir(self: Path) -> Iterator[Path]:
+        if self == resolved_alpha:
+            raise PermissionError(f"denied: {self}")
+        return original_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", _flaky_iterdir)
+
+    resp = client_with_root.get("/api/projects")
+    assert resp.status_code == 200
+    body = resp.json()
+    ids = {p["project_id"] for p in body["projects"]}
+    assert ids == {"alpha", "Beta", "gamma"}  # the whole list still comes back
+    alpha_entry = next(p for p in body["projects"] if p["project_id"] == "alpha")
+    assert alpha_entry["page_count"] is None
+
+
+def _write_book_manifest_project(root: Path, *, page_count: int) -> None:
+    """Write a minimal, schema-valid ``book-labeling-manifest.json`` at ``root``.
+
+    Mirrors ``tests/unit/core/test_project_enumeration.py::_write_book_manifest``
+    — deliberately skips creating the pages' materialization directories, since
+    the list endpoint's page count only reads this one JSON file.
+    """
+    root.mkdir()
+    pages = tuple(
+        BookLabelingPage(
+            page_index=index,
+            page_id=f"pgdp:project:{index:03d}.png",
+            labeling_bundle_id=hashlib.sha256(f"bundle-{index}".encode()).hexdigest(),
+            materialization_relative_path=f"pages/{index + 1:03d}",
+            materialization_sha256=hashlib.sha256(f"materialization-{index}".encode()).hexdigest(),
+            configuration_hash="c" * 64,
+            taxonomy_version="labeler-v1",
+            taxonomy_hash="a" * 64,
+        )
+        for index in range(page_count)
+    )
+    manifest = BookLabelingManifest(book_id="pgdp-project", pages=pages)
+    (root / "book-labeling-manifest.json").write_bytes(manifest.to_json_bytes())
+
+
+def test_get_projects_page_count_from_book_labeling_manifest(
+    client_with_root: TestClient, projects_root: Path
+) -> None:
+    """A book-labeling-manifest.json project — selectable from the same
+    source root as any other project — reports its real page count from
+    the manifest's own page list, not 0 from a top-level file scan.
+    """
+    _write_book_manifest_project(projects_root / "manifest-book", page_count=300)
+
+    body = client_with_root.get("/api/projects").json()
+    entry = next(p for p in body["projects"] if p["project_id"] == "manifest-book")
+    assert entry["page_count"] == 300
+
+
+def test_get_projects_page_count_for_labeling_bundle_project(
+    client_with_root: TestClient, projects_root: Path
+) -> None:
+    """A labeling-bundle.json project — the single-page portable-bundle
+    shape — reports page_count: 1, not 0."""
+    bundle_root = projects_root / "single-page-bundle"
+    bundle_root.mkdir()
+    (bundle_root / "labeling-bundle.json").write_text("{}")
+
+    body = client_with_root.get("/api/projects").json()
+    entry = next(p for p in body["projects"] if p["project_id"] == "single-page-bundle")
+    assert entry["page_count"] == 1
 
 
 # ──────────────────────────────────────────────────────────────────────

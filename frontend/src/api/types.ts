@@ -4825,6 +4825,18 @@ export interface components {
          *
          *     Mirrors ``core.project_enumeration.EnumeratedProject`` but with
          *     ``Path`` rendered as a string in JSON (FastAPI's default).
+         *
+         *     ``page_count`` is the image-file count under ``project_root``, or
+         *     ``None`` when unknown (unreadable directory). Cheap — a single
+         *     directory scan, same cost class as project enumeration itself; see
+         *     ``core.project_enumeration.EnumeratedProject.page_count`` and
+         *     ``docs/context/decisions.md`` (P2-ROOT) for the measured cost.
+         *
+         *     Per-project labeling *progress* (validated/reviewed page count) is
+         *     deliberately NOT part of this response: computing it requires
+         *     replaying each page's event-store aggregate, which does not scale
+         *     to "every project, every list request" — see the same decision
+         *     entry for the measurement that ruled it out.
          */
         ProjectKey: {
             /** Project Id */
@@ -4836,6 +4848,8 @@ export interface components {
             project_root: string;
             /** Label */
             label: string;
+            /** Page Count */
+            page_count?: number | null;
         };
         /**
          * ProposePageKindsResponse
