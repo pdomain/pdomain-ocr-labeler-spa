@@ -47,6 +47,7 @@ from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from pdomain_book_contracts.annotation import PageKind
 from pydantic import BaseModel
 
 from ..core.project_state import ProjectState
@@ -61,12 +62,13 @@ from .middleware.error_handler import ApiError
 from .page_kinds import PageKindsListItem, page_kinds_rows
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
     from fastapi import FastAPI
     from pdomain_book_tools.typography import LabelingBundle
 
     from ..core.models import Project
+    from ..core.review_counts import PageWordCounts
 
 router = APIRouter(prefix="/api/projects", tags=["review-queue"])
 
@@ -216,8 +218,34 @@ def _region_entry(project: Project, page_kind_rows: list[PageKindsListItem]) -> 
     )
 
 
+def _is_unvouched_zero(
+    page_index: int,
+    counts: PageWordCounts,
+    confirmed_kind_by_page: Mapping[int, PageKind | None],
+) -> bool:
+    """True when OCR reported zero words for *page_index* and no person has
+    confirmed the page is actually blank.
+
+    ``run_ocr`` (``adapters/ocr/local_doctr.py``) writes a
+    ``WordReviewCountsJournal`` row for every OCR outcome, including one
+    where detection found nothing — the same zero row a genuinely blank
+    page produces. Nothing at OCR time records which of the two happened
+    (BUG-RELOAD-1), so a zero-word row cannot be trusted as "done" on its
+    own: a person must have looked at the page and confirmed its kind as
+    ``PageKind.BLANK`` (the ``page_kind`` review kind already asks for that
+    confirmation on every page) before the zero counts as satisfied review
+    work. Until then this page is treated the same as one that has never
+    been counted at all — excluded from ``total``/``outstanding`` and
+    reported as a ``first_page_index`` candidate so a person is still sent
+    to look at it.
+    """
+    return counts.total_words == 0 and confirmed_kind_by_page.get(page_index) != PageKind.BLANK
+
+
 def _word_entry(
-    project: Project, project_state: ProjectState
+    project: Project,
+    project_state: ProjectState,
+    page_kind_rows: list[PageKindsListItem],
 ) -> tuple[ReviewQueueKindEntry, _WordCountSource]:
     """The ``word`` entry, plus what the ``typography`` entry needs to key its lookups.
 
@@ -241,8 +269,17 @@ def _word_entry(
        ``ImportedTextValidationLog.decisions()`` is a plain-dict JSONL read
        — cheap at the scale of one page's words, the same class of cost as
        the region and page-kind journals. Counted from the real thing.
-    3. **An ordinary project.** Unchanged: ``WordReviewCountsJournal``, keyed
-       by ``stable_page_id``.
+       Imported-bundle text is never OCR, so ``_is_unvouched_zero`` does not
+       apply here — a zero-word bundle page is whatever the import said.
+    3. **An ordinary project.** ``WordReviewCountsJournal``, keyed by
+       ``stable_page_id`` — plus ``_is_unvouched_zero`` (BUG-RELOAD-1):
+       reload OCR can legitimately produce a page with zero words, and that
+       is indistinguishable, from the count alone, from OCR failing to find
+       text a person can plainly see. A zero-word page whose kind nobody
+       has confirmed as blank is excluded from ``total``/``outstanding``
+       and kept in ``first_page_index`` contention — the same treatment a
+       never-counted page already gets — rather than reported as
+       satisfied review work.
     """
     if project_state.has_book_labeling_session:
         entry = ReviewQueueKindEntry(
@@ -260,15 +297,25 @@ def _word_entry(
     if bundle is not None:
         return _word_entry_from_bundle(project, bundle)
 
+    confirmed_kind_by_page = {row.page_index: row.confirmed_kind for row in page_kind_rows}
     counts_by_page = WordReviewCountsJournal(project.project_root).latest_by_page()
-    total = sum(counts.total_words for counts in counts_by_page.values())
-    validated = sum(counts.validated_words for counts in counts_by_page.values())
-    pages_not_counted = project.total_pages - len(counts_by_page)
+    countable_pages = {
+        page_index: counts
+        for page_index, counts in counts_by_page.items()
+        if not _is_unvouched_zero(page_index, counts, confirmed_kind_by_page)
+    }
+    total = sum(counts.total_words for counts in countable_pages.values())
+    validated = sum(counts.validated_words for counts in countable_pages.values())
+    pages_not_counted = project.total_pages - len(countable_pages)
 
     first_page_index: int | None = None
     for page_index in range(project.total_pages):
         counts = counts_by_page.get(page_index)
-        if counts is None or counts.total_words > counts.validated_words:
+        if (
+            counts is None
+            or _is_unvouched_zero(page_index, counts, confirmed_kind_by_page)
+            or counts.total_words > counts.validated_words
+        ):
             first_page_index = page_index
             break
 
@@ -284,7 +331,9 @@ def _word_entry(
     )
     project_id = project.project_id
     source = _WordCountSource(
-        total_words_by_page={page_index: counts.total_words for page_index, counts in counts_by_page.items()},
+        total_words_by_page={
+            page_index: counts.total_words for page_index, counts in countable_pages.items()
+        },
         logical_page_id=lambda page_index, _project_id=project_id: stable_page_id(
             project_id=_project_id, page_index=page_index
         ),
@@ -482,7 +531,7 @@ def get_review_queue(
 
     page_kind_entry, page_kind_rows_ = _page_kind_entry(project, project_state)
     region_entry = _region_entry(project, page_kind_rows_)
-    word_entry, word_source = _word_entry(project, project_state)
+    word_entry, word_source = _word_entry(project, project_state, page_kind_rows_)
     typography_entry = _typography_entry(project, word_source, word_entry=word_entry)
     glyph_entry = _glyph_entry()
 

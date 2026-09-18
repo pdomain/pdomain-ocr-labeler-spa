@@ -4,7 +4,12 @@
 
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { OcrFailedBanner, ProjectNotFoundBanner, ImageDriftBanner } from "./InlineBanners";
+import {
+  OcrFailedBanner,
+  ProjectNotFoundBanner,
+  ImageDriftBanner,
+  EmptyOcrBanner,
+} from "./InlineBanners";
 
 describe("OcrFailedBanner", () => {
   it("renders when ocrFailed is true", () => {
@@ -96,5 +101,31 @@ describe("ImageDriftBanner", () => {
     expect(banner).not.toBeNull();
     // It's a direct child of the render container, not a portal/toast
     expect(container.contains(banner)).toBe(true);
+  });
+});
+
+describe("EmptyOcrBanner", () => {
+  // BUG-RELOAD-1 (docs/context/open-findings.md): a page where OCR found no
+  // text must not render as an ordinary, apparently-finished empty page.
+  it("renders when emptyOcr is true", () => {
+    render(<EmptyOcrBanner emptyOcr />);
+    expect(screen.getByTestId("banner-empty-ocr")).toBeInTheDocument();
+    expect(screen.getByText(/OCR found no text/i)).toBeInTheDocument();
+  });
+
+  it("does NOT render when emptyOcr is false", () => {
+    const { container } = render(<EmptyOcrBanner emptyOcr={false} />);
+    expect(container.querySelector("[data-testid='banner-empty-ocr']")).toBeNull();
+  });
+
+  it("does NOT render when emptyOcr is undefined", () => {
+    const { container } = render(<EmptyOcrBanner />);
+    expect(container.querySelector("[data-testid='banner-empty-ocr']")).toBeNull();
+  });
+
+  it("points at both the page-kind confirmation and Reload OCR toolbar action", () => {
+    render(<EmptyOcrBanner emptyOcr />);
+    expect(screen.getByText(/blank/i)).toBeInTheDocument();
+    expect(screen.getByText(/reload ocr/i)).toBeInTheDocument();
   });
 });

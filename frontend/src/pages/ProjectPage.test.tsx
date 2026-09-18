@@ -207,6 +207,8 @@ function pageFixture() {
     page_text_ocr: "ocr text",
     page_text_gt: "gt text",
     page_load_error: null as { error: string; message: string } | null,
+    page_load_job_id: null as string | null,
+    page_kind: null as string | null,
     image_drift: null as { error: string; message: string } | null,
     extra: {},
   };
@@ -501,6 +503,69 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
     expect(banner.textContent).toMatch(/reload ocr/i);
     // The action it points at (reload-ocr-button) must actually exist.
     expect(screen.getByTestId("reload-ocr-button")).toBeInTheDocument();
+  });
+
+  it("BUG-RELOAD-1: renders EmptyOcrBanner for a loaded page with zero OCR words", async () => {
+    // docs/context/open-findings.md BUG-RELOAD-1: the default fixture (empty
+    // line_matches, no page_load_error, no page_load_job_id, no confirmed
+    // page_kind) is exactly the state OCR produces for a genuinely blank
+    // page AND for a page where OCR failed to find text a person can
+    // plainly see — the two are indistinguishable from the payload alone,
+    // so the SPA must surface that ambiguity instead of a silent, ordinary-
+    // looking empty page.
+    server.use(
+      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid/pages/:idx", () => HttpResponse.json(pageFixture())),
+    );
+    renderProjectPage();
+    const banner = await screen.findByTestId("banner-empty-ocr");
+    expect(banner.textContent).toMatch(/blank/i);
+    expect(banner.textContent).toMatch(/reload ocr/i);
+  });
+
+  it("BUG-RELOAD-1: does NOT render EmptyOcrBanner once the page's kind is confirmed Blank", async () => {
+    server.use(
+      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid/pages/:idx", () => {
+        const page = pageFixture();
+        page.page_kind = "blank";
+        return HttpResponse.json(page);
+      }),
+    );
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    expect(screen.queryByTestId("banner-empty-ocr")).toBeNull();
+  });
+
+  it("BUG-RELOAD-1: does NOT render EmptyOcrBanner while a load-page job is still pending", async () => {
+    server.use(
+      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid/pages/:idx", () => {
+        const page = pageFixture();
+        page.page_load_job_id = "job-1";
+        return HttpResponse.json(page);
+      }),
+    );
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    expect(screen.queryByTestId("banner-empty-ocr")).toBeNull();
+  });
+
+  it("BUG-RELOAD-1: does NOT render EmptyOcrBanner alongside a genuine loader failure", async () => {
+    // A loader failure already has its own banner (banner-ocr-failed); the
+    // empty-OCR ambiguity does not apply when the page never actually
+    // loaded.
+    server.use(
+      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid/pages/:idx", () => {
+        const page = pageFixture();
+        page.page_load_error = { error: "ocr_load_failed", message: "doctr predictor unavailable" };
+        return HttpResponse.json(page);
+      }),
+    );
+    renderProjectPage();
+    await screen.findByTestId("banner-ocr-failed");
+    expect(screen.queryByTestId("banner-empty-ocr")).toBeNull();
   });
 
   it("IS-1: auto-redirects to / and does NOT render ProjectNotFoundBanner when project 404s", async () => {
