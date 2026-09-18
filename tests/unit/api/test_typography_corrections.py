@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -34,6 +35,7 @@ from pdomain_ocr_labeler_spa.core.typography_review import (
     stable_page_id,
     stable_word_id,
 )
+from pdomain_ocr_labeler_spa.core.typography_review_counts import TypographyReviewCountsJournal
 from pdomain_ocr_labeler_spa.settings import Settings
 
 
@@ -1185,3 +1187,76 @@ def test_canonical_typography_edit_reloads_and_is_undone_by_successor(tmp_path: 
         assert undone.status_code == 200, undone.text
         assert undone.json()["correction"]["supersedes_id"] == "edit"
         assert undone.json()["correction"]["replacement"]["text"] == "Word"
+
+
+# ── P2-TYPOGRAPHY-ROLLUP: the typography-review-counts rollup append ───────
+#
+# docs/issues/2026-09-18-typography-numerator-needs-a-per-page-rollup.md:
+# ``append_typography_correction`` appends one rollup row after its own
+# ``TypographyCorrectionLog.append`` has durably succeeded, mirroring
+# ``tests/unit/core/test_page_state_word_counts.py``'s coverage of
+# ``save_page_content_to_store``'s own best-effort journal append.
+
+
+def test_accepted_correction_appends_a_typography_review_counts_row(tmp_path: Path) -> None:
+    client, page_id, word_id = _client(tmp_path)
+    path = f"/api/projects/alpha/pages/0/typography/words/{word_id}"
+    head = client.get(f"{path}/head").json()
+
+    response = client.post(f"{path}/corrections", json=_accepted_edit(head, correction_id="c1", text="Word"))
+
+    assert response.status_code == 200, response.text
+    latest = TypographyReviewCountsJournal(tmp_path / "alpha").latest_by_page()
+    assert latest[page_id].total_words == 1
+    assert latest[page_id].typography_reviewed_words == 1
+
+
+def test_a_later_correction_that_un_reviews_a_word_lowers_the_rollup_row(tmp_path: Path) -> None:
+    """A revision that fails the completeness bar must lower the page's
+    rolled-up reviewed count — proof the rollup recomputes fresh at every
+    accepted correction rather than only ever incrementing.
+    """
+    client, page_id, word_id = _client(tmp_path)
+    path = f"/api/projects/alpha/pages/0/typography/words/{word_id}"
+    head = client.get(f"{path}/head").json()
+    reviewed = client.post(f"{path}/corrections", json=_accepted_edit(head, correction_id="c1", text="Word"))
+    assert reviewed.status_code == 200, reviewed.text
+
+    journal = TypographyReviewCountsJournal(tmp_path / "alpha")
+    assert journal.latest_by_page()[page_id].typography_reviewed_words == 1
+
+    rejected = client.post(
+        f"{path}/corrections",
+        json={
+            "expected_head": reviewed.json()["head_token"],
+            "correction_id": "c2",
+            "taxonomy_version": _taxonomy().version,
+            "taxonomy_hash": _taxonomy().taxonomy_hash,
+            "grapheme_map_version": GRAPHEME_SEGMENTATION_VERSION,
+            "decision": "reject_source",
+        },
+    )
+
+    assert rejected.status_code == 200, rejected.text
+    assert journal.latest_by_page()[page_id].typography_reviewed_words == 0
+
+
+def test_typography_review_counts_append_failure_is_logged_and_swallowed(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _raise(self: TypographyReviewCountsJournal, counts: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(TypographyReviewCountsJournal, "append", _raise)
+    client, _page_id, word_id = _client(tmp_path)
+    path = f"/api/projects/alpha/pages/0/typography/words/{word_id}"
+    head = client.get(f"{path}/head").json()
+
+    with caplog.at_level(logging.WARNING):
+        response = client.post(
+            f"{path}/corrections", json=_accepted_edit(head, correction_id="c1", text="Word")
+        )
+
+    # The correction itself already landed durably — a broken rollup must not surface here.
+    assert response.status_code == 200, response.text
+    assert any("typography-review-counts append failed" in record.message for record in caplog.records)

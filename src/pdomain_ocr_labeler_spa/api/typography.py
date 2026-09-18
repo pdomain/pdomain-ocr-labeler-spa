@@ -47,7 +47,9 @@ from ..core.typography_review import (
     TypographyJournalEnvelope,
     stable_page_id,
     stable_word_id,
+    typography_reviewed,
 )
+from ..core.typography_review_counts import append_typography_review_counts_best_effort
 from .dependencies import bind_page_labeling_lease, get_project_state
 
 router = APIRouter(tags=["typography"])
@@ -79,35 +81,16 @@ TYPOGRAPHY_TAXONOMY = TypographyTaxonomy(
     ),
 )
 
-_TYPOGRAPHY_ACCEPTED_DECISIONS = {
-    CorrectionDecision.ACCEPT,
-    CorrectionDecision.APPROVED_EDIT,
-    CorrectionDecision.REVIEWED_REGULAR,
+_TYPOGRAPHY_REQUIRED_LABELS = {
+    label.value for label in TYPOGRAPHY_TAXONOMY.labels if label.required_for_completion
 }
-
-
-def _typography_reviewed(correction: TypographyCorrection | None) -> bool:
-    """Whether ``correction`` reflects a complete grapheme-level typography
-    review: an accepted decision, a replacement, an explicit reviewed
-    ``review_state``, and every taxonomy label required for completion set
-    to a positive or negative state.
-
-    Shared by ``typography_page_review`` (page-wide aggregate) and
-    ``_current_head`` (single-word ``typography_reviewed`` field) so the
-    per-word gate in P1-VALIDATE-GATE uses exactly the rule the page-level
-    completion count already uses — not a re-derived approximation.
-    """
-    if correction is None or correction.replacement is None:
-        return False
-    if correction.decision not in _TYPOGRAPHY_ACCEPTED_DECISIONS:
-        return False
-    if correction.replacement.review_state not in {ReviewState.REVIEWED, ReviewState.REVIEWED_REGULAR}:
-        return False
-    required_labels = {label.value for label in TYPOGRAPHY_TAXONOMY.labels if label.required_for_completion}
-    return all(
-        correction.replacement.label_states.get(label) in {LabelState.POSITIVE, LabelState.NEGATIVE}
-        for label in required_labels
-    )
+"""Every ``core.typography_review.typography_reviewed`` call in this module
+shares this fixed set, derived from the router's default taxonomy — not a
+bundle's own taxonomy, even when one is loaded. Preserves the behavior this
+module has always had (``_current_head``, ``typography_page_review``, and
+now ``append_typography_correction``'s rollup write all evaluated
+completeness against this same fixed set before P2-TYPOGRAPHY-ROLLUP, and
+still do)."""
 
 
 class LabelStates(RootModel[dict[str, Literal["unknown", "positive", "negative"]]]):
@@ -694,7 +677,7 @@ def _current_head(
         imported_text_validation_available=state.labeling_bundle is not None,
         revision=word_head.revision if word_head else 0,
         correction=word_head,
-        typography_reviewed=_typography_reviewed(word_head),
+        typography_reviewed=typography_reviewed(word_head, required_labels=_TYPOGRAPHY_REQUIRED_LABELS),
         head_token="0" * 64,
     )
     return response.model_copy(
@@ -922,6 +905,17 @@ def append_typography_correction(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (OSError, ValueError) as exc:
             raise HTTPException(status_code=422, detail="replacement artifact publication failed") from exc
+        # P2-TYPOGRAPHY-ROLLUP: append only after the correction above has
+        # durably succeeded — mirrors save_page_content_to_store's "append
+        # only after the head write has succeeded" ordering — and the
+        # rollup append is itself best-effort, so an unwritable rollup never
+        # turns this already-accepted correction into a failed request.
+        append_typography_review_counts_best_effort(
+            correction_log=log,
+            logical_page_id=logical_page_id,
+            total_words=len(_active_word_ids(project, page_index, state)),
+            required_labels=_TYPOGRAPHY_REQUIRED_LABELS,
+        )
         return _current_head(project, page_index, word_id, log, state)
 
 
@@ -1043,7 +1037,7 @@ def typography_page_review(
     lineage_root = records[0].correction if records else None
     heads = tuple(sorted(heads_by_word.values(), key=lambda item: item.word_id))
     text_reviewed = 0
-    typography_reviewed = 0
+    typography_reviewed_count = 0
     blocked = total - len(heads)
     for correction in heads:
         try:
@@ -1060,11 +1054,13 @@ def typography_page_review(
                 or lineage_root.page_head_sha256 != current.page_head_sha256
             )
         valid_text = not stale and correction.word_id in text_validated_word_ids
-        valid_typography = not stale and _typography_reviewed(correction)
+        valid_typography = not stale and typography_reviewed(
+            correction, required_labels=_TYPOGRAPHY_REQUIRED_LABELS
+        )
         if valid_text:
             text_reviewed += 1
         if valid_typography:
-            typography_reviewed += 1
+            typography_reviewed_count += 1
         if not valid_text or not valid_typography:
             blocked += 1
     return TypographyPageReviewResponse(
@@ -1073,10 +1069,10 @@ def typography_page_review(
         logical_page_id=_logical_page_id(project, page_index, state),
         reviewed_words=len(heads),
         text_reviewed_words=text_reviewed,
-        typography_reviewed_words=typography_reviewed,
+        typography_reviewed_words=typography_reviewed_count,
         blocked_words=blocked,
         total_words=total,
-        complete=(text_reviewed == total and typography_reviewed == total and blocked == 0),
+        complete=(text_reviewed == total and typography_reviewed_count == total and blocked == 0),
         heads=heads,
     )
 
@@ -1120,7 +1116,7 @@ def get_typography_worklist(
         for source_word in bundle.words:
             correction = heads.get(source_word.word_id)
             replacement = correction.replacement if correction is not None else None
-            typography_reviewed = bool(
+            word_typography_reviewed = bool(
                 correction is not None
                 and correction.decision
                 in {
@@ -1137,9 +1133,9 @@ def get_typography_worklist(
             )
             text_reviewed = source_word.word_id in text_validated
             reviewed = correction is not None
-            if typography_reviewed:
+            if word_typography_reviewed:
                 typography_reviewed_words += 1
-            if not text_reviewed or not typography_reviewed:
+            if not text_reviewed or not word_typography_reviewed:
                 blocked_words += 1
             words.append(
                 TypographyWorklistWord(
@@ -1153,7 +1149,7 @@ def get_typography_worklist(
                     current_correction=correction,
                     decision=correction.decision if correction is not None else None,
                     reviewed=reviewed,
-                    typography_reviewed=typography_reviewed,
+                    typography_reviewed=word_typography_reviewed,
                     text_reviewed=text_reviewed,
                 )
             )

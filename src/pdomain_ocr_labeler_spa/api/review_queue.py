@@ -10,19 +10,22 @@ design.md).
 
 Reuses the existing counting paths rather than writing second versions of
 them: ``page_kinds_rows`` (the page-kinds reader), ``is_undecided`` (the
-region queue's undecided predicate), and ``reviewed_word_keys`` (the
-typography numerator's journal read). Reads each journal once — six reads
-total for five kinds, since the word and typography kinds share the same
-``WordReviewCountsJournal`` read — and opens no page.
+region queue's undecided predicate), and
+``core.typography_review_counts.TypographyReviewCountsJournal`` (the
+typography numerator's own per-page rollup, written where a correction is
+accepted — ``api/typography.py``'s ``append_typography_correction``). Reads
+each journal once — six reads total for five kinds, since the word and
+typography kinds each read their own small per-page journal — and opens
+no page.
 
-The typography numerator is the one exception to "cheap": once its journal
-holds real correction history, reading it costs about 80 microseconds a row
-(measured; see ``_TYPOGRAPHY_CORRECTIONS_MAX_BYTES``), not the negligible
-cost the design first projected from a book whose journal happened to be
-empty. Above that threshold the ``typography`` entry reports
-``available: false`` with a reason, checked by one ``stat()`` rather than a
-read — the same honesty the ``glyph`` entry already has for a different
-cause.
+The typography numerator used to be the one exception to "cheap": before
+the rollup existed (docs/issues/2026-09-18-typography-numerator-needs-a-
+per-page-rollup.md), this entry answered its count by reading and parsing
+the *whole book's* ``typography-corrections.jsonl``, which cost about 80
+microseconds a row and forced a 512 KiB ``available: false`` ceiling once a
+book's correction history grew past it. The rollup removed that ceiling —
+this entry now reads one small per-page-keyed file, the same shape of cost
+every other kind on this route already has.
 
 A project loaded from a labeling bundle never calls
 ``save_page_content_to_store`` at all — text validation is a CAS append to
@@ -39,7 +42,6 @@ carries. See ``_word_entry``'s docstring for the full three-way split.
 
 from __future__ import annotations
 
-from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
@@ -52,16 +54,11 @@ from ..core.regions.decision_log import RegionDecisionLog
 from ..core.regions.proposal_log import RegionProposalLog
 from ..core.regions.resolver import is_undecided
 from ..core.review_counts import WordReviewCountsJournal
-from ..core.typography_review import (
-    ImportedTextValidationLog,
-    TypographyCorrectionLog,
-    reviewed_word_keys,
-    stable_page_id,
-)
+from ..core.typography_review import ImportedTextValidationLog, stable_page_id
+from ..core.typography_review_counts import TypographyReviewCountsJournal
 from .dependencies import get_project_state
 from .middleware.error_handler import ApiError
 from .page_kinds import PageKindsListItem, page_kinds_rows
-from .typography import TYPOGRAPHY_TAXONOMY
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -76,31 +73,6 @@ router = APIRouter(prefix="/api/projects", tags=["review-queue"])
 _ReviewQueueKindName = Literal["page_kind", "region", "word", "typography", "glyph"]
 
 _GLYPH_UNAVAILABLE_REASON = "no glyph predictor is wired"
-
-_TYPOGRAPHY_CORRECTIONS_MAX_BYTES = 512 * 1024
-"""Above this, the typography numerator is not cheap to compute.
-
-pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-review-
-next.md "What each kind costs to count" projected the typography numerator
-as journal-cheap on the strength of the one book measured, whose corrections
-journal was empty. Measured afterwards on a fixture with real correction
-history (labeler-spa `2cfc834`'s follow-up measurement): reading and parsing
-``TypographyCorrectionLog.records()`` costs about 80 microseconds a row,
-because every row is a pydantic ``TypographyJournalEnvelope`` with a nested
-``WordTypography`` replacement, not a flat dict — file size tracks row count
-closely (about 2.3 KB a row for this taxonomy). At 512 KiB (about 224 rows)
-the read costs about 16ms; at 600 KiB about 20ms; at 800 KiB about 27ms. 512
-KiB keeps the read in the low tens of milliseconds with headroom before the
-next size step crosses further into it, and it is a size ``stat()`` answers
-in one syscall — no read, no parse — so the gate itself costs nothing
-per-row to evaluate, unlike a row-count threshold would.
-"""
-
-_TYPOGRAPHY_TOO_LARGE_REASON_TEMPLATE = (
-    "typography-corrections journal is {size} bytes, over the {threshold} byte "
-    "limit for a single request's read (see docs/issues/2026-09-18-typography-"
-    "numerator-needs-a-per-page-rollup.md)"
-)
 
 _BOOK_LABELING_SESSION_WORD_UNAVAILABLE_REASON = (
     "project is a multi-page labeling-bundle book: each page's word total "
@@ -157,9 +129,16 @@ class ReviewQueueKindEntry(BaseModel):
 
     ``pages_not_counted`` and ``is_lower_bound`` matter for ``word`` and
     ``typography`` only; both default to the "nothing to distrust" value for
-    the other kinds. ``is_lower_bound`` is ``True`` for ``typography``
-    always (its per-head staleness check is skipped — see
-    ``core.typography_review.reviewed_word_keys``) and for ``word`` whenever
+    the other kinds. For ``typography``, ``pages_not_counted`` also covers a
+    word-counted page with no ``TypographyReviewCountsJournal`` row of its
+    own yet — untouched, or corrected before this rollup existed; the two
+    are indistinguishable from a rollup-only read, so both are excluded from
+    ``total``/``outstanding`` rather than reported as a confidently wrong
+    zero (see ``_typography_entry``). ``is_lower_bound`` is ``True`` for
+    ``typography`` always, on top of that — its per-head staleness check is
+    skipped, and its reviewed count is each word's *latest-ever* correction
+    rather than one bound to the page's current epoch (see
+    ``core.typography_review_counts``) — and for ``word`` whenever
     ``pages_not_counted`` is above zero.
     """
 
@@ -375,74 +354,81 @@ def _typography_entry(
     *,
     word_entry: ReviewQueueKindEntry,
 ) -> ReviewQueueKindEntry:
-    """The ``typography`` entry: a journal-only numerator over the word total.
+    """The ``typography`` entry: a rollup-only numerator over the word total.
 
     Unavailable whenever ``word`` is: there is no page to navigate to or
     count against without knowing whether its words are done. Otherwise
-    reports unavailable, without reading the journal at all, once it is
-    bigger than ``_TYPOGRAPHY_CORRECTIONS_MAX_BYTES`` — checked with one
-    ``stat()``, never a read or a parse. See that constant's docstring for
-    the measurement behind the threshold.
+    reads ``TypographyReviewCountsJournal.latest_by_page`` once — one small
+    file, keyed by ``logical_page_id`` — never the whole book's
+    ``typography-corrections.jsonl`` this entry used to parse in full (see
+    docs/issues/2026-09-18-typography-numerator-needs-a-per-page-rollup.md).
+
+    A word-counted page (present in ``word_source.total_words_by_page``) can
+    still have no rollup row of its own: nothing has ever corrected a word
+    on it, or its correction history predates this rollup and nothing has
+    touched it since. The two are indistinguishable from a rollup-only
+    read, so both are treated the way ``word`` already treats a page it has
+    never saved — excluded from ``total``/``outstanding`` and counted in
+    ``pages_not_counted``, never reported as a confidently wrong zero.
 
     ``blocked_by`` is ``"word"`` whenever any word is still outstanding, or
     the ``word`` kind has not counted every page yet — a page it has not
     counted has never had a word validated on it either, so it cannot be
     presumed done. While blocked, ``first_page_index`` mirrors the ``word``
-    entry's: there is nothing typography-specific to navigate to until
-    words clear. Once unblocked, it is the first page (among pages
-    ``word_source`` has a total for) whose typography-reviewed count is
-    below its word total — keyed by ``word_source.logical_page_id``, which
-    is ``stable_page_id`` for an ordinary project and the loaded bundle's
-    own ``page_id`` for a single-page labeling-bundle project, matching
-    whichever key ``TypographyCorrectionLog`` records were written under
-    for that project shape (see ``api/typography.py``'s ``_logical_page_id``).
+    entry's: there is nothing typography-specific to navigate to until words
+    clear. Once unblocked, it is the first page (among pages ``word_source``
+    has a total for) with no rollup row yet or whose rolled-up reviewed
+    count is below its word total — keyed by ``word_source.logical_page_id``,
+    the same key ``append_typography_correction`` writes rollup rows under
+    (see ``api/typography.py``'s ``_logical_page_id``).
+
+    Preserves this entry's reviewed-count semantics unchanged from before
+    the rollup existed: each word id's *latest-ever* correction on its page,
+    with no staleness check against the live page's current hashes (see
+    ``core.typography_review_counts``) — ``is_lower_bound`` is ``True``
+    unconditionally, as it always has been for this kind.
     """
     if not word_entry.available:
         return _typography_unavailable_entry(
             reason=word_entry.unavailable_reason or "the word kind is unavailable for this project"
         )
 
-    log = TypographyCorrectionLog(project.project_root, corpus_root=project.project_root.parent)
-    journal_size = 0
-    with suppress(FileNotFoundError):
-        journal_size = log.path.stat().st_size
-    if journal_size > _TYPOGRAPHY_CORRECTIONS_MAX_BYTES:
-        return _typography_unavailable_entry(
-            reason=_TYPOGRAPHY_TOO_LARGE_REASON_TEMPLATE.format(
-                size=journal_size, threshold=_TYPOGRAPHY_CORRECTIONS_MAX_BYTES
-            )
-        )
+    rollup_by_page = TypographyReviewCountsJournal(project.project_root).latest_by_page()
 
-    required_labels = {label.value for label in TYPOGRAPHY_TAXONOMY.labels if label.required_for_completion}
-    reviewed_keys = reviewed_word_keys(log.records(), required_labels=required_labels)
+    total = 0
+    reviewed_total = 0
+    pages_not_counted = 0
+    reviewed_by_page_index: dict[int, int] = {}
+    for page_index, page_total in word_source.total_words_by_page.items():
+        row = rollup_by_page.get(word_source.logical_page_id(page_index))
+        if row is None:
+            pages_not_counted += 1
+            continue
+        total += page_total
+        reviewed_total += row.typography_reviewed_words
+        reviewed_by_page_index[page_index] = row.typography_reviewed_words
 
-    total = sum(word_source.total_words_by_page.values())
     words_pending = word_entry.outstanding > 0 or word_entry.pages_not_counted > 0
     blocked_by: _ReviewQueueKindName | None = "word" if words_pending else None
 
     if blocked_by is not None:
         first_page_index = word_entry.first_page_index
     else:
-        reviewed_per_logical_page: dict[str, int] = {}
-        for logical_page_id, _word_id in reviewed_keys:
-            reviewed_per_logical_page[logical_page_id] = reviewed_per_logical_page.get(logical_page_id, 0) + 1
         first_page_index = None
         for page_index in sorted(word_source.total_words_by_page):
-            logical_page_id = word_source.logical_page_id(page_index)
-            if (
-                reviewed_per_logical_page.get(logical_page_id, 0)
-                < word_source.total_words_by_page[page_index]
-            ):
+            reviewed = reviewed_by_page_index.get(page_index)
+            if reviewed is None or reviewed < word_source.total_words_by_page[page_index]:
                 first_page_index = page_index
                 break
 
     return ReviewQueueKindEntry(
         kind="typography",
-        outstanding=max(total - len(reviewed_keys), 0),
+        outstanding=max(total - reviewed_total, 0),
         total=total,
         available=True,
         blocked_by=blocked_by,
         first_page_index=first_page_index,
+        pages_not_counted=pages_not_counted,
         is_lower_bound=True,
     )
 
@@ -485,11 +471,10 @@ def get_review_queue(
 
     Reads each of the journals it needs exactly once: the page-kind
     proposal and reviewed journals (via ``page_kinds_rows``), the region
-    proposal and decision journals, and — depending on project shape — the
-    word-review-counts journal or ``ImportedTextValidationLog`` (shared by
-    the ``word`` and ``typography`` entries), plus the typography-
-    corrections journal for the ``typography`` entry's numerator. It opens
-    no page.
+    proposal and decision journals, then — depending on project shape — the
+    word-review-counts journal or ``ImportedTextValidationLog`` for the
+    ``word`` entry, and the typography-review-counts rollup for the
+    ``typography`` entry's numerator. It opens no page.
     """
     project = project_state.loaded_project
     if project is None or project.project_id != project_id:

@@ -29,7 +29,7 @@ from pdomain_book_tools.typography import (
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Sequence
+    from collections.abc import Collection
 
 _PAGE_ID_NAMESPACE = UUID("87638c97-711a-536d-80d2-6963f85ef543")
 
@@ -417,47 +417,38 @@ def stable_page_id(*, project_id: str, page_index: int) -> str:
     return str(uuid5(_PAGE_ID_NAMESPACE, f"{project_id}\0{page_index}"))
 
 
-def reviewed_word_keys(
-    records: Sequence[TypographyJournalEnvelope],
+def typography_reviewed(
+    correction: TypographyCorrection | None,
     *,
     required_labels: Collection[str],
-) -> frozenset[tuple[str, str]]:
-    """Every ``(logical_page_id, word_id)`` whose latest correction is typography-reviewed.
+) -> bool:
+    """Whether *correction* reflects one complete, accepted typography review.
 
-    Journal-only, from one whole-book read of ``TypographyCorrectionLog.
-    records()`` (no ``logical_page_id`` filter) — never opens a page. Mirrors
-    the typography-reviewed half of ``api/typography.py``'s
-    ``typography_page_review``/``get_typography_worklist`` acceptance test:
-    the latest correction's decision is accepted, it carries a replacement,
-    that replacement's review state is fully reviewed, and every taxonomy
-    label required for completion is set on it.
+    An accepted decision, a replacement, an explicit reviewed
+    ``review_state``, and every taxonomy label in *required_labels* set to a
+    positive or negative state. This is the single rule for "this word's
+    graphemes have had a complete accepted review" — shared by
+    ``api/typography.py``'s ``_current_head`` (single-word
+    ``typography_reviewed`` field), ``typography_page_review`` (page-wide
+    aggregate), and ``core.typography_review_counts``'s per-page rollup
+    write, so no caller re-derives an approximation of its own.
 
-    Deliberately omits the staleness check those two page-scoped functions
-    also perform — that needs the live page's current hashes, which this
-    book-wide count does not load. Per pdomain-ocr-synth's docs/specs/2026-
-    09-18-one-answer-to-what-to-review-next.md "What this does not build":
-    "Skipping it has a direction, and it is the unsafe one" — a correction
-    that has gone stale counts as reviewed here, so the result is a floor,
-    never an overcount. The caller must label it a lower bound.
+    *required_labels* is a parameter rather than a fixed taxonomy lookup so
+    this stays usable from ``core`` (which must not import the ``api``
+    layer's ``TYPOGRAPHY_TAXONOMY`` constant) — every current caller passes
+    the same fixed set derived from that constant, preserving one rule
+    everywhere it is asked.
     """
-    latest: dict[tuple[str, str], TypographyCorrection] = {}
-    for record in records:
-        latest[record.logical_page_id, record.correction.word_id] = record.correction
-
-    reviewed: set[tuple[str, str]] = set()
-    for key, correction in latest.items():
-        replacement = correction.replacement
-        if (
-            correction.decision in _TYPOGRAPHY_REVIEWED_DECISIONS
-            and replacement is not None
-            and replacement.review_state in _TYPOGRAPHY_REVIEWED_STATES
-            and all(
-                replacement.label_states.get(label) in _TYPOGRAPHY_SET_LABEL_STATES
-                for label in required_labels
-            )
-        ):
-            reviewed.add(key)
-    return frozenset(reviewed)
+    if correction is None or correction.replacement is None:
+        return False
+    if correction.decision not in _TYPOGRAPHY_REVIEWED_DECISIONS:
+        return False
+    if correction.replacement.review_state not in _TYPOGRAPHY_REVIEWED_STATES:
+        return False
+    return all(
+        correction.replacement.label_states.get(label) in _TYPOGRAPHY_SET_LABEL_STATES
+        for label in required_labels
+    )
 
 
 @final
@@ -1036,7 +1027,7 @@ __all__ = [
     "TypographyBinding",
     "TypographyCorrectionLog",
     "TypographyJournalEnvelope",
-    "reviewed_word_keys",
     "stable_page_id",
     "stable_word_id",
+    "typography_reviewed",
 ]
