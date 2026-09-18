@@ -169,9 +169,29 @@ export function BBoxSection({ word, projectId, pageIndex }: BBoxSectionProps) {
     jobProgress: refineJobProgress,
     setActiveJobId: setRefineJobId,
     invalidationKey: ["page", projectId, pageIndex],
-    onComplete: (jobId) => {
-      setPendingRefineSync(true);
-      toast.success("Bbox refine complete", { id: jobId });
+    onComplete: (jobId, event) => {
+      // Review finding 2: "refine" and "expand_then_refine" no-op whenever
+      // the page has no `cv2_numpy_page_image` attached — true for every
+      // page loaded from the store, not an edge case
+      // (core/jobs/handlers/refine.py; word.refine_bbox(None, ...) and
+      // word.expand_then_refine_bbox(None) both return False without
+      // raising). The job still reaches "complete" with `refined: 0` in
+      // its result. Treating that as success and arming the resync
+      // unconditionally left the flag armed with nothing to consume — it
+      // would only fire (mis-attributing an unrelated bbox change to this
+      // refine) whenever `word.bbox` next happened to change for any other
+      // reason. Key off the job's own count of what it touched instead.
+      const refinedRaw = event.result?.refined;
+      const refined = typeof refinedRaw === "number" ? refinedRaw : 0;
+      if (refined > 0) {
+        setPendingRefineSync(true);
+        toast.success(
+          `Bbox refine complete (${String(refined)} word${refined === 1 ? "" : "s"} updated)`,
+          { id: jobId },
+        );
+      } else {
+        toast.warn("Bbox refine ran, but nothing changed.", { id: jobId });
+      }
     },
     onError: (jobId, errorMessage) => {
       toast.error(errorMessage ?? "Bbox refine failed", { id: jobId });

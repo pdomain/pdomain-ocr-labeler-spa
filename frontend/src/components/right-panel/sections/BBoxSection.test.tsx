@@ -42,6 +42,7 @@ function jobFrame(input: {
   status: string;
   progress?: { message?: string; current?: number; total?: number };
   error_message?: string | null;
+  result?: Record<string, unknown> | null;
 }) {
   return {
     id: input.job_id,
@@ -50,6 +51,7 @@ function jobFrame(input: {
     status: input.status,
     progress: { current: 0, total: 0, message: "", ...input.progress },
     error_message: input.error_message ?? null,
+    result: input.result ?? null,
     created_at: new Date(0).toISOString(),
     updated_at: new Date(0).toISOString(),
     event: input.status,
@@ -507,7 +509,7 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     await user.click(screen.getByTestId("bbox-expand-refine-button"));
     await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
 
-    es.dispatch({ job_id: "job-sync-1", status: "complete" });
+    es.dispatch({ job_id: "job-sync-1", status: "complete", result: { refined: 1 } });
 
     await waitFor(() => {
       expect(screen.getByTestId("bbox-input-x").value).toBe("6");
@@ -515,6 +517,110 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     expect(screen.getByTestId("bbox-input-y").value).toBe("16");
     expect(screen.getByTestId("bbox-input-w").value).toBe("38");
     expect(screen.getByTestId("bbox-input-h").value).toBe("23");
+
+    vi.unstubAllGlobals();
+  });
+
+  // ─── Review finding 2 (high): refine and expand_then_refine no-op when
+  // the page has no cv2_numpy_page_image (true for any page loaded from the
+  // store) — a documented outcome, not an edge case. The job's terminal
+  // event carries `result.refined`; the resync must key off it rather than
+  // arming unconditionally on any "complete" status. ─────────────────────
+
+  it("a no-op refine (result.refined: 0) says nothing changed instead of claiming success", async () => {
+    server.use(
+      http.post("/api/projects/p1/pages/0/refine", () =>
+        HttpResponse.json({ job_id: "job-noop-1" }, { status: 202 }),
+      ),
+    );
+    const es = mockEventSource();
+    const user = userEvent.setup();
+    renderBBox();
+
+    await user.click(screen.getByTestId("bbox-refine-button"));
+    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
+
+    es.dispatch({ job_id: "job-noop-1", status: "complete", result: { refined: 0 } });
+
+    await waitFor(() => {
+      const calls = toastMock.mock.calls as [unknown, { style?: { borderLeft?: string } }?][];
+      const nothingChangedCall = calls.find(
+        ([msg]) => typeof msg === "string" && msg.toLowerCase().includes("nothing changed"),
+      );
+      expect(nothingChangedCall).toBeDefined();
+    });
+
+    // The generic "complete" success wording must not also fire — a no-op
+    // is not success.
+    const successCalls = toastMock.mock.calls as [unknown][];
+    expect(successCalls.some(([msg]) => msg === "Bbox refine complete")).toBe(false);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("a no-op refine (result.refined: 0) does not arm a resync for a later, unrelated bbox change", async () => {
+    // The bug: `pendingRefineSync` used to arm unconditionally on any
+    // "complete" status. A no-op refine never changes `word.bbox`, so the
+    // flag just sat there armed — until some later, wholly unrelated change
+    // to `word.bbox` (a GT rematch, a different word's edit landing on the
+    // same query, anything) arrived as a fresh prop and got silently
+    // snapped into `draft`, as if IT were the refine's result.
+    let currentBbox: BBox = DEFAULT_BBOX;
+    server.use(
+      http.post("/api/projects/p1/pages/0/refine", () =>
+        HttpResponse.json({ job_id: "job-noop-2" }, { status: 202 }),
+      ),
+      http.get("/api/projects/p1/pages/0", () => HttpResponse.json(makePageResponse(currentBbox))),
+    );
+
+    function Harness() {
+      const q = useQuery({
+        queryKey: ["page", "p1", 0],
+        queryFn: async () => {
+          const res = await fetch("/api/projects/p1/pages/0");
+          return res.json() as Promise<ReturnType<typeof makePageResponse>>;
+        },
+        initialData: makePageResponse(DEFAULT_BBOX),
+      });
+      const word = q.data.line_matches[0].word_matches[0];
+      return <BBoxSection word={word} projectId="p1" pageIndex={0} />;
+    }
+
+    const qc = makeQueryClient();
+    const es = mockEventSource();
+    const user = userEvent.setup();
+
+    render(
+      <QueryClientProvider client={qc}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+
+    await user.click(screen.getByTestId("bbox-refine-button"));
+    await waitFor(() => expect(toastMock.loading).toHaveBeenCalled());
+
+    // The job completes as a genuine no-op — the bbox never changed.
+    es.dispatch({ job_id: "job-noop-2", status: "complete", result: { refined: 0 } });
+    await waitFor(() => {
+      const calls = toastMock.mock.calls as [unknown][];
+      expect(
+        calls.some(
+          ([msg]) => typeof msg === "string" && msg.toLowerCase().includes("nothing changed"),
+        ),
+      ).toBe(true);
+    });
+
+    // Now something else entirely changes this word's bbox and the same
+    // page query is invalidated — nothing to do with the no-op refine
+    // above. If the flag were still armed, this arrival would get
+    // misattributed to "the refine finished" and silently overwrite draft.
+    currentBbox = { x: 999, y: 999, width: 999, height: 999 };
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ["page", "p1", 0] });
+    });
+    await waitFor(() => expect(qc.getQueryData(["page", "p1", 0])).toBeDefined());
+
+    expect(screen.getByTestId("bbox-input-x").value).toBe("10");
 
     vi.unstubAllGlobals();
   });
