@@ -525,7 +525,7 @@ export function useGlyphAnnotationPending(projectId: string, pageIndex: number):
 
 /**
  * Set or clear a word's confirmed glyph annotations (ligatures, long-s
- * positions, swash) — Typography section of `WordDetail`.
+ * positions, swash) — "Glyphs" accordion item of `WordDetail`.
  *
  * `annotations: null` unsets back to "not reviewed"; `annotations:
  * {ligatures:[],long_s_positions:[],swash:false,source:"human"}` marks the
