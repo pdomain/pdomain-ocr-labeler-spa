@@ -26,6 +26,11 @@ import { railStore, type RailTarget, type RailMode } from "../../stores/rail-sto
 import { useRailHotkeys } from "../../hooks/useRailHotkeys";
 import { useLayerColors } from "../../hooks/useLayerColors";
 import { useReviewQueue } from "../../hooks/useReviewQueue";
+import {
+  useBookReviewQueue,
+  firstActionableKind,
+  REVIEW_QUEUE_KIND_LABELS,
+} from "../../hooks/useBookReviewQueue";
 import { LAYER_COLORS } from "../BBoxOverlay";
 import { dialogStore } from "../../stores/dialog-store";
 import { useUiPrefs, type LayerVisibility } from "../../stores/ui-prefs";
@@ -186,6 +191,46 @@ function TargetCell({ target, active, swatchColor, onClick, badge }: TargetCellP
   );
 }
 
+// ─── "What to review next" kind badge ─────────────────────────────────────
+// Spec: pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-
+// review-next.md "How the SPA uses the new route" — "The rail badge stops
+// being a region count. It becomes the outstanding count for the first kind
+// that has work, and names that kind."
+//
+// This is additional to (not a replacement for) the region target cell's
+// own undecided-count badge above: that one is a fixed contract
+// tests/e2e/test_review_queue_navigation.py depends on (the region kind's
+// own count, always, regardless of which kind is "next" book-wide), so it
+// keeps reading straight off the region-only route exactly as before. This
+// element is the book-wide, cross-kind answer the design calls for.
+
+interface QueueNextBadgeProps {
+  kind: string;
+  label: string;
+  count: number;
+  onClick: () => void;
+}
+
+function QueueNextBadge({ kind, label, count, onClick }: QueueNextBadgeProps) {
+  return (
+    <button
+      type="button"
+      data-testid="rail-queue-next"
+      title={`Next to review: ${label} (${String(count)})`}
+      aria-label={`Next to review: ${String(count)} ${label.toLowerCase()}`}
+      onClick={onClick}
+      className={cn(
+        "mx-1 my-1 flex items-center justify-between gap-1 px-2 py-1 rounded-sm select-none",
+        "bg-accent/15 text-ink-1 border border-accent/40 hover:bg-accent/25 transition-colors",
+      )}
+      data-kind={kind}
+    >
+      <span className="text-[9px] font-semibold uppercase tracking-wide truncate">{label}</span>
+      <span className="text-[10px] font-mono tabular-nums shrink-0">{count}</span>
+    </button>
+  );
+}
+
 // ─── Layer visibility toggle ─────────────────────────────────────────────────
 
 interface LayerToggleRowProps {
@@ -236,6 +281,10 @@ export function Rail({ projectId }: RailProps) {
   // useRegionReviewHotkeys' bracket keys read, cached under one key.
   const reviewQueueQ = useReviewQueue(projectId);
   const totalUndecided = reviewQueueQ.data?.total_undecided ?? 0;
+
+  // One-answer-to-what-to-review-next: the book-wide "next kind" badge.
+  const bookQueueQ = useBookReviewQueue(projectId);
+  const nextKind = firstActionableKind(bookQueueQ.data?.kinds ?? []);
 
   // Subscribe to rail store via useSyncExternalStore for React 18+.
   const state = useSyncExternalStore(railStore.subscribe, railStore.getState, railStore.getState);
@@ -344,6 +393,22 @@ export function Rail({ projectId }: RailProps) {
           badge={totalUndecided}
         />
       </div>
+
+      {/* "What to review next" — book-wide, cross-kind badge */}
+      {nextKind !== undefined && (
+        <QueueNextBadge
+          kind={nextKind.kind}
+          label={REVIEW_QUEUE_KIND_LABELS[nextKind.kind]}
+          count={nextKind.outstanding}
+          onClick={() => {
+            useUiPrefs.setState({
+              drawerOpen: true,
+              drawerTab: "queue",
+              reviewQueueKind: nextKind.kind,
+            });
+          }}
+        />
+      )}
 
       {/* LAYERS visibility section */}
       <SectionLabel label="LAYERS" />

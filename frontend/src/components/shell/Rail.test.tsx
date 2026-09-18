@@ -352,3 +352,111 @@ describe("Rail — region undecided badge (book review queue)", () => {
     expect(screen.queryByTestId("rail-region-undecided-badge")).not.toBeInTheDocument();
   });
 });
+
+// ─── "What to review next" kind badge (one-answer-to-what-to-review-next) ──
+// Spec: pdomain-ocr-synth's docs/specs/2026-09-18-one-answer-to-what-to-
+// review-next.md "How the SPA uses the new route" — "The rail badge stops
+// being a region count. It becomes the outstanding count for the first kind
+// that has work, and names that kind."
+//
+// This is a new, additional indicator (rail-queue-next) alongside the
+// pre-existing region-only badge above — see this file's own history and
+// tests/e2e/test_review_queue_navigation.py, which still asserts
+// rail-region-undecided-badge reads the region kind's own count regardless
+// of which kind is "next" book-wide; that assertion is a fixed contract this
+// change must not disturb.
+
+function kindsResponse(kinds: Partial<Record<string, unknown>>[]) {
+  return HttpResponse.json({ kinds });
+}
+
+function kindEntry(overrides: Record<string, unknown> = {}) {
+  return {
+    kind: "page_kind",
+    outstanding: 0,
+    total: 0,
+    available: true,
+    blocked_by: null,
+    first_page_index: null,
+    pages_not_counted: 0,
+    is_lower_bound: false,
+    ...overrides,
+  };
+}
+
+describe("Rail — 'what to review next' kind badge", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    railStore.reset();
+    useUiPrefs.setState({
+      layerVisibility: { block: true, paragraph: true, line: true, word: true },
+      drawerOpen: false,
+      drawerTab: "worklist",
+      reviewQueueKind: null,
+    });
+  });
+
+  it("names the first kind with outstanding, unblocked work and its count", async () => {
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([
+          kindEntry({ kind: "page_kind", outstanding: 40, total: 80 }),
+          kindEntry({ kind: "region", outstanding: 12, total: 29 }),
+        ]),
+      ),
+    );
+    renderRail("proj-1");
+
+    const badge = await screen.findByTestId("rail-queue-next");
+    expect(badge).toHaveTextContent("Page kind");
+    expect(badge).toHaveTextContent("40");
+  });
+
+  it("skips a kind with outstanding work that is blocked", async () => {
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([
+          kindEntry({ kind: "page_kind", outstanding: 0, total: 80 }),
+          kindEntry({ kind: "region", outstanding: 12, total: 29, blocked_by: "page_kind" }),
+          kindEntry({ kind: "word", outstanding: 5, total: 100 }),
+        ]),
+      ),
+    );
+    renderRail("proj-1");
+
+    const badge = await screen.findByTestId("rail-queue-next");
+    expect(badge).toHaveTextContent("Word");
+    expect(badge).toHaveTextContent("5");
+  });
+
+  it("hides the badge when no kind has outstanding, unblocked work", async () => {
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([
+          kindEntry({ kind: "page_kind", outstanding: 0 }),
+          kindEntry({ kind: "region", outstanding: 3, blocked_by: "page_kind" }),
+        ]),
+      ),
+    );
+    renderRail("proj-1");
+
+    await waitFor(() => expect(screen.getByTestId("rail-target-region")).toBeInTheDocument());
+    expect(screen.queryByTestId("rail-queue-next")).not.toBeInTheDocument();
+  });
+
+  it("clicking it opens the Queue drawer tab pinned to that kind", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get("/api/projects/:pid/review-queue", () =>
+        kindsResponse([kindEntry({ kind: "page_kind", outstanding: 7, total: 10 })]),
+      ),
+    );
+    renderRail("proj-1");
+
+    await user.click(await screen.findByTestId("rail-queue-next"));
+
+    expect(useUiPrefs.getState().drawerOpen).toBe(true);
+    expect(useUiPrefs.getState().drawerTab).toBe("queue");
+    expect(useUiPrefs.getState().reviewQueueKind).toBe("page_kind");
+  });
+});
