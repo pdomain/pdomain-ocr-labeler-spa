@@ -6,7 +6,6 @@ Tests:
 - normalize_string delegates to pdomain_book_tools when available (mocked)
 - normalize_string never raises (error path)
 - PagePayload has page_text_ocr, page_text_gt fields
-- ExportRequest has normalize_recognition_labels field
 
 Spec: docs/specs/2026-05-12-text-normalization-design.md
 """
@@ -116,20 +115,33 @@ def test_page_payload_accepts_text_fields() -> None:
     assert p.page_text_gt == "shall not"
 
 
-# ── ExportRequest field ────────────────────────────────────────────────
+# ── ExportRequest — normalize_recognition_labels removed (P1-NORMALIZE) ────
+#
+# No long-s/ligature ASCII normalizer exists anywhere in pdomain-book-tools,
+# pdomain-pgdp-measure, or this repo (verified 2026-09-18): the field was
+# dead from the API model through the UI, so it was removed rather than
+# wired to a normalizer that does not exist. See
+# docs/issues/2026-07-21-export-normalize-flag-dead.md.
 
 
-def test_export_request_has_normalize_labels_field() -> None:
-    """ExportRequest must have normalize_recognition_labels: bool = False."""
+def test_export_request_has_no_normalize_labels_field() -> None:
+    """ExportRequest no longer has a normalize_recognition_labels field."""
     from pdomain_ocr_labeler_spa.api.export import ExportRequest, ExportScope
 
     req = ExportRequest(scope=ExportScope.CURRENT, page_index=0)
-    assert req.normalize_recognition_labels is False
+    assert not hasattr(req, "normalize_recognition_labels")
 
 
-def test_export_request_normalize_labels_can_be_true() -> None:
-    """ExportRequest.normalize_recognition_labels can be set to True."""
+def test_export_request_ignores_unknown_normalize_field_from_old_clients() -> None:
+    """A client still sending the removed field gets it silently ignored.
+
+    ``ExportRequest`` has no ``model_config`` override, so Pydantic v2's
+    default ``extra="ignore"`` applies: the field is dropped during
+    validation rather than raising or reappearing on the model.
+    """
     from pdomain_ocr_labeler_spa.api.export import ExportRequest, ExportScope
 
-    req = ExportRequest(scope=ExportScope.CURRENT, page_index=0, normalize_recognition_labels=True)
-    assert req.normalize_recognition_labels is True
+    req = ExportRequest.model_validate(
+        {"scope": ExportScope.CURRENT.value, "page_index": 0, "normalize_recognition_labels": True}
+    )
+    assert not hasattr(req, "normalize_recognition_labels")
