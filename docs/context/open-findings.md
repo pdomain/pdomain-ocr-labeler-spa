@@ -58,8 +58,15 @@ Reload OCR may legitimately create unmatched-GT placeholders with zero-area
 boxes. Confirm `BBoxOverlay` suppresses them and that a page with genuinely no
 OCR text produces a clear failure state instead of a misleading complete page.
 
-### BUG-HIER-1 — Hierarchy coverage path can render no nodes
+### ~~BUG-HIER-1~~ — Hierarchy coverage path can render no nodes (retired 2026-09-18)
 
-Issue #403 recorded an empty hierarchy during E2E setup, which skipped six
-WordDetail section tests. Replace fixed sleeps with an explicit hierarchy-node
-wait and verify the exercise fixture contains the required hierarchy fields.
+Retired after checking both halves and finding neither still true. No hierarchy
+skip exists: the empty-hierarchy branch became a hard assertion on 2026-07-21,
+so an empty tree would now fail loudly rather than skip. And the exercise
+fixture was never missing anything; page 1 carries the full page, block, line
+and word nesting the tree needs.
+
+What was real was the mechanism. The helper slept a fixed 200 to 300 ms after
+expanding a node and then read the count immediately, which can observe zero
+before a fetched hierarchy renders. That is fixed: it waits for the node
+selector to attach instead. See the 2026-09-18 entry in `decisions.md`.

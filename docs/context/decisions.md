@@ -1844,3 +1844,22 @@ family and not touched.
   them. BUG-SMOKE-3 was scoped to `data_root` — the one with a real
   compatibility hazard, since `config_root` / `cache_root` hold no
   irreplaceable user data. Filed as a follow-up, not fixed here.
+
+### [2026-09-18] Retired: BUG-HIER-1, stale on both of its claims
+
+- The finding said an empty hierarchy during browser-test setup skipped six
+  WordDetail tests, and asked to replace fixed sleeps with a node wait and to
+  check the exercise fixture for missing hierarchy fields.
+- Neither claim still held. No hierarchy skip exists: the empty-hierarchy
+  branch was converted from a skip to a hard assertion on 2026-07-21, so an
+  empty tree now fails loudly. And the fixture was never the problem; page 1
+  carries the full page, block, line and word nesting. All seven tests that
+  reach the hierarchy pass, before and after.
+- The mechanism was real and is fixed. The helper slept 200 to 300 ms after
+  expanding a node and read the count immediately, which can see zero before a
+  fetched hierarchy renders and call a populated tree empty. It waits for the
+  node selector to attach now, timing out to a genuine zero rather than raising
+  when a kind legitimately has no nodes.
+- Worth noting for the next reader of a finding this old: two of its three
+  claims were already answered by work nobody linked back to it. Check a
+  finding against the code before building to it.
