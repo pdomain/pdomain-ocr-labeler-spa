@@ -140,7 +140,8 @@ ASCII normalizer exists in `pdomain_book_tools`, `pdomain-pgdp-measure`,
 or this repo — `pdomain_book_tools.text.normalize` referenced above has
 never shipped. The flag reached no code path that normalized anything, so
 it was removed (P1-NORMALIZE,
-[`../issues/2026-07-21-export-normalize-flag-dead.md`](../issues/2026-07-21-export-normalize-flag-dead.md))
+removed 2026-09-18 in `c68661d`; see the tombstone in
+`../context/decisions.md`)
 rather than left as a dead, honest-looking no-op. DocTR export writes
 recognition `labels.json` strings exactly as stored; there is no
 normalization toggle on export today.
