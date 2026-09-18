@@ -153,16 +153,25 @@ export function WordDetail({ page, projectId, pageIndex, bboxRefine }: WordDetai
   );
 
   // Controlled accordion open-state (M11 Task 5): the "Glyphs" item starts
-  // collapsed like every other item, but auto-opens once per newly-selected
-  // word when that word has predictions still awaiting review
-  // (glyph_predictions != null && glyph_annotations == null — spec §5.4).
-  // `autoOpenAppliedForWordKey` guards the auto-open to fire only on the
-  // word-identity transition, not on every render, so a user who manually
-  // collapses the item again (still viewing the same word) stays collapsed —
-  // same "reseed state on identity change during render" idiom
-  // TypographySection uses just below for its own word-scoped state.
+  // collapsed like every other item, but auto-opens once per word when that
+  // word has predictions still awaiting review (glyph_predictions != null
+  // && glyph_annotations == null — spec §5.4).
+  //
+  // `autoOpenEvaluatedWordKeys` records *every* word key this mount has
+  // already decided the auto-open question for, not just the most recently
+  // visited one (reviewer finding 2, 2026-09-18): a single "last word key"
+  // remembers only the current word, so leaving a word after dismissing its
+  // auto-opened Glyphs item and later revisiting it looked identical to a
+  // fresh first visit — the item reopened even though the user had already
+  // dismissed it. Recording every evaluated key makes a dismissal permanent
+  // for the life of this mount, regardless of how many other words get
+  // visited in between. Same "reseed state on identity change during
+  // render" idiom TypographySection uses just below for its own word-scoped
+  // state, generalized from a single remembered key to a set of them.
   const [openAccordionItems, setOpenAccordionItems] = useState<string[]>([]);
-  const [autoOpenAppliedForWordKey, setAutoOpenAppliedForWordKey] = useState<string | null>(null);
+  const [autoOpenEvaluatedWordKeys, setAutoOpenEvaluatedWordKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
 
   const { level, path } = state;
 
@@ -197,8 +206,12 @@ export function WordDetail({ page, projectId, pageIndex, bboxRefine }: WordDetai
   const glyphPredictions = word.glyph_predictions ?? null;
   const glyphAutoOpen = glyphPredictions !== null && glyphAnnotations === null;
   const wordKey = `${String(lineIdx)}-${String(wordIdx)}`;
-  if (wordKey !== autoOpenAppliedForWordKey) {
-    setAutoOpenAppliedForWordKey(wordKey);
+  if (!autoOpenEvaluatedWordKeys.has(wordKey)) {
+    setAutoOpenEvaluatedWordKeys((prev) => {
+      const next = new Set(prev);
+      next.add(wordKey);
+      return next;
+    });
     if (glyphAutoOpen) {
       setOpenAccordionItems((prev) => (prev.includes("glyph") ? prev : [...prev, "glyph"]));
     }

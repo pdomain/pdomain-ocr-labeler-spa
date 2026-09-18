@@ -128,6 +128,27 @@ function makePageWithGlyph(glyph: {
   return page;
 }
 
+/** Two words on one line, second word carrying glyph predictions pending review. */
+function makeTwoWordPageWithGlyph(
+  predictions: components["schemas"]["GlyphAnnotationsModel"],
+): PagePayload {
+  const page = makePage();
+  const firstWord = page.line_matches![0]!.word_matches[0]!;
+  firstWord.glyph_annotations = null;
+  firstWord.glyph_predictions = null;
+  const secondWord: components["schemas"]["WordMatch"] = {
+    ...firstWord,
+    word_index: 1,
+    ocr_text: "world",
+    ground_truth_text: "world",
+    bbox: { x: 60, y: 20, width: 30, height: 15 },
+    glyph_annotations: null,
+    glyph_predictions: predictions,
+  };
+  page.line_matches![0]!.word_matches.push(secondWord);
+  return page;
+}
+
 function renderWithQuery(ui: React.ReactElement) {
   const qc = makeQueryClient();
   return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
@@ -402,6 +423,41 @@ describe("WordDetail — GlyphAnnotationPanel mount (M11 Task 5)", () => {
     );
 
     expect(screen.queryByTestId("glyph-panel-0-0")).not.toBeInTheDocument();
+  });
+
+  it("does not reopen the Glyphs item after the user dismisses it and revisits the word", async () => {
+    const predictions: components["schemas"]["GlyphAnnotationsModel"] = {
+      ligatures: [{ kind: "ct", char_span: [0, 2] }],
+      long_s_positions: [],
+      swash: false,
+      source: "predicted",
+    };
+    const page = makeTwoWordPageWithGlyph(predictions);
+
+    selectWord(0, 1); // the word with pending predictions
+    const user = userEvent.setup();
+    renderWithQuery(
+      <WordDetail page={page} projectId="p1" pageIndex={0} bboxRefine={NOOP_BBOX_REFINE} />,
+    );
+
+    // Auto-opens on first visit — predictions pending, no annotations yet.
+    expect(await screen.findByTestId("glyph-panel-0-1")).toBeInTheDocument();
+
+    // Dismiss it manually.
+    await user.click(screen.getByRole("button", { name: /glyphs/i }));
+    await waitFor(() => expect(screen.queryByTestId("glyph-panel-0-1")).not.toBeInTheDocument());
+
+    // Visit the other word in the line, then come back.
+    await user.click(screen.getByTestId("word-header-prev"));
+    await waitFor(() => expect(screen.getByTestId("word-header-id")).toHaveTextContent("Word 1"));
+
+    await user.click(screen.getByTestId("word-header-next"));
+    await waitFor(() => expect(screen.getByTestId("word-header-id")).toHaveTextContent("Word 2"));
+
+    // Nothing changed server-side (predictions are still pending) — but the
+    // user already dismissed the auto-open once, so revisiting must not
+    // reopen it a second time.
+    expect(screen.queryByTestId("glyph-panel-0-1")).not.toBeInTheDocument();
   });
 });
 
