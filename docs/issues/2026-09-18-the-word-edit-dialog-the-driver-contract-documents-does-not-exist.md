@@ -57,6 +57,19 @@ to the dialog, `ToolbarActionGrid`'s word map has no merge entry, so
 `toolbar-word-merge` is a permanent stub, and no part of the right panel offers
 word merge. Merging two words is a real editing operation with nowhere to go.
 
+## The help modal advertises eighteen dead shortcuts for it
+
+`hotkeyMap.ts` has eighteen entries under `scope: "dialog"` — enter, escape,
+shift+enter, the arrow navigation, four nudge pairs, `r`, `shift+r`, `m`,
+`shift+m` and delete. `WordDetail` has no keyboard handling at all, so none of
+them do anything, and the help modal lists every one. Found 2026-09-18 while
+registering the hotkeys that the react-hotkeys-hook 5 bump had broken.
+
+Removing them is not a two-line change: it touches the `Scope` union,
+`hotkeyMap.test.ts`'s valid-scope list and `hotkey-bridge.ts`'s scope-to-group
+switch. It also presumes the answer to the first decision below, so it waits on
+that.
+
 ## What to decide
 
 1. **Retire §2.11** of the driver contract, and delete or rewrite

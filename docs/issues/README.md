@@ -147,6 +147,7 @@ The normalize report stays open on its frontend half.
 | Issue | ID | Sev |
 | --- | --- | --- |
 | [`2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`](2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md) | P2-WORD-EDIT | Low |
+| [`2026-09-18-the-per-word-validate-button-can-never-validate-a-word.md`](2026-09-18-the-per-word-validate-button-can-never-validate-a-word.md) | P1-VALIDATE-GATE | Medium |
 
 ## Selection (2026-09-17)
 
