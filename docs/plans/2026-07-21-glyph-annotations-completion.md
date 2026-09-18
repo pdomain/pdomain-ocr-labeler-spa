@@ -351,6 +351,16 @@ removed the now-dead `_write_cached_envelope_best_effort` from `api/pages.py`
 (its only caller). No load-path change was needed — rehydration already
 restores both maps together via `apply_sidecars_to_page_state`.
 
+Review note (2026-09-18): a scratch-worktree review confirmed with the old
+code that bulk apply was not merely failing to persist — every non-dry-run
+apply crashed outright with a 500 (the Task 2 `TypeError: Object of type
+UUID is not JSON serializable` bug), so this branch's Task 2 fix was a
+prerequisite for Task 3's reload test to even reach the persistence gap.
+The review also added a bulk-apply 503 `store_persist_failed` test
+(`tests/integration/test_mutation_store_failure_status.py`), confirmed
+failing against the pre-fix STUB, matching the single-word routes' existing
+coverage in the same file.
+
 - [x] **Step 3: Document decision**
 
 If strategy differs from retired v2.2 `UserPageEnvelope` text in
