@@ -49,6 +49,12 @@ export interface WordMatchViewProps {
   filter?: MatchFilter;
   /** Called when Validate / Unvalidate is clicked. */
   onValidate?: (lineIndex: number, validated: boolean) => void;
+  /**
+   * Called when a line card (or a non-interactive part of it, including a
+   * word's GT input) is clicked. Forwarded to each LineCard → onSelectLine.
+   * Signature: (lineIndex) => void
+   */
+  onSelectLine?: (lineIndex: number) => void;
   /** Called when GT→OCR copy is clicked. */
   onCopyGtToOcr?: (lineIndex: number) => void;
   /** Called when OCR→GT copy is clicked. */
@@ -87,6 +93,7 @@ export function WordMatchView({
   lines,
   filter = "all",
   onValidate,
+  onSelectLine,
   onCopyGtToOcr,
   onCopyOcrToGt,
   onDelete,
@@ -177,6 +184,7 @@ export function WordMatchView({
                 line={line}
                 paragraphFirst={paragraphFirstSet.has(line.line_index)}
                 onValidate={onValidate}
+                onSelectLine={onSelectLine}
                 onCopyGtToOcr={onCopyGtToOcr}
                 onCopyOcrToGt={onCopyOcrToGt}
                 onDelete={onDelete}

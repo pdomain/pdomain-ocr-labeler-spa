@@ -12,6 +12,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { components } from "../api/types";
 import { WordMatchView, lineMatchesFilter } from "./WordMatchView";
 import { LineCard } from "./LineCard";
@@ -312,6 +313,113 @@ describe("LineCard word rows", () => {
     // In jsdom the virtualiser doesn't render items (no layout), but
     // spacer height confirms the line is in the virtualiser's count.
     // We just confirm the prop threads without TypeScript error.
+    expect(screen.getByTestId("word-match-view")).toBeInTheDocument();
+  });
+
+  // ─── Card click selection (2026-09-18 fix) ────────────────────────────
+  //
+  // Before this fix, LineCard's outer element had no click handler at all,
+  // so clicking a card did nothing — worse, since it renders each word's GT
+  // <input> inline, a click aimed at the card often landed inside one of
+  // those inputs, and the matches-scope hotkeys (V/U/D) read
+  // worklistStore.selectedLineIndex, which nothing set. See
+  // tests/e2e/test_match_nav_selection_sync.py for the live-browser version
+  // of this same loop (click → V hotkey → real request).
+
+  it("clicking the card body calls onSelectLine(line_index)", () => {
+    const onSelectLine = vi.fn();
+    const line = makeLineMatch({ line_index: 3 });
+    render(<LineCard line={line} onSelectLine={onSelectLine} />);
+    fireEvent.click(screen.getByTestId("line-card-3-header"));
+    expect(onSelectLine).toHaveBeenCalledOnce();
+    expect(onSelectLine).toHaveBeenCalledWith(3);
+  });
+
+  it("clicking a word's GT input selects the line AND leaves the caret in that input", async () => {
+    const user = userEvent.setup();
+    const onSelectLine = vi.fn();
+    const line = makeLineMatch({
+      line_index: 0,
+      word_matches: [makeWordMatchFull(0, 0)],
+    });
+    render(<LineCard line={line} onSelectLine={onSelectLine} />);
+
+    const input = screen.getByTestId("gt-text-input-0-0");
+    expect(document.activeElement).not.toBe(input);
+
+    await user.click(input);
+
+    // Selecting the line and focusing the input are not in conflict — both happen.
+    expect(document.activeElement).toBe(input);
+    expect(onSelectLine).toHaveBeenCalledOnce();
+    expect(onSelectLine).toHaveBeenCalledWith(0);
+  });
+
+  it("clicking the Validate button does only that button's job (no line selection)", () => {
+    const onValidate = vi.fn();
+    const onSelectLine = vi.fn();
+    const line = makeLineMatch({ line_index: 0, is_fully_validated: false });
+    render(<LineCard line={line} onValidate={onValidate} onSelectLine={onSelectLine} />);
+
+    fireEvent.click(screen.getByTestId("line-validate-button-0"));
+
+    expect(onValidate).toHaveBeenCalledOnce();
+    expect(onValidate).toHaveBeenCalledWith(0, true);
+    expect(onSelectLine).not.toHaveBeenCalled();
+  });
+
+  it("clicking Delete does only that button's job (no line selection, no other handler)", () => {
+    const onDelete = vi.fn();
+    const onSelectLine = vi.fn();
+    const onValidate = vi.fn();
+    const line = makeLineMatch({ line_index: 0 });
+    render(
+      <LineCard
+        line={line}
+        onDelete={onDelete}
+        onSelectLine={onSelectLine}
+        onValidate={onValidate}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("line-delete-button-0"));
+
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(onDelete).toHaveBeenCalledWith(0);
+    expect(onSelectLine).not.toHaveBeenCalled();
+    expect(onValidate).not.toHaveBeenCalled();
+  });
+
+  it("clicking the copy buttons (GT→OCR, OCR→GT) does only that button's job", () => {
+    const onCopyGtToOcr = vi.fn();
+    const onCopyOcrToGt = vi.fn();
+    const onSelectLine = vi.fn();
+    // overall_match_status must not be "exact" — the copy buttons are hidden when exact.
+    const line = makeLineMatch({ line_index: 0, overall_match_status: "mismatch" });
+    render(
+      <LineCard
+        line={line}
+        onCopyGtToOcr={onCopyGtToOcr}
+        onCopyOcrToGt={onCopyOcrToGt}
+        onSelectLine={onSelectLine}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("line-gt-to-ocr-button-0"));
+    fireEvent.click(screen.getByTestId("line-ocr-to-gt-button-0"));
+
+    expect(onCopyGtToOcr).toHaveBeenCalledOnce();
+    expect(onCopyOcrToGt).toHaveBeenCalledOnce();
+    expect(onSelectLine).not.toHaveBeenCalled();
+  });
+
+  it("WordMatchView threads onSelectLine through to LineCard", () => {
+    const onSelectLine = vi.fn();
+    const lines = [makeLineMatch({ line_index: 0 })];
+    render(<WordMatchView lines={lines} onSelectLine={onSelectLine} />);
+    // jsdom's virtualiser renders nothing without real layout (see other
+    // WordMatchView tests) — this just confirms the prop threads without a
+    // TypeScript error, mirroring the onEditWord threading test above.
     expect(screen.getByTestId("word-match-view")).toBeInTheDocument();
   });
 });

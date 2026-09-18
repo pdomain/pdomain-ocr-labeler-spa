@@ -1220,6 +1220,13 @@ export default function ProjectPage() {
     useUiPrefs.setState({ rightPanelOpen: true });
   }
 
+  // Clicking a line card selects it the same way J/K (matches scope) do —
+  // through focusWorklistLine, so a mouse click and keyboard navigation
+  // cannot desync selectedLineIndex from selectionStore (P1-MATCH-NAV).
+  function handleSelectLine(lineIndex: number) {
+    focusWorklistLine(idx0, lineIndex);
+  }
+
   // Right panel slot — RightPanel routes on selection-store.level.
   // Word-level content is WordDetail (Slice 16).
   // D-051 (2026-06-14): TextTabs + WordMatchView are now mounted visibly in
@@ -1236,7 +1243,12 @@ export default function ProjectPage() {
           setMatchFilter(f);
         }}
       >
-        <WordMatchView lines={lines} filter={uiPrefs.matchFilter} onEditWord={handleEditWord} />
+        <WordMatchView
+          lines={lines}
+          filter={uiPrefs.matchFilter}
+          onEditWord={handleEditWord}
+          onSelectLine={handleSelectLine}
+        />
       </TextTabs>
       <PlaintextEditor source="gt" page={pagePayload} />
       <PlaintextEditor source="ocr" page={pagePayload} />

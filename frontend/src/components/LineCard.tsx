@@ -16,6 +16,24 @@
 // Word rows: WordCell is rendered for each word_match directly under the
 // line header (no accordion). Words are always visible per driver-contract §2.8.
 //
+// Card click → line selection (2026-09-18 fix):
+//   The outer card is a click-to-select wrapper around the real interactive
+//   controls it contains (buttons, checkboxes, the per-word GT inputs) — the
+//   same "cosmetic wrapper" shape as QuickSearch's click-to-focus div. A
+//   click anywhere on the card, including inside a GT input, also selects
+//   the line via `onSelectLine`; the browser's native click behavior (e.g.
+//   focusing the input, placing the caret) is untouched because the wrapper
+//   never calls preventDefault. The four per-line action buttons already
+//   have their own onClick handlers and call stopPropagation so a click on
+//   one of them does only that button's job, not also a line selection.
+//   No role/tabIndex is added to the wrapper: it already contains several
+//   independently focusable, keyboard-operable controls (buttons, checkbox,
+//   GT inputs), so turning the wrapper itself into another interactive
+//   element (and tab stop) would nest interactive semantics inside
+//   interactive semantics — an ARIA anti-pattern — for no reachability gain,
+//   since keyboard users already select a line with J/K (matches scope),
+//   which calls the same `focusWorklistLine` this click handler forwards to.
+//
 // data-testids (driver-contract §2.8):
 //   line-card-{n}              — full card (spec canonical)
 //   line-card-{n}-header       — header row
@@ -76,6 +94,14 @@ export interface LineCardProps {
   paragraphFirst?: boolean | undefined;
   /** Called when Validate / Unvalidate is clicked. */
   onValidate?: ((lineIndex: number, validated: boolean) => void) | undefined;
+  /**
+   * Called when the card itself (or any non-interactive part of it,
+   * including a word's GT input) is clicked. Should select this line the
+   * same way `J`/`K` do — call `focusWorklistLine(pageIndex, lineIndex)`,
+   * not `worklistStore`/`selectionStore` directly, so click and keyboard
+   * navigation cannot drift apart.
+   */
+  onSelectLine?: ((lineIndex: number) => void) | undefined;
   /** Called when GT→OCR copy is clicked. */
   onCopyGtToOcr?: ((lineIndex: number) => void) | undefined;
   /** Called when OCR→GT copy is clicked. */
@@ -127,6 +153,7 @@ export function LineCard({
   line,
   paragraphFirst = false,
   onValidate,
+  onSelectLine,
   onCopyGtToOcr,
   onCopyOcrToGt,
   onDelete,
@@ -140,9 +167,11 @@ export function LineCard({
   const isExact = line.overall_match_status === "exact";
 
   return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- cosmetic click-to-select wrapper (see file header comment); the buttons, checkbox, and GT inputs it contains are the real interactive elements, each already independently keyboard-operable, and J/K already select a line by keyboard through the same `onSelectLine`/`focusWorklistLine` path.
     <div
       data-testid={`line-card-${line.line_index}`}
       className="border border-border-1 rounded-sm mb-1 overflow-hidden"
+      onClick={() => onSelectLine?.(line.line_index)}
     >
       {/* Header */}
       <div
@@ -223,7 +252,12 @@ export function LineCard({
               <button
                 data-testid={`line-gt-to-ocr-button-${line.line_index}`}
                 className="px-1.5 py-0.5 text-xs border border-border-2 rounded-sm bg-bg-surface hover:bg-bg-raised"
-                onClick={() => onCopyGtToOcr?.(line.line_index)}
+                onClick={(e) => {
+                  // Own job only — don't let the click also select the line
+                  // via the card wrapper's onClick (bubbling).
+                  e.stopPropagation();
+                  onCopyGtToOcr?.(line.line_index);
+                }}
                 title="Copy GT to OCR"
               >
                 GT→OCR
@@ -231,7 +265,10 @@ export function LineCard({
               <button
                 data-testid={`line-ocr-to-gt-button-${line.line_index}`}
                 className="px-1.5 py-0.5 text-xs border border-border-2 rounded-sm bg-bg-surface hover:bg-bg-raised"
-                onClick={() => onCopyOcrToGt?.(line.line_index)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCopyOcrToGt?.(line.line_index);
+                }}
                 title="Copy OCR to GT"
               >
                 OCR→GT
@@ -242,7 +279,10 @@ export function LineCard({
           <button
             data-testid={`line-validate-button-${line.line_index}`}
             className="px-1.5 py-0.5 text-xs border border-border-2 rounded-sm bg-bg-surface hover:bg-bg-raised"
-            onClick={() => onValidate?.(line.line_index, !line.is_fully_validated)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onValidate?.(line.line_index, !line.is_fully_validated);
+            }}
           >
             {line.is_fully_validated ? "Unvalidate" : "Validate"}
           </button>
@@ -250,7 +290,10 @@ export function LineCard({
           <button
             data-testid={`line-delete-button-${line.line_index}`}
             className="px-1.5 py-0.5 text-xs border border-status-mismatch/50 text-status-mismatch rounded-sm bg-bg-surface hover:bg-bg-raised"
-            onClick={() => onDelete?.(line.line_index)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete?.(line.line_index);
+            }}
             title="Delete line"
           >
             Delete

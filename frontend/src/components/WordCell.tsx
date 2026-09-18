@@ -187,13 +187,20 @@ export function WordCell({ word, onCommitGt, onEditWord, onValidate, onClearTag 
           >
             ✔
           </button>
-          {/* Edit button — selects the word and opens the right-panel word detail view */}
+          {/* Edit button — selects the word and opens the right-panel word detail view.
+              stopPropagation: LineCard's card-level click selects the *line*
+              (onSelectLine); without this, that bubbled line-level selection
+              would immediately overwrite the more specific word-level
+              selection this button just made. */}
           <button
             data-testid={`edit-word-button-${l}-${w}`}
             aria-label={`Edit word ${w} in line ${l}`}
             className="text-[10px] text-ink-4 hover:text-ink-1 px-0.5 leading-none"
             title="Edit word"
-            onClick={() => onEditWord?.(l, w)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onEditWord?.(l, w);
+            }}
           >
             ✎
           </button>
