@@ -1294,13 +1294,22 @@ def _page_payload(
       consumers can diff against a remembered value.
     - ``page_text_ocr`` / ``page_text_gt`` are rendered from
       ``line_matches`` (empty when no OCR has run).
+    - ``history`` (undo/redo availability) is read from the page's event-
+      store aggregate when ``page_store`` and ``pstate.page_id`` are both
+      available, ``None`` otherwise (no store wired — test envs).
 
-    Concurrency: pure read over ``ProjectState`` — no lock needed
-    here.  The mutation endpoints that call this helper hold the
-    per-project lock for their state change; the snapshot returned
-    here is consistent with the state at the moment the lock was
-    released. One exception: ``_image_drift_for_page`` opportunistically
-    caches a cheap stat baseline on ``pstate`` (issue
+    Concurrency: the whole build runs under ``project_state.get_page_lock``
+    (2026-09-18 fixes — see the ``with`` block below for the live-``Page``-
+    sort race this closes, and the ``history`` paragraph above for the
+    page-history-consistency race it also closes). The lock is
+    re-entrant (``ProjectState.get_page_lock``), so mutation routes that
+    already hold it when they call this helper to refresh their response
+    nest safely; routes that call it unlocked (``GET /pages/{idx}``) get a
+    fresh acquisition. Either way every field in the returned payload —
+    word counts, ``line_matches``, and now ``history`` together — comes from
+    one consistent instant, never a mix of pre- and post-mutation state.
+    One exception: ``_image_drift_for_page`` opportunistically caches a
+    cheap stat baseline on ``pstate`` (issue
     2026-07-21-image-drift-banner-hard-off) — a best-effort write tolerant of
     races the same way ``edited_image_blob`` and friends already are; a lost
     update there costs one extra file hash on the next call, never a wrong
@@ -1622,6 +1631,22 @@ def _page_payload(
                 exc_info=True,
             )
 
+        # Undo/redo flags — spec 2026-06-12-event-store-undo. Read here, under
+        # the same per-page lock as ``line_matches`` and every word count
+        # derived from it, so the two can never come from different instants
+        # (2026-09-18 page-history-consistency fix). Before this moved, ``GET
+        # /pages/{idx}`` built this payload, released the lock, and only then
+        # called ``_build_history_info`` — a second, unlocked read of the same
+        # aggregate. A mutation landing in that gap (``validate_batch`` and
+        # friends mutate the in-memory page *and* write the store under this
+        # same lock) could produce a response whose word counts and
+        # ``history.undo_available`` disagreed — see
+        # ``tests/integration/test_page_history_consistency_race.py``.
+        # ``None`` when no event store / page aggregate is wired (test envs).
+        history: PageHistoryInfo | None = None
+        if page_store is not None and pstate is not None and pstate.page_id is not None:
+            history = _build_history_info(page_store, pstate.page_id, depth=_resolve_undo_depth(settings))
+
         return PagePayload(
             project_id=project_id,
             page_index=page_index,
@@ -1640,6 +1665,7 @@ def _page_payload(
             page_kind_reviewed=page_kind_reviewed,
             page_kind_proposal=page_kind_proposal,
             image_drift=image_drift,
+            history=history,
         )
 
 
@@ -1829,12 +1855,10 @@ def get_page(
     if page_load_job_id is not None:
         payload.page_load_job_id = page_load_job_id
 
-    # Undo/redo flags — spec 2026-06-12-event-store-undo. Stamped here (not in
-    # ``_page_payload``) so the helper stays store-free; mutation routes refresh
-    # button state via invalidation → this GET.
-    pstate = project_state.get_page_state(page_index)
-    if page_store is not None and pstate is not None and pstate.page_id is not None:
-        payload.history = _build_history_info(page_store, pstate.page_id, depth=_resolve_undo_depth(settings))
+    # Undo/redo flags (spec 2026-06-12-event-store-undo) are now stamped by
+    # ``_page_payload`` itself, under the same per-page lock as the word
+    # counts above — see that function's docstring for why (2026-09-18
+    # page-history-consistency fix).
 
     # GAP-2: schedule adjacent-page prefetch AFTER assembling the response
     # so the background task never blocks the current response.

@@ -272,27 +272,6 @@ def _wait_validated_count(server: UndoServer, idx: int, expected: int, timeout: 
     raise AssertionError(f"validated count never reached {expected}; last={_validated_count(payload)}")
 
 
-def _wait_undo_available(server: UndoServer, idx: int, *, expected: bool, timeout: float = 15.0) -> dict:
-    """Poll the API until ``history.undo_available`` equals *expected*.
-
-    ``validate_batch`` mutates the in-memory page and then writes the store
-    under the page lock; ``get_page`` takes no lock and derives
-    ``history.undo_available`` from the store. So right after a mutating
-    click, ``validated_word_count`` can already reflect the new state while
-    the store's provenance append (and thus ``undo_available``) is still in
-    flight — waiting on the word count alone races. Poll the field the test
-    actually depends on instead.
-    """
-    deadline = time.monotonic() + timeout
-    payload = _api_page(server, idx)
-    while time.monotonic() < deadline:
-        payload = _api_page(server, idx)
-        if (payload.get("history") or {}).get("undo_available") is expected:
-            return payload
-        time.sleep(0.25)
-    raise AssertionError(f"history.undo_available never reached {expected}; last={payload.get('history')}")
-
-
 # ── Tests (ordered: they share one server; each starts from a known state) ───
 
 
@@ -401,12 +380,18 @@ def test_textfield_mod_z_does_not_fire_page_undo(undo_server: UndoServer, page: 
     """U-10: Mod+Z inside a text input performs the native text undo only."""
     _goto_page(page, undo_server, page_no=1)
 
-    # Create one undo step so page undo WOULD be possible. Wait on
-    # undo_available itself (not the validated count) — see
-    # _wait_undo_available's docstring for the race this avoids.
+    # Create one undo step so page undo WOULD be possible. Polling here
+    # waits out the async round-trip the click kicks off (Playwright's
+    # .click() returns before the mutation lands) — not a race between
+    # validated_word_count and history.undo_available. Backend fix
+    # 2026-09-18 (page-history-consistency) reads both under the same
+    # per-page lock, so any response that shows the new word count already
+    # shows the matching history state too; asserting undo_available
+    # straight off this payload, instead of polling it separately, checks
+    # exactly that.
     page.locator('[data-testid="page-validate-all"]').click()
-    payload = _wait_undo_available(undo_server, 0, expected=True)
-    assert _validated_count(payload) == 2
+    payload = _wait_validated_count(undo_server, 0, 2)
+    assert payload["history"]["undo_available"] is True
 
     # Focus a text input (quick-search lives in the Drawer worklist header
     # after D-047), type, then press Control+Z — the page state must NOT change.
