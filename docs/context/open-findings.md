@@ -25,11 +25,17 @@ Registered. `App.tsx` binds `mod+,` to the OCR-config dialog, with a comment
 recording that the default delimiter parses that combo as two, which is why it
 is registered the way it is.
 
-### BUG-KBD-4 — ConfirmDialog keyboard behavior needs browser verification
+### ~~BUG-KBD-4~~ — ConfirmDialog keyboard behavior needs browser verification (retired 2026-09-18)
 
-`ConfirmDialog` relies on its focused button and lacks explicit Escape/Enter
-bindings. Verify the destructive-action flow in a browser; add scoped bindings
-if native focused-button behavior does not cover both keys.
+Verified in a real browser against the Matches pane's `D` (delete line)
+confirm — `tests/e2e/test_confirm_dialog_keyboard.py`. Escape cancels and
+Enter confirms, both checked against the server (`line_matches` before and
+after), and focus is sound on open, on Tab, and after either close path. No
+scoped bindings were added: Radix's AlertDialog already handles both keys
+natively. One correction to the finding's own premise — the dialog
+default-focuses **Cancel**, not Confirm, on open (a safety default), so
+Enter alone right after opening cancels; reaching Confirm needs one Tab
+first.
 
 ### ~~BUG-KBD-5~~ — `Mod+J` is advertised but not registered (retired 2026-09-18)
 
