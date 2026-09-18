@@ -1087,3 +1087,48 @@ bulk-mark apply specifically (Task 3, the STUB this entry fixes).
   too, so this change neither introduces nor worsens it, but the intent is now
   enforced on one path and not the others.
 - Shipped in `f42179b`.
+
+### [2026-09-18] Retired: text normalization waited on a module that never existed
+
+- Old path:
+  `docs/issues/2026-09-18-text-normalization-waits-on-a-module-that-has-never-existed.md`
+- Outcome: removed, not implemented
+- Superseded by: `docs/architecture/18-text-normalization.md`, now titled "Not
+  offered"
+- Resolved by: `fix/normalize-remove` (branch)
+- Rationale kept: `core/text_normalize.py` probed for
+  `pdomain_book_tools.text.normalize.normalize_string`, a module that has
+  never existed in any version of `pdomain-book-tools`. `is_available()` was
+  therefore permanently `False`, `GET /api/normalize/available` existed only
+  to report that probe, the SPA's OCR config modal gated its "Text
+  normalization" section on the route, and `api/pages.py`'s plaintext-tab
+  renderer called `normalize_string` behind a flag every caller already
+  hardcoded to `False`. All four had zero effect: deleting them changes
+  nothing observable. This is the same defect this repo already retired once
+  for the export request's `normalize_recognition_labels` flag
+  (2026-09-18, above) — that fix left the probe and the UI gate in place,
+  which is what this entry removes. A real normalizer exists upstream
+  (`pdomain_book_contracts.text.text_normalize.apply_text_normalizations`),
+  but it does curly quotes and em dashes, not the long s and ligatures this
+  capability's comments described, and this product transcribes historical
+  text to ground truth — rewriting punctuation by default is the wrong
+  product decision, not a missing import.
+- Removed: `src/pdomain_ocr_labeler_spa/core/text_normalize.py`,
+  `src/pdomain_ocr_labeler_spa/api/normalize.py` and its router registration
+  in `bootstrap.py`, the `normalize_string` call and `normalize_tabs`
+  parameter in `api/pages.py::_render_plaintext`, the OCR config modal's
+  "Text normalization" section and `NormalizeSettings` type in
+  `OCRConfigModal.tsx`, and the tests that existed only to cover the probe
+  or the route (`tests/unit/test_text_normalize.py`,
+  `tests/integration/test_normalize_router.py`). `PagePayload` field tests
+  and the unrelated `ExportRequest` normalize-field regression tests moved to
+  `tests/unit/test_page_text_and_export_fields.py`.
+- Left in place, flagged as a separate finding: `AppConfig.
+  normalize_for_gt_matching`, `normalize_plaintext_tabs`, `normalize_profile`
+  (unread by any handler) and `WordMatch.normalized_match` (never set `True`,
+  never rendered). These predate this capability and are not wired to it;
+  removing them is a distinct decision nobody has made.
+- `GET /api/normalize/available` was a public route with no known external
+  caller — checked via this app's own git history and the driver-agent
+  contract (`docs/architecture/13-driver-contract.md`), neither references
+  it outside the now-removed `OCRConfigModal.tsx` probe.

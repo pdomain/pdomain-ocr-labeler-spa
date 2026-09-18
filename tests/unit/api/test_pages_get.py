@@ -115,8 +115,8 @@ def test_build_image_url_handles_none_dims() -> None:
 
 def test_render_plaintext_empty_line_matches_returns_empty_string() -> None:
     """No line_matches → empty string (not None)."""
-    assert _render_plaintext([], source="ocr", normalize_tabs=False) == ""
-    assert _render_plaintext([], source="gt", normalize_tabs=False) == ""
+    assert _render_plaintext([], source="ocr") == ""
+    assert _render_plaintext([], source="gt") == ""
 
 
 # ── GET /pages/{idx} HTTP integration ────────────────────────────────

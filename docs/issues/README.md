@@ -120,7 +120,6 @@ tombstone. See [`../context/decisions.md`](../context/decisions.md).
 | Issue | ID | Sev |
 | --- | --- | --- |
 | [`2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md`](2026-09-18-the-word-edit-dialog-the-driver-contract-documents-does-not-exist.md) | P2-WORD-EDIT | Low |
-| [`2026-09-18-text-normalization-waits-on-a-module-that-has-never-existed.md`](2026-09-18-text-normalization-waits-on-a-module-that-has-never-existed.md) | P2-NORMALIZE-DEAD | Low |
 
 ## Review queue (2026-09-18)
 

@@ -1,20 +1,19 @@
-// OCRConfigModal.tsx — OCR configuration modal with text-normalization and auto-rotation sections.
-// Spec: docs/specs/2026-05-12-text-normalization-design.md §Toggle UI
+// OCRConfigModal.tsx — OCR configuration modal with auto-rotation and model-selection sections.
 // Spec: docs/specs/2026-05-12-auto-rotation-design.md §OCR config additions
-// Issues #261, #264, #447
+// Issues #264, #447
+//
+// Text normalization is not offered — see
+// docs/architecture/18-text-normalization.md (removed P2-NORMALIZE-DEAD,
+// 2026-09-18). The modal had no such section before that removal took effect.
 //
 // Sections:
-//   - Text normalization: normalize-gt-matching-checkbox, normalize-plaintext-checkbox,
-//     normalize-profile-select (greyed out in v1, only "ascii" available)
 //   - Auto-rotation: auto-rotate-checkbox, auto-rotate-method-select
 //     (disabled when auto_rotate_available=false)
-//   - When pdomain_book_tools.text.normalize unavailable: shows disabled message
 //
 // Chrome backed by pdomain-ui's Radix Dialog suite. Radix provides native focus trap +
 // Escape handling — no manual Esc handler or hand-rolled backdrop needed.
 //
-// Testids: ocr-config-modal (DialogContent), normalize-gt-matching-checkbox,
-//          normalize-plaintext-checkbox, normalize-profile-select,
+// Testids: ocr-config-modal (DialogContent),
 //          auto-rotate-checkbox, auto-rotate-method-select,
 //          ocr-config-close-button, ocr-config-done-button,
 //          ocr-config-save-error (error banner when a POST fails)
@@ -37,15 +36,6 @@ import {
 } from "@pdomain/pdomain-ui/primitives";
 
 type AutoRotateMethod = "gt-best-match" | "layout" | "auto";
-
-// Minimal in-line fetch wrappers to avoid adding openapi-ts-generated fetch
-// before #276 completes the client setup.
-async function fetchNormalizeAvailable(): Promise<boolean> {
-  const resp = await fetch("/api/normalize/available");
-  if (!resp.ok) return false;
-  const data = await resp.json();
-  return Boolean(data.available);
-}
 
 /** One detection/recognition model option from ``GET /api/ocr-config``. */
 interface OcrModelOption {
@@ -134,63 +124,22 @@ async function postAutoRotateConfig(settings: {
   }
 }
 
-export interface NormalizeSettings {
-  normalize_for_gt_matching: boolean;
-  normalize_plaintext_tabs: boolean;
-  normalize_profile: string;
-}
-
 interface OCRConfigModalProps {
   open: boolean;
-  /** Current normalize settings from AppConfig. */
-  normalizeSettings?: NormalizeSettings;
-  /** Called when the user changes normalize settings. */
-  onNormalizeChange?: (settings: NormalizeSettings) => void;
   onClose: () => void;
 }
 
 /**
  * OCR configuration modal.
  *
- * Renders the "Text normalization" section.  Toggle states mirror
- * AppConfig fields (``normalize_for_gt_matching``, ``normalize_plaintext_tabs``,
- * ``normalize_profile``).  When ``pdomain_book_tools.text.normalize`` is absent,
- * the section is disabled with a tooltip message.
- *
  * Backed by pdomain-ui's Radix Dialog suite (native focus trap + Escape handling).
- *
- * Issue #261 testid contract:
- *   - ``ocr-config-modal``  (DialogContent)
- *   - ``normalize-gt-matching-checkbox``
- *   - ``normalize-plaintext-checkbox``
- *   - ``normalize-profile-select``
  *
  * Issue #447 testid contract:
  *   - ``ocr-config-save-error``  (error banner on POST failure)
  */
-export function OCRConfigModal({
-  open,
-  normalizeSettings,
-  onNormalizeChange,
-  onClose,
-}: OCRConfigModalProps) {
-  const defaults: NormalizeSettings = {
-    normalize_for_gt_matching: false,
-    normalize_plaintext_tabs: false,
-    normalize_profile: "ascii",
-  };
-  const settings = normalizeSettings ?? defaults;
-
+export function OCRConfigModal({ open, onClose }: OCRConfigModalProps) {
   // Fix #447: track save errors from POST /api/ocr-config/auto-rotate.
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  // Probe pdomain_book_tools normalize availability.
-  const { data: normalizeAvailable = false } = useQuery({
-    queryKey: ["normalize-available"],
-    queryFn: fetchNormalizeAvailable,
-    staleTime: 60_000, // 1 minute — module presence doesn't change at runtime
-    enabled: open,
-  });
 
   // Fetch OCR config (auto-rotate settings + availability).
   const { data: ocrConfig, refetch: refetchOcrConfig } = useQuery({
@@ -366,31 +315,6 @@ export function OCRConfigModal({
       });
   }
 
-  function handleGtMatchingChange(e: React.ChangeEvent<HTMLInputElement>) {
-    onNormalizeChange?.({
-      ...settings,
-      normalize_for_gt_matching: e.target.checked,
-    });
-  }
-
-  function handlePlaintextChange(e: React.ChangeEvent<HTMLInputElement>) {
-    onNormalizeChange?.({
-      ...settings,
-      normalize_plaintext_tabs: e.target.checked,
-    });
-  }
-
-  function handleProfileChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    onNormalizeChange?.({
-      ...settings,
-      normalize_profile: e.target.value,
-    });
-  }
-
-  const unavailableTitle =
-    "Requires pdomain-book-tools with text.normalize module. " +
-    "Update pdomain-book-tools to enable these options.";
-
   return (
     // NOTE: Escape is handled natively by Radix Dialog — no manual Esc handler needed.
     <Dialog
@@ -435,91 +359,6 @@ export function OCRConfigModal({
               Failed to save: {saveError}
             </p>
           )}
-
-          {/* Text normalization section */}
-          <section aria-labelledby="normalize-section-heading">
-            <h3 id="normalize-section-heading" className="text-sm font-medium text-ink-2 mb-2">
-              Text normalization
-            </h3>
-
-            {!normalizeAvailable && (
-              <p
-                className="text-xs rounded-sm px-2 py-1 mb-3"
-                style={{
-                  color: "var(--status-fuzzy)",
-                  background: "color-mix(in srgb, var(--status-fuzzy) 8%, var(--bg-surface))",
-                }}
-                data-testid="normalize-unavailable-message"
-              >
-                Requires pdomain-book-tools with text.normalize module. Update pdomain-book-tools to
-                enable these options.
-              </p>
-            )}
-
-            <div className="space-y-2">
-              {/* GT matching toggle */}
-              <label
-                className={`flex items-center gap-2 text-sm ${
-                  normalizeAvailable ? "text-ink-1" : "text-ink-4"
-                }`}
-                title={normalizeAvailable ? undefined : unavailableTitle}
-              >
-                <input
-                  type="checkbox"
-                  data-testid="normalize-gt-matching-checkbox"
-                  checked={settings.normalize_for_gt_matching}
-                  disabled={!normalizeAvailable}
-                  onChange={handleGtMatchingChange}
-                  className="accent-accent"
-                />
-                Normalize for GT matching (long-s, ligatures → ASCII)
-              </label>
-
-              {/* Plaintext tabs toggle */}
-              <label
-                className={`flex items-center gap-2 text-sm ${
-                  normalizeAvailable ? "text-ink-1" : "text-ink-4"
-                }`}
-                title={normalizeAvailable ? undefined : unavailableTitle}
-              >
-                <input
-                  type="checkbox"
-                  data-testid="normalize-plaintext-checkbox"
-                  checked={settings.normalize_plaintext_tabs}
-                  disabled={!normalizeAvailable}
-                  onChange={handlePlaintextChange}
-                  className="accent-accent"
-                />
-                Normalize plaintext tab content
-              </label>
-
-              {/* Profile select — greyed out in v1 (only "ascii" available) */}
-              <div
-                className={`flex items-center gap-2 text-sm ${
-                  normalizeAvailable ? "text-ink-1" : "text-ink-4"
-                }`}
-                title={
-                  normalizeAvailable ? "Only 'ascii' profile available in v1" : unavailableTitle
-                }
-              >
-                <label htmlFor="normalize-profile-select" className="shrink-0">
-                  Profile:
-                </label>
-                <select
-                  id="normalize-profile-select"
-                  data-testid="normalize-profile-select"
-                  value={settings.normalize_profile}
-                  disabled={true}
-                  onChange={handleProfileChange}
-                  className="border border-border-1 rounded-sm text-xs px-1 py-0.5 bg-bg-sunk cursor-not-allowed"
-                  aria-label="Normalization profile"
-                >
-                  <option value="ascii">ascii</option>
-                </select>
-                <span className="text-xs text-ink-4">(v1: ascii only)</span>
-              </div>
-            </div>
-          </section>
 
           {/* Auto-rotation section */}
           <section aria-labelledby="auto-rotate-section-heading" className="mt-4">

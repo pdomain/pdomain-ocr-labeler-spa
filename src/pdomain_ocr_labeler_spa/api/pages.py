@@ -19,7 +19,6 @@ from pdomain_ops.pages import PageRecord
 from pdomain_ops.pages import build_provenance_summary as ops_build_provenance_summary
 from pydantic import BaseModel, BeforeValidator, Field
 
-from ..core import text_normalize
 from ..core.glyph.bulk_mark import GlyphBulkMarkParams, apply_bulk_mark
 from ..core.ground_truth_matcher import rematch_page
 from ..core.jobs import JobRunner, JobStatus
@@ -153,10 +152,10 @@ class PagePayload(BaseModel):
     """Full per-page payload — spec §5.3 / §1 ``PagePayload``.
 
     ``page_text_ocr`` and ``page_text_gt`` are pre-built plaintext strings
-    assembled from the page's OCR / GT words.  When
-    ``normalize_plaintext_tabs=True`` in ``AppConfig`` these are normalised
-    (long-s → ASCII etc.) before serialisation.  The envelope itself is never
-    modified.
+    assembled from the page's OCR / GT words, joined verbatim with no
+    normalization applied. Text normalization is not offered — see
+    ``docs/architecture/18-text-normalization.md``. The envelope itself is
+    never modified.
     """
 
     project_id: str
@@ -892,7 +891,6 @@ def _render_plaintext(
     line_matches: list[LineMatch],
     *,
     source: str,
-    normalize_tabs: bool,
 ) -> str:
     """Join per-line text into a single plaintext string.
 
@@ -902,11 +900,9 @@ def _render_plaintext(
     in ``pd-ocr-labeler/operations/.../page_text.py`` (one line per
     OCR line, no trailing newline).
 
-    When ``normalize_tabs=True``, delegates to
-    ``core.text_normalize.normalize_string`` (per
-    ``AppConfig.normalize_plaintext_tabs`` — spec §3).  When
-    pdomain_book_tools.text.normalize is unavailable, ``normalize_string``
-    is a no-op (see ``core/text_normalize.py`` for the contract).
+    Text is returned verbatim — no normalization is applied. Text
+    normalization is not offered (see
+    ``docs/architecture/18-text-normalization.md``).
     """
     if source == "ocr":
         lines = [lm.ocr_line_text for lm in line_matches]
@@ -915,10 +911,7 @@ def _render_plaintext(
     else:  # pragma: no cover - defensive
         raise ValueError(f"unknown source: {source!r}")
 
-    text = "\n".join(lines)
-    if normalize_tabs and text:
-        text = text_normalize.normalize_string(text)
-    return text
+    return "\n".join(lines)
 
 
 def _assemble_page_payload(
@@ -1493,12 +1486,10 @@ def _page_payload(
 
     image_url = _build_image_url(project_id, page_index, encoded_dims)
 
-    # Plaintext: empty until OCR runs.  normalize_tabs defaults to
-    # False; AppConfig wiring lands in a follow-up slice (the
-    # ``settings`` parameter is reserved on the signature so the
-    # change is additive).
-    page_text_ocr = _render_plaintext(line_matches, source="ocr", normalize_tabs=False)
-    page_text_gt = _render_plaintext(line_matches, source="gt", normalize_tabs=False)
+    # Plaintext: empty until OCR runs. Rendered verbatim — text
+    # normalization is not offered (docs/architecture/18-text-normalization.md).
+    page_text_ocr = _render_plaintext(line_matches, source="ocr")
+    page_text_gt = _render_plaintext(line_matches, source="gt")
 
     # spec-23-E §10: ``pstate.selection`` is the per-page UI selection
     # mutated by ``POST .../selection``; echo it onto the payload so a
