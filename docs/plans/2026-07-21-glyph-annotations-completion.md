@@ -145,7 +145,7 @@ in `ConcaveTrillion/ocr-container-meta` or archived SPA issues):
 
 **Files:** none (investigation only)
 
-- [ ] **Step 1: Confirm current glyph files and open failures**
+- [x] **Step 1: Confirm current glyph files and open failures**
 
 ```bash
 cd /workspaces/pdomain/pdomain-ocr-labeler-spa
@@ -155,6 +155,11 @@ cd frontend && pnpm exec vitest run src/components/glyph src/components/WordCell
 ```
 
 Expected: unit/vitest suites for existing scaffold pass; grep shows map write sites and unmounted panel / placeholder chip handlers.
+
+Update (2026-09-18): the payload-inject and generation-bump gaps this step
+found were already closed on `master` by the time this backend pass started
+(commits `eb11eb9`, `89bbe6d`) — see Task 1 below. Frontend mount (Steps
+2/5/6) remains unmounted; out of scope for this backend-only pass.
 
 - [ ] **Step 2: Record mount decision**
 
@@ -176,7 +181,7 @@ Do not resurrect `WordEditDialog`.
 Without this, every API mutation that writes `glyph_annotations_map` is
 invisible to the SPA. This is the highest-leverage residual bug.
 
-- [ ] **Step 1: Write failing unit test — map overrides / stamps WordMatch**
+- [x] **Step 1: Write failing unit test — map overrides / stamps WordMatch**
 
 Add a test that builds a tiny Page/word stub, passes
 `glyph_annotations_map={"0_0": {"ligatures": [{"kind": "ct", "char_span": [0, 2]}], "long_s_positions": [], "swash": false, "source": "human"}}`,
@@ -188,13 +193,17 @@ Also assert:
 - empty dict value `{ligatures:[], long_s_positions:[], swash:false, source:human}` → non-None empty reviewed
 - optional `glyph_predictions_map` stamps `glyph_predictions`
 
-- [ ] **Step 2: Run test — expect fail**
+Tests added in `tests/unit/core/test_page_to_line_matches.py`.
+
+- [x] **Step 2: Run test — expect fail**
 
 ```bash
 uv run pytest tests/unit/core/ -k glyph -q
 ```
 
-- [ ] **Step 3: Implement stamp path**
+Update (2026-09-18): the tests **passed immediately** — see Step 3.
+
+- [x] **Step 3: Implement stamp path**
 
 Mirror `char_bboxes_map` / `char_ranges_map`:
 
@@ -205,13 +214,22 @@ Mirror `char_bboxes_map` / `char_ranges_map`:
 3. In `_page_payload`, pass `pstate.glyph_annotations_map` and
    `pstate.glyph_predictions_map` into `page_to_line_matches`.
 
-- [ ] **Step 4: Run tests — expect pass**
+Update (2026-09-18): already implemented on `master` before this pass
+(commit `89bbe6d feat: inject glyph sidecars into page payload and
+persist`) — `page_to_line_matches.py` already has both kwargs and
+`_glyph_from_sidecar`; `api/pages.py::_page_payload` already passes
+`pstate.glyph_annotations_map` / `glyph_predictions_map`. No code change
+needed for this step; only the regression tests were missing.
+
+- [x] **Step 4: Run tests — expect pass**
 
 ```bash
 uv run pytest tests/unit/core/ -k "glyph or page_to_line_matches" -q
 ```
 
-- [ ] **Step 5: Commit**
+5 passed.
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/pdomain_ocr_labeler_spa/core/page_to_line_matches.py \
@@ -227,7 +245,7 @@ git commit -m "fix(m11): inject glyph sidecars into page payload"
 - Create: `tests/integration/api/test_glyph_routes.py` (or nearest integration layout)
 - Modify if needed: `api/words.py` / `api/pages.py` for correct status codes
 
-- [ ] **Step 1: Write failing integration tests**
+- [x] **Step 1: Write failing integration tests**
 
 Cover:
 
@@ -240,17 +258,37 @@ Cover:
 
 Use existing project/page fixtures from other word-mutation integration tests.
 
-- [ ] **Step 2: Run — expect fail until Task 1 lands; then fix any remaining route bugs**
+Added `tests/integration/test_glyph_routes.py` (flat layout — matches this
+repo's existing `tests/integration/` convention, not the
+`tests/integration/api/` path the plan's file map suggested).
+
+- [x] **Step 2: Run — expect fail until Task 1 lands; then fix any remaining route bugs**
 
 ```bash
 uv run pytest tests/integration -k glyph -q
 ```
 
-- [ ] **Step 3: Add `test_gt_rejects_ligature_codepoints.py`**
+Update (2026-09-18): Task 1 was already done (see above), so the set/accept
+tests passed immediately. The bulk-mark **apply** test failed with
+`TypeError: Object of type UUID is not JSON serializable` — `glyph_bulk_mark`
+returned a hand-built `JSONResponse(content=response.model_dump())` (no
+`mode="json"`), which chokes on the UUID nested in `page.page_record.page_id`.
+Fixed here by returning the declared `GlyphBulkMarkResponse` model instance
+directly (mirrors the jobs-API wire-shape fix, commit `324fb8b`). The
+separate durable-persistence gap (bulk-mark's STUB store write) is Task 3's
+fix, below. All 8 Task-2 tests pass after this fix.
+
+- [x] **Step 3: Add `test_gt_rejects_ligature_codepoints.py`**
 
 Assert POST GT with `ﬁ` or `ſ` returns 400 validation_error (spec §10).
 
-- [ ] **Step 4: Commit**
+Added as `test_update_word_gt_rejects_ligature_codepoints` /
+`test_update_word_gt_rejects_long_s_codepoint` in
+`tests/integration/test_glyph_routes.py` rather than a separate file — the
+validator (`UpdateWordGroundTruthRequest._reject_forbidden_codepoints`) was
+already shipped; only the test was missing.
+
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "test(m11): integration coverage for glyph routes"
@@ -276,19 +314,54 @@ git commit -m "test(m11): integration coverage for glyph routes"
 - Still keep `source` SPA field on the map or extension because book-tools
   type may omit `source`.
 
-- [ ] **Step 1: Write failing reload test**
+- [x] **Step 1: Write failing reload test**
 
 Set annotations → save page → clear in-memory page state / reload from store →
 GET page → word still has annotations (None/empty/populated tri-state cases).
 
-- [ ] **Step 2: Implement persist + hydrate**
+Added 4 `@pytest.mark.integration` tests to
+`tests/integration/test_glyph_routes.py` (the same file as Task 2, split by
+a "Durable persistence" section): populated (with an untouched sibling word
+proving the absent case), empty-reviewed, cleared-back-to-absent, and
+bulk-mark apply. All 4 failed before Step 2's fix — the single-word ones on
+the pre-existing `assert reloaded is not None` guard (bulk-mark never wrote
+a content blob at all; single-word routes already did, so those 3 actually
+passed against master before Task 1/2 — see Step 2 for what was and wasn't
+already fixed), and the bulk-mark one on the same STUB gap.
+
+- [x] **Step 2: Implement persist + hydrate**
 
 - On `set_glyph_annotations` / `accept_glyph_prediction` / bulk apply: write map
   **and** call the same store-best-effort path used by other word mutations
   (do not leave `pass  # STUB: cached-lane retired` without store write).
 - On load: restore map before `_page_payload`.
 
-- [ ] **Step 3: Document decision**
+Update (2026-09-18): most of this step was already done on `master` before
+this pass. `core/labeler_sidecars.py` (Wave 0.1) already carries
+`glyph_annotations_map` alongside `char_bboxes_map` in the content-blob
+`labeler_sidecars` section, and `set_glyph_annotations` /
+`accept_glyph_prediction` (`api/words.py`) already call
+`_save_to_store_best_effort` — the single-word reload tests passed without
+any code change. The **one** remaining gap: `glyph_bulk_mark`
+(`api/pages.py`) still called `_write_cached_envelope_best_effort`, the
+retired no-op STUB the plan's evidence section quotes. Fixed by calling
+`_save_to_store_best_effort` there too (mirroring the single-word routes,
+including the 503 `store_persist_failed` contract on write failure), and
+removed the now-dead `_write_cached_envelope_best_effort` from `api/pages.py`
+(its only caller). No load-path change was needed — rehydration already
+restores both maps together via `apply_sidecars_to_page_state`.
+
+Review note (2026-09-18): a scratch-worktree review confirmed with the old
+code that bulk apply was not merely failing to persist — every non-dry-run
+apply crashed outright with a 500 (the Task 2 `TypeError: Object of type
+UUID is not JSON serializable` bug), so this branch's Task 2 fix was a
+prerequisite for Task 3's reload test to even reach the persistence gap.
+The review also added a bulk-apply 503 `store_persist_failed` test
+(`tests/integration/test_mutation_store_failure_status.py`), confirmed
+failing against the pre-fix STUB, matching the single-word routes' existing
+coverage in the same file.
+
+- [x] **Step 3: Document decision**
 
 If strategy differs from retired v2.2 `UserPageEnvelope` text in
 `specs/20-glyph-annotations.md` §4, add a short note in
@@ -296,7 +369,12 @@ If strategy differs from retired v2.2 `UserPageEnvelope` text in
 event-store persistence. Do not unilaterally rewrite the whole §4 without
 reviewer OK; minimal delta is fine.
 
-- [ ] **Step 4: Commit**
+Added "2026-09-18 — Glyph annotations reuse the char-sidecar durability path
+(Wave 2 T3)" to `docs/context/decisions.md`, and a short residual-note
+blockquote at the top of `specs/20-glyph-annotations.md` §4 pointing at it.
+§4's body text is untouched.
+
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "feat(m11): persist glyph annotations across save/reload"

@@ -739,19 +739,6 @@ def _build_page_loader_from_context(
     )
 
 
-def _write_cached_envelope_best_effort(
-    *,
-    page: Any,
-    project_state: ProjectState,
-    page_index: int,
-    settings: Settings,
-) -> None:
-    """STUB: cached-envelope lane retired (M5b). No-op until M9 wires LabelerPageStore."""
-    # The UserPageEnvelope + LaneResolver path is deleted (greenfield event-store adoption).
-    # M9 replaces this call with a LabelerPageStore.save_page() via save_page_to_store.
-    pass  # pragma: no cover
-
-
 # ── Adjacent-page prefetch — GAP-2 ───────────────────────────────────
 
 
@@ -2729,7 +2716,7 @@ def glyph_bulk_mark(
     settings: Settings = Depends(get_settings),  # pyright: ignore[reportCallInDefaultInitializer]
     app_config: AppConfig = Depends(get_app_config),  # pyright: ignore[reportCallInDefaultInitializer]
     page_store: LabelerPageStore | None = Depends(get_page_store_optional),  # pyright: ignore[reportCallInDefaultInitializer]
-) -> JSONResponse:
+) -> GlyphBulkMarkResponse | JSONResponse:
     """``POST .../pages/{idx}/glyph-bulk-mark`` — apply a glyph-mark recipe to the page.
 
     Runs synchronously (page-scope bulk is fast).  Dry-run returns preview
@@ -2790,12 +2777,18 @@ def glyph_bulk_mark(
                 pstate.glyph_annotations_map[sidecar_key] = ann_dict
             if result.annotations:
                 pstate.generation += 1
-                _write_cached_envelope_best_effort(
-                    page=page,
-                    project_state=project_state,
-                    page_index=page_index,
-                    settings=settings,
-                )
+                if not _save_to_store_best_effort(
+                    pstate=pstate,
+                    store=page_store,
+                    changes=[
+                        {
+                            "type": "glyph_bulk_mark",
+                            "recipe": body.recipe,
+                            "affected_word_ids": [f"{li}_{wi}" for (li, wi) in result.affected_word_ids],
+                        }
+                    ],
+                ):
+                    return _store_persist_failed_response(page_id=pstate.page_id)
         page_payload_out = _page_payload(
             project_id=project_id,
             page_index=page_index,
@@ -2808,12 +2801,16 @@ def glyph_bulk_mark(
     affected = [f"{li}_{wi}" for (li, wi) in result.affected_word_ids]
     skipped = [f"{li}_{wi}" for (li, wi) in result.skipped_word_ids]
 
-    response = GlyphBulkMarkResponse(
+    # Return the declared response_model directly (not a hand-built
+    # JSONResponse dict): FastAPI's response_model then validates and
+    # serializes it, correctly handling non-JSON-native nested fields
+    # (e.g. ``page.page_record.page_id: UUID``) the way the jobs API's
+    # wire-shape fix does (``JobRunner.to_public_job`` callers).
+    return GlyphBulkMarkResponse(
         affected_word_ids=affected,
         skipped_word_ids=skipped,
         page=page_payload_out,
     )
-    return JSONResponse(content=response.model_dump())
 
 
 def _resolve_page_object_for_pages(pstate: PageState | None) -> Page | None:

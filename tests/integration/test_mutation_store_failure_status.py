@@ -136,3 +136,99 @@ def test_gt_mutation_returns_503_when_store_write_fails(tmp_path: Path) -> None:
         # In-memory edit still applied (generation advanced).
         assert pstate.generation == 2
         assert page.lines[0].words[0].ground_truth_text == "hello"
+
+
+def _make_page_with_ct_word() -> Page:
+    """One word whose GT ('victor') matches the ``ct_substring`` bulk recipe."""
+    return Page.from_dict(
+        {
+            "width": 100,
+            "height": 100,
+            "page_index": 0,
+            "bounding_box": _bbox(0, 0, 100, 100),
+            "items": [
+                {
+                    "type": "Block",
+                    "child_type": "BLOCKS",
+                    "block_category": "PARAGRAPH",
+                    "items": [
+                        {
+                            "type": "Block",
+                            "child_type": "WORDS",
+                            "block_category": "LINE",
+                            "items": [
+                                {
+                                    "type": "Word",
+                                    "text": "victor",
+                                    "ground_truth_text": "victor",
+                                    "bounding_box": _bbox(0, 0, 10, 10),
+                                    "word_labels": [],
+                                }
+                            ],
+                            "bounding_box": _bbox(0, 0, 100, 20),
+                        }
+                    ],
+                    "bounding_box": _bbox(0, 0, 100, 40),
+                }
+            ],
+        }
+    )
+
+
+@pytest.mark.integration
+def test_glyph_bulk_mark_returns_503_when_store_write_fails(tmp_path: Path) -> None:
+    """glyph_bulk_mark must not return silent 200 on store failure either —
+    same P1-MUTATION-200 contract as the single-word routes above."""
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    proj_dir = projects_root / "book1"
+    proj_dir.mkdir()
+    (proj_dir / "001.png").write_bytes(b"\x89PNG\r\n")
+
+    settings = Settings(  # type: ignore[call-arg]
+        host="127.0.0.1",
+        port=8080,
+        config_root=tmp_path / "config",
+        data_root=tmp_path / "data",
+        cache_root=tmp_path / "cache",
+        mode="api_only",
+        source_projects_root=projects_root,
+    )
+    app = build_app(settings)
+    page_id = uuid4()
+    page = _make_page_with_ct_word()
+
+    with TestClient(app) as client:
+        resp = client.post("/api/projects/load", json={"project_root": str(proj_dir)})
+        assert resp.status_code == 200, resp.text
+
+        real_store: LabelerPageStore | None = getattr(app.state, "page_store", None)
+        assert real_store is not None
+        real_store.save_page(PageAggregate(PageRecord(page_id=page_id, page_index=0, source="ocr")))
+        # Replace the wired store with one that fails on save_page.
+        boom = _ExplodingStore(real_store)
+        app.state.page_store = boom  # type: ignore[attr-defined]
+
+        project_state = app.state.project_state
+        pstate = PageState(
+            page_index=0,
+            page_record=PageLoadOutcome(page_index=0, source=PageSource.OCR, payload=page),
+        )
+        pstate.page_id = page_id
+        pstate.generation = 1
+        pstate.last_saved_generation = 0
+        project_state._page_states[0] = pstate
+
+        mut = client.post(
+            "/api/projects/book1/pages/0/glyph-bulk-mark",
+            json={"recipe": "ct_substring", "dry_run": False},
+        )
+        assert mut.status_code == 503, mut.text
+        body = mut.json()
+        assert body.get("error") == "store_persist_failed"
+        # In-memory map is fully mutated even though the store write failed —
+        # same contract the single-word routes already accept above.
+        assert pstate.generation == 2
+        assert pstate.glyph_annotations_map.get("0_0", {}).get("ligatures") == [
+            {"kind": "ct", "char_span": [2, 4]}
+        ]

@@ -941,3 +941,74 @@ Fine at today's measured scale (~22ms for 20 projects × 50 files); revisit if
 a source root's total file/page count grows much larger, or if
 `GET /api/projects` starts being called often enough (e.g. polling) for
 per-call cost to matter.
+
+## 2026-09-18 — Glyph annotations reuse the char-sidecar durability path (Wave 2 T3)
+
+### Context
+
+`specs/20-glyph-annotations.md` §4 still describes durable glyph persistence
+as a `UserPageEnvelope` schema bump (v2.1 → v2.2), keyed by stable `word_id`,
+written by `core/persistence/user_page_envelope.py`. That envelope lane was
+retired by the M5b event-store adoption, before this task started — §4 is
+stale text describing a carrier that no longer exists, not a live design.
+
+The 2026-07-21 "Char sidecar durability (Wave 0.1)" decision above already
+anticipated this and reserved the slot: *"Glyph annotation maps stay out of
+scope until Wave 2 T3; they will reuse this key when implemented."* By the
+time this task started, `PageState.glyph_annotations_map` was already wired
+into `LabelerSidecars` (`core/labeler_sidecars.py`) alongside
+`char_bboxes_map`, and `set_glyph_annotations` / `accept_glyph_prediction`
+already called `_save_to_store_best_effort` (the same content-blob write
+`char-bboxes` and word-validation mutations use). The one gap: the bulk-mark
+route (`POST .../pages/{idx}/glyph-bulk-mark`) still called
+`_write_cached_envelope_best_effort`, a no-op STUB left over from the retired
+envelope lane, so bulk-applied marks vanished on reload even though
+single-word marks already survived it.
+
+### Decision
+
+**Strategy A — reuse the Wave 0.1 `labeler_sidecars` content-blob key, not a
+new envelope schema bump.** No new decision was needed for the single-word
+routes; this entry exists to record that Wave 2 T3 finished the bulk-mark
+route the same way:
+
+1. Keyed the same as `char_bboxes_map`: `"{line_index}_{word_index}"`, not
+   the spec §4 `word_id` shape. Rehydration on load already restores both
+   maps together (`apply_sidecars_to_page_state`); no new load-path code
+   needed.
+2. Fixed `glyph_bulk_mark` to call `_save_to_store_best_effort` (writes the
+   content blob) instead of the retired `_write_cached_envelope_best_effort`
+   STUB, and to surface a 503 `store_persist_failed` on write failure —
+   matching every other word/page mutation route's contract instead of
+   silently dropping the write.
+3. Removed the now-dead `_write_cached_envelope_best_effort` STUB from
+   `api/pages.py` (its only caller); `api/words.py` keeps its own
+   identically-named backward-compat no-op for an unrelated
+   `lines_paragraphs.py` import.
+4. `glyph_bulk_mark` also returned a hand-built `JSONResponse(content=
+   response.model_dump())` (no `mode="json"`), which raised
+   `TypeError: Object of type UUID is not JSON serializable` on any non-empty
+   apply (`page.page_record.page_id` is always a UUID). Fixed by returning
+   the declared `GlyphBulkMarkResponse` model instance directly — the same
+   fix `324fb8b` applied to `/api/jobs` ("Routes return typed Job/list[Job]
+   instances instead of a raw JSONResponse dump, so response_model actually
+   validates them").
+
+### Consequences
+
+- Glyph annotations share one blob and one undo/redo story with char bboxes;
+  no second `word_id`-keyed carrier, no envelope schema bump, no legacy
+  `pd-ocr-labeler` compatibility question to resolve.
+- `specs/20-glyph-annotations.md` §4 is not rewritten by this entry — it
+  remains a historical description of the retired envelope plan. Read this
+  decision instead of §4 for how glyph durability actually works.
+- Predictions (`glyph_predictions_map`) are still never persisted — this was
+  already true and remains correct (spec §4.2, §9): they are recomputed at
+  payload-build time, not carried in the content blob.
+
+### Tests
+
+`tests/integration/test_glyph_routes.py` — set/clear/accept/bulk-mark HTTP
+round trips (Task 2) plus fresh-store reload coverage for all three
+`glyph_annotations` tri-states (absent / empty-reviewed / populated) and for
+bulk-mark apply specifically (Task 3, the STUB this entry fixes).

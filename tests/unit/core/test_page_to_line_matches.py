@@ -447,3 +447,108 @@ def test_line_match_block_index_none_when_no_items() -> None:
 
     assert len(lms) == 1
     assert lms[0].block_index is None
+
+
+# ── Glyph sidecar stamping (Wave 2 T1 / M11 — plan Task 1) ─────────────
+#
+# ``PageState.glyph_annotations_map`` / ``glyph_predictions_map`` are keyed
+# by ``"{line_index}_{word_index}"`` and must be stamped onto the matching
+# ``WordMatch.glyph_annotations`` / ``glyph_predictions`` so a route's write
+# is visible on the very next payload build — the critical read path fixed
+# by docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md.
+
+
+def test_glyph_annotations_map_stamps_word_match() -> None:
+    """A populated sidecar entry stamps ``WordMatch.glyph_annotations``."""
+    word = _StubWord(text="victor", ground_truth_text="victor")
+    line = _StubLine(words=[word], ground_truth_text="victor")
+    page = _StubPage(lines_=[line])
+
+    glyph_annotations_map = {
+        "0_0": {
+            "ligatures": [{"kind": "ct", "char_span": [0, 2]}],
+            "long_s_positions": [],
+            "swash": False,
+            "source": "human",
+        }
+    }
+
+    _record, lms = page_to_line_matches(page, 0, _IMAGE, glyph_annotations_map=glyph_annotations_map)
+
+    wm = lms[0].word_matches[0]
+    assert wm.glyph_annotations is not None
+    assert wm.glyph_annotations.ligatures[0].kind == "ct"
+    assert wm.glyph_annotations.ligatures[0].char_span == (0, 2)
+    assert wm.glyph_annotations.source == "human"
+
+
+def test_glyph_annotations_absent_key_is_none() -> None:
+    """A word with no entry in the map is 'not reviewed' — glyph_annotations is None."""
+    word = _StubWord(text="victor", ground_truth_text="victor")
+    line = _StubLine(words=[word], ground_truth_text="victor")
+    page = _StubPage(lines_=[line])
+
+    # A map that has entries for OTHER words only — this word's key is absent.
+    glyph_annotations_map = {
+        "9_9": {"ligatures": [], "long_s_positions": [], "swash": False, "source": "human"}
+    }
+
+    _record, lms = page_to_line_matches(page, 0, _IMAGE, glyph_annotations_map=glyph_annotations_map)
+
+    assert lms[0].word_matches[0].glyph_annotations is None
+
+
+def test_glyph_annotations_empty_dict_is_reviewed_with_no_marks() -> None:
+    """An explicit empty annotation dict means 'reviewed, nothing to mark' — not None."""
+    word = _StubWord(text="plain", ground_truth_text="plain")
+    line = _StubLine(words=[word], ground_truth_text="plain")
+    page = _StubPage(lines_=[line])
+
+    glyph_annotations_map = {
+        "0_0": {"ligatures": [], "long_s_positions": [], "swash": False, "source": "human"}
+    }
+
+    _record, lms = page_to_line_matches(page, 0, _IMAGE, glyph_annotations_map=glyph_annotations_map)
+
+    wm = lms[0].word_matches[0]
+    assert wm.glyph_annotations is not None
+    assert wm.glyph_annotations.ligatures == []
+    assert wm.glyph_annotations.long_s_positions == []
+    assert wm.glyph_annotations.swash is False
+
+
+def test_glyph_predictions_map_stamps_word_match() -> None:
+    """``glyph_predictions_map`` stamps ``WordMatch.glyph_predictions`` independently."""
+    word = _StubWord(text="first", ground_truth_text="first")
+    line = _StubLine(words=[word], ground_truth_text="first")
+    page = _StubPage(lines_=[line])
+
+    glyph_predictions_map = {
+        "0_0": {
+            "ligatures": [{"kind": "fi", "char_span": [0, 2]}],
+            "long_s_positions": [],
+            "swash": False,
+            "source": "predicted",
+        }
+    }
+
+    _record, lms = page_to_line_matches(page, 0, _IMAGE, glyph_predictions_map=glyph_predictions_map)
+
+    wm = lms[0].word_matches[0]
+    assert wm.glyph_annotations is None
+    assert wm.glyph_predictions is not None
+    assert wm.glyph_predictions.ligatures[0].kind == "fi"
+    assert wm.glyph_predictions.source == "predicted"
+
+
+def test_glyph_maps_none_leaves_both_fields_none() -> None:
+    """Omitting both sidecar maps degrades to None on both fields (no crash)."""
+    word = _StubWord(text="plain", ground_truth_text="plain")
+    line = _StubLine(words=[word], ground_truth_text="plain")
+    page = _StubPage(lines_=[line])
+
+    _record, lms = page_to_line_matches(page, 0, _IMAGE)
+
+    wm = lms[0].word_matches[0]
+    assert wm.glyph_annotations is None
+    assert wm.glyph_predictions is None
