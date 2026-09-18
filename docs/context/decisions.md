@@ -1351,3 +1351,20 @@ bulk-mark apply specifically (Task 3, the STUB this entry fixes).
   is parsed and discarded until the next append compacts it. At 200 projects
   that is the difference between half a second and seven. Nothing is wrong
   today; it is the number to look at first if the list ever feels slow.
+
+### [2026-09-18] Retired: two migrated GitHub issues that were already implemented
+
+- Both records carried `status: implemented` and `Resolution: Implemented
+  locally` since their 2026-07-19 export, and both had sat in `docs/issues/`
+  ever since, where the index reads as open work. They were resolved records
+  filed in the open drawer.
+- `2026-05-22-gh-437-openapi-schema-quality.md`: the repository enforces the
+  OpenAPI response contracts the original report asked for. Nothing remained.
+- `2026-05-23-gh-460-resolver-narrowing.md`: asked to replace casts once
+  `PageRecord` landed. Resolvers use `isinstance(payload, Page)` with a guarded
+  structural `.lines` fallback, and the repository accepted and documented that
+  nominal-plus-structural policy. Pure nominal narrowing failed 52 tests,
+  because the suite deliberately uses duck-typed stub pages; the fallback keeps
+  those working without loosening the public return type.
+- Their upstream GitHub issues were still open at export and this does not
+  close those. The local records are what is retired.

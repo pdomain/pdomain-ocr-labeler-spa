@@ -77,10 +77,11 @@ Lead with the **smallest decisive evidence**, separate **observation** from
   — open (pre-commit + knip missing from GH).
 - [`2026-05-22-gh-433-openapi-drift.md`](2026-05-22-gh-433-openapi-drift.md)
   — open (drift job vs gitignored openapi.json).
-- [`2026-05-22-gh-437-openapi-schema-quality.md`](2026-05-22-gh-437-openapi-schema-quality.md)
-  — implemented locally; GitHub closure may lag.
-- [`2026-05-23-gh-460-resolver-narrowing.md`](2026-05-23-gh-460-resolver-narrowing.md)
-  — implemented locally; GitHub closure may lag.
+
+The 437 schema-quality and 460 resolver-narrowing records were implemented and
+are retired; see the 2026-09-18 tombstone in
+[`../context/decisions.md`](../context/decisions.md). Their upstream GitHub
+issues may still be open.
 
 ## Deep-review split issues (2026-07-21)
 
