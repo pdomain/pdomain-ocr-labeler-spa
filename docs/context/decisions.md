@@ -1057,3 +1057,33 @@ bulk-mark apply specifically (Task 3, the STUB this entry fixes).
   deferred: the per-page counts journal added in `f175297` carries validated and
   total words per page, so a project's progress is one small file read rather
   than a parse of every page.
+
+### [2026-09-18] Retired: the per-word validate button could never validate a word
+
+- Report: `WordFooter`'s validate button was disabled until the page's typography
+  review was complete, and completion required every word on the page already
+  validated. The first unvalidated word on any page had no sequence of clicks
+  that worked, so the button functioned only as a one-shot unvalidate.
+- Decision: gate the validate direction on that word's own grapheme review, not
+  the page's. Option 2 of the issue.
+- Why: the gate's intent reads as "do not validate a word whose graphemes nobody
+  has looked at", and that intent survives at word scope without the
+  circularity. Dropping the gate entirely would discard the intent; keeping the
+  page gate and removing the button would leave per-word validation to bulk
+  paths that check nothing at all.
+- How: a new `typography_reviewed` field on `TypographyHeadResponse`, the one
+  per-word endpoint that works for ordinary projects as well as bundles. It is
+  computed by `_typography_reviewed`, extracted from the inline rule
+  `typography_page_review` already used, so the per-word gate and the page-wide
+  count cannot drift apart. `_current_head` epoch-filters the correction before
+  the check, so no separate staleness test is needed there.
+- Deliberately excluded: the page rule's other half, `text_reviewed`. For an
+  ordinary project that means "carries the `validated` label", which is the same
+  flag the button toggles. Gating on it would rebuild the same circularity at
+  word scope.
+- Still open, and pre-existing: the toolbar's page-scope validate batch and
+  `LineDetail`'s line-scope batch check nothing. A word can still be bulk
+  validated with no typography review at all. They ignored the old page gate
+  too, so this change neither introduces nor worsens it, but the intent is now
+  enforced on one path and not the others.
+- Shipped in `f42179b`.
