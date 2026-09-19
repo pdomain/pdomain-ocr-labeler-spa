@@ -48,6 +48,56 @@ def _legacy_data_root() -> Path:
     return Path.home() / _APP_DIRNAME
 
 
+def _os_aware_root(
+    *,
+    xdg_env: str,
+    xdg_default_parts: tuple[str, ...],
+    macos_parts: tuple[str, ...],
+    windows_env: str,
+    windows_default_parts: tuple[str, ...],
+    windows_extra_parts: tuple[str, ...] = (),
+) -> Path:
+    """Resolve one OS-aware root, shared by the ``config_root`` / ``data_root``
+    / ``cache_root`` branches in :func:`_xdg_config_root`, :func:`_xdg_data_root`
+    and :func:`_xdg_cache_root`.
+
+    Spec: ``docs/architecture/01-data-models.md §5``. The three roots share
+    the same three-way branch (Linux honours an ``XDG_*`` env var with a
+    ``~``-relative fallback; macOS and Windows use a fixed OS convention) but
+    disagree on which env var / OS directory applies — callers supply that
+    difference:
+
+    - ``xdg_env`` / ``xdg_default_parts``: the Linux (and other POSIX)
+      env var and its ``~``-relative fallback parts.
+    - ``macos_parts``: the ``~``-relative parts of the macOS directory.
+      config_root and data_root pass the same value here — Apple has no
+      config/data distinction, both collapse onto
+      ``~/Library/Application Support``.
+    - ``windows_env`` / ``windows_default_parts``: the Windows env var and
+      its ``~``-relative fallback parts. data_root and cache_root pass
+      ``LOCALAPPDATA`` (non-roaming); config_root passes ``APPDATA``
+      (roaming) — Windows roams small user-authored settings files but not
+      bulk/cache data.
+    - ``windows_extra_parts``: path parts appended after ``_APP_DIRNAME`` on
+      Windows only. Only cache_root uses this (a nested ``cache`` leaf) —
+      on Windows, data_root and cache_root would otherwise resolve to the
+      exact same directory.
+
+    Every branch appends ``_APP_DIRNAME`` as the leaf (before
+    ``windows_extra_parts``, if any).
+    """
+    home = Path.home()
+    if sys.platform == "win32":
+        env_value = os.environ.get(windows_env)
+        base = Path(env_value) if env_value else home.joinpath(*windows_default_parts)
+        return base.joinpath(_APP_DIRNAME, *windows_extra_parts)
+    if sys.platform == "darwin":
+        return home.joinpath(*macos_parts, _APP_DIRNAME)
+    xdg_value = os.environ.get(xdg_env)
+    base = Path(xdg_value) if xdg_value else home.joinpath(*xdg_default_parts)
+    return base / _APP_DIRNAME
+
+
 def _xdg_data_root() -> Path:
     """The OS-aware default ``data_root`` for the current platform.
 
@@ -61,16 +111,68 @@ def _xdg_data_root() -> Path:
 
     Every branch appends ``_APP_DIRNAME`` as the leaf.
     """
-    home = Path.home()
-    if sys.platform == "win32":
-        local_appdata = os.environ.get("LOCALAPPDATA")
-        base = Path(local_appdata) if local_appdata else home / "AppData" / "Local"
-        return base / _APP_DIRNAME
-    if sys.platform == "darwin":
-        return home / "Library" / "Application Support" / _APP_DIRNAME
-    xdg_data_home = os.environ.get("XDG_DATA_HOME")
-    base = Path(xdg_data_home) if xdg_data_home else home / ".local" / "share"
-    return base / _APP_DIRNAME
+    return _os_aware_root(
+        xdg_env="XDG_DATA_HOME",
+        xdg_default_parts=(".local", "share"),
+        macos_parts=("Library", "Application Support"),
+        windows_env="LOCALAPPDATA",
+        windows_default_parts=("AppData", "Local"),
+    )
+
+
+def _xdg_config_root() -> Path:
+    """The OS-aware default ``config_root`` for the current platform.
+
+    Spec: ``docs/architecture/01-data-models.md §5`` (``config_root`` row):
+
+    - Linux / other POSIX: ``$XDG_CONFIG_HOME`` (default ``~/.config``).
+    - macOS: ``~/Library/Application Support`` — identical to
+      :func:`_xdg_data_root`'s macOS branch. Apple has no per-user *config*
+      convention distinct from *data*; both XDG categories collapse onto the
+      same directory there, so ``config_root == data_root`` on macOS. That's
+      harmless here: the two roots never write files with the same name
+      (``config.yaml`` vs. ``session_state.json`` / ``ocr_config.json`` /
+      etc.), so nothing collides.
+    - Windows: ``%APPDATA%`` (default ``~/AppData/Roaming``) — the
+      *roaming* profile directory, distinct from data/cache's
+      ``%LOCALAPPDATA%``. Windows roams small user-authored settings files
+      (``config.yaml`` is one); it does not roam bulk or cache data.
+
+    Every branch appends ``_APP_DIRNAME`` as the leaf.
+    """
+    return _os_aware_root(
+        xdg_env="XDG_CONFIG_HOME",
+        xdg_default_parts=(".config",),
+        macos_parts=("Library", "Application Support"),
+        windows_env="APPDATA",
+        windows_default_parts=("AppData", "Roaming"),
+    )
+
+
+def _xdg_cache_root() -> Path:
+    """The OS-aware default ``cache_root`` for the current platform.
+
+    Spec: ``docs/architecture/01-data-models.md §5`` (``cache_root`` row):
+
+    - Linux / other POSIX: ``$XDG_CACHE_HOME`` (default ``~/.cache``).
+    - macOS: ``~/Library/Caches`` — Apple's per-user cache convention.
+      Unlike config_root, this does *not* collapse onto Application
+      Support; caches get their own directory on macOS.
+    - Windows: ``%LOCALAPPDATA%/pdomain-ocr-labeler-spa/cache`` — the same
+      base directory as :func:`_xdg_data_root`'s Windows branch, with a
+      nested ``cache`` leaf so the two roots don't share a directory.
+
+    Every branch appends ``_APP_DIRNAME`` as the leaf (plus the extra
+    ``cache`` leaf on Windows).
+    """
+    return _os_aware_root(
+        xdg_env="XDG_CACHE_HOME",
+        xdg_default_parts=(".cache",),
+        macos_parts=("Library", "Caches"),
+        windows_env="LOCALAPPDATA",
+        windows_default_parts=("AppData", "Local"),
+        windows_extra_parts=("cache",),
+    )
 
 
 def default_data_root() -> Path:
@@ -123,6 +225,88 @@ def data_root_legacy_note(data_root: Path) -> str | None:
     return None
 
 
+def _legacy_config_root() -> Path:
+    """The pre-XDG default (``~/.config/pdomain-ocr-labeler-spa``).
+
+    Kept only as a fallback for installs that predate ``config_root``
+    honouring ``XDG_CONFIG_HOME`` / the macOS / Windows equivalents (see
+    :func:`default_config_root`). On Linux with ``XDG_CONFIG_HOME`` unset
+    this is byte-identical to :func:`_xdg_config_root`'s result, so the
+    fallback only changes behaviour when ``XDG_CONFIG_HOME`` was set (and
+    previously ignored) or on macOS/Windows, where the old hardcoded
+    ``~/.config`` path was never the OS-native location. A function (not a
+    module-level constant) so it re-reads ``Path.home()`` on every call —
+    see :func:`_legacy_data_root` for why.
+    """
+    return Path.home() / ".config" / _APP_DIRNAME
+
+
+def default_config_root() -> Path:
+    """Resolve ``Settings.config_root``'s default.
+
+    Same compatibility ruling as :func:`default_data_root`, extending the
+    BUG-SMOKE-3 policy to ``config_root``: default to the OS-aware config
+    directory (:func:`_xdg_config_root`), but if a pre-XDG install already
+    wrote ``config.yaml`` at the legacy location
+    (:func:`_legacy_config_root`) and the new location doesn't exist yet,
+    keep using the legacy directory.
+
+    ``config.yaml`` holds settings a person set deliberately — most
+    notably ``source_projects_root``, written by
+    ``POST /api/projects/source-root`` (``api/projects.py``) whenever
+    someone points the app at a different projects directory — so losing
+    track of it silently is the same hazard :func:`default_data_root`
+    exists to avoid. That's *not* true of ``cache_root``; see
+    :func:`default_cache_root` for why that one has no such fallback.
+    """
+    legacy = _legacy_config_root()
+    xdg = _xdg_config_root()
+    if legacy.exists() and not xdg.exists():
+        return legacy
+    return xdg
+
+
+def default_cache_root() -> Path:
+    """Resolve ``Settings.cache_root``'s default.
+
+    Deliberately **no** legacy-directory fallback, unlike
+    :func:`default_data_root` / :func:`default_config_root`: everything
+    under ``cache_root`` is disposable and regenerated on demand — the
+    content-addressed page-image cache (``core/app_state.py``,
+    ``core/persistence/paths.py::image_cache_root``, re-derived from
+    project pages on a cache miss) and the per-run startup pidfile
+    (``core/persistence/pidfile.py``, rewritten every launch). A stranded
+    pre-XDG cache directory loses nothing a re-run can't recreate, so
+    keeping it around — or warning that it's stranded — would be pure
+    noise. This always resolves to the OS-aware default
+    (:func:`_xdg_cache_root`).
+    """
+    return _xdg_cache_root()
+
+
+def config_root_legacy_note(config_root: Path) -> str | None:
+    """A one-time compatibility note, or ``None`` if it doesn't apply.
+
+    Same "never migrate silently" contract as :func:`data_root_legacy_note`,
+    for ``config_root``: when the resolved ``config_root`` is the pre-XDG
+    legacy directory and it holds a config while the OS-aware default does
+    not, say so.
+    """
+    xdg = _xdg_config_root()
+    if (
+        config_root == _legacy_config_root()
+        and config_root != xdg
+        and config_root.exists()
+        and not xdg.exists()
+    ):
+        return (
+            f"{config_root} is the pre-XDG config directory and still has your settings, so "
+            f"it's still in use. The default is now {xdg} — move config.yaml there and set "
+            f"PDLABELER_CONFIG_ROOT={xdg} to switch."
+        )
+    return None
+
+
 class Settings(BaseSettings):
     """One process-wide settings instance. Chosen at startup; never mutated."""
 
@@ -155,9 +339,9 @@ class Settings(BaseSettings):
     request_id_header: str = "X-Request-ID"
 
     # ── OS-aware roots (docs/architecture/01-data-models.md §5) ──────────────────────────
-    config_root: Path = Field(default_factory=lambda: Path.home() / ".config" / "pdomain-ocr-labeler-spa")
+    config_root: Path = Field(default_factory=default_config_root)
     data_root: Path = Field(default_factory=default_data_root)
-    cache_root: Path = Field(default_factory=lambda: Path.home() / ".cache" / "pdomain-ocr-labeler-spa")
+    cache_root: Path = Field(default_factory=default_cache_root)
 
     # ── Project discovery (docs/architecture/02-backend.md §3 lines 130-132) ─────────────
     # Both fields are CLI-overridable seams; their consumers land in M2

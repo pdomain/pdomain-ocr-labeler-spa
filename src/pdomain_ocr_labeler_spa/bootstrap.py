@@ -91,7 +91,7 @@ from .core.regions.poetry import PoetryDetector
 from .core.source_root_state import SourceRootCarrier
 from .core.startup_discovery import resolve_initial_project
 from .middleware.local_trust import LocalTrustMiddleware
-from .settings import Settings, data_root_legacy_note, describe_data_root
+from .settings import Settings, config_root_legacy_note, data_root_legacy_note, describe_data_root
 
 log = logging.getLogger(__name__)
 
@@ -164,6 +164,18 @@ def _make_lifespan(
         legacy_note = data_root_legacy_note(settings.data_root)
         if legacy_note is not None:
             log.warning(legacy_note)
+
+        # config_root follow-up to BUG-SMOKE-3: same "never migrate
+        # silently" WARNING as data_root, fired only when a pre-XDG
+        # config.yaml is being kept in place. No unconditional INFO line
+        # (unlike data_root) — a fresh XDG-native install has nothing
+        # startup-relevant to say about where its config lives, and this
+        # keeps that the common case. cache_root gets neither: it's
+        # disposable (see settings.default_cache_root), so a stranded
+        # pre-XDG cache directory is not worth a line at any level.
+        config_legacy_note = config_root_legacy_note(settings.config_root)
+        if config_legacy_note is not None:
+            log.warning(config_legacy_note)
 
         # Issue #223 — pidfile check: warn if another live process holds
         # the cache root; write our own PID regardless.  Advisory-only;
