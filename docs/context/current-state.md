@@ -216,6 +216,13 @@ Spec: [`../../specs/20-glyph-annotations.md`](../../specs/20-glyph-annotations.m
   original, so the journal stays evidence.
 - ~~Whether the OCR engine should warm up at server start~~ — decided
   2026-09-18: no. The predictor stays lazy; see `decisions.md`.
+- **Two mutations in quick succession can leave a control showing its
+  pre-mutation label.** Their invalidation refetches are not sequenced, so an
+  older response can land after a newer one and overwrite it in the cache. A
+  frontend cache-ordering problem, unrelated to the page-payload race fixed on
+  2026-09-18, and still open. `tests/e2e/test_parity_persistence.py`'s reload
+  recovery guards against it; its polling half now guards a race that is fixed
+  and could be simplified.
 - **Released `v0.3.0` on 2026-09-18**, 561 commits after `v0.2.0`, with the pip
   index regenerated. `docs/runbooks/release.md` has the steps.
 - PGDP/pdomain-ui alignment is partial:
