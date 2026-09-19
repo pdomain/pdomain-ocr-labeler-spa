@@ -1439,7 +1439,7 @@ wheels = [
 
 [[package]]
 name = "pdomain-book-tools"
-version = "0.29.0"
+version = "0.30.0"
 source = { registry = "https://pdomain.github.io/pdomain-index-pip/simple/" }
 dependencies = [
     { name = "deskew" },
@@ -1465,9 +1465,9 @@ dependencies = [
     { name = "torchvision" },
     { name = "transformers" },
 ]
-sdist = { url = "https://github.com/pdomain/pdomain-book-tools/releases/download/v0.29.0/pdomain_book_tools-0.29.0.tar.gz", hash = "sha256:2ec07919d3979e852bc5d84da2324c641ae822af09a495ae76004cbfe5e02b3f" }
+sdist = { url = "https://github.com/pdomain/pdomain-book-tools/releases/download/v0.30.0/pdomain_book_tools-0.30.0.tar.gz", hash = "sha256:ef2a4b28361a82fdf8d93e1eab5cc68995f03a438016a2bdcdfebc65e9438e26" }
 wheels = [
-    { url = "https://github.com/pdomain/pdomain-book-tools/releases/download/v0.29.0/pdomain_book_tools-0.29.0-py3-none-any.whl", hash = "sha256:ac6884e3da985007459c42c4e39cd4ec0a4c13610501cb3804ecaa9660c30904" },
+    { url = "https://github.com/pdomain/pdomain-book-tools/releases/download/v0.30.0/pdomain_book_tools-0.30.0-py3-none-any.whl", hash = "sha256:452b223bb1cd40f2fbbfe939519789290c0148240cadc4f2ae7b7576d1096cf8" },
 ]
 
 [[package]]
@@ -1524,7 +1524,7 @@ requires-dist = [
     { name = "idna", specifier = ">=3.19" },
     { name = "modal", marker = "extra == 'modal'", specifier = ">=0.66" },
     { name = "pdomain-book-contracts", specifier = ">=0.2.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
-    { name = "pdomain-book-tools", specifier = "==0.29.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
+    { name = "pdomain-book-tools", specifier = "==0.30.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pdomain-ops", specifier = ">=0.11.2", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pdomain-pgdp-measure", specifier = ">=0.1.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pydantic", specifier = ">=2.13" },

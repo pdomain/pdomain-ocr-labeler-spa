@@ -31,7 +31,7 @@ dependencies = [
     # urllib3>=2.7.0 — PYSEC-2026-141 / PYSEC-2026-142
     "urllib3>=2.7.0",
     # OCR / image domain (wired in later milestones; harmless to declare now)
-    "pdomain-book-tools==0.29.0",
+    "pdomain-book-tools==0.30.0",
     # >=0.2.0: pdomain-book-contracts.annotation (RegionRole, PageKind,
     # LabelSource, KnowledgeState, ConfidenceTier) — released 2026-09-08.
     "pdomain-book-contracts>=0.2.0",
