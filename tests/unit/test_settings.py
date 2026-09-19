@@ -12,8 +12,13 @@ import pytest
 
 from pdomain_ocr_labeler_spa.settings import (
     Settings,
+    _xdg_cache_root,  # private helper — platform-branch coverage
+    _xdg_config_root,  # private helper — platform-branch coverage
     _xdg_data_root,  # private helper — BUG-SMOKE-3 platform-branch coverage
+    config_root_legacy_note,
     data_root_legacy_note,
+    default_cache_root,
+    default_config_root,
     default_data_root,
     describe_data_root,
 )
@@ -115,11 +120,13 @@ def test_settings_ignores_extra_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_path_roots_default_under_user_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    # Isolate HOME and XDG_DATA_HOME so this test is deterministic — BUG-SMOKE-3
-    # made data_root's default depend on both, and a real environment (a dev
-    # container, say) may set XDG_DATA_HOME outside $HOME.
+    # Isolate HOME and every XDG_*_HOME so this test is deterministic — each
+    # of the three OS-aware roots' defaults depends on both, and a real
+    # environment (a dev container, say) may set any of them outside $HOME.
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
 
     s = Settings()
     home = tmp_path
@@ -450,3 +457,227 @@ def test_data_root_legacy_note_fires_when_legacy_dir_is_kept(
     assert note is not None
     assert str(legacy) in note
     assert str(home / ".local" / "share" / "pdomain-ocr-labeler-spa") in note
+
+
+# ── config_root / cache_root: extending BUG-SMOKE-3's XDG policy ──────────
+#
+# Ruling (this follow-up): config_root gets the same never-migrate-silently
+# treatment as data_root, because config.yaml can hold a person's chosen
+# settings (source_projects_root, set via POST /api/projects/source-root).
+# cache_root does NOT get a legacy fallback — everything under it is
+# disposable and regenerated on demand, so a stranded pre-XDG cache
+# directory is not a compatibility hazard.
+
+
+def test_xdg_config_root_uses_xdg_config_home_when_set(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "custom-xdg-config"))
+
+    assert _xdg_config_root() == tmp_path / "custom-xdg-config" / "pdomain-ocr-labeler-spa"
+
+
+def test_xdg_config_root_falls_back_to_dot_config_when_xdg_unset(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+
+    assert _xdg_config_root() == home / ".config" / "pdomain-ocr-labeler-spa"
+
+
+def test_xdg_config_root_uses_application_support_on_macos(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """macOS collapses config_root onto the same directory as data_root."""
+    monkeypatch.setattr(sys, "platform", "darwin")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+
+    assert _xdg_config_root() == home / "Library" / "Application Support" / "pdomain-ocr-labeler-spa"
+    assert _xdg_config_root() == _xdg_data_root()
+
+
+def test_xdg_config_root_uses_roaming_appdata_on_windows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Windows config_root uses the roaming %APPDATA%, not %LOCALAPPDATA%."""
+    monkeypatch.setattr(sys, "platform", "win32")
+    appdata = tmp_path / "AppData" / "Roaming"
+    monkeypatch.setenv("APPDATA", str(appdata))
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+
+    assert _xdg_config_root() == appdata / "pdomain-ocr-labeler-spa"
+
+
+def test_xdg_config_root_falls_back_on_windows_without_appdata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.delenv("APPDATA", raising=False)
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+
+    assert _xdg_config_root() == home / "AppData" / "Roaming" / "pdomain-ocr-labeler-spa"
+
+
+def test_xdg_cache_root_uses_xdg_cache_home_when_set(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "custom-xdg-cache"))
+
+    assert _xdg_cache_root() == tmp_path / "custom-xdg-cache" / "pdomain-ocr-labeler-spa"
+
+
+def test_xdg_cache_root_falls_back_to_dot_cache_when_xdg_unset(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+
+    assert _xdg_cache_root() == home / ".cache" / "pdomain-ocr-labeler-spa"
+
+
+def test_xdg_cache_root_uses_library_caches_on_macos(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Unlike config_root, macOS cache_root does NOT collapse onto data_root."""
+    monkeypatch.setattr(sys, "platform", "darwin")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+
+    assert _xdg_cache_root() == home / "Library" / "Caches" / "pdomain-ocr-labeler-spa"
+    assert _xdg_cache_root() != _xdg_data_root()
+
+
+def test_xdg_cache_root_nests_under_local_appdata_on_windows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Windows cache_root shares data_root's base dir but adds a ``cache`` leaf."""
+    monkeypatch.setattr(sys, "platform", "win32")
+    local_appdata = tmp_path / "AppData" / "Local"
+    monkeypatch.setenv("LOCALAPPDATA", str(local_appdata))
+
+    assert _xdg_cache_root() == local_appdata / "pdomain-ocr-labeler-spa" / "cache"
+    assert _xdg_cache_root() != _xdg_data_root()
+
+
+def test_xdg_cache_root_falls_back_on_windows_without_localappdata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+
+    assert _xdg_cache_root() == home / "AppData" / "Local" / "pdomain-ocr-labeler-spa" / "cache"
+
+
+def test_config_root_defaults_to_xdg_config_home_when_set(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A fresh install with ``XDG_CONFIG_HOME`` set uses it."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "custom-xdg-config"))
+
+    assert default_config_root() == tmp_path / "custom-xdg-config" / "pdomain-ocr-labeler-spa"
+
+
+def test_config_root_keeps_legacy_dir_when_it_exists_and_xdg_does_not(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An existing pre-XDG config.yaml keeps being used, same as data_root."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    legacy = home / ".config" / "pdomain-ocr-labeler-spa"
+    legacy.mkdir(parents=True)
+    (legacy / "config.yaml").write_text("source_projects_root: /some/path\n")
+
+    assert default_config_root() == legacy
+
+
+def test_config_root_prefers_xdg_when_it_already_has_config_too(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Once the XDG location exists, it wins even if the legacy dir also exists."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    xdg_config_home = tmp_path / "xdg-config"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_config_home))
+    (home / ".config" / "pdomain-ocr-labeler-spa").mkdir(parents=True)
+    (xdg_config_home / "pdomain-ocr-labeler-spa").mkdir(parents=True)
+
+    assert default_config_root() == xdg_config_home / "pdomain-ocr-labeler-spa"
+
+
+def test_config_root_legacy_note_is_none_for_a_fresh_xdg_install(tmp_path: Path) -> None:
+    assert config_root_legacy_note(tmp_path / "fresh") is None
+
+
+def test_config_root_legacy_note_fires_when_legacy_dir_is_kept(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """On Linux with ``XDG_CONFIG_HOME`` unset, the legacy path and the new
+    default are the same directory, so no note would ever fire — this
+    pins the case that actually diverges: ``XDG_CONFIG_HOME`` set (to a
+    directory that doesn't have our config yet) while the old hardcoded
+    ``~/.config`` location still holds one.
+    """
+    monkeypatch.setattr(sys, "platform", "linux")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    xdg_config_home = tmp_path / "xdg-config"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_config_home))
+    legacy = home / ".config" / "pdomain-ocr-labeler-spa"
+    legacy.mkdir(parents=True)
+
+    note = config_root_legacy_note(legacy)
+
+    assert note is not None
+    assert str(legacy) in note
+    assert str(xdg_config_home / "pdomain-ocr-labeler-spa") in note
+
+
+def test_cache_root_has_no_legacy_fallback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Unlike data_root/config_root, cache_root never keeps a stranded legacy
+    directory — it always resolves to the OS-aware default, even when a
+    directory shaped like the pre-XDG default exists on disk.
+    """
+    monkeypatch.setattr(sys, "platform", "linux")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    pre_xdg_shaped = home / ".cache" / "pdomain-ocr-labeler-spa"
+    pre_xdg_shaped.mkdir(parents=True)
+    (pre_xdg_shaped / "page-images").mkdir()
+
+    assert default_cache_root() == home / ".cache" / "pdomain-ocr-labeler-spa"
+    assert default_cache_root() == _xdg_cache_root()
+
+
+def test_settings_config_and_cache_root_use_new_defaults_on_linux(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``Settings()`` wires config_root / cache_root through the new
+    XDG-aware factories, not the old hardcoded ``~/.config`` / ``~/.cache``.
+    """
+    monkeypatch.setattr(sys, "platform", "linux")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
+    monkeypatch.delenv("PDLABELER_CONFIG_ROOT", raising=False)
+    monkeypatch.delenv("PDLABELER_CACHE_ROOT", raising=False)
+
+    s = Settings()
+
+    assert s.config_root == tmp_path / "xdg-config" / "pdomain-ocr-labeler-spa"
+    assert s.cache_root == tmp_path / "xdg-cache" / "pdomain-ocr-labeler-spa"

@@ -16,7 +16,8 @@ last_verified: 2026-09-18
 - **Last verified:** 2026-09-18
 - **Read when:** looking for durable migration, lifecycle, or changed-direction rationale.
 - **Search terms:** decisions, tombstones, retirement, changed direction, docgraph,
-  sidecar durability, char_ranges_map, labeler_sidecars.
+  sidecar durability, char_ranges_map, labeler_sidecars, XDG_CONFIG_HOME,
+  XDG_CACHE_HOME, config_root, cache_root.
 
 ## 2026-07-13 — Retire retrieval-hostile historical scaffolding
 
@@ -1844,6 +1845,70 @@ family and not touched.
   them. BUG-SMOKE-3 was scoped to `data_root` — the one with a real
   compatibility hazard, since `config_root` / `cache_root` hold no
   irreplaceable user data. Filed as a follow-up, not fixed here.
+  **Resolved 2026-09-18 — see the entry directly below.** (`cache_root`'s
+  premise held; `config_root`'s didn't — it turned out to hold something a
+  person wrote.)
+
+### [2026-09-18] Follow-up: `config_root` and `cache_root` honour XDG too
+
+- Extends the BUG-SMOKE-3 ruling above to the other two roots the same spec
+  table names. Checked what each directory actually holds before deciding,
+  per the task brief, rather than assuming symmetry with `data_root`:
+  - `cache_root` holds only the content-addressed page-image cache
+    (`core/persistence/paths.py::image_cache_root`, re-derived from project
+    pages on a miss) and the per-run startup pidfile
+    (`core/persistence/pidfile.py`, rewritten every launch). Both are
+    disposable — nothing there survives being deleted except a few seconds
+    of recompute.
+  - `config_root` holds `config.yaml`, and it does carry something a person
+    wrote: `source_projects_root`, written by
+    `POST /api/projects/source-root` (`api/projects.py`) whenever someone
+    points the app at a different projects directory, plus a handful of
+    review-behavior toggles (`normalize_for_gt_matching`, `fuzz_threshold`,
+    `glyph_review_required`) set the same way. The premise in the bullet
+    above — that `config_root` "holds no irreplaceable user data" — didn't
+    hold up once checked.
+- Ruled, per directory:
+  - `config_root` gets `data_root`'s full treatment: default to the
+    OS-aware directory, but if a pre-XDG install already wrote
+    `config.yaml` at the legacy `~/.config/pdomain-ocr-labeler-spa` and the
+    new location doesn't exist yet, keep using the legacy one — same
+    never-migrate-silently guarantee, because a stranded `config.yaml`
+    means a person's chosen projects root quietly stops applying.
+  - `cache_root` gets no legacy-directory fallback and no startup note at
+    any log level. Warning about a stranded cache directory would be noise
+    — nothing is lost, there's nothing to move, and "your cache moved" is
+    not information anyone needs to act on.
+- What ships, in `settings.py`:
+  - `_os_aware_root()` factors the three-way platform branch
+    (`_xdg_data_root()` used to inline this) so `_xdg_config_root()` and
+    `_xdg_cache_root()` reuse it instead of re-deriving the same shape.
+    The platforms genuinely differ per-root, so the branch stays
+    parameterized rather than collapsing to one function: on macOS,
+    `config_root` and `data_root` resolve to the *identical* directory
+    (`~/Library/Application Support/pdomain-ocr-labeler-spa` — Apple has no
+    config/data distinction); on Windows, `config_root` uses the roaming
+    `%APPDATA%` while `data_root` and `cache_root` share `%LOCALAPPDATA%`
+    (`cache_root` nests a nested `cache` leaf under it so the two don't
+    collide). Only Linux gives all three roots their own `XDG_*_HOME`
+    variable.
+  - `default_config_root()` / `config_root_legacy_note()` mirror
+    `default_data_root()` / `data_root_legacy_note()` exactly.
+    `default_cache_root()` has no legacy-fallback branch at all — it's
+    always `_xdg_cache_root()`.
+  - The lifespan startup hook (`bootstrap.py`) gains one more conditional
+    `log.warning(...)` for `config_root_legacy_note`, fired only when a
+    legacy `config.yaml` is being kept. No unconditional `log.info` line
+    for `config_root` (unlike `data_root`'s "Using data directory: …") and
+    nothing at any level for `cache_root` — a fresh XDG-native install (the
+    common case, post-migration) says nothing new at startup.
+- Full spec-table mapping: `docs/architecture/01-data-models.md §5`.
+- Tests: `tests/unit/test_settings.py` (platform-branch coverage for both
+  new `_xdg_*_root()` helpers, the legacy-fallback behavior for
+  `config_root` and its absence for `cache_root`) and
+  `tests/integration/test_lifespan.py` (the startup warning fires for a
+  kept legacy config dir; a fresh install logs nothing about either
+  directory).
 
 ### [2026-09-18] Retired: BUG-HIER-1, stale on both of its claims
 

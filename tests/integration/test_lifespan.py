@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import gc
 import logging
+import sys
 import warnings
 from pathlib import Path
 
@@ -160,6 +161,72 @@ def test_startup_logs_the_data_root_actually_in_use(tmp_path: Path, caplog: pyte
         pass
 
     assert f"Using data directory: {settings.data_root}" in caplog.text
+
+
+def test_startup_warns_when_a_legacy_config_dir_is_kept(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """config_root follow-up to BUG-SMOKE-3: the same never-migrate-silently
+    WARNING data_root gets, fired only when a pre-XDG ``config.yaml`` is
+    being kept because the OS-aware default doesn't exist yet.
+
+    Uses the real default factory (no explicit ``config_root=`` override)
+    so ``Settings()`` resolves the legacy directory itself, the same path
+    a real pre-XDG install would take.
+    """
+    # ``XDG_CONFIG_HOME`` unset would make the legacy path and the new
+    # default the exact same directory on Linux (both are ``~/.config``),
+    # so the note would never fire — set it to a not-yet-existing
+    # directory to exercise the case that actually diverges.
+    monkeypatch.setattr(sys, "platform", "linux")
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+    legacy_config = home / ".config" / "pdomain-ocr-labeler-spa"
+    legacy_config.mkdir(parents=True)
+    (legacy_config / "config.yaml").write_text("source_projects_root: /some/path\n")
+
+    settings = Settings(
+        host="127.0.0.1",
+        port=8080,
+        data_root=tmp_path / "data",
+        cache_root=tmp_path / "cache",
+        mode="api_only",
+    )
+    assert settings.config_root == legacy_config  # sanity: the fixture set up the case we're testing
+
+    app = build_app(settings)
+
+    with caplog.at_level(logging.WARNING, logger="pdomain_ocr_labeler_spa.bootstrap"), TestClient(app):
+        pass
+
+    assert str(legacy_config) in caplog.text
+    assert "PDLABELER_CONFIG_ROOT" in caplog.text
+
+
+def test_startup_is_silent_about_config_and_cache_on_a_fresh_install(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """No config_root / cache_root line at all when there's no legacy dir to
+    warn about — config_root gets a WARNING only when needed (see
+    ``test_startup_warns_when_a_legacy_config_dir_is_kept``), and cache_root
+    never gets a startup line at any level (it's disposable).
+    """
+    settings = Settings(
+        host="127.0.0.1",
+        port=8080,
+        config_root=tmp_path / "config",
+        data_root=tmp_path / "data",
+        cache_root=tmp_path / "cache",
+        mode="api_only",
+    )
+    app = build_app(settings)
+
+    with caplog.at_level(logging.INFO, logger="pdomain_ocr_labeler_spa.bootstrap"), TestClient(app):
+        pass
+
+    assert str(settings.config_root) not in caplog.text
+    assert str(settings.cache_root) not in caplog.text
 
 
 def test_lifespan_runs_when_used_as_context_manager(tmp_path: Path) -> None:
