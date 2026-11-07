@@ -15,10 +15,12 @@
 # pnpm is used exclusively (tracks `frontend/pnpm-lock.yaml`).
 FROM node:24.15.0-bookworm-slim AS spa
 # Install pnpm via corepack (ships with Node 24).
-RUN corepack enable && corepack prepare pnpm@11.3.0 --activate
+# pnpm 11 reads overrides from pnpm-workspace.yaml. That file has to be
+# present for a frozen install, and 11.28 is the pnpm 11 that wrote the lockfile.
+RUN corepack enable && corepack prepare pnpm@11.28.11 --activate
 WORKDIR /work
 # Copy lockfile + manifest first so pnpm store layer is cached.
-COPY frontend/package.json frontend/pnpm-lock.yaml frontend/.npmrc* ./
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml frontend/.npmrc* ./
 # --frozen-lockfile: fail fast on lockfile drift (no mutations in image builds).
 RUN pnpm install --frozen-lockfile
 COPY frontend/ ./
@@ -80,6 +82,8 @@ RUN uv build --wheel -o /dist/
 # `--no-emit-project` excludes `pdomain-ocr-labeler-spa` itself (the wheel
 # installs that). `--no-dev` strips dev/test extras.
 # NOTE: `--no-hashes` is intentionally absent — hashes are required.
+# The uv pinned above (0.11.16) has no `--emit-index-url`. The runtime
+# pip install passes the pdomain index itself.
 RUN uv export --frozen --no-emit-project --no-dev \
     -o /dist/requirements.lock
 
@@ -118,17 +122,31 @@ COPY --from=wheel /dist/*.whl /dist/requirements.lock /tmp/
 #   1. `pip install --require-hashes -r requirements.lock` pulls every
 #      transitive dep at the exact version uv locked AND verifies each
 #      wheel against its sha256 hash, closing the supply-chain gap that
-#      --no-hashes introduced (F-016).
+#      --no-hashes introduced (F-016). The pdomain index is required:
+#      those packages are not on PyPI.
 #   2. `pip install --no-deps <wheel>` adds `pdomain-ocr-labeler-spa` itself
 #      without re-resolving — its declared deps were already satisfied
 #      by step 1.
 RUN apt-get update \
     && apt-get install --no-install-recommends -y git ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir --require-hashes -r /tmp/requirements.lock \
+    && pip install --no-cache-dir --require-hashes --extra-index-url https://pdomain.github.io/pdomain-index-pip/simple/ -r /tmp/requirements.lock \
     && pip install --no-cache-dir --no-deps /tmp/*.whl \
     && rm /tmp/*.whl /tmp/requirements.lock \
     && apt-get purge --autoremove -y git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# opencv-python links these and does not bundle them. python:slim has none
+# of them, so `import cv2` dies before the server can listen.
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+        libgl1 \
+        libglib2.0-0 \
+        libice6 \
+        libsm6 \
+        libx11-6 \
+        libxext6 \
+        libxcb1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Transfer ownership of /app to the non-root user so the app can write any
