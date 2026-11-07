@@ -48,6 +48,8 @@ This layout is workspace-standard; see
 - [`architecture/module-map.md`](architecture/module-map.md) — source module layout
 - [`architecture/runtime-flows.md`](architecture/runtime-flows.md) — major data and control flows
 - `architecture/00-overview.md` through `architecture/28-palettes-pickers.md` — per-feature design reference
+- [Glyph annotations](architecture/20-glyph-annotations.md) — manual review, persistence, and export.
+- [Page loading and history](architecture/29-page-loading-and-history.md) — cold-page jobs and version navigation.
 
 ### context/
 
@@ -65,12 +67,12 @@ This layout is workspace-standard; see
 
 ### plans/
 
-- [`plans/2026-06-08-compute-settings-panel.md`](plans/2026-06-08-compute-settings-panel.md)
-- [`plans/2026-06-10-export-manifest-and-send-to-trainer.md`](plans/2026-06-10-export-manifest-and-send-to-trainer.md)
-- [`plans/2026-06-14-labeler-spa-pgdp-alignment-backlog.md`](plans/2026-06-14-labeler-spa-pgdp-alignment-backlog.md)
+- [PGDP residual work](plans/2026-07-21-pgdp-alignment-remaining.md) — export history, detail shell, and documentation.
+- [Glyph enum parity](plans/2026-07-21-glyph-annotations-completion.md) — remaining picker alignment.
+- [Test TypeScript strictness](plans/2026-07-21-tsconfig-test-strictness.md) — test-project compiler checks.
 
 ### specs/
 
-- [`specs/2026-06-01-ocr-labeler-behavior-completion-design.md`](specs/2026-06-01-ocr-labeler-behavior-completion-design.md)
+- [Behavior completion design](specs/2026-06-01-ocr-labeler-behavior-completion-design.md)
 - [`specs/behavior/README.md`](specs/behavior/README.md) — behavior contracts and coverage
 - [`../specs/README.md`](../specs/README.md) — milestone, decision, and glyph specifications

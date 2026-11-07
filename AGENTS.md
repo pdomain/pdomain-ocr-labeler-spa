@@ -80,13 +80,13 @@ available in Git history. The legacy `pd-ocr-labeler` is superseded.
 `docs/issues/README.md` has no open issues — the 18 deep-review reports under
 `docs/issues/2026-07-21-*`, plus every report filed on 2026-09-18, are
 resolved and deleted.
-[`docs/plans/2026-07-21-deep-code-review-continuation.md`](docs/plans/2026-07-21-deep-code-review-continuation.md)
-(Waves 0–6) is a historical record now, not a live queue: almost everything it
-named has a 2026-09-17 or 2026-09-18 tombstone in `docs/context/decisions.md`.
+The July deep-review execution plan is retired. Its outcomes live in
+`docs/context/decisions.md`; remaining work lives in focused plans and
+`docs/context/intent-map.md`.
 
-High-level status, including what actually remains open (a word-identity bug
-that 404s typography after a ground-truth edit, a transient empty-page read
-race, and no SPA surface for seeing or undoing a carried region rejection):
+High-level status, including what actually remains open (typography suggestion acceptance and undo, U-M6 history
+boundaries,
+finer page-load progress, and focused PGDP, glyph, and test-strictness work):
 [`docs/context/current-state.md`](docs/context/current-state.md).
 
 Summary of what closed 2026-09-18 (full reasoning in
@@ -104,8 +104,8 @@ Summary of what closed 2026-09-18 (full reasoning in
   Glyph chips select the word and open the panel on click, same as the
   pencil button.
 - Open findings (`docs/context/open-findings.md`): keyboard entries
-  (BUG-KBD-1/4/5) are closed; the XDG data root default, reload zero-area GT
-  boxes, and hierarchy E2E coverage are untouched and still open.
+  (BUG-KBD-1/4/5) are closed; all six findings, including platform data roots, empty OCR, and hierarchy waits, are
+  closed.
 - Residual `tsconfig.test.json` strictness — untouched:
   `docs/plans/2026-07-21-tsconfig-test-strictness.md`.
 - PGDP alignment remaining is partial: project-card metadata, root filters,
@@ -117,9 +117,10 @@ Per-slice history is preserved in git log and GitHub closed milestones.
 
 ## Specs
 
-Active specs live in `specs/` (milestones, ADR log, glyph-annotations).
+Active milestones and the ADR log live in `specs/`; glyph annotations live in
+`docs/architecture/20-glyph-annotations.md`.
 Implemented specs are under `docs/architecture/` (`00-overview.md` through
-`28-palettes-pickers.md`, minus 16/17/20 which remain active in `specs/`).
+`28-palettes-pickers.md`, minus 16/17 which remain in `specs/`; 20 now lives in architecture).
 All are canonical source of truth. Milestone acceptance gates:
 `specs/16-milestones.md`.
 

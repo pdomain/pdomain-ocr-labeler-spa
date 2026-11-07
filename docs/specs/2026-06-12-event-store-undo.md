@@ -1,5 +1,5 @@
 ---
-last_verified: 2026-07-13
+last_verified: 2026-11-07
 created: 2026-06-12
 owner: maintainers
 kind: spec
@@ -9,6 +9,11 @@ date: 2026-06-12
 ---
 
 # Per-page undo/redo from the event store — spec + implementation plan
+
+Current scope, verified 2026-11-07: v1 undo/redo and U-M7 visible history and jumps ship today.
+[Page-history architecture](../architecture/29-page-loading-and-history.md) records that behavior. U-M6
+cross-OCR/rotation traversal, page-slot lineage, and conservative pruning remain open. Older statements that U-M7
+is future work are superseded by commit 44b52257.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > or superpowers:executing-plans to implement this plan slice-by-slice. Each slice is TDD

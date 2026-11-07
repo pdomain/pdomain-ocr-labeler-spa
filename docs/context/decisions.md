@@ -2009,3 +2009,38 @@ family and not touched.
 - The report is deleted per this repo's own convention (docs/issues/README.md):
   resolved issues don't stay as files, their reasoning becomes a tombstone
   here.
+
+### 2026-11-07 — Consolidate completed specs and execution plans
+
+Completed behavior now lives in architecture. Partial designs and focused residual plans stay live. Historical
+execution steps remain available in Git; they are not current work orders.
+
+- Old path: `docs/plans/2026-06-08-compute-settings-panel.md`. Outcome: implemented.
+  Superseded by: `docs/architecture/03-frontend.md`.
+- Old path: `docs/plans/2026-06-10-export-manifest-and-send-to-trainer.md`. Outcome: implemented or previously
+  retired. Superseded by: `docs/architecture/10-export.md`.
+- Old path: `docs/plans/2026-06-14-labeler-spa-pgdp-alignment-backlog.md`. Outcome: superseded. Superseded by:
+  `docs/plans/2026-07-21-pgdp-alignment-remaining.md`.
+- Old path: `docs/plans/2026-07-21-ci-openapi-gates.md`. Outcome: implemented. Superseded
+  by: `docs/architecture/14-testing.md`.
+- Old path: `docs/plans/2026-07-21-open-findings-fixes.md`. Outcome: implemented. Superseded
+  by: `docs/context/open-findings.md`.
+- Old path: `docs/plans/2026-07-21-overnight-work-index.md`. Outcome: superseded. Superseded by:
+  `docs/context/intent-map.md`.
+- Old path: `docs/plans/2026-07-21-deep-code-review-continuation.md`. Outcome: superseded. Superseded by:
+  `docs/context/current-state.md`.
+- Old path: `docs/specs/2026-06-10-multi-line-detail.md`. Outcome: implemented. Superseded
+  by: `docs/architecture/26-right-panel-detail.md`.
+- Old path: `specs/20-glyph-annotations.md`. Outcome: implemented. Superseded by:
+  `docs/architecture/20-glyph-annotations.md`.
+
+- Rationale kept: frontend, export, testing, multi-line, glyph, loading, and history architecture, plus the
+  existing dated decisions.
+- Evidence: source/test inspection recorded in architecture; commits `44b52257`, `9768576`, `a0d79d5e`,
+  `29ebcdc6`, `26b2d40f`, `6348b1e8`, and `1dfe9553`.
+- Link impact: docgraph inbound-neighbor inspection preceded retirement; live documentation links now target
+  architecture or retained residual plans.
+- Remaining work: typography suggestions and predecessor undo, U-M6, finer load stages, PGDP residuals, glyph enum
+  parity, and test strictness remain explicit in intent-map and their source documents.
+- Removal commit: the commit introducing this entry; resolve with
+  `git log -1 --format=%H -- docs/architecture/20-glyph-annotations.md`.

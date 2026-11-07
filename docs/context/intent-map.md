@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-09-18
+last_verified: 2026-11-07
 ---
 
 # Intent map
@@ -13,7 +13,7 @@ last_verified: 2026-09-18
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-07-19
+- **Last verified:** 2026-11-07
 - **Read when:** deciding what to build next, what remains intentionally
   parked, or how shared page-schema convergence should proceed.
 - **Search terms:** active intent, deferred, blocked, rejected, owner decision,
@@ -28,15 +28,16 @@ last_verified: 2026-09-18
 
 - Maintain the shipped FastAPI/React labeler and its driver contract.
 - Complete the still-relevant items in the
-  [PGDP alignment backlog](../plans/2026-06-14-labeler-spa-pgdp-alignment-backlog.md)
+  [PGDP alignment backlog](../plans/2026-07-21-pgdp-alignment-remaining.md)
   without importing PGDP's pipeline-stage product scope.
 - Keep behavior contracts and their coverage map aligned with executable tests.
-- Implement the approved glyph-annotation design when prioritized; Q-A5–Q-A7
-  no longer block it.
+- Finish the glyph picker enum parity in the [residual plan](../plans/2026-07-21-glyph-annotations-completion.md) .
+  Manual review, bulk persistence, and glyph export already ship.
 - Reconcile driver-contract section 2.11 and its E2E coverage with the shipped
   right-panel editing model before deleting migrated GitHub issue #454.
-- Resolve the two active governed [GitHub-open issue records](../issues/README.md):
-  CI gate equivalence and OpenAPI drift.
+- Keep test-project strictness work in its [focused plan](../plans/2026-07-21-tsconfig-test-strictness.md) ;
+  `noUncheckedIndexedAccess` is still false. CI workflow equivalence and drift issues were closed as moot when
+  workflows were removed.
 
 ## Done
 
@@ -78,10 +79,8 @@ No product-direction blocker is established by current repository evidence.
 
 ## Needs owner decision
 
-- Decide whether the remaining Tabs and Accordion compatibility wrappers need
-  upstream `pdomain-ui` enhancements or permanent local ownership. Current
-  composition is recorded in `docs/architecture/03-frontend.md` and
-  `docs/architecture/26-right-panel-detail.md`.
+- Preserve the shared primitive and local adapter ownership recorded in `docs/architecture/03-frontend.md`. The
+  September decision settles worklist ownership; it does not authorize a pipeline port.
 - Decide whether the broad directory-level RUF002 exceptions in
   `pyproject.toml` are intentional policy. GitHub issue #456 removed the global
   ignore, but the remaining exceptions conflict with `CONVENTIONS.md`, which
@@ -95,3 +94,17 @@ code, tests, git history, and graph links. Shipped architecture was declared
 remain live; completed or superseded execution and research artifacts were
 retired. The durable changed directions and residual intent are recorded here
 and in [`decisions.md`](decisions.md).
+
+## Residual work preserved by the 2026-11-07 consolidation
+
+- U-M6 retains cross-OCR and rotation-boundary history, page-slot lineage, conservative pruning, and its retention
+  policy in the [undo spec](../specs/2026-06-12-event-store-undo.md) . U-M7 history listing and jumps ship.
+- Finer predictor-load progress needs an upstream callback or structured events. Keep that design in the
+  [page-load spec](../specs/2026-08-08-page-load-progress-design.md) ; eager predictor warm-up was rejected.
+- The [PGDP residual plan](../plans/2026-07-21-pgdp-alignment-remaining.md) retains export-dialog history
+  hydration, the detail-shell comparison, and residual driver/adapter documentation. Server preferences remain
+  deferred.
+- Glyph enum parity remains required. Per-mark provenance, cross-page bulk marking, a profile registry, and
+  prediction-only UI polish remain deferred. No predictor will be built here.
+- Mixed-selection and mutation-error browser coverage remains a risk for multi-line editing; the existence of
+  browser tests is not a fresh full-suite verification.

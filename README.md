@@ -119,7 +119,6 @@ Specs are split into two trees as of 2026-05-14:
 |---|---|
 | [`16-milestones.md`](specs/16-milestones.md) | M0…M9 milestone breakdown (living) |
 | [`17-decisions.md`](specs/17-decisions.md) | ADRs / decisions log (append-only) |
-| [`20-glyph-annotations.md`](specs/20-glyph-annotations.md) | Glyph-level annotations — manual review and dataset-export path implemented; no predictor exists or will be built (`docs/context/decisions.md`, 2026-09-18) |
 
 ### Architecture (implemented — `docs/architecture/`)
 
@@ -143,6 +142,8 @@ Specs are split into two trees as of 2026-05-14:
 | [`15-deployment-dev.md`](docs/architecture/15-deployment-dev.md) | Build, devcontainer, install |
 | [`18-text-normalization.md`](docs/architecture/18-text-normalization.md) | Long-S / ligature normalization |
 | [`19-auto-rotation.md`](docs/architecture/19-auto-rotation.md) | Manual + auto page rotation |
+| [`20-glyph-annotations.md`](docs/architecture/20-glyph-annotations.md) | Glyph-level annotations — manual review and dataset-export path implemented; no predictor exists or will be built (`docs/context/decisions.md`, 2026-09-18) |
+| [Page loading and history](docs/architecture/29-page-loading-and-history.md) | Cold-page jobs and visible version navigation |
 | [`21-konva-renderer.md`](docs/architecture/21-konva-renderer.md) | Konva renderer for `PageImageCanvas` + `BBoxOverlay` |
 | [`22-page-surface-wireup.md`](docs/architecture/22-page-surface-wireup.md) | `ProjectPage` real labeling surface assembly |
 | [`23-page-payload-backend.md`](docs/architecture/23-page-payload-backend.md) | Real backend page payload + 19 mutation endpoints |

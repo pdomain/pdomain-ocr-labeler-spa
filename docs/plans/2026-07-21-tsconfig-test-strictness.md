@@ -539,3 +539,19 @@ Do **not** push unless explicitly asked.
 
 **Effort estimate:** small (≈0.5–1.5 engineer-hours) if Task 0 confirms ≤25 files; still one PR if
 somewhat higher.
+
+## Goal
+
+Complete only the residual work identified above; retain implemented behavior.
+
+## Architecture
+
+Use the existing SPA, backend routes, and shared suite adapters described above.
+
+## Tech Stack
+
+FastAPI, React, TypeScript, pytest, Vitest, and Playwright.
+
+## Global Constraints
+
+Preserve the driver contract and generated types. Keep deferred deployment axes outside this work.

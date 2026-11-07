@@ -1,24 +1,23 @@
 ---
 kind: spec
-status: draft
+status: partial
 owner: maintainers
 created: 2026-08-21
-last_verified: 2026-08-21
+last_verified: 2026-11-07
 repo: pdomain/pdomain-ocr-labeler-spa
 ---
 
 # Typography review and training export design
 
-Typography review becomes part of page completion, alongside corrected text. The labeler will replace its current
-character-range contract with grapheme-based typography annotations, preserve every correction through the event store,
-and export immutable records for model training.
+Phase-one typography review, the correction journal, and immutable export ship today. Suggestion acceptance and
+editing, predecessor-based undo, and the unresolved owner decisions remain design work.
 
 ## Agent Index
 
 - **Kind:** spec
-- **Status:** draft
+- **Status:** partial
 - **Owner:** maintainers
-- **Last verified:** 2026-08-21
+- **Last verified:** 2026-11-07
 - **Read when:** designing or implementing typography review, page completion, contextual annotation, or typography
   training export.
 - **Search terms:** typography review, grapheme spans, page completion, corrected training data, contextual crop,
@@ -299,7 +298,8 @@ TypographyCorrection
 Decisions include `accept`, `edit`, `reviewed_regular`, `reject_source`, `reject_alignment`, `unusable_image`, and
 `defer`. Rejected, unusable, and deferred records remain available for audit but do not become training negatives.
 
-Planned `accept` will copy accepted positive spans and preserve explicit label states from suggestion review. Planned `edit`
+Planned `accept` will copy accepted positive spans and preserve explicit label states from suggestion review.
+Planned `edit`
 stores the reviewer spans and explicit states. `reviewed_regular` sets every required launch label to negative and
 leaves audit-only labels unchanged unless the reviewer decided them. Rejecting one suggested label sets only that label
 to negative when the reviewer explicitly confirms its absence. `reject_source`, `reject_alignment`, `unusable_image`,
@@ -644,6 +644,19 @@ character-range format.
   [`src/pdomain_ocr_labeler_spa/core/labeler_sidecars.py`](../../src/pdomain_ocr_labeler_spa/core/labeler_sidecars.py)
 - Current exporter:
   [`src/pdomain_ocr_labeler_spa/core/jobs/handlers/export.py`](../../src/pdomain_ocr_labeler_spa/core/jobs/handlers/export.py)
-- Related glyph-form spec: [`specs/20-glyph-annotations.md`](../../specs/20-glyph-annotations.md)
+- Related glyph-form spec: [`docs/architecture/20-glyph-annotations.md`](../architecture/20-glyph-annotations.md)
 - Typography model design:
   `/workspaces/pdomain/pdomain-ocr-training/docs/specs/2026-08-21-fine-grained-typography-model-design.md`
+
+## Adversarial Review
+
+Stage: post-implementation documentation review, 2026-11-07.
+
+Source: an independent read-only migration analyzer compared the phase-one boundary with code, tests, and decisions.
+
+Accepted finding: draft status understated shipped phase-one review, correction-journal, and export behavior.
+The spec is now partial; it remains live because suggestion acceptance and editing, predecessor-based undo,
+and the remaining owner decisions are unresolved.
+
+Residual risk: this status review does not approve the remaining design or resolve its owner questions. Cross-source
+matching and the wider training loop remain intent rather than claims of implemented behavior.

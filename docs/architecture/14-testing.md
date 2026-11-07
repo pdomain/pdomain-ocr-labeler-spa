@@ -409,3 +409,25 @@ incomplete — do NOT mark complete.
   legacy `generate_test_fixtures.py` (or the SPA equivalent) once to
   pre-OCR. Document in `tests/fixtures/README.md`.
 - **Cross-binary tests.** Out of scope for v1. Added in M9 manual QA.
+
+## Local gates and closed review findings
+
+The owner removed GitHub Actions workflows on 2026-09-13. The old CI-equivalence and OpenAPI-workflow tasks are
+therefore moot; documentation cleanup must not restore those workflows. The committed OpenAPI contract is
+`frontend/src/api/types.ts`; `frontend/openapi.json` is an ignored intermediate.
+
+All six findings in [the findings record](../context/open-findings.md) closed on 2026-09-18. Hierarchy helpers wait
+for attached nodes and fail on an unexpectedly empty tree. Unmatched ground-truth placeholders are filtered before
+overlays; successful zero-word OCR stays distinguishable from a reviewed blank page. Keyboard registration and
+platform data-root behavior are recorded in the feature architecture and decision log.
+
+The test TypeScript project still sets `noUncheckedIndexedAccess: false`. Enabling it and enforcing the
+test-project typecheck remain in [the strictness plan](../plans/2026-07-21-tsconfig-test-strictness.md) .
+
+### Evidence
+
+- Code: `Makefile`, `frontend/tsconfig.test.json`, and `frontend/src/components/PageImageCanvas.tsx`.
+- Tests: `tests/e2e/test_ui_coverage.py`, `tests/e2e/test_confirm_dialog_keyboard.py`, and
+  `tests/unit/test_settings.py`.
+- Verified: 2026-11-07 by source inspection and September decision records. These statements do not claim a new
+  full browser-suite run.

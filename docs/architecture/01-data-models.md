@@ -828,3 +828,20 @@ Carry over from legacy:
 The SPA must read every legacy envelope in the test tree without
 mutating it. Writing one SPA envelope and reading it from the legacy
 binary is a manual M9 acceptance test.
+
+## Default books folder
+
+Books default to `<data_root>/labeler-books`. A nonempty environment override wins over a saved nonempty absolute
+`source_projects_root`; otherwise the default applies. Startup creates the default folder if missing. A missing
+user-selected folder remains an error, rather than creating an arbitrary typed path.
+
+Settings remain in the platform config directory, data in the platform data directory, and cache in the cache
+directory. Existing legacy data-root fallback behavior is unchanged. The existing Set Source Folder dialog controls
+this single books path.
+
+### Evidence
+
+- Code: `src/pdomain_ocr_labeler_spa/settings.py` and `bootstrap.py`.
+- Tests: `tests/unit/test_settings.py` and
+  `tests/integration/test_projects_router.py::test_post_load_pgdp_mirror_uses_flat_page_images_and_pages_json`.
+- Verified: 2026-11-07 by source inspection; commits `6348b1e8` and `1dfe9553`.

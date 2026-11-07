@@ -667,108 +667,22 @@ available (delegated 2026-05-06; not yet implemented).
 
 ## M11 — Glyph-level side-channel annotations
 
-> **Residual note (2026-09-18):** the manual review path below shipped, but
-> not as originally designed here. The data model came from
-> `pdomain_book_contracts` (this doc's `pdomain-book-tools` naming was
-> superseded); durability uses a content-blob sidecar rather than the v2.2
-> envelope bump; the panel mounts in the right panel (`WordDetail`), not
-> `<WordEditDialog>`, which was retired; and no predictor was ever shipped
-> or will be — `pd-ocr-trainer` is retired, and the labeler will not build
-> one itself. See `docs/context/decisions.md`'s 2026-09-18 entries and
-> `specs/20-glyph-annotations.md` §9 for what actually shipped.
+The manual glyph-review milestone ships. A person can mark ligatures, long-s positions, and swash in WordDetail,
+mark a word reviewed without marks, and apply page-wide recipes. Chips open the review panel. Save and reload
+preserve the tri-state: unreviewed, reviewed empty, or reviewed with marks. Dataset export carries confirmed marks
+in recognition/glyph_features.json.
 
-**Outcome.** Per-word typography annotations (CT/ST ligatures, long-s
-positions, swash) editable via a new Typography section in
-`<WordEditDialog>` and a chip-row under each `<WordCell>`. Page-scope
-bulk-mark dialog drives recipes ("CT auto-mark", etc.) — exposed to
-the `pd-ocr-labeler-driver` agent via stable testids. `UserPageEnvelope`
-bumps to **v2.2** (additive `payload.glyph_annotations` keyed by
-word_id; tri-state preserved on round-trip).
+The shared model belongs to pdomain-book-contracts. Content-blob labeler_sidecars replaced the proposed envelope
+bump. WordEditDialog was retired. No predictor exists or will be built here; the former trainer delivery is not
+a prerequisite. The September decisions supersede this milestone's original envelope and prediction design.
 
-When pd-ocr-trainer's glyph-feature classifier is wired (via the new
-`IGlyphPredictor` adapter), per-word predictions render as greyed-out
-chips with accept/reject. Predictions are NOT persisted; they're
-recomputed at page-fetch time.
+[Glyph architecture](../docs/architecture/20-glyph-annotations.md) records the implemented contract.
+[The driver contract](../docs/architecture/13-driver-contract.md) owns panel and bulk identifiers. The
+[remaining picker plan](../docs/plans/2026-07-21-glyph-annotations-completion.md) retains shared-enum parity.
 
-The user-facing slot the user originally asked about ("M6 or M7
-range, post-editing-UX") was tempting but the data-model depends on
-**pdomain-book-tools** (`pdomain_book_tools.ocr.glyph_annotations` — NOT yet
-shipped) and the predictions path on **pd-ocr-trainer** (classifier
-— NOT yet shipped). Slotting after M10 keeps the SPA work blocked
-only on those two upstream deliveries.
-
-**Files to create / modify.**
-
-- `src/pdomain_ocr_labeler_spa/core/persistence/user_page_envelope.py` —
-  v2.2 reader/writer; back-compat with v2.1 (None on read).
-- `src/pdomain_ocr_labeler_spa/core/glyph/predictions.py` — `IGlyphPredictor`
-  Protocol; `none_` and `local_pdtrainer` adapters.
-- `src/pdomain_ocr_labeler_spa/core/page_state.py` — `set_glyph_annotations`,
-  `accept_glyph_prediction`, `bulk_mark_glyphs` mutators.
-- `src/pdomain_ocr_labeler_spa/api/words.py` —
-  POST `.../glyph-annotations`, POST `.../accept-prediction`.
-- `src/pdomain_ocr_labeler_spa/api/pages.py` —
-  POST `.../glyph-bulk-mark` (recipes, dry-run support).
-- `src/pdomain_ocr_labeler_spa/core/models.py` — extend `WordMatch` with
-  `glyph_annotations` and `glyph_predictions`.
-- `frontend/src/components/glyph/GlyphAnnotationPanel.tsx` (NEW).
-- `frontend/src/components/glyph/GlyphChip.tsx` (NEW).
-- `frontend/src/components/glyph/BulkGlyphMarkDialog.tsx` (NEW).
-- `frontend/src/components/WordCell.tsx` — corner badge + chip row.
-- `frontend/src/components/WordEditDialog.tsx` — Typography section.
-- `frontend/src/components/ToolbarActionGrid.tsx` — Bulk-mark button.
-- `frontend/src/components/PageImageCanvas.tsx` (canvas overlay) —
-  `predictions-overlay-toggle`.
-  (`ImageTabsHeader.tsx` deleted; overlay toggle lives in canvas overlay.)
-- `tests/unit/test_glyph_annotations_envelope.py`.
-- `tests/unit/test_glyph_envelope_back_compat.py`.
-- `tests/unit/test_glyph_bulk_mark.py`.
-- `tests/unit/test_gt_rejects_ligature_codepoints.py`.
-- `tests/e2e/test_glyph_panel.py`.
-- `tests/e2e/test_bulk_glyph_mark.py`.
-
-**Specs.** [`20-glyph-annotations.md`](20-glyph-annotations.md).
-Cross-refs [`01-data-models.md`](../docs/architecture/01-data-models.md) §3, §4 (envelope
-bump rules), [`05-word-matches.md`](../docs/architecture/05-word-matches.md) (`<WordCell>`
-host),
-[`26-right-panel-detail.md`](../docs/architecture/26-right-panel-detail.md) (Typography
-section),
-[`13-driver-contract.md`](../docs/architecture/13-driver-contract.md) (testid catalogue
-additions).
-
-**Acceptance tests.**
-
-- v2.2 envelope round-trip preserves the tri-state (None / empty /
-  populated) for every word.
-- v2.1 envelope reads with all `glyph_annotations = None`.
-- Backend bulk-mark CT recipe on the fixture project: dry-run returns
-  the expected `affected_word_ids`; apply mutates and persists.
-- E2E: open `<WordEditDialog>` on a `ct`-containing word, add a CT
-  ligature mark via the Typography section, close, reopen — chip
-  persists; save page; reload page; chip still present.
-- E2E: bulk-mark dialog on a page with 5 `ct` words shows preview "5
-  words will be modified", apply emits 5 corner badges in green.
-- Driver-contract conformance: every testid in
-  [`20-glyph-annotations.md`](20-glyph-annotations.md) §7 present
-  after a project loads.
-- (If classifier shipped) predictions render as greyed chips with
-  accept / reject; accepting writes `source="human_confirmed"`.
-
-**Pre-conditions.**
-
-- M9 (editing UX solid; envelope path stable).
-- `pdomain-book-tools` ships `pdomain_book_tools.ocr.glyph_annotations`
-  (delegation needed — see Q-A5 in [`specs/20-glyph-annotations.md`](20-glyph-annotations.md) §11).
-- `pd-ocr-trainer` ships glyph-feature classifier + inference adapter
-  for the predictions half (delegation needed; the manual half of
-  M11 can ship without it).
-- Q-A5 (legacy envelope tolerance), Q-A6 (predictions overlay color),
-  Q-A7 (per-mark provenance) resolved in
-  [`specs/20-glyph-annotations.md`](20-glyph-annotations.md) §11.
-
-> **Pre-condition:** `pdomain-book-tools` `glyph_annotations` shipped + `pd-ocr-trainer`
-> glyph classifier shipped + Q-A5/Q-A6/Q-A7 (in `specs/20-glyph-annotations.md`
-> §11) resolved.
+Acceptance evidence includes tests/integration/test_glyph_routes.py, tests/e2e/test_glyph_panel.py, and
+tests/e2e/test_bulk_glyph_mark.py. They cover manual review, save/reload, and persisted bulk apply. This
+documentation consolidation inspected those tests; it does not claim a fresh browser-suite pass.
 
 ---
 
@@ -805,6 +719,10 @@ plumbing).
 Total: ~15–20 sessions for an AI agent operating end-to-end.
 
 ## Adversarial Review
+
+2026-11-07 reconciliation: manual M11 review and export have shipped; picker enum parity remains in the
+focused residual plan. The July review below is historical. Its M11-backlog finding is superseded by the
+September implementation and decisions.
 
 **Accepted finding:** M0–M10 and cut-over shipped; M11 remains unimplemented backlog rather than
 blocked on Q-A7.

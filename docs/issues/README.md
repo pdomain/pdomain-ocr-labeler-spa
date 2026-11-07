@@ -95,11 +95,11 @@ issues may still be open.
 ## Deep-review split issues (2026-07-21)
 
 Prioritization authority:
-[`../plans/2026-07-21-deep-code-review-continuation.md`](../plans/2026-07-21-deep-code-review-continuation.md).
+[`../plans/2026-07-21-deep-code-review-continuation.md`](../context/current-state.md).
 
 Open findings (XDG, RELOAD, HIER — the keyboard entries closed 2026-09-18)
 remain in [`../context/open-findings.md`](../context/open-findings.md) + plan
-[`../plans/2026-07-21-open-findings-fixes.md`](../plans/2026-07-21-open-findings-fixes.md)
+[`../plans/2026-07-21-open-findings-fixes.md`](../context/open-findings.md)
 — not re-filed as separate issues.
 
 ### Wave 0 — data integrity

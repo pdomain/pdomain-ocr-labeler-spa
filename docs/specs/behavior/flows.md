@@ -278,7 +278,7 @@ last_verified: 2026-07-13
 - **Bad-state / error:** none observed for the mark-reviewed/reset path this
   flow drives end to end; the reject-prediction button (B-GLYPH-003) has no
   test coverage, and no predictor exists to populate predictions for a real
-  user (see `specs/20-glyph-annotations.md` §9).
+  user (see [glyph architecture](../../architecture/20-glyph-annotations.md#prediction-boundary)).
 - **Tier(s):** A+B
 - **Regression:** no
 - **Test:** `tests/e2e/test_glyph_panel.py` drives steps 1–3 in a browser

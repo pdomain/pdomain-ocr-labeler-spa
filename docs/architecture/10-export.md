@@ -307,3 +307,19 @@ Wire in M9. Test in `tests/integration/test_export_cancel.py` and the E2E
 - **Output dir collision.** Re-running export with the same scope
   overwrites the previous output. Acceptable but noisy. Consider
   appending a timestamp suffix to the subfolder name in v2.
+
+## Confirmed layout regions
+
+Dataset export writes confirmed regions to `regions/labels.json` beside the existing DocTR detection and
+recognition output. The exporter reads the confirmed blocks already stored in each page; it does not introduce a
+second region model. Unaccepted proposals are not confirmed labels.
+
+### Evidence
+
+- Code: `src/pdomain_ocr_labeler_spa/core/jobs/handlers/export.py`.
+- Tests: `tests/integration/test_export_manifest_integration.py`; region export coverage is recorded in commit
+  `26b2d40f`.
+- Verified: 2026-11-07 by inspection of the export implementation and commit `26b2d40f`.
+
+The manifest and Trainer handoff contract in section 5 replaces the completed export implementation plan.
+Persisting the export dialog's history across reopen remains separate work.

@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-09-18
+last_verified: 2026-11-07
 ---
 
 # Current state
@@ -13,7 +13,7 @@ last_verified: 2026-09-18
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-09-18
+- **Last verified:** 2026-11-07
 - **Read when:** orienting on shipped behavior, open work, or repository risk.
 - **Search terms:** current state, shipped, open work, risks, roadmap.
 
@@ -100,11 +100,8 @@ As of 2026-09-17:
   hand-drawn region deliberately does not carry forward: it has no real proposal behind it, so
   there is nothing a carried decision's `carried_from_*` fields could honestly name — the matching
   proposal is simply left for a person to review once more, which costs a click rather than hiding
-  anything. A carried rejection is visible to a reader of `PagePayload.proposals`/
-  `RegionProposalListItem` via its own `carried_from_run_id`/`carried_from_proposal_id`, but no SPA
-  surface renders it yet — nothing in the product today lets a person see or undo a carried
-  rejection (or, for that matter, an ordinary one) once made; the canvas and review queue simply
-  never show a rejected proposal again.
+  anything. The right panel now counts carried rejections and can reopen one. Reopening appends a decision instead
+  of rewriting the original journal.
 - **A book-wide review queue.** `GET .../regions/review-queue` returns the book's undecided count, a
   per-page summary, and up to 500 items in reading or confidence order. It uses the same
   undecided rule as the page view. In the SPA, `]` and `[` jump to the next or previous page with
@@ -120,8 +117,9 @@ As of 2026-09-17:
   Reviewed markers record the kind and whether it was confirmed alone, in bulk, or by undo or redo.
   A confirmed kind survives re-OCR, rotation and auto-rotate-all. Verified on 32 real OCR'd pages
   in `/workspaces/pdomain/.m15f-evidence/real-book-page-kind-review/`.
-- **Not built yet:** drawing a region, resizing a box, editing word membership in the UI, and a
-  keyboard path for page kinds.
+- **Region editing shipped in v0.6.0:** drawing, resizing, and word membership persist through save and reload.
+  Confirmed regions export beside DocTR output in `regions/labels.json`. A page-kind keyboard path remains
+  separate work. Commits `29ebcdc6` and `26b2d40f` contain implementation and tests.
 
 Page lifecycle types now have one import owner. Production and test callers
 import `PageRecord` and `RotationSource` from `pdomain_ops.pages`; the temporary
@@ -163,10 +161,8 @@ deep-review reports filed under `docs/issues/2026-07-21-*`, the two migrated
 GitHub records, and every report filed and closed same-day are resolved and
 deleted; each retirement's reasoning is a tombstone in `decisions.md`, which
 is the authoritative record, not this list.
-[`../plans/2026-07-21-deep-code-review-continuation.md`](../plans/2026-07-21-deep-code-review-continuation.md)
-prioritized that work across Waves 0–6 and is now a historical record rather
-than a live queue — nearly every finding it named carries a 2026-09-17 or
-2026-09-18 tombstone.
+The retired July deep-review plan prioritized Waves 0–6. Its outcomes remain in the 2026-09-17 and 2026-09-18
+decision entries; focused plans retain unfinished work.
 
 Glyph annotations (M11) — the manual review path is shipped. A person
 selects a word, marks its ligatures, long s or swash, or marks it reviewed
@@ -182,24 +178,14 @@ coverage: `tests/e2e/test_glyph_panel.py` (single-word mark) and
 `tests/e2e/test_bulk_glyph_mark.py` (a real bulk-apply dialog, confirmed
 against an independent `GET`). See `decisions.md`'s 2026-09-18 entries and
 [`../plans/2026-07-21-glyph-annotations-completion.md`](../plans/2026-07-21-glyph-annotations-completion.md).
-Spec: [`../../specs/20-glyph-annotations.md`](../../specs/20-glyph-annotations.md) §9.
+Current contract: [glyph architecture](../architecture/20-glyph-annotations.md).
 
 **What remains, verified against code or `decisions.md` rather than assumed:**
 
-- **Two word-identity bugs**, found and left open on 2026-09-18, documented
-  in `tests/e2e/test_parity_persistence.py`'s
-  `_prepare_word_for_validation` and `_poll_server_word_by_gt` docstrings:
-  - Editing a word's ground-truth text breaks that word's typography-review
-    reachability, and so its validate button: `core/page_to_line_matches.py`
-    computes the `WordMatch.word_id` a page payload carries from the word's
-    OCR text, while `api/typography.py` recomputes the same `stable_word_id`
-    from live ground-truth text once one has been entered. The two disagree
-    after any GT edit, and a typography lookup keyed by the stale id 404s.
-  - A `GET .../pages/{index}` issued right after a mutation such as `/save`
-    can transiently return 200 with an empty `line_matches` — reproduced over
-    plain back-to-back HTTP calls with no browser involved, so it is a
-    genuine backend race, not a rendering issue. The live UI shows "No page
-    data" / "Word not found in page data" when it happens.
+- **Word-identity and empty-page races are closed.** The 2026-09-18 decision entries record stable OCR-derived
+  identity after GT edits and lock-protected payload/history construction. Coverage includes
+  `tests/integration/test_typography_word_id_survives_gt_edit.py` and
+  `tests/integration/test_page_history_consistency_race.py`.
 - **`set_region_word_membership` can renumber every line on a page** — a
   known gap in `stable_word_id` and reading-order keying, recorded in its own
   docstring (`api/regions.py`) and pinned by
@@ -216,29 +202,19 @@ Spec: [`../../specs/20-glyph-annotations.md`](../../specs/20-glyph-annotations.m
   original, so the journal stays evidence.
 - ~~Whether the OCR engine should warm up at server start~~ — decided
   2026-09-18: no. The predictor stays lazy; see `decisions.md`.
-- **Two mutations in quick succession can leave a control showing its
-  pre-mutation label.** Their invalidation refetches are not sequenced, so an
-  older response can land after a newer one and overwrite it in the cache. A
-  frontend cache-ordering problem, unrelated to the page-payload race fixed on
-  2026-09-18, and still open. `tests/e2e/test_parity_persistence.py`'s reload
-  recovery guards against it; its polling half now guards a race that is fixed
-  and could be simplified.
+- **Out-of-order frontend refetches are fixed** by commit `a0d79d5e`; older page responses no longer overwrite
+  newer page state.
 - **Released `v0.3.0` on 2026-09-18**, 561 commits after `v0.2.0`, with the pip
   index regenerated. `docs/runbooks/release.md` has the steps.
-- PGDP/pdomain-ui alignment is partial:
-  [`../plans/2026-07-21-pgdp-alignment-remaining.md`](../plans/2026-07-21-pgdp-alignment-remaining.md).
-  Its status table predates 2026-09-18 — items 7–9 (project-card metadata, root
-  filters, the archive decision) that it lists open or partial were resolved
-  2026-09-18, see `decisions.md`. Item 4 (jobs pill/drawer) shipped 2026-09-18
-  once `@pdomain/pdomain-ui@0.13.0` closed the upstream contract gap the item
-  was blocked on (`cancelled` `JobStatus`, `Job.pausable`) — see `decisions.md`.
-  Item 10 (shared workbench layout) was decided against, not built — also see
-  `decisions.md`.
+- PGDP/pdomain-ui alignment remains partial. The [residual plan](../plans/2026-07-21-pgdp-alignment-remaining.md)
+  retains persisted export-dialog history, the detail-shell comparison, and remaining driver/adapter documentation.
+  Cards, progress filters, suite launch, jobs, and visible page history ship. Archive and shared-workbench adoption
+  were declined; the September decisions record those outcomes.
 - Open findings, keyboard entries now closed (`6db2e42` registered `mod+,`,
   `mod+j` and `mod+shift+r`; BUG-KBD-4 was already done). The XDG data root
   default (BUG-SMOKE-3) is now closed too — see `decisions.md`.
-  [`open-findings.md`](open-findings.md) still lists the reload zero-area GT
-  box check and the hierarchy-coverage E2E gap, neither touched.
+  [`open-findings.md`](open-findings.md) records all six findings closed, including zero-area placeholders, empty
+  OCR, and hierarchy waits.
 - Residual test-tsconfig strictness (#366 leftover), untouched 2026-09-18:
   [`../plans/2026-07-21-tsconfig-test-strictness.md`](../plans/2026-07-21-tsconfig-test-strictness.md).
 - Already done (do not re-plan): #404 lint-deviations catalogue

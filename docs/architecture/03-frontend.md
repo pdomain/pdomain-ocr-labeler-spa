@@ -703,3 +703,19 @@ patch around it.
 
 Vite sourcemaps: `sourcemap: true` so production stack traces are
 debuggable. (Same as pgdp-prep `vite.config.ts:11-25`.)
+
+## Compute settings and suite integration
+
+The shared Compute panel lists CPU, usable CUDA devices, and detected NVIDIA hardware that cannot run CUDA. It
+provides a reset for forced CPU settings and inline CUDA setup guidance. OCR configuration remains a separate
+panel. Startup warms the suite device endpoint once, before the settings panel opens.
+
+The suite launcher uses the installed-app and launch endpoints through the local suite adapter. Shared shell
+components own application chrome. The labeler owns its document workspace, domain panels, and worklist adapter. It
+does not adopt PGDP's pipeline stages or a shared workbench layout.
+
+### Evidence
+
+- Code: `frontend/src/App.tsx`, `frontend/src/api/suite.ts`, and `frontend/src/components/drawer/Worklist.tsx`.
+- Tests: `frontend/src/App.test.tsx` and `tests/integration/test_suite_device_routes.py`.
+- Verified: 2026-11-07 by source inspection against the completed compute-settings plan and September decisions.

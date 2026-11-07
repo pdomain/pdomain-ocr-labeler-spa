@@ -30,7 +30,9 @@ Specs are now organized into two trees:
 |---|---|---|
 | 16 | [`16-milestones.md`](16-milestones.md) | M0…M9 milestone breakdown — living roadmap |
 | 17 | [`17-decisions.md`](17-decisions.md) | ADRs / decisions log — append-only |
-| 20 | [`20-glyph-annotations.md`](20-glyph-annotations.md) | Glyph-level annotations — manual review and dataset-export path shipped; no predictor exists or will be built |
+
+Glyph annotations now live in [architecture](../docs/architecture/20-glyph-annotations.md) . Their picker enum
+parity remains in the [residual plan](../docs/plans/2026-07-21-glyph-annotations-completion.md) .
 
 ## Implemented specs (under `docs/architecture/`)
 

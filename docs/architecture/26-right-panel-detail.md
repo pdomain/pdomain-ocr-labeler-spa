@@ -481,3 +481,22 @@ No component in this group registers document-level hotkeys directly.
    be set to 640 for line/block views. The `ProjectPage` must pass the correct
    width based on the selection level. This wiring is not currently present
    (the default 520 px is used for all levels).
+
+## Multi-line editing
+
+Selecting more than one line opens MultiLineDetail. Cards appear in ascending line-index order. Each card shows
+line identity, OCR text, validation counts, and editable ground-truth words. Enter commits a word edit; Tab
+traverses inputs across cards.
+
+Per-line controls validate words, copy text between OCR and ground truth, and delete the line with confirmation.
+The bulk bar applies validation, text copying, and deletion to the selected lines. A single selected line still
+opens LineDetail; multi-word selection keeps its own detail view. The driver identifiers remain in
+[the driver contract](13-driver-contract.md) .
+
+### Evidence
+
+- Code: `frontend/src/components/right-panel/MultiLineDetail.tsx` and `frontend/src/components/shell/RightPanel.tsx`.
+- Tests: `frontend/src/components/right-panel/MultiLineDetail.test.tsx`; `tests/e2e/test_multi_line_detail.py`
+  covers drag selection, GT reload, bulk validation, and single-line routing.
+- Verified: 2026-11-07 by source inspection. Mixed-selection and mutation-error browser coverage remain risks; this
+  cleanup does not claim a fresh browser-suite pass.

@@ -1512,7 +1512,8 @@ removed.
 
 **Implications.**
 
-- [`../docs/architecture/21-konva-renderer.md`](../docs/architecture/21-konva-renderer.md) is the implementation spec; it
+- [`../docs/architecture/21-konva-renderer.md`](../docs/architecture/21-konva-renderer.md) is the implementation
+  spec; it
   replaces `04-image-viewport.md` §0 ("research spike at M4 start").
 - `OPEN_QUESTIONS.md` Q-A14 is resolved: the spike is unnecessary.
   Record Q-A14 as resolved in the durable decision context.
@@ -1591,7 +1592,7 @@ object-level consumers.
   v2.3 bump if full per-mark granularity is required.
 
 **Refs.** [`OPEN_QUESTIONS.md Q-A7`](../OPEN_QUESTIONS.md),
-[`specs/20-glyph-annotations.md`](20-glyph-annotations.md) §3 and §11,
+[`specs/20-glyph-annotations.md`](../docs/architecture/20-glyph-annotations.md) §3 and §11,
 D-032 (rotation provenance precedent).
 
 ---

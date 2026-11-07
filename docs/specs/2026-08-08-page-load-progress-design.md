@@ -1,19 +1,24 @@
 ---
-last_verified: 2026-08-08
+last_verified: 2026-11-07
 created: 2026-08-08
 owner: maintainers
 kind: spec
 repo: pdomain/pdomain-ocr-labeler-spa
-status: implemented
+status: partial
 date: 2026-08-08
 ---
 
 # Page-load progress and status
 
+Current scope, verified 2026-11-07: [page-loading architecture](../architecture/29-page-loading-and-history.md)
+records the shipped job and UI behavior. Predictor construction and OCR still share one stage. The remaining design
+work is the upstream callback or structured-event contract for finer progress. Eager startup warm-up is resolved
+against warming, by the 2026-09-18 decision; the later question below is historical.
+
 ## Agent Index
 
 - **Kind:** spec
-- **Status:** implemented
+- **Status:** partial
 - **Read when:** the SPA appears to hang on "Loading project", you are adding
   progress reporting to a slow backend path, or you are coordinating an OCR
   progress hook with `pdomain-book-tools`.
@@ -239,9 +244,20 @@ single stage, because the callback named below does not exist yet in `pdomain-bo
 
 ## Open questions
 
-Whether the OCR engine should warm up eagerly at server start is unresolved. Doing so moves the
-26-second predictor build off the first page open and into startup. That is better if the user always
-opens a page, and worse if they do not.
+Eager predictor warm-up was rejected on 2026-09-18. The engine stays lazy; the original question is resolved.
 
 Whether `pdomain-book-tools` should take a callback or emit structured events is also unresolved.
 That is the first thing to settle with that repo, since the stage granularity here depends on it.
+
+## Adversarial Review
+
+Stage: post-implementation documentation review, 2026-11-07.
+
+Source: an independent read-only migration analyzer compared this spec with code, tests, and September decisions.
+
+Accepted findings: cold-page jobs and visible progress ship, but predictor construction and OCR still share a stage.
+The eager-startup question was already resolved against warming. The spec is partial, and architecture now records
+only implemented behavior.
+
+Residual risk: finer stages still depend on an upstream callback or event contract. This review does not approve an
+unimplemented upstream API or claim a new browser-suite result.
