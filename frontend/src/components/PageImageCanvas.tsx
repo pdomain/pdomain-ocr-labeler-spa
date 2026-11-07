@@ -73,9 +73,10 @@ import {
 } from "@pdomain/pdomain-ui/canvas";
 import type { components } from "../api/types";
 import { getStageDimensions, type EncodedDims } from "../lib/canvas-utils";
-import type { BBox } from "../lib/coords";
+import { displayToSrc, type BBox } from "../lib/coords";
 import { expandFromStore } from "../lib/selection-expand";
 import { regionCandidates, hitTestRegions } from "../lib/region-hit-test";
+import { hitResizeHandle, resizeBox, type ResizeHandle } from "../lib/region-geometry";
 import { BBoxOverlay, type BBoxItem } from "./BBoxOverlay";
 import { scheduleDragUpdate } from "../lib/rafSchedule";
 import { readCssToken, hexToRgba } from "../hooks/useLayerColors";
@@ -102,6 +103,8 @@ import {
 import { useUiPrefs, type LayerVisibility, type SelectionMode } from "../stores/ui-prefs";
 import { useViewportHotkeys } from "../hooks/useViewportHotkeys";
 import { railStore, type RailTarget } from "../stores/rail-store";
+import { regionDraftStore } from "../stores/region-draft-store";
+import { useEditRegion, useRegionDecisionPending } from "../hooks/useRegionMutations";
 
 export type SelectionModifier = "replace" | "remove" | "toggle";
 
@@ -110,6 +113,12 @@ interface DragState {
   startY: number;
   /** Captured at mousedown per spec §7 (Shift release mid-drag does not flip the modifier). */
   modifier: SelectionModifier;
+}
+
+interface ResizeSession {
+  regionId: string;
+  handle: ResizeHandle;
+  origin: BBox;
 }
 
 /** Resolve the select-mode modifier from a raw DOM MouseEvent (spec §7). */
@@ -293,14 +302,20 @@ export default function PageImageCanvas({
   imageUrl,
   encoded,
   page,
+  projectId,
+  pageIndex,
   onBoxSelect,
   onRebox,
   onAddWord,
   onErasePixels,
 }: PageImageCanvasProps) {
+  // Always called. A resize is skipped when the page ids are missing.
+  const editRegion = useEditRegion(projectId ?? "", pageIndex ?? -1);
+  const regionDecisionPending = useRegionDecisionPending(projectId ?? "", pageIndex ?? -1);
   // Drag start coordinates (page-space). Held in state because the drag-preview
   // Rect and the ocr-drag-rect sidecar render from React state.
   const dragStateRef = useRef<DragState | null>(null);
+  const resizeSessionRef = useRef<ResizeSession | null>(null);
   const [dragRect, setLocalDragRect] = useState<BBox | null>(null);
   const [mode, setMode] = useState<ViewportMode>(viewportStore.getState().mode);
   const [railTarget, setRailTarget] = useState<RailTarget>(railStore.getState().target);
@@ -312,8 +327,19 @@ export default function PageImageCanvas({
   // because onCancelMode in useViewportHotkeys calls it.
   function clearDrag() {
     dragStateRef.current = null;
+    resizeSessionRef.current = null;
     setLocalDragRect(null);
     setDragRect(null);
+  }
+
+  function sourceBox(rect: BBox): BBox {
+    if (encoded !== null && encoded.scale > 0) return displayToSrc(rect, encoded.scale);
+    return {
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    };
   }
 
   // Build per-mode color maps from CSS tokens (called once per render).
@@ -591,6 +617,17 @@ export default function PageImageCanvas({
   function handleStagePointerDown(e: KonvaEventObject<MouseEvent>, ctx: CoordContext) {
     const pos = readStagePos(e, ctx);
     if (!pos) return;
+    const regionId = selectionState.path.regionId;
+    const selectedBox = selectedRegionItems[0]?.bbox;
+    if (regionId !== undefined && selectedBox !== undefined) {
+      const handle = hitResizeHandle(selectedBox, pos.x, pos.y);
+      if (handle !== null) {
+        resizeSessionRef.current = { regionId, handle, origin: selectedBox };
+        dragStateRef.current = null;
+        return;
+      }
+    }
+    resizeSessionRef.current = null;
     dragStateRef.current = {
       startX: pos.x,
       startY: pos.y,
@@ -600,6 +637,17 @@ export default function PageImageCanvas({
   }
 
   function handleStagePointerMove(e: KonvaEventObject<MouseEvent>, ctx: CoordContext) {
+    const resizing = resizeSessionRef.current;
+    if (resizing) {
+      const pos = readStagePos(e, ctx);
+      if (!pos) return;
+      scheduleDragUpdate(() => {
+        const rect = resizeBox(resizing.origin, resizing.handle, pos);
+        setLocalDragRect(rect);
+        setDragRect(rect);
+      });
+      return;
+    }
     const start = dragStateRef.current;
     if (!start) return;
     const pos = readStagePos(e, ctx);
@@ -611,7 +659,31 @@ export default function PageImageCanvas({
     });
   }
 
+  function commitResize(resizing: ResizeSession, pos: { x: number; y: number }) {
+    if (projectId === undefined || projectId === "" || pageIndex === undefined || pageIndex < 0) {
+      return;
+    }
+    if (regionDecisionPending) return;
+    // Resize the source box once. Rounding the display box and then converting
+    // it back shifts an edge whenever the scale does not divide that edge.
+    const scale = encoded !== null && encoded.scale > 0 ? encoded.scale : 1;
+    const box = resizeBox(sourceBox(resizing.origin), resizing.handle, {
+      x: pos.x / scale,
+      y: pos.y / scale,
+    });
+    if (box.width < 1 || box.height < 1) return;
+    editRegion.mutate({ regionId: resizing.regionId, box });
+  }
+
   function handleStagePointerUp(e: KonvaEventObject<MouseEvent>, ctx: CoordContext) {
+    const resizing = resizeSessionRef.current;
+    if (resizing) {
+      const pos = readStagePos(e, ctx);
+      clearDrag();
+      if (!pos) return;
+      commitResize(resizing, pos);
+      return;
+    }
     const start = dragStateRef.current;
     if (!start) return;
     const pos = readStagePos(e, ctx);
@@ -677,6 +749,14 @@ export default function PageImageCanvas({
           toggleWord(pageIndex, parts[0]!, parts[1]!, modifier);
         }
         useUiPrefs.setState({ rightPanelOpen: true });
+      }
+      return;
+    }
+
+    if (railStore.getState().mode === "region") {
+      const box = sourceBox(rect);
+      if (box.width >= 1 && box.height >= 1) {
+        regionDraftStore.getState().setBox(box);
       }
       return;
     }

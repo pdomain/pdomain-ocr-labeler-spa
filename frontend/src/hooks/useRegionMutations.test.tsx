@@ -25,6 +25,8 @@ import {
   useUnrejectProposal,
   useEditRegion,
   useDeleteRegion,
+  useCreateRegion,
+  useSetRegionWords,
   useRegionDecisionPending,
 } from "./useRegionMutations";
 
@@ -219,6 +221,104 @@ describe("useEditRegion", () => {
     expect(method).toBe("PATCH");
     expect(path).toBe(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/regions/region-1`);
     expect(body).toEqual({ role: "paragraph" });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID, PAGE_IDX] });
+  });
+
+  it("PATCHes exactly { box } when only a box is given", async () => {
+    let body: unknown;
+    server.use(
+      http.patch("/api/projects/:pid/pages/:idx/regions/:regionId", async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({
+          project_id: PROJECT_ID,
+          page_index: PAGE_IDX,
+          line_matches: [],
+        });
+      }),
+    );
+    const qc = makeQueryClient();
+    const { result } = renderHook(() => useEditRegion(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapper(qc),
+    });
+
+    await act(() =>
+      result.current.mutateAsync({
+        regionId: "region-1",
+        box: { x: 4, y: 5, width: 6, height: 7 },
+      }),
+    );
+
+    expect(body).toEqual({ box: { x: 4, y: 5, width: 6, height: 7 } });
+  });
+});
+
+describe("useCreateRegion", () => {
+  it("POSTs exactly { role, box } and invalidates the page query", async () => {
+    let method: string | undefined;
+    let path: string | undefined;
+    let body: unknown;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/regions", async ({ request }) => {
+        method = request.method;
+        path = new URL(request.url).pathname;
+        body = await request.json();
+        return HttpResponse.json({
+          project_id: PROJECT_ID,
+          page_index: PAGE_IDX,
+          line_matches: [],
+        });
+      }),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useCreateRegion(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapper(qc),
+    });
+
+    await act(() =>
+      result.current.mutateAsync({
+        role: "paragraph",
+        box: { x: 1, y: 2, width: 3, height: 4 },
+      }),
+    );
+
+    expect(method).toBe("POST");
+    expect(path).toBe(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/regions`);
+    expect(body).toEqual({ role: "paragraph", box: { x: 1, y: 2, width: 3, height: 4 } });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID, PAGE_IDX] });
+  });
+});
+
+describe("useSetRegionWords", () => {
+  it("PUTs the word refs and invalidates the page query", async () => {
+    let method: string | undefined;
+    let body: unknown;
+    server.use(
+      http.put("/api/projects/:pid/pages/:idx/regions/:regionId/words", async ({ request }) => {
+        method = request.method;
+        body = await request.json();
+        return HttpResponse.json({
+          project_id: PROJECT_ID,
+          page_index: PAGE_IDX,
+          line_matches: [],
+        });
+      }),
+    );
+    const qc = makeQueryClient();
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useSetRegionWords(PROJECT_ID, PAGE_IDX), {
+      wrapper: makeWrapper(qc),
+    });
+
+    await act(() =>
+      result.current.mutateAsync({
+        regionId: "region-1",
+        wordRefs: [{ line_index: 0, word_index: 1 }],
+      }),
+    );
+
+    expect(method).toBe("PUT");
+    expect(body).toEqual({ word_refs: [{ line_index: 0, word_index: 1 }] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID, PAGE_IDX] });
   });
 });

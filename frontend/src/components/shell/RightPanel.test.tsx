@@ -6,6 +6,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RightPanel } from "./RightPanel";
+import { regionDraftStore } from "../../stores/region-draft-store";
 import {
   clearSelection,
   selectBlock,
@@ -99,6 +100,7 @@ function makePage(): PagePayload {
 describe("RightPanel (Slice 14)", () => {
   beforeEach(() => {
     clearSelection();
+    regionDraftStore.reset();
   });
 
   it("renders with breadcrumb and collapse button", () => {
@@ -107,6 +109,13 @@ describe("RightPanel (Slice 14)", () => {
     expect(screen.getByTestId("right-panel-header")).toBeInTheDocument();
     expect(screen.getByTestId("breadcrumb")).toBeInTheDocument();
     expect(screen.getByTestId("right-panel-collapse")).toBeInTheDocument();
+  });
+
+  it("shows a new-region prompt while nothing is selected", () => {
+    regionDraftStore.getState().setBox({ x: 1, y: 2, width: 3, height: 4 });
+    renderWithQuery(<RightPanel page={makePage()} projectId="p1" pageIndex={0} />);
+    expect(screen.getByTestId("region-draw-prompt")).toBeInTheDocument();
+    expect(screen.getByTestId("right-panel-body")).toHaveAttribute("data-level", "none");
   });
 
   it("body shows 'no selection' placeholder when level=none", () => {
@@ -178,6 +187,7 @@ describe("RightPanel (Slice 14)", () => {
 describe("STB-5: RightPanel never shows placeholder for implemented levels", () => {
   beforeEach(() => {
     clearSelection();
+    regionDraftStore.reset();
   });
 
   it("level=none still shows the placeholder", () => {
@@ -236,6 +246,7 @@ describe("STB-5: RightPanel never shows placeholder for implemented levels", () 
 describe("ML-A: RightPanel multi-line routing", () => {
   beforeEach(() => {
     clearSelection();
+    regionDraftStore.reset();
   });
 
   it("2 lines selected → multi-line-detail renders, line-detail absent", () => {

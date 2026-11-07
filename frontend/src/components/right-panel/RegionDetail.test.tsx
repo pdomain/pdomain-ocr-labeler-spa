@@ -12,8 +12,14 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import { server } from "../../test/server";
-import { RegionDetail } from "./RegionDetail";
-import { clearSelection, selectProposal, selectRegion } from "../../stores/selection-store";
+import { RegionDetail, RegionDrawPrompt } from "./RegionDetail";
+import {
+  clearSelection,
+  selectProposal,
+  selectRegion,
+  selectionStore,
+} from "../../stores/selection-store";
+import { regionDraftStore } from "../../stores/region-draft-store";
 import { dialogStore } from "../../stores/dialog-store";
 import type { components } from "../../api/types";
 
@@ -115,6 +121,7 @@ describe("RegionDetail", () => {
   beforeEach(() => {
     clearSelection();
     dialogStore.reset();
+    regionDraftStore.reset();
   });
 
   it("shows role, confidence and evidence keys for a selected proposal", () => {
@@ -261,5 +268,127 @@ describe("RegionDetail", () => {
     selectRegion("region-does-not-exist");
     renderWithQuery(<RegionDetail page={makePage()} projectId="p1" pageIndex={0} />);
     expect(screen.getByTestId("region-detail")).toHaveTextContent(/no longer on the page/i);
+  });
+
+  it("checks words that match the region and saves the edited set", async () => {
+    const user = userEvent.setup();
+    const page = makePage();
+    page.line_matches = [
+      {
+        line_index: 0,
+        paragraph_index: 0,
+        ocr_line_text: "one two",
+        ground_truth_line_text: "one two",
+        word_matches: [
+          {
+            line_index: 0,
+            word_index: 0,
+            ocr_text: "one",
+            ground_truth_text: "one",
+            match_status: "exact",
+            normalized_match: false,
+            is_validated: false,
+            bbox: { x: 10, y: 20, width: 30, height: 8 },
+          },
+          {
+            line_index: 0,
+            word_index: 1,
+            ocr_text: "two",
+            ground_truth_text: "two",
+            match_status: "exact",
+            normalized_match: false,
+            is_validated: false,
+            bbox: { x: 50, y: 20, width: 10, height: 8 },
+          },
+        ],
+        overall_match_status: "exact",
+        exact_count: 2,
+        fuzzy_count: 0,
+        mismatch_count: 0,
+        unmatched_gt_count: 0,
+        unmatched_ocr_count: 0,
+        validated_word_count: 0,
+        total_word_count: 2,
+        is_fully_validated: false,
+      },
+    ];
+    const drawn = page.regions?.find((region) => region.region_id === "region-2");
+    if (drawn) drawn.member_word_signatures = [[10, 20, 40, 28, false]];
+
+    let body: unknown;
+    server.use(
+      http.put("/api/projects/:pid/pages/:idx/regions/:regionId/words", async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json(page);
+      }),
+    );
+
+    selectRegion("region-2");
+    renderWithQuery(<RegionDetail page={page} projectId="p1" pageIndex={0} />);
+    expect(screen.getByTestId("region-member-0-0")).toBeChecked();
+    expect(screen.getByTestId("region-member-0-1")).not.toBeChecked();
+
+    await user.click(screen.getByTestId("region-member-0-1"));
+    await user.click(screen.getByTestId("region-membership-save"));
+
+    await waitFor(() =>
+      expect(body).toEqual({
+        word_refs: [
+          { line_index: 0, word_index: 0 },
+          { line_index: 0, word_index: 1 },
+        ],
+      }),
+    );
+  });
+});
+
+describe("RegionDrawPrompt", () => {
+  beforeEach(() => {
+    clearSelection();
+    regionDraftStore.reset();
+  });
+
+  it("posts the draft box with the paragraph role and selects the new region", async () => {
+    const user = userEvent.setup();
+    regionDraftStore.getState().setBox({ x: 8, y: 9, width: 10, height: 11 });
+    let body: unknown;
+    server.use(
+      http.post("/api/projects/:pid/pages/:idx/regions", async ({ request }) => {
+        body = await request.json();
+        const created = makePage();
+        created.regions = [
+          ...(created.regions ?? []),
+          {
+            region_id: "region-new",
+            proposal_id: "hand-drawn",
+            role: "paragraph",
+            box: { x: 8, y: 9, width: 10, height: 11 },
+            confirmed: true,
+            confidence: null,
+            stale: false,
+          },
+        ];
+        return HttpResponse.json(created);
+      }),
+    );
+
+    renderWithQuery(<RegionDrawPrompt page={makePage()} projectId="p1" pageIndex={0} />);
+    expect(screen.getByTestId("region-draw-role")).toHaveValue("paragraph");
+    await user.click(screen.getByTestId("region-draw-create"));
+
+    await waitFor(() =>
+      expect(body).toEqual({ role: "paragraph", box: { x: 8, y: 9, width: 10, height: 11 } }),
+    );
+    expect(selectionStore.getState().path.regionId).toBe("region-new");
+    expect(regionDraftStore.getState().box).toBeNull();
+  });
+
+  it("clears the draft when Cancel is clicked", async () => {
+    const user = userEvent.setup();
+    regionDraftStore.getState().setBox({ x: 1, y: 1, width: 2, height: 2 });
+    renderWithQuery(<RegionDrawPrompt page={makePage()} projectId="p1" pageIndex={0} />);
+    await user.click(screen.getByTestId("region-draw-cancel"));
+    expect(regionDraftStore.getState().box).toBeNull();
+    expect(screen.queryByTestId("region-draw-prompt")).toBeNull();
   });
 });

@@ -17,12 +17,17 @@
 // Spec: specs/21-konva-renderer.md §4, §7, §9, §12, §13.
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render as rtlRender, screen, fireEvent, act, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { http, HttpResponse } from "msw";
 import { getStageDimensions } from "../lib/canvas-utils";
 import { viewportStore } from "../stores/viewport-store";
-import { selectionStore } from "../stores/selection-store";
+import { selectionStore, selectRegion } from "../stores/selection-store";
 import { useUiPrefs } from "../stores/ui-prefs";
 import { railStore } from "../stores/rail-store";
+import { regionDraftStore } from "../stores/region-draft-store";
+import { server } from "../test/server";
 
 // ── @pdomain/pdomain-ui/canvas mock ───────────────────────────────────────
 //
@@ -350,6 +355,13 @@ vi.mock("../lib/rafSchedule", () => ({
 // Import the component AFTER mocks so it pulls the mocked react-konva.
 import PageImageCanvas from "./PageImageCanvas";
 import type { components } from "../api/types";
+
+function render(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return rtlRender(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 import { SELECTION_STROKE_WIDTH } from "./BBoxOverlay";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -441,6 +453,8 @@ afterEach(() => {
     rightPanelOpen: false,
   });
   railStore.getState().setTarget("word");
+  railStore.getState().setMode("view");
+  regionDraftStore.reset();
   mockUseImageState.image = undefined;
   mockUseImageState.status = "loading";
   mockStageScale.value = 1;
@@ -1738,5 +1752,83 @@ describe("PageImageCanvas — AG-5: Ctrl/Cmd-click word accumulates selection", 
     expect(sel.selectedWords).toHaveLength(1);
     expect(sel.selectedWords).toContainEqual([0, 0]);
     expect(sel.selectedWords).not.toContainEqual([0, 1]);
+  });
+});
+
+describe("PageImageCanvas — region draw and resize", () => {
+  it("stores a source-pixel draft for a region-mode drag and does not box-select", () => {
+    railStore.getState().setMode("region");
+    const onBoxSelect = vi.fn();
+    render(
+      <PageImageCanvas
+        imageUrl="/test.jpg"
+        encoded={encoded}
+        onBoxSelect={onBoxSelect}
+        projectId="proj-001"
+        pageIndex={0}
+      />,
+    );
+
+    simulateDrag({ x: 100, y: 100 }, { x: 200, y: 180 });
+
+    expect(regionDraftStore.getState().box).toEqual({ x: 200, y: 200, width: 200, height: 160 });
+    expect(onBoxSelect).not.toHaveBeenCalled();
+  });
+
+  it("does not store a draft for a trivial region-mode drag", () => {
+    railStore.getState().setMode("region");
+    render(
+      <PageImageCanvas imageUrl="/test.jpg" encoded={encoded} projectId="proj-001" pageIndex={0} />,
+    );
+
+    simulateDrag({ x: 40, y: 40 }, { x: 41, y: 41 });
+
+    expect(regionDraftStore.getState().box).toBeNull();
+  });
+
+  it("patches the selected region's box when a corner is dragged", async () => {
+    let body: unknown;
+    server.use(
+      http.patch("/api/projects/:pid/pages/:idx/regions/:regionId", async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({
+          project_id: "proj-001",
+          page_index: 0,
+          line_matches: [],
+          generation: 2,
+        });
+      }),
+    );
+    const page = makePage([]);
+    page.regions = [
+      {
+        region_id: "reg-1",
+        proposal_id: null,
+        role: "paragraph",
+        box: { x: 100, y: 100, width: 80, height: 40 },
+        confirmed: true,
+        confidence: null,
+        stale: false,
+      },
+    ];
+    selectRegion("reg-1");
+    const onBoxSelect = vi.fn();
+    render(
+      <PageImageCanvas
+        imageUrl="/test.jpg"
+        encoded={encoded}
+        page={page}
+        projectId="proj-001"
+        pageIndex={0}
+        onBoxSelect={onBoxSelect}
+      />,
+    );
+
+    simulateDrag({ x: 90, y: 70 }, { x: 110, y: 90 });
+
+    await waitFor(() => expect(body).toBeDefined());
+    expect(body).toEqual({ box: { x: 100, y: 100, width: 120, height: 80 } });
+    expect(onBoxSelect).not.toHaveBeenCalled();
+    expect(regionDraftStore.getState().box).toBeNull();
   });
 });

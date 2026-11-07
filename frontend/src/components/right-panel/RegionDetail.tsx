@@ -54,16 +54,26 @@
 //   carried-rejections-error-{proposalId}       — inline error after a failed un-reject
 
 import { useState, useSyncExternalStore } from "react";
-import { selectionStore } from "../../stores/selection-store";
+import { selectionStore, selectRegion } from "../../stores/selection-store";
 import { dialogStore } from "../../stores/dialog-store";
+import { regionDraftStore } from "../../stores/region-draft-store";
+import { useUiPrefs } from "../../stores/ui-prefs";
 import {
   useAcceptProposal,
   useRejectProposal,
   useUnrejectProposal,
   useEditRegion,
   useDeleteRegion,
+  useCreateRegion,
+  useSetRegionWords,
   useRegionDecisionPending,
 } from "../../hooks/useRegionMutations";
+import {
+  matchingMemberKeys,
+  wordMemberKey,
+  type MembershipWord,
+  type WordSignature,
+} from "../../lib/region-membership";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -203,6 +213,9 @@ export function RegionDetail({ page, projectId, pageIndex }: RegionDetailProps) 
     }
     return (
       <ConfirmedRegionDetail
+        page={page}
+        projectId={projectId}
+        pageIndex={pageIndex}
         regionId={regionId}
         region={region}
         editRegion={editRegion}
@@ -410,6 +423,87 @@ function RoleSelect({ testId, value, onChange, disabled }: RoleSelectProps) {
   );
 }
 
+export function RegionDrawPrompt({ page, projectId, pageIndex }: RegionDetailProps) {
+  const box = useSyncExternalStore(
+    (onStoreChange) => regionDraftStore.subscribe(onStoreChange),
+    () => regionDraftStore.getState().box,
+    () => null,
+  );
+  const [role, setRole] = useState<RegionRole>("paragraph");
+  const createRegion = useCreateRegion(projectId, pageIndex);
+  const decisionPending = useRegionDecisionPending(projectId, pageIndex);
+  if (box === null) return null;
+
+  const draft = box;
+  return (
+    <div
+      data-testid="region-draw-prompt"
+      className="flex flex-col gap-2 border-b border-border-1 p-3"
+    >
+      <p className="text-[11px] text-ink-2">New region</p>
+      <RoleSelect
+        testId="region-draw-role"
+        value={role}
+        onChange={(next) => {
+          if (next !== "") setRole(next);
+        }}
+        disabled={createRegion.isPending || decisionPending}
+      />
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          data-testid="region-draw-create"
+          disabled={createRegion.isPending || decisionPending}
+          onClick={() => {
+            const previous = new Set(
+              (page.regions ?? []).flatMap((region) =>
+                region.region_id ? [region.region_id] : [],
+              ),
+            );
+            createRegion.mutate(
+              { role, box: draft },
+              {
+                onSuccess: (payload) => {
+                  regionDraftStore.getState().clear();
+                  const created = (payload.regions ?? []).find(
+                    (region) =>
+                      region.confirmed &&
+                      typeof region.region_id === "string" &&
+                      region.region_id !== "" &&
+                      !previous.has(region.region_id),
+                  );
+                  if (created?.region_id) {
+                    selectRegion(created.region_id);
+                    useUiPrefs.setState({ rightPanelOpen: true });
+                  }
+                },
+              },
+            );
+          }}
+          className="text-[11px] px-2 py-1 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+        >
+          Create
+        </button>
+        <button
+          type="button"
+          data-testid="region-draw-cancel"
+          onClick={() => {
+            regionDraftStore.getState().clear();
+          }}
+          className="text-[11px] px-2 py-1 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+      {createRegion.isError && (
+        <p data-testid="region-draw-error" className="text-[10px] text-status-mismatch italic">
+          Creating the region failed. Try again.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ─── Proposal detail ────────────────────────────────────────────────────────
 
 interface ProposalDetailProps {
@@ -538,6 +632,9 @@ function ProposalDetail({
 // ─── Confirmed region detail ────────────────────────────────────────────────
 
 interface ConfirmedRegionDetailProps {
+  page: PagePayload;
+  projectId: string;
+  pageIndex: number;
   regionId: string;
   region: RegionView;
   editRegion: ReturnType<typeof useEditRegion>;
@@ -545,7 +642,104 @@ interface ConfirmedRegionDetailProps {
   decisionPending: boolean;
 }
 
+interface ListedWord extends MembershipWord {
+  text: string;
+}
+
+function wordsOnPage(page: PagePayload): ListedWord[] {
+  const listed: ListedWord[] = [];
+  for (const line of page.line_matches ?? []) {
+    for (const word of line.word_matches) {
+      if (word.word_index === null) continue;
+      const groundTruth = word.ground_truth_text.trim();
+      listed.push({
+        lineIndex: line.line_index,
+        wordIndex: word.word_index,
+        bbox: word.bbox,
+        text: groundTruth !== "" ? groundTruth : word.ocr_text,
+      });
+    }
+  }
+  return listed;
+}
+
+function RegionWords({
+  regionId,
+  projectId,
+  pageIndex,
+  words,
+  matchedKeys,
+  decisionPending,
+}: {
+  regionId: string;
+  projectId: string;
+  pageIndex: number;
+  words: readonly ListedWord[];
+  matchedKeys: readonly string[];
+  decisionPending: boolean;
+}) {
+  const setWords = useSetRegionWords(projectId, pageIndex);
+  const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set(matchedKeys));
+
+  function toggle(key: string) {
+    setChecked((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-[11px] text-ink-3">Words</p>
+      {words.map((word) => {
+        const key = wordMemberKey(word);
+        return (
+          <label key={key} className="flex items-center gap-2 text-[11px] text-ink-2">
+            <input
+              type="checkbox"
+              data-testid={`region-member-${String(word.lineIndex)}-${String(word.wordIndex)}`}
+              checked={checked.has(key)}
+              disabled={setWords.isPending || decisionPending}
+              onChange={() => {
+                toggle(key);
+              }}
+            />
+            <span>{word.text}</span>
+          </label>
+        );
+      })}
+      <button
+        type="button"
+        data-testid="region-membership-save"
+        disabled={setWords.isPending || decisionPending}
+        onClick={() => {
+          const wordRefs = words
+            .filter((word) => checked.has(wordMemberKey(word)))
+            .map((word) => ({ line_index: word.lineIndex, word_index: word.wordIndex }));
+          setWords.mutate({ regionId, wordRefs });
+        }}
+        className="text-[11px] py-1.5 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+      >
+        Save words
+      </button>
+      {setWords.isError && (
+        <p
+          data-testid="region-membership-error"
+          className="text-[10px] text-status-mismatch italic"
+        >
+          Saving words failed. Try again.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ConfirmedRegionDetail({
+  page,
+  projectId,
+  pageIndex,
   regionId,
   region,
   editRegion,
@@ -554,6 +748,14 @@ function ConfirmedRegionDetail({
 }: ConfirmedRegionDetailProps) {
   const [changeRoleValue, setChangeRoleValue] = useState<RegionRole | "">("");
   const origin = region.proposal_id ? "From a proposal" : "Drawn by hand";
+  const words = wordsOnPage(page);
+  const signatures: readonly WordSignature[] = region.member_word_signatures ?? [];
+  const matchedKeys = matchingMemberKeys(
+    words,
+    signatures,
+    page.encoded_dims?.src_width ?? null,
+    page.encoded_dims?.src_height ?? null,
+  );
 
   function handleDelete() {
     dialogStore.openConfirm({
@@ -575,6 +777,16 @@ function ConfirmedRegionDetail({
           {origin}
         </p>
       </div>
+
+      <RegionWords
+        key={`${regionId}\0${signatures.map((signature) => signature.join(",")).join("|")}\0${matchedKeys.join("|")}`}
+        regionId={regionId}
+        projectId={projectId}
+        pageIndex={pageIndex}
+        words={words}
+        matchedKeys={matchedKeys}
+        decisionPending={decisionPending}
+      />
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-1.5">

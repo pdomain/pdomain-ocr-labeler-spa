@@ -36,8 +36,11 @@ import type { components } from "../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
 type RegionRole = components["schemas"]["RegionRole"];
+type BBox = components["schemas"]["BBox"];
 type AcceptRegionProposalRequest = components["schemas"]["AcceptRegionProposalRequest"];
 type EditRegionRequest = components["schemas"]["EditRegionRequest"];
+type SetRegionWordMembershipRequest = components["schemas"]["SetRegionWordMembershipRequest"];
+type WordRef = components["schemas"]["WordRef"];
 
 // ─── internal helpers ─────────────────────────────────────────────────────
 
@@ -172,16 +175,56 @@ export function useUnrejectProposal(projectId: string, pageIndex: number) {
 
 // ─── useEditRegion ──────────────────────────────────────────────────────────
 
-/** Change a confirmed region's role. */
+/**
+ * Change a confirmed region's role, its box, or both.
+ * Omitted fields are left out of the JSON body, so a role-only edit stays
+ * exactly `{ role }` and a resize stays exactly `{ box }`.
+ */
 export function useEditRegion(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
-  return useMutation<PagePayload, Error, { regionId: string; role: RegionRole }>({
+  return useMutation<PagePayload, Error, { regionId: string; role?: RegionRole; box?: BBox }>({
     mutationKey: decisionMutationKey(projectId, pageIndex),
-    mutationFn: ({ regionId, role }) => {
-      const body: EditRegionRequest = { role };
+    mutationFn: ({ regionId, role, box }) => {
+      const body: EditRegionRequest = {};
+      if (role !== undefined) body.role = role;
+      if (box !== undefined) body.box = box;
       return apiRequest<PagePayload>(
         `${pageBase(projectId, pageIndex)}/regions/${encodeURIComponent(regionId)}`,
         "PATCH",
+        body,
+      );
+    },
+    onSuccess: () => {
+      invalidateAfterDecision(qc, projectId, pageIndex);
+    },
+  });
+}
+
+/** Create a hand-drawn region. The server stamps the hand-drawn origin. */
+export function useCreateRegion(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { role: RegionRole; box: BBox }>({
+    mutationKey: decisionMutationKey(projectId, pageIndex),
+    mutationFn: ({ role, box }) => {
+      const body: { role: RegionRole; box: BBox } = { role, box };
+      return apiRequest<PagePayload>(`${pageBase(projectId, pageIndex)}/regions`, "POST", body);
+    },
+    onSuccess: () => {
+      invalidateAfterDecision(qc, projectId, pageIndex);
+    },
+  });
+}
+
+/** Replace the words that belong to a confirmed region. */
+export function useSetRegionWords(projectId: string, pageIndex: number) {
+  const qc = useQueryClient();
+  return useMutation<PagePayload, Error, { regionId: string; wordRefs: WordRef[] }>({
+    mutationKey: decisionMutationKey(projectId, pageIndex),
+    mutationFn: ({ regionId, wordRefs }) => {
+      const body: SetRegionWordMembershipRequest = { word_refs: wordRefs };
+      return apiRequest<PagePayload>(
+        `${pageBase(projectId, pageIndex)}/regions/${encodeURIComponent(regionId)}/words`,
+        "PUT",
         body,
       );
     },

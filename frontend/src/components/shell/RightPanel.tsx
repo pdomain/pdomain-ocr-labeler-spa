@@ -31,7 +31,11 @@ import { BlockDetail } from "../right-panel/BlockDetail";
 import { ParagraphDetail } from "../right-panel/ParagraphDetail";
 import { MultiWordDetail } from "../right-panel/MultiWordDetail";
 import { MultiLineDetail } from "../right-panel/MultiLineDetail";
-import { RegionDetail, CarriedRejectionsPanel } from "../right-panel/RegionDetail";
+import {
+  RegionDetail,
+  CarriedRejectionsPanel,
+  RegionDrawPrompt,
+} from "../right-panel/RegionDetail";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -110,7 +114,10 @@ export function RightPanel({
           than inside <RegionDetail>. Renders nothing when the page has no
           carried rejection to show. */}
       {page && projectId !== undefined && pageIndex !== undefined && (
-        <CarriedRejectionsPanel page={page} projectId={projectId} pageIndex={pageIndex} />
+        <>
+          <CarriedRejectionsPanel page={page} projectId={projectId} pageIndex={pageIndex} />
+          <RegionDrawPrompt page={page} projectId={projectId} pageIndex={pageIndex} />
+        </>
       )}
 
       {/* Body */}
