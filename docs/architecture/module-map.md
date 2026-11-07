@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-31
-last_verified: 2026-07-13
+last_verified: 2026-11-06
 ---
 
 # Module Map
@@ -183,7 +183,7 @@ Evidence:
 | Path | How produced | Notes |
 |------|-------------|-------|
 | `frontend/src/api/types.ts` | `make openapi-export` | Never hand-edit; CI gates on no drift |
-| `frontend/openapi.json` | `make openapi-export` | OpenAPI schema checked into repo |
+| `frontend/openapi.json` | `make openapi-export` | Intermediate schema written for `openapi-typescript`. Gitignored. The committed artifact is `frontend/src/api/types.ts`. |
 | `frontend/dist/` | `make frontend-build` | Copied to `src/pdomain_ocr_labeler_spa/static/` |
 | `src/pdomain_ocr_labeler_spa/static/` | `make frontend-build` | Bundled into wheel as package resources |
 | `dist/*.whl` | `uv build --wheel` | Includes bundled SPA; `build_hooks/spa_check.py` refuses if `static/` is empty |

@@ -23,7 +23,12 @@ def _sha(payload: bytes) -> str:
     return sha256(payload).hexdigest()
 
 
-def _write_book(root: Path, *, page_count: int = 2) -> BookLabelingManifest:
+def _write_book(
+    root: Path,
+    *,
+    page_count: int = 2,
+    relation_page_ids: tuple[str, ...] | None = None,
+) -> BookLabelingManifest:
     root.mkdir()
     pages_root = root / "pages"
     pages_root.mkdir()
@@ -34,6 +39,7 @@ def _write_book(root: Path, *, page_count: int = 2) -> BookLabelingManifest:
     (matching / "continuations.json").write_bytes(continuation_bytes)
     graph_sha256 = _sha(continuation_bytes)
     relation_id = "continuation-relation"
+    resolved_relation_page_ids = page_ids if relation_page_ids is None else relation_page_ids
     pages = tuple(
         BookLabelingPage(
             page_index=index,
@@ -44,7 +50,7 @@ def _write_book(root: Path, *, page_count: int = 2) -> BookLabelingManifest:
             configuration_hash="c" * 64,
             taxonomy_version="labeler-v1",
             taxonomy_hash="a" * 64,
-            relation_ids=(relation_id,),
+            relation_ids=(relation_id,) if page_id in resolved_relation_page_ids else (),
         )
         for index, page_id in enumerate(page_ids)
     )
@@ -56,7 +62,7 @@ def _write_book(root: Path, *, page_count: int = 2) -> BookLabelingManifest:
         match_relations=(
             BookMatchRelationReference(
                 relation_id=relation_id,
-                page_ids=page_ids,
+                page_ids=resolved_relation_page_ids,
                 match_graph_id=graph_sha256,
                 match_graph_relative_path="matching/continuations.json",
                 match_graph_sha256=graph_sha256,
@@ -82,6 +88,15 @@ def test_loads_manifest_and_retains_its_exact_bytes(tmp_path: Path) -> None:
         root_stat.st_dev,
         root_stat.st_ino,
     )
+
+
+def test_manifest_intake_accepts_one_page_relation(tmp_path: Path) -> None:
+    root = tmp_path / "book"
+    _write_book(root, relation_page_ids=("pgdp:project:001.png",))
+
+    loaded = load_book_labeling_manifest_directory(root)
+
+    assert loaded.manifest.match_relations[0].page_ids == ("pgdp:project:001.png",)
 
 
 def test_rejects_symlinked_book_root(tmp_path: Path) -> None:

@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-06
 ---
 
 # Behavior unit spec - Root screen
@@ -21,7 +21,8 @@ last_verified: 2026-07-13
 - **Backend / collaborators touched:** `GET /api/session-state`,
   `GET /api/projects`, `POST /api/projects/load`,
   `POST /api/projects`, `DELETE /api/projects/{id}`,
-  `POST /api/projects/{id}/archive`, source-root filesystem browser
+  source-root filesystem browser. There is no archive route
+  (`docs/context/decisions.md`, 2026-09-18).
 
 ## Behavior records
 

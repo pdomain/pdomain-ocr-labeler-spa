@@ -3,7 +3,7 @@ kind: spec
 status: active
 owner: maintainers
 created: 2026-06-01
-last_verified: 2026-07-13
+last_verified: 2026-11-06
 ---
 
 # Unclear behavior inventory
@@ -18,11 +18,11 @@ implementation decisions before they can be treated as locked behavior.
   does not obviously include those routes.
 - Unknown project behavior is now redirect-to-root with a warning and
   `skipSessionRedirect`; older docs mention inline "Project not found".
-- Root filter chips for active/complete/archived are visible, but metadata for
-  those states is not exposed by the current project API, so some chips are
-  effectively no-ops.
-- Root project card Delete/Archive menu items appear inert. Decide whether to
-  hide, disable, implement, or document them as placeholders.
+- Root filter chips are All, Active, and Complete. Active is every project
+  that is not complete. There is no Archived chip. Archive is omitted
+  (`docs/context/decisions.md`, 2026-09-18).
+- Root project card Delete confirms, then calls `DELETE /api/projects/{id}`
+  and refreshes the list. There is no Archive menu item.
 - Direct bad page URLs such as `/pageno/0`, `/pageno/abc`, or out-of-range
   values need a canonical redirect/error behavior.
 

@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-11-06
 ---
 
 # 15 — Deployment + Developer Workflow
@@ -172,8 +172,11 @@ CI gate (closes pgdp-prep drift gap):
 
 ```yaml
 - run: make openapi-export
-- run: git diff --exit-code frontend/src/api/types.ts frontend/openapi.json
+- run: git diff --exit-code frontend/src/api/types.ts
 ```
+
+`frontend/openapi.json` is a gitignored intermediate. A diff against it
+cannot fail. The committed artifact is `frontend/src/api/types.ts`.
 
 If the diff is non-empty, CI fails with "regenerate openapi types
 before merging".
@@ -373,7 +376,7 @@ repos:
       - id: openapi-drift
         name: OpenAPI types in sync
         language: system
-        entry: bash -c 'make openapi-export && git diff --exit-code frontend/src/api/types.ts frontend/openapi.json'
+        entry: bash -c 'make openapi-export && git diff --exit-code frontend/src/api/types.ts'
         pass_filenames: false
         stages: [pre-push]
 ```

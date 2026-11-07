@@ -7,6 +7,7 @@ import os
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from pdomain_book_tools.geometry import BoundingBox, Point
@@ -20,6 +21,7 @@ from pdomain_book_tools.typography import (
     ArtifactSource,
     BookLabelingManifest,
     BookLabelingPage,
+    BookMatchRelationReference,
     ConfidenceTier,
     Evidence,
     Grapheme,
@@ -171,16 +173,91 @@ def _fixture_image(index: int) -> bytes:
     return stream.getvalue()
 
 
+def _write_edition_companion(root: Path, *, page_ids: tuple[str, ...], relation_id: str) -> tuple[str, bytes]:
+    edition = root / "edition"
+    edition.mkdir()
+    edition_document_bytes = b'{"schema_version":"1.0"}\n'
+    projection_bytes = b'{"schema_version":"1.0","units":[]}\n'
+    source_resolver_bytes = b'{"schema_version":"1.0"}\n'
+    alignment_bytes = b'{"schema_version":"1.0"}\n'
+    (edition / "edition-document.json").write_bytes(edition_document_bytes)
+    (edition / "projection.json").write_bytes(projection_bytes)
+    (edition / "source-resolver.json").write_bytes(source_resolver_bytes)
+    (edition / "alignment.json").write_bytes(alignment_bytes)
+    gutenberg = root / "source" / "gutenberg"
+    gutenberg.mkdir()
+    gutenberg_bytes = b"<html><body>fixture</body></html>\n"
+    (gutenberg / "37235-h.htm").write_bytes(gutenberg_bytes)
+    graph_artifact_references = (
+        {
+            "artifact_id": "edition-alignment-evidence",
+            "kind": "matching_evidence",
+            "relative_path": "edition/alignment.json",
+            "sha256": _sha(alignment_bytes),
+        },
+        {
+            "artifact_id": "edition-document",
+            "kind": "edition_document",
+            "relative_path": "edition/edition-document.json",
+            "sha256": _sha(edition_document_bytes),
+        },
+        {
+            "artifact_id": "edition-projection",
+            "kind": "edition_projection",
+            "relative_path": "edition/projection.json",
+            "sha256": _sha(projection_bytes),
+        },
+        {
+            "artifact_id": "edition-source-resolver",
+            "kind": "matching_evidence",
+            "relative_path": "edition/source-resolver.json",
+            "sha256": _sha(source_resolver_bytes),
+        },
+        {
+            "artifact_id": "gutenberg-source:fixture",
+            "kind": "source",
+            "relative_path": "source/gutenberg/37235-h.htm",
+            "sha256": _sha(gutenberg_bytes),
+        },
+    )
+    graph_relation = {
+        "evidence_artifact_ids": [reference["artifact_id"] for reference in graph_artifact_references],
+        "kind": "edition_alignment",
+        "page_ids": list(page_ids),
+        "relation_id": relation_id,
+    }
+    graph_identity = {
+        "artifact_references": list(graph_artifact_references),
+        "relations": [graph_relation],
+        "schema_version": "1.0",
+    }
+    graph_id = _sha(json.dumps(graph_identity, sort_keys=True, separators=(",", ":")).encode())
+    graph_bytes = (
+        json.dumps(
+            {**graph_identity, "graph_id": graph_id},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode()
+    matching = root / "matching"
+    matching.mkdir()
+    (matching / "edition-alignment.json").write_bytes(graph_bytes)
+    return graph_id, graph_bytes
+
+
 def _write_book(
     root: Path,
     *,
     page_count: int = 4,
     valid_images: bool = False,
+    edition_companion: bool = False,
 ) -> BookLabelingManifest:
     root.mkdir()
     source = root / "source"
     source.mkdir()
     page_names = tuple(f"{index:03d}.png" for index in range(page_count))
+    page_ids = tuple(f"pgdp:project:{page_name.removesuffix('.png')}" for page_name in page_names)
     f2 = b"{" + b",".join(json.dumps(page_name).encode() + b':"x"' for page_name in page_names) + b"}\n"
     p3 = f2
     (source / "F2.json").write_bytes(f2)
@@ -201,6 +278,14 @@ def _write_book(
         )
         + "\n"
     )
+    edition_relation_id = "edition_alignment:fixture"
+    companion_graph: tuple[str, bytes] | None = None
+    if edition_companion:
+        companion_graph = _write_edition_companion(
+            root,
+            page_ids=page_ids,
+            relation_id=edition_relation_id,
+        )
     taxonomy = TypographyTaxonomy(
         version="labeler-v1",
         labels=(
@@ -329,9 +414,27 @@ def _write_book(
                 configuration_hash=bundle.configuration_hash,
                 taxonomy_version=taxonomy.version,
                 taxonomy_hash=taxonomy.taxonomy_hash,
+                relation_ids=(edition_relation_id,) if edition_companion else (),
             )
         )
-    manifest = BookLabelingManifest(book_id="book:pgdp:project", pages=tuple(pages))
+    if companion_graph is None:
+        match_relations: tuple[BookMatchRelationReference, ...] = ()
+    else:
+        graph_id, graph_bytes = companion_graph
+        match_relations = (
+            BookMatchRelationReference(
+                relation_id=edition_relation_id,
+                page_ids=tuple(page.page_id for page in pages),
+                match_graph_id=graph_id,
+                match_graph_relative_path="matching/edition-alignment.json",
+                match_graph_sha256=_sha(graph_bytes),
+            ),
+        )
+    manifest = BookLabelingManifest(
+        book_id="book:pgdp:project",
+        pages=tuple(pages),
+        match_relations=match_relations,
+    )
     (root / "book-labeling-manifest.json").write_bytes(manifest.to_json_bytes())
     return manifest
 
@@ -367,6 +470,76 @@ def test_opens_one_real_producer_shaped_page_without_eagerly_loading_others(
     }
     assert "image.png" in {path[-1] for path in read_paths}
     loaded.close()
+    session.close()
+
+
+def test_opens_first_middle_and_last_pages_with_an_edition_companion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "book"
+    manifest = _write_book(root, page_count=5, edition_companion=True)
+    manifest_read_paths: list[tuple[str, ...]] = []
+    read_paths: list[tuple[str, ...]] = []
+    from pdomain_ocr_labeler_spa.core.persistence import (
+        book_labeling_manifest,
+        book_labeling_session,
+    )
+
+    real_manifest_read = book_labeling_manifest._read_regular_at
+    real_read = book_labeling_session._read_regular_at
+
+    def record_manifest_read(descriptor: int, parts: tuple[str, ...]) -> bytes:
+        manifest_read_paths.append(parts)
+        return real_manifest_read(descriptor, parts)
+
+    def record_read(descriptor: int, parts: tuple[str, ...]) -> bytes:
+        read_paths.append(parts)
+        return real_read(descriptor, parts)
+
+    monkeypatch.setattr(book_labeling_manifest, "_read_regular_at", record_manifest_read)
+    monkeypatch.setattr(book_labeling_session, "_read_regular_at", record_read)
+    session = _session(root)
+
+    with patch.object(session, "_load_page", wraps=session._load_page) as load_page:
+        for page_index in (0, 2, 4):
+            loaded = session.open_page(page_index)
+            assert loaded.bundle.page_id == manifest.pages[page_index].page_id
+            assert loaded.artifact_payloads["f2"] == (root / "source" / "F2.json").read_bytes()
+            assert loaded.artifact_payloads["p3"] == (root / "source" / "P3.json").read_bytes()
+            loaded.close()
+
+        assert [call.args for call in load_page.call_args_list] == [(0,), (2,), (4,)]
+        cached = session.open_page(0)
+        cached.close()
+        fourth_page = session.open_page(1)
+        fourth_page.close()
+        reloaded = session.open_page(2)
+        reloaded.close()
+
+    assert [call.args for call in load_page.call_args_list] == [(0,), (2,), (4,), (1,), (2,)]
+
+    relation = manifest.match_relations[0]
+    graph = json.loads((root / relation.match_graph_relative_path).read_text())
+    graph_artifact_hashes = {
+        artifact["relative_path"]: artifact["sha256"] for artifact in graph["artifact_references"]
+    }
+    assert graph["graph_id"] == relation.match_graph_id
+    assert graph_artifact_hashes == {
+        "edition/alignment.json": _sha((root / "edition" / "alignment.json").read_bytes()),
+        "edition/edition-document.json": _sha((root / "edition" / "edition-document.json").read_bytes()),
+        "edition/projection.json": _sha((root / "edition" / "projection.json").read_bytes()),
+        "edition/source-resolver.json": _sha((root / "edition" / "source-resolver.json").read_bytes()),
+        "source/gutenberg/37235-h.htm": _sha((root / "source" / "gutenberg" / "37235-h.htm").read_bytes()),
+    }
+    assert relation.match_graph_relative_path == "matching/edition-alignment.json"
+    assert relation.match_graph_sha256 == _sha((root / relation.match_graph_relative_path).read_bytes())
+    assert manifest_read_paths == [
+        ("book-labeling-manifest.json",),
+        ("matching", "edition-alignment.json"),
+    ]
+    assert session.retained_page_count == 3
+    assert not any(parts[:1] in {("edition",), ("matching",)} for parts in read_paths)
+    assert ("source", "gutenberg", "37235-h.htm") not in read_paths
     session.close()
 
 
