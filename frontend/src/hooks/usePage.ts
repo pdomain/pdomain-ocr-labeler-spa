@@ -10,13 +10,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { components } from "../api/types";
+import { acceptPagePayload, pageCacheScope } from "../lib/page-cache-order";
 
 export type PagePayload = components["schemas"]["PagePayload"];
 export type LineFilter = components["schemas"]["LineFilter"];
 
 /** Throw on non-2xx; return parsed JSON on success. */
-async function apiFetch<T>(path: string): Promise<T> {
-  const response = await fetch(path);
+async function apiFetch<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(path, { signal: signal ?? null });
   if (!response.ok) {
     const text = await response.text();
     let message = response.statusText;
@@ -48,11 +49,13 @@ export function usePage(
 
   return useQuery<PagePayload>({
     queryKey: ["page", projectId, pageIndex, filter],
-    queryFn: () => {
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams({ line_filter: filter });
-      return apiFetch<PagePayload>(
+      const payload = await apiFetch<PagePayload>(
         `/api/projects/${encodeURIComponent(String(projectId))}/pages/${encodeURIComponent(String(pageIndex))}?${params.toString()}`,
+        signal,
       );
+      return acceptPagePayload(pageCacheScope(String(projectId), pageIndex ?? -1, filter), payload);
     },
     enabled:
       projectId !== undefined && projectId !== "" && pageIndex !== undefined && pageIndex >= 0,

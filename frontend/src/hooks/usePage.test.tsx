@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import React from "react";
 import { server } from "../test/server";
+import { resetPageCacheOrder } from "../lib/page-cache-order";
 import { usePage, type PagePayload } from "./usePage";
 
 function makeWrapper() {
@@ -31,6 +32,7 @@ const MOCK_PAGE: PagePayload = {
 };
 
 beforeEach(() => {
+  resetPageCacheOrder();
   server.use(
     http.get("/api/projects/:projectId/pages/:pageIndex", ({ request }) => {
       const url = new URL(request.url);
@@ -102,5 +104,34 @@ describe("usePage", () => {
 
     const cached = qc.getQueryData<PagePayload>(["page", "proj-001", 2, "mismatched"]);
     expect(cached).toBeTruthy();
+  });
+
+  it("keeps a newer generation when a later refetch returns an older page", async () => {
+    const gates: Array<() => void> = [];
+    let request = 0;
+    server.use(
+      http.get("/api/projects/:projectId/pages/:pageIndex", async () => {
+        const index = request;
+        request += 1;
+        await new Promise<void>((resolve) => {
+          gates[index] = resolve;
+        });
+        return HttpResponse.json({ ...MOCK_PAGE, generation: index === 0 ? 2 : 1 });
+      }),
+    );
+
+    const { result } = renderHook(() => usePage("proj-001", 0), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(gates[0]).toBeTypeOf("function"));
+    gates[0]?.();
+    await waitFor(() => expect(result.current.data?.generation).toBe(2));
+
+    void result.current.refetch();
+    await waitFor(() => expect(gates[1]).toBeTypeOf("function"));
+    gates[1]?.();
+    await waitFor(() => expect(result.current.isFetching).toBe(false));
+    expect(result.current.data?.generation).toBe(2);
   });
 });
