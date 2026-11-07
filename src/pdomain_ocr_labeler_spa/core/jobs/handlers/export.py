@@ -71,10 +71,16 @@ import logging
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
+
+from pdomain_book_tools.geometry.bounding_box import BoundingBox
+from pdomain_book_tools.ocr.page import Page
+from pdomain_book_tools.ocr.word import Word
 
 from ...notifications import NotificationKind, NotificationQueue
+from ...persistence.atomic import write_json_atomic
 from ...project_state import ProjectState
+from ...regions.block_adapter import confirmed_regions_from_page
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -507,6 +513,247 @@ def _subfolder_for_style(style_filter: str | None) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Confirmed layout regions, written beside detection/ and recognition/
+# ---------------------------------------------------------------------------
+
+_LAYOUT_REGIONS_SCHEMA = "pdomain.layout-regions"
+_LAYOUT_REGIONS_VERSION = 1
+
+
+class LayoutRegionBox(TypedDict):
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+class LayoutRegionRecord(TypedDict):
+    region_id: str
+    role: str
+    box: LayoutRegionBox
+    member_word_signatures: list[list[float | bool | None]]
+
+
+class LayoutRegionPage(TypedDict):
+    prefix: str
+    page_index: int
+    regions: list[LayoutRegionRecord]
+
+
+class LayoutRegionsFile(TypedDict):
+    schema: str
+    version: int
+    pages: list[LayoutRegionPage]
+
+
+def _json_value(text: str) -> object:
+    # json.loads is typed as Any. The parsers below check every field.
+    return json.loads(text)  # pyright: ignore[reportAny]
+
+
+def _object_dict(value: object, label: str) -> dict[str, object]:
+    """Copy a JSON object into ``dict[str, object]``.
+
+    ``isinstance(value, dict)`` leaves the key and value parameters unknown
+    under basedpyright, so the copy is the one place that names that fact.
+    """
+    if not isinstance(value, dict):
+        raise ValueError(f"layout regions {label} must be an object")
+    raw: dict[object, object] = value  # pyright: ignore[reportUnknownVariableType]
+    mapping: dict[str, object] = {}
+    for key, item in raw.items():
+        if not isinstance(key, str):
+            raise ValueError(f"layout regions {label} has a non-string key")
+        mapping[key] = item
+    return mapping
+
+
+def _object_list(value: object, label: str) -> list[object]:
+    if not isinstance(value, list):
+        raise ValueError(f"layout regions {label} must be a list")
+    raw: list[object] = value  # pyright: ignore[reportUnknownVariableType]
+    return list(raw)
+
+
+def _required(mapping: dict[str, object], key: str, label: str) -> object:
+    if key not in mapping:
+        raise ValueError(f"layout regions {label} is missing")
+    return mapping[key]
+
+
+def _layout_str(value: object, label: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"layout regions {label} must be a string")
+    return value
+
+
+def _layout_int(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"layout regions {label} must be an integer")
+    return value
+
+
+def _parse_layout_box(value: object) -> LayoutRegionBox:
+    mapping = _object_dict(value, "box")
+    return {
+        "x": _layout_int(_required(mapping, "x", "box.x"), "box.x"),
+        "y": _layout_int(_required(mapping, "y", "box.y"), "box.y"),
+        "width": _layout_int(_required(mapping, "width", "box.width"), "box.width"),
+        "height": _layout_int(_required(mapping, "height", "box.height"), "box.height"),
+    }
+
+
+def _parse_layout_signature(value: object) -> list[float | bool | None]:
+    items = _object_list(value, "word signature")
+    if len(items) != 5:
+        raise ValueError("layout region word signature must have 5 entries")
+    parsed: list[float | bool | None] = []
+    for index, item in enumerate(items):
+        if index < 4:
+            if isinstance(item, bool) or not isinstance(item, int | float):
+                raise ValueError("layout region word signature coordinate must be a number")
+            parsed.append(float(item))
+            continue
+        if item is not None and not isinstance(item, bool):
+            raise ValueError("layout region word signature flag must be a boolean or null")
+        parsed.append(item)
+    return parsed
+
+
+def _parse_layout_region(value: object) -> LayoutRegionRecord:
+    mapping = _object_dict(value, "region")
+    signatures = _object_list(
+        _required(mapping, "member_word_signatures", "member_word_signatures"),
+        "member_word_signatures",
+    )
+    return {
+        "region_id": _layout_str(_required(mapping, "region_id", "region_id"), "region_id"),
+        "role": _layout_str(_required(mapping, "role", "role"), "role"),
+        "box": _parse_layout_box(_required(mapping, "box", "box")),
+        "member_word_signatures": [_parse_layout_signature(item) for item in signatures],
+    }
+
+
+def _parse_layout_page(value: object) -> LayoutRegionPage:
+    mapping = _object_dict(value, "page")
+    regions = _object_list(_required(mapping, "regions", "regions"), "regions")
+    return {
+        "prefix": _layout_str(_required(mapping, "prefix", "prefix"), "prefix"),
+        "page_index": _layout_int(_required(mapping, "page_index", "page_index"), "page_index"),
+        "regions": [_parse_layout_region(item) for item in regions],
+    }
+
+
+def _load_layout_regions(path: Path) -> LayoutRegionsFile:
+    raw = _object_dict(_json_value(path.read_text(encoding="utf-8")), "file")
+    if raw.get("schema") != _LAYOUT_REGIONS_SCHEMA or raw.get("version") != _LAYOUT_REGIONS_VERSION:
+        raise ValueError("layout regions file has an unexpected schema")
+    try:
+        pages = _object_list(raw.get("pages"), "pages")
+    except ValueError as exc:
+        raise ValueError("layout regions file has an unexpected schema") from exc
+    return {
+        "schema": _LAYOUT_REGIONS_SCHEMA,
+        "version": _LAYOUT_REGIONS_VERSION,
+        "pages": [_parse_layout_page(item) for item in pages],
+    }
+
+
+def _signature_list(
+    signature: tuple[float, float, float, float, bool | None],
+) -> list[float | bool | None]:
+    return [signature[0], signature[1], signature[2], signature[3], signature[4]]
+
+
+def append_confirmed_regions(page: Page, output_dir: Path, *, prefix: str) -> int:
+    """Write this page's confirmed regions into ``output_dir/regions/labels.json``.
+
+    Schema ``pdomain.layout-regions`` version 1. A later export of the same
+    prefix replaces that page's entry, including when the page no longer has
+    any confirmed regions.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    regions_dir = output_dir / "regions"
+    regions_dir.mkdir(parents=True, exist_ok=True)
+    path = regions_dir / "labels.json"
+    empty_document: LayoutRegionsFile = {
+        "schema": _LAYOUT_REGIONS_SCHEMA,
+        "version": _LAYOUT_REGIONS_VERSION,
+        "pages": [],
+    }
+    document = _load_layout_regions(path) if path.is_file() else empty_document
+    records: list[LayoutRegionRecord] = []
+    for resolved in confirmed_regions_from_page(page):
+        if resolved.region_id is None:
+            continue
+        left, top, right, bottom = resolved.box
+        records.append(
+            {
+                "region_id": resolved.region_id,
+                "role": resolved.role.value,
+                "box": {"x": left, "y": top, "width": right - left, "height": bottom - top},
+                "member_word_signatures": [
+                    _signature_list(signature) for signature in resolved.member_word_signatures
+                ],
+            }
+        )
+    document["pages"] = [item for item in document["pages"] if item["prefix"] != prefix]
+    document["pages"].append({"prefix": prefix, "page_index": page.page_index, "regions": records})
+    write_json_atomic(path, document)
+    return len(records)
+
+
+def _snapshot_word_boxes(page: Page) -> list[tuple[Word, BoundingBox]]:
+    """Word boxes before export replaces them with ground-truth boxes."""
+    return [(word, word.bounding_box) for word in page.words]
+
+
+def _restore_word_boxes(snapshot: list[tuple[Word, BoundingBox]]) -> None:
+    for word, box in snapshot:
+        word.bounding_box = box
+
+
+def _export_page_to_output_roots(
+    page: Any,
+    image_path: Path,
+    output_roots: dict[str, Path],
+    *,
+    prefix: str,
+    style_filters: list[str],
+    component_filter: str | None,
+    detection: bool,
+    recognition: bool,
+    classification: bool,
+) -> None:
+    """Export one page into every style folder.
+
+    ``_export_page`` replaces word boxes with ground-truth boxes in place.
+    Region signatures are read from those boxes, so each folder is exported
+    from the same pre-swap snapshot. The page is left in the swapped state
+    the word counters already expect.
+    """
+    snapshot = _snapshot_word_boxes(page) if isinstance(page, Page) else None
+    for subfolder, output_root in output_roots.items():
+        if snapshot is not None:
+            _restore_word_boxes(snapshot)
+        word_filter: WordFilter | None = None
+        if style_filters and subfolder != "all":
+            word_filter = WordFilter(style_labels=frozenset([subfolder]))
+        elif component_filter:
+            word_filter = WordFilter(word_components=frozenset([component_filter]))
+        _export_page(
+            page,
+            image_path,
+            output_root,
+            word_filter=word_filter,
+            detection=detection,
+            recognition=recognition,
+            classification=classification,
+            prefix=prefix,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Single-page export (sync, wraps pdomain-book-tools)
 # ---------------------------------------------------------------------------
 
@@ -528,7 +775,14 @@ def _export_page(
     and ``Page.generate_doctr_recognition_training_set``.  Image loading
     (cv2_imread) is performed here rather than at caller level so failures
     are isolated per page.
+
+    Confirmed layout regions are written before the image is read, so a
+    missing OpenCV install or a missing image still leaves the region file.
     """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if not isinstance(page, Page):
+        raise TypeError("export page must be a book-tools Page")
+    _ = append_confirmed_regions(page, output_dir, prefix=prefix)
     try:
         from cv2 import imread as cv2_imread
     except ImportError:
@@ -840,24 +1094,20 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
             pages_skipped_not_validated += 1
             continue
 
-        # Export to each subfolder.
-        for subfolder, output_root in output_roots.items():
-            wf: WordFilter | None = None
-            if style_filters and subfolder != "all":
-                wf = WordFilter(style_labels=frozenset([subfolder]))
-            elif component_filter:
-                wf = WordFilter(word_components=frozenset([component_filter]))
-
-            _export_page(
-                page,
-                image_path,
-                output_root,
-                word_filter=wf,
-                detection=detection,
-                recognition=recognition,
-                classification=include_classification,
-                prefix=ref.prefix,
-            )
+        # Restore word boxes before each folder. The first successful export
+        # swaps them to ground-truth boxes, and region signatures must stay
+        # the boxes the page had before that swap.
+        _export_page_to_output_roots(
+            page,
+            image_path,
+            output_roots,
+            prefix=ref.prefix,
+            style_filters=style_filters,
+            component_filter=component_filter,
+            detection=detection,
+            recognition=recognition,
+            classification=include_classification,
+        )
 
         # Count each page ONCE (not once per subfolder) — use None filter so
         # the total reflects all exported words on the page, independent of

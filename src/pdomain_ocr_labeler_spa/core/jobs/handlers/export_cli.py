@@ -196,9 +196,8 @@ async def _run_export(
     from .export import (
         _DOCTR_EXPORT_DIRNAME,
         ExportPageRef,
-        WordFilter,
         _build_task_stats,
-        _export_page,
+        _export_page_to_output_roots,
         _page_is_validated,
         _resolve_ref_image,
         _write_export_manifest,
@@ -265,23 +264,19 @@ async def _run_export(
                 log.debug("Skipping non-validated page %s.", getattr(ref, "prefix", "?"))
                 continue
 
-            for subfolder, output_root in output_roots.items():
-                wf: WordFilter | None = None
-                if style_filters and subfolder != "all":
-                    wf = WordFilter(style_labels=frozenset([subfolder]))
-                elif component_filter:
-                    wf = WordFilter(word_components=frozenset([component_filter]))
-
-                _export_page(
-                    page,
-                    image_path,
-                    output_root,
-                    word_filter=wf,
-                    detection=detection,
-                    recognition=recognition,
-                    classification=classification,
-                    prefix=getattr(ref, "prefix", project_id),
-                )
+            # One snapshot for every style folder. Calling _export_page in
+            # this loop would record ground-truth boxes on the later folders.
+            _export_page_to_output_roots(
+                page,
+                image_path,
+                output_roots,
+                prefix=ref.prefix,
+                style_filters=style_filters,
+                component_filter=component_filter,
+                detection=detection,
+                recognition=recognition,
+                classification=classification,
+            )
 
             # Approximate word counts for manifest (best-effort).
             n_words = len(getattr(page, "words", []) or [])

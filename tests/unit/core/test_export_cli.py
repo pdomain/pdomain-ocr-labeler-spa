@@ -231,6 +231,58 @@ class TestRunExport:
         assert count == 1
         mock_export.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_style_folders_use_one_snapshot_export(self, tmp_path: Path) -> None:
+        """Every style folder goes through one snapshot export, not a raw loop."""
+        from pdomain_ocr_labeler_spa.core.jobs.handlers.export_cli import _run_export
+
+        labeled_dir = tmp_path / "labeled-projects" / "proj1"
+        labeled_dir.mkdir(parents=True)
+        page_file = labeled_dir / "proj1_000.json"
+        page_file.write_text('{"version": "2.1.0", "payload": {"pages": []}}')
+        image_path = labeled_dir / "proj1_000.png"
+        image_path.write_bytes(b"\x89PNG\r\n")
+
+        mock_page = MagicMock()
+        mock_page.words = []
+
+        with (
+            patch(
+                "pdomain_ocr_labeler_spa.core.jobs.handlers.export._load_page_from_envelope_file",
+                return_value=mock_page,
+            ),
+            patch(
+                "pdomain_ocr_labeler_spa.core.jobs.handlers.export._page_is_validated",
+                return_value=True,
+            ),
+            patch(
+                "pdomain_ocr_labeler_spa.core.jobs.handlers.export._resolve_image_path",
+                return_value=image_path,
+            ),
+            patch(
+                "pdomain_ocr_labeler_spa.core.jobs.handlers.export._scan_labeled_pages",
+                return_value=[page_file],
+            ),
+            patch(
+                "pdomain_ocr_labeler_spa.core.jobs.handlers.export._export_page_to_output_roots",
+            ) as mock_export,
+        ):
+            count = await _run_export(
+                data_root=tmp_path,
+                project_id="proj1",
+                style_filters=["italics", "bold"],
+                component_filter=None,
+                detection_only=False,
+                recognition_only=False,
+                classification=False,
+                page_index=None,
+            )
+
+        assert count == 1
+        mock_export.assert_called_once()
+        output_roots = mock_export.call_args.args[2]
+        assert set(output_roots) == {"italics", "bold"}
+
 
 class TestConsoleScriptRegistration:
     """Verify the console script is registered in pyproject.toml."""
