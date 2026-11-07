@@ -773,6 +773,45 @@ def test_post_load_returns_project_with_images_and_ground_truth(
     assert project["ground_truth_map"]["002.png"] == "second page text"
 
 
+def test_post_load_pgdp_mirror_uses_flat_page_images_and_pages_json(tmp_path: Path) -> None:
+    """A pgdp-fetch project loads flat page scans with their pages.json text.
+
+    Page images are files in the project directory. ``pages.json`` maps
+    each filename to proofread text. ``images/`` holds illustrations and
+    ``rounds/`` holds round files. Neither becomes a page.
+    """
+    projects_root = tmp_path / "books"
+    projects_root.mkdir()
+    project_dir = projects_root / "project-id"
+    project_dir.mkdir()
+    # Write out of filename order so the result is the sort, not creation order.
+    (project_dir / "002.png").write_bytes(b"\x00")
+    (project_dir / "001.png").write_bytes(b"\x00")
+    (project_dir / "pages.json").write_text(
+        json.dumps({"002.png": "second page", "001.png": "first page"}),
+        encoding="utf-8",
+    )
+    (project_dir / "project.json").write_text("{}\n", encoding="utf-8")
+    (project_dir / "inventory.json").write_text("{}\n", encoding="utf-8")
+    (project_dir / "rounds").mkdir()
+    (project_dir / "rounds" / "P3.json").write_text("{}\n", encoding="utf-8")
+    (project_dir / "images").mkdir()
+    (project_dir / "images" / "cover.png").write_bytes(b"\x00")
+
+    app = build_app(_make_settings(tmp_path, source_projects_root=projects_root))
+    with TestClient(app) as client:
+        resp = client.post("/api/projects/load", json={"project_root": str(project_dir)})
+
+    assert resp.status_code == 200, resp.text
+    project = resp.json()["project"]
+    names = [Path(path).name for path in project["image_paths"]]
+    assert names == ["001.png", "002.png"]
+    assert project["total_pages"] == 2
+    assert project["ground_truth_map"]["001.png"] == "first page"
+    assert project["ground_truth_map"]["002.png"] == "second page"
+    assert all(Path(path).parent == project_dir.resolve() for path in project["image_paths"])
+
+
 def test_post_load_populates_project_state(
     tmp_path: Path,
 ) -> None:
