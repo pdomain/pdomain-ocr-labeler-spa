@@ -59,12 +59,10 @@ def test_ruff_repo_present_with_check_and_format(config: dict) -> None:
     assert "ruff-format" in ids, "ruff-format hook missing"
 
 
-def test_pre_commit_update_repo_present(config: dict) -> None:
-    """Optional but matched in peer repos: keeps hook revs current."""
+def test_pre_commit_update_repo_absent(config: dict) -> None:
+    """The tag-writing updater must not undo frozen hook revisions."""
     ids = _hook_ids_for(config, "https://gitlab.com/vojko.pribudic.foss/pre-commit-update")
-    assert ids == ["pre-commit-update"], (
-        "expected single `pre-commit-update` hook from vojko.pribudic.foss/pre-commit-update"
-    )
+    assert not ids, "pre-commit-update rewrites frozen revisions to tags"
 
 
 def test_every_repo_pins_a_rev(config: dict) -> None:

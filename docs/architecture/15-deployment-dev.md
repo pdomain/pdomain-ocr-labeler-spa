@@ -591,3 +591,27 @@ detect-and-refuse contract.
   leaves `.venv/.pdomain-dev-local` present.
 - `PDOMAIN_DEV_LOCAL=1 make upgrade-deps` refuses on a venv that probes as
   canonical.
+
+## External pre-commit hook revisions
+
+External hooks use full 40-character commit SHAs with a `# frozen: <tag>`
+comment. The local `require-frozen-hook-revs` check rejects revisions that do
+not match that form.
+
+Run `make update-hooks` to update hooks to their latest releases. It runs
+`uv run pre-commit autoupdate --freeze` and preserves failures instead of
+ignoring them. Review the resulting configuration diff and upstream release
+notes. The former pre-commit-update bumper was removed because it rewrote
+frozen SHAs back to tags.
+
+Node-based hooks use Node 26.13.0. This avoids nodeenv 1.10.0 choosing a prerelease such as v27.0.0-alpha,
+whose version string it cannot parse. Bump that Node pin deliberately.
+
+### Configuration and verification evidence
+
+- Configuration: `.pre-commit-config.yaml`; update command: `Makefile`'s
+  `update-hooks` target.
+- Verification on 2026-11-07: the frozen-revision hook passes on SHA pins.
+  It fails when one revision is temporarily changed back to its tag. It passes
+  again after restoration.
+- Initial freeze preserves existing hook versions; it does not upgrade them.

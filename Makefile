@@ -354,12 +354,10 @@ format: ## Format code with ruff
 pre-commit-check: ## Run pre-commit on all files
 	uv run pre-commit run --all-files
 
-update-hooks: ## Bump pinned pre-commit hook revisions in .pre-commit-config.yaml
-	@echo "⬆️  Updating pinned pre-commit hook revisions..."
-	@# The hook exits non-zero when it rewrites the config, which is the success
-	@# case here, so its status is not the target's status.
-	-@uv run pre-commit run pre-commit-update --all-files --hook-stage manual
-	@echo "✅ Hook revisions updated — review the .pre-commit-config.yaml diff."
+update-hooks: ## Bump pre-commit hooks to their latest releases, frozen to commit SHAs
+	@echo "⬆️  Updating pre-commit hook revisions (frozen to commit SHAs)..."
+	uv run pre-commit autoupdate --freeze
+	@echo "✅ Hook revisions updated — review upstream release notes and the .pre-commit-config.yaml diff."
 
 test: ## Run pytest (excludes e2e/ and slow/integration markers)
 	uv run pytest tests/ -v --ignore=tests/e2e -m "not slow and not integration" -n auto
