@@ -2,7 +2,7 @@
 Status: active
 Owner: maintainers
 Created: 2026-07-19
-Last verified: 2026-09-18
+Last verified: 2026-11-07
 Kind: process
 Level: I1
 ---
@@ -14,7 +14,7 @@ Level: I1
 - **Kind:** process
 - **Status:** active
 - **Level:** I1
-- **Last verified:** 2026-09-18
+- **Last verified:** 2026-11-07
 - **Read when:** filing a bug / defect / investigation report, or looking up an
   open issue's status, evidence, or resolution.
 - **Search terms:** issues folder, bug report, defect report, issue template,
@@ -28,15 +28,13 @@ failures, regressions, and investigations that need a durable, citable record
 retrievable, linkable from specs/plans/context, and carried in the repo rather
 than in per-machine harness memory.
 
-**No open issues.** The 18 deep-review reports, the two migrated GitHub
-records, and every report filed and closed on 2026-09-18 (including the
-jobs-pill status contract gap, resolved once `@pdomain/pdomain-ui@0.13.0`
-shipped the `cancelled` status and pause/resume capability flag it blocked
-on) are resolved and deleted; each retirement's reasoning is a tombstone in
-[`../context/decisions.md`](../context/decisions.md). See
-[`../context/current-state.md`](../context/current-state.md) for what is
-actually still open in the product, most of it found rather than filed as a
-governed report.
+## Open issues
+
+- [Python builds without memfd support break labeling-bundle loading](2026-11-07-python-build-without-memfd-breaks-labeling-bundles.md)
+  — 21 related tests fail in the affected worktree and pass in the main checkout.
+
+Earlier deep-review and September issue reports remain resolved and deleted. Their tombstones live in
+[the decision log](../context/decisions.md).
 
 ## Convention
 
@@ -94,13 +92,9 @@ issues may still be open.
 
 ## Deep-review split issues (2026-07-21)
 
-Prioritization authority:
-[`../plans/2026-07-21-deep-code-review-continuation.md`](../context/current-state.md).
-
-Open findings (XDG, RELOAD, HIER — the keyboard entries closed 2026-09-18)
-remain in [`../context/open-findings.md`](../context/open-findings.md) + plan
-[`../plans/2026-07-21-open-findings-fixes.md`](../context/open-findings.md)
-— not re-filed as separate issues.
+Current work is summarized in [current state](../context/current-state.md). The July deep-review plan is retired.
+All six findings in [the findings record](../context/open-findings.md), including XDG paths, empty OCR, and
+hierarchy waits, were closed on 2026-09-18.
 
 ### Wave 0 — data integrity
 
@@ -123,6 +117,5 @@ Resolved and deleted. See the 2026-09-18 tombstone in
 All reports are resolved and deleted. The project-list one is in the
 2026-09-18 tombstones. See [`../context/decisions.md`](../context/decisions.md).
 
-Resolved reports are deleted, so this index tracks open work only — right now
-that is nothing. Past resolutions live in the `docs/context/decisions.md`
+Resolved reports are deleted, so this index tracks open work only. Past resolutions live in the `docs/context/decisions.md`
 tombstones and in git history.

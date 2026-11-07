@@ -156,7 +156,7 @@ See the 2026-09-18 tombstones in `decisions.md` for what each triage found.
 
 ## Open work
 
-[`../issues/README.md`](../issues/README.md) lists no open issues. The 18
+[The issue index](../issues/README.md) now tracks a runtime compatibility failure. The 18
 deep-review reports filed under `docs/issues/2026-07-21-*`, the two migrated
 GitHub records, and every report filed and closed same-day are resolved and
 deleted; each retirement's reasoning is a tombstone in `decisions.md`, which
@@ -231,6 +231,10 @@ reindexes; `set_region_word_membership` (above) is adjacent and not part of
 this family.
 
 ## Risks
+
+[Verified-image loading fails on Python builds without memfd support](../issues/2026-11-07-python-build-without-memfd-breaks-labeling-bundles.md).
+All 21 observed CI failures reproduce under the worktree build and pass under the main checkout build.
+The earlier full CI run was interrupted; neither this comparison nor the documentation gate is a full CI pass.
 
 The behavior specification set remains a living contract and includes explicit
 stubs or owner questions. Treat [`../specs/behavior/unclear-items.md`](../specs/behavior/unclear-items.md)
