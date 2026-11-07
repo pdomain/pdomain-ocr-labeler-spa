@@ -154,8 +154,9 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         type=_nonempty_path("--projects-root"),  # B-70
         default=None,
         metavar="PATH",
-        help="root directory whose subdirectories are selectable projects "
-        "(overrides config.yaml source_projects_root; consumer lands M2)",
+        help="books folder whose subdirectories are selectable projects "
+        "(overrides config.yaml source_projects_root; "
+        "default is <data_root>/labeler-books)",
     )
 
     # ── Legacy parity (consumers land in later milestones) ───────────────

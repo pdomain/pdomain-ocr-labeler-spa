@@ -224,9 +224,11 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
         className="max-w-md w-full mx-4 bg-bg-surface rounded-lg border border-border-2 p-5 space-y-4 shadow-lg focus:outline-hidden"
       >
         <DialogHeader>
-          <DialogTitle className="text-base font-semibold text-ink-1">
-            Set Source Folder
-          </DialogTitle>
+          <DialogTitle className="text-base font-semibold text-ink-1">Set Books Folder</DialogTitle>
+          <p className="text-sm text-ink-3">
+            Imported books are saved in this folder. The project menu lists the directories inside
+            it.
+          </p>
         </DialogHeader>
 
         {/* Current path display */}
@@ -307,7 +309,7 @@ export function SourceFolderDialog({ open, onClose }: SourceFolderDialogProps) {
             id="source-folder-path-input"
             type="text"
             data-testid="source-folder-path-input"
-            aria-label="Source folder path"
+            aria-label="Books folder path"
             value={inputPath}
             onChange={(e) => {
               setInputPath(e.target.value);

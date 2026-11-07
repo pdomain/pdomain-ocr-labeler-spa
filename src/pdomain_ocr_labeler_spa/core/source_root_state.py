@@ -17,11 +17,10 @@ Why not mutate ``Settings``? ``Settings`` is frozen (Pydantic
 boot-time snapshot. A separate carrier holds the runtime override so
 the two layers stay independent.
 
-Startup seeding: ``bootstrap._make_lifespan`` seeds this carrier from
-``Settings.source_projects_root`` (which the CLI + env vars populate at
-startup), then from ``config.yaml`` if the settings value is still
-``None`` (CLI > config.yaml precedence mirrors legacy
-``cli.py`` resolution order).
+Startup seeding: ``bootstrap.build_app`` seeds this carrier from
+``resolve_source_projects_root``: CLI or ``PDLABELER_SOURCE_PROJECTS_ROOT``,
+then an absolute ``config.yaml`` ``source_projects_root``, then
+``<data_root>/labeler-books``.
 """
 
 from __future__ import annotations

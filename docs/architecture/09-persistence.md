@@ -221,15 +221,16 @@ images, ignore.
 ## 7. config.yaml
 
 `<config_root>/config.yaml` (where `<config_root>` is the §5 OS-aware
-root which already includes the `pd-ocr-labeler/` app-name suffix):
+root which already includes the `pdomain-ocr-labeler-spa/` app-name suffix):
 
 ```yaml
 source_projects_root: "/path/to/projects"
 ```
 
-Auto-created on first run with the OS-specific default
-(`<data>/source-pgdp-data/output/`). Single key for v1; expand later
-if needed.
+When no env, CLI, or absolute `source_projects_root` is set, startup
+uses `<data>/labeler-books/` and creates that directory if it is
+missing. A chosen path that does not exist is left missing. Single key
+for v1; expand later if needed.
 
 ---
 

@@ -48,6 +48,16 @@ describe("SourceFolderDialog: render gating", () => {
     expect(screen.getByTestId("source-folder-dialog")).toBeInTheDocument();
   });
 
+  it("describes the folder as the books folder", () => {
+    renderDialog(true);
+    expect(screen.getByText("Set Books Folder")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Imported books are saved in this folder. The project menu lists the directories inside it.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   // Regression (2026-09-18): see HotkeyHelpModal.test.tsx — same double
   // -transform bug affects any dialog whose className re-adds
   // `-translate-x-1/2 -translate-y-1/2` on top of pdomain-ui's ".dialog" class.

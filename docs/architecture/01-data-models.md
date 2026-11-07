@@ -753,8 +753,9 @@ other's cache entries.
 source_projects_root: "/path/to/projects"
 ```
 
-Same path / same key as legacy. Auto-create on first run with default
-`<data_root>/source-pgdp-data/output/`.
+Same path / same key as legacy. When no env, CLI, or absolute
+`source_projects_root` is set, startup uses `<data_root>/labeler-books`
+and creates that directory if it is missing.
 
 The SPA will write its config at the **same path** (so flipping
 binaries doesn't reset the user's source root).
@@ -781,7 +782,7 @@ emits anything the legacy can't read.
 | `config_root` | `${XDG_CONFIG_HOME:-~/.config}/pdomain-ocr-labeler-spa/` | `~/Library/Application Support/pdomain-ocr-labeler-spa/` | `%APPDATA%/pdomain-ocr-labeler-spa/` |
 | `data_root` | `${XDG_DATA_HOME:-~/.local/share}/pdomain-ocr-labeler-spa/` | same as config_root | `%LOCALAPPDATA%/pdomain-ocr-labeler-spa/` |
 | `cache_root` | `${XDG_CACHE_HOME:-~/.cache}/pdomain-ocr-labeler-spa/` | `~/Library/Caches/pdomain-ocr-labeler-spa/` | `%LOCALAPPDATA%/pdomain-ocr-labeler-spa/cache/` |
-| `default_source_projects_root` | `<data>/source-pgdp-data/output/` | same | same |
+| `default_source_projects_root` | `<data>/labeler-books/` | same | same |
 | `logs_root` | `<data>/logs/` | same | same |
 | `page_image_cache_root` | `<cache>/page-images/` | same | same |
 | `saved_projects_root` | `<data>/labeled-projects/` | same | same |

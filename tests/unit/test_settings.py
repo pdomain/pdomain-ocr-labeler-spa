@@ -21,6 +21,8 @@ from pdomain_ocr_labeler_spa.settings import (
     default_config_root,
     default_data_root,
     describe_data_root,
+    ensure_default_books_dir,
+    resolve_source_projects_root,
 )
 
 
@@ -616,6 +618,176 @@ def test_config_root_prefers_xdg_when_it_already_has_config_too(
     (xdg_config_home / "pdomain-ocr-labeler-spa").mkdir(parents=True)
 
     assert default_config_root() == xdg_config_home / "pdomain-ocr-labeler-spa"
+
+
+# ── Books folder: source_projects_root resolution ─────────────────────────
+#
+# One path. Env or CLI (Settings.source_projects_root) wins, then a
+# non-empty absolute config.yaml value, then <data_root>/labeler-books.
+# Only the implicit default is created when it is missing.
+
+
+def test_books_dir_defaults_under_the_data_root(tmp_path: Path) -> None:
+    """With nothing chosen, books live in ``<data_root>/labeler-books``."""
+    data_root = tmp_path / "data"
+    path, create = resolve_source_projects_root(
+        configured=None,
+        config_file_value=None,
+        data_root=data_root,
+    )
+
+    assert path == data_root / "labeler-books"
+    assert create is True
+
+
+def test_books_dir_follows_the_data_root_it_is_given(tmp_path: Path) -> None:
+    """A legacy data root keeps its books under that same directory."""
+    legacy = tmp_path / "home" / "pdomain-ocr-labeler-spa"
+    path, create = resolve_source_projects_root(
+        configured=None,
+        config_file_value=None,
+        data_root=legacy,
+    )
+
+    assert path == legacy / "labeler-books"
+    assert create is True
+
+
+def test_configured_source_root_wins_over_config_and_the_default(tmp_path: Path) -> None:
+    """``PDLABELER_SOURCE_PROJECTS_ROOT`` or ``--projects-root`` wins, even if missing."""
+    chosen = tmp_path / "from-env"
+    path, create = resolve_source_projects_root(
+        configured=chosen,
+        config_file_value=Path("/from/config.yaml"),
+        data_root=tmp_path / "data",
+    )
+
+    assert path == chosen
+    assert create is False
+    assert not chosen.exists()
+
+
+def test_blank_env_source_root_does_not_win(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """An empty ``PDLABELER_SOURCE_PROJECTS_ROOT`` is unset, not the process cwd.
+
+    Pydantic turns ``""`` into ``Path('.')`` unless the field rejects it first.
+    That would make project delete operate on the directory the server was
+    started from.
+    """
+    for var in list(__import__("os").environ):
+        if var.startswith("PDLABELER_"):
+            monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("PDLABELER_SOURCE_PROJECTS_ROOT", "")
+    data_root = tmp_path / "data"
+    settings = Settings(
+        config_root=tmp_path / "config",
+        data_root=data_root,
+        cache_root=tmp_path / "cache",
+    )
+
+    assert settings.source_projects_root is None
+    path, create = resolve_source_projects_root(
+        configured=settings.source_projects_root,
+        config_file_value=Path("/from/config.yaml"),
+        data_root=data_root,
+    )
+    assert path == Path("/from/config.yaml")
+    assert create is False
+
+
+def test_explicit_dot_source_root_still_wins(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A configured ``.`` is a chosen relative path, not a blank value."""
+    for var in list(__import__("os").environ):
+        if var.startswith("PDLABELER_"):
+            monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("PDLABELER_SOURCE_PROJECTS_ROOT", ".")
+    settings = Settings(
+        config_root=tmp_path / "config",
+        data_root=tmp_path / "data",
+        cache_root=tmp_path / "cache",
+    )
+
+    assert settings.source_projects_root == Path(".")
+
+
+def test_blank_configured_source_root_does_not_win(tmp_path: Path) -> None:
+    """An empty settings value is unset, so config.yaml can still win."""
+    chosen = tmp_path / "from-config"
+    path, create = resolve_source_projects_root(
+        configured=Path("  "),
+        config_file_value=chosen,
+        data_root=tmp_path / "data",
+    )
+
+    assert path == chosen
+    assert create is False
+
+
+def test_absolute_config_path_wins_when_settings_are_unset(tmp_path: Path) -> None:
+    """A saved absolute ``source_projects_root`` is the books folder."""
+    chosen = tmp_path / "saved-books"
+    path, create = resolve_source_projects_root(
+        configured=None,
+        config_file_value=chosen,
+        data_root=tmp_path / "data",
+    )
+
+    assert path == chosen
+    assert create is False
+
+
+def test_tilde_config_path_counts_as_absolute(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """``~/books`` in config.yaml is a chosen path, not the implicit default."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+
+    path, create = resolve_source_projects_root(
+        configured=None,
+        config_file_value=Path("~/chosen-books"),
+        data_root=tmp_path / "data",
+    )
+
+    assert path == home / "chosen-books"
+    assert create is False
+
+
+def test_relative_config_path_falls_through_to_the_default(tmp_path: Path) -> None:
+    """A relative config.yaml path is not a chosen books folder."""
+    data_root = tmp_path / "data"
+    path, create = resolve_source_projects_root(
+        configured=None,
+        config_file_value=Path("relative/books"),
+        data_root=data_root,
+    )
+
+    assert path == data_root / "labeler-books"
+    assert create is True
+
+
+def test_empty_config_path_falls_through_to_the_default(tmp_path: Path) -> None:
+    """An empty config.yaml value is not a chosen books folder."""
+    data_root = tmp_path / "data"
+    path, create = resolve_source_projects_root(
+        configured=None,
+        config_file_value=Path(""),
+        data_root=data_root,
+    )
+
+    assert path == data_root / "labeler-books"
+    assert create is True
+
+
+def test_ensure_default_books_dir_creates_only_the_implicit_default(tmp_path: Path) -> None:
+    """Startup creates the default folder and leaves a chosen missing path alone."""
+    default = tmp_path / "data" / "labeler-books"
+    chosen = tmp_path / "chosen-missing"
+
+    ensure_default_books_dir(default, create=True)
+    ensure_default_books_dir(chosen, create=False)
+
+    assert default.is_dir()
+    assert not chosen.exists()
 
 
 def test_config_root_legacy_note_is_none_for_a_fresh_xdg_install(tmp_path: Path) -> None:

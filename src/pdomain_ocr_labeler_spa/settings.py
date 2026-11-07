@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogFormat = Literal["plain", "json"]
@@ -173,6 +173,68 @@ def _xdg_cache_root() -> Path:
         windows_default_parts=("AppData", "Local"),
         windows_extra_parts=("cache",),
     )
+
+
+_BOOKS_DIRNAME = "labeler-books"
+
+
+def _blank_path(path: Path | None) -> bool:
+    """True when ``path`` is missing or only whitespace.
+
+    ``Path`` is always truthy, so an empty env value must not win over
+    ``config.yaml`` or the default books folder.
+    """
+    if path is None:
+        return True
+    return str(path).strip() == ""
+
+
+def resolve_source_projects_root(
+    *,
+    configured: Path | None,
+    config_file_value: Path | None,
+    data_root: Path,
+) -> tuple[Path, bool]:
+    """Resolve the one books folder.
+
+    Precedence:
+
+    1. ``configured`` — ``PDLABELER_SOURCE_PROJECTS_ROOT`` or
+       ``--projects-root``, when it is non-blank. A relative or missing
+       path still wins. The caller must not create it.
+    2. ``config_file_value`` — ``source_projects_root`` from
+       ``config.yaml``, when it is a non-empty absolute path after
+       ``~`` expansion. A missing directory still wins. The caller must
+       not create it.
+    3. ``<data_root>/labeler-books``. ``data_root`` is the already
+       resolved settings value, so the legacy ``~/pdomain-ocr-labeler-spa``
+       fallback in :func:`default_data_root` carries through.
+
+    The second item is ``True`` only for case 3. Startup creates that
+    directory when it is missing. A path the user chose is left alone.
+    """
+    if not _blank_path(configured):
+        assert configured is not None
+        return configured.expanduser(), False
+    if not _blank_path(config_file_value):
+        assert config_file_value is not None
+        expanded = config_file_value.expanduser()
+        if expanded.is_absolute():
+            return expanded, False
+    return data_root / _BOOKS_DIRNAME, True
+
+
+def ensure_default_books_dir(path: Path, *, create: bool) -> None:
+    """Create the implicit default books folder when it is missing.
+
+    ``create`` is the flag from :func:`resolve_source_projects_root`.
+    A chosen path, including one that happens to equal the default
+    location, is not created here. An existing file at ``path`` is left
+    in place.
+    """
+    if not create or path.exists():
+        return
+    path.mkdir(parents=True, exist_ok=True)
 
 
 def default_data_root() -> Path:
@@ -348,12 +410,27 @@ class Settings(BaseSettings):
     # (project discovery + load). Declared here so the M1.g ``__main__``
     # CLI can thread CLI args through ``Settings(**overrides)`` today.
     source_projects_root: Path | None = None
-    """Root directory whose subdirectories are selectable projects.
+    """Books folder whose subdirectories are selectable projects.
 
-    Set by ``--projects-root``; falls back to ``config.yaml``'s
-    ``source_projects_root``. ``None`` until M2 wires the discovery
-    layer.
+    Set by ``--projects-root`` or ``PDLABELER_SOURCE_PROJECTS_ROOT``.
+    When this stays ``None``, startup uses an absolute
+    ``source_projects_root`` from ``config.yaml``, then
+    ``<data_root>/labeler-books``. See
+    :func:`resolve_source_projects_root`.
     """
+
+    @field_validator("source_projects_root", mode="before")
+    @classmethod
+    def _blank_source_projects_root_is_unset(cls, value: object) -> object:
+        """An empty env string must not become ``Path('.')``.
+
+        ``Path('')`` is ``Path('.')``. Treating that as a chosen books
+        folder would scan, and could delete, the directory the server
+        was started from. An explicit ``.`` is left alone.
+        """
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
 
     cli_project_dir: Path | None = None
     """Optional positional ``project_dir`` from the CLI.

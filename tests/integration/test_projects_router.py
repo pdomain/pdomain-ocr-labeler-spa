@@ -213,14 +213,76 @@ def test_get_projects_config_source_default(client_with_root: TestClient) -> Non
 
 
 def test_get_projects_no_root_configured_returns_empty_list(
-    client_no_root: TestClient,
+    client_no_root: TestClient, tmp_path: Path
 ) -> None:
-    """``source_projects_root=None`` → empty list, no error."""
+    """No saved path → the default books folder, which may be empty."""
+    books = tmp_path / "data" / "labeler-books"
     resp = client_no_root.get("/api/projects")
     assert resp.status_code == 200
     body = resp.json()
     assert body["projects"] == []
     assert body["selected"] is None
+    assert body["projects_root"] == str(books.resolve())
+    assert books.is_dir()
+
+
+def test_startup_ignores_a_relative_config_books_path(tmp_path: Path) -> None:
+    """A relative ``source_projects_root`` in config.yaml is not a chosen folder."""
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "config.yaml").write_text("source_projects_root: relative/books\n")
+    books = tmp_path / "data" / "labeler-books"
+    app = build_app(_make_settings(tmp_path))
+    with TestClient(app) as client:
+        body = client.get("/api/projects").json()
+
+    assert body["projects_root"] == str(books.resolve())
+    assert books.is_dir()
+
+
+def test_startup_keeps_a_missing_absolute_config_books_path(tmp_path: Path) -> None:
+    """A saved absolute path that does not exist is kept and not created."""
+    chosen = tmp_path / "saved-missing"
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "config.yaml").write_text(f"source_projects_root: {chosen}\n")
+    app = build_app(_make_settings(tmp_path))
+    with TestClient(app) as client:
+        body = client.get("/api/projects").json()
+
+    assert body["projects"] == []
+    assert body["projects_root"] == str(chosen.resolve())
+    assert not chosen.exists()
+    assert not (tmp_path / "data" / "labeler-books").exists()
+
+
+def test_startup_continues_when_the_default_books_dir_cannot_be_created(tmp_path: Path) -> None:
+    """An unwritable default books folder does not stop the server from booting."""
+    data_root = tmp_path / "data-file"
+    data_root.write_text("not a directory")
+    app = build_app(_make_settings(tmp_path, data_root=data_root))
+    with TestClient(app) as client:
+        resp = client.get("/api/projects")
+
+    assert resp.status_code == 200
+    assert resp.json()["projects"] == []
+    assert not (data_root / "labeler-books").exists()
+
+
+def test_startup_prefers_settings_source_root_over_config(tmp_path: Path) -> None:
+    """Env or CLI wins over config.yaml and is not created when missing."""
+    chosen = tmp_path / "from-env"
+    saved = tmp_path / "from-yaml"
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "config.yaml").write_text(f"source_projects_root: {saved}\n")
+    app = build_app(_make_settings(tmp_path, source_projects_root=chosen))
+    with TestClient(app) as client:
+        body = client.get("/api/projects").json()
+
+    assert body["projects_root"] == str(chosen.resolve())
+    assert not chosen.exists()
+    assert not saved.exists()
 
 
 def test_get_projects_after_load_marks_selected(client_with_root: TestClient, projects_root: Path) -> None:

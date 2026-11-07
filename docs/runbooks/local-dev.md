@@ -158,8 +158,8 @@ All variables use the `PDLABELER_` prefix (`settings.py`).
 |----------|---------|-------|
 | `PDLABELER_HOST` | `127.0.0.1` | Bind host |
 | `PDLABELER_PORT` | next free from 8080 | Bind port |
-| `PDLABELER_DATA_ROOT` | `~/.local/share/pdomain/ocr-labeler` | Project data root |
-| `PDLABELER_SOURCE_PROJECTS_ROOT` | — | Initial project discovery root |
+| `PDLABELER_DATA_ROOT` | `${XDG_DATA_HOME:-~/.local/share}/pdomain-ocr-labeler-spa` | Data root. If `~/pdomain-ocr-labeler-spa` exists and this directory does not, the legacy directory is used instead. |
+| `PDLABELER_SOURCE_PROJECTS_ROOT` | `<data_root>/labeler-books` | Books folder. When set, overrides `config.yaml`. When unset, an absolute `config.yaml` path wins; otherwise the default is created at startup if missing. |
 | `PDLABELER_LOG_LEVEL` | `info` | Log level |
 | `PDLABELER_FRONTEND_DEV_URL` | — | Set to `http://localhost:5173` when using Vite proxy |
 | `CUDA_VISIBLE_DEVICES` | — | Set to `""` to disable GPU for DocTR (CI default) |

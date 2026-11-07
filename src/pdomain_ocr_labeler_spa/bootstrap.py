@@ -91,7 +91,14 @@ from .core.regions.poetry import PoetryDetector
 from .core.source_root_state import SourceRootCarrier
 from .core.startup_discovery import resolve_initial_project
 from .middleware.local_trust import LocalTrustMiddleware
-from .settings import Settings, config_root_legacy_note, data_root_legacy_note, describe_data_root
+from .settings import (
+    Settings,
+    config_root_legacy_note,
+    data_root_legacy_note,
+    describe_data_root,
+    ensure_default_books_dir,
+    resolve_source_projects_root,
+)
 
 log = logging.getLogger(__name__)
 
@@ -176,6 +183,18 @@ def _make_lifespan(
         config_legacy_note = config_root_legacy_note(settings.config_root)
         if config_legacy_note is not None:
             log.warning(config_legacy_note)
+
+        # The books folder is resolved while the app is built. Create it
+        # here, at startup, only when that resolution fell through to
+        # <data_root>/labeler-books and the directory is missing. A path
+        # from the env, the CLI, or config.yaml is left as the user set it.
+        books_root = app.state.source_root_carrier.get()
+        if books_root is not None:
+            try:
+                ensure_default_books_dir(books_root, create=app.state.create_default_books_dir)
+            except OSError:
+                log.warning("books directory was not created: %s", books_root, exc_info=True)
+            log.info("Using books directory: %s", books_root)
 
         # Issue #223 — pidfile check: warn if another live process holds
         # the cache root; write our own PID regardless.  Advisory-only;
@@ -436,13 +455,20 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # route.  ``Settings.source_projects_root`` is the CLI/env-var seed;
     # ``config.yaml`` is the persistent fallback.  The carrier holds the
     # runtime-effective value so list/discover routes always read from
-    # one place. Seed order: CLI/env (Settings) > config.yaml > None.
+    # one place. Seed order: CLI/env (Settings) > absolute config.yaml
+    # path > <data_root>/labeler-books. The lifespan creates the default
+    # directory when that third case is the one that won.
     # Always load the full ``AppConfig`` so routes can read fields like
     # ``fuzz_threshold`` (GAP-5) via the ``get_app_config`` DI provider
     # without re-reading the file on every request.
     _app_config = load_config(settings.config_root)
     app.state.app_config = _app_config
-    _initial_root = settings.source_projects_root or _app_config.source_projects_root
+    _initial_root, _create_default_books = resolve_source_projects_root(
+        configured=settings.source_projects_root,
+        config_file_value=_app_config.source_projects_root,
+        data_root=settings.data_root,
+    )
+    app.state.create_default_books_dir = _create_default_books
     source_root_carrier = SourceRootCarrier(initial=_initial_root)
     app.state.source_root_carrier = source_root_carrier
 
