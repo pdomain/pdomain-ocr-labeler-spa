@@ -32,9 +32,9 @@ its text and typography review requirements.
 
 Detailed line and stanza writes require the word IDs stored in prepared
 bundles. Loose mirrors support ordinary region acceptance and column review.
-This local proof requires the reviewed contracts wheel from commit
-`94e4eef84a91c264c42b36097e49541eee4683ac`; registry contracts 0.2.0 lacks the
-new API. Package publication remains separate work.
+Region review requires `pdomain-book-contracts>=0.2.1`. The lockfile selects
+published v0.2.1 from the pdomain package index. Normal setup uses this
+release; local wheel overrides are no longer needed.
 
 Fine-grained typography phase one is shipped on this branch. The SPA uses
 `TypographySection`, server-authoritative grapheme/taxonomy metadata, and an

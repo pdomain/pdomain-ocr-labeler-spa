@@ -1423,7 +1423,7 @@ wheels = [
 
 [[package]]
 name = "pdomain-book-contracts"
-version = "0.2.0"
+version = "0.2.1"
 source = { registry = "https://pdomain.github.io/pdomain-index-pip/simple/" }
 dependencies = [
     { name = "pydantic" },
@@ -1432,9 +1432,9 @@ dependencies = [
     { name = "shapely" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://github.com/pdomain/pdomain-book-contracts/releases/download/v0.2.0/pdomain_book_contracts-0.2.0.tar.gz", hash = "sha256:6d35648a1e787618d30a0f2ef216a55eaa695f2292274fdbee447d6aed2de16b" }
+sdist = { url = "https://github.com/pdomain/pdomain-book-contracts/releases/download/v0.2.1/pdomain_book_contracts-0.2.1.tar.gz", hash = "sha256:2eb6a5dfb52893d16a00e07e6f5a213cd735f99d2730c22de3063cafae030120" }
 wheels = [
-    { url = "https://github.com/pdomain/pdomain-book-contracts/releases/download/v0.2.0/pdomain_book_contracts-0.2.0-py3-none-any.whl", hash = "sha256:1e30d57064b225b78841f9bcec0a392ee124bf00b3c3d1fd4a3e71e8018580d9" },
+    { url = "https://github.com/pdomain/pdomain-book-contracts/releases/download/v0.2.1/pdomain_book_contracts-0.2.1-py3-none-any.whl", hash = "sha256:57ff8472e7ce00fcd2c5ecef4dd4d68af2348e63825f45fcab7988eb0f9846a1" },
 ]
 
 [[package]]
@@ -1523,7 +1523,7 @@ requires-dist = [
     { name = "huggingface-hub", specifier = ">=1.16" },
     { name = "idna", specifier = ">=3.19" },
     { name = "modal", marker = "extra == 'modal'", specifier = ">=0.66" },
-    { name = "pdomain-book-contracts", specifier = ">=0.2.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
+    { name = "pdomain-book-contracts", specifier = ">=0.2.1", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pdomain-book-tools", specifier = "==0.30.1", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pdomain-ops", specifier = ">=0.11.2", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },
     { name = "pdomain-pgdp-measure", specifier = ">=0.1.0", index = "https://pdomain.github.io/pdomain-index-pip/simple/" },

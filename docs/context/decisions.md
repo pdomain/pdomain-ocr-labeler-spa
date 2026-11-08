@@ -2067,3 +2067,15 @@ is written, preserving prior output when a word binding or sidecar is invalid.
 The local proof depends on the reviewed contracts build from commit
 `94e4eef84a91c264c42b36097e49541eee4683ac`. Registry contracts 0.2.0 cannot run
 the new API. Release and publication remain separate work.
+
+## 2026-11-08 — Use published contracts v0.2.1
+
+Contracts v0.2.1 is now published on the pdomain package index. The labeler
+requires `pdomain-book-contracts>=0.2.1`, and its lockfile selects the stable
+release. This replaces the temporary local-wheel requirement recorded in
+the earlier layout proof decision. That proof history remains unchanged.
+
+Normal locked setup installs the new layout records and F2 producer from
+the published wheel. It needs no sibling path dependency, local wheel
+override, no-sync flag, or setup skip. This dependency rollout does not tag
+or release a new labeler package.
