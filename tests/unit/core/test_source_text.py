@@ -9,11 +9,12 @@ from pdomain_book_contracts.annotation.provenance import (
     KnowledgeState,
     LabelSource,
 )
+from pdomain_book_contracts.layout.text_hints import LayoutTextHint, LayoutTextLine
 from pdomain_book_contracts.matching.models import MatchQuarantineReason
 from pdomain_book_contracts.matching.pgdp_bounded import match_pgdp_documents_bounded
 from pdomain_book_contracts.matching.pgdp_visible import match_document_from_pgdp_text
 from pdomain_book_contracts.typography.labels import StyleLabel
-from pdomain_book_contracts.typography.spans import SourceSlice, StyleSpan
+from pdomain_book_contracts.typography.spans import SourceSlice, StyleSpan, split_graphemes
 
 from pdomain_ocr_labeler_spa.core.source_alignment import SourceAlignmentEvidence, alignment_policy
 from pdomain_ocr_labeler_spa.core.source_text import build_source_text_preview
@@ -165,6 +166,60 @@ def test_accepted_local_window_projects_when_assembled_graph_is_quarantined() ->
     assert preview.consolidated is not None
     assert preview.consolidated.runs[0].text == "régime"
     assert preview.consolidated.runs[0].styles == ("italic",)
+
+
+def test_layout_lines_keep_p3_ranges_and_f2_indents_without_text_search() -> None:
+    f2_raw = "First line\r\n        Repeated line\r\nThird line\r\n        Repeated line"
+    p3_raw = "First line\r\nRepeated line\r\nThird line\r\nRepeated line"
+    f2 = match_document_from_pgdp_text(f2_raw.encode(), document_id="f2", page_id="poem", artifact_id="f2")
+    p3 = match_document_from_pgdp_text(p3_raw.encode(), document_id="p3", page_id="poem", artifact_id="p3")
+    evidence = SourceAlignmentEvidence(
+        schema="pdomain.pgdp-source-alignment",
+        version=1,
+        project_id="project",
+        page_key="poem",
+        page_id="poem",
+        f2=f2,
+        p3=p3,
+        f2_to_p3=match_pgdp_documents_bounded(
+            source=f2.document, target=p3.document, policy=alignment_policy()
+        ),
+        hints=(
+            LayoutTextHint(
+                kind="formatted_block",
+                source="f2",
+                source_ref="F2",
+                text=f2_raw,
+                grapheme_range=(0, len(split_graphemes(f2_raw))),
+                lines=(
+                    LayoutTextLine(text="First line", stanza_index=0),
+                    LayoutTextLine(text="Repeated line", stanza_index=0, indent_hint="8 spaces"),
+                    LayoutTextLine(text="Third line", stanza_index=1),
+                    LayoutTextLine(text="Repeated line", stanza_index=1, indent_hint="8 spaces"),
+                ),
+            ),
+        ),
+    )
+
+    preview = build_source_text_preview(
+        page_key="poem",
+        f2_payload=json.dumps({"poem": f2_raw}).encode(),
+        p3_payload=json.dumps({"poem": p3_raw}).encode(),
+        evidence=evidence,
+    )
+
+    assert preview.consolidated is not None
+    assert preview.consolidated.text == p3_raw
+    hint = preview.consolidated.layout_hints[0]
+    first_repeated, second_repeated = hint.lines[1], hint.lines[3]
+    assert first_repeated.indent_columns == 8
+    assert second_repeated.indent_columns == 8
+    assert first_repeated.grapheme_range != second_repeated.grapheme_range
+    graphemes = split_graphemes(preview.consolidated.text)
+    for line in hint.lines:
+        assert line.grapheme_range is not None
+        start, end = line.grapheme_range
+        assert "".join(graphemes[start:end]) == line.text
 
 
 def test_api_returns_structured_error_for_inconsistent_source_snapshot(

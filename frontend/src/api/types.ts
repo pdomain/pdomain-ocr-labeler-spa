@@ -7119,6 +7119,13 @@ export interface components {
             stanza_index: number | null;
             /** Indent Hint */
             indent_hint: string | null;
+            /** Grapheme Range */
+            grapheme_range?: [
+                number,
+                number
+            ] | null;
+            /** Indent Columns */
+            indent_columns?: number | null;
         };
         /**
          * SourceTextPreview

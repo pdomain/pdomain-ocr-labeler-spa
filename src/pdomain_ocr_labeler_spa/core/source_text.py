@@ -48,6 +48,8 @@ class SourceTextLayoutLine(BaseModel):
     text: str
     stanza_index: int | None
     indent_hint: str | None
+    grapheme_range: tuple[int, int] | None = None
+    indent_columns: int | None = None
 
 
 class SourceTextLayoutHint(BaseModel):
@@ -496,19 +498,49 @@ def _map_hint_lines(
     if any(any(token.token_id not in target_ids for token in line.tokens) for line in target_lines):
         return None
     visible = split_graphemes(p3.visible_text)
+    source_indents = _source_line_indents(hint)
     result: list[SourceTextLayoutLine] = []
-    for source_line, target_line in zip(hint.lines, target_lines, strict=True):
+    for source_line, target_line, source_indent in zip(hint.lines, target_lines, source_indents, strict=True):
         first = target_line.tokens[0]
         last = target_line.tokens[-1]
         start = p3_visible.get((first.token_id, 0))
         end = p3_visible.get((last.token_id, len(split_graphemes(last.text)) - 1))
         if start is None or end is None:
             return None
+        grapheme_range = (start, end + 1)
         result.append(
             SourceTextLayoutLine(
-                text="".join(visible[start : end + 1]),
+                text="".join(visible[slice(*grapheme_range)]),
                 stanza_index=source_line.stanza_index,
                 indent_hint=source_line.indent_hint,
+                grapheme_range=grapheme_range,
+                indent_columns=_indent_columns(source_line.indent_hint, fallback=source_indent),
             )
         )
     return tuple(result)
+
+
+def _source_line_indents(hint: LayoutTextHint) -> tuple[int | None, ...]:
+    """Read source-leading spaces in order without locating P3 text by value."""
+    source_lines = iter(hint.text.splitlines())
+    indents: list[int | None] = []
+    for expected in hint.lines:
+        for source_line in source_lines:
+            content = source_line.lstrip(" \t")
+            if content != expected.text:
+                continue
+            prefix = source_line[: len(source_line) - len(content)]
+            indents.append(len(prefix) if prefix.strip(" ") == "" else None)
+            break
+        else:
+            indents.append(None)
+    return tuple(indents)
+
+
+def _indent_columns(indent_hint: str | None, *, fallback: int | None) -> int | None:
+    if indent_hint is None:
+        return fallback
+    columns, separator, unit = indent_hint.partition(" ")
+    if separator and columns.isdecimal() and unit in {"space", "spaces"}:
+        return int(columns)
+    return fallback

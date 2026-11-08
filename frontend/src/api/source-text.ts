@@ -12,6 +12,10 @@ interface ConsolidatedLayoutLine {
   readonly text: string;
   readonly stanza_index: number | null;
   readonly indent_hint: string | null;
+  /** Exact P3 visible-text grapheme range, when the backend accepted the mapping. */
+  readonly grapheme_range?: readonly [number, number] | undefined;
+  /** Exact F2 indentation projected to the P3 range, when the mapping is accepted. */
+  readonly indent_columns?: number | null | undefined;
 }
 
 interface ConsolidatedLayoutHint {
@@ -27,7 +31,7 @@ interface UnresolvedSourceFormatting {
   readonly reason: string;
 }
 
-interface ConsolidatedSourceText {
+export interface ConsolidatedSourceText {
   readonly text: string;
   readonly runs: readonly ConsolidatedRun[];
   readonly layout_hints: readonly ConsolidatedLayoutHint[];
@@ -118,6 +122,39 @@ function parseLayoutLine(value: unknown): ConsolidatedLayoutLine {
       "source text preview consolidated layout line stanza_index must be a non-negative integer or null",
     );
   }
+  const graphemeRange = record["grapheme_range"];
+  let parsedGraphemeRange: readonly [number, number] | undefined;
+  if (graphemeRange !== undefined && graphemeRange !== null) {
+    if (
+      !Array.isArray(graphemeRange) ||
+      graphemeRange.length !== 2 ||
+      !graphemeRange.every((item) => Number.isSafeInteger(item) && item >= 0) ||
+      graphemeRange[0] === undefined ||
+      graphemeRange[1] === undefined ||
+      graphemeRange[0] > graphemeRange[1]
+    ) {
+      throw new Error(
+        "source text preview consolidated layout line grapheme_range must be an ordered pair of non-negative integers",
+      );
+    }
+    parsedGraphemeRange = [graphemeRange[0], graphemeRange[1]];
+  }
+  const indentColumns = record["indent_columns"];
+  let parsedIndentColumns: number | null | undefined;
+  if (indentColumns === null) {
+    parsedIndentColumns = null;
+  } else if (indentColumns !== undefined) {
+    if (
+      typeof indentColumns !== "number" ||
+      !Number.isSafeInteger(indentColumns) ||
+      indentColumns < 0
+    ) {
+      throw new Error(
+        "source text preview consolidated layout line indent_columns must be a non-negative integer or null",
+      );
+    }
+    parsedIndentColumns = indentColumns;
+  }
   return {
     text: stringOf(record, "text", "source text preview consolidated layout line text"),
     stanza_index: stanzaIndex,
@@ -126,6 +163,8 @@ function parseLayoutLine(value: unknown): ConsolidatedLayoutLine {
       "indent_hint",
       "source text preview consolidated layout line indent_hint",
     ),
+    ...(parsedGraphemeRange === undefined ? {} : { grapheme_range: parsedGraphemeRange }),
+    ...(parsedIndentColumns === undefined ? {} : { indent_columns: parsedIndentColumns }),
   };
 }
 
@@ -185,12 +224,50 @@ function parseConsolidated(value: unknown): ConsolidatedSourceText | null {
   if (parsedRuns.map((run) => run.text).join("") !== text) {
     throw new Error("source text preview consolidated runs must concatenate to consolidated text");
   }
+  const parsedHints = suppressInvalidLayoutProjections(hints.map(parseLayoutHint), text);
   return {
     text,
     runs: parsedRuns,
-    layout_hints: hints.map(parseLayoutHint),
+    layout_hints: parsedHints,
     unresolved: unresolved.map(parseUnresolved),
   };
+}
+
+function splitGraphemes(text: string): readonly string[] {
+  return [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)].map(
+    (segment) => segment.segment,
+  );
+}
+
+function isLineBoundary(grapheme: string | undefined): boolean {
+  return grapheme !== undefined && /[\r\n]/u.test(grapheme);
+}
+
+function suppressInvalidLayoutProjections(
+  hints: readonly ConsolidatedLayoutHint[],
+  text: string,
+): readonly ConsolidatedLayoutHint[] {
+  const graphemes = splitGraphemes(text);
+  return hints.map((hint) => ({
+    ...hint,
+    lines: hint.lines.map((line) => {
+      const range = line.grapheme_range;
+      if (range === undefined) return line;
+      const [start, end] = range;
+      const valid =
+        end <= graphemes.length &&
+        (start === 0 || isLineBoundary(graphemes[start - 1])) &&
+        (end === graphemes.length || isLineBoundary(graphemes[end])) &&
+        graphemes.slice(start, end).join("") === line.text;
+      if (valid) return line;
+      const {
+        grapheme_range: _ignoredRange,
+        indent_columns: _ignoredIndentColumns,
+        ...withoutProjection
+      } = line;
+      return withoutProjection;
+    }),
+  }));
 }
 
 export function parseSourceTextPreview(value: unknown): SourceTextPreview {

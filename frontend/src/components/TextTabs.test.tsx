@@ -148,6 +148,213 @@ describe("TextTabs", () => {
     );
     expect(screen.getByTestId("consolidated-layout-hint")).not.toHaveAttribute("open");
     expect(screen.getByText("Source layout evidence: verse")).toBeInTheDocument();
+    expect(screen.queryByTestId("consolidated-layout-line")).not.toBeInTheDocument();
+  });
+
+  it("visually indents only accepted F2-to-P3 target ranges without changing P3 text or styles", () => {
+    const text = "But you\nWith flickering eye\nIn jeopardy";
+    render(
+      <TextTabs
+        sourcePreview={{
+          project_id: "project-1",
+          page_index: 0,
+          page_key: "poems-008.png",
+          available: true,
+          f2: {
+            raw_text: "But you\n        With flickering eye\n        In jeopardy",
+            visible_text: text,
+          },
+          p3: { raw_text: text, visible_text: text },
+          consolidated: {
+            text,
+            runs: [
+              { text: "But you\n", styles: [] },
+              { text: "With flickering eye", styles: ["italic"] },
+              { text: "\nIn jeopardy", styles: [] },
+            ],
+            layout_hints: [
+              {
+                kind: "verse",
+                source_ref: "f2-poems-008",
+                lines: [
+                  {
+                    text: "With flickering eye",
+                    stanza_index: 0,
+                    indent_hint: "        ",
+                    grapheme_range: [8, 27],
+                    indent_columns: 8,
+                  },
+                  {
+                    text: "In jeopardy",
+                    stanza_index: 0,
+                    indent_hint: "        ",
+                    grapheme_range: [28, 39],
+                    indent_columns: 8,
+                  },
+                ],
+              },
+            ],
+            unresolved: [],
+          },
+          warnings: [],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("text-tab-consolidated"));
+
+    expect(screen.getByTestId("consolidated-transcript").textContent).toBe(text);
+    const indentedLines = screen.getAllByTestId("consolidated-layout-line");
+    expect(indentedLines).toHaveLength(2);
+    expect(indentedLines[0]?.style.paddingInlineStart).toBe("8ch");
+    expect(indentedLines[0]).toHaveAttribute("data-indent-columns", "8");
+    expect(screen.getByText("With flickering eye")).toHaveClass("italic");
+  });
+
+  it("uses target ranges instead of matching repeated line text", () => {
+    const text = "Echo\nEcho";
+    render(
+      <TextTabs
+        sourcePreview={{
+          project_id: "project-1",
+          page_index: 0,
+          page_key: "repeated.png",
+          available: true,
+          f2: { raw_text: "Echo\n    Echo", visible_text: text },
+          p3: { raw_text: text, visible_text: text },
+          consolidated: {
+            text,
+            runs: [{ text, styles: [] }],
+            layout_hints: [
+              {
+                kind: "verse",
+                source_ref: "f2-repeated",
+                lines: [
+                  {
+                    text: "Echo",
+                    stanza_index: 0,
+                    indent_hint: "    ",
+                    grapheme_range: [5, 9],
+                    indent_columns: 4,
+                  },
+                ],
+              },
+            ],
+            unresolved: [
+              {
+                source_kind: "layout_hint",
+                source_ref: "f2-first-echo",
+                source_text: "Echo",
+                reason: "no accepted target range",
+              },
+            ],
+          },
+          warnings: [],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("text-tab-consolidated"));
+
+    const indentedLines = screen.getAllByTestId("consolidated-layout-line");
+    expect(indentedLines).toHaveLength(1);
+    expect(indentedLines[0]).toHaveTextContent("Echo");
+    expect(screen.getByTestId("consolidated-transcript").textContent).toBe(text);
+    expect(screen.getByTestId("consolidated-unresolved")).toHaveTextContent(
+      "no accepted target range",
+    );
+  });
+
+  it("adds only the remaining projected indent after P3 leading whitespace", () => {
+    const text = "    Already indented";
+    render(
+      <TextTabs
+        sourcePreview={{
+          project_id: "project-1",
+          page_index: 0,
+          page_key: "already-indented.png",
+          available: true,
+          f2: { raw_text: "        Already indented", visible_text: text },
+          p3: { raw_text: text, visible_text: text },
+          consolidated: {
+            text,
+            runs: [{ text, styles: [] }],
+            layout_hints: [
+              {
+                kind: "verse",
+                source_ref: "f2-already-indented",
+                lines: [
+                  {
+                    text,
+                    stanza_index: null,
+                    indent_hint: "        ",
+                    grapheme_range: [0, 20],
+                    indent_columns: 8,
+                  },
+                ],
+              },
+            ],
+            unresolved: [],
+          },
+          warnings: [],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("text-tab-consolidated"));
+
+    const line = screen.getByTestId("consolidated-layout-line");
+    expect(line).toHaveAttribute("data-indent-columns", "8");
+    expect(line).toHaveAttribute("data-padding-columns", "4");
+    expect(line.style.paddingInlineStart).toBe("4ch");
+    expect(screen.getByTestId("consolidated-transcript").textContent).toBe(text);
+  });
+
+  it("does not infer indentation from rejected or range-free layout evidence", () => {
+    const text = "Unindented P3";
+    render(
+      <TextTabs
+        sourcePreview={{
+          project_id: "project-1",
+          page_index: 0,
+          page_key: "unresolved.png",
+          available: true,
+          f2: { raw_text: "        Unindented P3", visible_text: text },
+          p3: { raw_text: text, visible_text: text },
+          consolidated: {
+            text,
+            runs: [{ text, styles: [] }],
+            layout_hints: [
+              {
+                kind: "verse",
+                source_ref: "f2-unresolved",
+                lines: [
+                  {
+                    text,
+                    stanza_index: null,
+                    indent_hint: "        ",
+                  },
+                ],
+              },
+            ],
+            unresolved: [
+              {
+                source_kind: "layout_hint",
+                source_ref: "f2-unresolved",
+                source_text: text,
+                reason: "no exact accepted mapping",
+              },
+            ],
+          },
+          warnings: [],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("text-tab-consolidated"));
+
+    expect(screen.queryByTestId("consolidated-layout-line")).not.toBeInTheDocument();
+    expect(screen.getByTestId("consolidated-transcript").textContent).toBe(text);
   });
 
   it("does not reuse prior source text when the current page has no prepared source", () => {

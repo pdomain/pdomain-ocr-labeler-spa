@@ -18,9 +18,9 @@
 //   text-tab-matches, text-tab-ground-truth, text-tab-ocr
 //   match-filter-unvalidated, match-filter-mismatched, match-filter-all
 
-import { useId, useRef, useState, type KeyboardEvent } from "react";
+import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { LineFilter } from "../hooks/usePage";
-import type { SourceTextPreview } from "../api/source-text";
+import type { ConsolidatedSourceText, SourceTextPreview } from "../api/source-text";
 
 export type TabId = "matches" | "ground-truth" | "p3" | "f2" | "consolidated" | "ocr";
 
@@ -131,6 +131,155 @@ function SourceUnavailable({
   );
 }
 
+interface StyledGrapheme {
+  readonly text: string;
+  readonly styles: readonly string[];
+}
+
+interface IndentedRange {
+  readonly start: number;
+  readonly end: number;
+  readonly indentColumns: number;
+  readonly paddingColumns: number;
+}
+
+function splitGraphemes(text: string): readonly string[] {
+  return [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)].map(
+    (segment) => segment.segment,
+  );
+}
+
+function runClassName(styles: readonly string[]): string | undefined {
+  const className = [
+    styles.includes("italic") ? "italic" : "",
+    styles.includes("bold") ? "font-bold" : "",
+  ]
+    .filter((style) => style !== "")
+    .join(" ");
+  return className === "" ? undefined : className;
+}
+
+function styledGraphemes(consolidated: ConsolidatedSourceText): readonly StyledGrapheme[] {
+  return consolidated.runs.flatMap((run) =>
+    splitGraphemes(run.text).map((text) => ({ text, styles: run.styles })),
+  );
+}
+
+function leadingWhitespaceColumns(graphemes: readonly StyledGrapheme[]): number {
+  let columns = 0;
+  for (const grapheme of graphemes) {
+    if (grapheme.text === " ") {
+      columns += 1;
+      continue;
+    }
+    if (grapheme.text === "\t") {
+      columns += 8 - (columns % 8);
+      continue;
+    }
+    break;
+  }
+  return columns;
+}
+
+function acceptedIndentedRanges(
+  consolidated: ConsolidatedSourceText,
+  graphemes: readonly StyledGrapheme[],
+): readonly IndentedRange[] {
+  const candidates = consolidated.layout_hints
+    .flatMap((hint) => hint.lines)
+    .flatMap((line): readonly IndentedRange[] => {
+      if (
+        line.grapheme_range === undefined ||
+        line.indent_columns === undefined ||
+        line.indent_columns === null ||
+        line.indent_columns === 0
+      ) {
+        return [];
+      }
+      const [start, end] = line.grapheme_range;
+      if (end > graphemes.length) return [];
+      const paddingColumns = Math.max(
+        0,
+        line.indent_columns - leadingWhitespaceColumns(graphemes.slice(start, end)),
+      );
+      if (paddingColumns === 0) return [];
+      return [{ start, end, indentColumns: line.indent_columns, paddingColumns }];
+    })
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+  const nonOverlapping: IndentedRange[] = [];
+  for (const candidate of candidates) {
+    const previous = nonOverlapping.at(-1);
+    if (previous !== undefined && candidate.start < previous.end) continue;
+    nonOverlapping.push(candidate);
+  }
+  return nonOverlapping;
+}
+
+function renderStyledGraphemes(
+  graphemes: readonly StyledGrapheme[],
+  keyPrefix: string,
+): readonly ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  while (cursor < graphemes.length) {
+    const current = graphemes[cursor];
+    if (current === undefined) break;
+    const styles = current.styles;
+    let text = current.text;
+    cursor += 1;
+    while (cursor < graphemes.length && graphemes[cursor]?.styles === styles) {
+      const next = graphemes[cursor];
+      if (next === undefined) break;
+      text += next.text;
+      cursor += 1;
+    }
+    nodes.push(
+      <span key={`${keyPrefix}-${String(nodes.length)}`} className={runClassName(styles)}>
+        {text}
+      </span>,
+    );
+  }
+  return nodes;
+}
+
+function ConsolidatedTranscript({
+  consolidated,
+}: {
+  readonly consolidated: ConsolidatedSourceText;
+}) {
+  const graphemes = styledGraphemes(consolidated);
+  const ranges = acceptedIndentedRanges(consolidated, graphemes);
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  for (const range of ranges) {
+    nodes.push(
+      ...renderStyledGraphemes(graphemes.slice(cursor, range.start), `plain-${String(cursor)}`),
+    );
+    nodes.push(
+      <span
+        key={`indented-${String(range.start)}-${String(range.end)}`}
+        data-testid="consolidated-layout-line"
+        data-indent-columns={String(range.indentColumns)}
+        data-padding-columns={String(range.paddingColumns)}
+        className="inline-block"
+        style={{ paddingInlineStart: `${String(range.paddingColumns)}ch` }}
+      >
+        {renderStyledGraphemes(
+          graphemes.slice(range.start, range.end),
+          `indented-${String(range.start)}`,
+        )}
+      </span>,
+    );
+    cursor = range.end;
+  }
+  nodes.push(...renderStyledGraphemes(graphemes.slice(cursor), `plain-${String(cursor)}`));
+  return (
+    <pre data-testid="consolidated-transcript" className="m-0 whitespace-pre-wrap font-inherit">
+      {nodes}
+    </pre>
+  );
+}
+
 function SourcePanel({
   tab,
   preview,
@@ -164,23 +313,7 @@ function SourcePanel({
         <p className="font-sans text-xs text-ink-3">
           P3 wording with F2 formatting where the source mapping is exact.
         </p>
-        <p>
-          {preview.consolidated.runs.map((run, index) => (
-            <span
-              key={`${run.text}:${String(index)}`}
-              className={
-                [
-                  run.styles.includes("italic") ? "italic" : "",
-                  run.styles.includes("bold") ? "font-bold" : "",
-                ]
-                  .filter((style) => style !== "")
-                  .join(" ") || undefined
-              }
-            >
-              {run.text}
-            </span>
-          ))}
-        </p>
+        <ConsolidatedTranscript consolidated={preview.consolidated} />
         {preview.consolidated.layout_hints.map((hint) => (
           <details key={`${hint.kind}:${hint.source_ref}`} data-testid="consolidated-layout-hint">
             <summary className="font-sans text-xs text-ink-3">
