@@ -11,9 +11,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pdomain_book_contracts.annotation import KnowledgeState, RegionRole
+
+if TYPE_CHECKING:
+    from pdomain_book_contracts.layout.text_hints import LayoutStructure
 
 #: The four facets a region proposal run can depend on. A geometry proposal
 #: depends on the first three; none depend on ``word_text`` — see the spec's
@@ -22,7 +25,10 @@ FACET_WORD_BOXES = "word_boxes"
 FACET_LINE_STRUCTURE = "line_structure"
 FACET_PAGE_IMAGE = "page_image"
 FACET_WORD_TEXT = "word_text"
-ALL_FACETS = frozenset({FACET_WORD_BOXES, FACET_LINE_STRUCTURE, FACET_PAGE_IMAGE, FACET_WORD_TEXT})
+FACET_LAYOUT_EVIDENCE = "layout_evidence"
+ALL_FACETS = frozenset(
+    {FACET_WORD_BOXES, FACET_LINE_STRUCTURE, FACET_PAGE_IMAGE, FACET_WORD_TEXT, FACET_LAYOUT_EVIDENCE}
+)
 
 
 class Disposition(StrEnum):
@@ -279,3 +285,4 @@ class ResolvedRegion:
     region_id: str | None
     member_word_signatures: tuple[tuple[float, float, float, float, bool | None], ...] = ()
     stale: bool = False
+    layout_structure: LayoutStructure | None = None

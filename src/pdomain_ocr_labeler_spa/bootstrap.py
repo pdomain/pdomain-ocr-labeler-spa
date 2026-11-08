@@ -88,6 +88,7 @@ from .core.project_state import ProjectState
 from .core.regions.detector import CompositeDetector
 from .core.regions.furniture import FurnitureDetector
 from .core.regions.poetry import PoetryDetector
+from .core.regions.text_layout import TextLayoutDetector
 from .core.source_root_state import SourceRootCarrier
 from .core.startup_discovery import resolve_initial_project
 from .middleware.local_trust import LocalTrustMiddleware
@@ -558,7 +559,9 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # unions both runs' proposals into the one proposal run a book gets. A
     # test overrides this key the same way the page-kind measure function is
     # overridden.
-    runner.context["region_detector"] = CompositeDetector((FurnitureDetector(), PoetryDetector()))
+    runner.context["region_detector"] = CompositeDetector(
+        (FurnitureDetector(), PoetryDetector(), TextLayoutDetector())
+    )
 
     # Spec §2 step 10: install error handlers AFTER middleware (CORS +
     # RequestId) so a 500 still passes back through both on the way

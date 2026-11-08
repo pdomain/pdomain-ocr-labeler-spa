@@ -3156,6 +3156,7 @@ export interface components {
         AcceptRegionProposalRequest: {
             role?: components["schemas"]["RegionRole"] | null;
             box?: components["schemas"]["BBox"] | null;
+            layout_structure?: components["schemas"]["LayoutStructure"] | null;
         };
         /**
          * AddWordRequest
@@ -3540,6 +3541,7 @@ export interface components {
             child_type: "words" | "blocks";
             /** Parent Region Id */
             parent_region_id?: string | null;
+            layout_structure?: components["schemas"]["LayoutStructure"] | null;
         };
         /**
          * CurrentPageIndexResponse
@@ -3698,6 +3700,7 @@ export interface components {
         EditRegionRequest: {
             role?: components["schemas"]["RegionRole"] | null;
             box?: components["schemas"]["BBox"] | null;
+            layout_structure?: components["schemas"]["LayoutStructure"] | null;
         };
         /**
          * EmptyBody
@@ -3840,6 +3843,11 @@ export interface components {
              * @default false
              */
             recognition_only: boolean;
+            /**
+             * Regions Only
+             * @default false
+             */
+            regions_only: boolean;
         };
         /**
          * ExportResponse
@@ -4340,6 +4348,147 @@ export interface components {
              * @default #ff4a9f
              */
             block: string;
+        };
+        /**
+         * LayoutStructure
+         * @description Reviewed layout structure for one confirmed region.
+         */
+        LayoutStructure: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "poetry" | "blockquote" | "table" | "column_flow";
+            /**
+             * Lines
+             * @default []
+             */
+            lines: components["schemas"]["LayoutStructureLine"][];
+            /** Column Group Id */
+            column_group_id?: string | null;
+            /** Column Index */
+            column_index?: number | null;
+            /** Reading Order */
+            reading_order?: number | null;
+            /** Measured Indent */
+            measured_indent?: number | null;
+            /**
+             * Table Rows
+             * @default []
+             */
+            table_rows: components["schemas"]["LayoutTableRow"][];
+        };
+        /**
+         * LayoutStructureLine
+         * @description One reviewed text line bound to prepared-bundle word identities.
+         */
+        LayoutStructureLine: {
+            /** Text */
+            text: string;
+            /**
+             * Word Ids
+             * @default []
+             */
+            word_ids: string[];
+            /**
+             * Word Signatures
+             * @default []
+             */
+            word_signatures: string[];
+            /** Stanza Index */
+            stanza_index?: number | null;
+            /** Indent Hint */
+            indent_hint?: string | null;
+            /** Measured Indent */
+            measured_indent?: number | null;
+        };
+        /**
+         * LayoutTableCell
+         * @description One reviewed table cell bound to prepared-bundle word identities.
+         */
+        LayoutTableCell: {
+            /** Text */
+            text: string;
+            /**
+             * Word Ids
+             * @default []
+             */
+            word_ids: string[];
+            /**
+             * Word Signatures
+             * @default []
+             */
+            word_signatures: string[];
+        };
+        /**
+         * LayoutTableRow
+         * @description One reviewed table row.
+         */
+        LayoutTableRow: {
+            /** Cells */
+            cells: components["schemas"]["LayoutTableCell"][];
+        };
+        /**
+         * LayoutTextHint
+         * @description Source evidence for a candidate textual layout role.
+         */
+        LayoutTextHint: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "poetry" | "blockquote" | "table_candidate" | "column_flow";
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "f2" | "gutenberg_html";
+            /** Text */
+            text: string;
+            /** Lines */
+            lines: components["schemas"]["LayoutTextLine"][];
+            /** Source Ref */
+            source_ref: string;
+            /** Grapheme Range */
+            grapheme_range?: [
+                number,
+                number
+            ] | null;
+            /** Source Byte Range */
+            source_byte_range?: [
+                number,
+                number
+            ] | null;
+            /**
+             * Attributes
+             * @default []
+             */
+            attributes: [
+                string,
+                string
+            ][];
+            /**
+             * Table Rows
+             * @default []
+             */
+            table_rows: string[][];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /**
+         * LayoutTextLine
+         * @description One source-visible line with optional source-relative indentation.
+         */
+        LayoutTextLine: {
+            /** Text */
+            text: string;
+            /** Stanza Index */
+            stanza_index?: number | null;
+            /** Indent Hint */
+            indent_hint?: string | null;
         };
         /**
          * LigatureMarkModel
@@ -4909,6 +5058,10 @@ export interface components {
             /** Page Load Job Id */
             page_load_job_id?: string | null;
             image_drift?: components["schemas"]["ImageDrift"] | null;
+            /** Layout Hints */
+            layout_hints?: components["schemas"]["LayoutTextHint"][];
+            /** Layout Warnings */
+            layout_warnings?: string[];
             /** Extra */
             extra?: {
                 [key: string]: unknown;
@@ -5428,6 +5581,7 @@ export interface components {
              * @default false
              */
             stale: boolean;
+            layout_structure?: components["schemas"]["LayoutStructure"] | null;
         };
         /**
          * ReloadOCRRequest

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 from pdomain_book_contracts.annotation import RegionRole
+from pdomain_book_contracts.layout.text_hints import LayoutStructure
 from pydantic import BaseModel, ConfigDict, Field
 
 _MAX_DISPLAY_DIMENSION = 1200
@@ -102,6 +103,7 @@ class RegionView(BaseModel):
     confidence: float | None = None
     member_word_signatures: list[tuple[float, float, float, float, bool | None]] = Field(default_factory=list)
     stale: bool = False
+    layout_structure: LayoutStructure | None = None
 
 
 class RegionProposalView(BaseModel):

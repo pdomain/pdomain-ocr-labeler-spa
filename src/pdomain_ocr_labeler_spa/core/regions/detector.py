@@ -12,7 +12,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pdomain_book_contracts.annotation import RegionRole
 from pdomain_book_tools.ocr.page import Page
@@ -20,6 +20,9 @@ from pdomain_pgdp_measure.page_templates import BookTemplates, PageClassificatio
 from pdomain_pgdp_measure.profile_models import PageMeasurement
 
 from .models import FACET_LINE_STRUCTURE, FACET_PAGE_IMAGE, FACET_WORD_BOXES
+
+if TYPE_CHECKING:
+    from pdomain_book_contracts.layout.text_hints import LayoutTextHint
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,9 @@ class DetectorInput:
     measurement: PageMeasurement
     classification: PageClassification
     templates: BookTemplates
+    layout_hints: tuple[LayoutTextHint, ...] = ()
+    layout_word_ids: tuple[str, ...] = ()
+    layout_warnings: tuple[str, ...] = ()
 
 
 RegionDetector = Callable[[DetectorInput], Sequence[DetectedRegion]]

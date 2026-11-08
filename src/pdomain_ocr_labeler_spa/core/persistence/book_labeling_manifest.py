@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from pdomain_book_tools.typography import BookLabelingManifest
@@ -23,6 +23,7 @@ class LoadedBookLabelingManifest:
     manifest_bytes: bytes
     root_device: int
     root_inode: int
+    match_graph_payloads: dict[str, bytes] = field(default_factory=dict)
 
 
 def _safe_parts(relative_path: str) -> tuple[str, ...]:
@@ -118,8 +119,9 @@ def _validate_materializations(root_descriptor: int, manifest: BookLabelingManif
         os.close(descriptor)
 
 
-def _validate_match_graphs(root_descriptor: int, manifest: BookLabelingManifest) -> None:
+def _validate_match_graphs(root_descriptor: int, manifest: BookLabelingManifest) -> dict[str, bytes]:
     payloads: dict[tuple[str, ...], bytes] = {}
+    validated: dict[str, bytes] = {}
     for relation in manifest.match_relations:
         parts = _safe_parts(relation.match_graph_relative_path)
         payload = payloads.get(parts)
@@ -128,6 +130,8 @@ def _validate_match_graphs(root_descriptor: int, manifest: BookLabelingManifest)
             payloads[parts] = payload
         if hashlib.sha256(payload).hexdigest() != relation.match_graph_sha256:
             raise ValueError(f"match graph hash mismatch: {relation.relation_id}")
+        validated[relation.match_graph_relative_path] = payload
+    return validated
 
 
 def load_book_labeling_manifest_directory(root: Path) -> LoadedBookLabelingManifest:
@@ -138,7 +142,7 @@ def load_book_labeling_manifest_directory(root: Path) -> LoadedBookLabelingManif
         manifest_bytes = _read_regular_at(root_descriptor, (_MANIFEST_FILENAME,))
         manifest = _load_manifest(manifest_bytes)
         _validate_materializations(root_descriptor, manifest)
-        _validate_match_graphs(root_descriptor, manifest)
+        match_graph_payloads = _validate_match_graphs(root_descriptor, manifest)
     finally:
         os.close(root_descriptor)
     return LoadedBookLabelingManifest(
@@ -147,6 +151,7 @@ def load_book_labeling_manifest_directory(root: Path) -> LoadedBookLabelingManif
         manifest_bytes=manifest_bytes,
         root_device=root_stat.st_dev,
         root_inode=root_stat.st_ino,
+        match_graph_payloads=match_graph_payloads,
     )
 
 

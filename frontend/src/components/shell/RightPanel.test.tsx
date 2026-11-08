@@ -125,6 +125,37 @@ describe("RightPanel (Slice 14)", () => {
     expect(body).toHaveTextContent(/select/i);
   });
 
+  it("shows unresolved source layout evidence without selecting a region", () => {
+    const page = makePage();
+    page.layout_hints = [
+      {
+        kind: "poetry",
+        source: "gutenberg_html",
+        text: "First line\nSecond line",
+        lines: [
+          { text: "First line", stanza_index: 0, indent_hint: "2em" },
+          { text: "Second line", stanza_index: 1 },
+        ],
+        source_ref: "edition/source.html",
+        attributes: [],
+        table_rows: [],
+        warnings: [],
+      },
+    ];
+    page.layout_warnings = ["No unique ordered OCR match."];
+    renderWithQuery(<RightPanel page={page} projectId="p1" pageIndex={0} />);
+
+    expect(screen.getByTestId("region-page-layout-evidence")).toHaveTextContent(
+      "gutenberg_html poetry",
+    );
+    expect(screen.getByTestId("region-layout-hint-0-line-0")).toHaveTextContent(
+      "First line Stanza 0 Source indent 2em",
+    );
+    expect(screen.getByTestId("region-page-layout-warning-0")).toHaveTextContent(
+      "No unique ordered OCR match.",
+    );
+  });
+
   it("body data-level updates when selection changes (block)", () => {
     selectBlock(0, "b1");
     render(<RightPanel page={makePage()} pageIndex={0} />);

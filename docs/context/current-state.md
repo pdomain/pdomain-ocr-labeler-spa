@@ -19,6 +19,23 @@ last_verified: 2026-11-07
 
 ## Shipped system
 
+F2 and Gutenberg evidence now feeds the existing region proposal job. The
+review panel exposes source lines, stanzas, indentation, disagreements, and
+unresolved hints. Physical columns retain separate paragraph or poetry roles
+with grouping and reading order. Table proposals require source semantics
+and matching scan geometry.
+
+Reviewed structure persists with confirmed regions and exports beside the
+unchanged version-1 region labels. The explicit region-only export action
+supports prepared books without exporting OCR crops. General export keeps
+its text and typography review requirements.
+
+Detailed line and stanza writes require the word IDs stored in prepared
+bundles. Loose mirrors support ordinary region acceptance and column review.
+This local proof requires the reviewed contracts wheel from commit
+`94e4eef84a91c264c42b36097e49541eee4683ac`; registry contracts 0.2.0 lacks the
+new API. Package publication remains separate work.
+
 Fine-grained typography phase one is shipped on this branch. The SPA uses
 `TypographySection`, server-authoritative grapheme/taxonomy metadata, and an
 append-only v1 correction journal. Persisted-page lineage epochs keep old heads

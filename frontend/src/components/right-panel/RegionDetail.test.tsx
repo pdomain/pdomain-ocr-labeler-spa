@@ -6,8 +6,8 @@
 // a QueryClientProvider with retries off, selection driven through the
 // selection-store actions, and MSW for HTTP.
 
-import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
@@ -26,6 +26,21 @@ import type { components } from "../../api/types";
 type PagePayload = components["schemas"]["PagePayload"];
 type RegionView = components["schemas"]["RegionView"];
 type RegionProposalView = components["schemas"]["RegionProposalView"];
+type LayoutStructure = components["schemas"]["LayoutStructure"];
+
+const VERSE_STRUCTURE: LayoutStructure = {
+  kind: "poetry",
+  lines: [
+    {
+      text: "First line",
+      word_ids: ["word-1"],
+      word_signatures: ["word-1@0,0,10,10"],
+      stanza_index: 0,
+      indent_hint: "2em",
+    },
+  ],
+  table_rows: [],
+};
 
 function makeQueryClient() {
   return new QueryClient({
@@ -108,12 +123,15 @@ function makePage(): PagePayload {
     generation: 0,
     page_kind_reviewed: false,
     regions: [
-      PROPOSAL_REGION,
-      STALE_PROPOSAL_REGION,
-      CONFIRMED_FROM_PROPOSAL,
-      CONFIRMED_DRAWN_BY_HAND,
+      { ...PROPOSAL_REGION },
+      { ...STALE_PROPOSAL_REGION },
+      { ...CONFIRMED_FROM_PROPOSAL },
+      { ...CONFIRMED_DRAWN_BY_HAND },
     ],
-    proposals: [PROPOSAL_1_EVIDENCE, PROPOSAL_2_EVIDENCE],
+    proposals: [
+      { ...PROPOSAL_1_EVIDENCE, evidence: { ...PROPOSAL_1_EVIDENCE.evidence } },
+      { ...PROPOSAL_2_EVIDENCE, evidence: { ...PROPOSAL_2_EVIDENCE.evidence } },
+    ],
   };
 }
 
@@ -122,6 +140,10 @@ describe("RegionDetail", () => {
     clearSelection();
     dialogStore.reset();
     regionDraftStore.reset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("shows role, confidence and evidence keys for a selected proposal", () => {
@@ -173,6 +195,73 @@ describe("RegionDetail", () => {
     expect(method).toBe("POST");
     expect(path).toBe("/api/projects/p1/pages/0/regions/proposals/prop-1/accept");
     expect(body).toEqual({});
+  });
+
+  it("shows editable reviewed structure and sends it when accepting a proposal", async () => {
+    const user = userEvent.setup();
+    let body: unknown;
+    const page = makePage();
+    const proposal = page.proposals?.find((item) => item.proposal_id === "prop-1");
+    if (proposal) {
+      proposal.evidence = { layout_structure: VERSE_STRUCTURE, structure_supported: true };
+    }
+    server.use(
+      http.post(
+        "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept",
+        async ({ request }) => {
+          body = await request.json();
+          return HttpResponse.json(page);
+        },
+      ),
+    );
+
+    selectProposal("prop-1");
+    renderWithQuery(<RegionDetail page={page} projectId="p1" pageIndex={0} />);
+    expect(screen.getByTestId("region-layout-editor")).toHaveTextContent("First line");
+    await user.click(screen.getByTestId("region-detail-accept"));
+
+    await waitFor(() => expect(body).toEqual({ layout_structure: VERSE_STRUCTURE }));
+  });
+
+  it("shows loose poetry evidence without a matched structure and keeps ordinary acceptance available", async () => {
+    const user = userEvent.setup();
+    let body: unknown;
+    const page = makePage();
+    const proposal = page.proposals?.find((item) => item.proposal_id === "prop-1");
+    if (proposal)
+      proposal.evidence = {
+        structure_supported: false,
+        layout_warnings: ["No unique ordered OCR match."],
+        layout_hints: [
+          {
+            source: "f2",
+            kind: "poetry",
+            lines: [{ text: "Loose verse", stanza_index: 0, indent_hint: "2em" }],
+          },
+        ],
+      };
+    server.use(
+      http.post(
+        "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept",
+        async ({ request }) => {
+          body = await request.json();
+          return HttpResponse.json(page);
+        },
+      ),
+    );
+
+    selectProposal("prop-1");
+    renderWithQuery(<RegionDetail page={page} projectId="p1" pageIndex={0} />);
+    expect(screen.getByTestId("region-layout-prepared-required")).toBeInTheDocument();
+    expect(screen.getByTestId("region-layout-hint-0-line-0")).toHaveTextContent(
+      "Loose verse Stanza 0 Source indent 2em",
+    );
+    expect(screen.getByTestId("region-layout-warning-0")).toHaveTextContent(
+      "No unique ordered OCR match.",
+    );
+    expect(screen.queryByTestId("region-layout-editor")).toBeNull();
+    await user.click(screen.getByTestId("region-detail-accept"));
+    await waitFor(() => expect(body).toEqual({}));
   });
 
   it("choosing a role in Accept as POSTs { role } to the accept route", async () => {
@@ -232,6 +321,129 @@ describe("RegionDetail", () => {
     selectRegion("region-2");
     renderWithQuery(<RegionDetail page={makePage()} projectId="p1" pageIndex={0} />);
     expect(screen.getByTestId("region-detail-origin")).toHaveTextContent("Drawn by hand");
+  });
+
+  it("saves reviewed structure on a confirmed region and starts a regions-only export", async () => {
+    const user = userEvent.setup();
+    let editBody: unknown;
+    let exportBody: unknown;
+    const page = makePage();
+    const region = page.regions?.find((item) => item.region_id === "region-1");
+    if (region) region.layout_structure = VERSE_STRUCTURE;
+    server.use(
+      http.patch("/api/projects/:pid/pages/:idx/regions/:regionId", async ({ request }) => {
+        editBody = await request.json();
+        return HttpResponse.json(page);
+      }),
+      http.post("/api/projects/:pid/export", async ({ request }) => {
+        exportBody = await request.json();
+        return HttpResponse.json({ job_id: "export-regions" }, { status: 202 });
+      }),
+    );
+
+    selectRegion("region-1");
+    renderWithQuery(<RegionDetail page={page} projectId="p1" pageIndex={0} />);
+    await user.click(screen.getByTestId("region-layout-save"));
+    await waitFor(() => expect(editBody).toEqual({ layout_structure: VERSE_STRUCTURE }));
+    await user.click(screen.getByTestId("region-layout-export"));
+    await waitFor(() =>
+      expect(exportBody).toEqual({
+        scope: "current",
+        page_index: 0,
+        style_filters: [],
+        component_filter: null,
+        include_classification: false,
+        detection_only: false,
+        recognition_only: false,
+        regions_only: true,
+      }),
+    );
+  });
+
+  it("shows a regions-only export job error from SSE", async () => {
+    let listener: ((event: MessageEvent) => void) | undefined;
+    class EventSourceMock {
+      static readonly CLOSED = 2;
+      readonly readyState = 0;
+      addEventListener(type: string, callback: (event: MessageEvent) => void): void {
+        if (type === "error") listener = callback;
+      }
+      removeEventListener(): void {}
+      close(): void {}
+    }
+    vi.stubGlobal("EventSource", EventSourceMock);
+    const user = userEvent.setup();
+    server.use(
+      http.post("/api/projects/:pid/export", () =>
+        HttpResponse.json({ job_id: "export-regions" }, { status: 202 }),
+      ),
+    );
+    selectRegion("region-1");
+    renderWithQuery(<RegionDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    await user.click(screen.getByTestId("region-layout-export"));
+    await waitFor(() => expect(listener).toBeDefined());
+    act(() => {
+      listener?.({
+        data: JSON.stringify({
+          id: "export-regions",
+          type: "export",
+          project_id: "p1",
+          status: "error",
+          progress: { current: 0, total: 1, message: "Export failed" },
+          created_at: "",
+          updated_at: "",
+          event: "error",
+          error_message: "No output space.",
+          result: null,
+        }),
+      } as MessageEvent);
+    });
+    expect(await screen.findByTestId("region-layout-export-job-error")).toHaveTextContent(
+      "No output space.",
+    );
+  });
+
+  it("shows a regions-only export cancellation from SSE", async () => {
+    let listener: ((event: MessageEvent) => void) | undefined;
+    class EventSourceMock {
+      static readonly CLOSED = 2;
+      readonly readyState = 0;
+      addEventListener(type: string, callback: (event: MessageEvent) => void): void {
+        if (type === "cancelled") listener = callback;
+      }
+      removeEventListener(): void {}
+      close(): void {}
+    }
+    vi.stubGlobal("EventSource", EventSourceMock);
+    const user = userEvent.setup();
+    server.use(
+      http.post("/api/projects/:pid/export", () =>
+        HttpResponse.json({ job_id: "export-regions" }, { status: 202 }),
+      ),
+    );
+    selectRegion("region-1");
+    renderWithQuery(<RegionDetail page={makePage()} projectId="p1" pageIndex={0} />);
+    await user.click(screen.getByTestId("region-layout-export"));
+    await waitFor(() => expect(listener).toBeDefined());
+    act(() => {
+      listener?.({
+        data: JSON.stringify({
+          id: "export-regions",
+          type: "export",
+          project_id: "p1",
+          status: "cancelled",
+          progress: { current: 0, total: 1, message: "Cancelled" },
+          created_at: "",
+          updated_at: "",
+          event: "cancelled",
+          error_message: null,
+          result: null,
+        }),
+      } as MessageEvent);
+    });
+    expect(await screen.findByTestId("region-layout-export-cancelled")).toHaveTextContent(
+      "cancelled",
+    );
   });
 
   it("Delete does not call the route until the confirm dialog is confirmed", async () => {

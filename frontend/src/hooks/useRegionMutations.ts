@@ -39,8 +39,11 @@ type RegionRole = components["schemas"]["RegionRole"];
 type BBox = components["schemas"]["BBox"];
 type AcceptRegionProposalRequest = components["schemas"]["AcceptRegionProposalRequest"];
 type EditRegionRequest = components["schemas"]["EditRegionRequest"];
+type LayoutStructure = components["schemas"]["LayoutStructure"];
 type SetRegionWordMembershipRequest = components["schemas"]["SetRegionWordMembershipRequest"];
 type WordRef = components["schemas"]["WordRef"];
+type ExportRequest = components["schemas"]["ExportRequest"];
+type ExportResponse = components["schemas"]["ExportResponse"];
 
 // ─── internal helpers ─────────────────────────────────────────────────────
 
@@ -114,10 +117,17 @@ function invalidateAfterDecision(
  */
 export function useAcceptProposal(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
-  return useMutation<PagePayload, Error, { proposalId: string; role?: RegionRole }>({
+  return useMutation<
+    PagePayload,
+    Error,
+    { proposalId: string; role?: RegionRole; layoutStructure?: LayoutStructure }
+  >({
     mutationKey: decisionMutationKey(projectId, pageIndex),
-    mutationFn: ({ proposalId, role }) => {
-      const body: AcceptRegionProposalRequest = role === undefined ? {} : { role };
+    mutationFn: ({ proposalId, role, layoutStructure }) => {
+      const body: AcceptRegionProposalRequest = {
+        ...(role === undefined ? {} : { role }),
+        ...(layoutStructure === undefined ? {} : { layout_structure: layoutStructure }),
+      };
       return apiRequest<PagePayload>(
         `${pageBase(projectId, pageIndex)}/regions/proposals/${encodeURIComponent(proposalId)}/accept`,
         "POST",
@@ -182,12 +192,17 @@ export function useUnrejectProposal(projectId: string, pageIndex: number) {
  */
 export function useEditRegion(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
-  return useMutation<PagePayload, Error, { regionId: string; role?: RegionRole; box?: BBox }>({
+  return useMutation<
+    PagePayload,
+    Error,
+    { regionId: string; role?: RegionRole; box?: BBox; layoutStructure?: LayoutStructure | null }
+  >({
     mutationKey: decisionMutationKey(projectId, pageIndex),
-    mutationFn: ({ regionId, role, box }) => {
+    mutationFn: ({ regionId, role, box, layoutStructure }) => {
       const body: EditRegionRequest = {};
       if (role !== undefined) body.role = role;
       if (box !== undefined) body.box = box;
+      if (layoutStructure !== undefined) body.layout_structure = layoutStructure;
       return apiRequest<PagePayload>(
         `${pageBase(projectId, pageIndex)}/regions/${encodeURIComponent(regionId)}`,
         "PATCH",
@@ -248,6 +263,29 @@ export function useDeleteRegion(projectId: string, pageIndex: number) {
       ),
     onSuccess: () => {
       invalidateAfterDecision(qc, projectId, pageIndex);
+    },
+  });
+}
+
+/** Export this page's confirmed region labels and reviewed layout structure. */
+export function useExportReviewedRegions(projectId: string, pageIndex: number) {
+  return useMutation<ExportResponse, Error>({
+    mutationFn: () => {
+      const body: ExportRequest = {
+        scope: "current",
+        page_index: pageIndex,
+        style_filters: [],
+        component_filter: null,
+        include_classification: false,
+        detection_only: false,
+        recognition_only: false,
+        regions_only: true,
+      };
+      return apiRequest<ExportResponse>(
+        `/api/projects/${encodeURIComponent(projectId)}/export`,
+        "POST",
+        body,
+      );
     },
   });
 }

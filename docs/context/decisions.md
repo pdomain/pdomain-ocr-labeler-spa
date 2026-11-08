@@ -2044,3 +2044,26 @@ execution steps remain available in Git; they are not current work orders.
   parity, and test strictness remain explicit in intent-map and their source documents.
 - Removal commit: the commit introducing this entry; resolve with
   `git log -1 --format=%H -- docs/architecture/20-glyph-annotations.md`.
+
+## 2026-11-08 — Keep reviewed layout separate from OCR identity and crop export
+
+The existing book-scoped region proposal job now combines portable F2 and
+Gutenberg evidence with OCR geometry. It remains the sole proposal journal
+writer. Physical columns retain paragraph or poetry roles with grouping and
+reading order; source table markup alone never establishes a table role.
+
+Detailed reviewed lines use the word IDs already stored in prepared bundles.
+Acceptance stores these IDs with the region without moving OCR words.
+Export refreshes optional geometry snapshots by ID after text or box edits.
+Loose mirrors retain ordinary region acceptance, but detailed word-bound
+writes require preparation. This proof adds no legacy identity migration.
+
+The existing export job accepts an explicit region-only mode. It exports
+confirmed labels and reviewed structure without OCR crops. This lets people
+export prepared-book layout review while general export retains its text and
+typography gates. Structure validation completes before either export document
+is written, preserving prior output when a word binding or sidecar is invalid.
+
+The local proof depends on the reviewed contracts build from commit
+`94e4eef84a91c264c42b36097e49541eee4683ac`. Registry contracts 0.2.0 cannot run
+the new API. Release and publication remain separate work.

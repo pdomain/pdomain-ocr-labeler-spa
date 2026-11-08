@@ -67,13 +67,20 @@ import {
   useCreateRegion,
   useSetRegionWords,
   useRegionDecisionPending,
+  useExportReviewedRegions,
 } from "../../hooks/useRegionMutations";
+import { useJobProgress } from "../../hooks/useJobProgress";
 import {
   matchingMemberKeys,
   wordMemberKey,
   type MembershipWord,
   type WordSignature,
 } from "../../lib/region-membership";
+import {
+  LayoutStructureEditor,
+  layoutStructureFromUnknown,
+  type LayoutStructureDraft,
+} from "./LayoutStructureEditor";
 import type { components } from "../../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
@@ -156,6 +163,107 @@ function formatEvidenceValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function layoutStructureValue(value: unknown): unknown {
+  return isRecord(value) ? value["layout_structure"] : undefined;
+}
+
+function LayoutHints({ value }: { value: unknown }) {
+  const hints = Array.isArray(value) ? value.filter(isRecord) : [];
+  if (hints.length === 0) return null;
+  return (
+    <div data-testid="region-layout-hints" className="flex flex-col gap-1 text-[11px]">
+      {hints.map((hint, hintIndex) => {
+        const lines = Array.isArray(hint["lines"]) ? hint["lines"].filter(isRecord) : [];
+        const source = typeof hint["source"] === "string" ? hint["source"] : "source";
+        const kind = typeof hint["kind"] === "string" ? hint["kind"] : "layout";
+        return (
+          <div
+            key={`${String(hintIndex)}:${source}:${kind}`}
+            data-testid={`region-layout-hint-${hintIndex}`}
+            className="border border-border-1 rounded-sm p-2"
+          >
+            <p className="text-ink-2">
+              {source} {kind}
+            </p>
+            {lines.map((line, lineIndex) => {
+              const text = typeof line["text"] === "string" ? line["text"] : "";
+              const stanza =
+                typeof line["stanza_index"] === "number"
+                  ? `Stanza ${String(line["stanza_index"])}`
+                  : null;
+              const indent =
+                typeof line["indent_hint"] === "string"
+                  ? `Source indent ${line["indent_hint"]}`
+                  : null;
+              return (
+                <p
+                  key={`${String(lineIndex)}:${text}`}
+                  data-testid={`region-layout-hint-${hintIndex}-line-${lineIndex}`}
+                  className="text-ink-3"
+                >
+                  {text} {stanza} {indent}
+                </p>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function LayoutReview({
+  structure,
+  evidence,
+  onChange,
+  disabled,
+}: {
+  structure: LayoutStructureDraft | null;
+  evidence?: Record<string, unknown>;
+  onChange: (next: LayoutStructureDraft) => void;
+  disabled: boolean;
+}) {
+  const warnings = stringList(evidence?.["layout_warnings"]);
+  const supported = evidence?.["structure_supported"] !== false;
+  const hasHints = Array.isArray(evidence?.["layout_hints"]);
+  if (structure === null && warnings.length === 0 && supported && !hasHints) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      {warnings.map((warning, index) => (
+        <p
+          key={warning}
+          data-testid={`region-layout-warning-${index}`}
+          className="text-[11px] text-status-fuzzy"
+        >
+          {warning}
+        </p>
+      ))}
+      <LayoutHints value={evidence?.["layout_hints"]} />
+      {!supported && (
+        <p data-testid="region-layout-prepared-required" className="text-[11px] text-status-fuzzy">
+          Detailed verse and table review needs a prepared book with stored word IDs. You can still
+          accept this region.
+        </p>
+      )}
+      {structure !== null && (
+        <LayoutStructureEditor
+          structure={structure}
+          onChange={onChange}
+          disabled={disabled || !supported}
+        />
+      )}
+    </div>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export interface RegionDetailProps {
@@ -176,6 +284,7 @@ export function RegionDetail({ page, projectId, pageIndex }: RegionDetailProps) 
   const rejectProposal = useRejectProposal(projectId, pageIndex);
   const editRegion = useEditRegion(projectId, pageIndex);
   const deleteRegion = useDeleteRegion(projectId, pageIndex);
+  const exportReviewedRegions = useExportReviewedRegions(projectId, pageIndex);
   // Whole-branch review defect 1: a keyboard decision (useRegionReviewHotkeys,
   // a separate hook instance) shares its in-flight signal with this panel's
   // own mutations through the mutationKey, so every action button below is
@@ -183,7 +292,7 @@ export function RegionDetail({ page, projectId, pageIndex }: RegionDetailProps) 
   const decisionPending = useRegionDecisionPending(projectId, pageIndex);
 
   if (level !== "region") {
-    return <NotSelected />;
+    return <NotSelected page={page} />;
   }
 
   if (path.proposalId !== undefined) {
@@ -195,6 +304,7 @@ export function RegionDetail({ page, projectId, pageIndex }: RegionDetailProps) 
     const proposal = (page.proposals ?? []).find((p) => p.proposal_id === proposalId);
     return (
       <ProposalDetail
+        key={proposalId}
         proposalId={proposalId}
         region={region}
         proposal={proposal}
@@ -213,6 +323,7 @@ export function RegionDetail({ page, projectId, pageIndex }: RegionDetailProps) 
     }
     return (
       <ConfirmedRegionDetail
+        key={regionId}
         page={page}
         projectId={projectId}
         pageIndex={pageIndex}
@@ -220,12 +331,13 @@ export function RegionDetail({ page, projectId, pageIndex }: RegionDetailProps) 
         region={region}
         editRegion={editRegion}
         deleteRegion={deleteRegion}
+        exportReviewedRegions={exportReviewedRegions}
         decisionPending={decisionPending}
       />
     );
   }
 
-  return <NotSelected />;
+  return <NotSelected page={page} />;
 }
 
 // ─── Carried-rejections panel ──────────────────────────────────────────────
@@ -374,10 +486,33 @@ function CarriedRejectionRow({
   );
 }
 
-function NotSelected() {
+export function PageLayoutEvidence({ page }: { page: PagePayload }) {
+  const pageRecord: unknown = page;
+  const hintsValue = isRecord(pageRecord) ? pageRecord["layout_hints"] : undefined;
+  const warnings = stringList(isRecord(pageRecord) ? pageRecord["layout_warnings"] : undefined);
+  if (!Array.isArray(hintsValue) && warnings.length === 0) return null;
+  return (
+    <div data-testid="region-page-layout-evidence" className="mt-3 flex flex-col gap-2 text-[11px]">
+      <p className="text-ink-2">Source layout evidence</p>
+      <LayoutHints value={hintsValue} />
+      {warnings.map((warning, index) => (
+        <p
+          key={warning}
+          data-testid={`region-page-layout-warning-${index}`}
+          className="text-status-fuzzy"
+        >
+          {warning}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function NotSelected({ page }: { page: PagePayload }) {
   return (
     <div data-testid="region-detail" className="p-3 text-ink-3 text-sm">
       No region selected.
+      <PageLayoutEvidence page={page} />
     </div>
   );
 }
@@ -524,7 +659,17 @@ function ProposalDetail({
   decisionPending,
 }: ProposalDetailProps) {
   const [acceptAsRole, setAcceptAsRole] = useState<RegionRole | "">("");
-  const evidenceEntries = Object.entries(proposal?.evidence ?? {});
+  const evidenceEntries = Object.entries(proposal?.evidence ?? {}).filter(
+    ([key]) =>
+      key !== "layout_structure" &&
+      key !== "layout_hints" &&
+      key !== "layout_warnings" &&
+      key !== "structure_supported",
+  );
+  const [layoutStructure, setLayoutStructure] = useState(() =>
+    layoutStructureFromUnknown(proposal?.evidence?.["layout_structure"]),
+  );
+  const canSaveLayoutStructure = proposal?.evidence?.["structure_supported"] !== false;
 
   return (
     <div data-testid="region-detail" className="p-3 flex flex-col gap-3">
@@ -564,12 +709,20 @@ function ProposalDetail({
       </div>
 
       <div className="flex flex-col gap-2">
+        <LayoutReview
+          structure={layoutStructure}
+          {...(proposal?.evidence === undefined ? {} : { evidence: proposal.evidence })}
+          onChange={setLayoutStructure}
+          disabled={acceptProposal.isPending || decisionPending}
+        />
         <button
           type="button"
           data-testid="region-detail-accept"
           disabled={acceptProposal.isPending || decisionPending}
           onClick={() => {
-            acceptProposal.mutate({ proposalId });
+            if (canSaveLayoutStructure && layoutStructure !== null) {
+              acceptProposal.mutate({ proposalId, layoutStructure });
+            } else acceptProposal.mutate({ proposalId });
           }}
           className="text-[11px] py-1.5 rounded-sm border border-status-exact/60 text-status-exact hover:bg-status-exact/10 transition-colors disabled:opacity-40"
         >
@@ -597,7 +750,9 @@ function ProposalDetail({
             disabled={acceptProposal.isPending || decisionPending || acceptAsRole === ""}
             onClick={() => {
               if (acceptAsRole === "") return;
-              acceptProposal.mutate({ proposalId, role: acceptAsRole });
+              if (canSaveLayoutStructure && layoutStructure !== null) {
+                acceptProposal.mutate({ proposalId, role: acceptAsRole, layoutStructure });
+              } else acceptProposal.mutate({ proposalId, role: acceptAsRole });
             }}
             className="text-[11px] px-2 py-1 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
           >
@@ -639,6 +794,7 @@ interface ConfirmedRegionDetailProps {
   region: RegionView;
   editRegion: ReturnType<typeof useEditRegion>;
   deleteRegion: ReturnType<typeof useDeleteRegion>;
+  exportReviewedRegions: ReturnType<typeof useExportReviewedRegions>;
   decisionPending: boolean;
 }
 
@@ -744,9 +900,15 @@ function ConfirmedRegionDetail({
   region,
   editRegion,
   deleteRegion,
+  exportReviewedRegions,
   decisionPending,
 }: ConfirmedRegionDetailProps) {
   const [changeRoleValue, setChangeRoleValue] = useState<RegionRole | "">("");
+  const [layoutStructure, setLayoutStructure] = useState(() =>
+    layoutStructureFromUnknown(layoutStructureValue(region)),
+  );
+  const [exportJobId, setExportJobId] = useState<string | null>(null);
+  const exportProgress = useJobProgress(exportJobId);
   const origin = region.proposal_id ? "From a proposal" : "Drawn by hand";
   const words = wordsOnPage(page);
   const signatures: readonly WordSignature[] = region.member_word_signatures ?? [];
@@ -788,6 +950,12 @@ function ConfirmedRegionDetail({
         decisionPending={decisionPending}
       />
 
+      <LayoutReview
+        structure={layoutStructure}
+        onChange={setLayoutStructure}
+        disabled={editRegion.isPending || decisionPending}
+      />
+
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-1.5">
           <RoleSelect
@@ -802,7 +970,9 @@ function ConfirmedRegionDetail({
             disabled={editRegion.isPending || decisionPending || changeRoleValue === ""}
             onClick={() => {
               if (changeRoleValue === "") return;
-              editRegion.mutate({ regionId, role: changeRoleValue });
+              if (layoutStructure !== null) {
+                editRegion.mutate({ regionId, role: changeRoleValue, layoutStructure });
+              } else editRegion.mutate({ regionId, role: changeRoleValue });
             }}
             className="text-[11px] px-2 py-1 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
           >
@@ -815,6 +985,71 @@ function ConfirmedRegionDetail({
             className="text-[10px] text-status-mismatch italic"
           >
             Update failed. Try again.
+          </p>
+        )}
+
+        {layoutStructure !== null && (
+          <button
+            type="button"
+            data-testid="region-layout-save"
+            disabled={editRegion.isPending || decisionPending}
+            onClick={() => {
+              editRegion.mutate({ regionId, layoutStructure });
+            }}
+            className="text-[11px] py-1.5 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+          >
+            Save layout
+          </button>
+        )}
+
+        <button
+          type="button"
+          data-testid="region-layout-export"
+          disabled={
+            exportReviewedRegions.isPending ||
+            exportProgress?.status === "running" ||
+            decisionPending
+          }
+          onClick={() => {
+            exportReviewedRegions.mutate(undefined, {
+              onSuccess: (response) => {
+                setExportJobId(response.job_id);
+              },
+            });
+          }}
+          className="text-[11px] py-1.5 rounded-sm border border-border-2 text-ink-2 hover:text-ink-1 hover:border-accent transition-colors disabled:opacity-40"
+        >
+          Export reviewed regions
+        </button>
+        {exportReviewedRegions.isError && (
+          <p
+            data-testid="region-layout-export-error"
+            className="text-[10px] text-status-mismatch italic"
+          >
+            Region export failed. Try again.
+          </p>
+        )}
+        {exportProgress?.status === "running" && (
+          <p data-testid="region-layout-export-progress" className="text-[10px] text-ink-3">
+            {exportProgress.progress.message || "Exporting reviewed regions…"}
+          </p>
+        )}
+        {exportProgress?.status === "complete" && (
+          <p data-testid="region-layout-export-complete" className="text-[10px] text-status-exact">
+            Reviewed regions exported.
+          </p>
+        )}
+        {exportProgress?.status === "error" && (
+          <p
+            data-testid="region-layout-export-job-error"
+            className="text-[10px] text-status-mismatch italic"
+          >
+            {exportProgress.error_message ?? "Region export failed."}
+          </p>
+        )}
+        {exportProgress?.status === "cancelled" && (
+          <p data-testid="region-layout-export-cancelled" className="text-[10px] text-status-fuzzy">
+            Region export was cancelled.
           </p>
         )}
 

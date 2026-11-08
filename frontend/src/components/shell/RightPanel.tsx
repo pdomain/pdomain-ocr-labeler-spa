@@ -35,6 +35,7 @@ import {
   RegionDetail,
   CarriedRejectionsPanel,
   RegionDrawPrompt,
+  PageLayoutEvidence,
 } from "../right-panel/RegionDetail";
 import type { components } from "../../api/types";
 
@@ -117,6 +118,7 @@ export function RightPanel({
         <>
           <CarriedRejectionsPanel page={page} projectId={projectId} pageIndex={pageIndex} />
           <RegionDrawPrompt page={page} projectId={projectId} pageIndex={pageIndex} />
+          {level !== "region" && <PageLayoutEvidence page={page} />}
         </>
       )}
 

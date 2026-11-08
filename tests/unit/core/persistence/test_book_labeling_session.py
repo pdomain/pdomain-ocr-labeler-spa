@@ -740,3 +740,32 @@ def _write_replaced_manifest(
         }
     )
     (root / "book-labeling-manifest.json").write_bytes(replacement_manifest.to_json_bytes())
+
+
+def test_graph_referenced_optional_layout_sidecar_is_carried_without_source_imports(tmp_path: Path) -> None:
+    root = tmp_path / "book"
+    manifest = _write_book(root, page_count=2, edition_companion=True)
+    payload = b'{"schema":"pdomain.edition-layout-hints","version":1,"groups":[]}'
+    (root / "edition" / "layout-hints.json").write_bytes(payload)
+    relation = manifest.match_relations[0]
+    graph_payload = json.dumps(
+        {
+            "artifact_references": [
+                {
+                    "kind": "supporting_evidence",
+                    "relative_path": "edition/layout-hints.json",
+                }
+            ]
+        }
+    ).encode()
+    (root / relation.match_graph_relative_path).write_bytes(graph_payload)
+    relation = relation.model_copy(update={"match_graph_sha256": _sha(graph_payload)})
+    manifest = manifest.model_copy(update={"match_relations": (relation,)})
+    (root / "book-labeling-manifest.json").write_bytes(manifest.to_json_bytes())
+    session = _session(root)
+    try:
+        with session.open_page(0) as loaded:
+            assert loaded.artifact_payloads["layout_hints"] == payload
+            assert loaded.artifact_payloads["f2"] == (root / "source" / "F2.json").read_bytes()
+    finally:
+        session.close()

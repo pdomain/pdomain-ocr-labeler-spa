@@ -67,6 +67,7 @@ from ..core.models import BBox, GlyphAnnotationsModel, Project
 from ..core.persistence.config_yaml import AppConfig
 from ..core.persistence.page_store import LabelerPageStore
 from ..core.project_state import PageState, ProjectState
+from ..core.regions.block_adapter import preserve_empty_regions
 from ..core.typography_review import TypographyCorrectionLog, stable_page_id, stable_word_id
 from ..settings import Settings
 from .dependencies import (
@@ -900,7 +901,8 @@ def rebox_word(
         if word is None:
             return _word_not_found(line_index, word_index)
         x1, y1, x2, y2 = _bbox_to_coords(body.bbox)
-        ok = page.rebox_word(line_index, word_index, x1=x1, y1=y1, x2=x2, y2=y2)
+        with preserve_empty_regions(page):
+            ok = page.rebox_word(line_index, word_index, x1=x1, y1=y1, x2=x2, y2=y2)
         if not ok:
             return _mutation_failed(
                 f"rebox_word rejected line={line_index} word={word_index} bbox=({x1}, {y1}, {x2}, {y2})"
@@ -967,15 +969,16 @@ def nudge_bbox(
         word = _resolve_word(page, line_index, word_index)
         if word is None:
             return _word_not_found(line_index, word_index)
-        ok = page.nudge_word_bbox(
-            line_index,
-            word_index,
-            left_delta=body.left,
-            right_delta=body.right,
-            top_delta=body.top,
-            bottom_delta=body.bottom,
-            refine_after=body.refine_after,
-        )
+        with preserve_empty_regions(page):
+            ok = page.nudge_word_bbox(
+                line_index,
+                word_index,
+                left_delta=body.left,
+                right_delta=body.right,
+                top_delta=body.top,
+                bottom_delta=body.bottom,
+                refine_after=body.refine_after,
+            )
         if not ok:
             return _mutation_failed(
                 f"nudge_word_bbox rejected line={line_index} word={word_index} "

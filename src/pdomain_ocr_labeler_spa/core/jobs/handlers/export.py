@@ -71,16 +71,19 @@ import logging
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypedDict
 
+from pdomain_book_contracts.layout.text_hints import LayoutStructure
 from pdomain_book_tools.geometry.bounding_box import BoundingBox
 from pdomain_book_tools.ocr.page import Page
 from pdomain_book_tools.ocr.word import Word
+from pydantic import BaseModel, ConfigDict, Field
 
 from ...notifications import NotificationKind, NotificationQueue
 from ...persistence.atomic import write_json_atomic
 from ...project_state import ProjectState
 from ...regions.block_adapter import confirmed_regions_from_page
+from ...regions.layout_structure import refresh_structure_signatures
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -665,6 +668,59 @@ def _signature_list(
     return [signature[0], signature[1], signature[2], signature[3], signature[4]]
 
 
+class LayoutStructureEntry(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+    prefix: str
+    page_index: int
+    region_id: str
+    structure: LayoutStructure
+
+
+class LayoutStructureFile(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+    schema_name: Literal["pdomain.layout-structure"] = Field(
+        default="pdomain.layout-structure", alias="schema"
+    )
+    version: Literal[1] = 1
+    regions: list[LayoutStructureEntry] = Field(default_factory=list)
+
+
+def _reviewed_structure_document(
+    page: Page, path: Path, *, prefix: str
+) -> tuple[LayoutStructureFile | None, int]:
+    """Validate existing and new structure before publishing either export file."""
+    entries = [
+        LayoutStructureEntry(
+            prefix=prefix,
+            page_index=page.page_index,
+            region_id=region.region_id,
+            structure=refresh_structure_signatures(region.layout_structure, page=page),
+        )
+        for region in confirmed_regions_from_page(page)
+        if region.region_id is not None and region.layout_structure is not None
+    ]
+    if not entries and not path.exists():
+        return None, 0
+    document = (
+        LayoutStructureFile.model_validate_json(path.read_bytes()) if path.exists() else LayoutStructureFile()
+    )
+    document.regions = [
+        entry for entry in document.regions if (entry.prefix, entry.page_index) != (prefix, page.page_index)
+    ] + entries
+    return document, len(entries)
+
+
+def append_reviewed_structure(page: Page, output_dir: Path, *, prefix: str) -> int:
+    """Replace this page's current reviewed structure, including deletions."""
+    path = output_dir / "regions" / "structure.json"
+    document, count = _reviewed_structure_document(page, path, prefix=prefix)
+    if document is None:
+        return count
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_json_atomic(path, document.model_dump(mode="json", exclude_none=True, by_alias=True))
+    return count
+
+
 def append_confirmed_regions(page: Page, output_dir: Path, *, prefix: str) -> int:
     """Write this page's confirmed regions into ``output_dir/regions/labels.json``.
 
@@ -699,7 +755,11 @@ def append_confirmed_regions(page: Page, output_dir: Path, *, prefix: str) -> in
         )
     document["pages"] = [item for item in document["pages"] if item["prefix"] != prefix]
     document["pages"].append({"prefix": prefix, "page_index": page.page_index, "regions": records})
+    structure_path = regions_dir / "structure.json"
+    structure, _count = _reviewed_structure_document(page, structure_path, prefix=prefix)
     write_json_atomic(path, document)
+    if structure is not None:
+        write_json_atomic(structure_path, structure.model_dump(mode="json", exclude_none=True, by_alias=True))
     return len(records)
 
 
@@ -978,6 +1038,11 @@ async def handle_export(runner: JobRunner, job: Job) -> None:
     Spec: ``docs/specs/2026-05-12-export-design.md §Export flow``.
     """
     payload = job.payload
+    if payload.get("regions_only") is True:
+        from .region_export import handle_region_export
+
+        await handle_region_export(runner, job)
+        return
     project_id = job.project_id or ""
     scope = payload.get("scope", "all_validated")
     style_filters: list[str] = payload.get("style_filters") or []

@@ -75,6 +75,7 @@ class ExportRequest(BaseModel):
     include_classification: bool = False
     detection_only: bool = False
     recognition_only: bool = False
+    regions_only: bool = False
 
     @field_validator("style_filters", mode="before")
     @classmethod
@@ -230,6 +231,15 @@ def start_export(
     from .typography import typography_page_review
 
     project = project_state.loaded_project
+    if body.regions_only:
+        return _start_region_export(
+            project_id=project_id,
+            body=body,
+            runner=runner,
+            project_state=project_state,
+            settings=settings,
+            page_store=page_store,
+        )
     if project is not None and project.project_id == project_id and project_state.has_book_labeling_session:
         return JSONResponse(
             status_code=422,
@@ -326,6 +336,47 @@ def start_export(
         status_code=202,
         content=ExportResponse(job_id=job_id).model_dump(),
     )
+
+
+def _start_region_export(
+    *,
+    project_id: str,
+    body: ExportRequest,
+    runner: JobRunner,
+    project_state: ProjectState,
+    settings: Settings,
+    page_store: LabelerPageStore | None,
+) -> JSONResponse:
+    """Freeze saved region review independently of text/crop export review."""
+    from ..core.jobs.handlers.export import load_export_page, resolve_export_page_refs
+    from ..core.jobs.handlers.region_export import RegionExportPage
+
+    project = project_state.loaded_project
+    if project is None or project.project_id != project_id:
+        return JSONResponse(status_code=409, content={"detail": "Load the project before exporting regions"})
+    refs = resolve_export_page_refs(Path(settings.data_root), project_id, page_store)
+    if body.scope is ExportScope.CURRENT:
+        refs = [ref for ref in refs if ref.page_index == body.page_index]
+    snapshots: list[dict[str, object]] = []
+    for ref in refs:
+        with project_state.get_page_lock(ref.page_index):
+            page = load_export_page(ref, page_store)
+            if page is None:
+                return JSONResponse(
+                    status_code=409, content={"detail": "Save the page before exporting regions"}
+                )
+            snapshots.append(RegionExportPage.from_page(page, prefix=ref.prefix).model_dump())
+    if not snapshots:
+        return JSONResponse(status_code=409, content={"detail": "Save the page before exporting regions"})
+    job_id = runner.submit(
+        "export",
+        project_id=project_id,
+        payload={
+            "regions_only": True,
+            "region_pages": snapshots,
+        },
+    )
+    return JSONResponse(status_code=202, content=ExportResponse(job_id=job_id).model_dump())
 
 
 def _collect_style_labels(data_root: Path, project_id: str, store: object = None) -> list[str]:

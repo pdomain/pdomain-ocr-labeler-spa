@@ -27,6 +27,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pdomain_book_contracts.annotation import RegionRole
 from pdomain_book_contracts.geometry.bounding_box import BoundingBox
+from pdomain_book_contracts.layout.text_hints import LayoutStructure
 from pdomain_book_tools.ocr.block import Block, BlockCategory, BlockChildType
 from pdomain_book_tools.ocr.page import Page
 from pdomain_book_tools.ocr.reorganize_page_utils import build_recovered_words_block
@@ -41,6 +42,7 @@ from ..core.project_state import ProjectState
 from ..core.regions.block_adapter import HAND_DRAWN_SENTINEL, find_region_block
 from ..core.regions.coordinates import pixel_box_to_bounding_box
 from ..core.regions.decision_log import RegionDecisionLog
+from ..core.regions.layout_structure import reviewed_structure
 from ..core.regions.models import Disposition, RegionDecision, RegionProposal
 from ..core.regions.proposal_log import RegionProposalLog
 from ..core.regions.resolver import is_undecided
@@ -97,11 +99,13 @@ class CreateRegionRequest(BaseModel):
     box: BBox
     child_type: Literal["words", "blocks"] = "words"
     parent_region_id: str | None = None
+    layout_structure: LayoutStructure | None = None
 
 
 class EditRegionRequest(BaseModel):
     role: RegionRole | None = None
     box: BBox | None = None
+    layout_structure: LayoutStructure | None = None
 
 
 class WordRef(BaseModel):
@@ -123,6 +127,7 @@ class AcceptRegionProposalRequest(BaseModel):
 
     role: RegionRole | None = None
     box: BBox | None = None
+    layout_structure: LayoutStructure | None = None
 
 
 class RegionProposalListItem(BaseModel):
@@ -305,6 +310,12 @@ def _region_not_found(region_id: str) -> JSONResponse:
     return JSONResponse(
         status_code=404,
         content=ApiError(error="region_not_found", message=f"region not found: {region_id}").model_dump(),
+    )
+
+
+def _invalid_layout_structure(exc: ValueError) -> JSONResponse:
+    return JSONResponse(
+        status_code=400, content=ApiError(error="invalid_layout_structure", message=str(exc)).model_dump()
     )
 
 
@@ -623,6 +634,14 @@ def create_region(
             )
         except ValueError as exc:
             return _invalid_region_role(exc)
+        if body.layout_structure is not None:
+            try:
+                structure = reviewed_structure(
+                    body.layout_structure, page=page, bundle=project_state.labeling_bundle
+                )
+            except ValueError as exc:
+                return _invalid_layout_structure(exc)
+            region.additional_block_attributes["layout_structure"] = structure.to_dict()
         # ``Block.add_item`` recomputes the owner's bounding box from its items. A
         # container region's box is what a person drew on the page, not the union of
         # its children — same rule the membership route follows for a leaf region.
@@ -680,6 +699,14 @@ def edit_region(
         region = find_region_block(page, region_id)
         if region is None:
             return _region_not_found(region_id)
+        structure = None
+        if body.layout_structure is not None:
+            try:
+                structure = reviewed_structure(
+                    body.layout_structure, page=page, bundle=project_state.labeling_bundle
+                )
+            except ValueError as exc:
+                return _invalid_layout_structure(exc)
         if body.role is not None:
             try:
                 region.block_role_labels = _normalized_role_labels(body.role)
@@ -700,6 +727,11 @@ def edit_region(
                 )
             except ValueError as exc:
                 return _invalid_region_box(exc)
+        if "layout_structure" in body.model_fields_set:
+            if structure is None:
+                region.additional_block_attributes.pop("layout_structure", None)
+            else:
+                region.additional_block_attributes["layout_structure"] = structure.to_dict()
         pstate.generation += 1
         if not _save_to_store_best_effort(
             pstate=pstate,
@@ -1047,7 +1079,7 @@ def accept_region_proposal(
 
     role = body.role if body.role is not None else proposal.role
     box = _bbox_to_ltrb(body.box) if body.box is not None else proposal.box
-    has_override = body.role is not None or body.box is not None
+    has_override = body.role is not None or body.box is not None or body.layout_structure is not None
     disposition = Disposition.EDITED if has_override else Disposition.ACCEPTED
     decision_log = RegionDecisionLog(project.project_root)
 
@@ -1086,6 +1118,14 @@ def accept_region_proposal(
             )
         except ValueError as exc:
             return _invalid_region_role(exc)
+        if body.layout_structure is not None:
+            try:
+                structure = reviewed_structure(
+                    body.layout_structure, page=page, bundle=project_state.labeling_bundle
+                )
+            except ValueError as exc:
+                return _invalid_layout_structure(exc)
+            region.additional_block_attributes["layout_structure"] = structure.to_dict()
         page.add_item(region)
         pstate.generation += 1
         if not _save_to_store_best_effort(

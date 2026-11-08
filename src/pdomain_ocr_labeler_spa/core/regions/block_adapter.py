@@ -18,15 +18,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from copy import deepcopy
 
 from pdomain_book_contracts.annotation import RegionRole
+from pdomain_book_contracts.layout.text_hints import LayoutStructure
 from pdomain_book_tools.ocr.block import Block
 from pdomain_book_tools.ocr.page import Page
 from pdomain_book_tools.ocr.word import Word
 
 from pdomain_ocr_labeler_spa.core.regions.coordinates import bounding_box_to_pixels
 from pdomain_ocr_labeler_spa.core.regions.models import ResolvedRegion
+
+log = logging.getLogger(__name__)
 
 _REGION_ID_KEY = "region_id"
 _SOURCE_PROPOSAL_ID_KEY = "source_proposal_id"
@@ -54,6 +60,65 @@ def find_region_block(page: Page, region_id: str) -> Block | None:
         if block.additional_block_attributes.get(_REGION_ID_KEY) == region_id:
             return block
     return None
+
+
+@contextmanager
+def preserve_empty_regions(page: Page) -> Iterator[None]:
+    """Retain annotation-only regions while word geometry cleanup prunes empty blocks."""
+    parents: dict[int, tuple[Page | Block, int]] = {}
+
+    def remember(owner: Page | Block) -> None:
+        for index, item in enumerate(owner.items):
+            if isinstance(item, Block):
+                parents[id(item)] = owner, index
+                remember(item)
+
+    remember(page)
+    regions = [
+        (block, list(block.items))
+        for block in _walk_blocks(page.items)
+        if isinstance(region_id := block.additional_block_attributes.get(_REGION_ID_KEY), str)
+        and region_id
+        and not block.words
+    ]
+    containers = {id(block): block for block, _children in regions}
+    for block, _children in regions:
+        owner, _index = parents[id(block)]
+        while isinstance(owner, Block) and not owner.words:
+            containers[id(owner)] = owner
+            owner, _index = parents[id(owner)]
+    boxes = [(block, deepcopy(block.bounding_box)) for block in containers.values()]
+
+    def attach(block: Block) -> None:
+        owner, index = parents[id(block)]
+        if isinstance(owner, Block):
+            attach(owner)
+        if not any(item is block for item in owner.items):
+            items = owner.items
+            owner.items = [*items[:index], block, *items[index:]]
+
+    try:
+        yield
+    finally:
+        for block, children in regions:
+            block.items = children
+            attach(block)
+        for block, box in boxes:
+            block.bounding_box = box
+
+
+def _reviewed_layout_structure(block: Block) -> LayoutStructure | None:
+    value = block.additional_block_attributes.get("layout_structure")
+    if value is None:
+        return None
+    try:
+        return LayoutStructure.model_validate(value)
+    except ValueError:
+        log.warning(
+            "Ignoring malformed reviewed layout structure on region %s",
+            block.additional_block_attributes.get(_REGION_ID_KEY),
+        )
+        return None
 
 
 def confirmed_regions_from_page(page: Page) -> list[ResolvedRegion]:
@@ -102,6 +167,7 @@ def confirmed_regions_from_page(page: Page) -> list[ResolvedRegion]:
                 proposal_id=source_proposal_id if isinstance(source_proposal_id, str) else None,
                 region_id=region_id,
                 member_word_signatures=member_signatures,
+                layout_structure=_reviewed_layout_structure(block),
             )
         )
     return resolved
@@ -119,7 +185,9 @@ def _carries_region_id(block: Block) -> bool:
     return isinstance(region_id, str) and bool(region_id)
 
 
-def compute_page_facet_digests(page: Page, *, image_digest: str | None) -> dict[str, str]:
+def compute_page_facet_digests(
+    page: Page, *, image_digest: str | None, layout_evidence_digest: str | None = None
+) -> dict[str, str]:
     """Digest each facet a proposal run can depend on.
 
     Recomputed from the live page rather than declared by a mutation route —
@@ -173,6 +241,8 @@ def compute_page_facet_digests(page: Page, *, image_digest: str | None) -> dict[
         "line_structure": line_structure,
         "word_text": word_text,
     }
+    if layout_evidence_digest is not None:
+        digests["layout_evidence"] = layout_evidence_digest
     if image_digest:
         digests["page_image"] = image_digest
     return digests

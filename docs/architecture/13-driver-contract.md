@@ -713,3 +713,35 @@ This document follows the SPA's app version. Bumping a major version
 means breaking driver compatibility — needs a coordinated update of
 `pd-ocr-labeler-driver` first. Adding new testids without removing
 any is a non-breaking minor bump.
+
+## 10. Text layout review controls
+
+These controls review portable F2 and Gutenberg evidence in the region panel.
+The existing Propose regions action starts the book-scoped proposal job.
+
+| Test ID | Control |
+| --- | --- |
+| `region-layout-editor` | Reviewed verse, table, or column fields |
+| `region-layout-line-{n}-word-count` | Number of bound words in a source line |
+| `region-layout-line-{n}-stanza` | Source stanza index |
+| `region-layout-line-{n}-indent` | Source-relative indentation |
+| `region-layout-column-group` | Physical column group |
+| `region-layout-column-index` | Column index within its group |
+| `region-layout-reading-order` | Reviewed reading order |
+| `region-layout-table-{row}-{cell}` | Reviewed table cell text |
+| `region-layout-save` | Save corrected confirmed-region structure |
+| `region-layout-export` | Export confirmed regions and reviewed structure |
+| `region-layout-export-progress` | Region export progress |
+| `region-layout-export-complete` | Completed region export result |
+| `region-layout-export-error` | Failed region export explanation |
+| `region-layout-prepared-required` | Prepared-book requirement for bound words |
+| `region-layout-warning-{n}` | Proposal warning or source disagreement |
+| `region-page-layout-evidence` | Page-level source evidence |
+| `region-layout-hints` | Readable source hint list |
+| `region-layout-hint-{n}` | Source hint retained for review |
+| `region-layout-hint-{n}-line-{m}` | Source line, stanza, and indentation |
+| `region-page-layout-warning-{n}` | Unresolved source evidence explanation |
+
+Indices start at zero. The existing accept and reject controls remain unchanged.
+Detailed line and stanza writes require stored prepared-bundle word IDs.
+Loose mirrors support ordinary region acceptance and physical column review.

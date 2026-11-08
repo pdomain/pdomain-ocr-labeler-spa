@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import logging
 import os
 import stat
 from dataclasses import dataclass
@@ -27,6 +28,16 @@ _F_SEAL_SHRINK = 0x0002
 _F_SEAL_GROW = 0x0004
 _F_SEAL_WRITE = 0x0008
 _CACHE_CAPACITY = 3
+log = logging.getLogger(__name__)
+
+
+class _SupportingArtifact(BaseModel):
+    kind: str
+    relative_path: str
+
+
+class _GraphArtifacts(BaseModel):
+    artifact_references: tuple[_SupportingArtifact, ...] = ()
 
 
 class _SharedSourceResolverReference(BaseModel):
@@ -381,11 +392,41 @@ class BookLabelingSession:
                         artifact.relative_path, file_payloads, sources
                     )
                     for artifact in bundle.artifacts
-                },
+                }
+                | self._layout_hint_payloads(root_descriptor, page_index),
                 image_descriptor=image_descriptor,
             ),
             sources.identity,
         )
+
+    def _layout_hint_payloads(self, root_descriptor: int, page_index: int) -> dict[str, bytes]:
+        """Discover the optional portable sidecar through this page's match graph.
+
+        An absent or malformed optional sidecar leaves normal book intake usable.
+        Shared contract validation and page-specific matching happen in the
+        text-layout detector; no source-data package enters this boundary.
+        """
+        manifest = self._loaded_manifest.manifest
+        page_id = manifest.pages[page_index].page_id
+        for relation in manifest.match_relations:
+            if page_id not in relation.page_ids:
+                continue
+            graph_payload = self._loaded_manifest.match_graph_payloads.get(relation.match_graph_relative_path)
+            if graph_payload is None:
+                continue
+            try:
+                graph = _GraphArtifacts.model_validate_json(graph_payload)
+                if any(
+                    artifact.kind == "supporting_evidence"
+                    and artifact.relative_path == "edition/layout-hints.json"
+                    for artifact in graph.artifact_references
+                ):
+                    return {
+                        "layout_hints": _read_regular_at(root_descriptor, ("edition", "layout-hints.json"))
+                    }
+            except (OSError, ValueError) as exc:
+                log.warning("Optional edition layout hints unavailable for page %s: %s", page_id, exc)
+        return {}
 
     def _pin_source_identity(self, source_identity: _SourceIdentity) -> None:
         pinned = self._source_identity

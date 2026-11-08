@@ -13,6 +13,7 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import JSONResponse, Response
 from pdomain_book_contracts.annotation import PageKind, normalize_page_kind
+from pdomain_book_contracts.layout.text_hints import LayoutTextHint
 from pdomain_book_tools.ocr.page import Page
 from pdomain_ops.pages import PagePayload as OpsPagePayload
 from pdomain_ops.pages import PageRecord
@@ -234,6 +235,8 @@ class PagePayload(BaseModel):
     # mutation endpoint that reuses ``_page_payload`` should reflect current
     # drift state. See ``ImageDrift`` / ``_image_drift_for_page``.
     image_drift: ImageDrift | None = None
+    layout_hints: list[LayoutTextHint] = Field(default_factory=list)
+    layout_warnings: list[str] = Field(default_factory=list)
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -1189,6 +1192,7 @@ def _resolve_regions_and_proposals(
     page_index: int,
     page_store: LabelerPageStore | None,
     page_id: UUID | None,
+    project_state: ProjectState | None = None,
 ) -> tuple[list[RegionView], list[RegionProposalView]]:
     """Assemble ``PagePayload.regions``/``.proposals`` for one live page.
 
@@ -1205,7 +1209,15 @@ def _resolve_regions_and_proposals(
     mutating route.
     """
     image_digest = _image_digest_for_page(page_store=page_store, page_id=page_id)
-    current_facet_digests = compute_page_facet_digests(page, image_digest=image_digest)
+    from ..core.regions.text_layout import layout_evidence_digest
+
+    current_facet_digests = compute_page_facet_digests(
+        page,
+        image_digest=image_digest,
+        layout_evidence_digest=(
+            layout_evidence_digest(project_state, page_index) if project_state is not None else None
+        ),
+    )
 
     confirmed = confirmed_regions_from_page(page)
     proposal_log = RegionProposalLog(project_root)
@@ -1233,6 +1245,7 @@ def _resolve_regions_and_proposals(
             confidence=r.confidence,
             member_word_signatures=list(r.member_word_signatures),
             stale=r.stale,
+            layout_structure=r.layout_structure,
         )
         for r in resolved
     ]
@@ -1563,6 +1576,7 @@ def _page_payload(
                 page_index=page_index,
                 page_store=page_store,
                 page_id=pstate.page_id if pstate is not None else None,
+                project_state=project_state,
             )
 
         # Confirmed page kind: lifted from the same resolved ``Page`` object
@@ -1647,6 +1661,16 @@ def _page_payload(
         if page_store is not None and pstate is not None and pstate.page_id is not None:
             history = _build_history_info(page_store, pstate.page_id, depth=_resolve_undo_depth(settings))
 
+        from ..core.regions.text_layout import review_layout_evidence
+
+        layout_page = None
+        if (
+            pstate is not None
+            and pstate.page_record is not None
+            and isinstance(pstate.page_record.payload, Page)
+        ):
+            layout_page = pstate.page_record.payload
+        layout = review_layout_evidence(project_state, page_index, layout_page)
         return PagePayload(
             project_id=project_id,
             page_index=page_index,
@@ -1666,6 +1690,8 @@ def _page_payload(
             page_kind_proposal=page_kind_proposal,
             image_drift=image_drift,
             history=history,
+            layout_hints=list(layout.hints),
+            layout_warnings=list(layout.warnings),
         )
 
 

@@ -138,6 +138,7 @@ from ...regions.detector import (
 )
 from ...regions.models import Disposition, ProposalRun, RegionDecision, RegionProposal
 from ...regions.proposal_log import RegionProposalLog
+from ...regions.text_layout import load_layout_evidence
 from ._labeling_page_lease import leased_labeling_page
 
 if TYPE_CHECKING:
@@ -331,11 +332,22 @@ def _image_digest(page_store: LabelerPageStore | None, page_id: UUID | None) -> 
 
 
 def _compute_page_facets(
-    page_store: LabelerPageStore | None, page: Page, page_id: UUID | None
+    page_store: LabelerPageStore | None,
+    page: Page,
+    page_id: UUID | None,
+    project_state: ProjectState | None = None,
+    page_index: int = 0,
 ) -> dict[str, str]:
     """Image digest plus facet digests for one page — the unit offloaded to a thread."""
     image_digest = _image_digest(page_store, page_id)
-    return compute_page_facet_digests(page, image_digest=image_digest)
+    evidence_digest = None
+    if project_state is not None:
+        try:
+            with leased_labeling_page(project_state, page_index):
+                evidence_digest = load_layout_evidence(project_state, page_index).digest
+        except ValueError as exc:
+            log.warning("propose_regions: layout facet unavailable for page=%d: %s", page_index, exc)
+    return compute_page_facet_digests(page, image_digest=image_digest, layout_evidence_digest=evidence_digest)
 
 
 def _proposed_page_indices(
@@ -959,7 +971,7 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
         # the page's word/line tree — offloaded so a book-scoped run of many
         # pages doesn't stall the event loop for the duration of the pass.
         page_facet_digests[idx] = await asyncio.to_thread(
-            _compute_page_facets, page_store, page, pstate.page_id
+            _compute_page_facets, page_store, page, pstate.page_id, project_state, idx
         )
 
     run_id = uuid.uuid4().hex
@@ -1095,12 +1107,16 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
                         )
                         detected = None
                     else:
+                        layout = load_layout_evidence(project_state, idx, page)
                         detector_input = DetectorInput(
                             page=page,
                             page_index=idx,
                             measurement=measured.measurements[measured_at],
                             classification=measured.classifications[measured_at],
                             templates=measured.templates,
+                            layout_hints=layout.hints,
+                            layout_word_ids=layout.word_ids,
+                            layout_warnings=layout.warnings,
                         )
                         try:
                             # CPU-bound in the general case — slice 4's
