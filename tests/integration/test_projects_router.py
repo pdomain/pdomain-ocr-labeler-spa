@@ -80,6 +80,7 @@ from pdomain_book_tools.typography import (
 
 from pdomain_ocr_labeler_spa.bootstrap import build_app
 from pdomain_ocr_labeler_spa.settings import Settings
+from tests.unit.core.persistence.test_book_labeling_session import _write_book
 
 # ──────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -372,7 +373,7 @@ def test_get_projects_page_count_null_for_unreadable_project(
     assert alpha_entry["page_count"] is None
 
 
-def _write_book_manifest_project(root: Path, *, page_count: int) -> None:
+def _write_book_manifest_project(root: Path, *, page_count: int, book_id: str | None = None) -> None:
     """Write a minimal, schema-valid ``book-labeling-manifest.json`` at ``root``.
 
     Mirrors ``tests/unit/core/test_project_enumeration.py::_write_book_manifest``
@@ -393,7 +394,7 @@ def _write_book_manifest_project(root: Path, *, page_count: int) -> None:
         )
         for index in range(page_count)
     )
-    manifest = BookLabelingManifest(book_id="pgdp-project", pages=pages)
+    manifest = BookLabelingManifest(book_id=book_id if book_id is not None else root.name, pages=pages)
     (root / "book-labeling-manifest.json").write_bytes(manifest.to_json_bytes())
 
 
@@ -409,6 +410,72 @@ def test_get_projects_page_count_from_book_labeling_manifest(
     body = client_with_root.get("/api/projects").json()
     entry = next(p for p in body["projects"] if p["project_id"] == "manifest-book")
     assert entry["page_count"] == 300
+
+
+def test_get_projects_uses_prepared_book_canonical_id_not_working_directory(
+    client_with_root: TestClient, projects_root: Path
+) -> None:
+    """Prepared books list under the same id their manifest loader assigns."""
+    canonical_id = "projectID64ff850152930"
+    opaque_working_directory = "0" * 64
+    _write_book_manifest_project(
+        projects_root / opaque_working_directory,
+        page_count=3,
+        book_id=f"book:pgdp:{canonical_id}",
+    )
+
+    body = client_with_root.get("/api/projects").json()
+    entry = next(project for project in body["projects"] if project["project_id"] == canonical_id)
+
+    assert entry["label"] == canonical_id
+    assert entry["project_root"] == str((projects_root / opaque_working_directory).resolve())
+
+
+def test_duplicate_prepared_book_ids_are_not_actionable(tmp_path: Path) -> None:
+    """An ID-only delete must never select one of two matching book roots."""
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    canonical_id = "duplicated-pgdp-project"
+    first_root = projects_root / ("1" * 64)
+    second_root = projects_root / ("2" * 64)
+    for root in (first_root, second_root):
+        _write_book_manifest_project(
+            root,
+            page_count=1,
+            book_id=f"book:pgdp:{canonical_id}",
+        )
+    app = build_app(_make_settings(tmp_path, source_projects_root=projects_root))
+
+    with TestClient(app) as client:
+        listed = client.get("/api/projects")
+        deleted = client.delete(f"/api/projects/{canonical_id}")
+
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["projects"] == []
+    assert deleted.status_code == 404, deleted.text
+    assert first_root.is_dir()
+    assert second_root.is_dir()
+
+
+def test_listed_prepared_book_id_loads_and_reads_the_project(tmp_path: Path) -> None:
+    """The list URL identity survives loading an opaque prepared-book directory."""
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    book_root = projects_root / ("a" * 64)
+    manifest = _write_book(book_root, page_count=1, valid_images=True)
+    canonical_id = manifest.book_id.rsplit(":", maxsplit=1)[-1]
+    app = build_app(_make_settings(tmp_path, source_projects_root=projects_root))
+
+    with TestClient(app) as client:
+        listed = client.get("/api/projects")
+        loaded = client.post("/api/projects/load", json={"project_root": str(book_root)})
+        read = client.get(f"/api/projects/{canonical_id}")
+
+    assert listed.status_code == 200, listed.text
+    assert [project["project_id"] for project in listed.json()["projects"]] == [canonical_id]
+    assert loaded.status_code == 200, loaded.text
+    assert loaded.json()["project"]["project_id"] == canonical_id
+    assert read.status_code == 200, read.text
 
 
 def test_get_projects_page_count_for_labeling_bundle_project(
@@ -652,13 +719,16 @@ def _write_labeling_bundle_project(root: Path) -> LabelingBundle:
 def test_post_load_auto_detects_and_retains_labeling_bundle(tmp_path: Path) -> None:
     projects_root = tmp_path / "projects"
     projects_root.mkdir()
-    bundle_root = projects_root / "bundle-project"
+    bundle_root = projects_root / ("f" * 64)
     bundle = _write_labeling_bundle_project(bundle_root)
     app = build_app(_make_settings(tmp_path, source_projects_root=projects_root))
 
     with TestClient(app) as client:
+        listed = client.get("/api/projects")
         response = client.post("/api/projects/load", json={"project_root": str(bundle_root)})
 
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["projects"][0]["project_id"] == "bundle-project"
     assert response.status_code == 200, response.text
     assert response.json()["project"]["project_id"] == "bundle-project"
     image_path = response.json()["project"]["image_paths"][0]
