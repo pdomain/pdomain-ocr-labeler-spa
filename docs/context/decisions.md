@@ -2079,3 +2079,29 @@ Normal locked setup installs the new layout records and F2 producer from
 the published wheel. It needs no sibling path dependency, local wheel
 override, no-sync flag, or setup skip. This dependency rollout does not tag
 or release a new labeler package.
+
+## 2026-11-08 — Compose F2 and OCR matching through P3
+
+The new review flow composes the prepared F2-to-P3 graph with bounded
+P3-to-OCR matching. It retains both graphs, their search windows, and explicit
+many-to-many groups. P3 is corrected source text, never fabricated OCR.
+Stored F2 word identities and real OCR topology remain unchanged.
+
+Group decisions are review annotations. They do not silently replace human
+text or typography. Rejected groups cannot supply structure geometry. Safe
+coarse layout can remain reviewable after unambiguous wording changes;
+unsupported inline styles and ambiguous or exhausted mappings stay unresolved.
+A formatted block marker alone does not establish poetry.
+
+External clients use the existing domain routes through the JSON control
+client. Application event revisions support replay and explicit reset.
+Browser commands name a tab and sequence, and success requires an observed
+view at the current ready page generation. Desired and acknowledged views
+remain distinct. The router, query cache, and existing selection mechanisms
+retain their ownership.
+
+Native Tesseract provides the explicit CPU proof path without model downloads.
+The default DocTR provider remains unchanged. The new matching dependency is
+still a reviewed local contracts wheel; published-version rollout requires a
+separate authorization. No corpus write, training, merge, or push is part of
+this feature task.

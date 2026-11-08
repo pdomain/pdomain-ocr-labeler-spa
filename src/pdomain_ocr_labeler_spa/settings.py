@@ -28,7 +28,7 @@ LogFormat = Literal["plain", "json"]
 Mode = Literal["normal", "api_only"]
 StorageBackend = Literal["filesystem", "s3"]
 AuthMode = Literal["none"]
-OCREngine = Literal["local_doctr", "modal", "shared_container"]
+OCREngine = Literal["local_doctr", "tesseract", "modal", "shared_container"]
 
 # The app-name leaf used under every OS-aware root (config_root / data_root /
 # cache_root) — matches the distribution name, per
@@ -456,7 +456,13 @@ class Settings(BaseSettings):
     """``none`` returns a single anonymous ``UserContext`` for every request (D-005)."""
 
     ocr_engine: OCREngine = "local_doctr"
-    """``modal`` / ``shared_container`` are ``NotImplementedYet`` (D-018); only ``local_doctr`` is wired."""
+    """Select the OCR provider; remote providers remain deferred."""
+
+    tesseract_binary: str = "tesseract"
+    tesseract_language: str = "eng"
+    pgdp_corpus_root: Path | None = None
+    source_data_python: Path | None = None
+    source_data_timeout_s: float = Field(default=120.0, gt=0, le=3600)
 
     # ── Job runner (docs/architecture/02-backend.md §3 line 138) ─────────────────────────
     # Consumer lands in M3 (JobRunner background loop). Declared now so

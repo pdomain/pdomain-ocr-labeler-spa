@@ -769,3 +769,37 @@ def test_graph_referenced_optional_layout_sidecar_is_carried_without_source_impo
             assert loaded.artifact_payloads["f2"] == (root / "source" / "F2.json").read_bytes()
     finally:
         session.close()
+
+
+@pytest.mark.parametrize("tampered", [False, True])
+def test_graph_referenced_source_alignment_is_pinned_to_page(tmp_path: Path, *, tampered: bool) -> None:
+    root = tmp_path / "book"
+    manifest = _write_book(root, page_count=2, edition_companion=True)
+    payload = b'{"schema":"pdomain.pgdp-source-alignment","version":1}'
+    directory = root / "evidence" / "f2-p3"
+    directory.mkdir(parents=True)
+    (directory / "page.json").write_bytes(payload if not tampered else b"corrupted")
+    relation = manifest.match_relations[0]
+    graph_payload = json.dumps(
+        {
+            "artifact_references": [
+                {
+                    "kind": "matching_evidence",
+                    "artifact_id": relation.relation_id,
+                    "relative_path": "evidence/f2-p3/page.json",
+                    "sha256": _sha(payload),
+                }
+            ]
+        }
+    ).encode()
+    (root / relation.match_graph_relative_path).write_bytes(graph_payload)
+    relation = relation.model_copy(update={"match_graph_sha256": _sha(graph_payload)})
+    manifest = manifest.model_copy(update={"match_relations": (relation,)})
+    (root / "book-labeling-manifest.json").write_bytes(manifest.to_json_bytes())
+    with _session(root) as session:
+        if tampered:
+            with pytest.raises(ValueError, match="alignment evidence hash mismatch"):
+                session.open_page(0)
+        else:
+            with session.open_page(0) as loaded:
+                assert loaded.artifact_payloads["source_alignment"] == payload

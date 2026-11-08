@@ -89,6 +89,7 @@ from ...notifications import NotificationKind, NotificationQueue
 from ...ocr.device_pref import resolve_ocr_device_override
 from ...page_state import PageLoadOutcome
 from ...project_state import ProjectState
+from ..publication import job_change_broker
 from .reload_ocr import _finalize_reocr_outcome, _get_page_loader, _prior_confirmed_page_kind
 
 if TYPE_CHECKING:
@@ -212,6 +213,7 @@ async def handle_load_page(runner: JobRunner, job: Job) -> None:
         page_kind_sent=page_kind,
         page_store=runner.context.get("page_store"),
         expected_project_id=project_id,
+        change_broker=job_change_broker(runner),
     )
 
     # Stage 3 — terminal "done" message, so the SSE terminal frame reads as

@@ -17,7 +17,9 @@ executing.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import threading
 import uuid
 from collections.abc import Callable, Coroutine, Mapping
 from datetime import UTC, datetime
@@ -25,8 +27,9 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue, TypeAdapter
 
+from ..automation.events import AutomationBroker
 from ..models import Job as PublicJob
 from ..models import JobProgress as PublicJobProgress
 from ..models import JobResult as PublicJobResult
@@ -66,6 +69,11 @@ class Job(BaseModel):
 
 
 _TERMINAL = {JobStatus.COMPLETE, JobStatus.ERROR, JobStatus.CANCELLED}
+
+
+class RequestIdConflictError(ValueError):
+    """A logical request key was already admitted with different inputs."""
+
 
 Handler = Callable[["JobRunner", Job], Coroutine[Any, Any, None]]
 
@@ -130,6 +138,28 @@ def _build_public_result(job: Job) -> PublicJobResult:
         result["words_exported_recognition"] = job.result["words_exported_recognition"]
     if "pages_skipped_not_validated" in job.result:
         result["pages_skipped_not_validated"] = job.result["pages_skipped_not_validated"]
+    if "book_path" in job.result:
+        result["book_path"] = job.result["book_path"]
+    if "manifest_path" in job.result:
+        result["manifest_path"] = job.result["manifest_path"]
+    if "page_keys" in job.result:
+        result["page_keys"] = job.result["page_keys"]
+    if "alignment_summaries" in job.result:
+        result["alignment_summaries"] = job.result["alignment_summaries"]
+    if "warnings" in job.result:
+        result["warnings"] = job.result["warnings"]
+    if "source_error" in job.result:
+        result["source_error"] = job.result["source_error"]
+    if "result_id" in job.result:
+        result["result_id"] = job.result["result_id"]
+    if "generation" in job.result:
+        result["generation"] = job.result["generation"]
+    if "disposition" in job.result:
+        result["disposition"] = job.result["disposition"]
+    if "group_count" in job.result:
+        result["group_count"] = job.result["group_count"]
+    if "unresolved_count" in job.result:
+        result["unresolved_count"] = job.result["unresolved_count"]
     return result
 
 
@@ -218,6 +248,10 @@ class JobRunner:
         # without a full DI graph (handlers run outside FastAPI request context).
         self.context: dict[str, Any] = context or {}
         self._labeling_page_leases: dict[str, LabelingPageLease] = {}
+        self._automation: AutomationBroker | None = None
+        self._admission_lock: threading.RLock = threading.RLock()
+        self._admissions: dict[str, tuple[str, str]] = {}
+        self._loop: asyncio.AbstractEventLoop | None = None
         # Task 3: caps concurrent OCR-heavy jobs (see ``_OCR_HEAVY_JOB_TYPES``).
         # ``<= 0`` disables the cap — no semaphore, unbounded like every
         # other job type.
@@ -230,6 +264,67 @@ class JobRunner:
 
     def list_jobs(self) -> list[Job]:
         return list(self._jobs.values())
+
+    def set_automation_broker(self, broker: AutomationBroker) -> None:
+        """Publish job assignments inside the snapshot's mutation boundary."""
+        self._automation = broker
+        self._admission_lock = broker.lock
+
+    def _store_job(self, job: Job) -> None:
+        broker = self._automation
+        if broker is None:
+            self._jobs[job.job_id] = job
+            return
+        with broker.lock:
+            self._jobs[job.job_id] = job
+            raw_index = job.payload.get("page_index")
+            index = raw_index if isinstance(raw_index, int) else None
+            _ = broker.publish("job_changed", project_id=job.project_id, page_index=index, job_id=job.job_id)
+
+    def submit_idempotent(
+        self,
+        job_type: str,
+        *,
+        request_id: str,
+        project_id: str | None = None,
+        payload: Mapping[str, object] | None = None,
+    ) -> str:
+        """Atomically admit one key/input pair, including terminal jobs."""
+        if not request_id or len(request_id) > 200:
+            raise ValueError("request_id must contain 1..200 characters")
+        # Normalize and detach caller-owned mutable input before admission.
+        detached = TypeAdapter[dict[str, JsonValue]](dict[str, JsonValue]).validate_python(payload or {})
+        fingerprint = json.dumps([job_type, project_id, detached], sort_keys=True, separators=(",", ":"))
+        with self._admission_lock:
+            existing = self._admissions.get(request_id)
+            if existing is not None:
+                if existing[0] != fingerprint:
+                    raise RequestIdConflictError("request_id was already used with different inputs")
+                return existing[1]
+            job_id = self.submit(job_type, project_id=project_id, payload=detached)
+            self._admissions[request_id] = (fingerprint, job_id)
+            return job_id
+
+    def lookup_idempotent(
+        self,
+        job_type: str,
+        *,
+        request_id: str,
+        project_id: str | None = None,
+        payload: Mapping[str, object] | None = None,
+    ) -> str | None:
+        """Look up one prior logical request before validating mutable state."""
+        if not request_id or len(request_id) > 200:
+            raise ValueError("request_id must contain 1..200 characters")
+        detached = TypeAdapter[dict[str, JsonValue]](dict[str, JsonValue]).validate_python(payload or {})
+        fingerprint = json.dumps([job_type, project_id, detached], sort_keys=True, separators=(",", ":"))
+        with self._admission_lock:
+            existing = self._admissions.get(request_id)
+            if existing is None:
+                return None
+            if existing[0] != fingerprint:
+                raise RequestIdConflictError("request_id was already used with different inputs")
+            return existing[1]
 
     def submit(
         self,
@@ -249,10 +344,17 @@ class JobRunner:
             payload=payload or {},
             created_at=datetime.now(UTC),
         )
-        self._jobs[job_id] = job
+        self._store_job(job)
         if labeling_page_lease is not None:
             self._labeling_page_leases[job_id] = labeling_page_lease
-        self._queue.put_nowait(job)
+        try:
+            calling_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            calling_loop = None  # Sync routes enqueue onto the runner's loop below.
+        if self._loop is None or self._loop is calling_loop:
+            self._queue.put_nowait(job)
+        else:
+            _ = self._loop.call_soon_threadsafe(self._queue.put_nowait, job)
         return job_id
 
     def get_labeling_page_lease(self, job_id: str) -> LabelingPageLease | None:
@@ -267,6 +369,7 @@ class JobRunner:
 
     async def run_forever(self) -> None:
         """Consume jobs from the queue until ``stop()`` is called."""
+        self._loop = asyncio.get_running_loop()
         while not self._stop.is_set():
             try:
                 job = await asyncio.wait_for(self._queue.get(), timeout=0.25)
@@ -292,7 +395,7 @@ class JobRunner:
                     "completed_at": datetime.now(UTC),
                 }
             )
-            self._jobs[queued.job_id] = cancelled
+            self._store_job(cancelled)
             self._close_labeling_page_lease(queued.job_id)
             await self._emit(cancelled)
         tasks = tuple(self._running_tasks)
@@ -330,7 +433,7 @@ class JobRunner:
                 "completed_at": datetime.now(UTC),
             }
         )
-        self._jobs[job_id] = cancelled
+        self._store_job(cancelled)
         if was_queued:
             self._close_labeling_page_lease(job_id)
         await self._emit(cancelled)
@@ -377,7 +480,7 @@ class JobRunner:
                 "result": result if result is not None else job.result,
             }
         )
-        self._jobs[job_id] = updated
+        self._store_job(updated)
         await self._emit(updated)
 
     async def _emit(self, job: Job) -> None:
@@ -411,7 +514,7 @@ class JobRunner:
                 "started_at": datetime.now(UTC),
             }
         )
-        self._jobs[running.job_id] = running
+        self._store_job(running)
         await self._emit(running)
 
         try:
@@ -435,7 +538,7 @@ class JobRunner:
                             "completed_at": datetime.now(UTC),
                         }
                     )
-                    self._jobs[job.job_id] = cancelled
+                    self._store_job(cancelled)
                     await self._emit(cancelled)
                 raise
             except Exception as exc:
@@ -450,7 +553,7 @@ class JobRunner:
                         "error_message": str(exc),
                     }
                 )
-                self._jobs[failed.job_id] = failed
+                self._store_job(failed)
                 await self._emit(failed)
                 return
 
@@ -463,7 +566,7 @@ class JobRunner:
                     "completed_at": datetime.now(UTC),
                 }
             )
-            self._jobs[completed.job_id] = completed
+            self._store_job(completed)
             await self._emit(completed)
         finally:
             self._close_labeling_page_lease(job.job_id)
@@ -571,6 +674,18 @@ async def _handle_load_page(runner: JobRunner, job: Job) -> None:
     await handle_load_page(runner, job)
 
 
+async def _handle_prepare_pgdp(runner: JobRunner, job: Job) -> None:
+    from .handlers.prepare_pgdp import handle_prepare_pgdp
+
+    await handle_prepare_pgdp(runner, job)
+
+
+async def _handle_source_alignment(runner: JobRunner, job: Job) -> None:
+    from .handlers.source_alignment import handle_source_alignment
+
+    await handle_source_alignment(runner, job)
+
+
 _HANDLERS: dict[str, Handler] = {
     "reload_ocr": _handle_reload_ocr,
     "save_project": _handle_save_project,
@@ -581,6 +696,8 @@ _HANDLERS: dict[str, Handler] = {
     "propose_page_kinds": _handle_propose_page_kinds,
     "propose_regions": _handle_propose_regions,
     "load_page": _handle_load_page,
+    "prepare_pgdp": _handle_prepare_pgdp,
+    "source_alignment": _handle_source_alignment,
 }
 
 

@@ -64,6 +64,7 @@ import { HotkeyHelpModal } from "./components/HotkeyHelpModal";
 import { SourceFolderDialog } from "./components/SourceFolderDialog";
 import { PageKindsDialog } from "./components/PageKindsDialog";
 import { dialogStore, useDialogStore } from "./stores/dialog-store";
+import { AutomationViewerProvider } from "./hooks/useAutomationViewer";
 
 // One QueryClient for the app.
 // staleTime: 30 000 ms — spec §Server state.
@@ -529,12 +530,14 @@ export default function App() {
          * components/shell/SuiteLauncher.tsx.
          */}
         <SuiteLauncherProvider>
-          <ComputeStateWarmup />
-          <AppInner />
-          {/* Single Toaster instance — all toasts routed through sonner.
-              Position: bottom-right (Slice 26).
-              Theme matches data-theme preference. */}
-          <ThemedToaster />
+          <AutomationViewerProvider>
+            <ComputeStateWarmup />
+            <AppInner />
+            {/* Single Toaster instance — all toasts routed through sonner.
+                Position: bottom-right (Slice 26).
+                Theme matches data-theme preference. */}
+            <ThemedToaster />
+          </AutomationViewerProvider>
         </SuiteLauncherProvider>
       </BrowserRouter>
     </QueryClientProvider>

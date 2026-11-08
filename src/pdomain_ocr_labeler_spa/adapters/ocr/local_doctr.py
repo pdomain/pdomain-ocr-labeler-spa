@@ -148,6 +148,7 @@ def _ingest_ocr_result(
     store: Any,  # LabelerPageStore — TYPE_CHECKING import avoids circular dep
     project: Any = None,  # Project — its project_id keys the ProjectAggregate
     image_is_edited: bool = False,
+    tool: str = "doctr",
 ) -> Any:  # PageAggregate
     """Fire OcrCompleted on a new PageAggregate and persist via LabelerPageStore.
 
@@ -213,7 +214,7 @@ def _ingest_ocr_result(
     prov_node = ProvenanceNode(
         id=str(page_id),
         source="ocr",
-        tool="doctr",
+        tool=tool,
         blob_refs=[content_hash, image_hash],
         extra={"image_is_edited": True} if image_is_edited else None,
     )

@@ -80,6 +80,7 @@ from pdomain_book_tools.ocr.word import Word
 from pydantic import BaseModel, ConfigDict, Field
 
 from ...notifications import NotificationKind, NotificationQueue
+from ...page_content_snapshot import restore_page_content, snapshot_page_content
 from ...persistence.atomic import write_json_atomic
 from ...project_state import ProjectState
 from ...regions.block_adapter import confirmed_regions_from_page
@@ -130,7 +131,7 @@ class WordFilter:
 # ---------------------------------------------------------------------------
 
 
-def _load_page_from_envelope_file(json_path: Path) -> Any | None:
+def _load_page_from_envelope_file(json_path: Path) -> Page | None:
     """Load a ``Page`` from an envelope (or legacy pages-dict) JSON file.
 
     Returns ``None`` on any error.  Import of ``pdomain_book_tools`` is deferred
@@ -138,26 +139,19 @@ def _load_page_from_envelope_file(json_path: Path) -> Any | None:
     ``pdomain_book_tools``.
     """
     try:
-        from pdomain_book_tools.ocr.page import Page as PdPage
-
-        data = json.loads(json_path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            return None
+        data = _object_dict(_json_value(json_path.read_text(encoding="utf-8")), "page file")
 
         # Try envelope format first.
-        schema = data.get("schema", {})
-        if isinstance(schema, dict) and schema.get("name") == "pd_ocr_labeler.user_page":
-            payload = data.get("payload", {})
-            if isinstance(payload, dict):
-                page_dict = payload.get("page")
-                if isinstance(page_dict, dict):
-                    return PdPage.from_dict(page_dict)
-            return None
+        schema = _object_dict(data.get("schema", {}), "page schema")
+        if schema.get("name") == "pd_ocr_labeler.user_page":
+            payload = _object_dict(data.get("payload", {}), "page payload")
+            page_dict = _object_dict(payload.get("page"), "page content")
+            return restore_page_content(page_dict)
 
         # Legacy {"pages": [...]} format.
-        pages = data.get("pages")
-        if isinstance(pages, list) and pages and isinstance(pages[0], dict):
-            return PdPage.from_dict(pages[0])
+        pages = _object_list(data.get("pages", []), "legacy pages")
+        if pages:
+            return restore_page_content(_object_dict(pages[0], "legacy page content"))
 
         return None
     except Exception:
@@ -173,7 +167,7 @@ def _page_is_validated(page: Any) -> bool:
 
 def freeze_export_page(
     *,
-    page: Any,
+    page: Page,
     image_path: Path,
     page_index: int,
     prefix: str,
@@ -183,7 +177,7 @@ def freeze_export_page(
     from pdomain_ops.blob_store import BlobStore
 
     page_payload = json.dumps(
-        page.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        snapshot_page_content(page), ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode()
     image_payload = image_path.read_bytes()
     blobs = BlobStore(blob_project_dir)
@@ -198,11 +192,10 @@ def freeze_export_page(
     }
 
 
-def load_frozen_export_page(snapshot: dict[str, object]) -> tuple[Any, Path]:
+def load_frozen_export_page(snapshot: dict[str, object]) -> tuple[Page, Path]:
     """Reload and verify an immutable page/image snapshot from its declared hashes."""
     import hashlib
 
-    from pdomain_book_tools.ocr.page import Page
     from pdomain_ops.blob_store import BlobStore
 
     blob_project_dir = Path(str(snapshot["blob_project_dir"]))
@@ -218,7 +211,7 @@ def load_frozen_export_page(snapshot: dict[str, object]) -> tuple[Any, Path]:
         raise ValueError("frozen export page hash mismatch")
     if hashlib.sha256(image_payload).hexdigest() != image_sha256:
         raise ValueError("frozen export image hash mismatch")
-    return Page.from_dict(json.loads(page_payload)), blob_project_dir / "blobs" / image_sha256
+    return restore_page_content(page_payload), blob_project_dir / "blobs" / image_sha256
 
 
 def _prepare_page_gt_first(page: Any) -> None:
@@ -354,7 +347,7 @@ def resolve_export_page_refs(
     return refs
 
 
-def load_export_page(ref: ExportPageRef, store: Any) -> Any | None:
+def load_export_page(ref: ExportPageRef, store: Any) -> Page | None:
     """Load the ``Page`` for a ref: store head first, legacy envelope fallback."""
     if ref.page_id is not None and store is not None:
         from ....api._page_content import load_page_from_store

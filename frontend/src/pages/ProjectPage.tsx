@@ -43,7 +43,7 @@
 // Hook-order discipline: ALL hooks are called unconditionally at the top
 // before any early return, matching the Rules of Hooks.
 
-import { useMemo, useRef, useState, useSyncExternalStore, useEffect } from "react";
+import { useCallback, useMemo, useRef, useState, useSyncExternalStore, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "../lib/toast";
@@ -95,6 +95,7 @@ import {
   applyParagraphSelection,
   promoteCompleteWordLines,
   selectProposal,
+  selectRegion,
   useSelectionForPage,
   selectWord,
 } from "../stores/selection-store";
@@ -106,6 +107,8 @@ import { worklistStore } from "../stores/worklist-store";
 import { focusWorklistLine } from "../stores/worklist-focus";
 import { pageNoUrl } from "../lib/routes";
 import { getLabelerExtension } from "../lib/labelerExtension";
+import { useAutomationViewer } from "../hooks/automation-viewer-context";
+import { AutomationApiError, type ViewerAck, type ViewerCommand } from "../api/automation";
 
 import { PageActionsCompact } from "../components/PageActionsCompact";
 import ProjectNavigationControls, {
@@ -131,6 +134,7 @@ import { WordDetail } from "../components/right-panel/WordDetail";
 import { useBreadcrumbHotkeys } from "../hooks/useBreadcrumbHotkeys";
 import { useRegionReviewHotkeys } from "../hooks/useRegionReviewHotkeys";
 import { useReviewQueue } from "../hooks/useReviewQueue";
+import { SourceAlignmentPanel } from "../components/right-panel/SourceAlignmentPanel";
 
 import type {
   Selection as ToolbarSelection,
@@ -141,6 +145,98 @@ import type { components } from "../api/types";
 
 type PagePayload = components["schemas"]["PagePayload"];
 type LineMatch = components["schemas"]["LineMatch"];
+
+interface ViewerApplication {
+  readonly viewerId: string;
+  readonly commandSeq: number;
+  readonly status: "applying" | "acknowledging" | "terminal";
+  readonly retryCount: number;
+}
+
+function isSameViewerCommand(
+  application: ViewerApplication | null,
+  command: ViewerCommand,
+): boolean {
+  return (
+    application?.viewerId === command.viewer_id && application.commandSeq === command.command_seq
+  );
+}
+
+function isApplicationForCommand(
+  application: ViewerApplication | null,
+  command: ViewerCommand,
+): application is ViewerApplication {
+  return isSameViewerCommand(application, command);
+}
+
+function viewerAck(
+  command: ViewerCommand,
+  generation: number,
+  status: "applied" | "failed",
+  error: ViewerAck["error"],
+): ViewerAck {
+  return { ...command, generation, status, error };
+}
+
+function viewerSelectionFailure(command: ViewerCommand): string | null {
+  const selection = command.selection;
+  if (
+    command.panel === "source_alignment" &&
+    (selection.alignment_group_id === null || selection.alignment_id === null)
+  ) {
+    return "source_alignment_unavailable";
+  }
+  if (
+    command.panel !== "source_alignment" &&
+    (selection.alignment_group_id !== null || selection.alignment_id !== null)
+  ) {
+    return "source_alignment_unavailable";
+  }
+  if (selection.region_id !== null && selection.proposal_id !== null) {
+    return "viewer_selection_conflict";
+  }
+  if (
+    selection.word_ids.length > 0 &&
+    (selection.region_id !== null || selection.proposal_id !== null)
+  ) {
+    return "viewer_selection_conflict";
+  }
+  return null;
+}
+
+function viewerWordTargets(
+  page: PagePayload,
+  wordIds: readonly string[],
+): [number, number][] | null {
+  const targetById = new Map<string, [number, number]>();
+  for (const line of page.line_matches ?? []) {
+    for (const word of line.word_matches) {
+      if (word.word_id !== null && word.word_id !== undefined && word.word_index !== null) {
+        targetById.set(word.word_id, [line.line_index, word.word_index]);
+      }
+    }
+  }
+  const targets: [number, number][] = [];
+  for (const wordId of wordIds) {
+    const target = targetById.get(wordId);
+    if (target === undefined) return null;
+    targets.push(target);
+  }
+  return targets;
+}
+
+function sameTargetSet(
+  left: readonly [number, number][],
+  right: readonly [number, number][],
+): boolean {
+  if (left.length !== right.length) return false;
+  const toKey = ([lineIndex, wordIndex]: [number, number]): string =>
+    `${String(lineIndex)}:${String(wordIndex)}`;
+  return (
+    new Set(left.map(toKey)).size === new Set(right.map(toKey)).size &&
+    left.every((target) => new Set(right.map(toKey)).has(toKey(target)))
+  );
+}
 
 // ─── ui-prefs subscriber bridge ─────────────────────────────────────────────
 // The hand-rolled `useUiPrefs` store has no native `subscribe()`. We bridge
@@ -246,6 +342,18 @@ export default function ProjectPage() {
   // ── Top-level data hooks — always called before any early return ────────
   const projectQ = useProject(projectId);
   const pageQ = usePage(projectId, idx0);
+  const automationViewer = useAutomationViewer();
+  const viewerCommand = automationViewer.command;
+  const reportObservation = useCallback(
+    (acknowledgement: ViewerAck): Promise<void> =>
+      automationViewer.reportObservation(acknowledgement),
+    [automationViewer],
+  );
+  const [sourceAlignmentRenderedCommand, setSourceAlignmentRenderedCommand] = useState<{
+    viewerId: string;
+    commandSeq: number;
+    generation: number;
+  } | null>(null);
   // Active job tracking — fed by mutation hooks when they return job_ids.
   // Wave 3a / P1-JOB-TYPE: every SSE frame is now the full public `Job`
   // model, so `jobProgress.type` is the real job kind straight from the
@@ -313,6 +421,71 @@ export default function ProjectPage() {
 
   // ── QueryClient (for explicit invalidation after job-completion / saves) ─
   const qc = useQueryClient();
+  const viewerApplicationRef = useRef<ViewerApplication | null>(null);
+  const acknowledgeViewerCommand = useCallback(
+    (
+      command: ViewerCommand,
+      generation: number,
+      status: "applied" | "failed",
+      error: ViewerAck["error"],
+    ): void => {
+      const application = viewerApplicationRef.current;
+      if (!isApplicationForCommand(application, command) || application.status === "terminal")
+        return;
+      viewerApplicationRef.current = { ...application, status: "acknowledging" };
+      const acknowledgement = reportObservation(viewerAck(command, generation, status, error));
+      acknowledgement.then(
+        () => {
+          const current = viewerApplicationRef.current;
+          if (!isApplicationForCommand(current, command)) return;
+          viewerApplicationRef.current = { ...current, status: "terminal" };
+        },
+        (reason: unknown) => {
+          const current = viewerApplicationRef.current;
+          if (!isApplicationForCommand(current, command)) return;
+          if (
+            reason instanceof AutomationApiError &&
+            reason.status === 409 &&
+            current.retryCount < 1
+          ) {
+            viewerApplicationRef.current = {
+              ...current,
+              status: "applying",
+              retryCount: current.retryCount + 1,
+            };
+            const refresh = Promise.all([
+              qc.invalidateQueries({ queryKey: ["page", command.project_id, command.page_index] }),
+              qc.invalidateQueries({
+                queryKey: ["source-alignment", command.project_id, command.page_index],
+              }),
+            ]);
+            refresh.catch((refreshError: unknown) => {
+              if (!isApplicationForCommand(viewerApplicationRef.current, command)) return;
+              viewerApplicationRef.current = {
+                viewerId: command.viewer_id,
+                commandSeq: command.command_seq,
+                status: "terminal",
+                retryCount: current.retryCount + 1,
+              };
+              console.error("viewer generation-conflict refresh failed", refreshError);
+            });
+            return;
+          }
+          if (!(reason instanceof AutomationApiError)) {
+            viewerApplicationRef.current = { ...current, status: "applying" };
+            console.error(
+              "viewer acknowledgement transport failed; waiting for viewer reconnect",
+              reason,
+            );
+            return;
+          }
+          viewerApplicationRef.current = { ...current, status: "terminal" };
+          console.error("viewer acknowledgement was not accepted", reason);
+        },
+      );
+    },
+    [qc, reportObservation],
+  );
 
   // ── Terminal-status invalidation (#377) ────────────────────────────────
   // Mutations such as `useReloadOcr` / `useReloadOcrEdited` / `useSaveProject`
@@ -390,6 +563,130 @@ export default function ProjectPage() {
   // ── Derived view state ─────────────────────────────────────────────────
   const pagePayload = pageQ.data ?? null;
   const lines: LineMatch[] = pagePayload?.line_matches ?? [];
+  const displayedCommand = automationViewer.displayedCommand;
+
+  useEffect(() => {
+    if (viewerCommand === null || pagePayload === null) return;
+    if (
+      pagePayload.project_id !== viewerCommand.project_id ||
+      pagePayload.page_index !== viewerCommand.page_index ||
+      pagePayload.page_load_job_id !== null
+    ) {
+      return;
+    }
+    const currentApplication = viewerApplicationRef.current;
+    if (
+      isApplicationForCommand(currentApplication, viewerCommand) &&
+      currentApplication.status !== "applying"
+    )
+      return;
+
+    const failure = viewerSelectionFailure(viewerCommand);
+    if (failure !== null) {
+      viewerApplicationRef.current = {
+        viewerId: viewerCommand.viewer_id,
+        commandSeq: viewerCommand.command_seq,
+        status: "applying",
+        retryCount: isApplicationForCommand(currentApplication, viewerCommand)
+          ? currentApplication.retryCount
+          : 0,
+      };
+      acknowledgeViewerCommand(viewerCommand, pagePayload.generation, "failed", {
+        error: failure,
+        message: "The requested viewer panel is not available in this browser.",
+        details: null,
+      });
+      return;
+    }
+
+    const targets = viewerWordTargets(pagePayload, viewerCommand.selection.word_ids);
+    if (targets === null) {
+      viewerApplicationRef.current = {
+        viewerId: viewerCommand.viewer_id,
+        commandSeq: viewerCommand.command_seq,
+        status: "applying",
+        retryCount: isApplicationForCommand(currentApplication, viewerCommand)
+          ? currentApplication.retryCount
+          : 0,
+      };
+      acknowledgeViewerCommand(viewerCommand, pagePayload.generation, "failed", {
+        error: "viewer_selection_unavailable",
+        message: "The requested word selection is not present in the rendered page.",
+        details: null,
+      });
+      return;
+    }
+
+    if (viewerCommand.selection.region_id !== null) {
+      selectRegion(viewerCommand.selection.region_id);
+    } else if (viewerCommand.selection.proposal_id !== null) {
+      selectProposal(viewerCommand.selection.proposal_id);
+    } else if (targets.length === 0) {
+      clearSelection();
+    } else {
+      const firstTarget = targets[0];
+      if (firstTarget === undefined) return;
+      selectWord(pagePayload.page_index, firstTarget[0], firstTarget[1]);
+      for (const [lineIndex, wordIndex] of targets.slice(1)) {
+        toggleWord(pagePayload.page_index, lineIndex, wordIndex, "toggle");
+      }
+    }
+    useUiPrefs.setState({ rightPanelOpen: viewerCommand.panel !== "closed" });
+    viewerApplicationRef.current = {
+      viewerId: viewerCommand.viewer_id,
+      commandSeq: viewerCommand.command_seq,
+      status: "applying",
+      retryCount: isApplicationForCommand(currentApplication, viewerCommand)
+        ? currentApplication.retryCount
+        : 0,
+    };
+  }, [acknowledgeViewerCommand, pagePayload, viewerCommand]);
+
+  useEffect(() => {
+    if (viewerCommand === null || pagePayload === null) return;
+    const application = viewerApplicationRef.current;
+    if (
+      application === null ||
+      !isApplicationForCommand(application, viewerCommand) ||
+      application.status !== "applying" ||
+      pagePayload.project_id !== viewerCommand.project_id ||
+      pagePayload.page_index !== viewerCommand.page_index
+    ) {
+      return;
+    }
+    const targets = viewerWordTargets(pagePayload, viewerCommand.selection.word_ids);
+    if (targets === null || !sameTargetSet(selection.selectedWords, targets)) return;
+    if (
+      viewerCommand.selection.region_id !== null &&
+      selection.path.regionId !== viewerCommand.selection.region_id
+    ) {
+      return;
+    }
+    if (
+      viewerCommand.selection.proposal_id !== null &&
+      selection.path.proposalId !== viewerCommand.selection.proposal_id
+    ) {
+      return;
+    }
+    if (viewerCommand.panel === "closed" ? rightPanelOpen : !rightPanelOpen) return;
+    if (
+      viewerCommand.panel === "source_alignment" &&
+      (sourceAlignmentRenderedCommand?.viewerId !== viewerCommand.viewer_id ||
+        sourceAlignmentRenderedCommand.commandSeq !== viewerCommand.command_seq ||
+        sourceAlignmentRenderedCommand.generation !== pagePayload.generation)
+    ) {
+      return;
+    }
+
+    acknowledgeViewerCommand(viewerCommand, pagePayload.generation, "applied", null);
+  }, [
+    acknowledgeViewerCommand,
+    pagePayload,
+    rightPanelOpen,
+    selection,
+    sourceAlignmentRenderedCommand,
+    viewerCommand,
+  ]);
   // Event-store undo (spec 2026-06-12): availability flags from the payload.
   const undoAvailable = pagePayload?.history?.undo_available === true;
   const redoAvailable = pagePayload?.history?.redo_available === true;
@@ -1101,6 +1398,58 @@ export default function ProjectPage() {
     />
   );
 
+  const sourceAlignmentCommand =
+    displayedCommand?.panel === "source_alignment" ? displayedCommand : null;
+  const sourceAlignmentSlot =
+    sourceAlignmentCommand !== null &&
+    pagePayload !== null &&
+    pagePayload.project_id === sourceAlignmentCommand.project_id &&
+    pagePayload.page_index === sourceAlignmentCommand.page_index &&
+    sourceAlignmentCommand.selection.alignment_group_id !== null &&
+    sourceAlignmentCommand.selection.alignment_id !== null ? (
+      <SourceAlignmentPanel
+        projectId={sourceAlignmentCommand.project_id}
+        pageIndex={sourceAlignmentCommand.page_index}
+        generation={pagePayload.generation}
+        alignmentId={sourceAlignmentCommand.selection.alignment_id}
+        groupId={sourceAlignmentCommand.selection.alignment_group_id}
+        onRendered={() => {
+          setSourceAlignmentRenderedCommand((current) => {
+            if (
+              current?.viewerId === sourceAlignmentCommand.viewer_id &&
+              current.commandSeq === sourceAlignmentCommand.command_seq &&
+              current.generation === pagePayload.generation
+            ) {
+              return current;
+            }
+            return {
+              viewerId: sourceAlignmentCommand.viewer_id,
+              commandSeq: sourceAlignmentCommand.command_seq,
+              generation: pagePayload.generation,
+            };
+          });
+        }}
+        onUnavailable={(message) => {
+          const application = viewerApplicationRef.current;
+          if (
+            viewerCommand?.viewer_id !== sourceAlignmentCommand.viewer_id ||
+            viewerCommand.command_seq !== sourceAlignmentCommand.command_seq ||
+            application === null ||
+            !isApplicationForCommand(application, sourceAlignmentCommand) ||
+            application.status !== "applying"
+          )
+            return;
+          acknowledgeViewerCommand(sourceAlignmentCommand, pagePayload.generation, "failed", {
+            error: "source_alignment_unavailable",
+            message,
+            details: null,
+          });
+        }}
+      />
+    ) : undefined;
+  const renderedAutomationPanel =
+    sourceAlignmentSlot === undefined ? "selection" : "source_alignment";
+
   // D-047: full-width workspace toolbar band — mounts at the top of the
   // project route body (where today's nav/actions appeared), leaving the
   // AppShell chrome header free of document/page-scoped controls.
@@ -1344,6 +1693,8 @@ export default function ProjectPage() {
       pageIndex={idx0}
       wordSlot={wordDetailSlot}
       textTabsSlot={textTabsContent}
+      automationPanel={renderedAutomationPanel}
+      sourceAlignmentSlot={sourceAlignmentSlot}
       onCollapse={() => {
         useUiPrefs.setState({ rightPanelOpen: false });
       }}

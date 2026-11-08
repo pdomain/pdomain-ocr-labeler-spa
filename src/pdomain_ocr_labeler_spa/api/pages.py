@@ -23,6 +23,7 @@ from pydantic import BaseModel, BeforeValidator, Field
 from ..core.glyph.bulk_mark import GlyphBulkMarkParams, apply_bulk_mark
 from ..core.ground_truth_matcher import rematch_page
 from ..core.jobs import JobRunner, JobStatus
+from ..core.jobs.publication import job_change_broker
 from ..core.labeler_extension import LabelerPageExtension
 from ..core.models import (
     BBox,
@@ -30,6 +31,7 @@ from ..core.models import (
     LineFilter,
     LineMatch,
     PageSource,
+    Project,
     RegionProposalView,
     RegionView,
     Selection,
@@ -286,6 +288,7 @@ class ReloadOCRRequest(BaseModel):
 
     force: bool = False
     use_edited_image: bool = False
+    engine: Literal["local_doctr", "tesseract"] | None = None
 
 
 class ReloadOCRResponse(BaseModel):
@@ -720,22 +723,13 @@ def _build_page_loader_from_context(
     if project_state.loaded_project is None:
         raise RuntimeError("_build_page_loader_from_context: no project loaded")
 
-    from ..adapters.ocr.local_doctr import LocalDoctrPageLoader
-    from ..core.ocr.predictor import PredictorCache
+    from ..adapters.ocr.page_loader_factory import build_page_loader
 
     ctx: dict[str, Any] = runner.context
-    predictor_cache: PredictorCache = ctx["predictor_cache"]
-    ocr_carrier = ctx["ocr_config_carrier"]
-    detection_key, recognition_key, hf_revision = ocr_carrier.snapshot()
-
-    return LocalDoctrPageLoader(
+    return build_page_loader(
         project=project_state.loaded_project,
-        predictor_cache=predictor_cache,
-        detection_key=detection_key,
-        recognition_key=recognition_key,
-        hf_revision=hf_revision,
-        data_root=settings.data_root,
-        cache_root=settings.cache_root,
+        settings=settings,
+        context=ctx,
         store=ctx.get("page_store"),  # LabelerPageStore | None
         image_path_resolver=project_state.labeling_image_path,
     )
@@ -787,10 +781,54 @@ def _prefetch_adjacent_pages(
             log.debug("prefetch: page %d already cached, skipping", target)
             continue
         try:
-            ensure_page_model(project_state, target, loader=loader)
+            broker = job_change_broker(runner)
+            if broker is None:
+                ensure_page_model(project_state, target, loader=loader)
+            else:
+                _prefetch_with_publication(project_state, runner, loader, target, expected_project=project)
             log.debug("prefetch: page %d loaded (offset +%d)", target, offset)
         except Exception as exc:  # pragma: no cover - defensive
             log.debug("prefetch: page %d failed (offset +%d): %s", target, offset, exc)
+
+
+def _prefetch_with_publication(
+    state: ProjectState, runner: JobRunner, loader: PageLoader, page_index: int, *, expected_project: Project
+) -> None:
+    from ..core.jobs.handlers.reload_ocr import _finalize_reocr_outcome, _prior_confirmed_page_kind
+
+    broker = job_change_broker(runner)
+    if broker is None:
+        return
+    with broker.lock, state.mutation_lock:
+        if state.loaded_project is not expected_project:
+            return
+    kind = _prior_confirmed_page_kind(state, page_index)
+    lease = state.open_labeling_page(page_index)
+    try:
+        with state.bind_labeling_page(page_index, lease):
+            outcome = loader.load_labeled(page_index) or loader.load_cached(page_index)
+            if outcome is None:
+                outcome = loader.run_ocr(page_index)
+        with broker.lock, state.mutation_lock, state.get_page_lock(page_index):
+            if state.loaded_project is not expected_project:
+                return
+            existing = state.get_page_state(page_index)
+            if existing is not None and existing.page_record is not None:
+                return
+            store = runner.context.get("page_store")
+            _finalize_reocr_outcome(
+                state,
+                page_index,
+                outcome,
+                page_kind_sent=kind,
+                page_store=store if isinstance(store, LabelerPageStore) else None,
+                expected_project_id=expected_project.project_id,
+                change_broker=broker,
+                hydrate_sidecars=True,
+            )
+    finally:
+        if lease is not None:
+            lease.close()
 
 
 # ── Provenance summary — GAP-1 ───────────────────────────────────────
@@ -2122,16 +2160,34 @@ def load_page(
 
 @router.post("/{page_index}/reload-ocr", status_code=202, response_model=ReloadOCRResponse)
 def reload_ocr(
+    *,
     project_id: str,
     page_index: int,
     body: ReloadOCRRequest,
     project_state: ProjectState = Depends(get_project_state),
     runner: JobRunner = Depends(get_job_runner),
+    settings: Settings = Depends(get_settings),
 ) -> JSONResponse:
     """``POST .../reload-ocr`` → ``202 {job_id}`` — spec §5.3."""
     err = _check_project_and_page(project_id, page_index, project_state)
     if err is not None:
         return err
+
+    if (body.engine or settings.ocr_engine) == "tesseract":
+        from ..adapters.ocr.tesseract import tesseract_capability
+
+        capability = tesseract_capability(
+            binary=settings.tesseract_binary, language=settings.tesseract_language
+        )
+        if not capability.available:
+            return JSONResponse(
+                status_code=503,
+                content=ApiError(
+                    error="ocr_engine_unavailable",
+                    message=capability.message,
+                    details={"engine": "tesseract", "language": settings.tesseract_language},
+                ).model_dump(),
+            )
 
     try:
         job_lease = project_state.open_labeling_page(page_index)
@@ -2151,6 +2207,7 @@ def reload_ocr(
             "page_index": page_index,
             "force": body.force,
             "use_edited_image": body.use_edited_image,
+            "engine": body.engine,
         },
         labeling_page_lease=job_lease,
     )

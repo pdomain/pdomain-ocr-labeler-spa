@@ -89,6 +89,7 @@ if TYPE_CHECKING:
 
     from .page_state import PageLoadOutcome
     from .persistence.book_labeling_session import BookLabelingSession
+    from .source_alignment import SourceAlignmentResult
 
 
 @dataclass
@@ -129,6 +130,7 @@ class PageState:
     page_id: UUID | None = field(default=None)
     """page_id of PageAggregate in LabelerPageStore. Set after OCR/load."""
     logical_page_id: UUID | None = field(default=None)
+    source_alignment: SourceAlignmentResult | None = field(default=None)
     """Stable page identity that does not change when OCR replaces the aggregate."""
     # Per-page UI selection (spec-23-E §10). Mutated by
     # ``POST /api/projects/{id}/pages/{idx}/selection`` via
@@ -326,6 +328,11 @@ class ProjectState:
         ``set_current_page_index`` is the explicit setter.
         """
         return self._current_page_index
+
+    @property
+    def mutation_lock(self) -> threading.RLock:
+        """Serialize project identity checks and mutations with project swaps."""
+        return self._lock
 
     @property
     def generation(self) -> int:

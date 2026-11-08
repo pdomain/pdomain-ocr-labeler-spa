@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 from pdomain_book_contracts.layout.text_hints import LayoutStructure
 
+from ..source_alignment import alignment_from_page, grouped_word_bindings
+
 if TYPE_CHECKING:
     from pdomain_book_tools.ocr.page import Page
     from pdomain_book_tools.ocr.word import Word
@@ -64,7 +66,14 @@ def reviewed_structure(
         word_id for row in structure.table_rows for cell in row.cells for word_id in cell.word_ids
     )
     if word_ids:
-        bindings = prepared_word_bindings(page, bundle)
+        alignment = alignment_from_page(page)
+        bindings = (
+            grouped_word_bindings(page, alignment)
+            if alignment is not None
+            else prepared_word_bindings(page, bundle)
+        )
+        if alignment is not None and any(word_id not in bindings for word_id in word_ids):
+            raise ValueError("Layout structure references an unresolved or rejected source alignment group")
         if not bindings:
             raise ValueError(
                 " ".join(
@@ -88,9 +97,18 @@ def _signature(word: Word) -> str:
 
 def refresh_structure_signatures(structure: LayoutStructure, *, page: Page) -> LayoutStructure:
     """Rebuild optional geometry snapshots by canonical imported IDs."""
-    bindings = stored_word_bindings(page)
+    alignment = alignment_from_page(page)
+    groups = grouped_word_bindings(page, alignment) if alignment is not None else None
+    bindings = stored_word_bindings(page) if groups is None else {}
 
     def signatures(word_ids: tuple[str, ...]) -> tuple[str, ...]:
+        if groups is not None:
+            if any(word_id not in groups for word_id in word_ids):
+                raise ValueError("Reviewed layout structure references an unresolved or rejected source word")
+            return tuple(
+                json.dumps([json.loads(_signature(word)) for word in groups[word_id]], separators=(",", ":"))
+                for word_id in word_ids
+            )
         if any(word_id not in bindings for word_id in word_ids):
             raise ValueError("Reviewed layout structure references a word no longer on this page")
         return tuple(_signature(bindings[word_id]) for word_id in word_ids)

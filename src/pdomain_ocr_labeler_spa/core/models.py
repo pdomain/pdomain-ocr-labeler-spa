@@ -19,7 +19,7 @@ from typing import Any, Literal, TypedDict
 
 from pdomain_book_contracts.annotation import RegionRole
 from pdomain_book_contracts.layout.text_hints import LayoutStructure
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 _MAX_DISPLAY_DIMENSION = 1200
 
@@ -323,6 +323,8 @@ class JobType(StrEnum):
     """
 
     RELOAD_OCR = "reload_ocr"
+    PREPARE_PGDP = "prepare_pgdp"
+    SOURCE_ALIGNMENT = "source_alignment"
     SAVE_PROJECT = "save_project"
     EXPORT = "export"
     ROTATE_PAGE = "rotate_page"
@@ -388,6 +390,17 @@ class JobResult(TypedDict, total=False):
     words_exported_detection: int
     words_exported_recognition: int
     pages_skipped_not_validated: int
+    book_path: str
+    manifest_path: str
+    page_keys: list[str]
+    alignment_summaries: list[dict[str, JsonValue]]
+    warnings: list[str]
+    source_error: dict[str, JsonValue]
+    result_id: str
+    generation: int
+    disposition: str
+    group_count: int
+    unresolved_count: int
 
 
 class Job(BaseModel):

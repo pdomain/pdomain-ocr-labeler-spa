@@ -745,3 +745,25 @@ The existing Propose regions action starts the book-scoped proposal job.
 Indices start at zero. The existing accept and reject controls remain unchanged.
 Detailed line and stanza writes require stored prepared-bundle word IDs.
 Loose mirrors support ordinary region acceptance and physical column review.
+
+## 11. Source alignment and viewer acknowledgement
+
+| Test ID | Meaning |
+| --- | --- |
+| `source-alignment-panel` | Current F2, P3, and OCR group comparison |
+| `source-alignment-layout-hint` | Mapped formatting evidence, including source lines, stanzas, and indentation; repeated for each hint |
+| `source-alignment-group-warnings` | Warnings for the focused group |
+| `source-alignment-result-warnings` | Warnings for the full alignment |
+| `source-alignment-unresolved` | Formatting that remains unresolved or exhausted |
+
+The existing `right-panel` carries `data-automation-panel="selection"` or
+`data-automation-panel="source_alignment"` to identify its rendered content.
+Viewer commands target a tab's `viewer_id` and command sequence. The tab
+acknowledges its observed project, page, panel, selection, and ready page
+generation. Focusing a source group also requires the current alignment and
+group IDs. An accepted command alone does not prove that the browser applied it.
+
+Source-group comparison uses the composed F2-to-P3-to-OCR mapping. It retains
+changed, ambiguous, unmapped, and exhausted outcomes. Mapped coarse formatting
+can remain reviewable after unambiguous wording changes; inline style transfer
+requires exact supported grapheme mappings.

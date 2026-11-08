@@ -326,3 +326,20 @@ def test_poetry_detector_is_callable_as_a_region_detector() -> None:
 
     assert len(detected) == 1
     assert detected[0].role is RegionRole.POETRY
+
+
+def test_ragged_numeric_rows_do_not_become_poetry() -> None:
+    from pdomain_ocr_labeler_spa.core.regions.poetry import PoetryDetector
+
+    page = _page(
+        [
+            _paragraph(
+                [
+                    _line("Austria 111 717 300", 100, 100, 450, 120),
+                    _line("Belgium 24 916 122", 100, 140, 700, 160),
+                    _line("Denmark 12 144 900", 100, 180, 350, 200),
+                ]
+            )
+        ]
+    )
+    assert PoetryDetector()(_input(page)) == []

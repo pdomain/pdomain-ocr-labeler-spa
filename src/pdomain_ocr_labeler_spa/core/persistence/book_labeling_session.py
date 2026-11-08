@@ -34,6 +34,8 @@ log = logging.getLogger(__name__)
 class _SupportingArtifact(BaseModel):
     kind: str
     relative_path: str
+    artifact_id: str | None = None
+    sha256: str | None = None
 
 
 class _GraphArtifacts(BaseModel):
@@ -378,6 +380,7 @@ class BookLabelingSession:
             page_record=page_record,
             sources=sources,
         )
+        extra_payloads = self._layout_hint_payloads(root_descriptor, page_index)
         image_descriptor = _sealed_descriptor(image_payload)
         return (
             LoadedLabelingBundle(
@@ -393,7 +396,7 @@ class BookLabelingSession:
                     )
                     for artifact in bundle.artifacts
                 }
-                | self._layout_hint_payloads(root_descriptor, page_index),
+                | extra_payloads,
                 image_descriptor=image_descriptor,
             ),
             sources.identity,
@@ -408,6 +411,7 @@ class BookLabelingSession:
         """
         manifest = self._loaded_manifest.manifest
         page_id = manifest.pages[page_index].page_id
+        result: dict[str, bytes] = {}
         for relation in manifest.match_relations:
             if page_id not in relation.page_ids:
                 continue
@@ -416,17 +420,32 @@ class BookLabelingSession:
                 continue
             try:
                 graph = _GraphArtifacts.model_validate_json(graph_payload)
+            except ValueError as exc:
+                log.warning("Optional layout artifact graph unavailable for page %s: %s", page_id, exc)
+                continue
+            for artifact in graph.artifact_references:
+                if artifact.kind != "matching_evidence" or artifact.artifact_id != relation.relation_id:
+                    continue
+                if not artifact.relative_path.startswith("evidence/f2-p3/"):
+                    continue
+                payload = _read_regular_at(root_descriptor, _safe_parts(artifact.relative_path))
+                if artifact.sha256 is None or hashlib.sha256(payload).hexdigest() != artifact.sha256:
+                    raise ValueError("Source alignment evidence hash mismatch")
+                if "source_alignment" in result and result["source_alignment"] != payload:
+                    raise ValueError("Page has conflicting source alignment evidence")
+                result["source_alignment"] = payload
+            try:
                 if any(
                     artifact.kind == "supporting_evidence"
                     and artifact.relative_path == "edition/layout-hints.json"
                     for artifact in graph.artifact_references
                 ):
-                    return {
-                        "layout_hints": _read_regular_at(root_descriptor, ("edition", "layout-hints.json"))
-                    }
+                    result["layout_hints"] = _read_regular_at(
+                        root_descriptor, ("edition", "layout-hints.json")
+                    )
             except (OSError, ValueError) as exc:
                 log.warning("Optional edition layout hints unavailable for page %s: %s", page_id, exc)
-        return {}
+        return result
 
     def _pin_source_identity(self, source_identity: _SourceIdentity) -> None:
         pinned = self._source_identity

@@ -3045,6 +3045,178 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/automation/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** State */
+        get: operations["state_api_automation_state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/viewers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Register */
+        post: operations["register_api_automation_viewers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** View */
+        get: operations["view_api_automation_view_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Command */
+        patch: operations["command_api_automation_view_patch"];
+        trace?: never;
+    };
+    "/api/automation/view/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge */
+        post: operations["acknowledge_api_automation_view_ack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automation/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Events */
+        get: operations["events_api_automation_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pgdp/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Projects */
+        get: operations["projects_api_pgdp_projects_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pgdp/projects/{project_id}/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Pages */
+        get: operations["pages_api_pgdp_projects__project_id__pages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pgdp/prepare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Prepare */
+        post: operations["prepare_api_pgdp_prepare_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/source-alignment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Alignment */
+        get: operations["get_alignment_api_projects__project_id__pages__page_index__source_alignment_get"];
+        put?: never;
+        /** Start Alignment */
+        post: operations["start_alignment_api_projects__project_id__pages__page_index__source_alignment_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/pages/{page_index}/source-alignment/groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Review Alignment */
+        patch: operations["review_alignment_api_projects__project_id__pages__page_index__source_alignment_groups__group_id__patch"];
+        trace?: never;
+    };
     "/api/suite/installed": {
         parameters: {
             query?: never;
@@ -3199,6 +3371,24 @@ export interface components {
             enabled: boolean;
         };
         /**
+         * ArtifactRange
+         * @description One exact nonempty byte and grapheme range in an input artifact.
+         */
+        ArtifactRange: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Artifact Sha256 */
+            artifact_sha256: string;
+            /** Byte Start */
+            byte_start: number;
+            /** Byte End */
+            byte_end: number;
+            /** Grapheme Start */
+            grapheme_start: number;
+            /** Grapheme End */
+            grapheme_end: number;
+        };
+        /**
          * ArtifactReference
          * @description Path-safe content-addressed artifact metadata with no filesystem I/O.
          */
@@ -3238,6 +3428,26 @@ export interface components {
         AutoRotateAllResponse: {
             /** Job Id */
             job_id: string;
+        };
+        /** AutomationState */
+        AutomationState: {
+            /** Revision */
+            revision: number;
+            project: components["schemas"]["Project"] | null;
+            /** Current Page Index */
+            current_page_index: number | null;
+            /** Project Generation */
+            project_generation: number;
+            /** Pages */
+            pages: components["schemas"]["PageReadiness"][];
+            /** Jobs */
+            jobs: components["schemas"]["Job"][];
+            /** Capabilities */
+            capabilities?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Viewers */
+            viewers: components["schemas"]["ViewerState"][];
         };
         /**
          * BBox
@@ -3288,6 +3498,60 @@ export interface components {
             /** Update Policy */
             update_policy?: ("notify" | "auto" | "manual") | null;
             layer_colors?: components["schemas"]["LayerColors"];
+        };
+        /**
+         * ComparisonOperation
+         * @description One immutable source-to-comparison-view transformation.
+         */
+        ComparisonOperation: {
+            kind: components["schemas"]["ComparisonOperationKind"];
+            /** Input Range */
+            input_range: [
+                number,
+                number
+            ];
+            /** Output Range */
+            output_range: [
+                number,
+                number
+            ];
+            /** Original Text */
+            original_text: string;
+            /** Transformed Text */
+            transformed_text: string;
+        };
+        /**
+         * ComparisonOperationKind
+         * @description Comparison-only transformations allowed by the alignment contract.
+         * @enum {string}
+         */
+        ComparisonOperationKind: "unicode_canonical" | "quote_equivalence" | "dash_equivalence" | "small_caps_case_folded" | "soft_hyphen_removed" | "letter_space_removed";
+        /**
+         * ComparisonView
+         * @description A source-preserving normalized grapheme view for matching only.
+         */
+        ComparisonView: {
+            /** Source Text */
+            source_text: string;
+            /** Graphemes */
+            graphemes: string[];
+            /** Source Grapheme Map */
+            source_grapheme_map: number[][];
+            /** Operations */
+            operations: components["schemas"]["ComparisonOperation"][];
+            /**
+             * Small Caps Ranges
+             * @default []
+             */
+            small_caps_ranges: [
+                number,
+                number
+            ][];
+            /**
+             * Casefold All
+             * @default false
+             */
+            casefold_all: boolean;
         };
         /**
          * ConfidenceTier
@@ -4198,6 +4462,32 @@ export interface components {
             words_exported_recognition?: number;
             /** Pages Skipped Not Validated */
             pages_skipped_not_validated?: number;
+            /** Book Path */
+            book_path?: string;
+            /** Manifest Path */
+            manifest_path?: string;
+            /** Page Keys */
+            page_keys?: string[];
+            /** Alignment Summaries */
+            alignment_summaries?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            }[];
+            /** Warnings */
+            warnings?: string[];
+            /** Source Error */
+            source_error?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Result Id */
+            result_id?: string;
+            /** Generation */
+            generation?: number;
+            /** Disposition */
+            disposition?: string;
+            /** Group Count */
+            group_count?: number;
+            /** Unresolved Count */
+            unresolved_count?: number;
         };
         /**
          * JobResultFailure
@@ -4235,7 +4525,8 @@ export interface components {
          *     handler has no matching member (or vice versa).
          * @enum {string}
          */
-        JobType: "reload_ocr" | "save_project" | "export" | "rotate_page" | "auto_rotate_all" | "refine_bboxes" | "propose_page_kinds" | "propose_regions" | "load_page";
+        JobType: "reload_ocr" | "prepare_pgdp" | "source_alignment" | "save_project" | "export" | "rotate_page" | "auto_rotate_all" | "refine_bboxes" | "propose_page_kinds" | "propose_regions" | "load_page";
+        JsonValue: unknown;
         /**
          * JumpRequest
          * @description Body of ``POST .../jump`` — spec §"Jump-to-version semantics".
@@ -4244,6 +4535,12 @@ export interface components {
             /** Node Id */
             node_id: string;
         };
+        /**
+         * KnowledgeState
+         * @description How much is known about one label assignment.
+         * @enum {string}
+         */
+        KnowledgeState: "positive" | "verified_negative" | "unknown" | "conflict";
         /**
          * LabelSource
          * @description Evidence sources that can assign a canonical label.
@@ -4437,7 +4734,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "poetry" | "blockquote" | "table_candidate" | "column_flow";
+            kind: "poetry" | "blockquote" | "table_candidate" | "column_flow" | "formatted_block";
             /**
              * Source
              * @enum {string}
@@ -4667,6 +4964,281 @@ export interface components {
             generation: number;
         };
         /**
+         * MatchAlternative
+         * @description One complete deterministic graph candidate with immutable relations.
+         */
+        MatchAlternative: {
+            /** Alternative Id */
+            alternative_id?: string | null;
+            /** Total Cost */
+            total_cost: number;
+            /** Relations */
+            relations: components["schemas"]["MatchRelation"][];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /**
+         * MatchComparisonNormalization
+         * @description Validated comparison views the source-neutral matcher may build.
+         * @enum {string}
+         */
+        MatchComparisonNormalization: "unicode_casefold_v1";
+        /**
+         * MatchContinuationReference
+         * @description Source-neutral immutable provenance projected from a continuation adapter.
+         */
+        MatchContinuationReference: {
+            /** Continuation Id */
+            continuation_id: string;
+            /** Evidence Artifact Id */
+            evidence_artifact_id: string;
+            /** Evidence Artifact Path */
+            evidence_artifact_path: string;
+            /** Evidence Sha256 */
+            evidence_sha256: string;
+            /** Decision */
+            decision: string;
+            /** Left Fragment Token Id */
+            left_fragment_token_id: string;
+            /** Right Fragment Token Id */
+            right_fragment_token_id: string;
+            /** Left Fragment Text */
+            left_fragment_text: string;
+            /** Right Fragment Text */
+            right_fragment_text: string;
+            /** Left Fragment Grapheme Ranges */
+            left_fragment_grapheme_ranges: components["schemas"]["ArtifactRange"][];
+            /** Right Fragment Grapheme Ranges */
+            right_fragment_grapheme_ranges: components["schemas"]["ArtifactRange"][];
+            /** Relation Source Token Ids */
+            relation_source_token_ids: string[];
+            /** Relation Target Token Ids */
+            relation_target_token_ids: string[];
+        };
+        /**
+         * MatchDocument
+         * @description A source-neutral ordered document with stable page, line, and token IDs.
+         */
+        MatchDocument: {
+            /** Document Id */
+            document_id: string;
+            /** Pages */
+            pages: components["schemas"]["MatchPage"][];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /**
+         * MatchGraph
+         * @description An immutable match result with canonical identity and review quarantine.
+         */
+        MatchGraph: {
+            /** Graph Id */
+            graph_id?: string | null;
+            source_document: components["schemas"]["MatchDocument"];
+            target_document: components["schemas"]["MatchDocument"];
+            policy: components["schemas"]["MatchPolicy"];
+            best_alternative: components["schemas"]["MatchAlternative"];
+            runner_up_alternative: components["schemas"]["MatchAlternative"] | null;
+            /** Runner Up Margin */
+            runner_up_margin: number | null;
+            /** Accepted */
+            accepted: boolean;
+            /** Quarantine Reasons */
+            quarantine_reasons: components["schemas"]["MatchQuarantineReason"][];
+            search_evidence?: components["schemas"]["MatchSearchEvidence"] | null;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /**
+         * MatchLine
+         * @description One ordered physical line of immutable tokens.
+         */
+        MatchLine: {
+            /** Line Id */
+            line_id: string;
+            /** Tokens */
+            tokens: components["schemas"]["MatchToken"][];
+        };
+        /**
+         * MatchOperation
+         * @description One typed monotonic operation in local source and target grapheme ranges.
+         */
+        MatchOperation: {
+            kind: components["schemas"]["MatchOperationKind"];
+            /** Source Grapheme Range */
+            source_grapheme_range: [
+                number,
+                number
+            ];
+            /** Target Grapheme Range */
+            target_grapheme_range: [
+                number,
+                number
+            ];
+        };
+        /**
+         * MatchOperationKind
+         * @description A monotonic grapheme edit retained as matching evidence.
+         * @enum {string}
+         */
+        MatchOperationKind: "match" | "substitution" | "source_only_deletion" | "target_only_insertion";
+        /**
+         * MatchPage
+         * @description One ordered physical page of immutable lines.
+         */
+        MatchPage: {
+            /** Page Id */
+            page_id: string;
+            /** Lines */
+            lines: components["schemas"]["MatchLine"][];
+        };
+        /**
+         * MatchPolicy
+         * @description Versioned deterministic costs, bounds, and acceptance settings.
+         */
+        MatchPolicy: {
+            /** Policy Id */
+            policy_id: string;
+            /** Version */
+            version: string;
+            /** Low Margin Threshold */
+            low_margin_threshold: number;
+            /** Max Merge Size */
+            max_merge_size: number;
+            /** Max State Count */
+            max_state_count: number;
+            /** Max Transition Count */
+            max_transition_count: number;
+            /**
+             * Max Grapheme State Count
+             * @default 100000
+             */
+            max_grapheme_state_count: number;
+            /**
+             * Max Grapheme Work Count
+             * @default 10000000
+             */
+            max_grapheme_work_count: number;
+            /**
+             * Exact Match Cost
+             * @default 0
+             */
+            exact_match_cost: number;
+            /**
+             * Substitution Cost
+             * @default 1
+             */
+            substitution_cost: number;
+            /**
+             * Source Only Cost
+             * @default 1
+             */
+            source_only_cost: number;
+            /**
+             * Target Only Cost
+             * @default 1
+             */
+            target_only_cost: number;
+            /** @default unicode_casefold_v1 */
+            comparison_normalization: components["schemas"]["MatchComparisonNormalization"];
+            /** @default canonical_relation_path_bytes_v1 */
+            tie_break_rule: components["schemas"]["MatchTieBreakRule"];
+        };
+        /**
+         * MatchQuarantineReason
+         * @description Reasons a graph is retained for review instead of accepted.
+         * @enum {string}
+         */
+        MatchQuarantineReason: "tie" | "low_margin" | "state_limit_exhausted" | "transition_limit_exhausted" | "grapheme_state_limit_exhausted" | "unresolved_continuation" | "incompatible_continuation";
+        /**
+         * MatchRelation
+         * @description An immutable relation between physical source and target token IDs.
+         */
+        MatchRelation: {
+            /** Relation Id */
+            relation_id?: string | null;
+            kind: components["schemas"]["MatchRelationKind"];
+            /** Source Token Ids */
+            source_token_ids: string[];
+            /** Target Token Ids */
+            target_token_ids: string[];
+            /** Operations */
+            operations: components["schemas"]["MatchOperation"][];
+            source_comparison?: components["schemas"]["ComparisonView"] | null;
+            target_comparison?: components["schemas"]["ComparisonView"] | null;
+            /**
+             * Continuation References
+             * @default []
+             */
+            continuation_references: components["schemas"]["MatchContinuationReference"][];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /**
+         * MatchRelationKind
+         * @description The cardinality of one immutable physical-token relation.
+         * @enum {string}
+         */
+        MatchRelationKind: "one_to_one" | "source_to_fragments" | "sources_to_one" | "source_only" | "target_only";
+        /**
+         * MatchSearchEvidence
+         * @description Immutable bounded-search evidence, including retained partial paths.
+         */
+        MatchSearchEvidence: {
+            /** Source Token Count */
+            source_token_count: number;
+            /** Target Token Count */
+            target_token_count: number;
+            /** State Count */
+            state_count: number;
+            /** State Iteration Count */
+            state_iteration_count: number;
+            /** Transition Count */
+            transition_count: number;
+            /** Grapheme State Count */
+            grapheme_state_count: number;
+            /** Grapheme Work Count */
+            grapheme_work_count: number;
+            /** Max State Count */
+            max_state_count: number;
+            /** Max Transition Count */
+            max_transition_count: number;
+            /** Max Grapheme State Count */
+            max_grapheme_state_count: number;
+            /** Max Grapheme Work Count */
+            max_grapheme_work_count: number;
+            best_complete_path: components["schemas"]["MatchSearchPathEvidence"] | null;
+            runner_up_complete_path: components["schemas"]["MatchSearchPathEvidence"] | null;
+            /** Partial Paths */
+            partial_paths: components["schemas"]["MatchSearchPathEvidence"][];
+        };
+        /**
+         * MatchSearchPathEvidence
+         * @description One retained complete or partial dynamic-program search path.
+         */
+        MatchSearchPathEvidence: {
+            /** Source Tokens Consumed */
+            source_tokens_consumed: number;
+            /** Target Tokens Consumed */
+            target_tokens_consumed: number;
+            /** Total Cost */
+            total_cost: number;
+            /** Relations */
+            relations: components["schemas"]["MatchRelation"][];
+        };
+        /**
          * MatchStatus
          * @description Per-word match result — spec §1 ``MatchStatus``.
          *
@@ -4674,6 +5246,27 @@ export interface components {
          * @enum {string}
          */
         MatchStatus: "exact" | "fuzzy" | "mismatch" | "unmatched_ocr" | "unmatched_gt";
+        /**
+         * MatchTieBreakRule
+         * @description Validated deterministic ordering for paths with equal total cost.
+         * @enum {string}
+         */
+        MatchTieBreakRule: "canonical_relation_path_bytes_v1";
+        /**
+         * MatchToken
+         * @description A stable physical token and the exact artifacts that supplied its text.
+         */
+        MatchToken: {
+            /** Token Id */
+            token_id: string;
+            /** Text */
+            text: string;
+            /**
+             * Artifact Ranges
+             * @default []
+             */
+            artifact_ranges: components["schemas"]["ArtifactRange"][];
+        };
         /**
          * MergeLinesRequest
          * @description ``POST .../lines/merge`` body — spec §9 row 16.
@@ -4850,6 +5443,36 @@ export interface components {
             is_default: boolean;
             /** Weights Id */
             weights_id?: string | null;
+        };
+        /** OcrWordReference */
+        OcrWordReference: {
+            /** Token Id */
+            token_id: string;
+            /** Line Index */
+            line_index: number;
+            /** Word Index */
+            word_index: number;
+            /** Reading Order */
+            reading_order: number;
+        };
+        /** PageCatalog */
+        PageCatalog: {
+            /** Project Id */
+            project_id: string;
+            /** Title */
+            title: string;
+            /** Pages */
+            pages: components["schemas"]["SourcePage"][];
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
+            /** Next Offset */
+            next_offset: number | null;
+            /** Page Count */
+            page_count: number;
+            /** Warnings */
+            warnings: string[];
         };
         /**
          * PageChangeEntry
@@ -5067,6 +5690,17 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** PageReadiness */
+        PageReadiness: {
+            /** Page Index */
+            page_index: number;
+            /** Generation */
+            generation: number;
+            /** Ready */
+            ready: boolean;
+            /** Page Load Job Id */
+            page_load_job_id?: string | null;
+        };
         /**
          * PageRecord
          * @description Durable, versioned record of a page's lifecycle metadata.
@@ -5139,6 +5773,302 @@ export interface components {
             layout_type: string;
         };
         /**
+         * PgdpAlignmentDisposition
+         * @description The review state retained for a mapping.
+         * @enum {string}
+         */
+        PgdpAlignmentDisposition: "accepted" | "changed" | "ambiguous" | "unmapped" | "exhausted";
+        /**
+         * PgdpAlignmentGroup
+         * @description One connected component through shared P3 tokens.
+         */
+        PgdpAlignmentGroup: {
+            /** Group Id */
+            group_id: string;
+            /**
+             * F2 Token Ids
+             * @default []
+             */
+            f2_token_ids: string[];
+            /**
+             * P3 Token Ids
+             * @default []
+             */
+            p3_token_ids: string[];
+            /**
+             * Ocr Token Ids
+             * @default []
+             */
+            ocr_token_ids: string[];
+            /**
+             * F2 To P3 Relation Ids
+             * @default []
+             */
+            f2_to_p3_relation_ids: string[];
+            /**
+             * P3 To Ocr Relation Ids
+             * @default []
+             */
+            p3_to_ocr_relation_ids: string[];
+            disposition: components["schemas"]["PgdpAlignmentDisposition"];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /**
+         * PgdpAlignmentWindow
+         * @description One actual local graph with ranges in the original token orders.
+         */
+        PgdpAlignmentWindow: {
+            /** Source Token Range */
+            source_token_range: [
+                number,
+                number
+            ];
+            /** Target Token Range */
+            target_token_range: [
+                number,
+                number
+            ];
+            graph: components["schemas"]["MatchGraph"];
+            /** Is Anchor */
+            is_anchor: boolean;
+        };
+        /**
+         * PgdpBoundedStrategy
+         * @description The safe partitioning route selected for one match.
+         * @enum {string}
+         */
+        PgdpBoundedStrategy: "whole_document" | "unique_exact_anchors" | "continuation_abstention";
+        /**
+         * PgdpFormattingProjection
+         * @description Mapped formatting and explicit unresolved source evidence.
+         */
+        PgdpFormattingProjection: {
+            /** Layout Hints */
+            layout_hints: components["schemas"]["PgdpProjectedLayoutHint"][];
+            /** Style Spans */
+            style_spans: components["schemas"]["PgdpProjectedStyleSpan"][];
+            /** Unresolved */
+            unresolved: components["schemas"]["PgdpUnresolvedFormatting"][];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /**
+         * PgdpOcrWord
+         * @description One immutable supplied OCR word, line identity, and optional box snapshot.
+         */
+        PgdpOcrWord: {
+            /** Token Id */
+            token_id: string;
+            /** Text */
+            text: string;
+            /** Line Id */
+            line_id: string;
+            /** Box */
+            box?: [
+                number,
+                number,
+                number,
+                number
+            ] | null;
+        };
+        /**
+         * PgdpPageAlignment
+         * @description Both graphs and their explicit many-to-many groups.
+         */
+        PgdpPageAlignment: {
+            f2_to_p3: components["schemas"]["MatchGraph"];
+            p3_to_ocr: components["schemas"]["MatchGraph"];
+            /** Groups */
+            groups: components["schemas"]["PgdpAlignmentGroup"][];
+            disposition: components["schemas"]["PgdpAlignmentDisposition"];
+            /** Warnings */
+            warnings: string[];
+            work: components["schemas"]["PgdpWorkSummary"];
+            timing: components["schemas"]["PgdpTimingSummary"];
+            /**
+             * F2 To P3 Windows
+             * @default []
+             */
+            f2_to_p3_windows: components["schemas"]["PgdpAlignmentWindow"][];
+            /**
+             * P3 To Ocr Windows
+             * @default []
+             */
+            p3_to_ocr_windows: components["schemas"]["PgdpAlignmentWindow"][];
+            /** @default whole_document */
+            f2_to_p3_strategy: components["schemas"]["PgdpBoundedStrategy"];
+            /** @default whole_document */
+            p3_to_ocr_strategy: components["schemas"]["PgdpBoundedStrategy"];
+        };
+        /**
+         * PgdpProjectedLayoutHint
+         * @description A hint mapped via F2 artifact ranges instead of text searching.
+         */
+        PgdpProjectedLayoutHint: {
+            hint: components["schemas"]["LayoutTextHint"];
+            /** Group Ids */
+            group_ids: string[];
+            /** F2 Token Ids */
+            f2_token_ids: string[];
+            /** P3 Token Ids */
+            p3_token_ids: string[];
+            /** Ocr Token Ids */
+            ocr_token_ids: string[];
+            disposition: components["schemas"]["PgdpAlignmentDisposition"];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /**
+         * PgdpProjectedStyleSpan
+         * @description A style segment whose originals match through both graphs.
+         */
+        PgdpProjectedStyleSpan: {
+            style_span: components["schemas"]["StyleSpan"];
+            /** Source Grapheme Range */
+            source_grapheme_range: [
+                number,
+                number
+            ];
+            /** Group Ids */
+            group_ids: string[];
+            /** F2 Token Ids */
+            f2_token_ids: string[];
+            /** P3 Token Ids */
+            p3_token_ids: string[];
+            /** Ocr Token Ids */
+            ocr_token_ids: string[];
+            /** Ocr Ranges */
+            ocr_ranges: components["schemas"]["PgdpProjectedTokenRange"][];
+            disposition: components["schemas"]["PgdpAlignmentDisposition"];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /**
+         * PgdpProjectedTokenRange
+         * @description A local half-open grapheme range in one OCR token.
+         */
+        PgdpProjectedTokenRange: {
+            /** Token Id */
+            token_id: string;
+            /** Grapheme Range */
+            grapheme_range: [
+                number,
+                number
+            ];
+        };
+        /**
+         * PgdpTimingSummary
+         * @description Monotonic elapsed seconds for matching and composition.
+         */
+        PgdpTimingSummary: {
+            /** F2 To P3 Seconds */
+            f2_to_p3_seconds: number;
+            /** P3 To Ocr Seconds */
+            p3_to_ocr_seconds: number;
+            /** Composition Seconds */
+            composition_seconds: number;
+        };
+        /**
+         * PgdpTokenLookup
+         * @description Visible-token location and explicitly supplied persisted word identities.
+         */
+        PgdpTokenLookup: {
+            /** Token Id */
+            token_id: string;
+            /** Visible Grapheme Range */
+            visible_grapheme_range: [
+                number,
+                number
+            ];
+            /**
+             * Source Word Ids
+             * @default []
+             */
+            source_word_ids: string[];
+        };
+        /**
+         * PgdpUnresolvedFormatting
+         * @description Formatting that must remain visible for review.
+         */
+        PgdpUnresolvedFormatting: {
+            /**
+             * Source Kind
+             * @enum {string}
+             */
+            source_kind: "layout_hint" | "style_span";
+            /** Source Ref */
+            source_ref: string;
+            /** Grapheme Range */
+            grapheme_range: [
+                number,
+                number
+            ] | null;
+            disposition: components["schemas"]["PgdpAlignmentDisposition"];
+            /** Warnings */
+            warnings: string[];
+        };
+        /**
+         * PgdpVisibleDocument
+         * @description Matching text with raw-source lookup or unchanged OCR word snapshots.
+         */
+        PgdpVisibleDocument: {
+            document: components["schemas"]["MatchDocument"];
+            /** Visible Text */
+            visible_text: string;
+            /** Token Lookup */
+            token_lookup: components["schemas"]["PgdpTokenLookup"][];
+            /**
+             * Ocr Words
+             * @default []
+             */
+            ocr_words: components["schemas"]["PgdpOcrWord"][];
+        };
+        /**
+         * PgdpWorkSummary
+         * @description Bounded work consumed by both matcher invocations.
+         */
+        PgdpWorkSummary: {
+            /** F2 To P3 State Count */
+            f2_to_p3_state_count: number;
+            /** F2 To P3 Transition Count */
+            f2_to_p3_transition_count: number;
+            /** F2 To P3 Grapheme Work Count */
+            f2_to_p3_grapheme_work_count: number;
+            /** P3 To Ocr State Count */
+            p3_to_ocr_state_count: number;
+            /** P3 To Ocr Transition Count */
+            p3_to_ocr_transition_count: number;
+            /** P3 To Ocr Grapheme Work Count */
+            p3_to_ocr_grapheme_work_count: number;
+        };
+        /** PrepareRequest */
+        PrepareRequest: {
+            /** Project Id */
+            project_id: string;
+            /** Page Keys */
+            page_keys: string[];
+            /** Request Id */
+            request_id: string;
+        };
+        /** PrepareResponse */
+        PrepareResponse: {
+            /** Job Id */
+            job_id: string;
+        };
+        /**
          * Project
          * @description One labeler project — ``docs/architecture/01-data-models.md §1`` lines 28-44.
          *
@@ -5190,6 +6120,23 @@ export interface components {
              * @default false
              */
             copied_images: boolean;
+        };
+        /** ProjectCatalog */
+        ProjectCatalog: {
+            /** Projects */
+            projects: components["schemas"]["ProjectSummary"][];
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
+            /** Next Offset */
+            next_offset: number | null;
+            /** Scanned Count */
+            scanned_count: number;
+            /** Truncated */
+            truncated: boolean;
+            /** Warnings */
+            warnings: string[];
         };
         /**
          * ProjectKey
@@ -5246,6 +6193,19 @@ export interface components {
             is_lower_bound: boolean;
             /** Complete */
             complete: boolean;
+        };
+        /** ProjectSummary */
+        ProjectSummary: {
+            /** Project Id */
+            project_id: string;
+            /** Title */
+            title: string;
+            /** Author */
+            author?: string | null;
+            /** Available Rounds */
+            available_rounds: string[];
+            /** Page Count */
+            page_count: number;
         };
         /**
          * ProposePageKindsResponse
@@ -5603,6 +6563,8 @@ export interface components {
              * @default false
              */
             use_edited_image: boolean;
+            /** Engine */
+            engine?: ("local_doctr" | "tesseract") | null;
         };
         /**
          * ReloadOCRResponse
@@ -5642,6 +6604,25 @@ export interface components {
             artifact_id: string;
             /** Data Base64 */
             data_base64: string;
+        };
+        /** ReviewAlignmentRequest */
+        ReviewAlignmentRequest: {
+            /** Expected Generation */
+            expected_generation: number;
+            /** Result Id */
+            result_id: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "pending" | "accepted" | "rejected" | "edited";
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Reviewed Text */
+            reviewed_text?: string | null;
         };
         /**
          * ReviewDecision
@@ -5804,6 +6785,17 @@ export interface components {
             /** Skipped Indices */
             skipped_indices?: number[];
         };
+        /** ScanMetadata */
+        ScanMetadata: {
+            /** Relative Path */
+            relative_path: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Width */
+            width?: number | null;
+            /** Height */
+            height?: number | null;
+        };
         /**
          * Selection
          * @description Backend-canonical per-page UI selection state.
@@ -5951,12 +6943,115 @@ export interface components {
             /** Projects */
             projects: components["schemas"]["ProjectKey"][];
         };
+        /** SourceAlignmentGroup */
+        SourceAlignmentGroup: {
+            /** Group Id */
+            group_id: string;
+            /** Source Word Ids */
+            source_word_ids: string[];
+            /** F2 Token Ids */
+            f2_token_ids: string[];
+            /** P3 Token Ids */
+            p3_token_ids: string[];
+            /** Ocr Token Ids */
+            ocr_token_ids: string[];
+            /** F2 Text */
+            f2_text: string;
+            /** P3 Text */
+            p3_text: string;
+            /** Ocr Text */
+            ocr_text: string;
+            /** Ocr Refs */
+            ocr_refs: components["schemas"]["OcrWordReference"][];
+            /** Box */
+            box: [
+                number,
+                number,
+                number,
+                number
+            ] | null;
+            disposition: components["schemas"]["PgdpAlignmentDisposition"];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+            /**
+             * Decision
+             * @default pending
+             * @enum {string}
+             */
+            decision: "pending" | "accepted" | "rejected" | "edited";
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Reviewed Text */
+            reviewed_text?: string | null;
+        };
+        /** SourceAlignmentResponse */
+        SourceAlignmentResponse: {
+            /** Generation */
+            generation: number;
+            result: components["schemas"]["SourceAlignmentResult"] | null;
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
+        };
+        /** SourceAlignmentResult */
+        SourceAlignmentResult: {
+            /** Result Id */
+            result_id: string;
+            /** Page Id */
+            page_id: string;
+            /** Page Key */
+            page_key: string;
+            /** Input Generation */
+            input_generation: number;
+            /** Ocr Signature */
+            ocr_signature: string;
+            alignment: components["schemas"]["PgdpPageAlignment"];
+            projection: components["schemas"]["PgdpFormattingProjection"];
+            /** Groups */
+            groups: components["schemas"]["SourceAlignmentGroup"][];
+            f2: components["schemas"]["PgdpVisibleDocument"];
+            p3: components["schemas"]["PgdpVisibleDocument"];
+            ocr: components["schemas"]["PgdpVisibleDocument"];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
         /**
          * SourceOrientation
          * @description Orientation of the source image before a geometry transform.
          * @enum {string}
          */
         SourceOrientation: "upright" | "rotate_90_clockwise" | "rotate_180" | "rotate_90_counterclockwise";
+        /** SourcePage */
+        SourcePage: {
+            /** Page Key */
+            page_key: string;
+            /** Available Rounds */
+            available_rounds: string[];
+            image?: components["schemas"]["ScanMetadata"] | null;
+        };
+        /**
+         * SourceSlice
+         * @description A half-open byte range in a source artifact.
+         */
+        SourceSlice: {
+            /** Artifact Sha256 */
+            artifact_sha256: string;
+            /** Byte Start */
+            byte_start: number;
+            /** Byte End */
+            byte_end: number;
+        };
         /**
          * SplitByWordsRequest
          * @description ``POST .../lines/split-by-words`` body — spec §9 row 18.
@@ -6040,6 +7135,18 @@ export interface components {
              */
             direction: "horizontal" | "vertical";
         };
+        /** StartAlignmentRequest */
+        StartAlignmentRequest: {
+            /** Request Id */
+            request_id: string;
+            /** Expected Generation */
+            expected_generation: number;
+        };
+        /** StartAlignmentResponse */
+        StartAlignmentResponse: {
+            /** Job Id */
+            job_id: string;
+        };
         /**
          * StartRegionProposalRunRequest
          * @description No page-kind fields: the handler reads that state itself from the page-kind
@@ -6062,6 +7169,34 @@ export interface components {
         StartRegionProposalRunResponse: {
             /** Job Id */
             job_id: string;
+        };
+        /**
+         * StyleLabel
+         * @description Visible typography labels in the canonical interchange contract.
+         * @enum {string}
+         */
+        StyleLabel: "italic" | "bold" | "small_caps" | "letter_spaced" | "superscript" | "subscript" | "underline" | "font_blackletter" | "font_antiqua" | "font_upright_in_italic" | "font_other_reviewed";
+        /**
+         * StyleSpan
+         * @description One independent style over a half-open grapheme range.
+         */
+        StyleSpan: {
+            label: components["schemas"]["StyleLabel"];
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            state: components["schemas"]["KnowledgeState"];
+            label_source: components["schemas"]["LabelSource"];
+            confidence_tier: components["schemas"]["ConfidenceTier"];
+            /** Source Slices */
+            source_slices: components["schemas"]["SourceSlice"][];
+            /** Rule Ref */
+            rule_ref: string | null;
+            /** Semantic Reason */
+            semantic_reason: string | null;
+            /** Warnings */
+            warnings: string[];
         };
         /**
          * ToggleValidatedRequest
@@ -6489,6 +7624,108 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** ViewerAck */
+        ViewerAck: {
+            /** Viewer Id */
+            viewer_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Page Index */
+            page_index: number;
+            /**
+             * Panel
+             * @default selection
+             * @enum {string}
+             */
+            panel: "closed" | "selection" | "source_alignment";
+            selection?: components["schemas"]["ViewerSelection"];
+            /** Command Seq */
+            command_seq: number;
+            /** Generation */
+            generation: number;
+            /**
+             * Status
+             * @default applied
+             * @enum {string}
+             */
+            status: "applied" | "failed";
+            error?: components["schemas"]["ViewerError"] | null;
+        };
+        /** ViewerCommand */
+        ViewerCommand: {
+            /** Viewer Id */
+            viewer_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Page Index */
+            page_index: number;
+            /**
+             * Panel
+             * @default selection
+             * @enum {string}
+             */
+            panel: "closed" | "selection" | "source_alignment";
+            selection?: components["schemas"]["ViewerSelection"];
+            /** Command Seq */
+            command_seq: number;
+        };
+        /** ViewerCommandRequest */
+        ViewerCommandRequest: {
+            /** Viewer Id */
+            viewer_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Page Index */
+            page_index: number;
+            /**
+             * Panel
+             * @default selection
+             * @enum {string}
+             */
+            panel: "closed" | "selection" | "source_alignment";
+            selection?: components["schemas"]["ViewerSelection"];
+        };
+        /** ViewerError */
+        ViewerError: {
+            /** Error */
+            error: string;
+            /** Message */
+            message: string;
+            details?: components["schemas"]["JsonValue"];
+        };
+        /** ViewerRegistration */
+        ViewerRegistration: {
+            /** Viewer Id */
+            viewer_id?: string | null;
+        };
+        /** ViewerSelection */
+        ViewerSelection: {
+            /** Word Ids */
+            word_ids?: string[];
+            /** Region Id */
+            region_id?: string | null;
+            /** Proposal Id */
+            proposal_id?: string | null;
+            /** Alignment Group Id */
+            alignment_group_id?: string | null;
+            /** Alignment Id */
+            alignment_id?: string | null;
+        };
+        /** ViewerState */
+        ViewerState: {
+            /** Viewer Id */
+            viewer_id: string;
+            /** Connected */
+            connected: boolean;
+            desired?: components["schemas"]["ViewerCommand"] | null;
+            acknowledged?: components["schemas"]["ViewerAck"] | null;
+            /**
+             * Pending
+             * @default false
+             */
+            pending: boolean;
+            last_observation?: components["schemas"]["ViewerAck"] | null;
         };
         /**
          * WordGeometry
@@ -10260,6 +11497,395 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LabelVocabularyResponse"];
+                };
+            };
+        };
+    };
+    state_api_automation_state_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationState"];
+                };
+            };
+        };
+    };
+    register_api_automation_viewers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ViewerRegistration"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewerState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_api_automation_view_get: {
+        parameters: {
+            query: {
+                viewer_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewerState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    command_api_automation_view_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ViewerCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewerState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_api_automation_view_ack_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ViewerAck"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewerState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    events_api_automation_events_get: {
+        parameters: {
+            query?: {
+                after?: number | null;
+                viewer_id?: string | null;
+            };
+            header?: {
+                "last-event-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    projects_api_pgdp_projects_get: {
+        parameters: {
+            query?: {
+                query?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectCatalog"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pages_api_pgdp_projects__project_id__pages_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageCatalog"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    prepare_api_pgdp_prepare_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrepareRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrepareResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_alignment_api_projects__project_id__pages__page_index__source_alignment_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceAlignmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_alignment_api_projects__project_id__pages__page_index__source_alignment_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartAlignmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartAlignmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_alignment_api_projects__project_id__pages__page_index__source_alignment_groups__group_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewAlignmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceAlignmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

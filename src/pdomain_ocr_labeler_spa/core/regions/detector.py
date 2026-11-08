@@ -24,6 +24,8 @@ from .models import FACET_LINE_STRUCTURE, FACET_PAGE_IMAGE, FACET_WORD_BOXES
 if TYPE_CHECKING:
     from pdomain_book_contracts.layout.text_hints import LayoutTextHint
 
+    from ..source_alignment import SourceAlignmentResult
+
 
 @dataclass(frozen=True)
 class DetectedRegion:
@@ -58,6 +60,8 @@ class DetectorInput:
     layout_hints: tuple[LayoutTextHint, ...] = ()
     layout_word_ids: tuple[str, ...] = ()
     layout_warnings: tuple[str, ...] = ()
+    source_alignment: SourceAlignmentResult | None = None
+    composed_source: bool = False
 
 
 RegionDetector = Callable[[DetectorInput], Sequence[DetectedRegion]]

@@ -292,6 +292,11 @@ def _detect_paragraph(
     ragged = right_mad_frac is not None and right_mad_frac > RAGGED_RIGHT_EDGE_MAD_THRESHOLD_FRAC
 
     line_texts = [_line_text(line) for line in lines]
+    characters = [char for text in line_texts for char in text if char.isalnum()]
+    if characters and sum(char.isdigit() for char in characters) / len(characters) >= 0.25:
+        # Numeric rows can be ragged and start with capitals in row headings.
+        # Neither property establishes verse in a statistical table.
+        return None
     cap_frac, n_checked = _capital_start_fraction(line_texts)
     checkable_share = n_checked / len(lines)
     text_is_reliable = cap_frac is not None and checkable_share >= MIN_CHECKABLE_LINE_SHARE

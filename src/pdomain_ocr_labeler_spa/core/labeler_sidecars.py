@@ -14,6 +14,8 @@ from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from .source_alignment import SourceAlignmentResult
+
 # Reserved top-level key inside the content blob JSON. book-tools
 # ``Page.from_dict`` ignores unknown keys, so OCR structure is unaffected.
 LABELER_SIDECARS_KEY = "labeler_sidecars"
@@ -34,9 +36,15 @@ class LabelerSidecars:
     char_bboxes_map: dict[str, Any] = field(default_factory=dict)
     glyph_annotations_map: dict[str, Any] = field(default_factory=dict)
     logical_page_id: str | None = None
+    source_alignment: SourceAlignmentResult | None = None
 
     def is_empty(self) -> bool:
-        return not self.char_bboxes_map and not self.glyph_annotations_map and self.logical_page_id is None
+        return (
+            not self.char_bboxes_map
+            and not self.glyph_annotations_map
+            and self.logical_page_id is None
+            and self.source_alignment is None
+        )
 
     def to_blob_section(self) -> dict[str, Any] | None:
         """Return the JSON object for ``labeler_sidecars``, or None if empty."""
@@ -49,6 +57,8 @@ class LabelerSidecars:
             out["glyph_annotations_map"] = dict(self.glyph_annotations_map)
         if self.logical_page_id is not None:
             out["logical_page_id"] = self.logical_page_id
+        if self.source_alignment is not None:
+            out["source_alignment"] = self.source_alignment.model_dump(mode="json")
         return out
 
     @classmethod
@@ -57,10 +67,12 @@ class LabelerSidecars:
         bboxes = getattr(pstate, "char_bboxes_map", None) or {}
         glyphs = getattr(pstate, "glyph_annotations_map", None) or {}
         logical_page_id = getattr(pstate, "logical_page_id", None)
+        alignment: object = getattr(pstate, "source_alignment", None)
         return cls(
             char_bboxes_map=dict(bboxes) if isinstance(bboxes, Mapping) else {},
             glyph_annotations_map=dict(glyphs) if isinstance(glyphs, Mapping) else {},
             logical_page_id=str(logical_page_id) if logical_page_id is not None else None,
+            source_alignment=alignment if isinstance(alignment, SourceAlignmentResult) else None,
         )
 
     @classmethod
@@ -74,10 +86,14 @@ class LabelerSidecars:
         bboxes = raw.get("char_bboxes_map")
         glyphs = raw.get("glyph_annotations_map")
         logical_page_id = raw.get("logical_page_id")
+        alignment = raw.get("source_alignment")
         return cls(
             char_bboxes_map=dict(bboxes) if isinstance(bboxes, Mapping) else {},
             glyph_annotations_map=dict(glyphs) if isinstance(glyphs, Mapping) else {},
             logical_page_id=logical_page_id if isinstance(logical_page_id, str) else None,
+            source_alignment=SourceAlignmentResult.model_validate(alignment)
+            if alignment is not None
+            else None,
         )
 
 
@@ -104,6 +120,7 @@ def stamp_sidecars_on_page(page: Any, sidecars: LabelerSidecars) -> None:
         object.__setattr__(page, PAGE_SIDECARS_ATTR, sidecars)
     except Exception:  # pragma: no cover - defensive for frozen/slotted objects
         setattr(page, PAGE_SIDECARS_ATTR, sidecars)
+    object.__setattr__(page, "_labeler_source_alignment", sidecars.source_alignment)
 
 
 def sidecars_from_page(page: Any) -> LabelerSidecars | None:
@@ -120,9 +137,11 @@ def apply_sidecars_to_page_state(pstate: Any, sidecars: LabelerSidecars | None) 
     if sidecars is None:
         pstate.char_bboxes_map = {}
         pstate.glyph_annotations_map = {}
+        pstate.source_alignment = None
         return
     pstate.char_bboxes_map = dict(sidecars.char_bboxes_map)
     pstate.glyph_annotations_map = dict(sidecars.glyph_annotations_map)
+    pstate.source_alignment = sidecars.source_alignment
     if sidecars.logical_page_id is not None:
         from uuid import UUID
 

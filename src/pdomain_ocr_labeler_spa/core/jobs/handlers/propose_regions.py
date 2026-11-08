@@ -108,7 +108,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -117,6 +117,7 @@ from pdomain_book_tools.ocr.page import Page
 from pdomain_pgdp_measure.profiling import profile_page
 
 from ....settings import Settings
+from ...automation.service import AutomationService
 from ...labeler_sidecars import LegacyTypographyPayloadError
 from ...notifications import NotificationKind, NotificationQueue
 from ...page_kind.proposal_log import PageKindProposalLog
@@ -147,6 +148,7 @@ if TYPE_CHECKING:
 
     from pdomain_book_contracts.annotation import RegionRole
 
+    from ...automation.events import AutomationBroker
     from ...models import Project
     from ...ocr.predictor import PredictorCache
     from ...ocr_config_state import OCRConfigCarrier
@@ -216,20 +218,17 @@ def _get_page_loader(
     predictor_cache: PredictorCache | None = ctx.get("predictor_cache")
     ocr_carrier: OCRConfigCarrier | None = ctx.get("ocr_config_carrier")
     settings = ctx.get("settings")
-    if predictor_cache is None or ocr_carrier is None or not isinstance(settings, Settings):
+    if not isinstance(settings, Settings):
+        return None
+    if settings.ocr_engine != "tesseract" and (predictor_cache is None or ocr_carrier is None):
         return None
 
-    from ....adapters.ocr.local_doctr import LocalDoctrPageLoader
+    from ....adapters.ocr.page_loader_factory import build_page_loader
 
-    detection_key, recognition_key, hf_revision = ocr_carrier.snapshot()
-    return LocalDoctrPageLoader(
+    return build_page_loader(
         project=project_state.loaded_project,
-        predictor_cache=predictor_cache,
-        detection_key=detection_key,
-        recognition_key=recognition_key,
-        hf_revision=hf_revision,
-        data_root=settings.data_root,
-        cache_root=settings.cache_root,
+        settings=settings,
+        context=ctx,
         store=page_store,
     )
 
@@ -627,6 +626,8 @@ def _carry_page(
     proposal_by_id: Mapping[str, RegionProposal],
     rejected_origins: Sequence[RegionProposal] = (),
     decided_at: str,
+    broker: AutomationBroker | None = None,
+    expected_project: Project | None = None,
 ) -> tuple[int, int]:
     """Match and append one page's carried decisions under that page's lock.
 
@@ -638,9 +639,17 @@ def _carry_page(
     decision is append-only and permanent, which a transient digest read is not.
     Blocking: call it through ``asyncio.to_thread``.
     """
-    pstate = project_state.page_states[page_index]
     appended = 0
-    with project_state.get_page_lock(page_index):
+    with (
+        broker.lock if broker is not None else nullcontext(),
+        project_state.mutation_lock,
+        project_state.get_page_lock(page_index),
+    ):
+        if expected_project is not None and project_state.loaded_project is not expected_project:
+            return 0, 0
+        pstate = project_state.get_page_state(page_index)
+        if pstate is None:
+            return 0, 0
         page = _resolve_live_page(pstate)
         if page is None:
             return 0, 0
@@ -664,6 +673,14 @@ def _carry_page(
                 )
                 continue
             appended += 1
+        if appended and broker is not None:
+            project = project_state.loaded_project
+            _ = broker.publish(
+                "page_changed",
+                project_id=project.project_id if project is not None else None,
+                page_index=page_index,
+                generation=pstate.generation,
+            )
     return appended, skipped
 
 
@@ -705,6 +722,8 @@ def _book_fit_inputs(
 
 async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     project_state, page_store = _get_required_context(runner)
+    automation: object = runner.context.get("automation")
+    broker = automation.broker if isinstance(automation, AutomationService) else None
     project = project_state.loaded_project
     if project is None:
         await runner.update_progress(job.job_id, current=0, total=0, message="No project loaded")
@@ -987,7 +1006,12 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
     )
 
     proposal_log = RegionProposalLog(project.project_root)
-    proposal_log.append_run(run)
+    with broker.lock if broker is not None else nullcontext(), project_state.mutation_lock:
+        if project_state.loaded_project is not project or runner.is_cancelled(job.job_id):
+            return
+        proposal_log.append_run(run)
+        if broker is not None:
+            _ = broker.publish("project_changed", project_id=project.project_id)
 
     if skipped_indices:
         log.info(
@@ -1058,6 +1082,7 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
             cancelled_after = i - 1
             break
         pstate = project_state.page_states[idx]
+        detection_generation = pstate.generation
         page = _resolve_live_page(pstate)
         if page is not None:
             # A detector reads the page image on a book-labeling project only
@@ -1117,6 +1142,8 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
                             layout_hints=layout.hints,
                             layout_word_ids=layout.word_ids,
                             layout_warnings=layout.warnings,
+                            source_alignment=layout.source_alignment,
+                            composed_source=layout.composed_source,
                         )
                         try:
                             # CPU-bound in the general case — slice 4's
@@ -1150,7 +1177,23 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
                     )
                     for d in detected
                 ]
-                proposal_log.append_proposals(proposals)
+                with (
+                    broker.lock if broker is not None else nullcontext(),
+                    project_state.mutation_lock,
+                    project_state.get_page_lock(idx),
+                ):
+                    if project_state.loaded_project is not project:
+                        return
+                    if pstate.generation != detection_generation:
+                        continue
+                    proposal_log.append_proposals(proposals)
+                    if broker is not None:
+                        _ = broker.publish(
+                            "page_changed",
+                            project_id=project.project_id,
+                            page_index=idx,
+                            generation=pstate.generation,
+                        )
                 proposal_count += len(proposals)
                 detected_page_indices.add(idx)
                 new_proposals_by_page[idx] = proposals
@@ -1252,6 +1295,8 @@ async def handle_propose_regions(runner: JobRunner, job: Job) -> None:
                 proposal_by_id=proposal_by_id,
                 rejected_origins=rejected_by_page.get(idx, ()),
                 decided_at=decided_at,
+                broker=broker,
+                expected_project=project,
             )
             carried_count += appended
             carry_skipped_region_count += skipped

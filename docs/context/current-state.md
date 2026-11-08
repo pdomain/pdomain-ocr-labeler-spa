@@ -17,6 +17,27 @@ last_verified: 2026-11-07
 - **Read when:** orienting on shipped behavior, open work, or repository risk.
 - **Search terms:** current state, shipped, open work, risks, roadmap.
 
+## Local P3 and F2 review
+
+The local feature branch adds bounded corpus preparation, native Tesseract
+OCR, and composed F2-to-P3-to-OCR alignment. Group review preserves human
+text edits and the OCR word topology. Split and joined words use explicit
+group bindings; ambiguous, unmapped, and exhausted results remain visible.
+Mapped source lines, stanzas, and indentation can survive unambiguous wording
+changes. Inline style transfer still requires supported exact grapheme mappings.
+
+The JSON control client uses the domain APIs. Revisioned application events
+refresh idle viewers, while explicit commands target one browser tab.
+Acknowledgement checks the actual project, page, panel, selected IDs, and
+current ready generation. Content changes do not navigate another viewer.
+Tesseract is an explicit CPU provider; the default remains DocTR.
+
+These matching APIs are unreleased. This branch requires the reviewed local
+contracts wheel `0.2.2.dev1+g1bd8261b5` for integration. The committed lockfile
+still selects published `0.2.1`; use an isolated environment and explicit
+no-sync when retaining the local wheel. This work does not authorize a
+release, merge, or push.
+
 ## Shipped system
 
 F2 and Gutenberg evidence now feeds the existing region proposal job. The
@@ -32,9 +53,10 @@ its text and typography review requirements.
 
 Detailed line and stanza writes require the word IDs stored in prepared
 bundles. Loose mirrors support ordinary region acceptance and column review.
-Region review requires `pdomain-book-contracts>=0.2.1`. The lockfile selects
-published v0.2.1 from the pdomain package index. Normal setup uses this
-release; local wheel overrides are no longer needed.
+The published region-review baseline requires `pdomain-book-contracts>=0.2.1`.
+The lockfile selects published v0.2.1 from the pdomain package index, and that
+baseline needs no local wheel override. The unreleased matching branch above
+requires its isolated dev1 wheel and explicit no-sync environment instead.
 
 Fine-grained typography phase one is shipped on this branch. The SPA uses
 `TypographySection`, server-authoritative grapheme/taxonomy metadata, and an

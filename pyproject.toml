@@ -54,6 +54,7 @@ modal = [
 [project.scripts]
 # Console script for the SPA server. See specs/15-deployment-dev.md §2.
 pdomain-ocr-labeler-ui = "pdomain_ocr_labeler_spa.__main__:main"
+pdomain-ocr-labeler-control = "pdomain_ocr_labeler_spa.control_cli:main"
 pdomain-ocr-labeler-spa-export = "pdomain_ocr_labeler_spa.core.jobs.handlers.export_cli:main"
 
 [project.urls]

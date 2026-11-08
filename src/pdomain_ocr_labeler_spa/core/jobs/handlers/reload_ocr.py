@@ -75,18 +75,21 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import nullcontext
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pdomain_book_contracts.annotation import PageKind
 
 from ....settings import Settings
 from ...notifications import NotificationKind, NotificationQueue
-from ...ocr.predictor import PredictorCache
 from ...page_state import PageLoader, PageLoadOutcome, save_page_content_to_store
 from ...project_state import PageState, ProjectState
+from ..publication import job_change_broker
 
 if TYPE_CHECKING:
+    from ...automation.events import AutomationBroker
+    from ...persistence.page_store import LabelerPageStore
     from ..runner import Job, JobRunner
 
 log = logging.getLogger(__name__)
@@ -121,6 +124,7 @@ def _get_page_loader(
     *,
     job_id: str | None = None,
     page_index: int | None = None,
+    engine: Literal["local_doctr", "tesseract"] | None = None,
 ) -> PageLoader:
     """Return the active ``PageLoader``, building one on-demand if needed.
 
@@ -136,22 +140,27 @@ def _get_page_loader(
     explicitly so callers don't have to pull them a second time off
     ``runner.context`` after ``_get_required_context`` already did so.
     """
+    with project_state.mutation_lock:
+        project = project_state.loaded_project
+        if project is None:
+            raise RuntimeError("reload_ocr: no project loaded")
+        if job_id is not None:
+            queued = runner.get_job(job_id)
+            if queued is None:
+                raise RuntimeError("reload_ocr: queued job no longer exists")
+            expected_project_id = queued.project_id or queued.payload.get("project_id")
+            if expected_project_id != project.project_id:
+                raise RuntimeError("reload_ocr: project changed since job was queued")
+
     # Fast path: explicit injection (tests + future route-layer wiring).
     loader = runner.context.get("page_loader")
     if loader is not None:
         return loader  # type: ignore[return-value]
 
     # Production path: build LocalDoctrPageLoader on-demand.
-    if project_state.loaded_project is None:
-        raise RuntimeError("reload_ocr: no project loaded")
-
-    from ....adapters.ocr.local_doctr import LocalDoctrPageLoader
+    from ....adapters.ocr.page_loader_factory import build_page_loader
 
     ctx: dict[str, Any] = runner.context
-    predictor_cache: PredictorCache = ctx["predictor_cache"]
-    ocr_carrier = ctx["ocr_config_carrier"]
-    detection_key, recognition_key, hf_revision = ocr_carrier.snapshot()
-
     page_lease = runner.get_labeling_page_lease(job_id) if job_id is not None else None
     image_descriptor = None if page_lease is None else page_lease.image_descriptor
 
@@ -160,14 +169,12 @@ def _get_page_loader(
             raise ValueError("reload_ocr job has no verified source image for this page")
         return Path(f"/proc/self/fd/{image_descriptor}")
 
-    return LocalDoctrPageLoader(
-        project=project_state.loaded_project,
-        predictor_cache=predictor_cache,
-        detection_key=detection_key,
-        recognition_key=recognition_key,
-        hf_revision=hf_revision,
-        data_root=settings.data_root,
-        cache_root=settings.cache_root,
+    return build_page_loader(
+        project=project,
+        settings=settings,
+        context=ctx,
+        engine=engine,
+        cancelled=(lambda: runner.is_cancelled(job_id)) if job_id is not None else None,
         store=ctx.get("page_store"),  # LabelerPageStore | None
         image_path_resolver=resolve_job_image if page_lease is not None else None,
     )
@@ -274,6 +281,42 @@ def _finalize_reocr_outcome(
     outcome: PageLoadOutcome,
     *,
     page_kind_sent: PageKind | None,
+    page_store: LabelerPageStore | None,
+    expected_project_id: str,
+    change_broker: AutomationBroker | None = None,
+    hydrate_sidecars: bool = False,
+) -> None:
+    with change_broker.lock if change_broker is not None else nullcontext():
+        before = project_state.get_page_state(page_index)
+        generation = before.generation if before is not None else None
+        _finalize_reocr_outcome_locked(
+            project_state,
+            page_index,
+            outcome,
+            page_kind_sent=page_kind_sent,
+            page_store=page_store,
+            expected_project_id=expected_project_id,
+        )
+        after = project_state.get_page_state(page_index)
+        if hydrate_sidecars and after is not None and after.generation != generation:
+            from ...labeler_sidecars import apply_sidecars_from_payload
+
+            apply_sidecars_from_payload(after, outcome.payload)
+        if change_broker is not None and after is not None and after.generation != generation:
+            _ = change_broker.publish(
+                "page_changed",
+                project_id=expected_project_id,
+                page_index=page_index,
+                generation=after.generation,
+            )
+
+
+def _finalize_reocr_outcome_locked(
+    project_state: ProjectState,
+    page_index: int,
+    outcome: PageLoadOutcome,
+    *,
+    page_kind_sent: PageKind | None,
     page_store: Any | None,
     expected_project_id: str,
 ) -> None:
@@ -366,6 +409,9 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
     page_index: int = int(payload.get("page_index", 0))
     project_id: str = job.project_id or str(payload.get("project_id", ""))
     use_edited_image: bool = bool(payload.get("use_edited_image", False))
+    engine = payload.get("engine")
+    if engine not in (None, "local_doctr", "tesseract"):
+        raise ValueError(f"unsupported OCR engine: {engine!r}")
 
     project_state, notification_queue = _get_required_context(runner)
     settings = runner.context.get("settings")
@@ -392,6 +438,7 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
         settings,
         job_id=job.job_id,
         page_index=page_index,
+        engine=engine,
     )
 
     # Stage 2 — 0.1 / "Running OCR".
@@ -463,6 +510,7 @@ async def handle_reload_ocr(runner: JobRunner, job: Job) -> None:
         page_kind_sent=page_kind,
         page_store=runner.context.get("page_store"),
         expected_project_id=project_id,
+        change_broker=job_change_broker(runner),
     )
 
     # Stage 4 — 1.0 / "Done".

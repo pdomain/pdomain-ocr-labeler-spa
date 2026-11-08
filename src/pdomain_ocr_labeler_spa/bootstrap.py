@@ -45,6 +45,10 @@ from pdomain_ops.suite.routes import mount_routes as mount_suite_routes
 from pdomain_ops.suite.shared_paths import publish_shared_path
 from pdomain_ops.suite.types import InstalledApp
 
+from .adapters.source_data import SourceDataBridge
+from .api.automation import router as automation_router
+from .api.automation_publication import install_change_publication
+from .api.automation_runtime import ready_view_resolver, runtime_capabilities
 from .api.env_js import install_env_js
 from .api.export import install_export_router
 from .api.fs import install_fs_router
@@ -59,11 +63,13 @@ from .api.notifications import install_notifications_router
 from .api.ocr_config import _resolve_local_models_root, install_ocr_config_router
 from .api.page_kinds import install_page_kinds_router
 from .api.pages import install_pages_router
+from .api.pgdp import router as pgdp_router
 from .api.projects import install_projects_router
 from .api.refine import install_refine_router
 from .api.regions import install_regions_router
 from .api.review_queue import install_review_queue_router
 from .api.session_state import install_session_state_router
+from .api.source_alignment import router as source_alignment_router
 from .api.static_mounts import install_blob_route, install_spa_fallback
 from .api.typography import install_typography_router
 from .api.words import install_words_router
@@ -72,6 +78,7 @@ from .core.active_project import (
     InvalidProjectDirError,
 )
 from .core.app_state import build_app_state
+from .core.automation.service import AutomationService
 from .core.jobs import JobEventBroker, JobRunner
 from .core.logging_config import configure_logging
 from .core.notifications import NotificationQueue
@@ -626,6 +633,37 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     # sourced from pdomain_book_tools so the frontend can never drift.
     # Q-B2-STYLE-LABELS option (b). Issue resolved in this slice.
     install_label_vocabulary_router(app)
+
+    def current_page_store() -> LabelerPageStore | None:
+        store = getattr(app.state, "page_store", None)
+        return store if isinstance(store, LabelerPageStore) else None
+
+    source_data = SourceDataBridge(
+        python=settings.source_data_python,
+        corpus_root=settings.pgdp_corpus_root,
+        output_root=source_root_carrier.get,
+        timeout_s=settings.source_data_timeout_s,
+    )
+    automation = AutomationService(
+        project_state=app.state.project_state,
+        runner=runner,
+        ready_view=ready_view_resolver(
+            project_state=app.state.project_state,
+            settings=settings,
+            app_config=_app_config,
+            page_store=current_page_store,
+        ),
+        capabilities=lambda: runtime_capabilities(settings=settings, source_data=source_data),
+    )
+    app.state.source_data = source_data
+    app.state.automation = automation
+    runner.context["source_data"] = source_data
+    runner.context["automation"] = automation
+    runner.set_automation_broker(automation.broker)
+    app.include_router(automation_router)
+    app.include_router(pgdp_router)
+    app.include_router(source_alignment_router)
+    install_change_publication(app, broker=automation.broker, project_state=app.state.project_state)
 
     # pdomain-ops suite plumbing for shared settings panels. The compute panel
     # uses /api/suite/device on startup and when opened to report CPU/CUDA/NVIDIA

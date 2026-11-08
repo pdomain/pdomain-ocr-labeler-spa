@@ -7,9 +7,10 @@ import json
 from typing import TYPE_CHECKING
 
 from pdomain_book_tools.ocr.page import Page
-from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter
+from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from ....settings import Settings
+from ...page_content_snapshot import restore_page_content, snapshot_page_content
 
 if TYPE_CHECKING:
     from typing import ClassVar
@@ -26,7 +27,7 @@ class RegionExportPage(BaseModel):
 
     @classmethod
     def from_page(cls, page: Page, *, prefix: str) -> RegionExportPage:
-        return cls(prefix=prefix, page_json=json.dumps(page.to_dict()))
+        return cls(prefix=prefix, page_json=json.dumps(snapshot_page_content(page)))
 
 
 async def handle_region_export(runner: JobRunner, job: Job) -> None:
@@ -42,8 +43,7 @@ async def handle_region_export(runner: JobRunner, job: Job) -> None:
     for index, snapshot in enumerate(snapshots):
         if runner.is_cancelled(job.job_id):
             return
-        page_data = TypeAdapter(dict[str, JsonValue]).validate_json(snapshot.page_json)
-        page = Page.from_dict(page_data)
+        page = restore_page_content(snapshot.page_json)
         count += append_confirmed_regions(page, output, prefix=snapshot.prefix)
         await runner.update_progress(
             job.job_id,

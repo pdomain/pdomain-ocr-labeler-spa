@@ -51,6 +51,8 @@ from typing import TYPE_CHECKING, Any
 import cv2
 import numpy as np
 
+from ..publication import job_change_broker
+
 if TYPE_CHECKING:
     from ..runner import Job, JobRunner
 
@@ -81,6 +83,13 @@ def _build_ocr_fn(runner: JobRunner, project_state: Any, settings: Any) -> Calla
     clear error rather than silently skipping all pages.
     """
     from ....settings import Settings
+
+    if isinstance(settings, Settings) and settings.ocr_engine == "tesseract":
+        from ....adapters.ocr.tesseract import TesseractCapabilityError
+
+        raise TesseractCapabilityError(
+            "auto_rotate_all_unsupported_engine: Tesseract automatic rotation is unavailable"
+        )
 
     # If there's an injected ocr_fn use it (test path and future explicit wiring).
     ocr_fn = runner.context.get("auto_rotate_ocr_fn")
@@ -170,7 +179,7 @@ async def handle_auto_rotate_all(runner: JobRunner, job: Job) -> None:
     # Build ocr_fn once for the whole batch.
     ocr_fn = _build_ocr_fn(runner, project_state, settings)
     store = ctx.get("page_store")
-    loader = _get_page_loader(runner, project_state, settings)
+    loader = _get_page_loader(runner, project_state, settings, job_id=job.job_id)
     project_root = Path(project.project_root).resolve()
 
     rotated_pages: list[int] = []
@@ -289,6 +298,8 @@ async def handle_auto_rotate_all(runner: JobRunner, job: Job) -> None:
                 # read before the fresh Page from run_ocr replaces this one.
                 page_kind = _prior_confirmed_page_kind(project_state, page_idx)
                 outcome = await asyncio.to_thread(loader.run_ocr, page_idx, page_kind=page_kind)
+                if runner.is_cancelled(job.job_id):
+                    return
                 # Recheck the confirmed kind under this page's lock first — a
                 # confirm can have landed on the OLD page while OCR ran with
                 # no lock held; see ``_finalize_reocr_outcome``.
@@ -299,6 +310,7 @@ async def handle_auto_rotate_all(runner: JobRunner, job: Job) -> None:
                     page_kind_sent=page_kind,
                     page_store=store,
                     expected_project_id=project_id,
+                    change_broker=job_change_broker(runner),
                 )
 
                 if store is not None:

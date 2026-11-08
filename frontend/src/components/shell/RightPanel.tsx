@@ -71,6 +71,10 @@ export interface RightPanelProps {
   textTabsSlot?: React.ReactNode;
   /** Invoked when the collapse button is clicked. */
   onCollapse?: (() => void) | undefined;
+  /** The externally requested panel that has committed to this rendered surface. */
+  automationPanel?: "selection" | "source_alignment" | undefined;
+  /** Rendered instead of the normal detail router for a verified source alignment command. */
+  sourceAlignmentSlot?: React.ReactNode;
 }
 
 export function RightPanel({
@@ -80,6 +84,8 @@ export function RightPanel({
   wordSlot,
   textTabsSlot,
   onCollapse,
+  automationPanel,
+  sourceAlignmentSlot,
 }: RightPanelProps) {
   const state = useSelectionForPage(pageIndex);
   const { level } = state;
@@ -87,6 +93,7 @@ export function RightPanel({
   return (
     <div
       data-testid="right-panel"
+      data-automation-panel={automationPanel}
       className="flex flex-col h-full w-full bg-bg-surface border-l border-border-1"
     >
       {/* Header: Breadcrumb + collapse */}
@@ -128,87 +135,87 @@ export function RightPanel({
         data-level={level}
         className="flex-1 min-h-0 overflow-auto text-sm text-ink-2"
       >
-        {/* STB-5: multi-word takes priority */}
-        {state.selectedWords.length > 1 &&
-        page &&
-        projectId !== undefined &&
-        pageIndex !== undefined ? (
-          <MultiWordDetail
-            page={page}
-            projectId={projectId}
-            pageIndex={pageIndex}
-            selectedWords={state.selectedWords}
-          />
-        ) : /* ML-A: multi-line branch — after multi-word, before single-line */
-        level === "line" &&
-          state.selectedLines.length > 1 &&
+        {sourceAlignmentSlot ??
+          (state.selectedWords.length > 1 &&
           page &&
           projectId !== undefined &&
           pageIndex !== undefined ? (
-          <MultiLineDetail
-            page={page}
-            projectId={projectId}
-            pageIndex={pageIndex}
-            selectedLines={state.selectedLines}
-          />
-        ) : /* STB-5: word level — slot takes priority, else "no word selected" */
-        level === "word" ? (
-          wordSlot ? (
-            <div className="p-3">{wordSlot}</div>
+            <MultiWordDetail
+              page={page}
+              projectId={projectId}
+              pageIndex={pageIndex}
+              selectedWords={state.selectedWords}
+            />
+          ) : /* ML-A: multi-line branch — after multi-word, before single-line */
+          level === "line" &&
+            state.selectedLines.length > 1 &&
+            page &&
+            projectId !== undefined &&
+            pageIndex !== undefined ? (
+            <MultiLineDetail
+              page={page}
+              projectId={projectId}
+              pageIndex={pageIndex}
+              selectedLines={state.selectedLines}
+            />
+          ) : /* STB-5: word level — slot takes priority, else "no word selected" */
+          level === "word" ? (
+            wordSlot ? (
+              <div className="p-3">{wordSlot}</div>
+            ) : (
+              <div data-testid="right-panel-word-empty" className="p-3 text-ink-3 text-sm">
+                Select a word to inspect it here.
+              </div>
+            )
+          ) : /* STB-5: line level — render LineDetail when context available */
+          level === "line" ? (
+            page && projectId !== undefined && pageIndex !== undefined ? (
+              <LineDetail page={page} projectId={projectId} pageIndex={pageIndex} />
+            ) : (
+              <div data-testid="right-panel-line-empty" className="p-3 text-ink-3 text-sm">
+                No line selected.
+              </div>
+            )
+          ) : /* STB-5: block level */
+          level === "block" ? (
+            page && projectId !== undefined && pageIndex !== undefined ? (
+              <BlockDetail page={page} projectId={projectId} pageIndex={pageIndex} level="block" />
+            ) : (
+              <div data-testid="right-panel-block-empty" className="p-3 text-ink-3 text-sm">
+                No block selected.
+              </div>
+            )
+          ) : /* STB-5: para level */
+          level === "para" ? (
+            page && projectId !== undefined && pageIndex !== undefined ? (
+              <div className="flex flex-col">
+                {/* D1: paragraph-scope actions panel above the items overview. */}
+                <ParagraphDetail page={page} projectId={projectId} pageIndex={pageIndex} />
+                <BlockDetail page={page} projectId={projectId} pageIndex={pageIndex} level="para" />
+              </div>
+            ) : (
+              <div data-testid="right-panel-para-empty" className="p-3 text-ink-3 text-sm">
+                No paragraph selected.
+              </div>
+            )
+          ) : /* STB-5: region level */
+          level === "region" ? (
+            page && projectId !== undefined && pageIndex !== undefined ? (
+              <RegionDetail page={page} projectId={projectId} pageIndex={pageIndex} />
+            ) : (
+              <div data-testid="right-panel-region-empty" className="p-3 text-ink-3 text-sm">
+                No region selected.
+              </div>
+            )
+          ) : textTabsSlot ? (
+            /* D-051: level === "none" — render TextTabs slot when provided */
+            <div className="flex flex-col h-full min-h-0">{textTabsSlot}</div>
           ) : (
-            <div data-testid="right-panel-word-empty" className="p-3 text-ink-3 text-sm">
-              Select a word to inspect it here.
+            /* STB-5: level === "none" — only show the generic placeholder here */
+            <div className="p-3">
+              <Placeholder level={level} />
             </div>
-          )
-        ) : /* STB-5: line level — render LineDetail when context available */
-        level === "line" ? (
-          page && projectId !== undefined && pageIndex !== undefined ? (
-            <LineDetail page={page} projectId={projectId} pageIndex={pageIndex} />
-          ) : (
-            <div data-testid="right-panel-line-empty" className="p-3 text-ink-3 text-sm">
-              No line selected.
-            </div>
-          )
-        ) : /* STB-5: block level */
-        level === "block" ? (
-          page && projectId !== undefined && pageIndex !== undefined ? (
-            <BlockDetail page={page} projectId={projectId} pageIndex={pageIndex} level="block" />
-          ) : (
-            <div data-testid="right-panel-block-empty" className="p-3 text-ink-3 text-sm">
-              No block selected.
-            </div>
-          )
-        ) : /* STB-5: para level */
-        level === "para" ? (
-          page && projectId !== undefined && pageIndex !== undefined ? (
-            <div className="flex flex-col">
-              {/* D1: paragraph-scope actions panel above the items overview. */}
-              <ParagraphDetail page={page} projectId={projectId} pageIndex={pageIndex} />
-              <BlockDetail page={page} projectId={projectId} pageIndex={pageIndex} level="para" />
-            </div>
-          ) : (
-            <div data-testid="right-panel-para-empty" className="p-3 text-ink-3 text-sm">
-              No paragraph selected.
-            </div>
-          )
-        ) : /* STB-5: region level */
-        level === "region" ? (
-          page && projectId !== undefined && pageIndex !== undefined ? (
-            <RegionDetail page={page} projectId={projectId} pageIndex={pageIndex} />
-          ) : (
-            <div data-testid="right-panel-region-empty" className="p-3 text-ink-3 text-sm">
-              No region selected.
-            </div>
-          )
-        ) : textTabsSlot ? (
-          /* D-051: level === "none" — render TextTabs slot when provided */
-          <div className="flex flex-col h-full min-h-0">{textTabsSlot}</div>
-        ) : (
-          /* STB-5: level === "none" — only show the generic placeholder here */
-          <div className="p-3">
-            <Placeholder level={level} />
-          </div>
-        )}
+          ))}
       </div>
     </div>
   );

@@ -34,6 +34,8 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ..publication import job_change_broker
+
 if TYPE_CHECKING:
     from ..runner import Job, JobRunner
 
@@ -122,6 +124,15 @@ async def handle_rotate_page(runner: JobRunner, job: Job) -> None:
         raise RuntimeError("rotate_page: no project loaded")
     if project_state.has_book_labeling_session:
         raise RuntimeError("rotate_page: immutable book source rotation is unsupported")
+    loader = _get_page_loader(
+        runner,
+        project_state,
+        settings,
+        job_id=job.job_id,
+        page_index=page_index,
+    )
+    if runner.is_cancelled(job.job_id):
+        return
 
     log.info(
         "rotate_page: project=%s page=%d degrees=%d manual=%s",
@@ -159,7 +170,6 @@ async def handle_rotate_page(runner: JobRunner, job: Job) -> None:
     )
 
     # Step 2: Re-run OCR using the reload_ocr machinery (DRY — shared helper).
-    loader = _get_page_loader(runner, project_state, settings)
     # pdomain-ocr-synth's docs/specs/2026-09-17-page-kind-review-design.md
     # "Re-OCR and rotation keep the confirmed kind" — read before the fresh
     # Page from run_ocr replaces this one.
@@ -187,6 +197,8 @@ async def handle_rotate_page(runner: JobRunner, job: Job) -> None:
     # landed on the OLD page while OCR ran with no lock held; see
     # ``_finalize_reocr_outcome``.
     store = ctx.get("page_store")
+    if runner.is_cancelled(job.job_id):
+        return
     _finalize_reocr_outcome(
         project_state,
         page_index,
@@ -194,6 +206,7 @@ async def handle_rotate_page(runner: JobRunner, job: Job) -> None:
         page_kind_sent=page_kind,
         page_store=store,
         expected_project_id=project_id,
+        change_broker=job_change_broker(runner),
     )
 
     await runner.update_progress(

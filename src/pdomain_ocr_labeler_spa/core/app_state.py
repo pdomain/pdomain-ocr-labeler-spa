@@ -122,6 +122,14 @@ def _build_ocr_engine(settings: Settings) -> IOCREngine:
     engine = settings.ocr_engine
     if engine == "local_doctr":
         return LocalDoctrOCR()
+    if engine == "tesseract":
+        from ..adapters.ocr.tesseract import TesseractOCR
+
+        return TesseractOCR(
+            binary=settings.tesseract_binary,
+            language=settings.tesseract_language,
+            timeout_s=settings.ocr_timeout_s,
+        )
     if engine == "modal":
         return ModalOCR()
     if engine == "shared_container":
