@@ -725,3 +725,94 @@ def test_page_copy_rejects_alignment_from_another_ocr_snapshot(tmp_path: Path) -
     changed["labeler_sidecars"] = snapshot["labeler_sidecars"]
     with pytest.raises(ValueError, match="stale"):
         _ = restore_page_content(changed)
+
+
+@pytest.mark.parametrize("wide_bridge", [False, True])
+def test_composed_columns_abstain_from_splitting_continuous_paragraph(*, wide_bridge: bool) -> None:
+    from pdomain_book_contracts.layout.text_hints import LayoutStructure
+    from pydantic import JsonValue, TypeAdapter
+
+    from pdomain_ocr_labeler_spa.core.regions.text_layout import composed_layout_regions
+
+    items: list[dict[str, object]] = []
+    tokens: list[str] = []
+    for line in range(6):
+        if wide_bridge:
+            edges = ((34, 300), (400, 970)) if line % 2 == 0 else ((34, 200), (210, 650), (700, 970))
+        else:
+            edges = ((34, 484), (504, 570))
+        words: list[dict[str, object]] = []
+        for index, (left, right) in enumerate(edges):
+            text = f"paragraph{line}word{index}"
+            tokens.append(text)
+            words.append(
+                {
+                    "type": "Word",
+                    "text": text,
+                    "bounding_box": {
+                        "top_left": {"x": left, "y": 1050 + line * 30},
+                        "bottom_right": {"x": right, "y": 1070 + line * 30},
+                        "is_normalized": False,
+                    },
+                }
+            )
+        items.append({"type": "Block", "child_type": "WORDS", "block_category": "LINE", "items": words})
+    page = Page.from_dict({"width": 1000, "height": 1800, "page_index": 0, "items": items})
+    source = " ".join(tokens).encode()
+    result = align_source_page(_evidence(f2_text=source, p3_text=source), page=page, generation=0)
+    for region in composed_layout_regions(page=page, result=result):
+        evidence = TypeAdapter(dict[str, JsonValue]).validate_python(region.evidence)
+        structure = evidence.get("layout_structure")
+        assert structure is None or LayoutStructure.model_validate(structure).kind != "column_flow"
+
+
+def test_consumed_quote_fragments_cannot_create_independent_column_support() -> None:
+    from pdomain_book_contracts.layout.text_hints import LayoutStructure, LayoutTextHint, LayoutTextLine
+    from pdomain_book_contracts.typography.spans import split_graphemes
+    from pydantic import JsonValue, TypeAdapter
+
+    from pdomain_ocr_labeler_spa.core.regions.text_layout import composed_layout_regions
+
+    items: list[dict[str, object]] = []
+    tokens: list[str] = []
+    hints: list[LayoutTextHint] = []
+    cursor = 0
+    for line in range(6):
+        words: list[dict[str, object]] = []
+        for side, (left, right) in enumerate(((24, 367), (405, 951))):
+            text = f"row{line}side{side}"
+            tokens.append(text)
+            end = cursor + len(split_graphemes(text))
+            if side == line % 2:
+                hints.append(
+                    LayoutTextHint(
+                        kind="blockquote",
+                        source="f2",
+                        source_ref="F2",
+                        text=text,
+                        lines=(LayoutTextLine(text=text),),
+                        grapheme_range=(cursor, end),
+                    )
+                )
+            cursor = end + 1
+            words.append(
+                {
+                    "type": "Word",
+                    "text": text,
+                    "bounding_box": {
+                        "top_left": {"x": left, "y": 1111 + line * 30},
+                        "bottom_right": {"x": right, "y": 1131 + line * 30},
+                        "is_normalized": False,
+                    },
+                }
+            )
+        items.append({"type": "Block", "child_type": "WORDS", "block_category": "LINE", "items": words})
+    page = Page.from_dict({"width": 1000, "height": 1800, "page_index": 0, "items": items})
+    source = " ".join(tokens).encode()
+    evidence = _evidence(f2_text=source, p3_text=source).model_copy(update={"hints": tuple(hints)})
+    result = align_source_page(evidence, page=page, generation=0)
+    regions = composed_layout_regions(page=page, result=result)
+    assert len(regions) == 6
+    for region in regions:
+        data = TypeAdapter(dict[str, JsonValue]).validate_python(region.evidence)
+        assert LayoutStructure.model_validate(data["layout_structure"]).kind == "blockquote"

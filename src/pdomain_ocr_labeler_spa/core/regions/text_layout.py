@@ -820,9 +820,11 @@ def composed_layout_regions(
     ):
         return regions
     column_words = _column_body_words(remaining, mapped, page.width)
-    columns = _mapped_columns(column_words, mapped, page.width)
+    columns = _mapped_columns(column_words, mapped, page.width, original_words=words)
     if not columns:
         columns = _columns(column_words, page.width)
+    if columns and not _supported_text_columns(columns, words):
+        columns = []
     if columns:
         resolved = columns
         regions.extend(TextLayoutDetector.column_regions(resolved, (), list(warnings), ()))
@@ -831,6 +833,7 @@ def composed_layout_regions(
                 region.evidence["column_gap_min_page_share"] = 0.02
                 region.evidence["column_gap_min_word_heights"] = 1
                 region.evidence["column_vertical_overlap_tolerance_word_heights"] = 1
+                region.evidence["column_min_complete_original_lines"] = 3
                 region.evidence["alignment_result_id"] = result.result_id
         assigned = {word.index for column in resolved for word in column}
         unlinked_lines: dict[int, list[_Word]] = {}
@@ -876,7 +879,9 @@ def _column_body_words(words: Sequence[_Word], mapped: set[int], page_width: int
     return [word for word in usable if word.index not in excluded]
 
 
-def _mapped_columns(words: Sequence[_Word], mapped: set[int], page_width: int) -> list[tuple[_Word, ...]]:
+def _mapped_columns(
+    words: Sequence[_Word], mapped: set[int], page_width: int, *, original_words: Sequence[_Word]
+) -> list[tuple[_Word, ...]]:
     """Use mapped gutter candidates and full scan extents, retaining spanning words."""
     usable = [word for word in words if word.valid_geometry]
     if not usable:
@@ -894,6 +899,8 @@ def _mapped_columns(words: Sequence[_Word], mapped: set[int], page_width: int) -
             continue
         if any(sum(item.index in mapped for item in column) < 3 for column in (left, right)):
             continue
+        if not _supported_text_columns((left, right), original_words):
+            continue
         lbox, rbox = _union(left), _union(right)
         overlap = min(lbox[3], rbox[3]) - max(lbox[1], rbox[1])
         if overlap + height < 0.5 * min(lbox[3] - lbox[1], rbox[3] - rbox[1]):
@@ -901,3 +908,24 @@ def _mapped_columns(words: Sequence[_Word], mapped: set[int], page_width: int) -
         if len(left) + len(right) > sum(len(column) for column in best):
             best = [left, right]
     return best
+
+
+def _supported_text_columns(columns: Sequence[Sequence[_Word]], original_words: Sequence[_Word]) -> bool:
+    """Require columns independently supported by complete original OCR rows."""
+    if len(columns) != 2 or any(not column for column in columns):
+        return False
+    bounds = [_union(column) for column in columns]
+    original_lines: dict[int, list[_Word]] = {}
+    for word in original_words:
+        if word.valid_geometry and word.line_index >= 0:
+            original_lines.setdefault(word.line_index, []).append(word)
+    line_bounds = {index: _union(line) for index, line in original_lines.items()}
+    for column, box in zip(columns, bounds, strict=True):
+        complete = sum(
+            box[0] <= line_bounds[index][0] and line_bounds[index][2] <= box[2]
+            for index in {word.line_index for word in column}
+            if index in line_bounds
+        )
+        if complete < 3:
+            return False
+    return True
