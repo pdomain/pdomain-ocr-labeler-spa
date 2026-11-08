@@ -94,6 +94,29 @@ def test_loads_and_navigates_a_lazy_319_page_pgdp_book(tmp_path: Path) -> None:
         assert client.get(f"/api/projects/{project['project_id']}/pages/1/image").status_code == 200
 
 
+def test_source_text_reads_verified_sources_before_ocr(tmp_path: Path) -> None:
+    """The source preview has a sealed page lease but never needs an OCR page record."""
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    book_root = projects_root / "book"
+    _write_book(book_root, page_count=2, valid_images=True)
+    app = build_app(_settings(tmp_path, projects_root))
+
+    with TestClient(app) as client:
+        loaded = client.post("/api/projects/load", json={"project_root": str(book_root)})
+        assert loaded.status_code == 200, loaded.text
+        project_id = loaded.json()["project"]["project_id"]
+        response = client.get(f"/api/projects/{project_id}/pages/1/source-text")
+
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["available"] is True
+        assert payload["f2"] == {"raw_text": "x", "visible_text": "x"}
+        assert payload["p3"] == {"raw_text": "x", "visible_text": "x"}
+        assert payload["consolidated"] is None
+        assert app.state.project_state.get_page_state(1) is None
+
+
 def test_simultaneous_book_leases_keep_page_descriptors_independent(tmp_path: Path) -> None:
     """One request's page lease cannot invalidate another request's descriptor."""
     projects_root = tmp_path / "projects"

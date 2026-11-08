@@ -26,7 +26,7 @@
 //     behavior in `pd-ocr-labeler/pd_ocr_labeler/views/projects/pages/page_view.py`).
 //   - Total label: `/ ${total_pages}` (testid: nav-page-total-label).
 
-import { useRef, useState, useImperativeHandle, forwardRef } from "react";
+import { useRef, useState, useImperativeHandle, forwardRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "@pdomain/pdomain-ui/icons";
 import { useProject } from "../hooks/useProject";
@@ -71,6 +71,12 @@ const ProjectNavigationControls = forwardRef<
   const totalPages = data?.image_paths?.length ?? 0;
 
   const [gotoValue, setGotoValue] = useState<string>("");
+
+  // Keep a typed target through the input blur caused by clicking Go. Reset it
+  // only once the route has changed, so the input again reflects the current page.
+  useEffect(() => {
+    setGotoValue("");
+  }, [pageNo]);
 
   const canPrev = totalPages > 0 && currentPageNo > 1;
   const canNext = totalPages > 0 && currentPageNo < totalPages;
@@ -141,9 +147,6 @@ const ProjectNavigationControls = forwardRef<
         value={gotoValue !== "" ? gotoValue : String(currentPageNo)}
         onChange={(e) => {
           setGotoValue(e.target.value);
-        }}
-        onBlur={() => {
-          setGotoValue("");
         }}
         onKeyDown={onInputKeyDown}
         className="w-10 h-6 px-1 text-center text-[11px] tabular-nums border border-border-2 rounded-sm bg-bg-sunk text-ink-1 focus:outline-hidden focus:border-accent"

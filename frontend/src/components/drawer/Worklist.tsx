@@ -20,7 +20,7 @@
 
 import type { WordListItem, WordRowProps } from "@pdomain/pdomain-ui/worklist";
 import { WordList } from "@pdomain/pdomain-ui/worklist";
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { components } from "../../api/types";
 import { cn } from "@/lib/utils";
 import { worklistStore, type MatchFilter, type WorklistSort } from "../../stores/worklist-store";
@@ -368,6 +368,17 @@ export function Worklist({ lineMatches = [], projectId, pageIndex }: WorklistPro
   );
 
   const { activeFilter, selectedLineIndex, sort, searchQuery } = state;
+  const pageIdentity = `${projectId}\0${String(pageIndex)}`;
+  const previousPageIdentity = useRef(pageIdentity);
+
+  // Line indices belong to one page. Leaving these selections in the shared
+  // store makes the same numeric indices select unrelated lines after navigation.
+  useEffect(() => {
+    if (previousPageIdentity.current === pageIdentity) return;
+    previousPageIdentity.current = pageIdentity;
+    worklistStore.setSelectedLineIndex(null);
+    worklistStore.clearBulk();
+  }, [pageIdentity]);
 
   // Apply filter, then search, then sort.
   const filtered = sortLines(

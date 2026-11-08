@@ -19,6 +19,7 @@ from ..core.source_alignment import (
     ocr_signature,
     persist_alignment,
 )
+from ..core.source_text import SourceTextPreview, source_text_preview_for_page
 from .dependencies import bind_page_labeling_lease, get_job_runner, get_page_store_optional, get_project_state
 
 router = APIRouter(prefix="/api/projects", tags=["source-alignment"])
@@ -58,6 +59,31 @@ def _resolve(state: ProjectState, project_id: str, page_index: int) -> tuple[Pag
     if pstate is None or pstate.page_record is None or not isinstance(pstate.page_record.payload, Page):
         return _error("page_not_loaded", "Load scan OCR before using source alignment", status=400)
     return pstate.page_record.payload, pstate.generation
+
+
+def _source_text_page_is_loaded(state: ProjectState, project_id: str, page_index: int) -> JSONResponse | None:
+    """Check source identity only; source text never requires OCR page state."""
+    project = state.loaded_project
+    if project is None or project.project_id != project_id or not 0 <= page_index < project.total_pages:
+        return _error("page_not_found", "Project/page is not loaded", status=404)
+    return None
+
+
+@router.get(
+    "/{project_id}/pages/{page_index}/source-text",
+    response_model=SourceTextPreview,
+    dependencies=[Depends(bind_page_labeling_lease)],
+)
+def get_source_text(project_id: str, page_index: int, state: State) -> SourceTextPreview | JSONResponse:
+    """Return verified F2/P3 source text without loading, mutating, or using OCR."""
+    with state.mutation_lock, state.get_page_lock(page_index):
+        error = _source_text_page_is_loaded(state, project_id, page_index)
+        if error is not None:
+            return error
+        try:
+            return source_text_preview_for_page(state, page_index)
+        except ValueError as exc:
+            return _error("source_text_invalid", str(exc), status=400)
 
 
 @router.get("/{project_id}/pages/{page_index}/source-alignment", response_model=SourceAlignmentResponse)

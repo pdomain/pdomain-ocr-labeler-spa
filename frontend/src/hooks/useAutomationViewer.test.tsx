@@ -6,6 +6,13 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AutomationApiError, type ViewerAck, type ViewerCommand } from "../api/automation";
+import {
+  acceptPagePayload,
+  isCurrentPageCacheEpoch,
+  pageCacheEpoch,
+  pageCacheScope,
+  resetPageCacheOrder,
+} from "../lib/page-cache-order";
 import { useAutomationViewer } from "./automation-viewer-context";
 import { AutomationViewerProvider } from "./useAutomationViewer";
 
@@ -157,6 +164,7 @@ function renderProbe(client: QueryClient) {
 }
 
 beforeEach(() => {
+  resetPageCacheOrder();
   sources = [];
   snapshotRevision = 5;
   pendingCommand = null;
@@ -207,10 +215,61 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  resetPageCacheOrder();
   vi.unstubAllGlobals();
 });
 
 describe("AutomationViewerProvider event reconciliation", () => {
+  it("starts a fresh page-cache epoch from an authoritative state snapshot", async () => {
+    const scope = pageCacheScope("Poems00986", 0, "all");
+    const epochBeforeRestart = pageCacheEpoch("Poems00986");
+    acceptPagePayload(scope, { generation: 7, imageUrl: "before-restart" });
+    snapshotRevision = 0;
+
+    renderProvider(new QueryClient());
+
+    await waitFor(() => expect(sources).toHaveLength(1));
+    expect(isCurrentPageCacheEpoch("Poems00986", epochBeforeRestart)).toBe(false);
+    expect(acceptPagePayload(scope, { generation: 0, imageUrl: "after-restart" }).imageUrl).toBe(
+      "after-restart",
+    );
+  });
+
+  it("starts a fresh epoch only for the project named by a project reload event", async () => {
+    const client = new QueryClient();
+    const cancel = vi.spyOn(client, "cancelQueries");
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const reloaded = pageCacheScope("Poems00986", 0, "all");
+    const unrelated = pageCacheScope("Poems02000", 0, "all");
+    renderProvider(client);
+
+    await waitFor(() => expect(sources).toHaveLength(1));
+    acceptPagePayload(reloaded, { generation: 7, imageUrl: "before-reload" });
+    acceptPagePayload(unrelated, { generation: 3, imageUrl: "other-project" });
+    const source = sources[0];
+    if (source === undefined) throw new Error("automation EventSource was not opened");
+    source.emit("project_changed", {
+      revision: 6,
+      kind: "project_changed",
+      project_id: "Poems00986",
+      page_index: null,
+      generation: null,
+      job_id: null,
+      viewer_id: null,
+      command_seq: null,
+    });
+
+    await waitFor(() => expect(cancel).toHaveBeenCalledWith({ queryKey: ["page", "Poems00986"] }));
+    expect(cancel).toHaveBeenCalledWith({ queryKey: ["source-text", "Poems00986"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["source-text", "Poems00986"] });
+    expect(acceptPagePayload(reloaded, { generation: 0, imageUrl: "after-reload" }).imageUrl).toBe(
+      "after-reload",
+    );
+    expect(acceptPagePayload(unrelated, { generation: 1, imageUrl: "late-other" }).imageUrl).toBe(
+      "other-project",
+    );
+  });
+
   it("ignores a delayed old-viewer refresh after a re-registration replacement", async () => {
     pendingCommand = sourceCommand;
     renderProbe(new QueryClient());
@@ -342,6 +401,9 @@ describe("AutomationViewerProvider event reconciliation", () => {
 
     await waitFor(() => expect(sources).toHaveLength(1));
     invalidate.mockClear();
+    const scope = pageCacheScope("Poems00986", 0, "all");
+    const epochBeforeOrdinaryChange = pageCacheEpoch("Poems00986");
+    acceptPagePayload(scope, { generation: 7, imageUrl: "before-ordinary-change" });
     const source = sources[0];
     expect(source).toBeDefined();
     if (source === undefined) throw new Error("automation EventSource was not opened");
@@ -371,7 +433,43 @@ describe("AutomationViewerProvider event reconciliation", () => {
     await waitFor(() => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ["page", "Poems00986", 0] });
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ["source-alignment", "Poems00986", 0] });
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["source-text", "Poems00986", 0] });
     });
+    expect(isCurrentPageCacheEpoch("Poems00986", epochBeforeOrdinaryChange)).toBe(true);
+    expect(acceptPagePayload(scope, { generation: 5, imageUrl: "older-page-event" }).imageUrl).toBe(
+      "before-ordinary-change",
+    );
+  });
+
+  it("starts a new epoch when a completed external page reload marks its event", async () => {
+    const client = new QueryClient();
+    const cancel = vi.spyOn(client, "cancelQueries");
+    renderProvider(client);
+
+    await waitFor(() => expect(sources).toHaveLength(1));
+    cancel.mockClear();
+    const scope = pageCacheScope("Poems00986", 0, "all");
+    const epochBeforeReload = pageCacheEpoch("Poems00986");
+    acceptPagePayload(scope, { generation: 7, imageUrl: "before-external-reload" });
+    const source = sources[0];
+    if (source === undefined) throw new Error("automation EventSource was not opened");
+    source.emit("page_changed", {
+      revision: 6,
+      kind: "page_changed",
+      project_id: "Poems00986",
+      page_index: 0,
+      generation: 0,
+      generation_reset: true,
+      job_id: null,
+      viewer_id: null,
+      command_seq: null,
+    });
+
+    await waitFor(() => expect(cancel).toHaveBeenCalledWith({ queryKey: ["page", "Poems00986"] }));
+    expect(isCurrentPageCacheEpoch("Poems00986", epochBeforeReload)).toBe(false);
+    expect(
+      acceptPagePayload(scope, { generation: 0, imageUrl: "after-external-reload" }).imageUrl,
+    ).toBe("after-external-reload");
   });
 
   it("reconciles all domain caches from a newer reset snapshot", async () => {
@@ -401,6 +499,7 @@ describe("AutomationViewerProvider event reconciliation", () => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ["project"] });
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ["page"] });
       expect(invalidate).toHaveBeenCalledWith({ queryKey: ["source-alignment"] });
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["source-text"] });
     });
   });
 });

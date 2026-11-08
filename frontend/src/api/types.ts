@@ -3182,6 +3182,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/pages/{page_index}/source-text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Source Text
+         * @description Return verified F2/P3 source text without loading, mutating, or using OCR.
+         */
+        get: operations["get_source_text_api_projects__project_id__pages__page_index__source_text_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/pages/{page_index}/source-alignment": {
         parameters: {
             query?: never;
@@ -3618,6 +3638,20 @@ export interface components {
              * @enum {string}
              */
             status: "confirmed" | "not_loaded" | "store_unavailable" | "persist_failed";
+        };
+        /**
+         * ConsolidatedSourceText
+         * @description P3 wording with only exact F2-to-P3 formatting projections.
+         */
+        ConsolidatedSourceText: {
+            /** Text */
+            text: string;
+            /** Runs */
+            runs: components["schemas"]["SourceTextRun"][];
+            /** Layout Hints */
+            layout_hints: components["schemas"]["SourceTextLayoutHint"][];
+            /** Unresolved */
+            unresolved: components["schemas"]["SourceTextUnresolved"][];
         };
         /**
          * CoordinateTransform
@@ -7051,6 +7085,86 @@ export interface components {
             byte_start: number;
             /** Byte End */
             byte_end: number;
+        };
+        /**
+         * SourceTextDocument
+         * @description One verified source page's raw and rendered text.
+         */
+        SourceTextDocument: {
+            /** Raw Text */
+            raw_text: string;
+            /** Visible Text */
+            visible_text: string;
+        };
+        /**
+         * SourceTextLayoutHint
+         * @description A source layout hint retained without inferring a reviewed structure.
+         */
+        SourceTextLayoutHint: {
+            /** Kind */
+            kind: string;
+            /** Source Ref */
+            source_ref: string;
+            /** Lines */
+            lines: components["schemas"]["SourceTextLayoutLine"][];
+        };
+        /**
+         * SourceTextLayoutLine
+         * @description One reliable P3 line carrying F2 verse metadata.
+         */
+        SourceTextLayoutLine: {
+            /** Text */
+            text: string;
+            /** Stanza Index */
+            stanza_index: number | null;
+            /** Indent Hint */
+            indent_hint: string | null;
+        };
+        /**
+         * SourceTextPreview
+         * @description Read-only source text response independent of OCR page state.
+         */
+        SourceTextPreview: {
+            /** Project Id */
+            project_id: string;
+            /** Page Index */
+            page_index: number;
+            /** Page Key */
+            page_key: string | null;
+            /** Available */
+            available: boolean;
+            f2: components["schemas"]["SourceTextDocument"] | null;
+            p3: components["schemas"]["SourceTextDocument"] | null;
+            consolidated: components["schemas"]["ConsolidatedSourceText"] | null;
+            /** Warnings */
+            warnings: string[];
+        };
+        /**
+         * SourceTextRun
+         * @description One contiguous P3 text segment with exact F2 styles only.
+         */
+        SourceTextRun: {
+            /** Text */
+            text: string;
+            /** Styles */
+            styles: string[];
+        };
+        /**
+         * SourceTextUnresolved
+         * @description A source span or layout hint intentionally left out of the preview.
+         */
+        SourceTextUnresolved: {
+            /**
+             * Source Kind
+             * @enum {string}
+             */
+            source_kind: "style_span" | "layout_hint";
+            /** Source Ref */
+            source_ref: string;
+            /** Source Text */
+            source_text: string;
+            /** Reason */
+            reason: string;
         };
         /**
          * SplitByWordsRequest
@@ -11772,6 +11886,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PrepareResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_source_text_api_projects__project_id__pages__page_index__source_text_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                page_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceTextPreview"];
                 };
             };
             /** @description Validation Error */

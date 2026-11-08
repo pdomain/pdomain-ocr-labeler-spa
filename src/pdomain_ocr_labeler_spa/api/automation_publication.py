@@ -47,10 +47,18 @@ class PublicationContextMiddleware:
 
 @final
 class PublishedCall[**P, R]:
-    def __init__(self, call: Callable[P, R], *, page_index_name: str | None, mutation: bool) -> None:
+    def __init__(
+        self,
+        call: Callable[P, R],
+        *,
+        page_index_name: str | None,
+        mutation: bool,
+        generation_reset: bool,
+    ) -> None:
         self.call = call
         self.page_index_name = page_index_name
         self.mutation = mutation
+        self.generation_reset = generation_reset
         self.__signature__: inspect.Signature = inspect.signature(call, eval_str=True)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
@@ -74,6 +82,7 @@ class PublishedCall[**P, R]:
                         project_id=project_id,
                         page_index=page_index,
                         generation=state.generation if state is not None else None,
+                        generation_reset=True if self.generation_reset else None,
                     )
                 else:
                     _ = broker.publish("project_changed", project_id=project_id)
@@ -96,6 +105,11 @@ def install_change_publication(
             call,
             page_index_name="page_index" if "{page_index}" in route.path else None,
             mutation=bool((route.methods or set()) - {"GET", "HEAD", "OPTIONS"}),
+            generation_reset=(
+                route.path == "/api/projects/{project_id}/pages/{page_index}/load"
+                and route.methods is not None
+                and "POST" in route.methods
+            ),
         )
         route.endpoint = wrapped
         route.dependant.call = wrapped

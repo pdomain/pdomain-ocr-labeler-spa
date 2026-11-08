@@ -45,6 +45,51 @@ describe("automation DTO runtime validation", () => {
     ).toThrow("automation event kind");
   });
 
+  it("accepts an absent generation-reset marker from an older server as false", () => {
+    const event = parseAutomationEvent({
+      revision: 4,
+      kind: "page_changed",
+      project_id: "book-1",
+      page_index: 0,
+      generation: 7,
+      job_id: null,
+      viewer_id: null,
+      command_seq: null,
+    });
+
+    expect(event.generation_reset).toBe(false);
+  });
+
+  it("accepts an explicit page-generation reset marker and rejects a malformed one", () => {
+    expect(
+      parseAutomationEvent({
+        revision: 4,
+        kind: "page_changed",
+        project_id: "book-1",
+        page_index: 0,
+        generation: 0,
+        generation_reset: true,
+        job_id: null,
+        viewer_id: null,
+        command_seq: null,
+      }).generation_reset,
+    ).toBe(true);
+
+    expect(() =>
+      parseAutomationEvent({
+        revision: 4,
+        kind: "page_changed",
+        project_id: "book-1",
+        page_index: 0,
+        generation: 0,
+        generation_reset: "true",
+        job_id: null,
+        viewer_id: null,
+        command_seq: null,
+      }),
+    ).toThrow("generation_reset must be a boolean");
+  });
+
   it("rejects a zero command sequence", () => {
     expect(() =>
       parseViewerState({

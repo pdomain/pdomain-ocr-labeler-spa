@@ -22,6 +22,7 @@ class AutomationEvent(BaseModel):
     project_id: str | None = None
     page_index: int | None = None
     generation: int | None = None
+    generation_reset: bool | None = None
     job_id: str | None = None
     viewer_id: str | None = None
     command_seq: int | None = None
@@ -100,6 +101,7 @@ class AutomationBroker:
         project_id: str | None = None,
         page_index: int | None = None,
         generation: int | None = None,
+        generation_reset: bool | None = None,
         job_id: str | None = None,
         viewer_id: str | None = None,
         command_seq: int | None = None,
@@ -112,6 +114,7 @@ class AutomationBroker:
                 project_id=project_id,
                 page_index=page_index,
                 generation=generation,
+                generation_reset=generation_reset,
                 job_id=job_id,
                 viewer_id=viewer_id,
                 command_seq=command_seq,

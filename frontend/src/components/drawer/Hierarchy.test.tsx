@@ -163,6 +163,26 @@ describe("Hierarchy (Slice 12 + P5.c)", () => {
     expect(screen.getByTestId("hierarchy-node-para-0")).toHaveAttribute("data-selected", "true");
   });
 
+  it("clears the selected node and expansion when a different page arrives", async () => {
+    const user = userEvent.setup();
+    const firstPage = makePage();
+    const nextPage = { ...makePage(), page_index: 1 };
+    const { rerender } = render(<Hierarchy page={firstPage} />);
+
+    const paragraph = screen.getByTestId("hierarchy-node-para-0");
+    await user.click(paragraph);
+    fireEvent.keyDown(paragraph, { key: "ArrowRight" });
+    expect(screen.getByTestId("hierarchy-node-line-0")).toBeInTheDocument();
+
+    rerender(<Hierarchy page={nextPage} />);
+
+    expect(screen.getByTestId("hierarchy-node-para-0")).not.toHaveAttribute(
+      "data-selected",
+      "true",
+    );
+    expect(screen.queryByTestId("hierarchy-node-line-0")).not.toBeInTheDocument();
+  });
+
   it("expanding a line reveals its word nodes", async () => {
     const user = userEvent.setup();
     render(<Hierarchy page={makePage()} />);

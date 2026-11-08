@@ -155,6 +155,30 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
     expect(worklistStore.getState().selectedLineIndex).toBe(0);
   });
 
+  it("clears page-local line and bulk selections when the page changes", () => {
+    const { rerender } = render(
+      <Worklist
+        lineMatches={makeLines([{ is_fully_validated: false }])}
+        projectId="proj-1"
+        pageIndex={0}
+      />,
+    );
+    act(() => {
+      worklistStore.setSelectedLineIndex(0);
+      worklistStore.selectAll([0]);
+      rerender(
+        <Worklist
+          lineMatches={makeLines([{ is_fully_validated: false }])}
+          projectId="proj-1"
+          pageIndex={1}
+        />,
+      );
+    });
+
+    expect(worklistStore.getState().selectedLineIndex).toBeNull();
+    expect(worklistStore.getState().selectedIds).toEqual([]);
+  });
+
   it("selected row has data-selected=true", async () => {
     const user = userEvent.setup();
     const lines = makeLines([{ line_index: 0, is_fully_validated: false }]);

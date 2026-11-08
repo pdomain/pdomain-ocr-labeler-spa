@@ -1,11 +1,13 @@
-// TextTabs.tsx — tab switcher for Matches / Ground Truth / OCR views.
+// TextTabs.tsx — tab switcher for Matches, Working GT, source and OCR views.
 //
 // Spec: docs/specs/2026-05-12-word-matches-design.md §Layout
 // Issue #200
 //
-// Three tabs:
+// Tabs:
 //   - "matches"       → <WordMatchView /> (placeholder until #201–#203)
 //   - "ground-truth"  → plain readOnly textarea showing page_text_gt
+//   - "p3" / "f2"    → prepared PGDP source text
+//   - "consolidated"  → P3 wording with only exact F2 formatting projections
 //   - "ocr"           → plain readOnly textarea showing page_text_ocr
 //
 // Filter segmented control above the content area (for the "matches" tab):
@@ -16,10 +18,11 @@
 //   text-tab-matches, text-tab-ground-truth, text-tab-ocr
 //   match-filter-unvalidated, match-filter-mismatched, match-filter-all
 
-import { useState } from "react";
+import { useId, useRef, useState, type KeyboardEvent } from "react";
 import type { LineFilter } from "../hooks/usePage";
+import type { SourceTextPreview } from "../api/source-text";
 
-export type TabId = "matches" | "ground-truth" | "ocr";
+export type TabId = "matches" | "ground-truth" | "p3" | "f2" | "consolidated" | "ocr";
 
 interface FilterOption {
   value: LineFilter;
@@ -33,6 +36,8 @@ const FILTER_OPTIONS: FilterOption[] = [
   { value: "all", label: "All Lines", testid: "match-filter-all" },
 ];
 
+const TAB_IDS = ["matches", "ground-truth", "p3", "f2", "consolidated", "ocr"] as const;
+
 interface TextTabsProps {
   /** Text content for the Ground Truth plain panel. */
   pageTextGt?: string | null | undefined;
@@ -44,11 +49,176 @@ interface TextTabsProps {
   onLineFilterChange?: ((filter: LineFilter) => void) | undefined;
   /** Slot for the word-match list (rendered inside the "matches" tab). */
   children?: React.ReactNode;
+  /** Read-only source preview for the current project page. */
+  sourcePreview?: SourceTextPreview | undefined;
+  /** The current source-preview request has not completed. */
+  sourcePreviewPending?: boolean | undefined;
+  /** The current source-preview request failed. */
+  sourcePreviewError?: boolean | undefined;
+}
+
+interface TabButtonProps {
+  readonly id: TabId;
+  readonly label: string;
+  readonly activeTab: TabId;
+  readonly tabDomId: string;
+  readonly panelDomId: string;
+  readonly tabIndex: number;
+  readonly onActivate: (tab: TabId) => void;
+  readonly onKeyDown: (event: KeyboardEvent<HTMLButtonElement>, tab: TabId) => void;
+  readonly buttonRef: (button: HTMLButtonElement | null) => void;
+}
+
+function TabButton({
+  id,
+  label,
+  activeTab,
+  tabDomId,
+  panelDomId,
+  tabIndex,
+  onActivate,
+  onKeyDown,
+  buttonRef,
+}: TabButtonProps) {
+  return (
+    <button
+      ref={buttonRef}
+      id={tabDomId}
+      role="tab"
+      aria-selected={activeTab === id}
+      aria-controls={panelDomId}
+      tabIndex={tabIndex}
+      data-testid={`text-tab-${id}`}
+      onClick={() => {
+        onActivate(id);
+      }}
+      onKeyDown={(event) => {
+        onKeyDown(event, id);
+      }}
+      className={[
+        "px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+        activeTab === id
+          ? "border-accent text-accent"
+          : "border-transparent text-ink-2 hover:text-ink-1",
+      ].join(" ")}
+    >
+      {label}
+    </button>
+  );
+}
+
+function SourceUnavailable({
+  preview,
+  pending,
+  error,
+  tab,
+}: {
+  readonly preview: SourceTextPreview | undefined;
+  readonly pending: boolean;
+  readonly error: boolean;
+  readonly tab: "p3" | "f2" | "consolidated";
+}) {
+  if (pending) return <p data-testid={`source-preview-loading-${tab}`}>Loading source preview…</p>;
+  if (error)
+    return <p data-testid={`source-preview-error-${tab}`}>Source preview could not be loaded.</p>;
+  const warningText = preview?.warnings.join(" ");
+  return (
+    <p data-testid={`source-preview-unavailable-${tab}`}>
+      {warningText === undefined || warningText === ""
+        ? "This page has no prepared F2 and P3 source preview."
+        : warningText}
+    </p>
+  );
+}
+
+function SourcePanel({
+  tab,
+  preview,
+  pending,
+  error,
+}: {
+  readonly tab: "p3" | "f2" | "consolidated";
+  readonly preview: SourceTextPreview | undefined;
+  readonly pending: boolean;
+  readonly error: boolean;
+}) {
+  if (pending || error) {
+    return <SourceUnavailable preview={preview} pending={pending} error={error} tab={tab} />;
+  }
+  const unavailable =
+    preview === undefined ||
+    !preview.available ||
+    preview.f2 === null ||
+    preview.p3 === null ||
+    (tab === "consolidated" && preview.consolidated === null);
+  const source = tab === "f2" ? preview?.f2 : preview?.p3;
+  if (unavailable) {
+    return <SourceUnavailable preview={preview} pending={pending} error={error} tab={tab} />;
+  }
+  if (tab === "consolidated" && preview.consolidated !== null) {
+    return (
+      <section
+        data-testid="text-panel-consolidated"
+        className="space-y-3 font-mono text-sm whitespace-pre-wrap"
+      >
+        <p className="font-sans text-xs text-ink-3">
+          P3 wording with F2 formatting where the source mapping is exact.
+        </p>
+        <p>
+          {preview.consolidated.runs.map((run, index) => (
+            <span
+              key={`${run.text}:${String(index)}`}
+              className={
+                [
+                  run.styles.includes("italic") ? "italic" : "",
+                  run.styles.includes("bold") ? "font-bold" : "",
+                ]
+                  .filter((style) => style !== "")
+                  .join(" ") || undefined
+              }
+            >
+              {run.text}
+            </span>
+          ))}
+        </p>
+        {preview.consolidated.layout_hints.map((hint) => (
+          <details key={`${hint.kind}:${hint.source_ref}`} data-testid="consolidated-layout-hint">
+            <summary className="font-sans text-xs text-ink-3">
+              Source layout evidence: {hint.kind}
+            </summary>
+            <pre className="whitespace-pre-wrap">
+              {hint.lines.map((line) => line.text).join("\n")}
+            </pre>
+          </details>
+        ))}
+        {preview.consolidated.unresolved.length > 0 && (
+          <section data-testid="consolidated-unresolved">
+            <p className="font-sans text-xs text-ink-3">Unresolved F2 formatting</p>
+            <ul className="font-sans text-xs">
+              {preview.consolidated.unresolved.map((item) => (
+                <li key={`${item.source_kind}:${item.source_ref}:${item.source_text}`}>
+                  {item.source_text}: {item.reason}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </section>
+    );
+  }
+  return (
+    <pre
+      data-testid={`text-panel-${tab}`}
+      className="flex-1 whitespace-pre-wrap font-mono text-sm p-2 border border-border-1 rounded-sm bg-bg-sunk"
+    >
+      {source?.raw_text}
+    </pre>
+  );
 }
 
 /**
- * Three-tab layout for the right pane:
- *   Matches | Ground Truth | OCR
+ * Source-aware layout for the right pane:
+ *   Matches | Working GT | P3 | F2 | Consolidated GT | OCR
  *
  * The Matches tab shows a filter segmented control above the `children` slot.
  * The GT and OCR tabs show plain readOnly textareas.
@@ -59,71 +229,82 @@ export function TextTabs({
   lineFilter = "unvalidated",
   onLineFilterChange,
   children,
+  sourcePreview,
+  sourcePreviewPending = false,
+  sourcePreviewError = false,
 }: TextTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("matches");
+  const instanceId = useId();
+  const tabButtons = useRef<(HTMLButtonElement | null)[]>([]);
+  const tabDomId = (tab: TabId) => `text-tabs-${instanceId}-tab-${tab}`;
+  const panelDomId = (tab: TabId) => `text-tabs-${instanceId}-panel-${tab}`;
+  const activateTab = (tab: TabId): void => {
+    setActiveTab(tab);
+  };
+  const moveFocus = (tab: TabId): void => {
+    const index = TAB_IDS.indexOf(tab);
+    tabButtons.current[index]?.focus();
+  };
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tab: TabId): void => {
+    const currentIndex = TAB_IDS.indexOf(tab);
+    const nextIndex =
+      event.key === "ArrowRight"
+        ? (currentIndex + 1) % TAB_IDS.length
+        : event.key === "ArrowLeft"
+          ? (currentIndex - 1 + TAB_IDS.length) % TAB_IDS.length
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? TAB_IDS.length - 1
+              : undefined;
+    if (nextIndex === undefined) return;
+    event.preventDefault();
+    const nextTab = TAB_IDS[nextIndex];
+    if (nextTab === undefined) return;
+    activateTab(nextTab);
+    moveFocus(nextTab);
+  };
 
   return (
     <div data-testid="text-tabs" className="flex flex-col h-full">
       {/* Tab trigger row */}
       <div className="flex border-b border-border-1 bg-bg-surface shrink-0" role="tablist">
-        <button
-          role="tab"
-          aria-selected={activeTab === "matches"}
-          aria-controls="panel-matches"
-          data-testid="text-tab-matches"
-          onClick={() => {
-            setActiveTab("matches");
-          }}
-          className={[
-            "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
-            activeTab === "matches"
-              ? "border-accent text-accent"
-              : "border-transparent text-ink-2 hover:text-ink-1",
-          ].join(" ")}
-        >
-          Matches
-        </button>
-        <button
-          role="tab"
-          aria-selected={activeTab === "ground-truth"}
-          aria-controls="panel-ground-truth"
-          data-testid="text-tab-ground-truth"
-          onClick={() => {
-            setActiveTab("ground-truth");
-          }}
-          className={[
-            "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
-            activeTab === "ground-truth"
-              ? "border-accent text-accent"
-              : "border-transparent text-ink-2 hover:text-ink-1",
-          ].join(" ")}
-        >
-          Ground Truth
-        </button>
-        <button
-          role="tab"
-          aria-selected={activeTab === "ocr"}
-          aria-controls="panel-ocr"
-          data-testid="text-tab-ocr"
-          onClick={() => {
-            setActiveTab("ocr");
-          }}
-          className={[
-            "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
-            activeTab === "ocr"
-              ? "border-accent text-accent"
-              : "border-transparent text-ink-2 hover:text-ink-1",
-          ].join(" ")}
-        >
-          OCR
-        </button>
+        {TAB_IDS.map((tab, index) => (
+          <TabButton
+            key={tab}
+            id={tab}
+            label={
+              tab === "matches"
+                ? "Matches"
+                : tab === "ground-truth"
+                  ? "Working GT"
+                  : tab === "p3"
+                    ? "P3"
+                    : tab === "f2"
+                      ? "F2"
+                      : tab === "consolidated"
+                        ? "Consolidated GT"
+                        : "OCR"
+            }
+            activeTab={activeTab}
+            tabDomId={tabDomId(tab)}
+            panelDomId={panelDomId(tab)}
+            tabIndex={activeTab === tab ? 0 : -1}
+            onActivate={activateTab}
+            onKeyDown={handleTabKeyDown}
+            buttonRef={(button) => {
+              tabButtons.current[index] = button;
+            }}
+          />
+        ))}
       </div>
 
       {/* Matches panel */}
       <div
-        id="panel-matches"
+        id={panelDomId("matches")}
         role="tabpanel"
         hidden={activeTab !== "matches"}
+        aria-labelledby={tabDomId("matches")}
         className="flex flex-col flex-1 overflow-hidden"
       >
         {/* Filter segmented control — only visible in the matches tab */}
@@ -164,13 +345,35 @@ export function TextTabs({
         {children}
       </div>
 
+      {(["p3", "f2", "consolidated"] as const).map((tab) => (
+        <div
+          key={tab}
+          id={panelDomId(tab)}
+          role="tabpanel"
+          hidden={activeTab !== tab}
+          aria-labelledby={tabDomId(tab)}
+          className="flex flex-col flex-1 overflow-auto p-3"
+        >
+          {activeTab === tab && (
+            <SourcePanel
+              tab={tab}
+              preview={sourcePreview}
+              pending={sourcePreviewPending}
+              error={sourcePreviewError}
+            />
+          )}
+        </div>
+      ))}
+
       {/* Ground Truth panel */}
       <div
-        id="panel-ground-truth"
+        id={panelDomId("ground-truth")}
         role="tabpanel"
         hidden={activeTab !== "ground-truth"}
+        aria-labelledby={tabDomId("ground-truth")}
         className="flex flex-col flex-1 overflow-hidden p-2"
       >
+        <p className="shrink-0 pb-2 text-xs text-ink-3">Edit individual words in Matches.</p>
         <textarea
           data-testid="text-panel-ground-truth"
           readOnly
@@ -182,9 +385,10 @@ export function TextTabs({
 
       {/* OCR panel */}
       <div
-        id="panel-ocr"
+        id={panelDomId("ocr")}
         role="tabpanel"
         hidden={activeTab !== "ocr"}
+        aria-labelledby={tabDomId("ocr")}
         className="flex flex-col flex-1 overflow-hidden p-2"
       >
         <textarea

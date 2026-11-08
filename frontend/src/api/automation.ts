@@ -47,6 +47,8 @@ export interface AutomationEvent {
   readonly project_id: string | null;
   readonly page_index: number | null;
   readonly generation: number | null;
+  /** True only after a completed explicit page reload reset this page's generation. */
+  readonly generation_reset: boolean;
   readonly job_id: string | null;
   readonly viewer_id: string | null;
   readonly command_seq: number | null;
@@ -127,6 +129,13 @@ function nullableIntegerOf(
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     throw new Error(`${label} must be a non-negative integer or null`);
   }
+  return value;
+}
+
+function optionalBooleanOf(record: Record<string, unknown>, key: string, label: string): boolean {
+  const value = record[key];
+  if (value === undefined) return false;
+  if (typeof value !== "boolean") throw new Error(`${label} must be a boolean`);
   return value;
 }
 
@@ -242,6 +251,11 @@ export function parseAutomationEvent(value: unknown): AutomationEvent {
     project_id: nullableStringOf(record, "project_id", "automation event project_id"),
     page_index: nullableIntegerOf(record, "page_index", "automation event page_index"),
     generation: nullableIntegerOf(record, "generation", "automation event generation"),
+    generation_reset: optionalBooleanOf(
+      record,
+      "generation_reset",
+      "automation event generation_reset",
+    ),
     job_id: nullableStringOf(record, "job_id", "automation event job_id"),
     viewer_id: nullableStringOf(record, "viewer_id", "automation event viewer_id"),
     command_seq: nullableIntegerOf(record, "command_seq", "automation event command_seq"),

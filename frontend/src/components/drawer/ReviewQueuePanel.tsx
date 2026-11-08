@@ -386,6 +386,9 @@ export function ReviewQueuePanel({ projectId, pageIndex }: ReviewQueuePanelProps
   // KindSummary.
   return (
     <div data-testid="review-queue-panel" className="flex flex-col h-full">
+      <p data-testid="review-queue-scope" className="px-3 py-1.5 text-[11px] text-ink-3">
+        Queue for all pages
+      </p>
       <KindSelector kinds={kinds} active={resolvedKind} onSelect={setReviewQueueKind} />
 
       {/* Honesty applies to the region kind too: a blocked region queue must

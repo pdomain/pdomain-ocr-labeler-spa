@@ -31,6 +31,13 @@ import {
   useErasePagePixels,
   ERASE_PAGE_PIXELS_TIMEOUT_MS,
 } from "./usePageMutations";
+import {
+  acceptPagePayload,
+  isCurrentPageCacheEpoch,
+  pageCacheEpoch,
+  pageCacheScope,
+  resetPageCacheOrder,
+} from "../lib/page-cache-order";
 
 function makeWrapper() {
   const qc = new QueryClient({
@@ -190,6 +197,46 @@ describe("useLoadPage", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect((result.current.data as Record<string, unknown>)["page_source"]).toBe("filesystem");
+  });
+
+  it("starts a fresh page-cache epoch after the completed reload response", async () => {
+    const qc = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const scope = pageCacheScope(PROJECT_ID, PAGE_IDX, "all");
+    const epochBeforeReload = pageCacheEpoch(PROJECT_ID);
+    acceptPagePayload(scope, { generation: 7, image_url: "before-reload" });
+    const cancel = vi.spyOn(qc, "cancelQueries");
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+    server.use(
+      http.post(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/load`, () =>
+        HttpResponse.json({
+          project_id: PROJECT_ID,
+          page_index: PAGE_IDX,
+          generation: 0,
+          line_matches: [],
+        }),
+      ),
+    );
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useLoadPage(PROJECT_ID, PAGE_IDX), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+
+    expect(cancel).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["page", PROJECT_ID, PAGE_IDX] });
+    expect(isCurrentPageCacheEpoch(PROJECT_ID, epochBeforeReload)).toBe(false);
+    expect(acceptPagePayload(scope, { generation: 0, image_url: "after-reload" }).image_url).toBe(
+      "after-reload",
+    );
   });
 });
 

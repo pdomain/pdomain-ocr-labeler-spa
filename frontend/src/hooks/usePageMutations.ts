@@ -13,6 +13,7 @@
 import { useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
 import { invalidateBookReviewQueue } from "./useBookReviewQueue";
 import { historyVersionsKey } from "./useHistoryVersions";
+import { resetProjectPageCacheBoundary } from "../lib/page-cache-boundary";
 import type { components } from "../api/types";
 
 export type ReloadOCRResponse = components["schemas"]["ReloadOCRResponse"];
@@ -178,8 +179,9 @@ export function useLoadPage(projectId: string, pageIndex: number) {
   const qc = useQueryClient();
   return useMutation<PagePayload>({
     mutationFn: () => apiPost<PagePayload>(`${pageBase(projectId, pageIndex)}/load`, {}),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
+    onSuccess: async () => {
+      await resetProjectPageCacheBoundary(qc, projectId);
+      await qc.invalidateQueries({ queryKey: ["page", projectId, pageIndex] });
     },
   });
 }

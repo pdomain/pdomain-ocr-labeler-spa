@@ -22,8 +22,9 @@
 //       <RightPane data-testid="text-pane">
 //         <TextTabs>
 //           <FilterToggle /> + <WordMatchView />   // matches sub-tab
-//           <PlaintextEditor source="gt" />        // ground-truth sub-tab
-//           <PlaintextEditor source="ocr" />       // ocr sub-tab
+//           <WorkingGtPreview />                    // ground-truth sub-tab
+//           <SourcePreviews />                      // P3 / F2 / consolidated sub-tabs
+//           <OcrPreview />                          // ocr sub-tab
 //         </TextTabs>
 //       </RightPane>
 //     </Splitter>
@@ -127,7 +128,7 @@ import PageImageCanvas from "../components/PageImageCanvas";
 import { OcrFailedBanner, ImageDriftBanner, EmptyOcrBanner } from "../components/InlineBanners";
 import { TextTabs } from "../components/TextTabs";
 import { WordMatchView } from "../components/WordMatchView";
-import { PlaintextEditor } from "../components/PlaintextEditor";
+import { useSourceTextPreview } from "../components/SourceTextPreview";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { RightPanel } from "../components/shell/RightPanel";
 import { WordDetail } from "../components/right-panel/WordDetail";
@@ -342,6 +343,7 @@ export default function ProjectPage() {
   // ── Top-level data hooks — always called before any early return ────────
   const projectQ = useProject(projectId);
   const pageQ = usePage(projectId, idx0);
+  const sourcePreviewQ = useSourceTextPreview(projectId, idx0);
   const automationViewer = useAutomationViewer();
   const viewerCommand = automationViewer.command;
   const reportObservation = useCallback(
@@ -745,6 +747,19 @@ export default function ProjectPage() {
   // Queue tab's own count badge, same shape Rail.tsx's badge reads. The
   // Queue tab's item list is fetched separately, by ReviewQueuePanel itself.
   const reviewQueueQ = useReviewQueue(projectId);
+
+  // The worklist store is shared with document-level matches hotkeys, while
+  // the Worklist component itself is unmounted on the other drawer tabs.
+  // Reset page-local line and bulk selections at the route boundary so an
+  // inactive Worklist cannot leave its numeric indexes targeting a new page.
+  const previousWorklistPageRef = useRef({ projectId, pageIndex: idx0 });
+  useEffect(() => {
+    const previousPage = previousWorklistPageRef.current;
+    if (previousPage.projectId === projectId && previousPage.pageIndex === idx0) return;
+    previousWorklistPageRef.current = { projectId, pageIndex: idx0 };
+    worklistStore.setSelectedLineIndex(null);
+    worklistStore.clearBulk();
+  }, [projectId, idx0]);
 
   // ── Region selection scoping (whole-branch review defect 2) ────────────
   // A region or proposal id belongs to the page it was selected on. Nothing
@@ -1656,6 +1671,9 @@ export default function ProjectPage() {
       <TextTabs
         pageTextGt={pagePayload?.page_text_gt}
         pageTextOcr={pagePayload?.page_text_ocr}
+        sourcePreview={sourcePreviewQ.data}
+        sourcePreviewPending={sourcePreviewQ.isPending || sourcePreviewQ.isFetching}
+        sourcePreviewError={sourcePreviewQ.isError}
         lineFilter={uiPrefs.matchFilter}
         onLineFilterChange={(f) => {
           setMatchFilter(f);
@@ -1673,8 +1691,6 @@ export default function ProjectPage() {
           onCommitGt={handleMatchesCommitGt}
         />
       </TextTabs>
-      <PlaintextEditor source="gt" page={pagePayload} />
-      <PlaintextEditor source="ocr" page={pagePayload} />
     </div>
   );
   const wordDetailSlot =

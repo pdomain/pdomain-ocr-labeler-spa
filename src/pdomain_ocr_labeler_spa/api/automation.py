@@ -118,7 +118,12 @@ def events(
                 except TimeoutError:
                     yield ": heartbeat\n\n"
                     continue
-                yield f"id: {event.revision}\nevent: {event.kind}\ndata: {event.model_dump_json()}\n\n"
+                event_json = (
+                    event.model_dump_json(exclude={"generation_reset"})
+                    if event.generation_reset is None
+                    else event.model_dump_json()
+                )
+                yield f"id: {event.revision}\nevent: {event.kind}\ndata: {event_json}\n\n"
         finally:
             subscription.close()
 

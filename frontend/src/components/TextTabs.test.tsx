@@ -8,13 +8,46 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { TextTabs } from "./TextTabs";
 
+const sourcePreview = {
+  project_id: "project-1",
+  page_index: 0,
+  page_key: "001.png",
+  available: true,
+  f2: { raw_text: "<i>F2</i>", visible_text: "F2" },
+  p3: { raw_text: "<i>P3</i>", visible_text: "P3" },
+  consolidated: {
+    text: "P3",
+    runs: [{ text: "P3", styles: ["italic"] }],
+    layout_hints: [
+      {
+        kind: "verse",
+        source_ref: "f2-line-1",
+        lines: [{ text: "P3", stanza_index: 0, indent_hint: "  " }],
+      },
+    ],
+    unresolved: [
+      {
+        source_kind: "style_span",
+        source_ref: "italic",
+        source_text: "F2",
+        reason: "changed source text",
+      },
+    ],
+  },
+  warnings: [],
+} as const;
+
 describe("TextTabs", () => {
-  it("renders all three tab triggers with required data-testids", () => {
+  it("renders the working and source tab triggers with stable data-testids", () => {
     render(<TextTabs />);
     expect(screen.getByTestId("text-tab-matches")).toBeInTheDocument();
     expect(screen.getByTestId("text-tab-ground-truth")).toBeInTheDocument();
+    expect(screen.getByTestId("text-tab-p3")).toBeInTheDocument();
+    expect(screen.getByTestId("text-tab-f2")).toBeInTheDocument();
+    expect(screen.getByTestId("text-tab-consolidated")).toBeInTheDocument();
     expect(screen.getByTestId("text-tab-ocr")).toBeInTheDocument();
   });
 
@@ -83,6 +116,7 @@ describe("TextTabs", () => {
     expect(textarea).toBeInTheDocument();
     expect(textarea).toHaveAttribute("readonly");
     expect((textarea as HTMLTextAreaElement).value).toBe(gtText);
+    expect(screen.getByText("Edit individual words in Matches.")).toBeInTheDocument();
   });
 
   it("switches to the OCR tab and shows page_text_ocr in readOnly textarea", () => {
@@ -96,6 +130,71 @@ describe("TextTabs", () => {
     expect(textarea).toBeInTheDocument();
     expect(textarea).toHaveAttribute("readonly");
     expect((textarea as HTMLTextAreaElement).value).toBe(ocrText);
+  });
+
+  it("shows raw F2 and P3 markers, and a read-only consolidated preview", () => {
+    render(<TextTabs sourcePreview={sourcePreview} />);
+
+    fireEvent.click(screen.getByTestId("text-tab-f2"));
+    expect(screen.getByTestId("text-panel-f2")).toHaveTextContent("<i>F2</i>");
+
+    fireEvent.click(screen.getByTestId("text-tab-p3"));
+    expect(screen.getByTestId("text-panel-p3")).toHaveTextContent("<i>P3</i>");
+
+    fireEvent.click(screen.getByTestId("text-tab-consolidated"));
+    expect(screen.getByTestId("text-panel-consolidated")).toHaveTextContent("P3");
+    expect(screen.getByTestId("consolidated-unresolved")).toHaveTextContent(
+      "F2: changed source text",
+    );
+    expect(screen.getByTestId("consolidated-layout-hint")).not.toHaveAttribute("open");
+    expect(screen.getByText("Source layout evidence: verse")).toBeInTheDocument();
+  });
+
+  it("does not reuse prior source text when the current page has no prepared source", () => {
+    const { rerender } = render(<TextTabs sourcePreview={sourcePreview} />);
+    fireEvent.click(screen.getByTestId("text-tab-p3"));
+    expect(screen.getByTestId("text-panel-p3")).toHaveTextContent("P3");
+
+    rerender(
+      <TextTabs
+        sourcePreview={{
+          project_id: "project-1",
+          page_index: 1,
+          page_key: null,
+          available: false,
+          f2: null,
+          p3: null,
+          consolidated: null,
+          warnings: ["This page has no prepared PGDP source."],
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("source-preview-unavailable-p3")).toHaveTextContent(
+      "This page has no prepared PGDP source.",
+    );
+    expect(screen.queryByTestId("text-panel-p3")).not.toBeInTheDocument();
+  });
+
+  it("hides cached source text while the authoritative page source refreshes", () => {
+    const { rerender } = render(<TextTabs sourcePreview={sourcePreview} />);
+    fireEvent.click(screen.getByTestId("text-tab-p3"));
+    expect(screen.getByTestId("text-panel-p3")).toHaveTextContent("P3");
+
+    rerender(<TextTabs sourcePreview={sourcePreview} sourcePreviewPending />);
+
+    expect(screen.getByTestId("source-preview-loading-p3")).toBeInTheDocument();
+    expect(screen.queryByTestId("text-panel-p3")).not.toBeInTheDocument();
+  });
+
+  it("does not show stale source text after a source refresh error", () => {
+    const { rerender } = render(<TextTabs sourcePreview={sourcePreview} />);
+    fireEvent.click(screen.getByTestId("text-tab-p3"));
+
+    rerender(<TextTabs sourcePreview={sourcePreview} sourcePreviewError />);
+
+    expect(screen.getByTestId("source-preview-error-p3")).toBeInTheDocument();
+    expect(screen.queryByTestId("text-panel-p3")).not.toBeInTheDocument();
   });
 
   it("calls onLineFilterChange when a filter button is clicked", () => {
@@ -132,8 +231,62 @@ describe("TextTabs", () => {
   it("has correct aria role attributes on tabs", () => {
     render(<TextTabs />);
     const tabs = screen.getAllByRole("tab");
-    expect(tabs).toHaveLength(3);
+    expect(tabs).toHaveLength(6);
     const panels = screen.getAllByRole("tabpanel", { hidden: true });
-    expect(panels).toHaveLength(3);
+    expect(panels).toHaveLength(6);
+    for (const tab of tabs) {
+      const panelId = tab.getAttribute("aria-controls");
+      expect(panelId).not.toBeNull();
+      const panel = document.getElementById(panelId ?? "");
+      expect(panel).toHaveAttribute("role", "tabpanel");
+      expect(panel).toHaveAttribute("aria-labelledby", tab.id);
+    }
+  });
+
+  it("assigns associations per TextTabs instance", () => {
+    render(
+      <>
+        <TextTabs />
+        <TextTabs />
+      </>,
+    );
+
+    const tabIds = screen.getAllByRole("tab").map((tab) => tab.id);
+    const panelIds = screen.getAllByRole("tabpanel", { hidden: true }).map((panel) => panel.id);
+    expect(new Set(tabIds)).toHaveLength(tabIds.length);
+    expect(new Set(panelIds)).toHaveLength(panelIds.length);
+  });
+
+  it("uses roving focus and automatic activation for tab keyboard commands", async () => {
+    const user = userEvent.setup();
+    render(<TextTabs sourcePreview={sourcePreview} />);
+    const matches = screen.getByRole("tab", { name: "Matches" });
+    const workingGt = screen.getByRole("tab", { name: "Working GT" });
+    const p3 = screen.getByRole("tab", { name: "P3" });
+    const ocr = screen.getByRole("tab", { name: "OCR" });
+
+    matches.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(document.activeElement).toBe(workingGt);
+    expect(workingGt).toHaveAttribute("aria-selected", "true");
+    expect(workingGt).toHaveAttribute("tabindex", "0");
+    expect(matches).toHaveAttribute("tabindex", "-1");
+
+    await user.keyboard("{ArrowRight}");
+    expect(document.activeElement).toBe(p3);
+    expect(p3).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("text-panel-p3")).toHaveTextContent("<i>P3</i>");
+
+    await user.keyboard("{End}");
+    expect(document.activeElement).toBe(ocr);
+    expect(ocr).toHaveAttribute("aria-selected", "true");
+
+    await user.keyboard("{Home}");
+    expect(document.activeElement).toBe(matches);
+    expect(matches).toHaveAttribute("aria-selected", "true");
+
+    await user.keyboard("{ArrowLeft}");
+    expect(document.activeElement).toBe(ocr);
+    expect(ocr).toHaveAttribute("aria-selected", "true");
   });
 });

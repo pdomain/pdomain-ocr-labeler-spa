@@ -22,7 +22,7 @@
 // fix reacts to. `nav-next-button` (ProjectNavigationControls) drives it.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -31,6 +31,7 @@ import { server } from "../test/server";
 import { ROUTES } from "../lib/routes";
 import { dialogStore } from "../stores/dialog-store";
 import { useUiPrefs } from "../stores/ui-prefs";
+import { worklistStore } from "../stores/worklist-store";
 import {
   clearSelection,
   selectionStore,
@@ -223,6 +224,19 @@ describe("ProjectPage — region selection is scoped to its page (defect 2)", ()
         const idx = Number(params["idx"]);
         return HttpResponse.json(pageFixture(idx));
       }),
+      http.get("/api/projects/:pid/pages/:idx/source-text", ({ params }) =>
+        HttpResponse.json({
+          project_id: params["pid"],
+          page_index: Number(params["idx"]),
+          page_key: null,
+          available: false,
+          f2: null,
+          p3: null,
+          consolidated: null,
+          warnings: [],
+        }),
+      ),
+      http.get("/api/projects/:pid/pages/:idx/history/versions", () => HttpResponse.json([])),
     );
   });
 
@@ -275,6 +289,66 @@ describe("ProjectPage — region selection is scoped to its page (defect 2)", ()
     // it, unlike the region-level fix above.
     expect(selectionStore.getState().level).toBe("line");
     expect(selectionStore.getState().path).toEqual({ pageIndex: 0, lineId: 3 });
+  });
+});
+
+describe("ProjectPage — worklist selection belongs to the route page", () => {
+  beforeEach(() => {
+    dialogStore.reset();
+    clearSelection();
+    worklistStore.reset();
+    useUiPrefs.setState({ drawerOpen: true, drawerTab: "worklist", rightPanelOpen: true });
+    server.use(
+      http.get("/api/projects/:pid", () => HttpResponse.json(projectFixture())),
+      http.get("/api/projects/:pid/pages/:idx", ({ params }) => {
+        const idx = Number(params["idx"]);
+        return HttpResponse.json(pageFixture(idx));
+      }),
+      http.get("/api/projects/:pid/pages/:idx/source-text", ({ params }) =>
+        HttpResponse.json({
+          project_id: params["pid"],
+          page_index: Number(params["idx"]),
+          page_key: null,
+          available: false,
+          f2: null,
+          p3: null,
+          consolidated: null,
+          warnings: [],
+        }),
+      ),
+      http.get("/api/projects/:pid/pages/:idx/history/versions", () => HttpResponse.json([])),
+    );
+  });
+
+  afterEach(() => {
+    worklistStore.reset();
+  });
+
+  it("clears line and bulk selection when navigation happens while another drawer tab is active", async () => {
+    renderProjectPage();
+    await screen.findByTestId("project-page");
+    act(() => {
+      worklistStore.setSelectedLineIndex(3);
+      worklistStore.selectAll([3]);
+    });
+
+    for (const tab of ["hierarchy", "text", "history"] as const) {
+      fireEvent.click(screen.getByTestId(`drawer-tab-${tab}`));
+      expect(screen.getByTestId(`drawer-tab-${tab}`)).toHaveAttribute("data-active", "true");
+    }
+    expect(screen.queryByTestId("worklist")).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByTestId("nav-next-button"));
+    await waitFor(() => expect(screen.getByTestId("nav-page-input")).toHaveValue(2));
+
+    expect(worklistStore.getState().selectedLineIndex).toBeNull();
+    expect(worklistStore.getState().selectedIds).toEqual([]);
+    // Matches hotkeys remain document-scoped even while this drawer tab is
+    // active. With no selected line they have no stale target on page 2.
+    fireEvent.keyDown(document, { key: "v" });
+    expect(worklistStore.getState().selectedLineIndex).toBeNull();
+    expect(worklistStore.getState().selectedIds).toEqual([]);
+    expect(screen.queryByTestId("worklist")).not.toBeInTheDocument();
   });
 });
 

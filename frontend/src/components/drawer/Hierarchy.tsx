@@ -18,7 +18,7 @@
 // block_index (pre-FO-7 payload), paragraphs remain the top level (backward
 // compatible).
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { selectBlock, selectLine, selectPara, selectWord } from "../../stores/selection-store";
 import type { components } from "../../api/types";
@@ -438,6 +438,18 @@ export function Hierarchy({ page }: HierarchyProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const containerRef = useRef<HTMLDivElement>(null);
+  const pageIdentity =
+    page === undefined || page === null ? null : `${page.project_id}\0${page.page_index}`;
+  const previousPageIdentity = useRef(pageIdentity);
+
+  // Tree ids reuse page-local indexes. A new page must not inherit an expanded
+  // or selected node with the same index from the page that was just left.
+  useEffect(() => {
+    if (pageIdentity === null || previousPageIdentity.current === pageIdentity) return;
+    previousPageIdentity.current = pageIdentity;
+    setExpanded(new Set());
+    setSelectedId(null);
+  }, [pageIdentity]);
 
   // FO-7 / CU-4.3: use block tree when block_index is populated, else fall
   // back to para-rooted tree for backward compatibility.

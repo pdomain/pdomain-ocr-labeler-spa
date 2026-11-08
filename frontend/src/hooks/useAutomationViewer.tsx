@@ -15,6 +15,8 @@ import {
   type ViewerState,
 } from "../api/automation";
 import { pageNoUrl } from "../lib/routes";
+import { resetProjectPageCacheBoundary } from "../lib/page-cache-boundary";
+import { resetPageCacheOrder } from "../lib/page-cache-order";
 import { displayedViewerCommand } from "../lib/viewer-display";
 import {
   AutomationViewerContext,
@@ -135,6 +137,27 @@ export function AutomationViewerProvider({ children }: { children: ReactNode }) 
 
     const invalidatePage = (event: AutomationEvent): void => {
       if (event.project_id === null || event.page_index === null) return;
+      const projectId = event.project_id;
+      const pageIndex = event.page_index;
+      if (event.generation_reset) {
+        observe(
+          (async () => {
+            await resetProjectPageCacheBoundary(queryClient, projectId);
+            await Promise.all([
+              queryClient.invalidateQueries({
+                queryKey: ["page", projectId, pageIndex],
+              }),
+              queryClient.invalidateQueries({
+                queryKey: ["source-alignment", projectId, pageIndex],
+              }),
+              queryClient.invalidateQueries({
+                queryKey: ["source-text", projectId, pageIndex],
+              }),
+            ]);
+          })(),
+        );
+        return;
+      }
       observe(
         queryClient.invalidateQueries({ queryKey: ["page", event.project_id, event.page_index] }),
       );
@@ -143,14 +166,25 @@ export function AutomationViewerProvider({ children }: { children: ReactNode }) 
           queryKey: ["source-alignment", event.project_id, event.page_index],
         }),
       );
+      observe(
+        queryClient.invalidateQueries({
+          queryKey: ["source-text", event.project_id, event.page_index],
+        }),
+      );
     };
 
     const invalidateDomainCaches = async (): Promise<void> => {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: ["page"] }),
+        queryClient.cancelQueries({ queryKey: ["source-text"] }),
+      ]);
+      resetPageCacheOrder();
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["jobs"] }),
         queryClient.invalidateQueries({ queryKey: ["project"] }),
         queryClient.invalidateQueries({ queryKey: ["page"] }),
         queryClient.invalidateQueries({ queryKey: ["source-alignment"] }),
+        queryClient.invalidateQueries({ queryKey: ["source-text"] }),
       ]);
     };
 
@@ -193,7 +227,19 @@ export function AutomationViewerProvider({ children }: { children: ReactNode }) 
         }
         if (event.kind === "page_changed") invalidatePage(event);
         if (event.kind === "project_changed") {
-          observe(queryClient.invalidateQueries({ queryKey: ["project"] }));
+          observe(
+            (async () => {
+              if (event.project_id !== null) {
+                await resetProjectPageCacheBoundary(queryClient, event.project_id);
+                await queryClient.cancelQueries({ queryKey: ["source-text", event.project_id] });
+                await Promise.all([
+                  queryClient.invalidateQueries({ queryKey: ["page", event.project_id] }),
+                  queryClient.invalidateQueries({ queryKey: ["source-text", event.project_id] }),
+                ]);
+              }
+              await queryClient.invalidateQueries({ queryKey: ["project"] });
+            })(),
+          );
         }
         if (event.kind === "viewer_command" && event.viewer_id === viewerId) {
           observe(refreshViewerCommand(viewerId));

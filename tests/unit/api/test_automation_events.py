@@ -39,3 +39,22 @@ async def test_invalid_header_cursor_resets_and_unknown_viewer_fails() -> None:
     finally:
         await stream.aclose()
     assert events(viewer_id="unknown", service=service).status_code == 404
+
+
+async def test_page_event_omits_reset_flag_unless_it_is_true() -> None:
+    service = AutomationService(project_state=ProjectState(), runner=JobRunner(JobEventBroker()))
+    _ = service.broker.publish("page_changed", generation=1)
+    _ = service.broker.publish("page_changed", generation=0, generation_reset=True)
+    response = events(after=0, service=service)
+    assert isinstance(response, StreamingResponse)
+    stream = response.body_iterator
+    assert isinstance(stream, AsyncGenerator)
+    try:
+        ordinary_frame = await stream.__anext__()
+        reset_frame = await stream.__anext__()
+        assert isinstance(ordinary_frame, str)
+        assert '"generation_reset"' not in ordinary_frame
+        assert isinstance(reset_frame, str)
+        assert '"generation_reset":true' in reset_frame
+    finally:
+        await stream.aclose()

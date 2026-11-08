@@ -197,6 +197,21 @@ describe("ProjectNavigationControls: S6.1 visible Go-To button", () => {
       expect(currentUrl()).toBe("/projects/proj-1/pages/pageno/5");
     });
   });
+
+  it("keeps the typed target when clicking Go blurs the input", async () => {
+    mockProject("proj-1", 10);
+    renderControls({ projectId: "proj-1", route: "/projects/proj-1/pages/pageno/1" });
+    const input = await screen.findByTestId("nav-page-input");
+
+    fireEvent.change(input, { target: { value: "2" } });
+    // A pointer click moves focus first, so blur runs before the button click.
+    fireEvent.blur(input);
+    fireEvent.click(screen.getByTestId("nav-goto-button"));
+
+    await waitFor(() => {
+      expect(currentUrl()).toBe("/projects/proj-1/pages/pageno/2");
+    });
+  });
 });
 
 describe("ProjectNavigationControls: GoTo", () => {

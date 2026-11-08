@@ -10,7 +10,12 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { components } from "../api/types";
-import { acceptPagePayload, pageCacheScope } from "../lib/page-cache-order";
+import {
+  acceptPagePayload,
+  isCurrentPageCacheEpoch,
+  pageCacheEpoch,
+  pageCacheScope,
+} from "../lib/page-cache-order";
 
 export type PagePayload = components["schemas"]["PagePayload"];
 export type LineFilter = components["schemas"]["LineFilter"];
@@ -50,12 +55,17 @@ export function usePage(
   return useQuery<PagePayload>({
     queryKey: ["page", projectId, pageIndex, filter],
     queryFn: async ({ signal }) => {
+      const cacheProjectId = String(projectId);
+      const cacheEpoch = pageCacheEpoch(cacheProjectId);
       const params = new URLSearchParams({ line_filter: filter });
       const payload = await apiFetch<PagePayload>(
         `/api/projects/${encodeURIComponent(String(projectId))}/pages/${encodeURIComponent(String(pageIndex))}?${params.toString()}`,
         signal,
       );
-      return acceptPagePayload(pageCacheScope(String(projectId), pageIndex ?? -1, filter), payload);
+      if (signal.aborted || !isCurrentPageCacheEpoch(cacheProjectId, cacheEpoch)) {
+        throw new DOMException("Page request was superseded by a project reload", "AbortError");
+      }
+      return acceptPagePayload(pageCacheScope(cacheProjectId, pageIndex ?? -1, filter), payload);
     },
     enabled:
       projectId !== undefined && projectId !== "" && pageIndex !== undefined && pageIndex >= 0,

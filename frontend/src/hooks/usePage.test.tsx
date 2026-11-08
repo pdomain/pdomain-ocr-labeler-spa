@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import React from "react";
 import { server } from "../test/server";
-import { resetPageCacheOrder } from "../lib/page-cache-order";
+import { resetPageCacheOrder, resetPageCacheOrderForProject } from "../lib/page-cache-order";
 import { usePage, type PagePayload } from "./usePage";
 
 function makeWrapper() {
@@ -133,5 +133,45 @@ describe("usePage", () => {
     gates[1]?.();
     await waitFor(() => expect(result.current.isFetching).toBe(false));
     expect(result.current.data?.generation).toBe(2);
+  });
+
+  it("keeps reloaded page text when a canceled pre-reload request resolves late", async () => {
+    const gates: Array<() => void> = [];
+    let request = 0;
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client }, children);
+    server.use(
+      http.get("/api/projects/:projectId/pages/:pageIndex", async () => {
+        const index = request;
+        request += 1;
+        if (index === 1) {
+          await new Promise<void>((resolve) => {
+            gates[index] = resolve;
+          });
+        }
+        return HttpResponse.json({
+          ...MOCK_PAGE,
+          generation: index === 0 ? 7 : index === 1 ? 8 : 0,
+          image_url: index === 0 ? "old-page" : index === 1 ? "late-old-page" : "reloaded-page",
+        });
+      }),
+    );
+
+    const { result } = renderHook(() => usePage("proj-001", 0), { wrapper });
+    await waitFor(() => expect(result.current.data?.generation).toBe(7));
+
+    const lateRefetch = result.current.refetch();
+    await waitFor(() => expect(gates[1]).toBeTypeOf("function"));
+    await client.cancelQueries({ queryKey: ["page", "proj-001"] });
+    resetPageCacheOrderForProject("proj-001");
+    await client.invalidateQueries({ queryKey: ["page", "proj-001"] });
+    await waitFor(() => expect(result.current.data?.image_url).toBe("reloaded-page"));
+
+    gates[1]?.();
+    await lateRefetch;
+    expect(client.getQueryData<PagePayload>(["page", "proj-001", 0, "all"])?.image_url).toBe(
+      "reloaded-page",
+    );
   });
 });

@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { acceptPagePayload, pageCacheScope, resetPageCacheOrder } from "./page-cache-order";
+import {
+  acceptPagePayload,
+  isCurrentPageCacheEpoch,
+  pageCacheEpoch,
+  pageCacheScope,
+  resetPageCacheOrder,
+  resetPageCacheOrderForProject,
+} from "./page-cache-order";
 
 beforeEach(() => {
   resetPageCacheOrder();
@@ -44,5 +51,23 @@ describe("acceptPagePayload", () => {
     acceptPagePayload(all, allPayload);
     expect(acceptPagePayload(unvalidated, filtered)).toBe(filtered);
     expect(acceptPagePayload(all, { generation: 1, label: "late-all" })).toBe(allPayload);
+  });
+
+  it("accepts a reset generation after a project reload without clearing another project", () => {
+    const reloaded = pageCacheScope("proj-001", 0, "all");
+    const otherProject = pageCacheScope("proj-002", 0, "all");
+    const previous = { generation: 7, label: "before reload" };
+    const other = { generation: 3, label: "other project" };
+    acceptPagePayload(reloaded, previous);
+    acceptPagePayload(otherProject, other);
+    const oldEpoch = pageCacheEpoch("proj-001");
+
+    resetPageCacheOrderForProject("proj-001");
+
+    expect(isCurrentPageCacheEpoch("proj-001", oldEpoch)).toBe(false);
+    expect(acceptPagePayload(reloaded, { generation: 0, label: "after reload" }).label).toBe(
+      "after reload",
+    );
+    expect(acceptPagePayload(otherProject, { generation: 1, label: "late other" })).toBe(other);
   });
 });
