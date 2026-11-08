@@ -60,11 +60,8 @@
 // are the opposite case: the user wants that specific character, wherever
 // their layout puts it.
 //
-// Auto-advance: before firing accept or reject, the proposal that follows
-// the current one in `orderedUndecidedProposals(page.regions)` is computed
-// from the page payload the caller already holds — the mutation's success
-// refetches the page and the decided proposal is gone from that payload, so
-// computing the neighbour afterwards would find the wrong one.
+// Auto-advance validates the rendered successor against the decision response,
+// because the page refetch can lag a rapid next keypress.
 //
 // Whole-branch review defect 1 (double-fire / silent keyboard failure):
 //   - `decisionPending` (from `useRegionDecisionPending`, a shared
@@ -405,26 +402,39 @@ export function useRegionReviewHotkeys({
   }
 
   /** Select `next`, or clear the selection and say so when there is none. */
-  function advanceTo(next: string | null, decided: boolean): void {
+  function advanceTo(next: string | null, remaining: number | undefined): void {
     if (next === null) {
       clearSelection();
-      toast.info(endOfPageMessage(bookRemainingAfter(decided)));
+      toast.info(endOfPageMessage(remaining));
       return;
     }
     selectProposal(next);
   }
 
+  /** Use only a successor still present in the authoritative decision response. */
+  function advanceAfterDecision(updatedPage: PagePayload, intendedNext: string | null): void {
+    const actual = orderedUndecidedProposals(updatedPage.regions ?? []);
+    const next =
+      intendedNext !== null && actual.includes(intendedNext)
+        ? intendedNext
+        : edgeProposal(actual, 1);
+    // Every authoritative decision contributes to the cached total, even
+    // when a successor remains on this page. A rapid later decision can be
+    // the one that needs the end-of-page toast before the queue refetch lands.
+    advanceTo(next, bookRemainingAfter(true));
+  }
+
   function selectStep(dir: 1 | -1): void {
-    advanceTo(stepProposal(orderedProposals(), selectedProposalId, dir), false);
+    advanceTo(stepProposal(orderedProposals(), selectedProposalId, dir), bookRemainingAfter(false));
   }
 
   function acceptSelected(proposalId: string): void {
-    const next = nextAfterDecision(orderedProposals(), proposalId);
+    const intendedNext = nextAfterDecision(orderedProposals(), proposalId);
     acceptProposal.mutate(
       { proposalId },
       {
-        onSuccess: () => {
-          advanceTo(next, true);
+        onSuccess: (updatedPage) => {
+          advanceAfterDecision(updatedPage, intendedNext);
         },
         onError: () => {
           toast.error("Accept failed");
@@ -434,12 +444,12 @@ export function useRegionReviewHotkeys({
   }
 
   function rejectSelected(proposalId: string): void {
-    const next = nextAfterDecision(orderedProposals(), proposalId);
+    const intendedNext = nextAfterDecision(orderedProposals(), proposalId);
     rejectProposal.mutate(
       { proposalId },
       {
-        onSuccess: () => {
-          advanceTo(next, true);
+        onSuccess: (updatedPage) => {
+          advanceAfterDecision(updatedPage, intendedNext);
         },
         onError: () => {
           toast.error("Reject failed");

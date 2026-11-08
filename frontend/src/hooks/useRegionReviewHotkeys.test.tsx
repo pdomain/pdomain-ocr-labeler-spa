@@ -249,6 +249,79 @@ describe("useRegionReviewHotkeys: enter accepts and auto-advances", () => {
     await waitFor(() => expect(acceptedId).toBe("p1"));
     await waitFor(() => expect(selectionStore.getState().path.proposalId).toBe("p2"));
   });
+
+  it("uses each decision response when a rapid enter then x sequence beats the first page refetch", async () => {
+    // Keep the hook's rendered `page` deliberately stale. This models a
+    // person deciding the auto-advanced proposal before the invalidated page
+    // query from the first decision has returned. The mutation responses are
+    // authoritative, so the second decision must not wrap to the already
+    // accepted proposal from the stale snapshot.
+    const infoSpy = vi.spyOn(toast, "info");
+    const initialPage: PagePayload = {
+      ...PAGE,
+      regions: [proposal("top", 0), proposal("bottom", 10)],
+    };
+    const afterAccept: PagePayload = {
+      ...initialPage,
+      regions: [confirmedRegion("accepted-top", 0), proposal("bottom", 10)],
+    };
+    const afterReject: PagePayload = {
+      ...afterAccept,
+      regions: [confirmedRegion("accepted-top", 0)],
+    };
+    let acceptedId: string | undefined;
+    let rejectedId: string | undefined;
+    let queueFetches = 0;
+    server.use(
+      http.get("/api/projects/:pid/regions/review-queue", () => {
+        queueFetches += 1;
+        if (queueFetches > 1) return new Promise<Response>(() => {});
+        return HttpResponse.json({
+          total_undecided: 2,
+          pages: [
+            {
+              page_index: PAGE_IDX,
+              undecided: 2,
+              first_proposal_id: "top",
+              last_proposal_id: "bottom",
+            },
+          ],
+          items: [],
+        });
+      }),
+      http.post(
+        "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept",
+        ({ params }) => {
+          acceptedId = params.proposalId as string;
+          return HttpResponse.json(afterAccept);
+        },
+      ),
+      http.post(
+        "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject",
+        ({ params }) => {
+          rejectedId = params.proposalId as string;
+          return HttpResponse.json(afterReject);
+        },
+      ),
+    );
+    act(() => selectProposal("top"));
+    const { qc } = renderHotkeys(initialPage);
+    await waitFor(() =>
+      expect(qc.getQueryData(["review-queue", PROJECT_ID, "reading", 0])).toBeDefined(),
+    );
+
+    pressKey("enter");
+    await waitFor(() => expect(acceptedId).toBe("top"));
+    await waitFor(() => expect(selectionStore.getState().path.proposalId).toBe("bottom"));
+
+    pressKey("x");
+    await waitFor(() => expect(rejectedId).toBe("bottom"));
+    await waitFor(() => expect(selectionStore.getState().level).toBe("none"));
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+    expect(infoSpy).toHaveBeenCalledWith(
+      "No undecided proposals left on this page. None left in the book.",
+    );
+  });
 });
 
 describe("useRegionReviewHotkeys: x rejects and clears at the end of the list", () => {
@@ -276,7 +349,7 @@ describe("useRegionReviewHotkeys: x rejects and clears at the end of the list", 
         "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject",
         ({ params }) => {
           rejectedId = params.proposalId as string;
-          return HttpResponse.json({ ...PAGE_ONE_PROPOSAL });
+          return HttpResponse.json({ ...PAGE_ONE_PROPOSAL, regions: [] });
         },
       ),
     );
@@ -323,7 +396,7 @@ describe("useRegionReviewHotkeys: x rejects and clears at the end of the list", 
         "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject",
         ({ params }) => {
           rejectedId = params.proposalId as string;
-          return HttpResponse.json({ ...PAGE_ONE_PROPOSAL });
+          return HttpResponse.json({ ...PAGE_ONE_PROPOSAL, regions: [] });
         },
       ),
     );
