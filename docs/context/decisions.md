@@ -2143,7 +2143,7 @@ projects through their Open buttons and kept them across a page reload.
 - Old path: `docs/archive/specs/M0-acceptance.md`, with its shape test `tests/unit/test_m0_acceptance.py`
 - Outcome: deleted; retired docs live in Git history, not an archive folder
 - Superseded by: [milestones](../../specs/16-milestones.md) and [current state](current-state.md)
-- Removal commit: (fill after commit)
+- Removal commit: `8f5884df`
 - Rationale kept: M0 shipped before the 2026-05-21 cut-over. The test only pinned the shape of that
   sign-off page, so it goes with the page. The retirement manifest records the old path. Read it with
   `git show ee95c833:docs/archive/specs/M0-acceptance.md`.
