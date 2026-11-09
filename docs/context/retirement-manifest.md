@@ -71,7 +71,7 @@ checklists and transcripts were disposable; unique rationale remains in Git.
 | `docs/archive/specs/2026-05-12-word-matches-design.md` | superseded | `docs/architecture/05-word-matches.md` and `25-drawer-worklist.md` |
 | `docs/archive/specs/2026-05-24-F-001-export-path-traversal.md` | implemented | export containment code/tests and `docs/architecture/10-export.md` |
 | `docs/archive/specs/2026-05-24-F-002-cors-and-auth-hardening.md` | implemented | bootstrap middleware and CORS regression tests |
-| `docs/archive/specs/M0-acceptance.md` | retained build contract | consumed by `tests/unit/test_m0_acceptance.py`; explicitly excluded from retrieval |
+| `docs/archive/specs/M0-acceptance.md` | deleted 2026-11-09 with its shape test | M0 shipped; read it with `git show ee95c833:docs/archive/specs/M0-acceptance.md` |
 | `docs/plans/2026-06-03-labeler-spa-legacy-parity.md` | superseded | current architecture and behavior specs |
 | `docs/research/2026-05-22-deep-code-review-security-scan.md` | stale | current code/tests and issue tracker |
 | `docs/research/2026-05-23-ci-e2e-root-cause.md` | implemented | Vite dedupe configuration and troubleshooting runbook |

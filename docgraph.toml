@@ -15,7 +15,6 @@ reference_include = ['**/*.py', '**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '*
 reference_exclude = ['agent/**', 'agents/**', 'skills/**', 'prompts/**', '.claude/**', '.codex/**', '.cursor/**', '.docgraph/**', '.venv/**', 'node_modules/**']
 
 [infer]
-"docs/archive/**" = { kind = "research", status = "retired" }
 "docs/architecture/**" = { kind = "architecture", status = "built" }
 "docs/plans/**" = { kind = "plan", status = "active" }
 "docs/process/**" = { kind = "process", status = "active" }
