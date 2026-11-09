@@ -2121,7 +2121,7 @@ projects through their Open buttons and kept them across a page reload.
 - Old path: docs/handoff/2026-07-17-issue-tracker-migration.md
 - Outcome: implemented
 - Superseded by: [issues index](../issues/README.md)
-- Removal commit: (fill after commit)
+- Removal commit: `3d6c6066`
 - Rationale kept: `e1c2488a` moved the four open issues into `docs/issues/`, and #430, #433, #437
   and #460 are deleted from GitHub. The 2026-09-18 decision against an issue archive replaced its
   archive step. The closed-issue ledger is `completed-github-issues-ledger.md`.
@@ -2132,7 +2132,7 @@ projects through their Open buttons and kept them across a page reload.
 - Old path: docs/handoff/2026-07-21-142645-deep-review-continuation.md
 - Outcome: superseded
 - Superseded by: [current state](current-state.md) and the Wave 0 to Wave 4 entries in this file
-- Removal commit: (fill after commit)
+- Removal commit: `3d6c6066`
 - Rationale kept: All eight not-done items and the other open findings are shipped and recorded
   above, with the sidecar and undo design choices among them. The deferred D-042 and PGDP-pipeline
   scope lives in the intent map.
