@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-11-07
+last_verified: 2026-11-09
 ---
 
 # Intent map
@@ -13,7 +13,7 @@ last_verified: 2026-11-07
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-11-07
+- **Last verified:** 2026-11-09
 - **Read when:** deciding what to build next, what remains intentionally
   parked, or how shared page-schema convergence should proceed.
 - **Search terms:** active intent, deferred, blocked, rejected, owner decision,
@@ -34,7 +34,7 @@ last_verified: 2026-11-07
 - Finish the glyph picker enum parity in the [residual plan](../plans/2026-07-21-glyph-annotations-completion.md) .
   Manual review, bulk persistence, and glyph export already ship.
 - Reconcile driver-contract section 2.11 and its E2E coverage with the shipped
-  right-panel editing model before deleting migrated GitHub issue #454.
+  right-panel editing model. Its GitHub issue, #454, is already deleted.
 - Keep test-project strictness work in its [focused plan](../plans/2026-07-21-tsconfig-test-strictness.md) ;
   `noUncheckedIndexedAccess` is still false. CI workflow equivalence and drift issues were closed as moot when
   workflows were removed.
@@ -49,11 +49,10 @@ last_verified: 2026-11-07
   rotation tests pass against the shared types.
 - **Enforced OpenAPI response contracts.** Repository-wide conformance tests
   reject empty JSON schemas and verify response models, success responses,
-  JPEG declarations, and streaming routes. GitHub issue #437 remains open only
-  for external-state reconciliation.
+  JPEG declarations, and streaming routes. GitHub issue #437 is deleted.
 - **Accepted resolver narrowing.** Page resolvers return `Page | None` through
   nominal checks plus a guarded structural fallback for test doubles. GitHub
-  issue #460 remains open only for external-state reconciliation.
+  issue #460 is deleted.
 
 ## Deferred
 
