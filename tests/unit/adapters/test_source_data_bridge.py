@@ -53,8 +53,13 @@ async def test_timeout_cancel_and_malformed_output(tmp_path: Path, monkeypatch: 
     with pytest.raises(SourceDataError, match="cancelled"):
         _ = await bridge.call({"command": "prepare"}, cancelled=lambda: True)
     _ = module.write_text('print("not json")\n')
+    # A separate bridge: the 0.1 s budget above is for the hang case and can
+    # expire during interpreter startup on a loaded machine.
+    patient = SourceDataBridge(
+        python=Path(sys.executable), corpus_root=tmp_path, output_root=tmp_path, timeout_s=30
+    )
     with pytest.raises(SourceDataError, match="JSON"):
-        _ = await bridge.call({"command": "projects"})
+        _ = await patient.call({"command": "projects"})
 
 
 async def test_output_root_is_resolved_per_operation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
