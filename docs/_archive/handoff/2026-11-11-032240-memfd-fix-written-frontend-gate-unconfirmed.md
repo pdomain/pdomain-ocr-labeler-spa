@@ -1,19 +1,21 @@
 ---
-kind: handoff
-status: "active"
-created: "2026-11-11"
+kind: archive
+status: retired
 created_at: "2026-11-11T03:22:38Z"
 owner: "CT"
 branch: "feature/memfd-tsconfig-state"
 scope: "memfd-tsconfig-state"
 worktree: "/mnt/work/projects/pdomain/pdomain-ocr-labeler-spa/.worktrees/memfd-tsconfig-state"
 base_commit: "5a5fbcf0eb958278f61ed6587384565c214bb06d"
-supersedes: ""
 handoff_reason: "user_requested"
 host: "claude-code"
+created: "2026-11-11"
+last_verified: "2026-11-11"
 ---
 
 # memfd fix written, frontend gate unconfirmed
+
+> **Retired — superseded by `docs/handoff/2026-11-11-050958-memfd-committed-type-fixes-await-full-gate.md`.**
 
 ## Goal
 
