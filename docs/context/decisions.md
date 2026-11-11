@@ -2148,3 +2148,31 @@ projects through their Open buttons and kept them across a page reload.
   sign-off page, so it goes with the page. The retirement manifest records the old path. Read it with
   `git show ee95c833:docs/archive/specs/M0-acceptance.md`.
 - Remaining work: none
+
+### 2026-11-11 Retired: Python builds without memfd support break labeling-bundle loading
+
+- Old path: `docs/issues/2026-11-07-python-build-without-memfd-breaks-labeling-bundles.md`
+- Outcome: implemented in `a09b50e6`. Verified-image loaders refuse with `UnsupportedRuntimeError`, which the API
+  returns as `503 unsupported_runtime`, naming the missing interfaces. Failed book loads close their session.
+- Superseded by: [persistence architecture](../architecture/09-persistence.md) section 8a
+- Removal commit: (fill after commit)
+- Rationale kept: The issue left open whether to require memfd sealing or add an equivalent immutable carrier. The
+  fix requires sealing with no fallback, so image leases stay immutable and batch jobs fail instead of skipping pages.
+  An agent made that choice, and the owner has not reviewed it. On 2026-11-11 the 21 affected tests passed on
+  CPython 3.13.18. On 3.13.14 all 21 failed with the new refusal and none with `AttributeError`, which is the intended
+  result because those tests need memfd. Why the two builds differ is not established: `sysconfig` reports
+  `HAVE_MEMFD_CREATE` as 0 on both.
+- Remaining work: none
+
+### 2026-11-11 Retired: Enable `noUncheckedIndexedAccess` in `tsconfig.test.json`
+
+- Old path: `docs/plans/2026-07-21-tsconfig-test-strictness.md`
+- Outcome: implemented. The test project had 270 type errors across 60 files, of which 192 existed with the flag off
+  because nothing type-checked tests. All are fixed with no suppressions.
+- Superseded by: [testing architecture](../architecture/14-testing.md)
+- Removal commit: (fill after commit)
+- Rationale kept: `tsc -p tsconfig.test.json --noEmit` is the gate because Vitest does not type-check. Two `include`
+  globs ending in `**` were invalid and now end in `**/*`. `@types/node` is a direct dev dependency at the
+  already-locked 26.5.1 because the style tests read CSS from disk. Importing that CSS with `?raw` does not work: with
+  `css: false`, Vitest returns it empty.
+- Remaining work: none

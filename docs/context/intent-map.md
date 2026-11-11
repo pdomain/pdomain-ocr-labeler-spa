@@ -35,8 +35,7 @@ last_verified: 2026-11-09
   Manual review, bulk persistence, and glyph export already ship.
 - Reconcile driver-contract section 2.11 and its E2E coverage with the shipped
   right-panel editing model. Its GitHub issue, #454, is already deleted.
-- Keep test-project strictness work in its [focused plan](../plans/2026-07-21-tsconfig-test-strictness.md) ;
-  `noUncheckedIndexedAccess` is still false. CI workflow equivalence and drift issues were closed as moot when
+- CI workflow equivalence and drift issues were closed as moot when
   workflows were removed.
 
 ## Done

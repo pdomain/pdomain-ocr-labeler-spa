@@ -421,8 +421,9 @@ for attached nodes and fail on an unexpectedly empty tree. Unmatched ground-trut
 overlays; successful zero-word OCR stays distinguishable from a reviewed blank page. Keyboard registration and
 platform data-root behavior are recorded in the feature architecture and decision log.
 
-The test TypeScript project still sets `noUncheckedIndexedAccess: false`. Enabling it and enforcing the
-test-project typecheck remain in [the strictness plan](../plans/2026-07-21-tsconfig-test-strictness.md) .
+The test TypeScript project matches the app project and sets `noUncheckedIndexedAccess: true`. `make lint` runs
+`pnpm run typecheck:test`, which is `tsc -p tsconfig.test.json --noEmit`. Vitest does not type-check, so that command
+is the only check on test types.
 
 ### Evidence
 

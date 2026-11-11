@@ -86,7 +86,7 @@ The July deep-review execution plan is retired. Its outcomes live in
 
 High-level status, including what actually remains open (typography suggestion acceptance and undo, U-M6 history
 boundaries,
-finer page-load progress, and focused PGDP, glyph, and test-strictness work):
+finer page-load progress, and focused PGDP and glyph work):
 [`docs/context/current-state.md`](docs/context/current-state.md).
 
 Summary of what closed 2026-09-18 (full reasoning in
@@ -106,8 +106,6 @@ Summary of what closed 2026-09-18 (full reasoning in
 - Open findings (`docs/context/open-findings.md`): keyboard entries
   (BUG-KBD-1/4/5) are closed; all six findings, including platform data roots, empty OCR, and hierarchy waits, are
   closed.
-- Residual `tsconfig.test.json` strictness — untouched:
-  `docs/plans/2026-07-21-tsconfig-test-strictness.md`.
 - PGDP alignment remaining is partial: project-card metadata, root filters,
   the archive decision, and the jobs pill/drawer closed 2026-09-18; a shared
   workbench layout was decided against, not built.

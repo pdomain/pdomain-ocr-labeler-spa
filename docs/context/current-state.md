@@ -3,7 +3,7 @@ kind: context
 status: active
 owner: maintainers
 created: 2026-07-13
-last_verified: 2026-11-07
+last_verified: 2026-11-11
 ---
 
 # Current state
@@ -13,13 +13,13 @@ last_verified: 2026-11-07
 - **Kind:** context
 - **Status:** active
 - **Owner:** maintainers
-- **Last verified:** 2026-11-07
+- **Last verified:** 2026-11-11
 - **Read when:** orienting on shipped behavior, open work, or repository risk.
 - **Search terms:** current state, shipped, open work, risks, roadmap.
 
-## Local P3 and F2 review
+## P3 and F2 review
 
-The local feature branch adds bounded corpus preparation, native Tesseract
+Master includes bounded corpus preparation, native Tesseract
 OCR, and composed F2-to-P3-to-OCR alignment. Group review preserves human
 text edits and the OCR word topology. Split and joined words use explicit
 group bindings; ambiguous, unmapped, and exhausted results remain visible.
@@ -32,11 +32,8 @@ Acknowledgement checks the actual project, page, panel, selected IDs, and
 current ready generation. Content changes do not navigate another viewer.
 Tesseract is an explicit CPU provider; the default remains DocTR.
 
-These matching APIs are unreleased. This branch requires the reviewed local
-contracts wheel `0.2.2.dev1+g1bd8261b5` for integration. The committed lockfile
-still selects published `0.2.1`; use an isolated environment and explicit
-no-sync when retaining the local wheel. This work does not authorize a
-release, merge, or push.
+This work merged to master as `1445e173`. Its matching APIs come from the
+published `pdomain-book-contracts` 0.3.0, so no local wheel is needed.
 
 ## Shipped system
 
@@ -53,10 +50,8 @@ its text and typography review requirements.
 
 Detailed line and stanza writes require the word IDs stored in prepared
 bundles. Loose mirrors support ordinary region acceptance and column review.
-The published region-review baseline requires `pdomain-book-contracts>=0.2.1`.
-The lockfile selects published v0.2.1 from the pdomain package index, and that
-baseline needs no local wheel override. The unreleased matching branch above
-requires its isolated dev1 wheel and explicit no-sync environment instead.
+The labeler requires `pdomain-book-contracts>=0.3.0`. The lockfile selects
+published v0.3.0 from the pdomain package index, with no local wheel override.
 
 Fine-grained typography phase one is shipped on this branch. The SPA uses
 `TypographySection`, server-authoritative grapheme/taxonomy metadata, and an
@@ -195,7 +190,7 @@ See the 2026-09-18 tombstones in `decisions.md` for what each triage found.
 
 ## Open work
 
-[The issue index](../issues/README.md) now tracks a runtime compatibility failure. The 18
+[The issue index](../issues/README.md) lists no open issues. The 18
 deep-review reports filed under `docs/issues/2026-07-21-*`, the two migrated
 GitHub records, and every report filed and closed same-day are resolved and
 deleted; each retirement's reasoning is a tombstone in `decisions.md`, which
@@ -254,8 +249,8 @@ Current contract: [glyph architecture](../architecture/20-glyph-annotations.md).
   default (BUG-SMOKE-3) is now closed too — see `decisions.md`.
   [`open-findings.md`](open-findings.md) records all six findings closed, including zero-area placeholders, empty
   OCR, and hierarchy waits.
-- Residual test-tsconfig strictness (#366 leftover), untouched 2026-09-18:
-  [`../plans/2026-07-21-tsconfig-test-strictness.md`](../plans/2026-07-21-tsconfig-test-strictness.md).
+- Test-project TypeScript strictness (#366 leftover) closed on 2026-11-11: `noUncheckedIndexedAccess` is on and
+  `make lint` type-checks the test project. See `decisions.md`.
 - Already done (do not re-plan): #404 lint-deviations catalogue
   (`docs/process/lint-deviations.md`), #430 CI-equivalence and #433 OpenAPI
   drift (moot — the GitHub workflows they described are deleted), #437
@@ -271,9 +266,9 @@ this family.
 
 ## Risks
 
-[Verified-image loading fails on Python builds without memfd support](../issues/2026-11-07-python-build-without-memfd-breaks-labeling-bundles.md).
-All 21 observed CI failures reproduce under the worktree build and pass under the main checkout build.
-The earlier full CI run was interrupted; neither this comparison nor the documentation gate is a full CI pass.
+[Verified-image loading requires Linux memfd sealing](../architecture/09-persistence.md). A Python build without it,
+such as the uv-managed CPython 3.13.14 on omarchy-main, cannot load labeling bundles or book pages. The API returns
+`503 unsupported_runtime` and names the missing interfaces. The supported Python version range does not detect this.
 
 The behavior specification set remains a living contract and includes explicit
 stubs or owner questions. Treat [`../specs/behavior/unclear-items.md`](../specs/behavior/unclear-items.md)
