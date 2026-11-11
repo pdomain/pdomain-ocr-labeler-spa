@@ -2155,7 +2155,7 @@ projects through their Open buttons and kept them across a page reload.
 - Outcome: implemented in `a09b50e6`. Verified-image loaders refuse with `UnsupportedRuntimeError`, which the API
   returns as `503 unsupported_runtime`, naming the missing interfaces. Failed book loads close their session.
 - Superseded by: [persistence architecture](../architecture/09-persistence.md) section 8a
-- Removal commit: (fill after commit)
+- Removal commit: `f6f2e3de`
 - Rationale kept: The issue left open whether to require memfd sealing or add an equivalent immutable carrier. The
   fix requires sealing with no fallback, so image leases stay immutable and batch jobs fail instead of skipping pages.
   An agent made that choice, and the owner has not reviewed it. On 2026-11-11 the 21 affected tests passed on
@@ -2170,7 +2170,7 @@ projects through their Open buttons and kept them across a page reload.
 - Outcome: implemented. The test project had 270 type errors across 60 files, of which 192 existed with the flag off
   because nothing type-checked tests. All are fixed with no suppressions.
 - Superseded by: [testing architecture](../architecture/14-testing.md)
-- Removal commit: (fill after commit)
+- Removal commit: `f6f2e3de`
 - Rationale kept: `tsc -p tsconfig.test.json --noEmit` is the gate because Vitest does not type-check. Two `include`
   globs ending in `**` were invalid and now end in `**/*`. `@types/node` is a direct dev dependency at the
   already-locked 26.5.1 because the style tests read CSS from disk. Importing that CSS with `?raw` does not work: with
