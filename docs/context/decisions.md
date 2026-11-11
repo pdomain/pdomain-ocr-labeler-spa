@@ -2176,3 +2176,22 @@ projects through their Open buttons and kept them across a page reload.
   already-locked 26.5.1 because the style tests read CSS from disk. Importing that CSS with `?raw` does not work: with
   `css: false`, Vitest returns it empty.
 - Remaining work: none
+
+### 2026-11-11 Decided: keep the right panel frame local
+
+- Question: should the local `RightPanel` header, collapse control and body routing move to a shared `pdomain-ui`
+  panel shell?
+- Decision: keep the frame local. Nothing was extracted. An agent made this comparison overnight, and the owner has
+  not reviewed it.
+- Compared at `pdomain-ui` 0.13.0: `DetailPanelShell` and `InspectorPanel` take the same props (`title`,
+  `description`, `meta`, `actions`, `children`, `footer`, `className`). The shell `RightPanel` is a flex wrapper with
+  a 520px default width.
+- Why: the shared shells accept no `data-*` attributes, so `right-panel`, `right-panel-header`, `right-panel-body`,
+  `data-level` and `data-automation-panel` would need extra wrappers to stay on the driver contract. They have no
+  place between the header and the body for the always-mounted carried-rejection, region-draw and layout-evidence
+  panels. `ProjectPage` already sets the width. Selection routing and the word and text slots stay local either way,
+  so extraction would replace only the small header block.
+- What would change it: the same reason as the 2026-09-18 workbench layout decision, a second application needing
+  this frame.
+- Evidence: `frontend/src/components/shell/RightPanel.tsx`, `frontend/src/components/shell/RightPanel.test.tsx` and
+  the `pdomain-ui` type declarations in `dist/workbench/DetailPanelShell.d.ts` and `dist/shell/RightPanel.d.ts`.
