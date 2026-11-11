@@ -446,7 +446,7 @@ word's position in the page line-match list).
 |---|---|
 | `word-glyph-badge-{line}-{word}` | Corner badge on `<WordCell>`; absent when no annotations/predictions |
 | `word-glyph-chip-row-{line}-{word}` | Chip row under GT input |
-| `word-glyph-chip-{line}-{word}-{kind}` | Individual chip (`kind` ∈ `ct`, `st`, `long_s`, `fi`, `swash`, `predicted-{kind}`) |
+| `word-glyph-chip-{line}-{word}-{kind}` | Individual chip. `kind` is the lowercased ligature value, such as `ct`, `fi` or `long_st`, or `long_s`, `swash` or `predicted-{kind}` |
 | `glyph-panel-{line}-{word}` | The `<GlyphAnnotationPanel>` popover/section |
 | `glyph-panel-add-ligature` | "Add ligature" button inside panel |
 | `glyph-panel-ligature-kind-select` | Ligature kind enum picker |

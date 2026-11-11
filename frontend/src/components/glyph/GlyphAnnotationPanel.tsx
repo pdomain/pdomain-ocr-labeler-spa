@@ -46,7 +46,32 @@ export interface GlyphAnnotationPanelProps {
   disabled?: boolean;
 }
 
-const LIGATURE_KINDS = ["ct", "st", "fi", "fl", "ff", "ffi", "ffl"] as const;
+const LIGATURE_KINDS = [
+  { value: "CT", label: "ct" },
+  { value: "ST", label: "st" },
+  { value: "FI", label: "fi" },
+  { value: "FL", label: "fl" },
+  { value: "FF", label: "ff" },
+  { value: "FFI", label: "ffi" },
+  { value: "FFL", label: "ffl" },
+  { value: "LONG_ST", label: "long-s t" },
+  { value: "LONG_S_S", label: "long-s s" },
+  { value: "LONG_S_I", label: "long-s i" },
+  { value: "SP", label: "sp" },
+  { value: "QU", label: "qu" },
+  { value: "OE", label: "oe" },
+  { value: "AE", label: "ae" },
+] as const;
+
+const LIGATURE_LABELS: ReadonlyMap<string, string> = new Map(
+  LIGATURE_KINDS.map(({ value, label }) => [value, label]),
+);
+
+// Saved marks can predate the uppercase contract, so labels accept its legacy spellings.
+function ligatureLabel(kind: string): string {
+  const upper = kind.toUpperCase();
+  return LIGATURE_LABELS.get(upper === "LONG_S_T" ? "LONG_ST" : upper) ?? kind;
+}
 
 /**
  * Panel section for viewing and editing glyph annotations (ligatures,
@@ -62,7 +87,7 @@ export function GlyphAnnotationPanel({
   onAcceptPrediction,
   disabled = false,
 }: GlyphAnnotationPanelProps) {
-  const [newKind, setNewKind] = useState<string>("ct");
+  const [newKind, setNewKind] = useState<string>(LIGATURE_KINDS[0].value);
   const [selectedSpan, setSelectedSpan] = useState<[number, number] | null>(null);
 
   const chars = gtText.split("");
@@ -182,9 +207,9 @@ export function GlyphAnnotationPanel({
           onChange={(e) => setNewKind(e.target.value)}
           className="text-[10px] border border-border-1 rounded-sm px-1 mb-1 bg-surface-1"
         >
-          {LIGATURE_KINDS.map((k) => (
-            <option key={k} value={k}>
-              {k}
+          {LIGATURE_KINDS.map(({ value, label }) => (
+            <option key={value} value={value}>
+              {label}
             </option>
           ))}
         </select>
@@ -220,7 +245,7 @@ export function GlyphAnnotationPanel({
           return (
             <div key={idx} className="flex items-center gap-1 mt-0.5">
               <span className={isPredicted ? "text-ink-4" : "text-ink-1"}>
-                {isPredicted ? "◌" : "•"} {lig.kind}
+                {isPredicted ? "◌" : "•"} {ligatureLabel(lig.kind)}
                 {lig.char_span ? ` [${lig.char_span[0]}-${lig.char_span[1]}]` : ""}
               </span>
               <button
@@ -228,7 +253,7 @@ export function GlyphAnnotationPanel({
                 disabled={disabled}
                 className="text-[10px] text-red-500 hover:text-red-700 ml-auto disabled:opacity-40"
                 type="button"
-                aria-label={`Remove ${lig.kind} ligature`}
+                aria-label={`Remove ${ligatureLabel(lig.kind)} ligature`}
               >
                 ×
               </button>

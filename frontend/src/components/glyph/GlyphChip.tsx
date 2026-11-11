@@ -30,9 +30,11 @@ export interface GlyphChipProps {
  * - Predicted-only (predicted=true): hollow/muted pill with opacity-60
  */
 export function GlyphChip({ lineIndex, wordIndex, kind, predicted, onClick }: GlyphChipProps) {
+  // Driver identifiers stay lowercase while wire values are uppercase.
+  const testidKind = kind.toLowerCase();
   const testid = predicted
-    ? `word-glyph-chip-${lineIndex}-${wordIndex}-predicted-${kind}`
-    : `word-glyph-chip-${lineIndex}-${wordIndex}-${kind}`;
+    ? `word-glyph-chip-${lineIndex}-${wordIndex}-predicted-${testidKind}`
+    : `word-glyph-chip-${lineIndex}-${wordIndex}-${testidKind}`;
 
   const label = kind === "long_s" ? "ſ" : kind.toUpperCase();
 

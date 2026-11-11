@@ -32,6 +32,7 @@ error) — a plain GET of the page payload after the click.
 from __future__ import annotations
 
 import json
+import re
 import socket
 import struct
 import threading
@@ -44,6 +45,7 @@ from pathlib import Path
 import httpx
 import pytest
 import uvicorn
+from pdomain_book_contracts.ocr.glyph_annotations import LigatureKind
 from pdomain_book_tools.ocr.page import Page as BookPage
 from playwright.sync_api import Page, expect
 
@@ -401,4 +403,68 @@ def test_glyph_chip_click_selects_word_and_opens_panel(
             json={"annotations": None},
             timeout=10.0,
         )
+        assert reset.status_code == 200, f"reset glyph-annotations failed: {reset.status_code} {reset.text}"
+
+
+def _saved_ligature_kinds(base_url: str) -> list[str]:
+    body = httpx.get(f"{base_url}/api/projects/{_PROJECT_ID}/pages/0", timeout=10.0).json()
+    annotations = body["line_matches"][0]["word_matches"][0]["glyph_annotations"]
+    return [mark["kind"] for mark in annotations["ligatures"]]
+
+
+@pytest.mark.e2e
+def test_every_shared_ligature_kind_is_addable_and_survives_reload(
+    glyph_panel_server: GlyphPanelServer,
+    page: Page,
+) -> None:
+    """Add every shared kind through the real picker beside a saved legacy mark."""
+    base_url = glyph_panel_server.base_url
+    glyph_url = f"{base_url}/api/projects/{_PROJECT_ID}/pages/0/words/0/0/glyph-annotations"
+    legacy_mark = {"kind": "ct", "char_span": [2, 4]}
+    loaded = httpx.get(f"{base_url}/api/projects/{_PROJECT_ID}/pages/0", timeout=10.0)
+    assert loaded.status_code == 200, loaded.text
+    seed = httpx.post(
+        glyph_url,
+        json={
+            "annotations": {
+                "ligatures": [legacy_mark],
+                "long_s_positions": [],
+                "swash": False,
+                "source": "human",
+            }
+        },
+        timeout=10.0,
+    )
+    assert seed.status_code == 200, seed.text
+    remove_buttons = page.locator('[data-testid="glyph-panel-0-0"]').get_by_role(
+        "button", name=re.compile(r"^Remove .* ligature$")
+    )
+    expected_kinds = ["ct", *(kind.value for kind in LigatureKind)]
+
+    try:
+        _click_word_on_canvas(page, base_url)
+        _open_glyphs_accordion(page)
+        expect(remove_buttons).to_have_count(1, timeout=10_000)
+
+        for added, kind in enumerate(LigatureKind, start=1):
+            page.locator('[data-testid="glyph-panel-ligature-kind-select"]').select_option(kind.value)
+            with page.expect_response(
+                lambda r: r.url == glyph_url and r.request.method == "POST"
+            ) as response:
+                page.locator('[data-testid="glyph-panel-add-ligature"]').click()
+            assert response.value.status == 200, response.value.text()
+            sent = response.value.request.post_data_json["annotations"]["ligatures"]
+            assert sent[0] == legacy_mark
+            assert sent[-1] == {"kind": kind.value, "char_span": None}
+            expect(remove_buttons).to_have_count(added + 1, timeout=10_000)
+
+        assert _saved_ligature_kinds(base_url) == expected_kinds
+
+        page.reload()
+        _click_word_on_canvas(page, base_url)
+        _open_glyphs_accordion(page)
+        expect(remove_buttons).to_have_count(len(expected_kinds), timeout=10_000)
+        assert _saved_ligature_kinds(base_url) == expected_kinds
+    finally:
+        reset = httpx.post(glyph_url, json={"annotations": None}, timeout=10.0)
         assert reset.status_code == 200, f"reset glyph-annotations failed: {reset.status_code} {reset.text}"
