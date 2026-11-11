@@ -170,7 +170,7 @@ Three controls per word:
 - Word checkbox (testid `word-checkbox-{l}-{w}`). Bound to
   `useSelectionStore.selectedWords`.
 - Edit button (testid `edit-word-button-{l}-{w}`). `lucide-react Pencil`
-  icon. Opens the `<WordEditDialog />`.
+  icon. Selects the word and opens it in the right panel.
 - Per-word validate (testid `word-validate-button-{l}-{w}`). Green
   filled-check when validated, gray check otherwise. Toggles via
   optimistic mutation.

@@ -72,7 +72,6 @@ tested; this spec changes how they compose, not what they do.
   <OCRConfigModal />                       ← mounted at AppShell
   <ExportDialog />                         ← mounted at AppShell
   <HotkeyHelpModal />                      ← mounted at AppShell
-  <WordEditDialog />                       ← mounted at ProjectPage
   <ConfirmDialog />                        ← mounted at ProjectPage
 </AppShell>
 ```

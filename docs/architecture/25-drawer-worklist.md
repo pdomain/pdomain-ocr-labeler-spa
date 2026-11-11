@@ -25,6 +25,11 @@ batch-validate, re-run-match, and export actions. The Hierarchy provides an
 alternative structural navigation mode for understanding how lines are
 organized into paragraphs.
 
+The Worklist uses the shared `WordList` through a permanent local adapter. A `LineMatch` has no `text` or
+`bounding_box`, so the adapter supplies them, and `renderRow` draws the visible row. The adapter also wraps
+the list in `worklist-queue`, because the shared list exposes no test identifier. This is the intended
+boundary, not an unfinished migration.
+
 ## 2. User-facing goals
 
 - I need to see all lines at a glance, filtered to only the unvalidated ones, so

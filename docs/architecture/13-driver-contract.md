@@ -228,6 +228,7 @@ Hotkey: `Enter` on `nav-page-input` triggers `Go To`.
 > | `selection-mode-paragraph` | `rail-target-para` (`data-active`) | Rail §2.14 |
 > | `selection-mode-line` | `rail-target-line` (`data-active`) | Rail §2.14 |
 > | `selection-mode-word` | `rail-target-word` (`data-active`) | Rail §2.14 |
+> | `erase-pixels-button` | `rail-mode-erase` | Rail §2.14 |
 > | `zoom-fit-button` | `canvas-zoom-fit` (`aria-pressed`) | canvas overlay |
 > | `zoom-100-button` | `canvas-zoom-100` (`aria-pressed`) | canvas overlay |
 > | `mismatches-only-toggle` | `mismatches-only-toggle` (`aria-pressed`) | canvas overlay |
@@ -239,7 +240,6 @@ Hotkey: `Enter` on `nav-page-input` triggers `Go To`.
 
 | Testid | What it is |
 |---|---|
-| `erase-pixels-button` | Erase Pixels mode toggle (also reachable via Rail erase mode) |
 | `canvas-zoom-controls` | Zoom controls group (canvas overlay) |
 | `canvas-zoom-fit` | Fit page to viewport |
 | `canvas-zoom-100` | 100% zoom (1:1 pixel) |

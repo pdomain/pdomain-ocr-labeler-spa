@@ -49,8 +49,8 @@ The decision happens in M4. Document the result in a new ADR.
 > **D-050/D-053 (shipped):** `ImageTabsHeader` was retired. Layer-visibility
 > controls now live in the Rail (`rail-layer-*` buttons). Selection-mode and
 > zoom controls live in the canvas overlay (`canvas-zoom-fit`, `canvas-zoom-100`,
-> `mismatches-only-toggle`). `erase-pixels-button` and `add-word-button` remain
-> in the canvas overlay.
+> `mismatches-only-toggle`). `add-word-button` remains in the canvas overlay. Erase
+> mode is selected in the Rail with `rail-mode-erase`.
 
 ```
 <Rail />                                       (components/shell/Rail.tsx)
@@ -111,7 +111,7 @@ Bound to `railStore.target` / `useUiPrefs.selectionMode`. Default: `word`.
 
 ### Canvas overlay controls
 
-- **Erase Pixels** — `erase-pixels-button` (canvas overlay, `aria-pressed`).
+- **Erase Pixels** — `rail-mode-erase` (Rail).
   Toggles `useViewportStore.mode === "erase"`.
 - **Add Word** — `add-word-button` (canvas overlay, `aria-pressed`).
 - **Mismatches only** — `mismatches-only-toggle` (canvas overlay, `aria-pressed`).
