@@ -1,7 +1,6 @@
 ---
-kind: handoff
-status: "active"
-created: "2026-11-11"
+kind: archive
+status: retired
 created_at: "2026-11-11T05:09:58Z"
 owner: "CT"
 branch: "feature/memfd-tsconfig-state"
@@ -11,9 +10,13 @@ base_commit: "a09b50e6d1c38d1af8ffd3c22581f3511dd625cc"
 supersedes: "2026-11-11-032240-memfd-fix-written-frontend-gate-unconfirmed.md"
 handoff_reason: "stopping"
 host: "claude-code"
+created: "2026-11-11"
+last_verified: "2026-11-11"
 ---
 
 # memfd fix committed, test type fixes wait for the full gate
+
+> **Retired — superseded by `docs/handoff/2026-11-11-060138-memfd-and-test-types-committed-gate-green.md`.**
 
 ## Goal
 
