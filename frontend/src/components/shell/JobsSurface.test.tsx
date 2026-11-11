@@ -3,7 +3,7 @@
 // `useUtilityDock().toggle('jobs')` wiring the installed package documents,
 // and the real useJobsList → jobsMapping → AppShellJobsProps pipeline.
 //
-// Spec: docs/plans/2026-07-21-pgdp-alignment-remaining.md item 4.
+// Spec: docs/architecture/13-driver-contract.md section 2.13a.
 
 import React from "react";
 import { describe, it, expect, vi, afterEach } from "vitest";

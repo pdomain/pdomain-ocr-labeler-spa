@@ -2195,3 +2195,28 @@ projects through their Open buttons and kept them across a page reload.
   this frame.
 - Evidence: `frontend/src/components/shell/RightPanel.tsx`, `frontend/src/components/shell/RightPanel.test.tsx` and
   the `pdomain-ui` type declarations in `dist/workbench/DetailPanelShell.d.ts` and `dist/shell/RightPanel.d.ts`.
+
+### 2026-11-11 Retired: Glyph picker enum parity
+
+- Old path: `docs/plans/2026-07-21-glyph-annotations-completion.md`
+- Outcome: implemented in `b28085a7`. The picker offers all 14 shared ligature kinds and writes their uppercase wire
+  values. Saved legacy lowercase marks stay as stored and keep their names, and chip driver identifiers stay lowercase.
+- Superseded by: [glyph architecture](../architecture/20-glyph-annotations.md)
+- Removal commit: (fill after commit)
+- Rationale kept: the shared `LigatureKind` enum is the source of truth. The browser test adds every enum member
+  through the real picker beside a saved legacy mark and checks the request bodies and a reload.
+- Remaining work: prediction UI polish, per-mark provenance, cross-page bulk work and a profile registry stay
+  deferred in the [intent map](intent-map.md). Bulk recipes still write legacy `ct` and `st`.
+
+### 2026-11-11 Retired: Remaining shared UI alignment
+
+- Old path: `docs/plans/2026-07-21-pgdp-alignment-remaining.md`
+- Outcome: implemented. `18391dd5` shows the saved export in the export dialog and makes an unreadable manifest a 500
+  `export_history_unreadable` instead of an empty list. `800a4dad` keeps the right panel frame local. `8391cddc`
+  aligns the driver and shell docs with the mounted components.
+- Superseded by: [export architecture](../architecture/10-export.md), [frontend architecture](../architecture/03-frontend.md)
+  and the [driver contract](../architecture/13-driver-contract.md)
+- Removal commit: (fill after commit)
+- Rationale kept: the labeler does not adopt PGDP's stage registry, stage folders, stage runner, settings
+  inheritance, stale propagation, proof-pack or submit workflow. The frontend architecture records that boundary.
+- Remaining work: server preference persistence stays deferred. The owner has not reviewed the right panel decision.

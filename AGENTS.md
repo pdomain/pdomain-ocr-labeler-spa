@@ -106,10 +106,9 @@ Summary of what closed 2026-09-18 (full reasoning in
 - Open findings (`docs/context/open-findings.md`): keyboard entries
   (BUG-KBD-1/4/5) are closed; all six findings, including platform data roots, empty OCR, and hierarchy waits, are
   closed.
-- PGDP alignment remaining is partial: project-card metadata, root filters,
-  the archive decision, and the jobs pill/drawer closed 2026-09-18; a shared
-  workbench layout was decided against, not built.
-  `docs/plans/2026-07-21-pgdp-alignment-remaining.md`.
+- PGDP alignment is complete as of 2026-11-11: the export dialog shows the
+  saved export, the right panel frame stays local, and the driver docs match
+  the mounted components. A shared workbench layout was decided against.
 
 Per-slice history is preserved in git log and GitHub closed milestones.
 

@@ -27,12 +27,11 @@ last_verified: 2026-11-09
   implemented.
 
 - Maintain the shipped FastAPI/React labeler and its driver contract.
-- Complete the still-relevant items in the
-  [PGDP alignment backlog](../plans/2026-07-21-pgdp-alignment-remaining.md)
-  without importing PGDP's pipeline-stage product scope.
+- Keep shared-shell alignment within the boundary in the
+  [frontend architecture](../architecture/03-frontend.md), without PGDP's pipeline-stage product scope.
 - Keep behavior contracts and their coverage map aligned with executable tests.
-- Finish the glyph picker enum parity in the [residual plan](../plans/2026-07-21-glyph-annotations-completion.md) .
-  Manual review, bulk persistence, and glyph export already ship.
+- Glyph review ships in full, including every shared ligature kind in the picker. See the
+  [glyph architecture](../architecture/20-glyph-annotations.md).
 - Reconcile driver-contract section 2.11 and its E2E coverage with the shipped
   right-panel editing model. Its GitHub issue, #454, is already deleted.
 - CI workflow equivalence and drift issues were closed as moot when
@@ -99,10 +98,9 @@ and in [`decisions.md`](decisions.md).
   policy in the [undo spec](../specs/2026-06-12-event-store-undo.md) . U-M7 history listing and jumps ship.
 - Finer predictor-load progress needs an upstream callback or structured events. Keep that design in the
   [page-load spec](../specs/2026-08-08-page-load-progress-design.md) ; eager predictor warm-up was rejected.
-- The [PGDP residual plan](../plans/2026-07-21-pgdp-alignment-remaining.md) retains export-dialog history
-  hydration, the detail-shell comparison, and residual driver/adapter documentation. Server preferences remain
-  deferred.
-- Glyph enum parity remains required. Per-mark provenance, cross-page bulk marking, a profile registry, and
+- Server preference persistence remains deferred. The right panel frame stays local; the owner has not
+  reviewed that 2026-11-11 decision.
+- Per-mark provenance, cross-page bulk marking, a profile registry, and
   prediction-only UI polish remain deferred. No predictor will be built here.
 - Mixed-selection and mutation-error browser coverage remains a risk for multi-line editing; the existence of
   browser tests is not a fresh full-suite verification.

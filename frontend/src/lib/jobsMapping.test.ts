@@ -1,7 +1,7 @@
 // jobsMapping.test.ts — unit tests for the backend Job → pdomain-ui JobRow /
 // JobsPill mapping.
 //
-// Spec: docs/plans/2026-07-21-pgdp-alignment-remaining.md item 4.
+// Spec: docs/architecture/13-driver-contract.md section 2.13a.
 // Verifies the mapping this repo's own gap report
 // (docs/issues/2026-09-18-jobs-pill-status-contract-gap.md) blocked on:
 // `cancelled` maps to its own honest status (not `failed`, `done`, or

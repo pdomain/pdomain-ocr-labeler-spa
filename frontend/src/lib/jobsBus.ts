@@ -1,7 +1,7 @@
 // jobsBus.ts — minimal in-process signal so a job-tracking hook can tell
 // the shared jobs list (useJobsList) to refresh itself immediately.
 //
-// Why this exists (docs/plans/2026-07-21-pgdp-alignment-remaining.md item 4):
+// Why this exists (docs/architecture/13-driver-contract.md section 2.13a):
 // useJobsList only polls GET /api/jobs while its last-known snapshot already
 // contains a queued/running job — see that hook's file header for why. That
 // leaves one gap: nothing polls while the app is idle, so a *newly created*

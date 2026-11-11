@@ -1,7 +1,7 @@
 // useJobsList.ts — TanStack Query hook for GET /api/jobs, the source of
 // truth for the persistent jobs surface (JobsPill + AppShell `jobs` prop).
 //
-// Spec: docs/plans/2026-07-21-pgdp-alignment-remaining.md item 4.
+// Spec: docs/architecture/13-driver-contract.md section 2.13a.
 //
 // Rebuild-from-list, not from-stream: the broker buffers nothing and a job
 // only tracks its latest progress fraction, not a history

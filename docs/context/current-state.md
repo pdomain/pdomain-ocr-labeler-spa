@@ -210,8 +210,8 @@ fires; the seam stays, rendering nothing. A glyph chip click now selects the
 word and opens the review panel, same as the pencil button. Browser
 coverage: `tests/e2e/test_glyph_panel.py` (single-word mark) and
 `tests/e2e/test_bulk_glyph_mark.py` (a real bulk-apply dialog, confirmed
-against an independent `GET`). See `decisions.md`'s 2026-09-18 entries and
-[`../plans/2026-07-21-glyph-annotations-completion.md`](../plans/2026-07-21-glyph-annotations-completion.md).
+against an independent `GET`). The picker offers all 14 shared ligature kinds. See
+`decisions.md`'s 2026-09-18 and 2026-11-11 entries.
 Current contract: [glyph architecture](../architecture/20-glyph-annotations.md).
 
 **What remains, verified against code or `decisions.md` rather than assumed:**
@@ -240,8 +240,8 @@ Current contract: [glyph architecture](../architecture/20-glyph-annotations.md).
   newer page state.
 - **Released `v0.3.0` on 2026-09-18**, 561 commits after `v0.2.0`, with the pip
   index regenerated. `docs/runbooks/release.md` has the steps.
-- PGDP/pdomain-ui alignment remains partial. The [residual plan](../plans/2026-07-21-pgdp-alignment-remaining.md)
-  retains persisted export-dialog history, the detail-shell comparison, and remaining driver/adapter documentation.
+- PGDP/pdomain-ui alignment is complete. The export dialog shows the saved export after a reload, the right
+  panel frame stays local, and the driver and shell docs match the mounted components.
   Cards, progress filters, suite launch, jobs, and visible page history ship. Archive and shared-workbench adoption
   were declined; the September decisions record those outcomes.
 - Open findings, keyboard entries now closed (`6db2e42` registered `mod+,`,

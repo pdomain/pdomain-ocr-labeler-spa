@@ -2,7 +2,7 @@
 // Spec: specs/20-glyph-annotations.md §5.5
 // Issue #270
 //
-// M11 Task 7 (docs/plans/2026-07-21-glyph-annotations-completion.md):
+// M11 Task 7 (docs/architecture/20-glyph-annotations.md):
 // a successful (non-dry-run) apply invalidates the ["page", projectId,
 // pageIndex] query — before this, the dialog closed on apply with no
 // invalidation, so `WordCell` chips/badges stayed stale until something
