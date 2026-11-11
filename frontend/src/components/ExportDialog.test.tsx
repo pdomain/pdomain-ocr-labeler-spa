@@ -315,6 +315,150 @@ describe("ExportDialog", () => {
 // ---------------------------------------------------------------------------
 // Component filter — canonical vocab (fix for hardcoded non-canonical list)
 // ---------------------------------------------------------------------------
+describe("ExportDialog saved export history", () => {
+  const savedExport = {
+    job_id: `doctr-export:${PROJECT_ID}:2026-07-21T12:00:00+00:00`,
+    scope: "project",
+    created_at: "2026-07-21T12:00:00+00:00",
+    page_count: 3,
+    tasks: { detection: { item_count: 10 }, recognition: { item_count: 8 } },
+  };
+
+  function serveExports(...responses: (() => Response)[]) {
+    let calls = 0;
+    server.use(
+      http.get(`${BASE_URL}/exports`, () => {
+        const respond = responses[Math.min(calls, responses.length - 1)];
+        calls += 1;
+        if (respond === undefined) throw new Error("no exports response configured");
+        return respond();
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    mockUseJobProgress.mockReturnValue(null);
+    server.use(http.get(`${BASE_URL}/export/styles`, () => HttpResponse.json([])));
+  });
+
+  afterEach(() => {
+    server.resetHandlers();
+    vi.clearAllMocks();
+  });
+
+  it("shows the persisted export with its counts", async () => {
+    serveExports(() => HttpResponse.json([savedExport]));
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
+
+    const row = await screen.findByTestId("export-history-row");
+
+    expect(row.textContent).toContain("3 pages");
+    expect(row.textContent).toContain("detection: 10 items");
+    expect(row.textContent).toContain("recognition: 8 items");
+    expect(screen.queryByTestId("export-history-empty")).toBeNull();
+  });
+
+  it("shows a loading state until the history read settles", async () => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get(`${BASE_URL}/exports`, async () => {
+        await held;
+        return HttpResponse.json([]);
+      }),
+    );
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
+
+    expect(await screen.findByTestId("export-history-loading")).toBeTruthy();
+    expect(screen.queryByTestId("export-history-empty")).toBeNull();
+
+    release();
+    expect(await screen.findByTestId("export-history-empty")).toBeTruthy();
+    expect(screen.queryByTestId("export-history-loading")).toBeNull();
+  });
+
+  it("says when there is no previous export", async () => {
+    serveExports(() => HttpResponse.json([]));
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
+
+    expect((await screen.findByTestId("export-history-empty")).textContent).toBe(
+      "No previous export.",
+    );
+  });
+
+  it("reports a failed read instead of claiming no previous export", async () => {
+    serveExports(() =>
+      HttpResponse.json(
+        { error: "export_history_unreadable", message: "The export manifest is unreadable." },
+        { status: 500 },
+      ),
+    );
+    render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
+
+    const failure = await screen.findByTestId("export-history-error");
+
+    expect(failure.getAttribute("role")).toBe("alert");
+    expect(failure.textContent).toContain("The export manifest is unreadable.");
+    expect(screen.queryByTestId("export-history-empty")).toBeNull();
+  });
+
+  it("reads the history again when the dialog reopens", async () => {
+    serveExports(
+      () => HttpResponse.json([]),
+      () => HttpResponse.json([savedExport]),
+    );
+    const { rerender } = render(
+      <ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />,
+      { wrapper: makeWrapper() },
+    );
+    expect(await screen.findByTestId("export-history-empty")).toBeTruthy();
+
+    rerender(<ExportDialog open={false} projectId={PROJECT_ID} onClose={vi.fn()} />);
+    rerender(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
+
+    expect(await screen.findByTestId("export-history-row")).toBeTruthy();
+  });
+
+  it("reads the history again after a run completes", async () => {
+    serveExports(
+      () => HttpResponse.json([]),
+      () => HttpResponse.json([savedExport]),
+    );
+    server.use(
+      http.post(`${BASE_URL}/export`, () =>
+        HttpResponse.json({ job_id: "job-saved" }, { status: 202 }),
+      ),
+    );
+    const { rerender } = render(
+      <ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />,
+      { wrapper: makeWrapper() },
+    );
+    expect(await screen.findByTestId("export-history-empty")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("export-button"));
+    });
+    mockUseJobProgress.mockReturnValue({
+      id: "job-saved",
+      status: "complete",
+      progress: { current: 3, total: 3, current_page: 2, message: "done" },
+    });
+    rerender(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />);
+
+    expect(await screen.findByTestId("export-history-row")).toBeTruthy();
+  });
+});
+
 describe("ExportDialog — component filter sourced from canonical vocab", () => {
   beforeEach(() => {
     mockUseJobProgress.mockReturnValue(null);

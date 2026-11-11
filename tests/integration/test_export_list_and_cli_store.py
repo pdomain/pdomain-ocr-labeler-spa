@@ -150,6 +150,50 @@ def test_list_exports_reads_doctr_manifest(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    "manifest_text",
+    [
+        "{not json",
+        "[]",
+        json.dumps({"projects": []}),
+        json.dumps({"projects": {"book1": "not an entry"}}),
+        json.dumps({"projects": {"book1": {"page_count": 3}}}),
+    ],
+)
+def test_list_exports_reports_an_unreadable_manifest(tmp_path: Path, manifest_text: str) -> None:
+    data_root = tmp_path / "data"
+    export_root = data_root / "doctr-export"
+    export_root.mkdir(parents=True)
+    (export_root / "manifest.json").write_text(manifest_text, encoding="utf-8")
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+
+    settings = _make_settings(tmp_path, data_root=data_root, projects_root=projects_root)
+    with TestClient(build_app(settings)) as client:
+        resp = client.get("/api/projects/book1/exports")
+
+    assert resp.status_code == 500, resp.text
+    assert resp.json()["error"] == "export_history_unreadable"
+
+
+@pytest.mark.integration
+def test_list_exports_is_empty_when_another_project_owns_the_manifest(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    export_root = data_root / "doctr-export"
+    export_root.mkdir(parents=True)
+    (export_root / "manifest.json").write_text(json.dumps({"projects": {"other": {}}}), encoding="utf-8")
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+
+    settings = _make_settings(tmp_path, data_root=data_root, projects_root=projects_root)
+    with TestClient(build_app(settings)) as client:
+        resp = client.get("/api/projects/book1/exports")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
+
+
+@pytest.mark.integration
 def test_cli_export_store_first_non_zero_pages(tmp_path: Path) -> None:
     """Wave 1.5: SPA store-only save → CLI export yields non-zero pages."""
     project_dir = tmp_path / "book1"

@@ -370,7 +370,12 @@ a time. See
 | `export-style-checkbox-{key}` | One per style discovered, key = normalised style |
 | `export-button` | Export (the run button inside the dialog) |
 | `export-cancel-button` | Cancel (replaces Export while a job is running; posts `POST /api/jobs/{id}/cancel`) |
-| `export-results` | Container for per-export results |
+| `export-results` | Container for this dialog session's run history |
+| `export-history` | Saved export section |
+| `export-history-loading` | Saved export read is in flight |
+| `export-history-error` | Saved export read failed |
+| `export-history-empty` | No saved export exists |
+| `export-history-row` | One saved export |
 | `export-close-button` | Close |
 | `export-send-to-trainer` | Send to Trainer button (only visible when trainer is installed) |
 

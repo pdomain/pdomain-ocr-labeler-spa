@@ -119,11 +119,16 @@ italics: 12 pages, 245 words exported
 
 ### 2.6 Run history
 
-Persists for the duration of the dialog being open. On close + reopen,
-the list is empty (no server state for history in v1).
+The session list persists for the duration of the dialog being open. Format:
+one line per export run with the style label (or "all") + counts.
 
-Format: one line per export run with the style label (or "all") +
-counts.
+The Saved Export section reads `GET /api/projects/{id}/exports` each time the
+dialog opens and after each finished run, so a reload still shows the saved
+export. The manifest keeps one export per project. The section has separate
+loading, empty, and failed states. A missing manifest or a project with no entry
+returns an empty list. A manifest that cannot be read returns 500
+`export_history_unreadable`, which the dialog shows as a failure rather than as
+no previous export.
 
 ---
 
