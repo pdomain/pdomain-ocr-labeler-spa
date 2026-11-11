@@ -1,7 +1,6 @@
 ---
-kind: handoff
-status: "active"
-created: "2026-11-11"
+kind: archive
+status: retired
 created_at: "2026-11-11T06:01:38Z"
 owner: "CT"
 branch: "feature/memfd-tsconfig-state"
@@ -11,9 +10,13 @@ base_commit: "e11332316e70b3e59c236ca20b4e617449b197de"
 supersedes: "2026-11-11-050958-memfd-committed-type-fixes-await-full-gate.md"
 handoff_reason: "stopping"
 host: "claude-code"
+created: "2026-11-11"
+last_verified: "2026-11-11"
 ---
 
 # memfd fix and test type work are committed, and the full gate passes
+
+> **Retired — superseded by `docs/handoff/2026-11-11-075408-glyph-parity-and-shared-ui-alignment-done.md`.**
 
 ## Goal
 

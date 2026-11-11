@@ -2202,7 +2202,7 @@ projects through their Open buttons and kept them across a page reload.
 - Outcome: implemented in `b28085a7`. The picker offers all 14 shared ligature kinds and writes their uppercase wire
   values. Saved legacy lowercase marks stay as stored and keep their names, and chip driver identifiers stay lowercase.
 - Superseded by: [glyph architecture](../architecture/20-glyph-annotations.md)
-- Removal commit: (fill after commit)
+- Removal commit: `4982ebc4`
 - Rationale kept: the shared `LigatureKind` enum is the source of truth. The browser test adds every enum member
   through the real picker beside a saved legacy mark and checks the request bodies and a reload.
 - Remaining work: prediction UI polish, per-mark provenance, cross-page bulk work and a profile registry stay
@@ -2216,7 +2216,7 @@ projects through their Open buttons and kept them across a page reload.
   aligns the driver and shell docs with the mounted components.
 - Superseded by: [export architecture](../architecture/10-export.md), [frontend architecture](../architecture/03-frontend.md)
   and the [driver contract](../architecture/13-driver-contract.md)
-- Removal commit: (fill after commit)
+- Removal commit: `4982ebc4`
 - Rationale kept: the labeler does not adopt PGDP's stage registry, stage folders, stage runner, settings
   inheritance, stale propagation, proof-pack or submit workflow. The frontend architecture records that boundary.
 - Remaining work: server preference persistence stays deferred. The owner has not reviewed the right panel decision.
