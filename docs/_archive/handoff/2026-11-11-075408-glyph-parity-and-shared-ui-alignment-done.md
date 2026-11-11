@@ -1,7 +1,6 @@
 ---
-kind: handoff
-status: "active"
-created: "2026-11-11"
+kind: archive
+status: retired
 created_at: "2026-11-11T07:54:09Z"
 owner: "CT"
 branch: "feature/glyph-pgdp-completion"
@@ -11,9 +10,13 @@ base_commit: "4982ebc474a714e4f1682a1df5d3d703dd379bd0"
 supersedes: "2026-11-11-060138-memfd-and-test-types-committed-gate-green.md"
 handoff_reason: "stopping"
 host: "claude-code"
+created: "2026-11-11"
+last_verified: "2026-11-11"
 ---
 
 # Glyph parity and shared UI alignment are done, and both plans are retired
+
+> **Retired — superseded by `docs/handoff/2026-11-11-082317-typography-suggestion-and-undo-need-owner-design.md`.**
 
 ## Goal
 
