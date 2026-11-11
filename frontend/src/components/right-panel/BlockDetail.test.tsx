@@ -27,6 +27,7 @@ function makeQueryClient() {
 
 function makePage(): PagePayload {
   return {
+    page_kind_reviewed: false,
     project_id: "p1",
     page_index: 0,
     line_filter: "all",

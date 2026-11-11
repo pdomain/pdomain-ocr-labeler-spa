@@ -50,7 +50,7 @@ it("disconnects the MutationObserver on unmount (no leak)", () => {
 
   // Spy on MutationObserver to capture disconnect calls.
   globalThis.MutationObserver = class extends originalMutationObserver {
-    disconnect() {
+    override disconnect() {
       disconnectSpy();
       super.disconnect();
     }

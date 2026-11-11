@@ -341,6 +341,8 @@ lint: ## Run ruff + basedpyright + eslint + tsc --noEmit (backend + frontend)
 		$(call _npm,run lint); \
 		echo "  Running tsc --noEmit..."; \
 		$(call _npm,run typecheck); \
+		echo "  Running test-project tsc..."; \
+		$(call _npm,run typecheck:test); \
 	else \
 		echo "  [lint] eslint not installed — run 'make frontend-install' to enable frontend lint."; \
 	fi

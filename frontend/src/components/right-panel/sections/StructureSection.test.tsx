@@ -34,6 +34,7 @@ function makePage(wordCount = 3): PagePayload {
     makeWord(0, i, ["hello", "world", "foo"][i] ?? `w${i}`),
   );
   return {
+    page_kind_reviewed: false,
     project_id: "p1",
     page_index: 0,
     line_filter: "all",
@@ -254,7 +255,7 @@ describe("StructureSection (Slice 18 + P3.d / Gap 37)", () => {
 
   it("gap slider defaults to 0", () => {
     renderSection(makeWord(0, 1));
-    const slider = screen.getByTestId("structure-gap-slider");
+    const slider = screen.getByTestId<HTMLInputElement>("structure-gap-slider");
     expect(slider.value).toBe("0");
   });
 
@@ -339,7 +340,7 @@ describe("StructureSection (Slice 18 + P3.d / Gap 37)", () => {
     renderSection(makeWord(0, 1)); // "world"
     // Click the 3rd character ("r" at index 2 → split position 3)
     const charButtons = screen.getAllByTitle(/Split after position/);
-    await user.click(charButtons[2]); // position 3 (after "wor")
+    await user.click(charButtons[2]!); // position 3 (after "wor")
     expect(screen.getByTestId("structure-split-button")).toHaveTextContent("Split at position 3");
   });
 
@@ -368,7 +369,7 @@ describe("StructureSection (Slice 18 + P3.d / Gap 37)", () => {
     renderSection(makeWord(0, 1)); // "world" — 5 chars
     // Click first char → split position 1
     const charButtons = screen.getAllByTitle(/Split after position/);
-    await user.click(charButtons[0]);
+    await user.click(charButtons[0]!);
     await user.click(screen.getByTestId("structure-split-button"));
 
     await waitFor(() => expect(splitHandler).toHaveBeenCalledOnce());

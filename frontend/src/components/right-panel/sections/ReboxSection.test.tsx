@@ -160,7 +160,7 @@ describe("ReboxSection (P3.b — Konva mini-canvas)", () => {
 
   it("Apply button is disabled until bbox is modified", () => {
     renderWithQuery(<ReboxSection word={makeWord()} projectId="p1" pageIndex={0} />);
-    const apply = screen.getByTestId("rebox-apply");
+    const apply = screen.getByTestId<HTMLButtonElement>("rebox-apply");
     expect(apply.disabled).toBe(true);
   });
 
@@ -171,7 +171,7 @@ describe("ReboxSection (P3.b — Konva mini-canvas)", () => {
     fireEvent.mouseDown(canvas);
     fireEvent.mouseMove(canvas);
     fireEvent.mouseUp(canvas);
-    const apply = screen.getByTestId("rebox-apply");
+    const apply = screen.getByTestId<HTMLButtonElement>("rebox-apply");
     expect(apply.disabled).toBe(false);
   });
 
@@ -182,10 +182,10 @@ describe("ReboxSection (P3.b — Konva mini-canvas)", () => {
     fireEvent.mouseDown(canvas);
     fireEvent.mouseMove(canvas);
     fireEvent.mouseUp(canvas);
-    expect(screen.getByTestId("rebox-apply").disabled).toBe(false);
+    expect(screen.getByTestId<HTMLButtonElement>("rebox-apply").disabled).toBe(false);
 
     fireEvent.click(screen.getByTestId("rebox-reset"));
-    expect(screen.getByTestId("rebox-apply").disabled).toBe(true);
+    expect(screen.getByTestId<HTMLButtonElement>("rebox-apply").disabled).toBe(true);
   });
 
   it("Apply posts the bbox to /rebox via fetch and clears dirty state", async () => {

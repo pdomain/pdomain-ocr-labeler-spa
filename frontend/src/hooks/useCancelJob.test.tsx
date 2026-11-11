@@ -35,7 +35,7 @@ describe("useCancelJob", () => {
         hits += 1;
         method = request.method;
         path = new URL(request.url).pathname;
-        return HttpResponse.json({ job_id: params.jobId, status: "cancelled" });
+        return HttpResponse.json({ job_id: params["jobId"], status: "cancelled" });
       }),
     );
 

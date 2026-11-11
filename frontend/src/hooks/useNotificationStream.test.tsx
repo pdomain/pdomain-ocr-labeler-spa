@@ -86,7 +86,7 @@ import { toast } from "../lib/toast";
 function lastCallMessage(mockFn: ReturnType<typeof vi.fn>): string {
   const calls = mockFn.mock.calls;
   if (calls.length === 0) return "";
-  const firstArg = calls[calls.length - 1][0] as React.ReactElement<{
+  const firstArg = calls[calls.length - 1]![0] as React.ReactElement<{
     message: string;
   }>;
   return firstArg?.props?.message ?? String(firstArg);
@@ -219,7 +219,7 @@ describe("useNotificationStream", () => {
     });
     await waitFor(() => expect(toast.success).toHaveBeenCalled());
     const calls = vi.mocked(toast.success).mock.calls;
-    const elem = calls[calls.length - 1][0] as React.ReactElement<{
+    const elem = calls[calls.length - 1]![0] as React.ReactElement<{
       kind: string;
       id: string;
       message: string;

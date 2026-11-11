@@ -28,7 +28,7 @@ function renderRail(projectId?: string) {
   });
   return render(
     <QueryClientProvider client={qc}>
-      <Rail projectId={projectId} />
+      <Rail {...(projectId !== undefined ? { projectId } : {})} />
     </QueryClientProvider>,
   );
 }

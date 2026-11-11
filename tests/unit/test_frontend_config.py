@@ -158,8 +158,8 @@ def test_tsconfig_test_exists_and_includes_test_files() -> None:
         "src/**/*.test.tsx",
         "src/**/*.spec.ts",
         "src/**/*.spec.tsx",
-        "src/**/__tests__/**",
-        "src/test/**",
+        "src/**/__tests__/**/*",
+        "src/test/**/*",
     }
     missing = expected - includes
     assert not missing, f"tsconfig.test.json include is missing required test-file patterns: {missing}."

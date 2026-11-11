@@ -222,7 +222,7 @@ describe("OCRConfigModal — auto-rotate POST failure surfacing (#447)", () => {
 
     // Wait for auto-rotate controls to be enabled (ocr-config GET resolved).
     await waitFor(() => {
-      expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
+      expect(screen.getByTestId<HTMLInputElement>("auto-rotate-checkbox").disabled).toBe(false);
     });
 
     // S6.3: toggle checkbox (captures pending state) then click Done to trigger POST.
@@ -249,7 +249,7 @@ describe("OCRConfigModal — auto-rotate POST failure surfacing (#447)", () => {
     renderModal();
 
     await waitFor(() => {
-      expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
+      expect(screen.getByTestId<HTMLInputElement>("auto-rotate-checkbox").disabled).toBe(false);
     });
 
     // S6.3: change then Done to trigger POST.
@@ -272,7 +272,7 @@ describe("OCRConfigModal — auto-rotate POST failure surfacing (#447)", () => {
     renderModal();
 
     await waitFor(() => {
-      expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
+      expect(screen.getByTestId<HTMLInputElement>("auto-rotate-checkbox").disabled).toBe(false);
     });
 
     // S6.3: Trigger failure via Done.
@@ -298,7 +298,7 @@ describe("OCRConfigModal — auto-rotate POST failure surfacing (#447)", () => {
     renderModal();
 
     await waitFor(() => {
-      expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
+      expect(screen.getByTestId<HTMLInputElement>("auto-rotate-checkbox").disabled).toBe(false);
     });
 
     // S6.3: change + Done (no error expected).
@@ -343,7 +343,7 @@ describe("OCRConfigModal — S6.3 Cancel/snapshot semantics", () => {
 
     // Wait for auto-rotate to be enabled
     await waitFor(() => {
-      expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
+      expect(screen.getByTestId<HTMLInputElement>("auto-rotate-checkbox").disabled).toBe(false);
     });
 
     // Change the checkbox (should be captured as pending, NOT posted yet)
@@ -368,7 +368,7 @@ describe("OCRConfigModal — S6.3 Cancel/snapshot semantics", () => {
 
     // Wait for auto-rotate to be enabled
     await waitFor(() => {
-      expect(screen.getByTestId("auto-rotate-checkbox").disabled).toBe(false);
+      expect(screen.getByTestId<HTMLInputElement>("auto-rotate-checkbox").disabled).toBe(false);
     });
 
     // Change checkbox (pending, not posted yet)

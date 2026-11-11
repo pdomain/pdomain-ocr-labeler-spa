@@ -41,6 +41,7 @@ function w(line: number, idx: number): WordMatch {
 
 function makePage(pageIndex = 0): PagePayload {
   return {
+    page_kind_reviewed: false,
     project_id: "p1",
     page_index: pageIndex,
     line_filter: "all",
@@ -297,9 +298,9 @@ describe("selection-store hierarchical layer", () => {
   });
 
   it("preserves dragRect across selection changes", () => {
-    selectionStore.setState((p) => ({ ...p, dragRect: { x: 0, y: 0, w: 10, h: 10 } }));
+    selectionStore.setState((p) => ({ ...p, dragRect: { x: 0, y: 0, width: 10, height: 10 } }));
     selectLine(0, 0);
-    expect(selectionStore.getState().dragRect).toEqual({ x: 0, y: 0, w: 10, h: 10 });
+    expect(selectionStore.getState().dragRect).toEqual({ x: 0, y: 0, width: 10, height: 10 });
   });
 });
 

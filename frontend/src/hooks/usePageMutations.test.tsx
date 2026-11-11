@@ -36,7 +36,6 @@ import {
   isCurrentPageCacheEpoch,
   pageCacheEpoch,
   pageCacheScope,
-  resetPageCacheOrder,
 } from "../lib/page-cache-order";
 
 function makeWrapper() {
@@ -130,7 +129,7 @@ describe("useSavePage", () => {
   it("POSTs to save and returns saved:true", async () => {
     server.use(
       http.post(`/api/projects/${PROJECT_ID}/pages/${PAGE_IDX}/save`, () =>
-        HttpResponse.json({ saved: true, page_source: "filesystem" }),
+        HttpResponse.json({ saved: true }),
       ),
     );
 
@@ -144,7 +143,6 @@ describe("useSavePage", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.saved).toBe(true);
-    expect(result.current.data?.page_source).toBe("filesystem");
   });
 });
 

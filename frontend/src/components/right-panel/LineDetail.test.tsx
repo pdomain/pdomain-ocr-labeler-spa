@@ -23,6 +23,7 @@ function makeQueryClient() {
 
 function makePage(): PagePayload {
   return {
+    page_kind_reviewed: false,
     project_id: "p1",
     page_index: 0,
     line_filter: "all",
@@ -72,7 +73,7 @@ function makePage(): PagePayload {
 function makePageWithDiffGt(): PagePayload {
   const page = makePage();
   // Make GT differ from OCR for testing GTRow display
-  page.line_matches![0].ground_truth_line_text = "helo world";
+  page.line_matches![0]!.ground_truth_line_text = "helo world";
   return page;
 }
 
@@ -171,7 +172,7 @@ describe("LineDetail P5.e: structure box + GT row + validate-all (Gaps 42, 43)",
     const user = userEvent.setup();
     selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
-    const input = screen.getByTestId("line-detail-gt-input");
+    const input = screen.getByTestId<HTMLInputElement>("line-detail-gt-input");
     await user.clear(input);
     await user.type(input, "new text");
     expect(input.value).toBe("new text");
@@ -186,7 +187,7 @@ describe("LineDetail P5.e: structure box + GT row + validate-all (Gaps 42, 43)",
   it("validate-all button is disabled when fully validated", () => {
     selectLine(0, 3);
     const page = makePage();
-    page.line_matches![0].is_fully_validated = true;
+    page.line_matches![0]!.is_fully_validated = true;
     renderWithQuery(<LineDetail page={page} projectId="p1" pageIndex={0} />);
     expect(screen.getByTestId("line-detail-validate-all")).toBeDisabled();
   });
@@ -467,7 +468,7 @@ describe("LineDetail D2: line-scope copy + split buttons", () => {
     await user.click(screen.getByTestId("line-split-by-words"));
     await waitFor(() => expect(body).toBeDefined());
     expect(body!.word_keys.length).toBeGreaterThan(0);
-    expect(body!.word_keys[0][0]).toBe(3);
+    expect(body!.word_keys[0]![0]).toBe(3);
   });
 });
 
@@ -536,7 +537,7 @@ describe("LineDetail GTRow: blur-commit and Escape revert (Task 3)", () => {
 
     selectLine(0, 3);
     renderWithQuery(<LineDetail page={makePage()} projectId="p1" pageIndex={0} />);
-    const input = screen.getByTestId("line-detail-gt-input");
+    const input = screen.getByTestId<HTMLInputElement>("line-detail-gt-input");
 
     // Edit the value then press Escape
     await user.clear(input);
@@ -587,7 +588,7 @@ describe("STB-3: LineDetail LineCard action buttons perform their mutations", ()
 
     // Use a mismatch-status line so the GT→OCR button is visible
     const page = makePage();
-    page.line_matches![0].overall_match_status = "mismatch";
+    page.line_matches![0]!.overall_match_status = "mismatch";
 
     const user = userEvent.setup();
     selectLine(0, 3);

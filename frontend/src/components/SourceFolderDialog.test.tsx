@@ -158,7 +158,7 @@ describe("SourceFolderDialog: Home button", () => {
   it("resets inputPath to ~ in the text input", () => {
     renderDialog(true);
 
-    const input = screen.getByTestId("source-folder-path-input");
+    const input = screen.getByTestId<HTMLInputElement>("source-folder-path-input");
     fireEvent.change(input, { target: { value: "/some/deep/path" } });
     fireEvent.click(screen.getByTestId("source-folder-home-button"));
     expect(input.value).toBe("~");
@@ -190,7 +190,7 @@ describe("SourceFolderDialog: Up button", () => {
   it("navigates to / when already at a top-level directory", () => {
     renderDialog(true);
 
-    const input = screen.getByTestId("source-folder-path-input");
+    const input = screen.getByTestId<HTMLInputElement>("source-folder-path-input");
     fireEvent.change(input, { target: { value: "/data" } });
     fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
 
@@ -244,7 +244,7 @@ describe("SourceFolderDialog: Use-current button", () => {
     renderDialog(true);
 
     // Navigate to a path first.
-    const input = screen.getByTestId("source-folder-path-input");
+    const input = screen.getByTestId<HTMLInputElement>("source-folder-path-input");
     fireEvent.change(input, { target: { value: "/nav/path" } });
     fireEvent.click(screen.getByTestId("source-folder-open-typed-button"));
 

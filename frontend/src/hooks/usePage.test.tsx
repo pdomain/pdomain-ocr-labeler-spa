@@ -21,6 +21,7 @@ function makeWrapper() {
 }
 
 const MOCK_PAGE: PagePayload = {
+  page_kind_reviewed: false,
   project_id: "proj-001",
   page_index: 0,
   page_record: null,

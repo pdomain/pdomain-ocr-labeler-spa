@@ -4,7 +4,6 @@
 // or the hooks in isolation. docs/issues/2026-07-21-suite-launcher-app-shims.md
 // (P1-SUITE).
 
-import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

@@ -76,7 +76,7 @@ function renderControls({ projectId = "proj-1", totalPages = 5, route }: RenderO
   const initialPath = route ?? `/projects/${projectId}/pages/pageno/1`;
   // Extract pageNo from the initial path so we can pass it as a prop.
   const pageNoMatch = /\/pageno\/(\d+)/.exec(initialPath);
-  const pageNo = pageNoMatch ? pageNoMatch[1] : "1";
+  const pageNo = pageNoMatch?.[1] ?? "1";
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={[initialPath]}>
@@ -128,7 +128,7 @@ describe("ProjectNavigationControls: testids", () => {
     mockProject("proj-1", 7);
     renderControls({ projectId: "proj-1", route: "/projects/proj-1/pages/pageno/3" });
 
-    const input = await screen.findByTestId("nav-page-input");
+    const input = await screen.findByTestId<HTMLInputElement>("nav-page-input");
     await waitFor(() => expect(input.value).toBe("3"));
   });
 });

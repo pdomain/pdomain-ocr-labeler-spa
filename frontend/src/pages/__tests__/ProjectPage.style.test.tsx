@@ -279,7 +279,7 @@ describe("ProjectPage — style / component / add-word wiring (Lane B / B2)", ()
     await waitFor(() => {
       expect(calls.length).toBeGreaterThanOrEqual(1);
     });
-    expect(calls[0].url).toContain("/words/add");
-    expect(calls[0].body).toHaveProperty("bbox");
+    expect(calls[0]!.url).toContain("/words/add");
+    expect(calls[0]!.body).toHaveProperty("bbox");
   });
 });

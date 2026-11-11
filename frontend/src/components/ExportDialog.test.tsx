@@ -76,8 +76,8 @@ describe("ExportDialog", () => {
     render(<ExportDialog open={true} projectId={PROJECT_ID} onClose={vi.fn()} />, {
       wrapper: makeWrapper(),
     });
-    const allRadio = screen.getByTestId("export-scope-all");
-    const currentRadio = screen.getByTestId("export-scope-current");
+    const allRadio = screen.getByTestId<HTMLInputElement>("export-scope-all");
+    const currentRadio = screen.getByTestId<HTMLInputElement>("export-scope-current");
     expect(allRadio.checked).toBe(true);
     expect(currentRadio.checked).toBe(false);
   });
@@ -106,8 +106,8 @@ describe("ExportDialog", () => {
       wrapper: makeWrapper(),
     });
     await waitFor(() => screen.getByTestId("export-style-checkbox-italic"));
-    const allCheckbox = screen.getByTestId("export-style-all-checkbox");
-    const italicCheckbox = screen.getByTestId("export-style-checkbox-italic");
+    const allCheckbox = screen.getByTestId<HTMLInputElement>("export-style-all-checkbox");
+    const italicCheckbox = screen.getByTestId<HTMLInputElement>("export-style-checkbox-italic");
 
     // Initially All is checked (selectedStyles empty)
     expect(allCheckbox.checked).toBe(true);
@@ -126,12 +126,14 @@ describe("ExportDialog", () => {
 
     // Select italic first
     fireEvent.click(screen.getByTestId("export-style-checkbox-italic"));
-    expect(screen.getByTestId("export-style-checkbox-italic").checked).toBe(true);
+    expect(screen.getByTestId<HTMLInputElement>("export-style-checkbox-italic").checked).toBe(true);
 
     // Click All to reset
     fireEvent.click(screen.getByTestId("export-style-all-checkbox"));
-    expect(screen.getByTestId("export-style-checkbox-italic").checked).toBe(false);
-    expect(screen.getByTestId("export-style-all-checkbox").checked).toBe(true);
+    expect(screen.getByTestId<HTMLInputElement>("export-style-checkbox-italic").checked).toBe(
+      false,
+    );
+    expect(screen.getByTestId<HTMLInputElement>("export-style-all-checkbox").checked).toBe(true);
   });
 
   it("export-button present when not running", async () => {
@@ -305,7 +307,7 @@ describe("ExportDialog", () => {
     });
     // Click the footer close button (last one)
     const closeButtons = screen.getAllByTestId("export-close-button");
-    fireEvent.click(closeButtons[closeButtons.length - 1]);
+    fireEvent.click(closeButtons[closeButtons.length - 1]!);
     expect(onClose).toHaveBeenCalledOnce();
   });
 });

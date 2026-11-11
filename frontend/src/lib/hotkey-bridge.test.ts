@@ -145,7 +145,7 @@ describe("buildBridgedEntries", () => {
   it("every entry has at least one keyCap", () => {
     for (const entry of entries) {
       expect(entry.keyCaps.length, `entry "${entry.label}" has no keyCaps`).toBeGreaterThan(0);
-      expect(entry.keyCaps[0].length, `entry "${entry.label}" keyCap is empty`).toBeGreaterThan(0);
+      expect(entry.keyCaps[0]!.length, `entry "${entry.label}" keyCap is empty`).toBeGreaterThan(0);
     }
   });
 

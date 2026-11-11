@@ -186,7 +186,7 @@ describe("BBoxOverlay theme-aware colors (FO-4, #328)", () => {
         </Layer>
       </Stage>,
     );
-    const rect = getAllByTestId("konva-rect")[0];
+    const rect = getAllByTestId("konva-rect")[0]!;
     // Mock word color is "#0000ff" → rgba(0,0,255,0.20)
     const expectedFill = hexToRgba(MOCK_LAYER_COLORS.word, LAYER_FILL_ALPHA);
     expect(rect.getAttribute("data-fill")).toBe(expectedFill);
@@ -200,7 +200,7 @@ describe("BBoxOverlay theme-aware colors (FO-4, #328)", () => {
         </Layer>
       </Stage>,
     );
-    const rect = getAllByTestId("konva-rect")[0];
+    const rect = getAllByTestId("konva-rect")[0]!;
     // Mock word color is "#0000ff" → rgba(0,0,255,0.65)
     const expectedStroke = hexToRgba(MOCK_LAYER_COLORS.word, LAYER_STROKE_ALPHA);
     expect(rect.getAttribute("data-stroke")).toBe(expectedStroke);
@@ -214,7 +214,7 @@ describe("BBoxOverlay theme-aware colors (FO-4, #328)", () => {
         </Layer>
       </Stage>,
     );
-    const rect = getAllByTestId("konva-rect")[0];
+    const rect = getAllByTestId("konva-rect")[0]!;
     const expectedFill = hexToRgba(MOCK_LAYER_COLORS.line, LAYER_FILL_ALPHA);
     expect(rect.getAttribute("data-fill")).toBe(expectedFill);
   });
@@ -227,7 +227,7 @@ describe("BBoxOverlay theme-aware colors (FO-4, #328)", () => {
         </Layer>
       </Stage>,
     );
-    const rect = getAllByTestId("konva-rect")[0];
+    const rect = getAllByTestId("konva-rect")[0]!;
     const expectedFill = hexToRgba(MOCK_LAYER_COLORS.para, LAYER_FILL_ALPHA);
     expect(rect.getAttribute("data-fill")).toBe(expectedFill);
   });
@@ -242,7 +242,7 @@ describe("BBoxOverlay theme-aware colors (FO-4, #328)", () => {
         </Layer>
       </Stage>,
     );
-    const rect = getAllByTestId("konva-rect")[0];
+    const rect = getAllByTestId("konva-rect")[0]!;
     expect(rect.getAttribute("data-fill")).toBe("transparent");
     // stroke is whatever readAccentColor() returns (jsdom fallback = #d6925a)
     expect(rect.getAttribute("data-stroke")).toMatch(/^#[0-9a-f]{6}$/i);
@@ -258,7 +258,7 @@ describe("BBoxOverlay theme-aware colors (FO-4, #328)", () => {
         </Layer>
       </Stage>,
     );
-    const rect = getAllByTestId("konva-rect")[0];
+    const rect = getAllByTestId("konva-rect")[0]!;
     // Fill should be a valid rgba string derived from the accent token
     expect(rect.getAttribute("data-fill")).toMatch(/^rgba\(\d+,\d+,\d+,[\d.]+\)$/);
     expect(rect.getAttribute("data-stroke")).toMatch(/^#[0-9a-f]{6}$/i);
@@ -307,7 +307,7 @@ describe("BBoxOverlay Konva-rect rendering (#298, spec §6)", () => {
         </Layer>
       </Stage>,
     );
-    const rect = getAllByTestId("konva-rect")[0];
+    const rect = getAllByTestId("konva-rect")[0]!;
     expect(rect.getAttribute("data-fill")).toBeTruthy();
     expect(rect.getAttribute("data-stroke")).toBeTruthy();
     expect(rect.getAttribute("data-stroke-width")).toBe("1");
@@ -322,12 +322,12 @@ describe("BBoxOverlay Konva-rect rendering (#298, spec §6)", () => {
       </Stage>,
     );
     const rects = getAllByTestId("konva-rect");
-    expect(rects[0].getAttribute("data-x")).toBe("0");
-    expect(rects[0].getAttribute("data-y")).toBe("0");
-    expect(rects[0].getAttribute("data-width")).toBe("8");
-    expect(rects[0].getAttribute("data-height")).toBe("4");
-    expect(rects[1].getAttribute("data-x")).toBe("10");
-    expect(rects[1].getAttribute("data-y")).toBe("5");
+    expect(rects[0]!.getAttribute("data-x")).toBe("0");
+    expect(rects[0]!.getAttribute("data-y")).toBe("0");
+    expect(rects[0]!.getAttribute("data-width")).toBe("8");
+    expect(rects[0]!.getAttribute("data-height")).toBe("4");
+    expect(rects[1]!.getAttribute("data-x")).toBe("10");
+    expect(rects[1]!.getAttribute("data-y")).toBe("5");
   });
 
   it("selected items use SELECTION_STROKE_WIDTH (3px)", () => {
@@ -343,8 +343,8 @@ describe("BBoxOverlay Konva-rect rendering (#298, spec §6)", () => {
       </Stage>,
     );
     const rects = getAllByTestId("konva-rect");
-    expect(rects[0].getAttribute("data-stroke-width")).toBe(String(SELECTION_STROKE_WIDTH));
-    expect(rects[1].getAttribute("data-stroke-width")).toBe("1");
+    expect(rects[0]!.getAttribute("data-stroke-width")).toBe(String(SELECTION_STROKE_WIDTH));
+    expect(rects[1]!.getAttribute("data-stroke-width")).toBe("1");
   });
 
   it("Rect has listening=false and perfectDrawEnabled=false (perf pinning)", () => {
@@ -355,7 +355,7 @@ describe("BBoxOverlay Konva-rect rendering (#298, spec §6)", () => {
         </Layer>
       </Stage>,
     );
-    const rect = getAllByTestId("konva-rect")[0];
+    const rect = getAllByTestId("konva-rect")[0]!;
     expect(rect.getAttribute("data-listening")).toBe("false");
     expect(rect.getAttribute("data-perfect-draw")).toBe("false");
   });
@@ -435,7 +435,7 @@ describe("BBoxOverlay per-item dimming (#295)", () => {
         </Layer>
       </Stage>,
     );
-    const rect = getAllByTestId("konva-rect")[0];
+    const rect = getAllByTestId("konva-rect")[0]!;
     expect(Number(rect.getAttribute("data-opacity"))).toBeCloseTo(MISMATCH_DIM_OPACITY);
   });
 
@@ -450,7 +450,7 @@ describe("BBoxOverlay per-item dimming (#295)", () => {
         </Layer>
       </Stage>,
     );
-    const rect = getAllByTestId("konva-rect")[0];
+    const rect = getAllByTestId("konva-rect")[0]!;
     expect(Number(rect.getAttribute("data-opacity"))).toBeCloseTo(1);
   });
 
@@ -463,7 +463,7 @@ describe("BBoxOverlay per-item dimming (#295)", () => {
         </Layer>
       </Stage>,
     );
-    const rect = getAllByTestId("konva-rect")[0];
+    const rect = getAllByTestId("konva-rect")[0]!;
     expect(Number(rect.getAttribute("data-opacity"))).toBeCloseTo(1);
   });
 
@@ -481,9 +481,9 @@ describe("BBoxOverlay per-item dimming (#295)", () => {
     );
     const rects = getAllByTestId("konva-rect");
     // Item a: dimmed=true → MISMATCH_DIM_OPACITY
-    expect(Number(rects[0].getAttribute("data-opacity"))).toBeCloseTo(MISMATCH_DIM_OPACITY);
+    expect(Number(rects[0]!.getAttribute("data-opacity"))).toBeCloseTo(MISMATCH_DIM_OPACITY);
     // Item b: dimmed=false → full opacity
-    expect(Number(rects[1].getAttribute("data-opacity"))).toBeCloseTo(1);
+    expect(Number(rects[1]!.getAttribute("data-opacity"))).toBeCloseTo(1);
   });
 
   it("in matchFilterMode='all', all items render at full opacity (no per-item dimming)", () => {
@@ -523,9 +523,9 @@ describe("BBoxOverlay per-item dimming (#295)", () => {
       </Stage>,
     );
     const rects = getAllByTestId("konva-rect");
-    expect(Number(rects[0].getAttribute("data-opacity"))).toBeCloseTo(MISMATCH_DIM_OPACITY);
-    expect(Number(rects[1].getAttribute("data-opacity"))).toBeCloseTo(1);
-    expect(Number(rects[2].getAttribute("data-opacity"))).toBeCloseTo(1);
+    expect(Number(rects[0]!.getAttribute("data-opacity"))).toBeCloseTo(MISMATCH_DIM_OPACITY);
+    expect(Number(rects[1]!.getAttribute("data-opacity"))).toBeCloseTo(1);
+    expect(Number(rects[2]!.getAttribute("data-opacity"))).toBeCloseTo(1);
   });
 });
 

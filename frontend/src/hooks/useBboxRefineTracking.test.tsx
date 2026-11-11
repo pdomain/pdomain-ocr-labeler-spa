@@ -158,7 +158,7 @@ describe("useBboxRefineTracking", () => {
       expect.objectContaining({ id: "job-1" }),
     );
     const successCall = toastMock.mock.calls.find(
-      ([msg]: [unknown]) => msg === "Bbox refine complete",
+      ([msg]: unknown[]) => msg === "Bbox refine complete",
     );
     expect(successCall).toBeUndefined();
 
@@ -302,7 +302,7 @@ describe("useBboxRefineTracking", () => {
       expect(result.current.jobId).toBe("job-queued");
       expect(result.current.word).not.toBeNull();
       const timeoutCall = toastMock.mock.calls.find(
-        ([msg]: [unknown]) => typeof msg === "string" && msg.includes("timed out"),
+        ([msg]: unknown[]) => typeof msg === "string" && msg.includes("timed out"),
       );
       expect(timeoutCall).toBeUndefined();
     });
@@ -348,7 +348,7 @@ describe("useBboxRefineTracking", () => {
       });
 
       const timeoutCall = toastMock.mock.calls.find(
-        ([msg]: [unknown]) => typeof msg === "string" && msg.includes("timed out"),
+        ([msg]: unknown[]) => typeof msg === "string" && msg.includes("timed out"),
       );
       expect(timeoutCall).toBeUndefined();
     });

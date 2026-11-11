@@ -13,7 +13,7 @@ import { Worklist } from "./Worklist";
 import { worklistStore } from "../../stores/worklist-store";
 import { useUiPrefs } from "../../stores/ui-prefs";
 import type { components } from "../../api/types";
-import type { WordRowProps } from "@pdomain/pdomain-ui/worklist";
+import type { WordListItem, WordRowProps } from "@pdomain/pdomain-ui/worklist";
 
 // ── @pdomain/pdomain-ui/worklist mock ──────────────────────────────────────
 // WordList uses react-virtuoso which renders zero items in jsdom (no scroll
@@ -23,7 +23,7 @@ vi.mock("@pdomain/pdomain-ui/worklist", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@pdomain/pdomain-ui/worklist")>();
   const React = await import("react");
 
-  type MockWordListProps<TWord extends { text: string; bounding_box: object }> = {
+  type MockWordListProps<TWord extends WordListItem> = {
     items: TWord[];
     renderRow?: ((props: WordRowProps<TWord>) => React.ReactNode) | undefined;
     selectedIndex?: number | null | undefined;
@@ -32,7 +32,7 @@ vi.mock("@pdomain/pdomain-ui/worklist", async (importOriginal) => {
     className?: string;
   };
 
-  function MockWordList<TWord extends { text: string; bounding_box: object }>({
+  function MockWordList<TWord extends WordListItem>({
     items,
     renderRow,
     selectedIndex,
@@ -278,7 +278,7 @@ describe("Worklist (Slice 11 + P5.a/P5.b)", () => {
 
   it("P5.b: sort dropdown renders with default 'index'", () => {
     render(<Worklist projectId="proj-1" pageIndex={0} />);
-    const sel = screen.getByTestId("worklist-sort-select");
+    const sel = screen.getByTestId<HTMLSelectElement>("worklist-sort-select");
     expect(sel.value).toBe("index");
   });
 
@@ -478,7 +478,7 @@ describe("STB-4: Worklist row click sets rightPanelOpen=true", () => {
     // Re-render with updated filter
     render(<Worklist lineMatches={lines} projectId="proj-1" pageIndex={0} />);
 
-    await user.click(screen.getAllByTestId("worklist-row-0")[0]);
+    await user.click(screen.getAllByTestId("worklist-row-0")[0]!);
     expect(useUiPrefs.getState().rightPanelOpen).toBe(true);
   });
 

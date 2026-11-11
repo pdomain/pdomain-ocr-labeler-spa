@@ -561,8 +561,7 @@ describe("PageActionsCompact: auto-rotate-all trigger (P2 / C29)", () => {
     await waitFor(() => {
       const calls = toastMock.mock.calls;
       const errCall = calls.find(
-        ([msg]: [unknown, ...unknown[]]) =>
-          typeof msg === "string" && msg.toLowerCase().includes("auto-rotate"),
+        ([msg]: unknown[]) => typeof msg === "string" && msg.toLowerCase().includes("auto-rotate"),
       );
       expect(errCall).toBeDefined();
     });
@@ -1716,7 +1715,7 @@ describe("PageActionsCompact: S5.2 save-project skipped-page warning", () => {
     await waitFor(() => {
       const calls = toastMock.mock.calls;
       const warnCall = calls.find(
-        ([msg]: [unknown, ...unknown[]]) =>
+        ([msg]: unknown[]) =>
           typeof msg === "string" &&
           (msg.toLowerCase().includes("skip") ||
             msg.toLowerCase().includes("unsaved") ||
@@ -1776,8 +1775,7 @@ describe("PageActionsCompact: S5.2 save-project skipped-page warning", () => {
     await waitFor(() => {
       const calls = toastMock.mock.calls;
       const successCall = calls.find(
-        ([msg]: [unknown, ...unknown[]]) =>
-          typeof msg === "string" && msg.toLowerCase().includes("saved"),
+        ([msg]: unknown[]) => typeof msg === "string" && msg.toLowerCase().includes("saved"),
       );
       expect(successCall).toBeDefined();
     });

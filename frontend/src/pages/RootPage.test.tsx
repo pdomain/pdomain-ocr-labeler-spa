@@ -547,8 +547,6 @@ describe("RootPage progress-P2-ROOT-followup — Active / Complete filter chips"
 
 describe("RootPage F-043 — project card navigation on load failure", () => {
   it("does not navigate when POST /api/projects/load returns an error", async () => {
-    const navigateCalls: string[] = [];
-
     // Capture navigate calls via LocationSpy pattern (MemoryRouter internal)
     // — we assert navigate was NOT called by checking the card shows error state.
     setupProjectList([

@@ -51,6 +51,7 @@ function w(line: number, idx: number, ocr: string): WordMatch {
 
 function makeTwoBlockPage(): PagePayload {
   return {
+    page_kind_reviewed: false,
     project_id: "proj1",
     page_index: 0,
     line_filter: "all",
@@ -337,6 +338,7 @@ describe("MultiWordDetail (MUL-1, MUL-2, MUL-3 — Slice B)", () => {
   it("words without block_index render under a null-block group", () => {
     // Page without block_index on line_matches
     const page: PagePayload = {
+      page_kind_reviewed: false,
       project_id: "p2",
       page_index: 0,
       line_filter: "all",

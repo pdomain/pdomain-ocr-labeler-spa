@@ -59,6 +59,7 @@ function makeLine(
 
 function makePage(line_matches: LineMatch[], selection?: PagePayload["selection"]): PagePayload {
   return {
+    page_kind_reviewed: false,
     project_id: "proj-001",
     page_index: 0,
     page_record: null,
@@ -224,9 +225,9 @@ describe("expandSelection (#299)", () => {
     });
     const result = expandSelection(page);
     expect(result.paragraphs).toHaveLength(1);
-    expect(result.paragraphs[0].id).toBe("0");
+    expect(result.paragraphs[0]!.id).toBe("0");
     expect(warnSpy).toHaveBeenCalled();
-    const warnMsg = warnSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    const warnMsg = warnSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
     expect(warnMsg).toContain("paragraph");
     expect(warnMsg).toContain("42");
   });
@@ -241,7 +242,7 @@ describe("expandSelection (#299)", () => {
     const result = expandSelection(page);
     expect(result.lines).toEqual([]);
     expect(warnSpy).toHaveBeenCalled();
-    const warnMsg = warnSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    const warnMsg = warnSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
     expect(warnMsg).toContain("line");
     expect(warnMsg).toContain("99");
   });
@@ -259,7 +260,7 @@ describe("expandSelection (#299)", () => {
     const result = expandSelection(page);
     expect(result.words).toEqual([]);
     expect(warnSpy).toHaveBeenCalledTimes(2);
-    const warnMsg = warnSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    const warnMsg = warnSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
     expect(warnMsg).toContain("word");
   });
 
@@ -279,6 +280,6 @@ describe("expandSelection (#299)", () => {
     const result = expandSelection(page);
     // Line 0 has no words → skipped (no bbox can be computed). Line 1 yields its single-word bbox.
     expect(result.lines).toHaveLength(1);
-    expect(result.lines[0].id).toBe("1");
+    expect(result.lines[0]!.id).toBe("1");
   });
 });

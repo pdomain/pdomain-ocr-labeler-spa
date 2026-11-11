@@ -28,7 +28,7 @@ function makeWordMatch(overrides: Partial<WordMatch> = {}): WordMatch {
     is_validated: false,
     text_style_labels: [],
     word_components: [],
-    bbox: { x0: 0, y0: 0, x1: 10, y1: 10 },
+    bbox: { x: 0, y: 0, width: 10, height: 10 },
     word_id: "w-001",
     ...overrides,
   };
@@ -56,7 +56,7 @@ describe("WordCell", () => {
       ground_truth_text: "world",
     });
     render(<WordCell word={word} />);
-    const input = screen.getByTestId("gt-text-input-0-0");
+    const input = screen.getByTestId<HTMLInputElement>("gt-text-input-0-0");
     expect(input.value).toBe("world");
   });
 

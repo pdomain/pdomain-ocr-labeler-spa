@@ -10,8 +10,14 @@ import {
 const STRUCTURE: LayoutStructureDraft = {
   kind: "poetry",
   lines: [
-    { text: "First line", word_ids: ["word-a", "word-b"], stanza_index: 0, indent_hint: "2em" },
-    { text: "Second line", word_ids: ["word-c"], stanza_index: 1 },
+    {
+      text: "First line",
+      word_ids: ["word-a", "word-b"],
+      stanza_index: 0,
+      indent_hint: "2em",
+      word_signatures: [],
+    },
+    { text: "Second line", word_ids: ["word-c"], stanza_index: 1, word_signatures: [] },
   ],
   column_group_id: "columns-1",
   column_index: 0,
@@ -46,8 +52,14 @@ describe("LayoutStructureEditor", () => {
     expect(changed).toEqual({
       ...STRUCTURE,
       lines: [
-        { text: "First line", word_ids: ["word-a", "word-b"], stanza_index: 2, indent_hint: "3em" },
-        { text: "Second line", word_ids: ["word-c"], stanza_index: 1 },
+        {
+          text: "First line",
+          word_ids: ["word-a", "word-b"],
+          stanza_index: 2,
+          indent_hint: "3em",
+          word_signatures: [],
+        },
+        { text: "Second line", word_ids: ["word-c"], stanza_index: 1, word_signatures: [] },
       ],
       reading_order: 4,
     });
