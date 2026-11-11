@@ -567,7 +567,11 @@ Handler chain:
 2. `RequestValidationError` → `400 validation_error`, `details = exc.errors()`.
 3. `BoundingBoxGeometryError` (custom exception in `core/exceptions.py`)
    → `422 geometry_error`.
-4. `Exception` (catch-all) → `500 internal_error`, `details=` last 3
+4. `UnsupportedRuntimeError` (custom exception in `core/exceptions.py`)
+   → `503 unsupported_runtime`, `details.missing` names the absent runtime
+   interfaces. Verified labeling-bundle and book-page loading raises it when
+   the Python build lacks Linux memfd sealing.
+5. `Exception` (catch-all) → `500 internal_error`, `details=` last 3
    traceback lines, log via `logger.exception(...)`.
 
 The SPA's `client.ts` parses `{error, message, details}` uniformly.

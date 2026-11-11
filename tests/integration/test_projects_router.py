@@ -59,9 +59,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from pdomain_book_tools.typography import (
@@ -79,6 +81,7 @@ from pdomain_book_tools.typography import (
 )
 
 from pdomain_ocr_labeler_spa.bootstrap import build_app
+from pdomain_ocr_labeler_spa.core.persistence.book_labeling_session import BookLabelingSession
 from pdomain_ocr_labeler_spa.settings import Settings
 from tests.unit.core.persistence.test_book_labeling_session import _write_book
 
@@ -739,6 +742,57 @@ def test_post_load_auto_detects_and_retains_labeling_bundle(tmp_path: Path) -> N
     loaded_project = app.state.project_state.loaded_project
     assert loaded_project is not None
     assert loaded_project.image_paths[0].read_bytes() == b"image-payload"
+
+
+def _assert_unsupported_runtime(response: httpx2.Response) -> None:
+    assert response.status_code == 503, response.text
+    body = response.json()
+    assert body["error"] == "unsupported_runtime"
+    assert "os.memfd_create" in body["message"]
+    assert "os.memfd_create" in body["details"]["missing"]
+
+
+def test_bundle_load_reports_a_missing_runtime_interface(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    bundle_root = projects_root / ("f" * 64)
+    _ = _write_labeling_bundle_project(bundle_root)
+    app = build_app(_make_settings(tmp_path, source_projects_root=projects_root))
+    monkeypatch.delattr(os, "memfd_create", raising=False)
+
+    with TestClient(app) as client:
+        response = client.post("/api/projects/load", json={"project_root": str(bundle_root)})
+
+    _assert_unsupported_runtime(response)
+    assert app.state.project_state.loaded_project is None
+
+
+def test_book_load_reports_a_missing_runtime_interface_and_closes_its_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    book_root = projects_root / "book"
+    _ = _write_book(book_root, page_count=1, valid_images=True)
+    app = build_app(_make_settings(tmp_path, source_projects_root=projects_root))
+    closed: list[BookLabelingSession] = []
+    real_close = BookLabelingSession.close
+
+    def record_close(session: BookLabelingSession) -> None:
+        closed.append(session)
+        real_close(session)
+
+    monkeypatch.setattr(BookLabelingSession, "close", record_close)
+    monkeypatch.delattr(os, "memfd_create", raising=False)
+
+    with TestClient(app) as client:
+        response = client.post("/api/projects/load", json={"project_root": str(book_root)})
+
+    _assert_unsupported_runtime(response)
+    assert app.state.project_state.loaded_project is None
+    assert len(closed) == 1
 
 
 def test_invalid_labeling_bundle_load_does_not_swap_active_project(tmp_path: Path) -> None:

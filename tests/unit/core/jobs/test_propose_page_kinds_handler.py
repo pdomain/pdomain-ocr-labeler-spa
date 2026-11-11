@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -17,6 +18,7 @@ from pdomain_pgdp_measure.page_templates import classify_pages as _real_classify
 from pdomain_pgdp_measure.profile_models import CoordinateFrame, InkBand, PageMeasurement
 
 from pdomain_ocr_labeler_spa.api.projects import _build_project_from_book_labeling_manifest
+from pdomain_ocr_labeler_spa.core.exceptions import UnsupportedRuntimeError
 from pdomain_ocr_labeler_spa.core.jobs.events import JobEventBroker
 from pdomain_ocr_labeler_spa.core.jobs.runner import Job, JobRunner, JobStatus
 from pdomain_ocr_labeler_spa.core.models import Project
@@ -462,6 +464,26 @@ async def test_a_book_labeling_lease_is_closed_after_each_page_is_measured(
     for path in recorded_paths:
         with pytest.raises(OSError):
             path.read_bytes()
+
+
+@pytest.mark.parametrize("missing", ["memfd_create", "MFD_ALLOW_SEALING", "MFD_CLOEXEC"])
+async def test_a_missing_runtime_interface_fails_the_run_instead_of_skipping_every_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing: str
+) -> None:
+    """Pages are not unreadable when the interpreter cannot seal them. Skipping
+    each one would report a clean run that measured nothing.
+    """
+    from pdomain_ocr_labeler_spa.core.jobs.handlers.propose_page_kinds import (
+        handle_propose_page_kinds,
+    )
+
+    runner, job, recorded_paths = _book_runner_and_job(tmp_path / "book", page_count=3)
+    monkeypatch.delattr(os, missing, raising=False)
+
+    with pytest.raises(UnsupportedRuntimeError, match=rf"os\.{missing}"):
+        await handle_propose_page_kinds(runner, job)
+
+    assert recorded_paths == []
 
 
 async def test_an_unreadable_page_is_skipped_and_the_rest_of_the_book_still_runs(

@@ -18,6 +18,7 @@ from pdomain_book_tools.typography import (
     WordTypography,
 )
 
+from pdomain_ocr_labeler_spa.core.exceptions import UnsupportedRuntimeError
 from pdomain_ocr_labeler_spa.core.persistence.labeling_bundle import (
     load_labeling_bundle_directory,
 )
@@ -201,3 +202,17 @@ def test_load_rejects_symlinked_bundle_file(tmp_path: Path) -> None:
 
     with pytest.raises((OSError, ValueError)):
         load_labeling_bundle_directory(root)
+
+
+@pytest.mark.parametrize("missing", ["memfd_create", "MFD_ALLOW_SEALING", "MFD_CLOEXEC"])
+def test_load_names_the_missing_runtime_interface(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing: str
+) -> None:
+    root = tmp_path / "bundle"
+    _ = _write_bundle(root)
+    monkeypatch.delattr(os, missing, raising=False)
+
+    with pytest.raises(UnsupportedRuntimeError, match=rf"os\.{missing}") as caught:
+        _ = load_labeling_bundle_directory(root)
+
+    assert f"os.{missing}" in caught.value.missing

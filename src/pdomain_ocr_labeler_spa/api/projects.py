@@ -66,6 +66,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ..core.active_project import ActiveProjectCarrier, InvalidProjectDirError
+from ..core.exceptions import UnsupportedRuntimeError
 from ..core.jobs import JobRunner
 from ..core.models import Project
 from ..core.ocr_models import AutoRotateAllRequest
@@ -559,6 +560,11 @@ def load_project(
             project = _build_project_from_book_labeling_manifest(book_labeling_session)
             loaded_labeling_bundle.close()
             loaded_labeling_bundle = None
+        except UnsupportedRuntimeError:
+            # Let the 503 handler answer, but do not strand the session.
+            if book_labeling_session is not None:
+                book_labeling_session.close()
+            raise
         except (IndexError, OSError, ValueError) as exc:
             if loaded_labeling_bundle is not None:
                 loaded_labeling_bundle.close()
