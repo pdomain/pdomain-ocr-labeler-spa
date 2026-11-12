@@ -33,6 +33,9 @@ canonical corrections. Suggestion accept/edit and predecessor-based undo are
 not yet implemented; reject, quarantine, defer, reviewed, and reviewed-regular
 decisions are available.
 
+The panel frame stays local. The evidence is in the 2026-11-11 entry of
+[the decision log](../context/decisions.md).
+
 ## 2. User-facing goals
 
 - I need to see the OCR and GT text side-by-side for any word I click so I can
@@ -57,10 +60,11 @@ decisions are available.
 | `level === "line" && selectedLines.length === 1` | `LineDetail` | `line-detail` |
 | `level === "word"` | `WordDetail` | `word-detail` |
 | `level === "block" \| "para"` | `BlockDetail` | `block-detail` |
-| `level === "none"` | placeholder | `right-panel-placeholder` |
+| `level === "region"` | `RegionDetail` | `region-detail` |
+| `level === "none"` | text tabs slot, else placeholder | `right-panel-placeholder` |
 
 ```
-RightPanel (rendered inside StudioShell's "right" slot)
+RightPanel (rendered through ProjectPage's `rightSlot`)
 ├── [selectedWords.length > 1]
 │   └── MultiWordDetail             data-testid="multi-word-detail"
 │

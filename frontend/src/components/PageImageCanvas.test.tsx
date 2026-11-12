@@ -412,6 +412,7 @@ function makeLine(
 
 function makePage(line_matches: LineMatch[], selection?: PagePayload["selection"]): PagePayload {
   return {
+    page_kind_reviewed: false,
     project_id: "proj-001",
     page_index: 0,
     page_record: null,
@@ -608,7 +609,7 @@ describe("PageImageCanvas — Select mode (drag box-select, #197, #302)", () => 
     simulateDrag({ x: 50, y: 50 }, { x: 150, y: 120 });
 
     expect(onBoxSelect).toHaveBeenCalledOnce();
-    const [rect, modifier] = onBoxSelect.mock.calls[0];
+    const [rect, modifier] = onBoxSelect.mock.calls[0]!;
     expect(modifier).toBe("replace");
     expect(rect.width).toBeGreaterThan(2);
   });
@@ -618,7 +619,7 @@ describe("PageImageCanvas — Select mode (drag box-select, #197, #302)", () => 
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} onBoxSelect={onBoxSelect} />);
     simulateDrag({ x: 50, y: 50 }, { x: 150, y: 120 }, { shiftKey: true });
 
-    expect(onBoxSelect.mock.calls[0][1]).toBe("remove");
+    expect(onBoxSelect.mock.calls[0]![1]).toBe("remove");
   });
 
   it("calls onBoxSelect with 'toggle' modifier when Ctrl held", () => {
@@ -626,7 +627,7 @@ describe("PageImageCanvas — Select mode (drag box-select, #197, #302)", () => 
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} onBoxSelect={onBoxSelect} />);
     simulateDrag({ x: 50, y: 50 }, { x: 150, y: 120 }, { ctrlKey: true });
 
-    expect(onBoxSelect.mock.calls[0][1]).toBe("toggle");
+    expect(onBoxSelect.mock.calls[0]![1]).toBe("toggle");
   });
 
   it("does NOT call onBoxSelect for tiny drag (≤2px)", () => {
@@ -788,7 +789,7 @@ describe("PageImageCanvas — Rebox mode (#198)", () => {
     simulateDrag({ x: 50, y: 50 }, { x: 150, y: 120 });
 
     expect(onRebox).toHaveBeenCalledOnce();
-    const rect = onRebox.mock.calls[0][0];
+    const rect = onRebox.mock.calls[0]![0];
     expect(rect.width).toBeGreaterThan(2);
   });
 
@@ -1152,7 +1153,7 @@ describe("PageImageCanvas — target bbox click → selection action", () => {
         { x: 300, y: 200, width: 50, height: 20 },
       ]),
     ]);
-    page.line_matches![0].word_matches[0].word_index = 3;
+    page.line_matches![0]!.word_matches[0]!.word_index = 3;
 
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
     const overlay = getOverlay();
@@ -1174,7 +1175,7 @@ describe("PageImageCanvas — target bbox click → selection action", () => {
         { x: 300, y: 200, width: 50, height: 20 },
       ]),
     ]);
-    page.line_matches![0].word_matches[0].word_index = 3;
+    page.line_matches![0]!.word_matches[0]!.word_index = 3;
 
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
     const overlay = getOverlay();
@@ -1404,7 +1405,7 @@ describe("PageImageCanvas — target bbox click → selection action", () => {
         { x: 300, y: 200, width: 50, height: 20 },
       ]),
     ]);
-    page.line_matches![0].word_matches[0].word_index = 3;
+    page.line_matches![0]!.word_matches[0]!.word_index = 3;
 
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
     const overlay = getOverlay();
@@ -1424,7 +1425,7 @@ describe("PageImageCanvas — target bbox click → selection action", () => {
     // lands in the display bbox, but the page-space coord at scale 2 is outside.
     mockStageScale.value = 2;
     const page = makePage([makeLine(2, 0, [{ x: 100, y: 200, width: 50, height: 20 }])]);
-    page.line_matches![0].word_matches[0].word_index = 3;
+    page.line_matches![0]!.word_matches[0]!.word_index = 3;
 
     render(<PageImageCanvas imageUrl="/test.jpg" encoded={encoded} page={page} />);
     const overlay = getOverlay();

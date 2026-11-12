@@ -22,27 +22,27 @@ describe("PlaintextEditor", () => {
   it("source='gt' shows page_text_gt", () => {
     const page = makePage({ page_text_gt: "ground truth body", page_text_ocr: "ocr body" });
     render(<PlaintextEditor source="gt" page={page} />);
-    const ta = screen.getByTestId("plaintext-editor-gt");
+    const ta = screen.getByTestId<HTMLTextAreaElement>("plaintext-editor-gt");
     expect(ta.value).toBe("ground truth body");
   });
 
   it("source='ocr' shows page_text_ocr", () => {
     const page = makePage({ page_text_gt: "ground truth body", page_text_ocr: "ocr body" });
     render(<PlaintextEditor source="ocr" page={page} />);
-    const ta = screen.getByTestId("plaintext-editor-ocr");
+    const ta = screen.getByTestId<HTMLTextAreaElement>("plaintext-editor-ocr");
     expect(ta.value).toBe("ocr body");
   });
 
   it("textarea is readOnly", () => {
     const page = makePage({ page_text_gt: "x", page_text_ocr: "y" });
     render(<PlaintextEditor source="gt" page={page} />);
-    const ta = screen.getByTestId("plaintext-editor-gt");
+    const ta = screen.getByTestId<HTMLTextAreaElement>("plaintext-editor-gt");
     expect(ta.readOnly).toBe(true);
   });
 
   it("renders empty textarea when page is null/undefined (no crash)", () => {
     const { rerender } = render(<PlaintextEditor source="gt" page={null} />);
-    let ta = screen.getByTestId("plaintext-editor-gt");
+    let ta = screen.getByTestId<HTMLTextAreaElement>("plaintext-editor-gt");
     expect(ta.value).toBe("");
 
     rerender(<PlaintextEditor source="ocr" />);
@@ -53,7 +53,7 @@ describe("PlaintextEditor", () => {
   it("renders empty textarea when payload field is null", () => {
     const page = makePage({ page_text_gt: null, page_text_ocr: null });
     render(<PlaintextEditor source="gt" page={page} />);
-    const ta = screen.getByTestId("plaintext-editor-gt");
+    const ta = screen.getByTestId<HTMLTextAreaElement>("plaintext-editor-gt");
     expect(ta.value).toBe("");
   });
 });

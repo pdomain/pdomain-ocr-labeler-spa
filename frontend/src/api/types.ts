@@ -1075,11 +1075,12 @@ export interface paths {
         };
         /**
          * List Exports
-         * @description ``GET /api/projects/{id}/exports`` — past exports (best-effort).
+         * @description ``GET /api/projects/{id}/exports`` — this project's saved export.
          *
          *     Spec §5.9 line 326. Reads ``doctr-export/manifest.json`` and remaps this
          *     project's entry to ``ExportManifest`` (Wave 1.0–1.1). Missing manifest or
-         *     unknown project → empty list.
+         *     unknown project → empty list. Unreadable manifest → 500
+         *     ``export_history_unreadable``, so a failed read never looks like no export.
          */
         get: operations["list_exports_api_projects__project_id__exports_get"];
         put?: never;

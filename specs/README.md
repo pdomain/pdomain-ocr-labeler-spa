@@ -34,8 +34,7 @@ Specs are now organized into two trees:
 | 16 | [`16-milestones.md`](16-milestones.md) | M0–M11 acceptance history. Not the live roadmap. |
 | 17 | [`17-decisions.md`](17-decisions.md) | ADRs D-001–D-054 — append-only |
 
-Glyph annotations now live in [architecture](../docs/architecture/20-glyph-annotations.md) . Their picker enum
-parity remains in the [residual plan](../docs/plans/2026-07-21-glyph-annotations-completion.md) .
+Glyph annotations now live in [architecture](../docs/architecture/20-glyph-annotations.md).
 
 ## Implemented specs (under `docs/architecture/`)
 

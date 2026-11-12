@@ -678,7 +678,7 @@ a prerequisite. The September decisions supersede this milestone's original enve
 
 [Glyph architecture](../docs/architecture/20-glyph-annotations.md) records the implemented contract.
 [The driver contract](../docs/architecture/13-driver-contract.md) owns panel and bulk identifiers. The
-[remaining picker plan](../docs/plans/2026-07-21-glyph-annotations-completion.md) retains shared-enum parity.
+picker offers every shared ligature kind.
 
 Acceptance evidence includes tests/integration/test_glyph_routes.py, tests/e2e/test_glyph_panel.py, and
 tests/e2e/test_bulk_glyph_mark.py. They cover manual review, save/reload, and persisted bulk apply. This

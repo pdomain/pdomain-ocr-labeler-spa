@@ -97,8 +97,8 @@ Major groups:
 | `WordDetail.tsx` | Right-panel word detail view |
 | `LineDetail.tsx` | Right-panel line detail view |
 | `BlockDetail.tsx` | Right-panel block detail view |
-| `dialogs/` | `WordEditDialog`, `ExportDialog`, `OCRConfigDialog`, others |
-| `shell/` | `AppShell` wrapper, top toolbar, navigation |
+| Dialog files | `ExportDialog.tsx`, `ConfirmDialog.tsx`, `SourceFolderDialog.tsx`, `PageKindsDialog.tsx`, others |
+| `shell/` | `Rail`, `Drawer`, `RightPanel`, `WorkspaceToolbar`; `App.tsx` mounts the shared `AppShell` chrome |
 | `right-panel/` | Panel host + section components |
 | `drawer/` | Worklist, Hierarchy, Bulk-action drawer panels |
 | `ui/` | Radix/shadcn primitive wrappers |

@@ -2149,6 +2149,78 @@ projects through their Open buttons and kept them across a page reload.
   `git show ee95c833:docs/archive/specs/M0-acceptance.md`.
 - Remaining work: none
 
+### 2026-11-11 Retired: Python builds without memfd support break labeling-bundle loading
+
+- Old path: `docs/issues/2026-11-07-python-build-without-memfd-breaks-labeling-bundles.md`
+- Outcome: implemented in `a09b50e6`. Verified-image loaders refuse with `UnsupportedRuntimeError`, which the API
+  returns as `503 unsupported_runtime`, naming the missing interfaces. Failed book loads close their session.
+- Superseded by: [persistence architecture](../architecture/09-persistence.md) section 8a
+- Removal commit: `f6f2e3de`
+- Rationale kept: The issue left open whether to require memfd sealing or add an equivalent immutable carrier. The
+  fix requires sealing with no fallback, so image leases stay immutable and batch jobs fail instead of skipping pages.
+  An agent made that choice, and the owner has not reviewed it. On 2026-11-11 the 21 affected tests passed on
+  CPython 3.13.18. On 3.13.14 all 21 failed with the new refusal and none with `AttributeError`, which is the intended
+  result because those tests need memfd. Why the two builds differ is not established: `sysconfig` reports
+  `HAVE_MEMFD_CREATE` as 0 on both.
+- Remaining work: none
+
+### 2026-11-11 Retired: Enable `noUncheckedIndexedAccess` in `tsconfig.test.json`
+
+- Old path: `docs/plans/2026-07-21-tsconfig-test-strictness.md`
+- Outcome: implemented. The test project had 270 type errors across 60 files, of which 192 existed with the flag off
+  because nothing type-checked tests. All are fixed with no suppressions.
+- Superseded by: [testing architecture](../architecture/14-testing.md)
+- Removal commit: `f6f2e3de`
+- Rationale kept: `tsc -p tsconfig.test.json --noEmit` is the gate because Vitest does not type-check. Two `include`
+  globs ending in `**` were invalid and now end in `**/*`. `@types/node` is a direct dev dependency at the
+  already-locked 26.5.1 because the style tests read CSS from disk. Importing that CSS with `?raw` does not work: with
+  `css: false`, Vitest returns it empty.
+- Remaining work: none
+
+### 2026-11-11 Decided: keep the right panel frame local
+
+- Question: should the local `RightPanel` header, collapse control and body routing move to a shared `pdomain-ui`
+  panel shell?
+- Decision: keep the frame local. Nothing was extracted. An agent made this comparison overnight, and the owner has
+  not reviewed it.
+- Compared at `pdomain-ui` 0.13.0: `DetailPanelShell` and `InspectorPanel` take the same props (`title`,
+  `description`, `meta`, `actions`, `children`, `footer`, `className`). The shell `RightPanel` is a flex wrapper with
+  a 520px default width.
+- Why: the shared shells accept no `data-*` attributes, so `right-panel`, `right-panel-header`, `right-panel-body`,
+  `data-level` and `data-automation-panel` would need extra wrappers to stay on the driver contract. They have no
+  place between the header and the body for the always-mounted carried-rejection, region-draw and layout-evidence
+  panels. `ProjectPage` already sets the width. Selection routing and the word and text slots stay local either way,
+  so extraction would replace only the small header block.
+- What would change it: the same reason as the 2026-09-18 workbench layout decision, a second application needing
+  this frame.
+- Evidence: `frontend/src/components/shell/RightPanel.tsx`, `frontend/src/components/shell/RightPanel.test.tsx` and
+  the `pdomain-ui` type declarations in `dist/workbench/DetailPanelShell.d.ts` and `dist/shell/RightPanel.d.ts`.
+
+### 2026-11-11 Retired: Glyph picker enum parity
+
+- Old path: `docs/plans/2026-07-21-glyph-annotations-completion.md`
+- Outcome: implemented in `b28085a7`. The picker offers all 14 shared ligature kinds and writes their uppercase wire
+  values. Saved legacy lowercase marks stay as stored and keep their names, and chip driver identifiers stay lowercase.
+- Superseded by: [glyph architecture](../architecture/20-glyph-annotations.md)
+- Removal commit: `4982ebc4`
+- Rationale kept: the shared `LigatureKind` enum is the source of truth. The browser test adds every enum member
+  through the real picker beside a saved legacy mark and checks the request bodies and a reload.
+- Remaining work: prediction UI polish, per-mark provenance, cross-page bulk work and a profile registry stay
+  deferred in the [intent map](intent-map.md). Bulk recipes still write legacy `ct` and `st`.
+
+### 2026-11-11 Retired: Remaining shared UI alignment
+
+- Old path: `docs/plans/2026-07-21-pgdp-alignment-remaining.md`
+- Outcome: implemented. `18391dd5` shows the saved export in the export dialog and makes an unreadable manifest a 500
+  `export_history_unreadable` instead of an empty list. `800a4dad` keeps the right panel frame local. `8391cddc`
+  aligns the driver and shell docs with the mounted components.
+- Superseded by: [export architecture](../architecture/10-export.md), [frontend architecture](../architecture/03-frontend.md)
+  and the [driver contract](../architecture/13-driver-contract.md)
+- Removal commit: `4982ebc4`
+- Rationale kept: the labeler does not adopt PGDP's stage registry, stage folders, stage runner, settings
+  inheritance, stale propagation, proof-pack or submit workflow. The frontend architecture records that boundary.
+- Remaining work: server preference persistence stays deferred. The owner has not reviewed the right panel decision.
+
 ## 2026-11-12 — One roadmap, and shipped behavior stays in architecture
 
 ### Context

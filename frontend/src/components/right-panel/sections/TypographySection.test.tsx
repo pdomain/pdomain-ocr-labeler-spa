@@ -123,7 +123,7 @@ describe("TypographySection", () => {
       grapheme_map_version: "server-graphemes-v1",
       replacement_word_revision: 1,
     });
-    const replacement = body!.replacement as {
+    const replacement = body!["replacement"] as {
       spans: { start: number; end: number; label: string }[];
     };
     expect(replacement.spans.map(({ start, end, label }) => ({ start, end, label }))).toEqual([

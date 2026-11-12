@@ -8,6 +8,8 @@ import userEvent from "@testing-library/user-event";
 import { Drawer } from "./Drawer";
 import { useUiPrefs } from "../../stores/ui-prefs";
 
+const drawerProps = { projectId: "project-1", pageIndex: 0 };
+
 function resetPrefs() {
   useUiPrefs.setState({
     drawerOpen: true,
@@ -21,42 +23,42 @@ describe("Drawer (Slice 11)", () => {
   });
 
   it("renders with data-testid=drawer", () => {
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     expect(screen.getByTestId("drawer")).toBeInTheDocument();
   });
 
   it("shows open state by default", () => {
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     expect(screen.getByTestId("drawer")).toHaveAttribute("data-open", "true");
   });
 
   it("renders Worklist and Hierarchy tabs in the header", () => {
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     expect(screen.getByTestId("drawer-tab-worklist")).toBeInTheDocument();
     expect(screen.getByTestId("drawer-tab-hierarchy")).toBeInTheDocument();
   });
 
   it("renders the History tab trigger (U-M7)", () => {
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     expect(screen.getByTestId("drawer-tab-history")).toBeInTheDocument();
   });
 
   it("worklist tab is active by default", () => {
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     expect(screen.getByTestId("drawer-tab-worklist")).toHaveAttribute("data-active", "true");
     expect(screen.getByTestId("drawer-tab-hierarchy")).not.toHaveAttribute("data-active", "true");
   });
 
   it("switching to Hierarchy tab shows hierarchy component", async () => {
     const user = userEvent.setup();
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     await user.click(screen.getByTestId("drawer-tab-hierarchy"));
     expect(screen.getByTestId("hierarchy")).toBeInTheDocument();
   });
 
   it("switching to Hierarchy tab persists to useUiPrefs.drawerTab", async () => {
     const user = userEvent.setup();
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     await user.click(screen.getByTestId("drawer-tab-hierarchy"));
     expect(useUiPrefs.getState().drawerTab).toBe("hierarchy");
   });
@@ -64,21 +66,21 @@ describe("Drawer (Slice 11)", () => {
   it("switching back to Worklist tab works", async () => {
     const user = userEvent.setup();
     useUiPrefs.setState({ drawerTab: "hierarchy" });
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     await user.click(screen.getByTestId("drawer-tab-worklist"));
     expect(useUiPrefs.getState().drawerTab).toBe("worklist");
   });
 
   it("collapse button collapses the drawer", async () => {
     const user = userEvent.setup();
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     await user.click(screen.getByTestId("drawer-collapse-btn"));
     expect(useUiPrefs.getState().drawerOpen).toBe(false);
   });
 
   it("collapsed drawer shows expand button", async () => {
     const user = userEvent.setup();
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     await user.click(screen.getByTestId("drawer-collapse-btn"));
     // useSyncExternalStore subscription drives re-render; no extra render needed.
     expect(screen.getByTestId("drawer-expand-btn")).toBeInTheDocument();
@@ -87,20 +89,20 @@ describe("Drawer (Slice 11)", () => {
   it("expand button re-opens the drawer", async () => {
     const user = userEvent.setup();
     useUiPrefs.setState({ drawerOpen: false });
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     await user.click(screen.getByTestId("drawer-expand-btn"));
     expect(useUiPrefs.getState().drawerOpen).toBe(true);
   });
 
   it("collapsed state persists to useUiPrefs.drawerOpen", async () => {
     const user = userEvent.setup();
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     await user.click(screen.getByTestId("drawer-collapse-btn"));
     expect(useUiPrefs.getState().drawerOpen).toBe(false);
   });
 
   it("renders Worklist when tab is worklist", () => {
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     expect(screen.getByTestId("worklist")).toBeInTheDocument();
   });
 
@@ -110,7 +112,7 @@ describe("Drawer (Slice 11)", () => {
     // reflects the new value — which only works if useSyncExternalStore is wired to
     // the real store.subscribe (not a disconnected local Set).
     const user = userEvent.setup();
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     expect(screen.getByTestId("drawer")).toHaveAttribute("data-open", "true");
 
     // External setState — simulates another component collapsing the drawer.
@@ -134,20 +136,30 @@ describe("Drawer M1 — worklist-header slot (D-047)", () => {
   });
 
   it("renders drawer-worklist-header region containing injected content on the worklist tab", () => {
-    render(<Drawer worklistHeader={<span data-testid="ws-header-content">search</span>} />);
+    render(
+      <Drawer
+        {...drawerProps}
+        worklistHeader={<span data-testid="ws-header-content">search</span>}
+      />,
+    );
     const header = screen.getByTestId("drawer-worklist-header");
     expect(header).toBeInTheDocument();
     expect(header.querySelector('[data-testid="ws-header-content"]')).not.toBeNull();
   });
 
   it("does not render drawer-worklist-header when no content is injected", () => {
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     expect(screen.queryByTestId("drawer-worklist-header")).not.toBeInTheDocument();
   });
 
   it("does not render drawer-worklist-header on the hierarchy tab", async () => {
     const user = userEvent.setup();
-    render(<Drawer worklistHeader={<span data-testid="ws-header-content">search</span>} />);
+    render(
+      <Drawer
+        {...drawerProps}
+        worklistHeader={<span data-testid="ws-header-content">search</span>}
+      />,
+    );
     await user.click(screen.getByTestId("drawer-tab-hierarchy"));
     expect(screen.queryByTestId("drawer-worklist-header")).not.toBeInTheDocument();
   });
@@ -161,38 +173,38 @@ describe("Drawer Gap 18 — tab icons + count badges", () => {
   });
 
   it("renders icon span for worklist tab", () => {
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     expect(screen.getByTestId("drawer-tab-icon-worklist")).toBeInTheDocument();
   });
 
   it("renders icon span for hierarchy tab", () => {
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     expect(screen.getByTestId("drawer-tab-icon-hierarchy")).toBeInTheDocument();
   });
 
   it("does not render count badge when tabCounts is not provided", () => {
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     expect(screen.queryByTestId("drawer-tab-count-worklist")).not.toBeInTheDocument();
     expect(screen.queryByTestId("drawer-tab-count-hierarchy")).not.toBeInTheDocument();
   });
 
   it("renders count badge for worklist when tabCounts.worklist > 0", () => {
-    render(<Drawer tabCounts={{ worklist: 7 }} />);
+    render(<Drawer {...drawerProps} tabCounts={{ worklist: 7 }} />);
     expect(screen.getByTestId("drawer-tab-count-worklist")).toHaveTextContent("7");
   });
 
   it("renders count badge for hierarchy when tabCounts.hierarchy > 0", () => {
-    render(<Drawer tabCounts={{ hierarchy: 3 }} />);
+    render(<Drawer {...drawerProps} tabCounts={{ hierarchy: 3 }} />);
     expect(screen.getByTestId("drawer-tab-count-hierarchy")).toHaveTextContent("3");
   });
 
   it("does not render count badge when count is 0", () => {
-    render(<Drawer tabCounts={{ worklist: 0 }} />);
+    render(<Drawer {...drawerProps} tabCounts={{ worklist: 0 }} />);
     expect(screen.queryByTestId("drawer-tab-count-worklist")).not.toBeInTheDocument();
   });
 
   it("renders collapse button with ChevronLeft", () => {
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     expect(screen.getByTestId("drawer-collapse-btn")).toBeInTheDocument();
   });
 });
@@ -208,20 +220,20 @@ describe("Drawer S2.2 — Text tab visible GT/OCR view", () => {
   });
 
   it("renders the drawer-tab-text tab button", () => {
-    render(<Drawer pageTextGt="gt text" pageTextOcr="ocr text" />);
+    render(<Drawer {...drawerProps} pageTextGt="gt text" pageTextOcr="ocr text" />);
     expect(screen.getByTestId("drawer-tab-text")).toBeInTheDocument();
   });
 
   it("clicking drawer-tab-text sets drawerTab to 'text'", async () => {
     const user = userEvent.setup();
-    render(<Drawer pageTextGt="gt text" pageTextOcr="ocr text" />);
+    render(<Drawer {...drawerProps} pageTextGt="gt text" pageTextOcr="ocr text" />);
     await user.click(screen.getByTestId("drawer-tab-text"));
     expect(useUiPrefs.getState().drawerTab).toBe("text");
   });
 
   it("Text tab shows drawer-text-panel-ground-truth that is visible", async () => {
     const user = userEvent.setup();
-    render(<Drawer pageTextGt="the gt content" pageTextOcr="the ocr content" />);
+    render(<Drawer {...drawerProps} pageTextGt="the gt content" pageTextOcr="the ocr content" />);
     await user.click(screen.getByTestId("drawer-tab-text"));
     const gtPanel = screen.getByTestId("drawer-text-panel-ground-truth");
     expect(gtPanel).toBeVisible();
@@ -229,7 +241,7 @@ describe("Drawer S2.2 — Text tab visible GT/OCR view", () => {
 
   it("Text tab shows drawer-text-panel-ocr that is visible", async () => {
     const user = userEvent.setup();
-    render(<Drawer pageTextGt="the gt content" pageTextOcr="the ocr content" />);
+    render(<Drawer {...drawerProps} pageTextGt="the gt content" pageTextOcr="the ocr content" />);
     await user.click(screen.getByTestId("drawer-tab-text"));
     const ocrPanel = screen.getByTestId("drawer-text-panel-ocr");
     expect(ocrPanel).toBeVisible();
@@ -237,20 +249,20 @@ describe("Drawer S2.2 — Text tab visible GT/OCR view", () => {
 
   it("GT panel contains the page GT text", async () => {
     const user = userEvent.setup();
-    render(<Drawer pageTextGt="hello ground truth" pageTextOcr="hello ocr" />);
+    render(<Drawer {...drawerProps} pageTextGt="hello ground truth" pageTextOcr="hello ocr" />);
     await user.click(screen.getByTestId("drawer-tab-text"));
     expect(screen.getByTestId("drawer-text-panel-ground-truth")).toHaveValue("hello ground truth");
   });
 
   it("OCR panel contains the page OCR text", async () => {
     const user = userEvent.setup();
-    render(<Drawer pageTextGt="hello ground truth" pageTextOcr="hello ocr" />);
+    render(<Drawer {...drawerProps} pageTextGt="hello ground truth" pageTextOcr="hello ocr" />);
     await user.click(screen.getByTestId("drawer-tab-text"));
     expect(screen.getByTestId("drawer-text-panel-ocr")).toHaveValue("hello ocr");
   });
 
   it("Text tab panels are NOT visible on other tabs (no display:none stubs added)", async () => {
-    render(<Drawer pageTextGt="gt" pageTextOcr="ocr" />);
+    render(<Drawer {...drawerProps} pageTextGt="gt" pageTextOcr="ocr" />);
     // worklist is active — text panels should not be in DOM yet (hidden via tab panel)
     // (they render but within a hidden tabpanel — toBeVisible returns false)
     const gtPanel = screen.queryByTestId("drawer-text-panel-ground-truth");
@@ -272,7 +284,7 @@ describe("Drawer Bug-2a — expand button not clipped when collapsed", () => {
   });
 
   it("expand button is in the document and inside the drawer root (not clipped)", () => {
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     const drawer = screen.getByTestId("drawer");
     const expandBtn = screen.getByTestId("drawer-expand-btn");
     // Expand button must be a descendant of the drawer root element.
@@ -280,7 +292,7 @@ describe("Drawer Bug-2a — expand button not clipped when collapsed", () => {
   });
 
   it("expand button is NOT inside an element that has overflow-hidden AND no width", () => {
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     const expandBtn = screen.getByTestId("drawer-expand-btn");
     // Walk ancestors: none of the ancestors between expandBtn and drawer root
     // should combine overflow-hidden with w-0 (which would clip the button).
@@ -301,7 +313,7 @@ describe("Drawer Bug-2a — expand button not clipped when collapsed", () => {
   });
 
   it("outer drawer root does NOT have w-0 class when collapsed", () => {
-    render(<Drawer />);
+    render(<Drawer {...drawerProps} />);
     const drawer = screen.getByTestId("drawer");
     // After the fix the collapsed outer wrapper is w-8, not w-0.
     expect(drawer.className).not.toContain("w-0");

@@ -75,7 +75,7 @@ describe("useProject", () => {
     // Confirm no nested wrapper — GET /api/projects/{id} is flat
     const data = result.current.data;
     expect(data).toBeDefined();
-    expect((data as Record<string, unknown>)["project"]).toBeUndefined();
+    expect(data).not.toHaveProperty("project");
     expect(data?.project_id).toBe("proj-001");
   });
 

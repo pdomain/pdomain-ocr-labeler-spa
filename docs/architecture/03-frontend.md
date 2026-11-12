@@ -80,7 +80,6 @@ frontend/
 │   │   ├── WordMatchView.tsx
 │   │   ├── LineCard.tsx
 │   │   ├── WordCell.tsx
-│   │   ├── WordEditDialog.tsx
 │   │   ├── ToolbarActionGrid.tsx
 │   │   ├── right-panel/sections/TypographySection.tsx
 │   │   ├── AddWordRow.tsx
@@ -124,7 +123,7 @@ frontend/
 | Forms | controlled inputs + `useMutation` | No form library. |
 | Toasts | `sonner` | One `<Toaster />` in `App.tsx`. |
 | Hotkeys | `react-hotkeys-hook` | Thin `useHotkey()` wrapper. |
-| Image canvas | `react-konva` 19 | Used only by `PageImageCanvas` + `WordEditDialog`. |
+| Image canvas | `react-konva` 19 | Used only by `PageImageCanvas` and the right panel's `EraseCanvas`. |
 | Plain text editors | `<textarea readOnly>` | Replace legacy CodeMirror. |
 | Virtualisation | `@tanstack/react-virtual` | Only in `WordMatchView` for line cards. |
 | Test (unit) | Vitest + @testing-library/react + jest-dom | jsdom env. |
@@ -583,7 +582,6 @@ shadcn `Dialog` for everything modal:
 
 - `<OCRConfigModal />`
 - `<SourceFolderDialog />`
-- `<WordEditDialog />`
 - `<ExportDialog />`
 
 shadcn ships:

@@ -13,6 +13,11 @@ describe("GlyphChip", () => {
     expect(screen.getByTestId("word-glyph-chip-0-1-ct")).toBeTruthy();
   });
 
+  it("keeps the lowercase driver testid for an uppercase wire value", () => {
+    render(<GlyphChip lineIndex={0} wordIndex={1} kind="CT" predicted={false} onClick={vi.fn()} />);
+    expect(screen.getByTestId("word-glyph-chip-0-1-ct")).toBeTruthy();
+  });
+
   it("renders predicted chip with '?' suffix in testid", () => {
     render(<GlyphChip lineIndex={2} wordIndex={3} kind="st" predicted={true} onClick={vi.fn()} />);
     expect(screen.getByTestId("word-glyph-chip-2-3-predicted-st")).toBeTruthy();

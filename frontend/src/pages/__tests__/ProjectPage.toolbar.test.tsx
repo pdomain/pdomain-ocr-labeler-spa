@@ -215,7 +215,7 @@ describe("ProjectPage — toolbar grid dispatch (Lane B / B1)", () => {
     await waitFor(() => {
       expect(calls.length).toBeGreaterThanOrEqual(1);
     });
-    expect(calls[0].url).toContain("/words/validate-batch");
-    expect(calls[0].body).toEqual(expect.objectContaining({ scope: "line", validated: true }));
+    expect(calls[0]!.url).toContain("/words/validate-batch");
+    expect(calls[0]!.body).toEqual(expect.objectContaining({ scope: "line", validated: true }));
   });
 });

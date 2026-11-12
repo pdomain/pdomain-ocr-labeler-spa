@@ -372,7 +372,7 @@ describe("ProjectPage — Matches pane (WordMatchView) handler wiring", () => {
     server.use(
       http.post("/api/projects/:pid/pages/:idx/words/:li/:wi/gt", async ({ request }) => {
         calls.push({ url: request.url, body: await request.json() });
-        return HttpResponse.json(pageFixture().word_matches ?? {});
+        return HttpResponse.json({});
       }),
     );
     await renderAndWaitForCaptured();
@@ -398,7 +398,7 @@ describe("ProjectPage — Matches pane (WordMatchView) handler wiring", () => {
     server.use(
       http.post("/api/projects/:pid/pages/:idx/words/:li/:wi/gt", async ({ request }) => {
         calls.push({ url: request.url, body: await request.json() });
-        return HttpResponse.json(pageFixture().word_matches ?? {});
+        return HttpResponse.json({});
       }),
     );
     await renderAndWaitForCaptured();

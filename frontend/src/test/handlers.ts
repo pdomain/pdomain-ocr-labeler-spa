@@ -116,6 +116,8 @@ export const handlers: RequestHandler[] = [
     HttpResponse.json({ job_id: "job-1" }, { status: 202 }),
   ),
 
+  http.get("/api/projects/:pid/exports", () => HttpResponse.json([])),
+
   // Book review queue (docs/specs/2026-09-17-book-review-queue-design.md) —
   // baseline handler so any component/hook mounting useReviewQueue (Rail's
   // badge, useRegionReviewHotkeys' bracket keys) without an explicit

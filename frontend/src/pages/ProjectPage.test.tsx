@@ -686,7 +686,7 @@ describe("ProjectPage — real shell (spec 22 §3, #314)", () => {
       { timeout: 1000 },
     );
 
-    const lastCall = calls[calls.length - 1];
+    const lastCall = calls[calls.length - 1]!;
     expect(lastCall.projectId).toBe("p1");
     expect(lastCall.body).toEqual({ page_index: 0 });
   });

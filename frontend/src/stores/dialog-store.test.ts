@@ -20,10 +20,8 @@ describe("dialog-store: initial state", () => {
   });
 
   it("does not expose retired word-edit dialog state or launch API", () => {
-    const state = dialogStore.getState() as Record<string, unknown>;
-    const api = dialogStore as Record<string, unknown>;
-    expect(state.wordEdit).toBeUndefined();
-    expect(api.openWordEdit).toBeUndefined();
+    expect(dialogStore.getState()).not.toHaveProperty("wordEdit");
+    expect(dialogStore).not.toHaveProperty("openWordEdit");
   });
 });
 

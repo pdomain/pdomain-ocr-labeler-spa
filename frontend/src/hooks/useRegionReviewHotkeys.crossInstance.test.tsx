@@ -12,7 +12,6 @@
 // app, so a guard that only checked "my own instance's `isPending`" would
 // pass here and still fail in production.
 
-import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -46,6 +45,7 @@ function proposal(proposal_id: string, y: number, x = 0): RegionView {
 }
 
 const PAGE: PagePayload = {
+  page_kind_reviewed: false,
   project_id: PROJECT_ID,
   page_index: PAGE_IDX,
   page_record: null,

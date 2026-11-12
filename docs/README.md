@@ -70,9 +70,7 @@ This layout is workspace-standard; see
 
 ### plans/
 
-- [PGDP residual work](plans/2026-07-21-pgdp-alignment-remaining.md) — export history, detail shell, and documentation.
-- [Glyph enum parity](plans/2026-07-21-glyph-annotations-completion.md) — remaining picker alignment.
-- [Test TypeScript strictness](plans/2026-07-21-tsconfig-test-strictness.md) — test-project compiler checks.
+No plans are active.
 
 ### specs/
 

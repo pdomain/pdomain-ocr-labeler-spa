@@ -2,7 +2,7 @@
 // AppShell's docked Jobs panel, fed from one shared `GET /api/jobs` cache
 // entry (useJobsList).
 //
-// Spec: docs/plans/2026-07-21-pgdp-alignment-remaining.md item 4.
+// Spec: docs/architecture/13-driver-contract.md section 2.13a.
 //
 // Integration path: `JobsPill` + AppShell's `jobs` prop → `UtilityDock` →
 // `JobsPanelBody`, per

@@ -17,7 +17,7 @@ from pdomain_book_tools.typography import LabelingBundle, TypographyPageRecord
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .book_labeling_manifest import LoadedBookLabelingManifest
-from .labeling_bundle import LoadedLabelingBundle
+from .labeling_bundle import LoadedLabelingBundle, require_memfd_sealing
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -170,6 +170,7 @@ def _read_regular_at(root_descriptor: int, parts: tuple[str, ...]) -> bytes:
 
 
 def _sealed_descriptor(payload: bytes) -> int:
+    require_memfd_sealing()
     descriptor = os.memfd_create(
         "pdomain-book-labeling-page-image",
         os.MFD_ALLOW_SEALING | os.MFD_CLOEXEC,

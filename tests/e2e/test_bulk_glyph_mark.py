@@ -2,7 +2,7 @@
 
 Covers: B-GLYPH-004
 
-Plan: docs/plans/2026-07-21-glyph-annotations-completion.md — Task 9, Step 2.
+Spec: docs/architecture/20-glyph-annotations.md — Task 9, Step 2.
 Issue: docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md.
 
 Self-contained fixture-server pattern, following `test_glyph_panel.py` (read

@@ -24,6 +24,108 @@ const withCt: GlyphAnnotationsModel = {
   source: "human",
 };
 
+function renderPanel(
+  annotations: GlyphAnnotationsModel | null,
+  onSetAnnotations: (ann: GlyphAnnotationsModel | null) => void,
+) {
+  render(
+    <GlyphAnnotationPanel
+      lineIndex={0}
+      wordIndex={0}
+      gtText="action"
+      annotations={annotations}
+      predictions={null}
+      onSetAnnotations={onSetAnnotations}
+    />,
+  );
+}
+
+describe("GlyphAnnotationPanel ligature picker", () => {
+  it.each([
+    ["FI", "fi"],
+    ["FL", "fl"],
+    ["FF", "ff"],
+    ["FFI", "ffi"],
+    ["FFL", "ffl"],
+    ["CT", "ct"],
+    ["ST", "st"],
+    ["LONG_ST", "long-s t"],
+    ["LONG_S_S", "long-s s"],
+    ["LONG_S_I", "long-s i"],
+    ["SP", "sp"],
+    ["QU", "qu"],
+    ["OE", "oe"],
+    ["AE", "ae"],
+  ])("sends the wire value %s for the option labelled %s", (wireValue, label) => {
+    const handleSet = vi.fn();
+    renderPanel(emptyAnnotations, handleSet);
+
+    fireEvent.change(screen.getByTestId("glyph-panel-ligature-kind-select"), {
+      target: { value: wireValue },
+    });
+    fireEvent.click(screen.getByTestId("glyph-panel-add-ligature"));
+
+    expect(screen.getByRole("option", { name: label })).toBeTruthy();
+    expect(handleSet).toHaveBeenCalledWith(
+      expect.objectContaining({ ligatures: [{ kind: wireValue, char_span: null }] }),
+    );
+  });
+
+  it("keeps saved legacy marks unchanged when adding a new mark", () => {
+    const handleSet = vi.fn();
+    renderPanel(
+      {
+        ...emptyAnnotations,
+        ligatures: [
+          { kind: "ct", char_span: [1, 3] },
+          { kind: "long_s_t", char_span: null },
+        ],
+      },
+      handleSet,
+    );
+
+    fireEvent.change(screen.getByTestId("glyph-panel-ligature-kind-select"), {
+      target: { value: "OE" },
+    });
+    fireEvent.click(screen.getByTestId("glyph-panel-add-ligature"));
+
+    expect(handleSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ligatures: [
+          { kind: "ct", char_span: [1, 3] },
+          { kind: "long_s_t", char_span: null },
+          { kind: "OE", char_span: null },
+        ],
+      }),
+    );
+  });
+
+  it("names saved legacy marks the same way as current marks", () => {
+    renderPanel(
+      {
+        ...emptyAnnotations,
+        ligatures: [
+          { kind: "long_s_t", char_span: null },
+          { kind: "CT", char_span: null },
+        ],
+      },
+      vi.fn(),
+    );
+
+    expect(screen.getByRole("button", { name: "Remove long-s t ligature" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove ct ligature" })).toBeTruthy();
+  });
+
+  it("shows an unrecognised saved kind as stored", () => {
+    renderPanel(
+      { ...emptyAnnotations, ligatures: [{ kind: "mystery", char_span: null }] },
+      vi.fn(),
+    );
+
+    expect(screen.getByRole("button", { name: "Remove mystery ligature" })).toBeTruthy();
+  });
+});
+
 describe("GlyphAnnotationPanel", () => {
   it("renders with correct panel testid", () => {
     render(

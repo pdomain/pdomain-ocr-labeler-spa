@@ -3,7 +3,7 @@
 // Spec: specs/20-glyph-annotations.md §5.5
 // Issue #270
 //
-// M11 Task 7 (docs/plans/2026-07-21-glyph-annotations-completion.md):
+// M11 Task 7 (docs/architecture/20-glyph-annotations.md):
 // a successful (non-dry-run) apply must invalidate the page query, or
 // chips/badges stay stale until a manual refresh
 // (docs/issues/2026-07-21-glyph-m11-usable-path-incomplete.md). The dialog

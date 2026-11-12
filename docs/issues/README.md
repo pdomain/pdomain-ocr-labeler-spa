@@ -2,7 +2,7 @@
 Status: active
 Owner: maintainers
 Created: 2026-07-19
-Last verified: 2026-11-07
+Last verified: 2026-11-11
 Kind: process
 Level: I1
 ---
@@ -14,7 +14,7 @@ Level: I1
 - **Kind:** process
 - **Status:** active
 - **Level:** I1
-- **Last verified:** 2026-11-07
+- **Last verified:** 2026-11-11
 - **Read when:** filing a bug / defect / investigation report, or looking up an
   open issue's status, evidence, or resolution.
 - **Search terms:** issues folder, bug report, defect report, issue template,
@@ -30,10 +30,9 @@ than in per-machine harness memory.
 
 ## Open issues
 
-- [Python builds without memfd support break labeling-bundle loading](2026-11-07-python-build-without-memfd-breaks-labeling-bundles.md)
-  — 21 related tests fail in the affected worktree and pass in the main checkout.
+None.
 
-Earlier deep-review and September issue reports remain resolved and deleted. Their tombstones live in
+Earlier deep-review, September, and November issue reports remain resolved and deleted. Their tombstones live in
 [the decision log](../context/decisions.md).
 
 ## Convention

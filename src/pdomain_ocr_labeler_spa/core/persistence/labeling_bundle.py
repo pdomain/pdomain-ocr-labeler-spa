@@ -14,6 +14,7 @@ from typing import Self
 from pdomain_book_tools.typography import LabelingBundle
 from pydantic import ValidationError
 
+from ..exceptions import UnsupportedRuntimeError
 from ..models import Project
 
 _F_ADD_SEALS = 1033
@@ -21,6 +22,7 @@ _F_SEAL_SEAL = 0x0001
 _F_SEAL_SHRINK = 0x0002
 _F_SEAL_GROW = 0x0004
 _F_SEAL_WRITE = 0x0008
+_MEMFD_SEALING_INTERFACES = ("memfd_create", "MFD_ALLOW_SEALING", "MFD_CLOEXEC")
 
 
 @dataclass(frozen=True, init=False)
@@ -129,8 +131,16 @@ def _read_regular_at(root_descriptor: int, parts: tuple[str, ...]) -> bytes:
         os.close(descriptor)
 
 
+def require_memfd_sealing() -> None:
+    """Refuse to continue on a Python build that cannot seal verified images."""
+    missing = tuple(f"os.{name}" for name in _MEMFD_SEALING_INTERFACES if not hasattr(os, name))
+    if missing:
+        raise UnsupportedRuntimeError(missing=missing)
+
+
 def _sealed_descriptor(payload: bytes) -> int:
     """Retain verified bytes in an immutable anonymous Linux file."""
+    require_memfd_sealing()
     descriptor = os.memfd_create("pdomain-labeling-bundle-image", os.MFD_ALLOW_SEALING)
     try:
         view = memoryview(payload)

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { srcToDisplay, displayToSrc, BBox } from "./coords";
+import { srcToDisplay, displayToSrc, type BBox } from "./coords";
 
 describe("coords", () => {
   it("round-trips within 1px for known bbox set", () => {

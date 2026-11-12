@@ -33,7 +33,7 @@ const toastMock = vi.hoisted(() => {
 });
 vi.mock("sonner", () => ({ toast: toastMock }));
 
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
@@ -66,6 +66,7 @@ function makeQueryClient() {
 
 function makePage(): PagePayload {
   return {
+    page_kind_reviewed: false,
     project_id: "p1",
     page_index: 0,
     line_filter: "all",

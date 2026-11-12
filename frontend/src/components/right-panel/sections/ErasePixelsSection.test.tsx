@@ -203,12 +203,12 @@ describe("ErasePixelsSection — P3.c canvas behaviour", () => {
         <ErasePixelsSection backendAvailable={true} />
       </Wrapper>,
     );
-    const slider = screen.getByTestId("erase-brush-size");
+    const slider = screen.getByTestId<HTMLInputElement>("erase-brush-size");
     expect(slider.value).toBe("8"); // DEFAULT_BRUSH
     // userEvent.type does not work well for range inputs; fireEvent.change is cleaner.
     const { fireEvent } = await import("@testing-library/react");
     fireEvent.change(slider, { target: { value: "16" } });
-    expect(screen.getByTestId("erase-brush-size").value).toBe("16");
+    expect(screen.getByTestId<HTMLInputElement>("erase-brush-size").value).toBe("16");
   });
 
   it("forwards the page image crop to the erase canvas background", () => {
@@ -342,9 +342,9 @@ describe("ErasePixelsSection — CU-6.1 capability probe gating", () => {
     // Click Apply — onApply must be called with the ops list.
     await user.click(screen.getByTestId("erase-apply"));
     expect(onApply).toHaveBeenCalledOnce();
-    const ops = onApply.mock.calls[0][0] as { tool: string }[];
+    const ops = onApply.mock.calls[0]![0] as { tool: string }[];
     expect(ops.length).toBeGreaterThan(0);
-    expect(ops[0].tool).toBe("brush");
+    expect(ops[0]!.tool).toBe("brush");
   });
 });
 
@@ -400,9 +400,9 @@ describe("ErasePixelsSection — P3.c commit footer", () => {
     await user.click(screen.getByTestId("erase-canvas"));
     await user.click(screen.getByTestId("erase-apply"));
     expect(onApply).toHaveBeenCalledOnce();
-    const ops = onApply.mock.calls[0][0] as { tool: string }[];
+    const ops = onApply.mock.calls[0]![0] as { tool: string }[];
     expect(ops).toHaveLength(2);
-    expect(ops[0].tool).toBe("brush");
+    expect(ops[0]!.tool).toBe("brush");
     // After successful apply, ops should be cleared.
     await waitFor(() => expect(screen.queryByTestId("erase-op-0-remove")).not.toBeInTheDocument());
   });

@@ -28,7 +28,7 @@ function selectWords(pairs: [number, number][]) {
     ...s,
     selectedWords: pairs,
     level: "word",
-    path: { lineId: pairs[0][0], wordId: pairs[0] },
+    path: { lineId: pairs[0]![0], wordId: pairs[0]! },
   }));
 }
 
@@ -122,7 +122,9 @@ describe("BulkWordActions (Lane D / D3)", () => {
         "/api/projects/:pid/pages/:idx/words/:li/:wi/component",
         async ({ params, request }) => {
           const b = (await request.json()) as { component: string; enabled: boolean };
-          hits.push(`${params.li as string}/${params.wi as string}:${b.component}:${b.enabled}`);
+          hits.push(
+            `${params["li"] as string}/${params["wi"] as string}:${b.component}:${b.enabled}`,
+          );
           return HttpResponse.json({ project_id: "p1", page_index: 0, line_matches: [] });
         },
       ),

@@ -11,9 +11,8 @@ Routes:
   Enqueues an ``export`` job via the ``JobRunner`` and returns immediately.
   The caller opens ``EventSource(/api/jobs/{job_id}/events)`` to track
   progress.
-- ``GET /api/projects/{project_id}/exports`` → list of past exports
-  (best-effort, read from disk — stub returning empty list until the
-  export handler writes manifests).
+- ``GET /api/projects/{project_id}/exports`` → this project's saved export,
+  read from the on-disk manifest. An unreadable manifest is an error.
 
 Security note: ``ExportRequest.style_filters`` and ``component_filter`` are
 validated against ``_SAFE_LABEL_RE`` to prevent path-traversal attacks.
@@ -23,6 +22,7 @@ F-001: ``docs/specs/2026-05-24-F-001-export-path-traversal.md``.
 from __future__ import annotations
 
 import enum
+import logging
 import re
 from pathlib import Path
 
@@ -42,6 +42,7 @@ from .dependencies import (
 )
 
 router = APIRouter(prefix="/api/projects", tags=["export"])
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Validation — F-001 path-traversal guard
@@ -164,12 +165,12 @@ def _manifest_path(data_root: Path) -> Path:
     return Path(data_root) / "doctr-export" / "manifest.json"
 
 
-def _export_manifests_for_project(data_root: Path, project_id: str) -> list[ExportManifest]:
-    """Read on-disk doctr-export manifest and map this project's entry to API rows.
+class ExportHistoryUnreadableError(Exception):
+    """The on-disk export manifest exists but cannot be interpreted."""
 
-    Disk stores one latest export per project (merge/replace). Missing or
-    corrupt files yield an empty list (best-effort list contract).
-    """
+
+def _export_manifests_for_project(data_root: Path, project_id: str) -> list[ExportManifest]:
+    """Map this project's manifest entry to API rows; disk keeps one export per project."""
     import json
 
     path = _manifest_path(data_root)
@@ -177,19 +178,21 @@ def _export_manifests_for_project(data_root: Path, project_id: str) -> list[Expo
         return []
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ExportHistoryUnreadableError(f"cannot read {path}") from exc
     if not isinstance(raw, dict):
-        return []
+        raise ExportHistoryUnreadableError(f"{path} is not a JSON object")
     projects = raw.get("projects")
     if not isinstance(projects, dict):
+        raise ExportHistoryUnreadableError(f"{path} has no projects map")
+    if project_id not in projects:
         return []
-    entry = projects.get(project_id)
+    entry = projects[project_id]
     if not isinstance(entry, dict):
-        return []
+        raise ExportHistoryUnreadableError(f"{path} has a malformed entry for {project_id}")
     exported_at = entry.get("exported_at")
     if not isinstance(exported_at, str) or not exported_at:
-        return []
+        raise ExportHistoryUnreadableError(f"{path} has no export time for {project_id}")
     page_count_raw = entry.get("page_count", 0)
     page_count = int(page_count_raw) if isinstance(page_count_raw, int | float) else 0
     tasks_field = entry.get("tasks")
@@ -446,13 +449,25 @@ def list_exports(
     project_id: str,
     settings: Settings = Depends(get_settings),
 ) -> JSONResponse:
-    """``GET /api/projects/{id}/exports`` — past exports (best-effort).
+    """``GET /api/projects/{id}/exports`` — this project's saved export.
 
     Spec §5.9 line 326. Reads ``doctr-export/manifest.json`` and remaps this
     project's entry to ``ExportManifest`` (Wave 1.0–1.1). Missing manifest or
-    unknown project → empty list.
+    unknown project → empty list. Unreadable manifest → 500
+    ``export_history_unreadable``, so a failed read never looks like no export.
     """
-    rows = _export_manifests_for_project(Path(settings.data_root), project_id)
+    try:
+        rows = _export_manifests_for_project(Path(settings.data_root), project_id)
+    except ExportHistoryUnreadableError:
+        logger.exception("export history read failed for project %s", project_id)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "export_history_unreadable",
+                "message": "The saved export manifest could not be read.",
+                "details": None,
+            },
+        )
     return JSONResponse(
         status_code=200,
         content=[row.model_dump(mode="json") for row in rows],

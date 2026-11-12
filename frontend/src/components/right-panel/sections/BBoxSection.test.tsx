@@ -149,7 +149,7 @@ function makePageResponse(bbox: BBox) {
             word_index: 0,
             ocr_text: "hello",
             ground_truth_text: "hello",
-            match_status: "exact",
+            match_status: "exact" as const,
             normalized_match: false,
             is_validated: false,
             bbox,
@@ -226,10 +226,10 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
 
   it("renders four numeric inputs with initial bbox values", () => {
     renderBBox();
-    const x = screen.getByTestId("bbox-input-x");
-    const y = screen.getByTestId("bbox-input-y");
-    const w = screen.getByTestId("bbox-input-w");
-    const h = screen.getByTestId("bbox-input-h");
+    const x = screen.getByTestId<HTMLInputElement>("bbox-input-x");
+    const y = screen.getByTestId<HTMLInputElement>("bbox-input-y");
+    const w = screen.getByTestId<HTMLInputElement>("bbox-input-w");
+    const h = screen.getByTestId<HTMLInputElement>("bbox-input-h");
     expect(x.value).toBe("10");
     expect(y.value).toBe("20");
     expect(w.value).toBe("30");
@@ -271,9 +271,7 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
   });
 
   it("fires word PATCH (rebox) mutation on input blur-sm with changed value", async () => {
-    const handler = vi.fn((_req: Request) =>
-      Promise.resolve(HttpResponse.json(makePageResponse(DEFAULT_BBOX))),
-    );
+    const handler = vi.fn(() => Promise.resolve(HttpResponse.json(makePageResponse(DEFAULT_BBOX))));
     server.use(http.post("/api/projects/p1/pages/0/words/0/0/rebox", handler));
 
     const user = userEvent.setup();
@@ -300,8 +298,8 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     renderBBox(word);
 
     // Initial values should match bbox
-    expect(screen.getByTestId("bbox-input-x").value).toBe("5");
-    expect(screen.getByTestId("bbox-input-y").value).toBe("6");
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-x").value).toBe("5");
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-y").value).toBe("6");
 
     // Reset without any edits should fire mutation with original values
     const handler = vi.fn(async (info: { request: Request }) => {
@@ -511,7 +509,7 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
         initialData: makePageResponse(DEFAULT_BBOX),
       });
       const refineTracking = tracking.useTracking();
-      const word = q.data.line_matches[0].word_matches[0];
+      const word = q.data.line_matches[0]!.word_matches[0]!;
       return (
         <BBoxSection word={word} projectId="p1" pageIndex={0} refineTracking={refineTracking} />
       );
@@ -523,7 +521,7 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByTestId("bbox-input-x").value).toBe("10");
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-x").value).toBe("10");
 
     // Real timing (see useBboxRefineTracking.ts's onComplete): the outcome
     // is recorded and the page query is invalidated in the same tick, and
@@ -541,11 +539,11 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("bbox-input-x").value).toBe("6");
+      expect(screen.getByTestId<HTMLInputElement>("bbox-input-x").value).toBe("6");
     });
-    expect(screen.getByTestId("bbox-input-y").value).toBe("16");
-    expect(screen.getByTestId("bbox-input-w").value).toBe("38");
-    expect(screen.getByTestId("bbox-input-h").value).toBe("23");
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-y").value).toBe("16");
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-w").value).toBe("38");
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-h").value).toBe("23");
   });
 
   // ─── Review round 2, finding 2 (medium — reopens finding 1's window):
@@ -575,7 +573,7 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
         initialData: makePageResponse(DEFAULT_BBOX),
       });
       const refineTracking = tracking.useTracking();
-      const word = q.data.line_matches[0].word_matches[0];
+      const word = q.data.line_matches[0]!.word_matches[0]!;
       return (
         <BBoxSection word={word} projectId="p1" pageIndex={0} refineTracking={refineTracking} />
       );
@@ -611,12 +609,12 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
 
     // Y/W/H — not focused — pick up the refine's result immediately.
     await waitFor(() => {
-      expect(screen.getByTestId("bbox-input-y").value).toBe("16");
+      expect(screen.getByTestId<HTMLInputElement>("bbox-input-y").value).toBe("16");
     });
-    expect(screen.getByTestId("bbox-input-w").value).toBe("38");
-    expect(screen.getByTestId("bbox-input-h").value).toBe("23");
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-w").value).toBe("38");
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-h").value).toBe("23");
     // X — still focused — keeps exactly what the user is typing.
-    expect(screen.getByTestId("bbox-input-x").value).toBe("777");
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-x").value).toBe("777");
   });
 
   // ─── Review round 3, finding 2 (medium): `focusedField` must be cleared
@@ -691,11 +689,11 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     // would keep whatever `draft.x` already was (word A's stale 10)
     // instead of taking word B's resynced 51 like every other field.
     await waitFor(() => {
-      expect(screen.getByTestId("bbox-input-x").value).toBe("51");
+      expect(screen.getByTestId<HTMLInputElement>("bbox-input-x").value).toBe("51");
     });
-    expect(screen.getByTestId("bbox-input-y").value).toBe("61");
-    expect(screen.getByTestId("bbox-input-w").value).toBe("71");
-    expect(screen.getByTestId("bbox-input-h").value).toBe("81");
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-y").value).toBe("61");
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-w").value).toBe("71");
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-h").value).toBe("81");
   });
 
   // ─── Review finding 2 (high): refine and expand_then_refine no-op when
@@ -730,7 +728,7 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
         initialData: makePageResponse(DEFAULT_BBOX),
       });
       const refineTracking = tracking.useTracking();
-      const word = q.data.line_matches[0].word_matches[0];
+      const word = q.data.line_matches[0]!.word_matches[0]!;
       return (
         <BBoxSection word={word} projectId="p1" pageIndex={0} refineTracking={refineTracking} />
       );
@@ -757,7 +755,7 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
     });
     await waitFor(() => expect(qc.getQueryData(["page", "p1", 0])).toBeDefined());
 
-    expect(screen.getByTestId("bbox-input-x").value).toBe("10");
+    expect(screen.getByTestId<HTMLInputElement>("bbox-input-x").value).toBe("10");
   });
 
   it("a POST failure to start the refine job shows an error toast", async () => {
@@ -913,7 +911,6 @@ describe("BBoxSection (Slice 16 + P3.a)", () => {
       ),
     );
 
-    const user = userEvent.setup();
     renderBBox();
 
     await waitFor(() => expect(screen.getByTestId("bbox-refine-button")).toBeDisabled());

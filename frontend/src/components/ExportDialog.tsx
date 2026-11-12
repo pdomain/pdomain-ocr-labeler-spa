@@ -6,7 +6,7 @@
 //   - Style filter checkboxes (from GET .../export/styles; "All" toggle)
 //   - Component filter dropdown
 //   - Output mode flags (mutually exclusive)
-//   - Run history (client-only, resets on close)
+//   - Run history for this dialog session, plus the saved export from the API
 //   - Export button -> POST -> 202 -> useJobProgress SSE inline
 //   - Cancel while running
 //
@@ -22,12 +22,18 @@
 //   export-style-checkbox-{key}    — per-style checkbox
 //   export-button                  — run export button
 //   export-results                 — container for run history rows
+//   export-history                 — saved export section
+//   export-history-loading         — saved export read in flight
+//   export-history-error           — saved export read failed
+//   export-history-empty           — no saved export exists
+//   export-history-row             — one saved export
 //   export-close-button            — Close button
 
 import { useEffect, useState } from "react";
 import { useJobProgress, type JobProgressEvent } from "../hooks/useJobProgress";
 import { useLabelVocabulary } from "../hooks/useLabelVocabulary";
 import { useTypographyReview } from "../hooks/useTypographyReview";
+import { ExportHistorySection } from "./ExportHistorySection";
 import { fetchTrainerInstalled, launchTrainer } from "./ExportDialogUtils";
 import type { components } from "../api/types";
 import {
@@ -473,6 +479,8 @@ export function ExportDialog({
               {progressMsg}
             </div>
           )}
+
+          <ExportHistorySection projectId={projectId} completedRuns={history.length} />
 
           {/* Run history */}
           {history.length > 0 && (

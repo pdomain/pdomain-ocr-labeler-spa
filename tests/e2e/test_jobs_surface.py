@@ -1,6 +1,6 @@
 """E2E — persistent jobs surface (jobs pill + AppShell docked Jobs panel).
 
-Plan: docs/plans/2026-07-21-pgdp-alignment-remaining.md item 4.
+Spec: docs/architecture/13-driver-contract.md section 2.13a.
 
 Covers the plan's own acceptance criterion: a job started from a dialog
 stays visible in the persistent jobs surface after the dialog that started

@@ -25,13 +25,10 @@ function HotkeyTestComponent({
   enableOnFormTags?: boolean;
   ignoreDialogGate?: boolean;
 }) {
-  useHotkey(
-    combo,
-    handler,
-    enableOnFormTags !== undefined || ignoreDialogGate !== undefined
-      ? { enableOnFormTags, ignoreDialogGate }
-      : undefined,
-  );
+  useHotkey(combo, handler, {
+    ...(enableOnFormTags !== undefined ? { enableOnFormTags } : {}),
+    ...(ignoreDialogGate !== undefined ? { ignoreDialogGate } : {}),
+  });
   return <div data-testid="container">test</div>;
 }
 

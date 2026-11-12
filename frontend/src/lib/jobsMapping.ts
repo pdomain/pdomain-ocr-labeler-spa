@@ -1,7 +1,7 @@
 // jobsMapping.ts — pure mapping from the backend's `Job` wire shape
 // (GET /api/jobs) to pdomain-ui's `JobRow`/`JobsPill` contracts.
 //
-// Spec: docs/plans/2026-07-21-pgdp-alignment-remaining.md item 4.
+// Spec: docs/architecture/13-driver-contract.md section 2.13a.
 // v0.13.0 fixed both gaps docs/issues/2026-09-18-jobs-pill-status-contract-gap.md
 // blocked on: `JobStatus` now has a `cancelled` member with its own accent,
 // label, and testid, and `Job.pausable` gates the Pause/Resume control —

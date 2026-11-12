@@ -16,6 +16,7 @@ type TypographyHeadResponse = components["schemas"]["TypographyHeadResponse"];
 // ─── minimal page fixture ─────────────────────────────────────────────────────
 
 const minPage: PagePayload = {
+  page_kind_reviewed: false,
   project_id: "proj-1",
   page_index: 0,
   line_matches: [],
@@ -67,7 +68,7 @@ function renderFooter(isValidated = false, wordId?: string | null) {
       lineIndex={2}
       wordIndex={1}
       isValidated={isValidated}
-      wordId={wordId}
+      {...(wordId !== undefined ? { wordId } : {})}
     />,
     { wrapper: Wrapper },
   );

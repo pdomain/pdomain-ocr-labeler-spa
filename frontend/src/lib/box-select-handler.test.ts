@@ -57,11 +57,11 @@ function makeLine(lineIdx: number, words: WordMatch[]): LineMatch {
 
 function makePage(lines: LineMatch[], scale = 0.5): PagePayload {
   return {
+    page_kind_reviewed: false,
     project_id: "p1",
     page_index: 0,
     page_record: null,
     line_matches: lines,
-    selection: undefined,
     encoded_dims: {
       src_width: 1600,
       src_height: 1200,
@@ -121,11 +121,11 @@ describe("applyBoxSelect — SEL-2 intersection math", () => {
   it("returns empty when page has no encoded_dims (fallback scale 1)", () => {
     // Without encoded_dims, bboxes are treated as display-space directly (scale=1).
     const page: PagePayload = {
+      page_kind_reviewed: false,
       project_id: "p1",
       page_index: 0,
       page_record: null,
       line_matches: [makeLine(0, [makeWord(0, 0, 10, 10, 20, 10)])],
-      selection: undefined,
       encoded_dims: null,
       line_filter: "all",
       image_url: null,

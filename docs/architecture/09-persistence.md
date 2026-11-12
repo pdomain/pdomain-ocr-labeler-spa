@@ -3,7 +3,7 @@ kind: architecture
 status: built
 owner: maintainers
 created: 2026-05-06
-last_verified: 2026-07-13
+last_verified: 2026-11-10
 ---
 
 # 09 — Persistence
@@ -320,6 +320,22 @@ power-fail simulation (`os._exit(1)` between write and replace).
 
 Image writes use `cv2.imencode` to bytes, then `write_bytes_atomic`
 similarly.
+
+---
+
+## 8a. Verified images require Linux memfd sealing
+
+Labeling-bundle and book-page loaders keep each verified image in a sealed
+Linux memfd, so a later change on disk cannot alter a page already leased.
+The Python build must expose `os.memfd_create`, `os.MFD_ALLOW_SEALING`, and
+`os.MFD_CLOEXEC`.
+
+A build without them cannot make that guarantee, and the supported Python
+version range does not detect it. The uv-managed CPython 3.13.14 on
+omarchy-main lacks `os.memfd_create`, and the mise-managed 3.13.18 has it. The loaders
+refuse with `UnsupportedRuntimeError`, which the API returns as `503
+unsupported_runtime`, naming the missing interfaces. There is no fallback
+carrier. Batch jobs fail instead of skipping pages.
 
 ---
 

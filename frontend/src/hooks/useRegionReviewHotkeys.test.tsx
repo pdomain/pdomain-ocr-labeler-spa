@@ -64,6 +64,7 @@ function confirmedRegion(region_id: string, y: number, x = 0): RegionView {
 // Three proposals, deliberately out of y-order in the array so ordering is
 // exercised rather than incidentally correct.
 const PAGE: PagePayload = {
+  page_kind_reviewed: false,
   project_id: PROJECT_ID,
   page_index: PAGE_IDX,
   page_record: null,
@@ -236,7 +237,7 @@ describe("useRegionReviewHotkeys: enter accepts and auto-advances", () => {
       http.post(
         "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept",
         ({ params }) => {
-          acceptedId = params.proposalId as string;
+          acceptedId = params["proposalId"] as string;
           return HttpResponse.json({ ...PAGE });
         },
       ),
@@ -292,14 +293,14 @@ describe("useRegionReviewHotkeys: enter accepts and auto-advances", () => {
       http.post(
         "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/accept",
         ({ params }) => {
-          acceptedId = params.proposalId as string;
+          acceptedId = params["proposalId"] as string;
           return HttpResponse.json(afterAccept);
         },
       ),
       http.post(
         "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject",
         ({ params }) => {
-          rejectedId = params.proposalId as string;
+          rejectedId = params["proposalId"] as string;
           return HttpResponse.json(afterReject);
         },
       ),
@@ -348,7 +349,7 @@ describe("useRegionReviewHotkeys: x rejects and clears at the end of the list", 
       http.post(
         "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject",
         ({ params }) => {
-          rejectedId = params.proposalId as string;
+          rejectedId = params["proposalId"] as string;
           return HttpResponse.json({ ...PAGE_ONE_PROPOSAL, regions: [] });
         },
       ),
@@ -395,7 +396,7 @@ describe("useRegionReviewHotkeys: x rejects and clears at the end of the list", 
       http.post(
         "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject",
         ({ params }) => {
-          rejectedId = params.proposalId as string;
+          rejectedId = params["proposalId"] as string;
           return HttpResponse.json({ ...PAGE_ONE_PROPOSAL, regions: [] });
         },
       ),
@@ -441,7 +442,8 @@ describe("useRegionReviewHotkeys: x rejects and clears at the end of the list", 
       }),
       http.post(
         "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject",
-        ({ params }) => HttpResponse.json({ ...PAGE, regions: [], page_index: Number(params.idx) }),
+        ({ params }) =>
+          HttpResponse.json({ ...PAGE, regions: [], page_index: Number(params["idx"]) }),
       ),
     );
     const pageOnlyA: PagePayload = { ...PAGE, page_index: 5, regions: [proposal("onlyA", 0)] };
@@ -481,7 +483,7 @@ describe("useRegionReviewHotkeys: x rejects and clears at the end of the list", 
       http.post(
         "/api/projects/:pid/pages/:idx/regions/proposals/:proposalId/reject",
         ({ params }) => {
-          rejectedId = params.proposalId as string;
+          rejectedId = params["proposalId"] as string;
           return HttpResponse.json({ ...PAGE });
         },
       ),

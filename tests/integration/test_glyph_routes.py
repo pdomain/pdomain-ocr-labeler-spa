@@ -29,6 +29,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from pdomain_book_contracts.ocr.glyph_annotations import LigatureKind
 from pdomain_book_tools.ocr.page import Page
 from pdomain_ops.page_aggregate import PageAggregate
 from pdomain_ops.pages import PageRecord
@@ -480,6 +481,26 @@ def test_glyph_annotations_populated_persist_across_fresh_store_reload(tmp_path:
         "source": "human",
     }
     assert "0_1" not in sidecars.glyph_annotations_map
+
+
+@pytest.mark.integration
+def test_every_shared_ligature_kind_persists_beside_a_legacy_mark(tmp_path: Path) -> None:
+    ligatures = [
+        {"kind": "ct", "char_span": [2, 4]},
+        *({"kind": kind.value, "char_span": None} for kind in LigatureKind),
+    ]
+    annotations = {"ligatures": ligatures, "long_s_positions": [], "swash": False, "source": "human"}
+
+    def mutate(client: TestClient) -> None:
+        resp = client.post(
+            "/api/projects/book1/pages/0/words/0/0/glyph-annotations",
+            json={"annotations": annotations},
+        )
+        assert resp.status_code == 200, f"set_glyph_annotations failed: {resp.text}"
+        assert _word_match(resp.json())["glyph_annotations"] == annotations
+
+    sidecars = _drive_and_reload(tmp_path, mutate)
+    assert sidecars.glyph_annotations_map.get("0_0") == annotations
 
 
 @pytest.mark.integration

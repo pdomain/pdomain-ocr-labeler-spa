@@ -165,9 +165,9 @@ describe("CharFixerSection (Slice 20)", () => {
 
   it("renders one editable input per char with the GT char as initial value", () => {
     renderSection(makeWord("Hello", "Hello"));
-    expect(screen.getByTestId("char-fixer-input-0").value).toBe("H");
-    expect(screen.getByTestId("char-fixer-input-1").value).toBe("e");
-    expect(screen.getByTestId("char-fixer-input-4").value).toBe("o");
+    expect(screen.getByTestId<HTMLInputElement>("char-fixer-input-0").value).toBe("H");
+    expect(screen.getByTestId<HTMLInputElement>("char-fixer-input-1").value).toBe("e");
+    expect(screen.getByTestId<HTMLInputElement>("char-fixer-input-4").value).toBe("o");
   });
 
   it("renders the original OCR char as a label next to each input", () => {
@@ -288,30 +288,30 @@ describe("CharFixerSection — P4.b bbox canvas + handles (Gap 39)", () => {
     await user.clear(x1);
     await user.type(x1, "42");
 
-    expect(screen.getByTestId("charfixer-apply").disabled).toBe(false);
+    expect(screen.getByTestId<HTMLButtonElement>("charfixer-apply").disabled).toBe(false);
   });
 
   it("editing a coordinate input updates the bbox in local state", async () => {
     const user = userEvent.setup();
     renderSection(makeWord("ab", "ab"));
-    const x1Before = screen.getByTestId("charfixer-detail-x1").value;
+    const x1Before = screen.getByTestId<HTMLInputElement>("charfixer-detail-x1").value;
     expect(x1Before).toBe("0");
 
     const x1 = screen.getByTestId("charfixer-detail-x1");
     await user.clear(x1);
     await user.type(x1, "3");
 
-    expect(screen.getByTestId("charfixer-detail-x1").value).toBe("3");
+    expect(screen.getByTestId<HTMLInputElement>("charfixer-detail-x1").value).toBe("3");
   });
 
   it("dragging a handle marks the bbox dirty (enables Apply)", () => {
     renderSection(makeWord("ab", "ab"));
-    expect(screen.getByTestId("charfixer-apply").disabled).toBe(true);
+    expect(screen.getByTestId<HTMLButtonElement>("charfixer-apply").disabled).toBe(true);
 
     // The Konva mock surfaces onDragMove via onMouseDown on the handle rect.
     fireEvent.mouseDown(screen.getByTestId("charfixer-range-0-handle-se"));
 
-    expect(screen.getByTestId("charfixer-apply").disabled).toBe(false);
+    expect(screen.getByTestId<HTMLButtonElement>("charfixer-apply").disabled).toBe(false);
   });
 
   it("clicking Apply resets the dirty flag (button disables again)", async () => {
@@ -325,11 +325,11 @@ describe("CharFixerSection — P4.b bbox canvas + handles (Gap 39)", () => {
     const x1 = screen.getByTestId("charfixer-detail-x1");
     await user.clear(x1);
     await user.type(x1, "7");
-    const apply = screen.getByTestId("charfixer-apply");
+    const apply = screen.getByTestId<HTMLButtonElement>("charfixer-apply");
     expect(apply.disabled).toBe(false);
 
     await user.click(apply);
-    expect(screen.getByTestId("charfixer-apply").disabled).toBe(true);
+    expect(screen.getByTestId<HTMLButtonElement>("charfixer-apply").disabled).toBe(true);
   });
 
   it("clicking Apply POSTs char_bboxes to the backend", async () => {
@@ -389,7 +389,7 @@ describe("CharFixerSection — CU-6.2 char-bboxes POST body shape", () => {
     };
     expect(Array.isArray(body.char_bboxes)).toBe(true);
     expect(body.char_bboxes.length).toBeGreaterThan(0);
-    const bbox0 = body.char_bboxes[0];
+    const bbox0 = body.char_bboxes[0]!;
     expect(typeof bbox0.x).toBe("number");
     expect(typeof bbox0.y).toBe("number");
     expect(typeof bbox0.width).toBe("number");
@@ -425,7 +425,7 @@ describe("CharFixerSection — F-041 dirty state on failed save", () => {
     const x1 = screen.getByTestId("charfixer-detail-x1");
     await user.clear(x1);
     await user.type(x1, "7");
-    const apply = screen.getByTestId("charfixer-apply");
+    const apply = screen.getByTestId<HTMLButtonElement>("charfixer-apply");
     expect(apply.disabled).toBe(false);
 
     // Click Apply — mutation fires but server returns 500.
@@ -433,7 +433,7 @@ describe("CharFixerSection — F-041 dirty state on failed save", () => {
 
     // After the failed mutation, dirty state must remain true (button still enabled).
     await waitFor(() => expect(vi.mocked(toast.error)).toHaveBeenCalled());
-    expect(screen.getByTestId("charfixer-apply").disabled).toBe(false);
+    expect(screen.getByTestId<HTMLButtonElement>("charfixer-apply").disabled).toBe(false);
   });
 
   it("calls toast.error when the char-bboxes POST fails", async () => {

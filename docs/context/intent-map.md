@@ -8,8 +8,8 @@ last_verified: 2026-11-12
 
 # Intent map
 
-This is the roadmap. Shipped behavior lives in [`docs/architecture/`](../architecture/00-overview.md). The three plans
-under `docs/plans/` keep implementation steps for items named here. Do not treat `specs/16-milestones.md` as the live list.
+This is the roadmap. Shipped behavior lives in [`docs/architecture/`](../architecture/00-overview.md). Do not treat
+`specs/16-milestones.md` as the live list.
 
 ## Agent Index
 
@@ -27,18 +27,11 @@ under `docs/plans/` keep implementation steps for items named here. Do not treat
 Build these in this repository.
 
 - Finish suggestion accept and edit, and predecessor-based compensating undo, for the shipped typography journal. Phase
-  one is in [typography review](../architecture/31-typography-review.md).
-- Make the glyph picker list every shared ligature kind from `pdomain-book-contracts`. Include `LONG_ST`, `OE`, `AE`,
-  `LONG_S_S`, `LONG_S_I`, `SP`, and `QU`. Keep `FF` and the `long_s_t` alias. Steps are in the [glyph plan](../plans/2026-07-21-glyph-annotations-completion.md).
-- Hydrate ExportDialog from persisted export history so reopening it does not drop the run list. A failed history read
-  must not look like an empty history. The [PGDP plan](../plans/2026-07-21-pgdp-alignment-remaining.md) has the
-  acceptance check.
-- Compare the local right-panel header, collapse controls, and body routing with the shared shell, and record whether
-  shared framing is worth extracting. Do not replace the panel as part of the comparison.
-- Reconcile driver-contract section 2.11 and its browser coverage with persistent right-panel editing. GitHub issue
-  #454 is already deleted.
-- Enable `noUncheckedIndexedAccess` in `tsconfig.test.json`. The
-  [strictness plan](../plans/2026-07-21-tsconfig-test-strictness.md) is still unchecked. The flag is still false.
+  one is in [typography review](../architecture/31-typography-review.md). The open design questions are in
+  [`OPEN_QUESTIONS.md`](../../OPEN_QUESTIONS.md).
+- Reconcile browser coverage of driver-contract section 2.11 with the retired word-edit dialog. Commit `8391cddc`
+  aligns the driver and shell docs with the mounted components. `tests/e2e/test_project_page_smoke.py` still opens
+  the removed dialog. GitHub issue #454 is already deleted.
 - Finish U-M6 history: cross-OCR and rotation-boundary traversal, page-slot lineage, and conservative pruning. U-M7
   listing and jumps already ship. The design remains in the [undo spec](../specs/2026-06-12-event-store-undo.md).
 - Stop one `set_region_word_membership` write from renumbering every word on the page. `stable_word_id` hashes a
@@ -50,8 +43,6 @@ Build these in this repository.
   removed word-edit dialog and character-range mutations. `docs/specs/behavior/unclear-items.md` still questions
   page-level erase, while `erase_page_pixels` exists. Check [`decisions.md`](decisions.md) before treating an unclear
   item as open.
-- Refuse verified image loads when the Python build has no memfd sealing.
-  `feature/memfd-tsconfig-state` has that fix in `5e8b1781..986f01a5`.
 
 ## Next
 
@@ -67,11 +58,12 @@ These need another repository, or a short decision, before more labeler code.
 
 Worth doing, and not scheduled.
 
-- Global jobs history, and export history beyond the dialog hydration in Now. Appearance preferences stay in
+- Global jobs history, and export history beyond the saved-export list in the dialog. Appearance preferences stay in
   localStorage. App preference persistence is a no-op.
 - Mixed-selection and mutation-error browser coverage for multi-line editing. Existing browser tests are not a fresh
   full-suite run.
 - Glyph per-mark provenance, cross-page bulk marking, and a profile registry. No predictor will be built in this app.
+  Bulk recipes still write legacy `ct` and `st`.
 - Page-kind keyboard path, still separate from the shipped region keyboard loop.
 - Driver and adapter documentation so the catalogue matches mounted components and explains the permanent local adapters.
 
@@ -129,12 +121,26 @@ Auth, S3, Postgres, and managed adapters stay deferred under D-042 until there i
   No predictor exists, and the accept-prediction control never fires.
 - **Shipped cold-page jobs and U-M7 history jumps.** See [page loading and history](../architecture/29-page-loading-and-history.md).
 - **Removed the legacy character-range API.** See [typography review](../architecture/31-typography-review.md).
+- **Refused verified image loads without memfd sealing.** `a09b50e6` raises `UnsupportedRuntimeError` and the API
+  returns `503 unsupported_runtime`. Failed book loads close their session. There is no fallback. An agent made that
+  choice on 2026-11-11, and the owner has not reviewed it. The issue file is retired in [`decisions.md`](decisions.md).
+- **Enabled `noUncheckedIndexedAccess` in `tsconfig.test.json`.** Commit `9181753e` type-checks the test project with
+  no suppressions. The strictness plan is retired.
+- **Offered every shared ligature kind in the glyph picker.** Commit `b28085a7` writes the uppercase wire values,
+  including `LONG_ST`, `OE`, `AE`, `LONG_S_S`, `LONG_S_I`, `SP`, and `QU`, and keeps `FF` and the `long_s_t` alias.
+  Saved legacy lowercase marks keep their stored names.
+- **Showed the saved export in ExportDialog.** Commit `18391dd5` reads the on-disk manifest. An unreadable manifest is
+  `export_history_unreadable`, not an empty list.
+- **Kept the right-panel frame local.** Commit `800a4dad` extracted nothing. An agent made the comparison on
+  2026-11-11, and the owner has not reviewed it.
+- **Aligned driver and shell docs with mounted components.** Commit `8391cddc` removes the retired word-edit dialog
+  from the architecture docs and points erase mode at `rail-mode-erase`.
 
 ## Deferred
 
 - Managed auth, S3, Postgres, and managed-adapter deployment stay under D-042.
 - Server preference persistence stays deferred. D-042 bars a preferences API until the owner re-authorizes that
-  deployment work. It is not implied by the remaining PGDP-alignment plan.
+  deployment work. The retired shared-UI alignment does not authorize it.
 
 ## Blocked
 

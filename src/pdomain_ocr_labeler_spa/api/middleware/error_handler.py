@@ -18,7 +18,10 @@ Handler chain (per ``docs/architecture/02-backend.md §8``):
 4. ``IncompatibleEnvelopeError`` → ``422 incompatible_envelope`` (spec
    §11 of ``docs/architecture/09-persistence.md``). Raised by ``parse_envelope``
    when a saved page has a schema version this binary cannot read.
-5. ``Exception`` (catch-all) → ``500 internal_error``. The full
+5. ``UnsupportedRuntimeError`` → ``503 unsupported_runtime``, with
+   ``details.missing`` naming the absent interfaces. Raised when the Python
+   build lacks the memfd sealing that verified images require.
+6. ``Exception`` (catch-all) → ``500 internal_error``. The full
    traceback is logged via ``logger.exception(...)`` so operators see
    the full stack with the request-id prefixed by ``RequestIdFilter``.
    Whether the last three traceback lines reach the client in
@@ -59,7 +62,7 @@ from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
-from ...core.exceptions import BoundingBoxGeometryError
+from ...core.exceptions import BoundingBoxGeometryError, UnsupportedRuntimeError
 
 log = logging.getLogger(__name__)
 
@@ -129,6 +132,20 @@ def install_error_handlers(app: FastAPI) -> None:
             content=ApiError(
                 error="geometry_error",
                 message=str(exc) or exc.__class__.__name__,
+            ).model_dump(),
+        )
+
+    @app.exception_handler(UnsupportedRuntimeError)
+    async def _unsupported_runtime(_request: Request, exc: UnsupportedRuntimeError) -> JSONResponse:
+        # 503 because the request is valid and this deployment cannot serve
+        # it. The message names interpreter interfaces only, so it is safe to
+        # send despite the catch-all's no-exception-text rule.
+        return JSONResponse(
+            status_code=503,
+            content=ApiError(
+                error="unsupported_runtime",
+                message=str(exc),
+                details={"missing": list(exc.missing)},
             ).model_dump(),
         )
 

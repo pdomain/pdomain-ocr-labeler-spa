@@ -102,7 +102,7 @@ describe("OcrGtCompareRow S2.1 — Tab/Shift+Tab navigation", () => {
     expect(onCommitGt).toHaveBeenCalledWith("world");
     expect(onTab).toHaveBeenCalledWith("next");
     // commit before tab
-    expect(onCommitGt.mock.invocationCallOrder[0]).toBeLessThan(onTab.mock.invocationCallOrder[0]);
+    expect(onCommitGt.mock.invocationCallOrder[0]).toBeLessThan(onTab.mock.invocationCallOrder[0]!);
   });
 
   it("Tab without onTab prop does not throw", async () => {

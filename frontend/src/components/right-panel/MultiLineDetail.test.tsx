@@ -70,6 +70,7 @@ function makeLine(
 
 function makePage(): PagePayload {
   return {
+    page_kind_reviewed: false,
     project_id: "p1",
     page_index: 0,
     line_filter: "all",
@@ -99,7 +100,7 @@ describe("MultiLineDetail — ML-2: routing", () => {
     expect(screen.getByTestId("multi-line-card-0")).toBeInTheDocument();
     expect(screen.getByTestId("multi-line-card-2")).toBeInTheDocument();
     const cards = screen.getAllByTestId(/^multi-line-card-/);
-    const cardLineIds = cards.map((c) => parseInt(c.dataset.lineIndex ?? "0", 10));
+    const cardLineIds = cards.map((c) => parseInt(c.dataset["lineIndex"] ?? "0", 10));
     expect(cardLineIds).toEqual([0, 2]);
   });
 });
@@ -225,7 +226,6 @@ describe("MultiLineDetail — ML-5: Tab traversal across lines", () => {
   });
 
   it("Tab from last word of line 0 focuses first word of line 1", async () => {
-    const user = userEvent.setup();
     wrap(<MultiLineDetail page={makePage()} projectId="p1" pageIndex={0} selectedLines={[0, 1]} />);
     // Line 0 has words 0,1 — focus word 1 (last), then Tab
     const lastInLine0 = screen.getByTestId("gt-text-input-0-1");
@@ -237,7 +237,6 @@ describe("MultiLineDetail — ML-5: Tab traversal across lines", () => {
   });
 
   it("Shift+Tab from first word of line 1 focuses last word of line 0", async () => {
-    const user = userEvent.setup();
     wrap(<MultiLineDetail page={makePage()} projectId="p1" pageIndex={0} selectedLines={[0, 1]} />);
     const firstInLine1 = screen.getByTestId("gt-text-input-1-0");
     const lastInLine0 = screen.getByTestId("gt-text-input-0-1");

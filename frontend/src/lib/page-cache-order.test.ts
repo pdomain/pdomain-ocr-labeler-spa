@@ -38,7 +38,7 @@ describe("acceptPagePayload", () => {
 
   it("treats a missing generation as 0", () => {
     const numbered = { generation: 1, label: "numbered" };
-    const missing = { label: "missing" };
+    const missing: { generation?: number; label: string } = { label: "missing" };
     acceptPagePayload(scope, numbered);
     expect(acceptPagePayload(scope, missing)).toBe(numbered);
   });

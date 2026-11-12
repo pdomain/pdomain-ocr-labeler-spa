@@ -1,6 +1,6 @@
 // useJobsList.test.tsx — unit tests for the shared GET /api/jobs cache entry.
 //
-// Spec: docs/plans/2026-07-21-pgdp-alignment-remaining.md item 4.
+// Spec: docs/architecture/13-driver-contract.md section 2.13a.
 //
 // Covers:
 //   - fetches GET /api/jobs and sorts by updated_at, most recent first

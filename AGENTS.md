@@ -82,11 +82,10 @@ The roadmap is [`docs/context/intent-map.md`](docs/context/intent-map.md).
 Shipped ownership is [`docs/architecture/30-repository-boundaries.md`](docs/architecture/30-repository-boundaries.md).
 Operational status is [`docs/context/current-state.md`](docs/context/current-state.md).
 
-The open governed defect is
-[`docs/issues/2026-11-07-python-build-without-memfd-breaks-labeling-bundles.md`](docs/issues/2026-11-07-python-build-without-memfd-breaks-labeling-bundles.md).
-The 18 deep-review reports under `docs/issues/2026-07-21-*`, plus every report
-filed on 2026-09-18, are resolved and deleted. The July deep-review plan is
-retired. Its outcomes live in `docs/context/decisions.md`.
+`docs/issues/` has no open reports. The memfd refusal, the 18 deep-review
+reports under `docs/issues/2026-07-21-*`, and every report filed on 2026-09-18
+are resolved. Their tombstones are in `docs/context/decisions.md`. The July
+deep-review plan is retired.
 
 Summary of what closed 2026-09-18 (full reasoning in
 `docs/context/decisions.md`):
@@ -105,12 +104,10 @@ Summary of what closed 2026-09-18 (full reasoning in
 - Open findings (`docs/context/open-findings.md`): keyboard entries
   (BUG-KBD-1/4/5) are closed; all six findings, including platform data roots, empty OCR, and hierarchy waits, are
   closed.
-- Residual `tsconfig.test.json` strictness — untouched:
-  `docs/plans/2026-07-21-tsconfig-test-strictness.md`.
-- PGDP alignment remaining is partial: project-card metadata, root filters,
-  the archive decision, and the jobs pill/drawer closed 2026-09-18; a shared
-  workbench layout was decided against, not built.
-  `docs/plans/2026-07-21-pgdp-alignment-remaining.md`.
+- Test-project `noUncheckedIndexedAccess` is on as of 2026-11-11.
+- Export history, the local right-panel frame, and the driver docs landed on
+  2026-11-11. Browser coverage of driver-contract section 2.11 is still open.
+  A shared workbench layout was decided against.
 
 Per-slice history is preserved in git log and GitHub closed milestones.
 

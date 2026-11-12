@@ -23,6 +23,7 @@ function w(line: number, idx: number, ocr: string): WordMatch {
 
 function makePage(): PagePayload {
   return {
+    page_kind_reviewed: false,
     project_id: "p1",
     page_index: 0,
     line_filter: "all",
@@ -255,6 +256,7 @@ describe("walkDown", () => {
 // Block 0: lines 0, 1 (para 0). Block 1: line 2 (para 1).
 function makePageWithBlocks(): PagePayload {
   return {
+    page_kind_reviewed: false,
     project_id: "p1",
     page_index: 0,
     line_filter: "all",
@@ -365,6 +367,7 @@ describe("nextSibling — block level (FO-7)", () => {
 describe("nextSibling — 3-block page (CU-4.2)", () => {
   // Minimal 3-block page: one line per block.
   const page3blocks: PagePayload = {
+    page_kind_reviewed: false,
     project_id: "p1",
     page_index: 0,
     line_filter: "all",
@@ -437,6 +440,7 @@ describe("nextSibling — 3-block page (CU-4.2)", () => {
 
 describe("paragraph_index null bucket", () => {
   const page: PagePayload = {
+    page_kind_reviewed: false,
     project_id: "p1",
     page_index: 0,
     line_filter: "all",

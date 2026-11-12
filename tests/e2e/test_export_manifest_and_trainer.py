@@ -487,3 +487,48 @@ def test_export_dialog_opens_and_runs(page: Page, live_server: LiveServer) -> No
     assert page.locator("[data-testid='export-results']").is_visible(), (
         "export-results element is not visible after export was triggered"
     )
+
+
+def _open_export_dialog(page: Page, base_url: str) -> None:
+    page.goto(f"{base_url}/projects/tiny-fixture/pages/pageno/1", timeout=20_000)
+    page.locator("[data-testid='project-page']").wait_for(state="attached", timeout=20_000)
+    page.evaluate("() => { window.__DIALOG_STORE_OPEN?.('export'); }")
+    page.locator("[data-testid='export-dialog']").wait_for(state="visible", timeout=10_000)
+
+
+def test_saved_export_is_visible_after_a_full_reload(page: Page, live_server: LiveServer) -> None:
+    wait_for_app_ready(live_server.base_url)
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+    _complete_typography_review(live_server.base_url, "tiny-fixture", page_index=0)
+
+    _open_export_dialog(page, live_server.base_url)
+    page.locator("[data-testid='export-dialog'] [data-testid='export-button']").evaluate(
+        "button => button.click()"
+    )
+    page.locator("[data-testid='export-results']").wait_for(state="visible", timeout=30_000)
+    expect(page.locator("[data-testid='export-history-row']")).to_be_visible(timeout=10_000)
+
+    _open_export_dialog(page, live_server.base_url)
+
+    expect(page.locator("[data-testid='export-history-row']")).to_contain_text("page", timeout=10_000)
+    expect(page.locator("[data-testid='export-results']")).to_have_count(0)
+
+
+def test_unreadable_manifest_is_not_shown_as_no_previous_export(page: Page, live_server: LiveServer) -> None:
+    wait_for_app_ready(live_server.base_url)
+    _load_tiny_fixture(live_server.base_url, str(live_server.source_root))
+    manifest = Path(live_server.settings.data_root) / "doctr-export" / "manifest.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    original = manifest.read_bytes() if manifest.is_file() else None
+    manifest.write_text("{not json", encoding="utf-8")
+
+    try:
+        _open_export_dialog(page, live_server.base_url)
+
+        expect(page.locator("[data-testid='export-history-error']")).to_be_visible(timeout=10_000)
+        expect(page.locator("[data-testid='export-history-empty']")).to_have_count(0)
+    finally:
+        if original is None:
+            manifest.unlink()
+        else:
+            manifest.write_bytes(original)

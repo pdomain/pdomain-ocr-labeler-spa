@@ -93,7 +93,7 @@ Rendering:
 ## Flow 4: Word mutation (edit → save)
 
 ```
-User edits GT text in word row or WordEditDialog
+User edits GT text in word row or WordDetail
   └─ useWordMutations.mutate()
        └─ POST /api/projects/{id}/pages/{idx}/words/{wIdx}/text  { text: "..." }
             └─ backend: page_state.set_word_gt_text(...)

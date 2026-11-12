@@ -43,6 +43,34 @@ class NotImplementedYet(NotImplementedError):  # noqa: N818  # intentional name:
     """
 
 
+class UnsupportedRuntimeError(RuntimeError):
+    """The running interpreter lacks an interface the service requires.
+
+    Verified labeling images live in sealed Linux memfds. A build without them
+    cannot honor the immutable-lease guarantee, so the loaders refuse rather
+    than fall back. This deliberately is not a ``ValueError`` or ``OSError``:
+    callers treat those as one bad bundle or page, and would report every
+    page as invalid or skip it.
+
+    The error handler in ``api/middleware/error_handler.py`` maps this to
+    ``503 unsupported_runtime``.
+
+    Attributes
+    ----------
+    missing
+        Names of the absent interfaces, such as ``"os.memfd_create"``.
+    """
+
+    missing: tuple[str, ...]
+
+    def __init__(self, *, missing: tuple[str, ...]) -> None:
+        super().__init__(
+            f"Verified image loading needs {', '.join(missing)}, which this Python build does not "
+            "expose. Run the service on Linux with a Python build that provides them."
+        )
+        self.missing = missing
+
+
 class BoundingBoxGeometryError(ValueError):
     """A bounding box failed geometry normalization.
 

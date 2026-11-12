@@ -37,9 +37,9 @@ The synchronous page-wide bulk endpoint supports `ct_substring`, `st_substring`,
 Requests can skip already annotated words and preview without mutation. Applying a recipe persists the changes and
 refreshes the page. Project-wide bulk work is outside this endpoint's scope.
 
-The current picker offers ct, st, fi, fl, ff, ffi, and ffl. Reconciling it with the full shared enum remains in the
-[glyph completion plan](../plans/2026-07-21-glyph-annotations-completion.md) . Shared enum values are uppercase;
-the legacy long-s-t alias is `long_s_t`, not `long_st`.
+The picker offers all 14 shared kinds and writes their uppercase wire values. Saved legacy lowercase marks stay as
+stored, and the panel names them the same way as current marks. The legacy long-s-t alias is `long_s_t`, not
+`long_st`. Bulk recipes still write the legacy `ct` and `st` values, which the shared model migrates on read.
 
 ## Persistence and export
 

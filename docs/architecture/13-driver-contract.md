@@ -228,6 +228,7 @@ Hotkey: `Enter` on `nav-page-input` triggers `Go To`.
 > | `selection-mode-paragraph` | `rail-target-para` (`data-active`) | Rail §2.14 |
 > | `selection-mode-line` | `rail-target-line` (`data-active`) | Rail §2.14 |
 > | `selection-mode-word` | `rail-target-word` (`data-active`) | Rail §2.14 |
+> | `erase-pixels-button` | `rail-mode-erase` | Rail §2.14 |
 > | `zoom-fit-button` | `canvas-zoom-fit` (`aria-pressed`) | canvas overlay |
 > | `zoom-100-button` | `canvas-zoom-100` (`aria-pressed`) | canvas overlay |
 > | `mismatches-only-toggle` | `mismatches-only-toggle` (`aria-pressed`) | canvas overlay |
@@ -239,7 +240,6 @@ Hotkey: `Enter` on `nav-page-input` triggers `Go To`.
 
 | Testid | What it is |
 |---|---|
-| `erase-pixels-button` | Erase Pixels mode toggle (also reachable via Rail erase mode) |
 | `canvas-zoom-controls` | Zoom controls group (canvas overlay) |
 | `canvas-zoom-fit` | Fit page to viewport |
 | `canvas-zoom-100` | 100% zoom (1:1 pixel) |
@@ -370,7 +370,12 @@ a time. See
 | `export-style-checkbox-{key}` | One per style discovered, key = normalised style |
 | `export-button` | Export (the run button inside the dialog) |
 | `export-cancel-button` | Cancel (replaces Export while a job is running; posts `POST /api/jobs/{id}/cancel`) |
-| `export-results` | Container for per-export results |
+| `export-results` | Container for this dialog session's run history |
+| `export-history` | Saved export section |
+| `export-history-loading` | Saved export read is in flight |
+| `export-history-error` | Saved export read failed |
+| `export-history-empty` | No saved export exists |
+| `export-history-row` | One saved export |
 | `export-close-button` | Close |
 | `export-send-to-trainer` | Send to Trainer button (only visible when trainer is installed) |
 
@@ -446,7 +451,7 @@ word's position in the page line-match list).
 |---|---|
 | `word-glyph-badge-{line}-{word}` | Corner badge on `<WordCell>`; absent when no annotations/predictions |
 | `word-glyph-chip-row-{line}-{word}` | Chip row under GT input |
-| `word-glyph-chip-{line}-{word}-{kind}` | Individual chip (`kind` ∈ `ct`, `st`, `long_s`, `fi`, `swash`, `predicted-{kind}`) |
+| `word-glyph-chip-{line}-{word}-{kind}` | Individual chip. `kind` is the lowercased ligature value, such as `ct`, `fi` or `long_st`, or `long_s`, `swash` or `predicted-{kind}` |
 | `glyph-panel-{line}-{word}` | The `<GlyphAnnotationPanel>` popover/section |
 | `glyph-panel-add-ligature` | "Add ligature" button inside panel |
 | `glyph-panel-ligature-kind-select` | Ligature kind enum picker |

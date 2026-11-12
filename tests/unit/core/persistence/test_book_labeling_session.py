@@ -43,6 +43,7 @@ from pdomain_book_tools.typography import (
 )
 from PIL import Image
 
+from pdomain_ocr_labeler_spa.core.exceptions import UnsupportedRuntimeError
 from pdomain_ocr_labeler_spa.core.persistence.book_labeling_manifest import (
     load_book_labeling_manifest_directory,
 )
@@ -441,6 +442,19 @@ def _write_book(
 
 def _session(root: Path) -> BookLabelingSession:
     return BookLabelingSession(load_book_labeling_manifest_directory(root))
+
+
+@pytest.mark.parametrize("missing", ["memfd_create", "MFD_ALLOW_SEALING", "MFD_CLOEXEC"])
+def test_open_page_names_the_missing_runtime_interface(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing: str
+) -> None:
+    root = tmp_path / "book"
+    _ = _write_book(root)
+    session = _session(root)
+    monkeypatch.delattr(os, missing, raising=False)
+
+    with pytest.raises(UnsupportedRuntimeError, match=rf"os\.{missing}"):
+        _ = session.open_page(0)
 
 
 def test_opens_one_real_producer_shaped_page_without_eagerly_loading_others(
